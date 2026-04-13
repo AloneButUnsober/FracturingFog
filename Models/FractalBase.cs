@@ -76,8 +76,8 @@ namespace FracturingFog.Models
             {
                 for (int x = 0; x < renderSettings.Width; x += Fractals.TILESIZE)
                 {
-                    int endX = Math.Min(x + Fractals.TILESIZE, renderSettings.Width);
-                    int endY = Math.Min(y + Fractals.TILESIZE, renderSettings.Height);
+                    int endX = System.Math.Min(x + Fractals.TILESIZE, renderSettings.Width);
+                    int endY = System.Math.Min(y + Fractals.TILESIZE, renderSettings.Height);
                     yield return (x, y, endX, endY);
                 }
             }
@@ -200,7 +200,7 @@ namespace FracturingFog.Models
             }
 
             int effectiveIterations = previewMode ?
-                Math.Min(20, renderSettings.Iterations) :
+                System.Math.Min(20, renderSettings.Iterations) :
                 renderSettings.Iterations;
 
             renderWidth = previewMode && renderSettings.LowQuality ? renderSettings.HalfWidth : renderSettings.Width;

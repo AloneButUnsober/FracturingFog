@@ -19,8 +19,8 @@ namespace FracturingFog.Models
             // 8 full hue cycles across the iteration range → classic spiral gradient.
             float hue = smooth * 8.0f % 360.0f;
             float saturation = 0.85f;
-            float value = 1.0f - (float)Math.Pow(iterations / (double)MaxIterations, 0.2);
-            value = Math.Clamp(value, 0f, 1f);
+            float value = 1.0f - (float)System.Math.Pow(iterations / (double)MaxIterations, 0.2);
+            value = System.Math.Clamp(value, 0f, 1f);
 
             return Fractals.HsvToRgb(hue, saturation, value);
         }

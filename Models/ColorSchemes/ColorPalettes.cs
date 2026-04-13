@@ -1,58 +1,147 @@
-﻿using FracturingFog.Interefaces;
+﻿// Models/ColorSchemes/ColorPalettes.cs  — v5 (3D themes added)
+//
+// Add new themes to the Palettes list; they appear automatically in the UI.
+// The "3D Relief" category groups all normal-mapped colour maps together at
+// the top of the list so users can find them immediately.
+using FracturingFog.Interefaces;
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class ColorPalette
+    public static class ColorPalette
     {
-        public static List<IColorMap> Palettes { get; } = new List<IColorMap>
+        // ── Master palette list ───────────────────────────────────────────────
+        // Order here controls the order in the UI combo box.
+
+        public static readonly List<IColorMap> Palettes = new()
         {
+            // ── 3D Relief (normal-mapped) ─────────────────────────────────────
+            new PhongStoneMap(),
+            new MoltenMetalMap(),
+            new CrystalCaveMap(),
+            new GoldReliefMap(),
+            new MarbleReliefMap(),
+            new VolcanicRockMap(),
+            new LunarSurfaceMap(),
+            new AncientBronzeMap(),
+            new NeonReliefMap(),
+
+            // ── Classic / algorithmic ─────────────────────────────────────────
             new HsvPalette(),
             new HsvModified(),
-            new RedAndBlack(),
-            new GrayscalePalette(),
-            new FirePalette(),
-            new AuroraColorMap(),
-            new DeepSpaceBlueMap(),
-            new BlackbodyColorMap(),
-            new DistanceGlowMap(),
-            new EarthToneMap(),
+            new WarpedHsvMap(),
+            new RainbowColorMap(),
             new GoldenRatioMap(),
+            new MonoBandMap(),
+            new BernsteinMap(),
+
+            // ── Gradient — linear ─────────────────────────────────────────────
+            new BlackbodyColorMap(),
+            new DeepSpaceBlueMap(),
+            new EarthToneMap(),
             new IcefireColorMap(),
             new InfernoColorMap(),
-            new MonoBandMap(),
             new OceanDepthMap(),
-            new RainbowColorMap(),
-            new TriColorMap()
+            new AuroraColorMap(),
+            new PolarNightMap(),
+
+            // ── Gradient — cycling ────────────────────────────────────────────
+            new FirePalette(),
+            new CosmicLatteMap(),
+            new TropicalMap(),
+            new LavaLampMap(),
+            new TriColorMap(),
+
+            // ── Algorithmic / artistic ────────────────────────────────────────
+            new NebulaDustMap(),
+            new DistanceGlowMap(),
+            new DigitalMatrixMap(),
+            new PsychedelicMap(),
+            new TwilightCyclicMap(),
+            new SolarWindMap(),
+
+            // ── Metallic / texture ────────────────────────────────────────────
+            new CopperSheenMap(),
+            new VintageSepiaMap(),
+            new GrayscalePalette(),
+            new RedAndBlack(),
+
+            // ── Scientific / perceptual ───────────────────────────────────────
+            new ViridisColorMap(),
+            new PlasmaColorMap(),
         };
 
+        // ── Lookup helpers ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the <see cref="IColorMap"/> whose static <c>Name</c> property
+        /// matches <paramref name="name"/>, or a new <see cref="HsvPalette"/> if
+        /// not found.
+        /// </summary>
         public static IColorMap GetPaletteByName(string name)
         {
-            foreach (var palette in Palettes)
-            {
-                if (palette.GetType().GetProperty("Name")?.GetValue(null)?.ToString() == name)
-                {
-                    return palette;
-                }
-            }
-            return new HsvPalette(); // or throw an exception if preferred
+            foreach (var p in Palettes)
+                if (GetStaticName(p) == name) return p;
+            return new HsvPalette();
         }
 
+        /// <summary>Returns the display names of all registered palettes, in list order.</summary>
         public static List<string> GetPaletteNames()
         {
-            List<string> names = new List<string>();
-            foreach (var palette in Palettes)
+            var names = new List<string>();
+            foreach (var p in Palettes)
             {
-                var name = palette.GetType().GetProperty("Name")?.GetValue(null)?.ToString();
-                if (!string.IsNullOrEmpty(name))
-                {
-                    names.Add(name);
-                }
+                var n = GetStaticName(p);
+                if (!string.IsNullOrEmpty(n)) names.Add(n);
             }
             return names;
+        }
+
+        /// <summary>
+        /// Returns palettes grouped by their static <c>Category</c> property.
+        /// Key = category string, Value = ordered list of palettes in that category.
+        /// </summary>
+        public static Dictionary<string, List<IColorMap>> GetPalettesByCategory()
+            {
+            var groups = new Dictionary<string, List<IColorMap>>(StringComparer.Ordinal);
+            foreach (var p in Palettes)
+            {
+                string cat = GetStaticCategory(p);
+                if (!groups.TryGetValue(cat, out var list))
+                    groups[cat] = list = new List<IColorMap>();
+                list.Add(p);
+            }
+            return groups;
+        }
+
+        /// <summary>
+        /// Returns the tooltip description for a palette name, or empty string.
+        /// </summary>
+        public static string GetDescription(string name)
+        {
+            foreach (var p in Palettes)
+                if (GetStaticName(p) == name) return GetStaticDescription(p);
+            return string.Empty;
+            }
+        // ── Reflection helpers ────────────────────────────────────────────────
+        // Static interface members are not accessible via the interface reference;
+        // use reflection to read the implementation type's static properties.
+
+        public static string GetStaticName(IColorMap map)
+            => map.GetType().GetProperty("Name")?.GetValue(null)?.ToString() ?? "Unnamed";
+
+        public static string GetStaticCategory(IColorMap map)
+            => map.GetType().GetProperty("Category")?.GetValue(null)?.ToString() ?? "General";
+
+        public static string GetStaticDescription(IColorMap map)
+            => map.GetType().GetProperty("Description")?.GetValue(null)?.ToString() ?? string.Empty;
+
+        public static ColorMapFeatures GetStaticFeatures(IColorMap map)
+        {
+            var raw = map.GetType().GetProperty("Features")?.GetValue(null);
+            return raw is ColorMapFeatures f ? f : ColorMapFeatures.UsesSmooth;
         }
     }
 }

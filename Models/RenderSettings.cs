@@ -124,7 +124,7 @@ namespace FracturingFog.Models
                 RenderProfile.Preview => (
                     Width / 2,
                     Height / 2,
-                    Math.Min(50, baseIter)
+                    System.Math.Min(50, baseIter)
                 ),
                 RenderProfile.Final => (
                     Width,
@@ -188,7 +188,7 @@ namespace FracturingFog.Models
                 _ => 1.0f,
             };
 
-            _iterations = (int)Math.Clamp(raw * qualityMultiplier, MinIterations, MaxIterations);
+            _iterations = (int)System.Math.Clamp(raw * qualityMultiplier, MinIterations, MaxIterations);
         }
 
         #endregion Private Methods

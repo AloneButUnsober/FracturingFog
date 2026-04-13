@@ -117,8 +117,8 @@ float4 PS(VSOut i) : SV_Target
 
     public DirectXRenderer(IntPtr hwnd, int width, int height)
     {
-        _width  = Math.Max(1, width);
-        _height = Math.Max(1, height);
+        _width  = System.Math.Max(1, width);
+        _height = System.Math.Max(1, height);
 
         CreateDeviceAndSwapChain(hwnd);
         CreateRenderTarget();
