@@ -31,6 +31,7 @@ namespace FracturingFog.Models
             // ── Classic / algorithmic ─────────────────────────────────────────
             new HsvPalette(),
             new HsvModified(),
+            new HsvCLD(),
             new WarpedHsvMap(),
             new RainbowColorMap(),
             new GoldenRatioMap(),
@@ -61,6 +62,7 @@ namespace FracturingFog.Models
             new PsychedelicMap(),
             new TwilightCyclicMap(),
             new SolarWindMap(),
+            new SolarWindMapMOD(),
 
             // ── Metallic / texture ────────────────────────────────────────────
             new CopperSheenMap(),
@@ -94,8 +96,15 @@ namespace FracturingFog.Models
             foreach (var p in Palettes)
             {
                 var n = GetStaticName(p);
-                if (!string.IsNullOrEmpty(n)) names.Add(n);
+                if (!string.IsNullOrEmpty(n) &&
+                    n != HsvPalette.Name)
+                {
+                    names.Add(n);
+                }
             }
+
+            names.Sort();
+            names.Insert(0, HsvPalette.Name);
             return names;
         }
 
@@ -104,7 +113,7 @@ namespace FracturingFog.Models
         /// Key = category string, Value = ordered list of palettes in that category.
         /// </summary>
         public static Dictionary<string, List<IColorMap>> GetPalettesByCategory()
-            {
+        {
             var groups = new Dictionary<string, List<IColorMap>>(StringComparer.Ordinal);
             foreach (var p in Palettes)
             {
@@ -124,7 +133,7 @@ namespace FracturingFog.Models
             foreach (var p in Palettes)
                 if (GetStaticName(p) == name) return GetStaticDescription(p);
             return string.Empty;
-            }
+        }
         // ── Reflection helpers ────────────────────────────────────────────────
         // Static interface members are not accessible via the interface reference;
         // use reflection to read the implementation type's static properties.

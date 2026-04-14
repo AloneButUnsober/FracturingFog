@@ -13,7 +13,7 @@ namespace FracturingFog.Models
     /// Arctic polar night — near-black navy to pale ice blue with dusky purple
     /// midtones.  Subtle, high-detail palette.
     /// </summary>
-    public class PolarNightMap : GradientColorMap
+    public class PolarNightMap : CyclingGradientColorMap
     {
         public static string Name        => "Polar Night";
         public static string Category    => "Scientific";

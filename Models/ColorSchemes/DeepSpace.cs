@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class DeepSpaceBlueMap : GradientColorMap
+    public class DeepSpaceBlueMap : CyclingGradientColorMap
     {
         public static string Name => "Deep Space";
 

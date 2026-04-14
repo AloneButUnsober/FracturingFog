@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class IcefireColorMap : GradientColorMap
+    public class IcefireColorMap : CyclingGradientColorMap
     {
         public static string Name => "Ice Fire";
 

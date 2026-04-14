@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class OceanDepthMap : GradientColorMap
+    public class OceanDepthMap : CyclingGradientColorMap
     {
         public static string Name => "Ocean Depth";
 

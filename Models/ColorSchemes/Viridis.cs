@@ -13,7 +13,7 @@ namespace FracturingFog.Models
     /// Perceptually uniform purple → blue-green → yellow gradient.
     /// Stays readable on greyscale printouts and by colour-blind viewers.
     /// </summary>
-    public class ViridisColorMap : GradientColorMap
+    public class ViridisColorMap : CyclingGradientColorMap
     {
         public static string Name        => "Viridis";
         public static string Category    => "Scientific";

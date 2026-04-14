@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class TriColorMap : GradientColorMap
+    public class TriColorMap : CyclingGradientColorMap
     {
         public static string Name => "Tri-Color Stripe";
         public TriColorMap()

@@ -63,7 +63,7 @@ public sealed class MainForm : Form
 
     private const double DefaultCenterX = -0.5;
     private const double DefaultCenterY =  0.0;
-    private const double DefaultZoom    =  1.0;
+    private const double DefaultZoom    =  0.3;
 
     private double _centerX = DefaultCenterX;
     private double _centerY = DefaultCenterY;
@@ -74,6 +74,7 @@ public sealed class MainForm : Form
 
     // Guard: prevents coord boxes being repopulated while user types.
     private bool _suppressCoordUpdate;
+
     // ── Pan state ─────────────────────────────────────────────────────────────
 
     private bool   _panning;
@@ -91,6 +92,7 @@ public sealed class MainForm : Form
     private Rectangle       _preSpanBounds;
     private FormBorderStyle _preSpanBorderStyle;
     private FormWindowState _preSpanWindowState;
+
     // ── Async calculation ─────────────────────────────────────────────────────
 
     private CancellationTokenSource? _calcCts;
@@ -104,9 +106,10 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text        = "Fracturing Fog  —  Mandelbrot Explorer  (DirectX 11 · Vortice 3.8.3)";
-        ClientSize  = new Size(1440, 870);
-        MinimumSize = new Size(640, 420);
+        ClientSize  = new Size(1072, 768); // -38 for toolbar and chrome
+        MinimumSize = new Size(1072, 384);
         BackColor   = Color.Black;
+        StartPosition = FormStartPosition.CenterScreen;
 
         KeyPreview  = true;
 
@@ -129,7 +132,7 @@ public sealed class MainForm : Form
             {
                 Text      = text,
                 Left      = left,
-            Top       = 9,
+                Top       = 9,
                 AutoSize  = true,
             ForeColor = Color.FromArgb(155, 155, 155),
                 Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
@@ -157,54 +160,72 @@ public sealed class MainForm : Form
             BackColor = Color.FromArgb(28, 28, 28),
         };
 
-        int bx = 6;
+        int buttonLeft = 6;
 
-        _resetButton = MakeBtn("Reset", 78);
-        _resetButton.Left = bx; bx += 86;
+        _resetButton = MakeBtn("Reset", 60);
+        _resetButton.Left = buttonLeft; 
         _resetButton.Click += OnResetClick;
         _toolbar.Controls.Add(_resetButton);
 
-        _spanButton = MakeBtn("Span Monitors");
-        _spanButton.Left = bx; bx += 116;
+        buttonLeft += 63;
+
+        _spanButton = MakeBtn("Span", 60); // Monitors");
+        _spanButton.Left = buttonLeft; 
         _spanButton.Click += OnSpanMonitorsClick;
         _toolbar.Controls.Add(_spanButton);
 
-        _screenshotButton = MakeBtn("Screenshot");
-        _screenshotButton.Left = bx; bx += 116;
+        buttonLeft += 63;
+
+        _screenshotButton = MakeBtn("Image", 60); // "Screenshot");
+        _screenshotButton.Left = buttonLeft; 
         _screenshotButton.Click += OnScreenshotClick;
         _toolbar.Controls.Add(_screenshotButton);
+
+        buttonLeft += 63;
 
         // Thin separator.
         _toolbar.Controls.Add(new Label
         {
-            Left = bx, Top = 4, Width = 1, Height = 30,
+            Left = buttonLeft, 
+            Top = 4, 
+            Width = 1, 
+            Height = 30,
             BackColor = Color.FromArgb(65, 65, 65)
-        }); bx += 10;
+        }); 
+
+        buttonLeft += 8;
 
         // Quality label + combo.
         var qlbl = new Label
         {
             Text      = "Quality:",
-            Left      = bx, Top = 10, AutoSize = true,
+            Left      = buttonLeft, 
+            Top = 10, 
+            AutoSize = true,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
         _toolbar.Controls.Add(qlbl);
-        bx += qlbl.PreferredWidth + 4;
+        buttonLeft += qlbl.PreferredWidth + 4;
 
         _qualityCombo = new ComboBox
         {
-            Left          = bx, Top = 7, Width = 112, Height = 26,
+            Left          = buttonLeft, 
+            Top           = 7, 
+            Width         = 80, //112, 
+            Height        = 26,
             DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor     = Color.FromArgb(45, 45, 45),
-            ForeColor   = Color.White,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            ForeColor     = Color.White,
+            Font          = new Font("Segoe UI", 9f, FontStyle.Bold),
             FlatStyle     = FlatStyle.Flat,
             Cursor        = Cursors.Hand
         };
+
         foreach (var p in QualityPreset.All) _qualityCombo.Items.Add(p.Name);
         _qualityCombo.SelectedIndex = 1;  // Standard default
+
         // Tooltip shows description of selected quality tier.
         var qualityTip = new ToolTip();
         _qualityCombo.SelectedIndexChanged += (s, e) =>
@@ -214,47 +235,231 @@ public sealed class MainForm : Form
                 qualityTip.SetToolTip(_qualityCombo, QualityPreset.All[i].Description);
             OnQualityComboChanged(s, e);
         };
+
         // Set initial tooltip.
         qualityTip.SetToolTip(_qualityCombo, QualityPreset.Standard.Description);
         _toolbar.Controls.Add(_qualityCombo);
-        bx += 120;
+        buttonLeft += 80; // 120;
 
         // Theme separator.
         _toolbar.Controls.Add(new Label
         {
-            Left = bx, Top = 4, Width = 1, Height = 30,
+            Left = buttonLeft, 
+            Top = 4, 
+            Width = 1,
+            Height = 30,
             BackColor = Color.FromArgb(65, 65, 65)
-        }); bx += 10;
+        }); buttonLeft += 10;
 
         // Theme label + combo.
         var tlbl = new Label
         {
             Text      = "Theme:",
-            Left      = bx, Top = 10, AutoSize = true,
+            Left      = buttonLeft, 
+            Top = 10, 
+            AutoSize = true,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
         _toolbar.Controls.Add(tlbl);
-        bx += tlbl.PreferredWidth + 4;
+        buttonLeft += tlbl.PreferredWidth + 4;
 
         _colorThemeCombo = new ColorComboBox
         {
-            Left = bx, Top = 7, Width = 162, Height = 26,
+            Left = buttonLeft, 
+            Top = 7, 
+            Width = 162, 
+            Height = 26,
             BackColor = Color.FromArgb(55, 55, 55), ForeColor = Color.White,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold), Cursor = Cursors.Hand
         };
+
         BuildColorThemesSelection();
         _colorThemeCombo.SelectedIndex = 0;
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
 
         _toolbar.Controls.Add(_colorThemeCombo);
-        bx += 170;
+        buttonLeft += 170;
+
+        // Regions separator.
+        _toolbar.Controls.Add(new Label
+        {
+            Left = buttonLeft,
+            Top = 2,
+            Width = 1,
+            Height = 30,
+            BackColor = Color.FromArgb(60, 60, 60)
+        });
+
+        buttonLeft += 10;
+
+        var rlbl = new Label
+        {
+            Text = "Region:",
+            Left = buttonLeft,
+            Top = 10,
+            AutoSize = true,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent
+        };
+        _toolbar.Controls.Add(rlbl);
+        buttonLeft += rlbl.PreferredWidth + 3;
+
+        _regionCombo = new ComboBox
+        {
+            Left = buttonLeft,
+            Top = 7,
+            Width = 172,
+            Height = 26,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = Color.FromArgb(45, 45, 45),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9f),
+            FlatStyle = FlatStyle.Flat
+        };
+        _toolbar.Controls.Add(_regionCombo);
+        buttonLeft += 180; // 200;
+
+        _saveViewButton = MakeBtn("Save", 60); //new Button
+        _saveViewButton.Left = buttonLeft;
+        //{
+        //    Text = "Save", // "View", 
+        //    Left = buttonLeft,
+        //    //Top = 4,
+        //    Width = 60,
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(55, 55, 55),
+        //    ForeColor = Color.White,
+        //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor = Cursors.Hand
+        //};
+        _saveViewButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        _saveViewButton.Click += OnSaveViewClick;
+        _toolbar.Controls.Add(_saveViewButton);
+
+        buttonLeft += 63; // 96;
+
+        _delRegionButton = MakeBtn("Delete", 60); //new Button
+        _delRegionButton.Left = buttonLeft;
+        //{
+        //    Text = "Delete", // "Region",
+        //    Left = buttonLeft,
+        //    Top = 4,
+        //    Width = 60,
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(55, 55, 55),
+        //    ForeColor = Color.White,
+        //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor = Cursors.Hand,
+        //    Enabled = false
+        //};
+        _delRegionButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        _delRegionButton.Click += OnDelRegionClick;
+        _toolbar.Controls.Add(_delRegionButton);
+        buttonLeft += 63;
+
+        _exportRegionsButton = MakeBtn("Exp…", 60); //new Button
+        _exportRegionsButton.Left = buttonLeft;
+        //{
+        //    Text = "Exp…",
+        //    Left = buttonLeft,
+        //    Top = 4,
+        //    Width = 60,
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(40, 55, 70),
+        //    ForeColor = Color.White,
+        //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor = Cursors.Hand
+        //};
+        _exportRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
+        new ToolTip().SetToolTip(_exportRegionsButton, "Export all custom regions to a JSON file");
+        _exportRegionsButton.Click += OnExportRegionsClick;
+        _toolbar.Controls.Add(_exportRegionsButton);
+        buttonLeft += 63;
+
+        _importRegionsButton = MakeBtn("Imp…", 60); //new Button
+        _importRegionsButton.Left = buttonLeft;
+        //{
+        //    Text = "Imp…",
+        //    Left = buttonLeft,
+        //    Top = 4,
+        //    Width = 60,
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(40, 55, 70),
+        //    ForeColor = Color.White,
+        //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor = Cursors.Hand
+        //};
+        _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
+        new ToolTip().SetToolTip(_importRegionsButton, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+        _importRegionsButton.Click += OnImportRegionsClick;
+        _toolbar.Controls.Add(_importRegionsButton);
+
+        buttonLeft += 63;
+
+        // Thin separator after import/export.
+        _toolbar.Controls.Add(new Label
+        {
+            Left = buttonLeft,
+            Top = 2,
+            Width = 1,
+            Height = 30,
+            BackColor = Color.FromArgb(60, 60, 60)
+        });
+
+        buttonLeft += 10;
+
+        MakeLbl("CX:", buttonLeft, _toolbar); 
+        buttonLeft += 28;
+        _txCX = MakeTx(buttonLeft, 182, _toolbar, "Real part of the view centre");
+        buttonLeft += 190;
+        MakeLbl("CY:", buttonLeft, _toolbar); 
+        buttonLeft += 28;
+        _txCY = MakeTx(buttonLeft, 182, _toolbar, "Imaginary part of the view centre");
+        buttonLeft += 190;
+        MakeLbl("Zoom:", buttonLeft, _toolbar); 
+        buttonLeft += 44;
+        _txZoom = MakeTx(buttonLeft, 112, _toolbar, "Zoom factor (1 = full view; larger = zoomed in)");
+        buttonLeft += 120;
+        MakeLbl("Iter:", buttonLeft, _toolbar); 
+        buttonLeft += 38;
+        _txIter = MakeTx(buttonLeft, 64, _toolbar, "Maximum iteration count (auto-computed by quality+zoom)");
+        buttonLeft += 72;
+
+        _goButton = MakeBtn("Go", 38); //new Button
+        _goButton.BackColor = Color.FromArgb(40, 80, 40);
+        _goButton.Left = buttonLeft;
+        //{
+        //    Text = "Go",
+        //    Left = buttonLeft,
+        //    Top = 4,
+        //    Width = 48,
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(40, 80, 40),
+        //    ForeColor = Color.White,
+        //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor = Cursors.Hand
+        //};
+        _goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
+        _goButton.Click += OnGoClick;
+        _toolbar.Controls.Add(_goButton);
+        buttonLeft += 56;
 
         // Status label — fills the remainder.
         _statusLabel = new Label
         {
-            Left = bx + 8, Top = 0, Width = 700, Height = 38, AutoSize = false,
+            Left = buttonLeft + 8, 
+            Top = 0,
+            Width = 700, 
+            Height = 38, 
+            AutoSize = false,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(140, 140, 140),
             BackColor = Color.Transparent,
@@ -266,132 +471,167 @@ public sealed class MainForm : Form
 
         // ── Coordinate / region panel ─────────────────────────────────────────
 
-        _coordPanel = new Panel
-        {
-            Height    = 34,
-            Dock      = DockStyle.Top,
-            BackColor = Color.FromArgb(22, 22, 22),
-        };
+        //_coordPanel = new Panel
+        //{
+        //    Height    = 34,
+        //    Dock      = DockStyle.Top,
+        //    BackColor = Color.FromArgb(22, 22, 22),
+        //};
 
-        int cx = 8;
-        MakeLbl("CX:", cx, _coordPanel);       cx += 28;
-        _txCX   = MakeTx(cx, 182, _coordPanel, "Real part of the view centre");
-        cx += 190;
-        MakeLbl("CY:", cx, _coordPanel);       cx += 28;
-        _txCY   = MakeTx(cx, 182, _coordPanel, "Imaginary part of the view centre");
-        cx += 190;
-        MakeLbl("Zoom:", cx, _coordPanel);     cx += 44;
-        _txZoom = MakeTx(cx, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)");
-        cx += 120;
-        MakeLbl("Iter:", cx, _coordPanel);     cx += 38;
-        _txIter = MakeTx(cx, 64,  _coordPanel, "Maximum iteration count (auto-computed by quality+zoom)");
-        cx += 72;
+        //int cx = 8;
+        //MakeLbl("CX:", cx, _coordPanel);       cx += 28;
+        //_txCX   = MakeTx(cx, 182, _coordPanel, "Real part of the view centre");
+        //cx += 190;
+        //MakeLbl("CY:", cx, _coordPanel);       cx += 28;
+        //_txCY   = MakeTx(cx, 182, _coordPanel, "Imaginary part of the view centre");
+        //cx += 190;
+        //MakeLbl("Zoom:", cx, _coordPanel);     cx += 44;
+        //_txZoom = MakeTx(cx, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)");
+        //cx += 120;
+        //MakeLbl("Iter:", cx, _coordPanel);     cx += 38;
+        //_txIter = MakeTx(cx, 64,  _coordPanel, "Maximum iteration count (auto-computed by quality+zoom)");
+        //cx += 72;
 
-        _goButton = new Button
-        {
-            Text = "Go", Left = cx, Top = 4, Width = 48, Height = 26,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(40, 80, 40),
-            ForeColor = Color.White,
-            Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor    = Cursors.Hand
-        };
-        _goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
-        _goButton.Click += OnGoClick;
-        _coordPanel.Controls.Add(_goButton);
-        cx += 56;
+        //_goButton = new Button
+        //{
+        //    Text = "Go", Left = cx, Top = 4, Width = 48, Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(40, 80, 40),
+        //    ForeColor = Color.White,
+        //    Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor    = Cursors.Hand
+        //};
+        //_goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
+        //_goButton.Click += OnGoClick;
+        //_coordPanel.Controls.Add(_goButton);
+        //cx += 56;
 
-        // Separator.
-        _coordPanel.Controls.Add(new Label
-        {
-            Left = cx, Top = 2, Width = 1, Height = 30,
-            BackColor = Color.FromArgb(60, 60, 60)
-        }); cx += 10;
+        //// Separator.
+        //_coordPanel.Controls.Add(new Label
+        //{
+        //    Left = cx, 
+        //    Top = 2, 
+        //    Width = 1, 
+        //    Height = 30,
+        //    BackColor = Color.FromArgb(60, 60, 60)
+        //});
+        
+        //cx += 10;
 
-        var rlbl = new Label
-        {
-            Text      = "Region:",
-            Left      = cx, Top = 9, AutoSize = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent
-        };
-        _coordPanel.Controls.Add(rlbl); cx += rlbl.PreferredWidth + 4;
+        //var rlbl = new Label
+        //{
+        //    Text      = "Region:",
+        //    Left      = cx, 
+        //    Top       = 9, 
+        //    AutoSize = true,
+        //    ForeColor = Color.FromArgb(155, 155, 155),
+        //    Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+        //    BackColor = Color.Transparent
+        //};
+        //_coordPanel.Controls.Add(rlbl); 
+        //cx += rlbl.PreferredWidth + 3;
 
-        _regionCombo = new ComboBox
-        {
-            Left = cx, Top = 5, Width = 192, Height = 24,
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            BackColor     = Color.FromArgb(45, 45, 45),
-            ForeColor     = Color.White,
-            Font          = new Font("Segoe UI", 9f),
-            FlatStyle     = FlatStyle.Flat
-        };
-        _coordPanel.Controls.Add(_regionCombo); cx += 200;
+        //_regionCombo = new ComboBox
+        //{
+        //    Left = cx, 
+        //    Top = 5, 
+        //    Width = 172, 
+        //    Height = 24,
+        //    DropDownStyle = ComboBoxStyle.DropDownList,
+        //    BackColor     = Color.FromArgb(45, 45, 45),
+        //    ForeColor     = Color.White,
+        //    Font          = new Font("Segoe UI", 9f),
+        //    FlatStyle     = FlatStyle.Flat
+        //};
+        //_coordPanel.Controls.Add(_regionCombo);
+        //cx += 180; // 200;
 
-        _saveViewButton = new Button
-        {
-            Text = "Save View", Left = cx, Top = 4, Width = 88, Height = 26,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(55, 55, 55),
-            ForeColor = Color.White,
-            Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor    = Cursors.Hand
-        };
-        _saveViewButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
-        _saveViewButton.Click += OnSaveViewClick;
-        _coordPanel.Controls.Add(_saveViewButton); cx += 96;
+        //_saveViewButton = new Button
+        //{
+        //    Text = "Save", // "View", 
+        //    Left = cx, 
+        //    Top = 4, 
+        //    Width = 60, 
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(55, 55, 55),
+        //    ForeColor = Color.White,
+        //    Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor    = Cursors.Hand
+        //};
+        //_saveViewButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        //_saveViewButton.Click += OnSaveViewClick;
+        //_coordPanel.Controls.Add(_saveViewButton);
 
-        _delRegionButton = new Button
-        {
-            Text = "Del Region", Left = cx, Top = 4, Width = 90, Height = 26,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(55, 55, 55),
-            ForeColor = Color.White,
-            Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor    = Cursors.Hand,
-            Enabled   = false
-        };
-        _delRegionButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
-        _delRegionButton.Click  += OnDelRegionClick;
-        _coordPanel.Controls.Add(_delRegionButton);
-        cx += 98;
+        //cx += 63; // 96;
 
-        // Thin separator before import/export.
-        _coordPanel.Controls.Add(new Label
-        {
-            Left = cx, Top = 2, Width = 1, Height = 30,
-            BackColor = Color.FromArgb(60, 60, 60)
-        }); cx += 10;
+        //_delRegionButton = new Button
+        //{
+        //    Text = "Delete", // "Region",
+        //    Left = cx, 
+        //    Top = 4, 
+        //    Width = 60, 
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(55, 55, 55),
+        //    ForeColor = Color.White,
+        //    Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor    = Cursors.Hand,
+        //    Enabled   = false
+        //};
+        //_delRegionButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        //_delRegionButton.Click  += OnDelRegionClick;
+        //_coordPanel.Controls.Add(_delRegionButton);
+        //cx += 63;
 
-        _exportRegionsButton = new Button
-        {
-            Text = "Export…", Left = cx, Top = 4, Width = 80, Height = 26,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(40, 55, 70),
-            ForeColor = Color.White,
-            Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor    = Cursors.Hand
-        };
-        _exportRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-        new ToolTip().SetToolTip(_exportRegionsButton, "Export all custom regions to a JSON file");
-        _exportRegionsButton.Click += OnExportRegionsClick;
-        _coordPanel.Controls.Add(_exportRegionsButton);
-        cx += 88;
+        //_exportRegionsButton = new Button
+        //{
+        //    Text = "Exp…", 
+        //    Left = cx, 
+        //    Top = 4, 
+        //    Width = 60, 
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(40, 55, 70),
+        //    ForeColor = Color.White,
+        //    Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor    = Cursors.Hand
+        //};
+        //_exportRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
+        //new ToolTip().SetToolTip(_exportRegionsButton, "Export all custom regions to a JSON file");
+        //_exportRegionsButton.Click += OnExportRegionsClick;
+        //_coordPanel.Controls.Add(_exportRegionsButton);
+        //cx += 63;
 
-        _importRegionsButton = new Button
-        {
-            Text = "Import…", Left = cx, Top = 4, Width = 80, Height = 26,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(40, 55, 70),
-            ForeColor = Color.White,
-            Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor    = Cursors.Hand
-        };
-        _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-        new ToolTip().SetToolTip(_importRegionsButton, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
-        _importRegionsButton.Click += OnImportRegionsClick;
-        _coordPanel.Controls.Add(_importRegionsButton);
+        //_importRegionsButton = new Button
+        //{
+        //    Text = "Imp…", 
+        //    Left = cx, 
+        //    Top = 4,
+        //    Width = 60, 
+        //    Height = 26,
+        //    FlatStyle = FlatStyle.Flat,
+        //    BackColor = Color.FromArgb(40, 55, 70),
+        //    ForeColor = Color.White,
+        //    Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor    = Cursors.Hand
+        //};
+        //_importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
+        //new ToolTip().SetToolTip(_importRegionsButton, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+        //_importRegionsButton.Click += OnImportRegionsClick;
+        //_coordPanel.Controls.Add(_importRegionsButton);
+
+        //// Thin separator after import/export.
+        //_coordPanel.Controls.Add(new Label
+        //{
+        //    Left = cx,
+        //    Top = 2,
+        //    Width = 1,
+        //    Height = 30,
+        //    BackColor = Color.FromArgb(60, 60, 60)
+        //}); 
+        
+        //cx += 10;
 
         // ── Render panel ──────────────────────────────────────────────────────
         _renderPanel = new RenderPanel { Dock = DockStyle.Fill, Cursor = Cursors.Cross };
@@ -839,7 +1079,7 @@ public sealed class MainForm : Form
         _preSpanBounds = Bounds;
 
         _spanning = true;
-        _spanButton.Text = "Restore";
+        _spanButton.Text = "Back"; //"Restore";
 
         FormBorderStyle = FormBorderStyle.None;
         WindowState         = FormWindowState.Normal;

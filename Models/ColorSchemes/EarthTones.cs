@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class EarthToneMap : GradientColorMap
+    public class EarthToneMap : CyclingGradientColorMap
     {
         public static string Name => "Earth Tones";
 

@@ -7,7 +7,7 @@ namespace FracturingFog.Models
 {
     public class RedAndBlack : IColorMap
     {
-        public static string Name => "Red and Black";
+        public static string Name => "Radio Interference";
 
         public int MaxIterations { get; set; } = 1000;
 

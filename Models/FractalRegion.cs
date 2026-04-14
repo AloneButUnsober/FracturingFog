@@ -93,7 +93,7 @@ namespace FracturingFog.Models
                 Name        = "Classic Full View",
                 CenterX     = -0.5,
                 CenterY     =  0.0,
-                Zoom        =  1.0,
+                Zoom        =  0.3,
                 Iterations  =  256,
                 Description = "The default overview showing the complete Mandelbrot set.",
                 RegionType  = RegionType.BuiltIn

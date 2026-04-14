@@ -12,14 +12,14 @@ namespace FracturingFog.Models
     /// Perceptually uniform deep violet → magenta → orange → bright yellow gradient.
     /// High perceptual contrast; complementary to Viridis.
     /// </summary>
-    public class PlasmaColorMap : GradientColorMap
+    public class PlasmaColorMap : CyclingGradientColorMap
     {
         public static string Name        => "Plasma";
         public static string Category    => "Scientific";
         public static string Description => "Perceptually uniform violet→pink→orange→yellow. High contrast.";
         public static ColorMapFeatures Features =>
             ColorMapFeatures.UsesSmooth | ColorMapFeatures.Perceptual |
-            ColorMapFeatures.HighContrast | ColorMapFeatures.GradientBased;
+            ColorMapFeatures.HighContrast | ColorMapFeatures.Cyclic; //.GradientBased;
 
         public PlasmaColorMap()
         {

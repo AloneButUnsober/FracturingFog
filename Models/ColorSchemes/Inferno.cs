@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class InfernoColorMap : GradientColorMap
+    public class InfernoColorMap : CyclingGradientColorMap
     {
         public static string Name => "Inferno";
 

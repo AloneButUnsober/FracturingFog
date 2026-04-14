@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class BlackbodyColorMap : GradientColorMap
+    public class BlackbodyColorMap : CyclingGradientColorMap
     {
         public static string Name => "Black Body Rad";
 
