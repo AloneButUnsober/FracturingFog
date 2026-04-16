@@ -15,6 +15,10 @@
     <AssemblyName>MandelbrotExplorer</AssemblyName>
     <RootNamespace>MandelbrotExplorer</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="MainForm - Copy.cs.20260416-" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="Vortice.DirectX" Version="3.8.3" />

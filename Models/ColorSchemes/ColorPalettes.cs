@@ -27,11 +27,13 @@ namespace FracturingFog.Models
             new LunarSurfaceMap(),
             new AncientBronzeMap(),
             new NeonReliefMap(),
+            new PolarNight3DMap(),
 
             // ── Classic / algorithmic ─────────────────────────────────────────
             new HsvPalette(),
             new HsvModified(),
             new HsvCLD(),
+            new HsvTst(),
             new WarpedHsvMap(),
             new RainbowColorMap(),
             new GoldenRatioMap(),
@@ -40,6 +42,7 @@ namespace FracturingFog.Models
 
             // ── Gradient — linear ─────────────────────────────────────────────
             new BlackbodyColorMap(),
+            new PurplebodyColorMap(),
             new DeepSpaceBlueMap(),
             new EarthToneMap(),
             new IcefireColorMap(),
