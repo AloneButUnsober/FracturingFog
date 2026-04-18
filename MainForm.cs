@@ -510,7 +510,7 @@ public sealed class MainForm : Form
         MakeLbl("Iter:", buttonLeft, _coordPanel);
         buttonLeft += 38;
         _txIter = MakeTx(buttonLeft, 64, _coordPanel, "Maximum iteration count (auto-computed by quality+zoom)");
-        _txIter.Enabled = false;
+        //_txIter.Enabled = false;
         buttonLeft += 72;
 
         _goButton = MakeBtn("Go", 38); //new Button
@@ -546,13 +546,8 @@ public sealed class MainForm : Form
             getCenter: () => (_centerX, _centerY),
             getZoom: () => _zoom,
             getPanelSize: () => _renderPanel.ClientSize,
-            getSwatchColor: () =>
-            {
-                if (_calculator?.ColorMap == null) return Color.White;
-                _calculator.ColorMap.MaxIterations = 500;
-                int argb = _calculator.ColorMap.SwatchSample;
-                return Color.FromArgb((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
-            })
+            getSwatchColor: () => GetSwatchColor()
+            )
         {
             Visible = false,
         };
@@ -560,7 +555,7 @@ public sealed class MainForm : Form
         checkBoxShowGrid.Click += (s, e) =>
         {
             _gridVisible = checkBoxShowGrid.Checked;
-            _gridPanel?.Visible = _gridVisible;
+            _gridPanel?.Visible = _gridVisible;            
             if (_gridVisible && _gridPanel != null) _gridPanel.Invalidate();
         };
 
@@ -675,6 +670,60 @@ public sealed class MainForm : Form
         }
     }
 
+    private Color GetSwatchColor()
+    {
+        if (_calculator?.ColorMap == null) return Color.White;
+        _calculator.ColorMap.MaxIterations = 500;
+        int argb = _calculator.ColorMap.SwatchSample;
+        return Color.FromArgb((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
+    }
+
+    private static Color ComputeContrastColor(Color swatch, bool fade = false)
+    {
+        float r = swatch.R / 255f, g = swatch.G / 255f, b = swatch.B / 255f;
+        float cmax = System.Math.Max(r, System.Math.Max(g, b));
+        float cmin = System.Math.Min(r, System.Math.Min(g, b));
+        float delta = cmax - cmin;
+        float l = (cmax + cmin) * 0.5f;
+
+        float h2 = 0f;
+        if (delta > 0.001f)
+        {
+            if (cmax == r) h2 = ((g - b) / delta) % 6f;
+            else if (cmax == g) h2 = (b - r) / delta + 2f;
+            else h2 = (r - g) / delta + 4f;
+            h2 = (h2 / 6f + 1f) % 1f;
+        }
+        float s2 = delta < 0.001f ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
+
+        // Complementary hue + inverted/boosted luminance + boosted saturation.
+        float hc = (h2 + 0.5f) % 1f;
+        float lc = l < 0.5f
+            ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
+            : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
+        float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
+
+        // HSL → RGB
+        float c = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
+        float xv = c * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
+        float m = lc - c * 0.5f;
+        float rr, gg, bb;
+        switch ((int)(hc * 6f))
+        {
+            case 0: rr = c; gg = xv; bb = 0; break;
+            case 1: rr = xv; gg = c; bb = 0; break;
+            case 2: rr = 0; gg = c; bb = xv; break;
+            case 3: rr = 0; gg = xv; bb = c; break;
+            case 4: rr = xv; gg = 0; bb = c; break;
+            default: rr = c; gg = 0; bb = xv; break;
+        }
+        return Color.FromArgb(
+            fade ? 75 : 255,
+            (int)System.Math.Clamp((rr + m) * 255f, 0, 255),
+            (int)System.Math.Clamp((gg + m) * 255f, 0, 255),
+            (int)System.Math.Clamp((bb + m) * 255f, 0, 255));
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Reset
     // ─────────────────────────────────────────────────────────────────────────
@@ -711,10 +760,15 @@ public sealed class MainForm : Form
         _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
 
         if (_calculator != null && iter > 0)
+        {
             _calculator.MaxIterations = iter;
+            Debug.WriteLine($"Go set max iter: {_calculator.MaxIterations}");
+        }
+            
 
-        ApplyViewState();
+        ApplyViewState(Math.Clamp(iter,0,65534));
         TriggerCalculation();
+        Debug.WriteLine($"Go set max iter after calc: {_calculator?.MaxIterations}");
     }
 
     private bool TryParseCoords(out double cx, out double cy,
@@ -1150,10 +1204,9 @@ public sealed class MainForm : Form
         int w = _calculator!.Width;
         int h = _calculator!.Height;
         uint[] pixels = _calculator!.ColorBuffer;
-
         try
         {
-            SavePixelsToFile(pixels, w, h, path, format, waterMark);
+            SavePixelsToFile(pixels, w, h, path, format, waterMark, ComputeContrastColor(GetSwatchColor(), true));
             SetStatus($"Saved  {Path.GetFileName(path)}  ({w}×{h},  {new FileInfo(path).Length / 1024:N0} KB)");
         }
         catch (Exception ex)
@@ -1250,7 +1303,7 @@ public sealed class MainForm : Form
 
                 try
                 {
-                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark);
+                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, ComputeContrastColor(GetSwatchColor(), true));
                     long kb = new FileInfo(path).Length / 1024;
                     SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}" +
                               $"  ({result.Width}×{result.Height} px,  {kb:N0} KB)" +
@@ -1273,7 +1326,7 @@ public sealed class MainForm : Form
     // Layouts are identical — MemoryCopy is always correct.
 
     private static unsafe void SavePixelsToFile(
-        uint[] pixels, int w, int h, string path, ImageFormat format, string watermarkText = "")
+        uint[] pixels, int w, int h, string path, ImageFormat format, string watermarkText, Color fontColor)
     {
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
@@ -1317,20 +1370,24 @@ public sealed class MainForm : Form
 
         if (!string.IsNullOrEmpty(watermarkText))
         {
-            AddWaterMark(Graphics.FromImage(bmp), watermarkText, w, h);
+            AddWaterMark(Graphics.FromImage(bmp), watermarkText, w, h, fontColor);
             bmp.Save(path, format);
         }
     }
 
-    private static void AddWaterMark(Graphics g, string text, int width, int height)
+    private static void AddWaterMark(Graphics g, string text, int width, int height, Color fontColor)
     {
         using var font = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
         var textSize = g.MeasureString(text, font);
-        var pos = new PointF(width - textSize.Width - 10, height - textSize.Height - 10);
-        using var brush = new SolidBrush(Color.FromArgb(128, Color.White));
+        var pos = new PointF(width - textSize.Width - 20, height - textSize.Height - 12);
+        using var brush = new SolidBrush(fontColor);// Color.FromArgb(128, Color.White));
 
         Debug.WriteLine($"Adding watermark '{text}' at {pos} with size {textSize}");
         g.DrawString(text, font, brush, pos);
+        using var fontSmall = new Font("Segoe UI", 8, FontStyle.Bold, GraphicsUnit.Pixel);
+        textSize = g.MeasureString(text, fontSmall);
+        pos = new PointF(width - textSize.Width - 105, height - textSize.Height - 2);
+        g.DrawString("Something mundane to include in the image.", fontSmall, brush, pos);
         g.Save();
     }
 
@@ -1447,7 +1504,7 @@ public sealed class MainForm : Form
         return 3.5 / (System.Math.Max(_calculator.Width, _calculator.Height) * _zoom);
     }
 
-    private void ApplyViewState()
+    private void ApplyViewState(int maxIters = 0)
     {
         if (_calculator == null) return;
         _calculator.CenterX = _centerX;
@@ -1455,7 +1512,8 @@ public sealed class MainForm : Form
         _calculator.Zoom = _zoom;
         _calculator.Quality = _quality;
         // Auto-compute iterations from quality+zoom (may be overridden by Go button).
-        _calculator.MaxIterations = _quality.ComputeIterations(_zoom);
+        _calculator.MaxIterations = maxIters > 0 && maxIters < 65535 ? maxIters : _quality.ComputeIterations(_zoom);
+
         UpdateCoordBoxes();
     }
 
