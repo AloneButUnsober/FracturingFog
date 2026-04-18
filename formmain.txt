@@ -25,7 +25,6 @@ using System.Windows.Forms;
 
 using FracturingFog.Models;
 using FracturingFog.Interefaces;
-using System.Collections.Immutable;
 
 namespace FracturingFog;
 
@@ -56,13 +55,14 @@ public sealed class MainForm : Form
     // ── Render panel ──────────────────────────────────────────────────────────
     private readonly RenderPanel _renderPanel;
 
+    // ── Grid overlay panel ────────────────────────────────────────────────────
     // Sibling of _renderPanel in the form's control hierarchy (NOT a child of
     // _renderPanel). Added to Controls after _renderPanel so it sits above it
     // in Z-order. Manually positioned/sized to match _renderPanel on every
     // resize. Uses a layered-window approach (WS_EX_LAYERED + per-pixel alpha)
     // so its GDI+ output genuinely composites over the DirectX surface.
     private readonly GridOverlayPanel _gridPanel;
-    private bool _gridVisible;
+    private bool                      _gridVisible;
 
     // ── UI: Footer panel ──────────────────────────────────────────────────────
     private readonly Panel _footerPanel;
@@ -125,7 +125,7 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Fracturing Fog  —  Mandelbrot Explorer  (DirectX 11 · Vortice 3.8.3)";
-        ClientSize = new Size(1285, 768); // -38 for toolbar and chrome
+        ClientSize = new Size(1200, 768); // -38 for toolbar and chrome
         MinimumSize = new Size(1072, 384);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
@@ -425,26 +425,25 @@ public sealed class MainForm : Form
         // ── Grid overlay toggle ────────────────────────────────────────────────
         var checkBoxShowGrid = new CheckBox
         {
-            Text = "Grid",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
+            Text      = "Grid",
+            Left      = buttonLeft,
+            Top       = 9,
+            AutoSize  = true,
             AutoCheck = true,
             ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent,
-            Checked = false,
+            Checked   = false,
         };
         new ToolTip().SetToolTip(checkBoxShowGrid,
             "Overlay a Cartesian complex-plane grid on the fractal view");
+        checkBoxShowGrid.Click += (s, e) =>
+        {
+            _gridVisible       = checkBoxShowGrid.Checked;
+            _gridPanel.Visible = _gridVisible;
+            if (_gridVisible) _gridPanel.Invalidate();
+        };
         _toolbar.Controls.Add(checkBoxShowGrid);
-        //checkBoxShowGrid.Click += (s, e) =>
-        //{
-        //    _gridVisible = checkBoxShowGrid.Checked;
-        //    _gridPanel.Visible = _gridVisible;
-        //    if (_gridVisible) _gridPanel.Invalidate();
-        //};
-
 
         _footerPanel = new Panel
         {
@@ -457,7 +456,7 @@ public sealed class MainForm : Form
         _statusLabel = new Label
         {
             Left = 6, //buttonLeft + 8,
-            Top = 6,
+            Top = 0,
             //Width = 700,
             //Height = 22,
             AutoSize = true,
@@ -525,9 +524,9 @@ public sealed class MainForm : Form
         // ── Render panel ──────────────────────────────────────────────────────
         _renderPanel = new RenderPanel { Dock = DockStyle.Fill, Cursor = Cursors.Cross };
         _renderPanel.MouseWheel += OnMouseWheel;
-        _renderPanel.MouseDown += OnMouseDown;
-        _renderPanel.MouseMove += OnMouseMove;
-        _renderPanel.MouseUp += OnMouseUp;
+        _renderPanel.MouseDown  += OnMouseDown;
+        _renderPanel.MouseMove  += OnMouseMove;
+        _renderPanel.MouseUp    += OnMouseUp;
 
         // ── Grid overlay panel ────────────────────────────────────────────────
         // The grid panel is a SIBLING of _renderPanel, not a child.
@@ -543,9 +542,9 @@ public sealed class MainForm : Form
         // Bounds are set manually on Load and in OnFormResize to match
         // _renderPanel exactly. Mouse events pass through via WS_EX_TRANSPARENT.
         _gridPanel = new GridOverlayPanel(
-            getCenter: () => (_centerX, _centerY),
-            getZoom: () => _zoom,
-            getPanelSize: () => _renderPanel.ClientSize,
+            getCenter:      () => (_centerX, _centerY),
+            getZoom:        () => _zoom,
+            getPanelSize:   () => _renderPanel.ClientSize,
             getSwatchColor: () =>
             {
                 if (_calculator?.ColorMap == null) return Color.White;
@@ -557,22 +556,13 @@ public sealed class MainForm : Form
             Visible = false,
         };
 
-        checkBoxShowGrid.Click += (s, e) =>
-        {
-            _gridVisible = checkBoxShowGrid.Checked;
-            _gridPanel?.Visible = _gridVisible;
-            if (_gridVisible && _gridPanel != null) _gridPanel.Invalidate();
-        };
-
         // Docking order: Fill first, then Top-docked panels in reverse order,
         // then the grid panel last so it sits on top of everything.
-
-        // Docking order: Fill first, then Top-docked panels in reverse order.
         Controls.Add(_renderPanel);
-        Controls.Add(_gridPanel);
         Controls.Add(_coordPanel);
         Controls.Add(_toolbar);
-        Controls.Add(_footerPanel);   // last = highest Z-order
+        Controls.Add(_footerPanel);
+        Controls.Add(_gridPanel);   // last = highest Z-order
 
         // ── Events ───────────────────────────────────────────────────────────
         Load += OnLoad;
@@ -598,9 +588,8 @@ public sealed class MainForm : Form
 
         try
         {
-            _renderer = new DirectXRenderer(_renderPanel.Handle, w, h);
+            _renderer   = new DirectXRenderer(_renderPanel.Handle, w, h);
             _calculator = new MandelbrotCalculator(w, h);
-            _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             ApplyViewState();
             TriggerCalculation();
         }
@@ -659,7 +648,7 @@ public sealed class MainForm : Form
             if (palettes.Count == 0) continue;
             // Add a non-selectable header item for the type.
             _colorThemeCombo.Items.Add($"— {type} —");
-            foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
+            foreach (var name in palettes.Keys)
                 _colorThemeCombo.Items.Add(name);
         }
     }
@@ -684,7 +673,6 @@ public sealed class MainForm : Form
         _centerX = DefaultCenterX;
         _centerY = DefaultCenterY;
         _zoom = DefaultZoom;
-        _regionCombo.SelectedIndex = 0;
         ApplyViewState();
         TriggerCalculation();
     }
@@ -1314,7 +1302,7 @@ public sealed class MainForm : Form
         {
             bmp.Save(path, format);
         }
-
+        
         if (!string.IsNullOrEmpty(watermarkText))
         {
             AddWaterMark(Graphics.FromImage(bmp), watermarkText, w, h);
@@ -1425,7 +1413,7 @@ public sealed class MainForm : Form
         // The grid panel is a direct child of the form, so the same coordinate
         // system applies — we can assign Bounds directly.
         _gridPanel.Bounds = _renderPanel.Bounds;
-        if (_gridVisible && _gridPanel != null) _gridPanel.Invalidate();
+        if (_gridVisible) _gridPanel.Invalidate();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1529,16 +1517,13 @@ public sealed class MainForm : Form
                 {
                     if (_disposed) return;
                     renderer.UpdateTexture(calc.ColorBuffer, calc.Width, calc.Height);
-                    // Refresh grid overlay whenever a new frame lands.
-                    if (_gridVisible && _gridPanel != null) _gridPanel.Invalidate();
+                    if (_gridVisible) _gridPanel.Invalidate();
                     // Precision mode tag: [SP] or [DD].
                     string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
                     SetStatus(
                             $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
                             $"zoom={calc.Zoom:G6}  iter={calc.MaxIterations}  " +
                             $"{precTag}  [{ms} ms  {calc.Width}×{calc.Height}]");
-
-                    if (_gridVisible) _gridPanel?.Invalidate();
                 });
             }
         }, TaskScheduler.Default);
@@ -1675,7 +1660,6 @@ public sealed class InputDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         BackColor = Color.FromArgb(35, 35, 35);
-        TopMost = true;
 
         Controls.Add(new Label
         {
@@ -1732,7 +1716,8 @@ public sealed class InputDialog : Form
 // ─────────────────────────────────────────────────────────────────────────────
 // Cartesian grid overlay panel
 // ─────────────────────────────────────────────────────────────────────────────
-//// ARCHITECTURE NOTE — why sibling, not child
+//
+// ARCHITECTURE NOTE — why sibling, not child
 // ────────────────────────────────────────────────────────────────────────────
 // RenderPanel sets WS_EX_NOREDIRECTIONBITMAP (0x00200000) so that the D3D11
 // swap-chain presents directly to the screen without going through the DWM
@@ -1810,19 +1795,19 @@ internal sealed class GridOverlayPanel : Control
 
     // Delegates into MainForm — evaluated at paint time.
     private readonly Func<(double cx, double cy)> _getCenter;
-    private readonly Func<double> _getZoom;
-    private readonly Func<Size> _getPanelSize;
-    private readonly Func<Color> _getSwatchColor;
+    private readonly Func<double>                 _getZoom;
+    private readonly Func<Size>                   _getPanelSize;
+    private readonly Func<Color>                  _getSwatchColor;
 
     public GridOverlayPanel(
         Func<(double, double)> getCenter,
-        Func<double> getZoom,
-        Func<Size> getPanelSize,
-        Func<Color> getSwatchColor)
+        Func<double>           getZoom,
+        Func<Size>             getPanelSize,
+        Func<Color>            getSwatchColor)
     {
-        _getCenter = getCenter;
-        _getZoom = getZoom;
-        _getPanelSize = getPanelSize;
+        _getCenter      = getCenter;
+        _getZoom        = getZoom;
+        _getPanelSize   = getPanelSize;
         _getSwatchColor = getSwatchColor;
 
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
@@ -1854,7 +1839,7 @@ internal sealed class GridOverlayPanel : Control
     // WndProc override: pass all mouse messages to the render panel underneath.
     protected override void WndProc(ref Message m)
     {
-        const int WM_NCHITTEST = 0x0084;
+        const int WM_NCHITTEST  = 0x0084;
         const int HTTRANSPARENT = -1;
         if (m.Msg == WM_NCHITTEST) { m.Result = (IntPtr)HTTRANSPARENT; return; }
         base.WndProc(ref m);
@@ -1873,26 +1858,26 @@ internal sealed class GridOverlayPanel : Control
         using (var g = Graphics.FromImage(bmp))
         {
             g.Clear(Color.Transparent);
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.SmoothingMode     = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
             DrawCartesianGrid(g, w, h);
         }
 
         // Push the bitmap to the screen via UpdateLayeredWindow.
         IntPtr screenDC = GetDC(IntPtr.Zero);
-        IntPtr memDC = CreateCompatibleDC(screenDC);
-        IntPtr hBmp = bmp.GetHbitmap(Color.FromArgb(0, 0, 0, 0));
-        IntPtr hOld = SelectObject(memDC, hBmp);
+        IntPtr memDC    = CreateCompatibleDC(screenDC);
+        IntPtr hBmp     = bmp.GetHbitmap(Color.FromArgb(0, 0, 0, 0));
+        IntPtr hOld     = SelectObject(memDC, hBmp);
 
-        var pos = new POINT { x = Left, y = Top };
-        var size = new SIZE { cx = w, cy = h };
-        var srcPt = new POINT { x = 0, y = 0 };
-        var blend = new BLENDFUNCTION
+        var pos       = new POINT { x = Left, y = Top };
+        var size      = new SIZE  { cx = w, cy = h };
+        var srcPt     = new POINT { x = 0, y = 0 };
+        var blend     = new BLENDFUNCTION
         {
-            BlendOp = 0,   // AC_SRC_OVER
-            BlendFlags = 0,
+            BlendOp             = 0,   // AC_SRC_OVER
+            BlendFlags          = 0,
             SourceConstantAlpha = 255, // rely on per-pixel alpha
-            AlphaFormat = 1    // AC_SRC_ALPHA
+            AlphaFormat         = 1    // AC_SRC_ALPHA
         };
 
         UpdateLayeredWindow(Handle, screenDC, ref pos, ref size,
@@ -1908,28 +1893,28 @@ internal sealed class GridOverlayPanel : Control
 
     private void DrawCartesianGrid(Graphics g, int w, int h)
     {
-        var (cx, cy) = _getCenter();
-        double zoom = _getZoom();
+        var    (cx, cy) = _getCenter();
+        double zoom     = _getZoom();
 
         // World-units per pixel — matches MainForm.CurrentScale().
-        double scale = 3.5 / (System.Math.Max(w, h) * zoom);
+        double scale  = 3.5 / (System.Math.Max(w, h) * zoom);
 
         double halfWW = w * scale * 0.5;
         double halfHW = h * scale * 0.5;
-        double xMin = cx - halfWW;
-        double xMax = cx + halfWW;
-        double yMin = cy - halfHW;
-        double yMax = cy + halfHW;
+        double xMin   = cx - halfWW;
+        double xMax   = cx + halfWW;
+        double yMin   = cy - halfHW;
+        double yMax   = cy + halfHW;
 
         // Derive grid colour contrasting the current swatch.
         Color gridColor = ComputeContrastColor(_getSwatchColor());
 
-        using var gridPen = new Pen(Color.FromArgb(160, gridColor), 1.0f);
-        using var axisPen = new Pen(Color.FromArgb(210, gridColor), 1.8f);
+        using var gridPen    = new Pen(Color.FromArgb(160, gridColor), 1.0f);
+        using var axisPen    = new Pen(Color.FromArgb(210, gridColor), 1.8f);
         using var labelBrush = new SolidBrush(Color.FromArgb(200, gridColor));
-        using var shadowBrush = new SolidBrush(Color.FromArgb(120, 0, 0, 0));
-        using var labelFont = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
-        using var zeroFont = new Font("Consolas", 8.5f, FontStyle.Bold, GraphicsUnit.Point);
+        using var shadowBrush= new SolidBrush(Color.FromArgb(120, 0, 0, 0));
+        using var labelFont  = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
+        using var zeroFont   = new Font("Consolas", 8.5f, FontStyle.Bold,    GraphicsUnit.Point);
 
         // "Nice" grid spacing: aim for ~7 visible lines across the wider axis.
         double gridStep = NiceStep((xMax - xMin) / 7.0);
@@ -1946,12 +1931,12 @@ internal sealed class GridOverlayPanel : Control
 
             // Label at bottom — draw a shadow pass then the coloured text.
             string lbl = FormatCoord(wx);
-            var sz = g.MeasureString(lbl, labelFont);
-            float lx = px - sz.Width * 0.5f;
-            float ly = h - sz.Height - 2;
+            var    sz  = g.MeasureString(lbl, labelFont);
+            float  lx  = px - sz.Width  * 0.5f;
+            float  ly  = h  - sz.Height - 2;
             if (ly < 0) ly = 2;
             g.DrawString(lbl, labelFont, shadowBrush, lx + 1, ly + 1);
-            g.DrawString(lbl, labelFont, labelBrush, lx, ly);
+            g.DrawString(lbl, labelFont, labelBrush,  lx,     ly);
         }
 
         // ── Horizontal grid lines (constant Im) ───────────────────────────────
@@ -1967,11 +1952,11 @@ internal sealed class GridOverlayPanel : Control
             if (System.Math.Abs(wy) < gridStep * 0.01) continue; // zero label drawn separately
 
             string lbl = FormatCoord(wy) + "i";
-            var sz = g.MeasureString(lbl, labelFont);
-            float lx = 3;
-            float ly = py - sz.Height * 0.5f;
+            var    sz  = g.MeasureString(lbl, labelFont);
+            float  lx  = 3;
+            float  ly  = py - sz.Height * 0.5f;
             g.DrawString(lbl, labelFont, shadowBrush, lx + 1, ly + 1);
-            g.DrawString(lbl, labelFont, labelBrush, lx, ly);
+            g.DrawString(lbl, labelFont, labelBrush,  lx,     ly);
         }
 
         // ── Origin "0" label ──────────────────────────────────────────────────
@@ -1980,7 +1965,7 @@ internal sealed class GridOverlayPanel : Control
         if (ox >= 0 && ox <= w && oy >= 0 && oy <= h)
         {
             g.DrawString("0", zeroFont, shadowBrush, ox + 3, oy + 3);
-            g.DrawString("0", zeroFont, labelBrush, ox + 2, oy + 2);
+            g.DrawString("0", zeroFont, labelBrush,  ox + 2, oy + 2);
         }
     }
 
@@ -1995,7 +1980,7 @@ internal sealed class GridOverlayPanel : Control
     private static double NiceStep(double raw)
     {
         if (raw <= 0) return 1.0;
-        double mag = System.Math.Pow(10, System.Math.Floor(System.Math.Log10(raw)));
+        double mag  = System.Math.Pow(10, System.Math.Floor(System.Math.Log10(raw)));
         double norm = raw / mag;
         double nice = norm <= 1.0 ? 1.0 : norm <= 2.0 ? 2.0 : norm <= 5.0 ? 5.0 : 10.0;
         return nice * mag;
@@ -2020,17 +2005,17 @@ internal sealed class GridOverlayPanel : Control
     private static Color ComputeContrastColor(Color swatch)
     {
         float r = swatch.R / 255f, g = swatch.G / 255f, b = swatch.B / 255f;
-        float cmax = System.Math.Max(r, System.Math.Max(g, b));
-        float cmin = System.Math.Min(r, System.Math.Min(g, b));
+        float cmax  = System.Math.Max(r, System.Math.Max(g, b));
+        float cmin  = System.Math.Min(r, System.Math.Min(g, b));
         float delta = cmax - cmin;
-        float l = (cmax + cmin) * 0.5f;
+        float l     = (cmax + cmin) * 0.5f;
 
         float h2 = 0f;
         if (delta > 0.001f)
         {
-            if (cmax == r) h2 = ((g - b) / delta) % 6f;
+            if      (cmax == r) h2 = ((g - b) / delta) % 6f;
             else if (cmax == g) h2 = (b - r) / delta + 2f;
-            else h2 = (r - g) / delta + 4f;
+            else                h2 = (r - g) / delta + 4f;
             h2 = (h2 / 6f + 1f) % 1f;
         }
         float s2 = delta < 0.001f ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
@@ -2039,22 +2024,22 @@ internal sealed class GridOverlayPanel : Control
         float hc = (h2 + 0.5f) % 1f;
         float lc = l < 0.5f
             ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
-            : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
+            : System.Math.Clamp(1f - l * 1.4f, 0.0f,  0.35f);
         float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
 
         // HSL → RGB
-        float c = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
+        float c  = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
         float xv = c * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
-        float m = lc - c * 0.5f;
+        float m  = lc - c * 0.5f;
         float rr, gg, bb;
         switch ((int)(hc * 6f))
         {
-            case 0: rr = c; gg = xv; bb = 0; break;
-            case 1: rr = xv; gg = c; bb = 0; break;
-            case 2: rr = 0; gg = c; bb = xv; break;
-            case 3: rr = 0; gg = xv; bb = c; break;
-            case 4: rr = xv; gg = 0; bb = c; break;
-            default: rr = c; gg = 0; bb = xv; break;
+            case 0:  rr=c;  gg=xv; bb=0;  break;
+            case 1:  rr=xv; gg=c;  bb=0;  break;
+            case 2:  rr=0;  gg=c;  bb=xv; break;
+            case 3:  rr=0;  gg=xv; bb=c;  break;
+            case 4:  rr=xv; gg=0;  bb=c;  break;
+            default: rr=c;  gg=0;  bb=xv; break;
         }
         return Color.FromArgb(
             (int)System.Math.Clamp((rr + m) * 255f, 0, 255),

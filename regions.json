@@ -241,5 +241,24 @@
     "Iterations": 1116,
     "QualityPresetName": "Standard",
     "Description": "Saved 2026-04-18 08:51"
+  },
+  {
+    "Name": "Spanish Dancer",
+    "CenterX": -0.7427187471226199,
+    "CenterY": 0.13107946767877027,
+    "Zoom": 11100339816252.098,
+    "Iterations": 3851,
+    "QualityPresetName": "High",
+    "Description": "Saved 2026-04-18 11:32"
+  },
+  {
+    "Name": "Mini Brot Jr",
+    "CenterX": -1.2637024289471364,
+    "CenterY": -0.04171122855192993,
+    "Zoom": 46176034.410258986,
+    "Iterations": 2474,
+    "QualityPresetName": "High",
+    "Description": "Saved 2026-04-18 11:42"
   }
+
 ]
