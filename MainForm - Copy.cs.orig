@@ -55,14 +55,6 @@ public sealed class MainForm : Form
     // ── Render panel ──────────────────────────────────────────────────────────
     private readonly RenderPanel _renderPanel;
 
-    // ── Grid overlay panel ────────────────────────────────────────────────────
-    // Transparent WinForms panel that sits directly on top of _renderPanel and
-    // paints the Cartesian grid via GDI+.  Visible only when the Grid checkbox
-    // is checked.  Because it has no DirectX involvement it never interferes
-    // with the D3D11 swap-chain — it is simply a child control layered above it.
-    private readonly GridOverlayPanel _gridPanel;
-    private bool _gridVisible;
-
     // ── UI: Footer panel ──────────────────────────────────────────────────────
     private readonly Panel _footerPanel;
 
@@ -421,29 +413,6 @@ public sealed class MainForm : Form
 
         buttonLeft += _checkBoxShowCoordPanel.Width + 12;
 
-        // Grid overlay checkbox.
-        var checkBoxShowGrid = new CheckBox
-        {
-            Text = "Grid",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = false,
-        };
-        new ToolTip().SetToolTip(checkBoxShowGrid,
-            "Overlay a Cartesian complex-plane grid on the fractal view");
-        checkBoxShowGrid.Click += (s, e) =>
-        {
-            _gridVisible = checkBoxShowGrid.Checked;
-            _gridPanel.Visible = _gridVisible;
-            _gridPanel.Invalidate();
-        };
-        _toolbar.Controls.Add(checkBoxShowGrid);
-
         _footerPanel = new Panel
         {
             Height = 22,
@@ -526,31 +495,6 @@ public sealed class MainForm : Form
         _renderPanel.MouseDown += OnMouseDown;
         _renderPanel.MouseMove += OnMouseMove;
         _renderPanel.MouseUp += OnMouseUp;
-
-        // ── Grid overlay panel ────────────────────────────────────────────────
-        // GridOverlayPanel sits as a child of _renderPanel so it always matches
-        // the render area exactly and resizes with it automatically.
-        // It is transparent to mouse events (they fall through to _renderPanel)
-        // and paints the Cartesian complex-plane grid in its OnPaint override.
-        // The panel asks MainForm for view parameters via delegates each paint
-        // so the grid coordinate labels stay perfectly in sync with the view.
-        _gridPanel = new GridOverlayPanel(
-            getCenter: () => (_centerX, _centerY),
-            getZoom: () => _zoom,
-            getPanelSize: () => _renderPanel.ClientSize,
-            getSwatchColor: () =>
-            {
-                if (_calculator?.ColorMap == null) return Color.White;
-                _calculator.ColorMap.MaxIterations = 500;
-                int argb = _calculator.ColorMap.SwatchSample;
-                return Color.FromArgb((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
-            })
-        {
-            Dock = DockStyle.Fill,
-            Visible = false,
-        };
-        // Invalidate the grid whenever a new fractal frame arrives.
-        _renderPanel.Controls.Add(_gridPanel);
 
         // Docking order: Fill first, then Top-docked panels in reverse order.
         Controls.Add(_renderPanel);
@@ -1292,7 +1236,7 @@ public sealed class MainForm : Form
         {
             bmp.Save(path, format);
         }
-
+        
         if (!string.IsNullOrEmpty(watermarkText))
         {
             AddWaterMark(Graphics.FromImage(bmp), watermarkText, w, h);
@@ -1494,8 +1438,6 @@ public sealed class MainForm : Form
                 {
                     if (_disposed) return;
                     renderer.UpdateTexture(calc.ColorBuffer, calc.Width, calc.Height);
-                    // Refresh grid overlay whenever a new frame lands.
-                    if (_gridVisible) _gridPanel.Invalidate();
                     // Precision mode tag: [SP] or [DD].
                     string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
                     SetStatus(
@@ -1688,278 +1630,5 @@ public sealed class InputDialog : Form
 
         AcceptButton = ok; CancelButton = cancel;
         Controls.Add(ok); Controls.Add(cancel);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cartesian grid overlay panel
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// Design: a transparent WinForms panel that sits as a child of RenderPanel and
-// paints the Cartesian complex-plane grid entirely with GDI+ in OnPaint.
-//
-// Transparency trick
-//   WinForms doesn't support true per-pixel transparency for child panels over
-//   a DirectX surface.  Instead we set the panel's background to transparent
-//   (via SetStyle + BackColor = Color.Transparent) and mark it with
-//   WS_EX_TRANSPARENT so Windows skips painting its background and lets the
-//   D3D11 swap-chain show through.  Mouse events are passed through to the
-//   parent by forwarding WM_NCHITTEST to HTTRANSPARENT.
-//
-// Grid coordinate maths
-//   The complex-plane visible width is  3.5 / zoom  (matching CurrentScale).
-//   A "nice" grid spacing is chosen so that 4–10 grid lines appear across the
-//   view at any zoom level.  We pick the largest power-of-10 multiplied by 1,
-//   2, or 5 that satisfies that constraint.
-//
-// Colour contrast
-//   The panel asks MainForm for the current colour-map swatch colour and
-//   computes a contrasting colour by rotating the hue 180° and boosting/dimming
-//   the luminance.  The grid is always drawn at 60% opacity so the fractal
-//   detail underneath remains clearly visible.
-
-internal sealed class GridOverlayPanel : Panel
-{
-    // Delegates into MainForm — evaluated each paint so the grid stays live.
-    private readonly Func<(double cx, double cy)> _getCenter;
-    private readonly Func<double> _getZoom;
-    private readonly Func<Size> _getPanelSize;
-    private readonly Func<Color> _getSwatchColor;
-
-    public GridOverlayPanel(
-        Func<(double, double)> getCenter,
-        Func<double> getZoom,
-        Func<Size> getPanelSize,
-        Func<Color> getSwatchColor)
-    {
-        _getCenter = getCenter;
-        _getZoom = getZoom;
-        _getPanelSize = getPanelSize;
-        _getSwatchColor = getSwatchColor;
-
-        SetStyle(
-            ControlStyles.SupportsTransparentBackColor |
-            ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.UserPaint,
-            true);
-
-        BackColor = Color.Transparent;
-    }
-
-    // Pass mouse events through to the D3D11 surface underneath.
-    protected override void WndProc(ref Message m)
-    {
-        const int WM_NCHITTEST = 0x0084;
-        const int HTTRANSPARENT = -1;
-        if (m.Msg == WM_NCHITTEST) { m.Result = (IntPtr)HTTRANSPARENT; return; }
-        base.WndProc(ref m);
-    }
-
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            var cp = base.CreateParams;
-            cp.ExStyle |= 0x00000020; // WS_EX_TRANSPARENT
-            return cp;
-        }
-    }
-
-    // ── Paint ─────────────────────────────────────────────────────────────────
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-
-        var size = _getPanelSize();
-        int w = size.Width;
-        int h = size.Height;
-        if (w < 2 || h < 2) return;
-
-        var (cx, cy) = _getCenter();
-        double zoom = _getZoom();
-
-        // Complex-plane scale: world units per pixel.
-        double scale = 3.5 / (System.Math.Max(w, h) * zoom);
-
-        // World-space extent of the view.
-        double halfWW = w * scale * 0.5;
-        double halfHW = h * scale * 0.5;
-        double xMin = cx - halfWW;
-        double xMax = cx + halfWW;
-        double yMin = cy - halfHW;   // complex y points up
-        double yMax = cy + halfHW;
-
-        // ── Grid colour: complementary to the current swatch ─────────────────
-        Color gridColor = ComputeContrastColor(_getSwatchColor());
-        var gridPen = new Pen(Color.FromArgb(180, gridColor), 1.0f);
-        var axisPen = new Pen(Color.FromArgb(220, gridColor), 1.5f);
-        var labelBrush = new SolidBrush(Color.FromArgb(200, gridColor));
-        using var labelFont = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
-        using var zeroFont = new Font("Consolas", 8.5f, FontStyle.Bold, GraphicsUnit.Point);
-
-        // ── Choose a "nice" grid spacing ──────────────────────────────────────
-        double viewSpan = xMax - xMin;  // wider axis drives the spacing decision
-        double targetLines = 7.0;        // aim for ~7 grid lines across the view
-        double rawStep = viewSpan / targetLines;
-        double gridStep = NiceStep(rawStep);
-
-        // ── Draw vertical lines (constant Re) ─────────────────────────────────
-        double firstX = System.Math.Ceiling(xMin / gridStep) * gridStep;
-        for (double wx = firstX; wx <= xMax + gridStep * 0.5; wx += gridStep)
-        {
-            float px = WorldToScreenX(wx, cx, scale, w);
-            if (px < 0 || px > w) continue;
-
-            bool isAxis = System.Math.Abs(wx) < gridStep * 0.01;
-            g.DrawLine(isAxis ? axisPen : gridPen, px, 0, px, h);
-
-            // Label along the bottom edge.
-            string lbl = FormatCoord(wx);
-            var sz = g.MeasureString(lbl, labelFont);
-            float ly = h - sz.Height - 2;
-            if (ly < 0) ly = 2;
-            g.DrawString(lbl, labelFont, labelBrush, px - sz.Width * 0.5f, ly);
-        }
-
-        // ── Draw horizontal lines (constant Im) ───────────────────────────────
-        // Complex y increases upward but screen y increases downward, so we
-        // negate: a larger complex-Im value corresponds to a smaller screen-y.
-        double firstY = System.Math.Ceiling(yMin / gridStep) * gridStep;
-        for (double wy = firstY; wy <= yMax + gridStep * 0.5; wy += gridStep)
-        {
-            float py = WorldToScreenY(wy, cy, scale, h);
-            if (py < 0 || py > h) continue;
-
-            bool isAxis = System.Math.Abs(wy) < gridStep * 0.01;
-            g.DrawLine(isAxis ? axisPen : gridPen, 0, py, w, py);
-
-            // Label along the left edge (skip zero — the vertical axis already labels it).
-            if (System.Math.Abs(wy) < gridStep * 0.01) continue;
-            string lbl = FormatCoord(wy) + "i";
-            var sz = g.MeasureString(lbl, labelFont);
-            g.DrawString(lbl, labelFont, labelBrush, 3, py - sz.Height * 0.5f);
-        }
-
-        // ── Origin label ──────────────────────────────────────────────────────
-        float ox = WorldToScreenX(0, cx, scale, w);
-        float oy = WorldToScreenY(0, cy, scale, h);
-        if (ox >= 0 && ox <= w && oy >= 0 && oy <= h)
-        {
-            var sz0 = g.MeasureString("0", zeroFont);
-            g.DrawString("0", zeroFont, labelBrush, ox + 2, oy + 2);
-        }
-
-        gridPen.Dispose();
-        axisPen.Dispose();
-        labelBrush.Dispose();
-    }
-
-    // ── Coordinate helpers ────────────────────────────────────────────────────
-
-    private static float WorldToScreenX(double wx, double cx, double scale, int w)
-        => (float)((wx - cx) / scale + w * 0.5);
-
-    private static float WorldToScreenY(double wy, double cy, double scale, int h)
-        // Negate: larger complex-Im → smaller screen-y.
-        => (float)(-(wy - cy) / scale + h * 0.5);
-
-    /// <summary>
-    /// Returns the smallest "nice" step ≥ rawStep.
-    /// "Nice" means a value of the form  N × 10^k  where N ∈ {1, 2, 5}.
-    /// </summary>
-    private static double NiceStep(double rawStep)
-    {
-        if (rawStep <= 0) return 1.0;
-        double mag = System.Math.Pow(10, System.Math.Floor(System.Math.Log10(rawStep)));
-        double norm = rawStep / mag;
-        double nice = norm <= 1.0 ? 1.0 : norm <= 2.0 ? 2.0 : norm <= 5.0 ? 5.0 : 10.0;
-        return nice * mag;
-    }
-
-    /// <summary>
-    /// Formats a coordinate value concisely — switches between fixed and
-    /// scientific notation depending on magnitude.
-    /// </summary>
-    private static string FormatCoord(double v)
-    {
-        double abs = System.Math.Abs(v);
-        if (abs == 0) return "0";
-        if (abs >= 0.001 && abs < 10000)
-        {
-            // Fixed notation with just enough decimal places.
-            int decimals = System.Math.Max(0, -(int)System.Math.Floor(System.Math.Log10(abs)) + 2);
-            decimals = System.Math.Min(decimals, 6);
-            return v.ToString($"F{decimals}",
-                System.Globalization.CultureInfo.InvariantCulture);
-        }
-        return v.ToString("G4", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    // ── Colour contrast ───────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Produces a grid colour that contrasts with the given swatch colour by:
-    ///   1. Converting the swatch to HSL.
-    ///   2. Rotating hue by 180°.
-    ///   3. Inverting luminance (dark themes get light grid, light themes dark).
-    ///   4. Boosting saturation so the grid reads clearly against the fractal.
-    /// </summary>
-    private static Color ComputeContrastColor(Color swatch)
-    {
-        // Convert RGB → HSL.
-        float r = swatch.R / 255f;
-        float g = swatch.G / 255f;
-        float b = swatch.B / 255f;
-
-        float cmax = System.Math.Max(r, System.Math.Max(g, b));
-        float cmin = System.Math.Min(r, System.Math.Min(g, b));
-        float delta = cmax - cmin;
-
-        float l = (cmax + cmin) * 0.5f;
-
-        float h2 = 0f;
-        if (delta > 0.001f)
-        {
-            if (cmax == r) h2 = ((g - b) / delta) % 6f;
-            else if (cmax == g) h2 = (b - r) / delta + 2f;
-            else h2 = (r - g) / delta + 4f;
-            h2 = (h2 / 6f + 1f) % 1f;
-        }
-
-        float s2 = (delta < 0.001f) ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
-
-        // Contrast operations:
-        //   • Rotate hue 180° for complementary colour.
-        //   • Invert and boost luminance (dark → light, light → dark, pushed toward extremes).
-        //   • Boost saturation.
-        float hc = (h2 + 0.5f) % 1f;
-        float lc = l < 0.5f ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
-                             : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
-        float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
-
-        // Convert HSL → RGB.
-        float c = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
-        float xv = c * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
-        float m = lc - c * 0.5f;
-
-        float rr, gg, bb;
-        int sector = (int)(hc * 6f);
-        switch (sector)
-        {
-            case 0: rr = c; gg = xv; bb = 0; break;
-            case 1: rr = xv; gg = c; bb = 0; break;
-            case 2: rr = 0; gg = c; bb = xv; break;
-            case 3: rr = 0; gg = xv; bb = c; break;
-            case 4: rr = xv; gg = 0; bb = c; break;
-            default: rr = c; gg = 0; bb = xv; break;
-        }
-
-        return Color.FromArgb(
-            (int)System.Math.Clamp((rr + m) * 255f, 0, 255),
-            (int)System.Math.Clamp((gg + m) * 255f, 0, 255),
-            (int)System.Math.Clamp((bb + m) * 255f, 0, 255));
     }
 }

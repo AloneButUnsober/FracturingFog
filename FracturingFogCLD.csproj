@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <None Remove="MainForm - Copy.cs.20260416-" />
+    <None Remove="MainForm - Copy.cs.orig" />
     <None Remove="MNDD3D-VRT383.zip" />
   </ItemGroup>
   <ItemGroup>
