@@ -9,6 +9,8 @@ namespace FracturingFog.Models
     {
         public static string Name => "Radio Interference";
 
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
+
         public int MaxIterations { get; set; } = 1000;
 
         public int Map(float smooth, float distance, int iterations)

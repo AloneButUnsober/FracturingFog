@@ -16,6 +16,8 @@ namespace FracturingFog.Models
     public class VintageSepiaMap : IColorMap
     {
         public static string Name        => "Vintage Sepia";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
         public static string Category    => "Monochrome";
         public static string Description => "Aged sepia photograph with distance vignette darkening.";
         public static ColorMapFeatures Features =>

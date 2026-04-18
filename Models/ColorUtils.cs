@@ -84,6 +84,8 @@ namespace FracturingFog.Models
     {
         protected readonly List<ColorStop> Stops = new();
 
+        public ColorPaletteType Type => ColorPaletteType.GradientLinear;
+
         public int MaxIterations { get; set; } = 1000;
 
         /// <inheritdoc/>
@@ -147,6 +149,8 @@ namespace FracturingFog.Models
         /// Default 0.02 gives roughly the same cycle rate as the HSV palette.
         /// </summary>
         protected virtual float CycleSpeed { get; } = 0.02f;
+
+        public new ColorPaletteType Type => ColorPaletteType.GradientCyclic;
 
         /// <inheritdoc/>
         public override int Map(float smooth, float distance, int maxIterations)

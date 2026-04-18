@@ -15,6 +15,8 @@ namespace FracturingFog.Models
     public class SolarWindMap : IColorMap
     {
         public static string Name        => "Solar Wind";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Scientific;
         public static string Category    => "Scientific";
         public static string Description => "Coronal plasma: deep purple→electric blue→cyan→white edge flare.";
         public static ColorMapFeatures Features =>

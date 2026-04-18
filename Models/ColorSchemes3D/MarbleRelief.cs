@@ -19,6 +19,9 @@ namespace FracturingFog.Models
     public class MarbleReliefMap : IColorMap
     {
         public static string Name        => "Marble Relief";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
         public static string Category    => "3D Relief";
         public static string Description => "Carved white Carrara marble — overhead light with soft warm shadows and grey veining.";
         public static ColorMapFeatures Features =>

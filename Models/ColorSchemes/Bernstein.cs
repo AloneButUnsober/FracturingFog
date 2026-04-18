@@ -22,6 +22,9 @@ namespace FracturingFog.Models
     public class BernsteinMap : IColorMap
     {
         public static string Name        => "Bernstein";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
+
         public static string Category    => "Algorithmic";
         public static string Description => "Cosine-basis palette by Íñigo Quílez — mathematically smooth, band-free.";
         public static ColorMapFeatures Features =>

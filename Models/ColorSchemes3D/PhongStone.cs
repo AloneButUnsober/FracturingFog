@@ -16,7 +16,7 @@ namespace FracturingFog.Models
     /// Classic Phong shading on a grey granite surface with a warm key light.
     /// Produces the look of carved stone mathematical relief art.
     /// </summary>
-    public class PhongStoneMap : IColorMap
+    public class PhongStoneMap : GradientPhong3DBase
     {
         public static string Name        => "Phong Stone";
         public static string Category    => "3D Relief";
@@ -25,7 +25,7 @@ namespace FracturingFog.Models
             ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesNormals |
             ColorMapFeatures.ThreeDEffect | ColorMapFeatures.HighContrast;
 
-        public int MaxIterations { get; set; } = 1000;
+        //public int MaxIterations { get; set; } = 1000;
 
         // Single warm key light: upper-right, slightly toward the viewer.
         private static readonly LightSource Key = new(

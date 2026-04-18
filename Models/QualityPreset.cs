@@ -30,13 +30,13 @@ namespace FracturingFog.Models
     public enum QualityTier
     {
         /// <summary>Fast preview. Shallow zoom, low iteration cap.</summary>
-        Draft    = 0,
+        Draft = 0,
         /// <summary>Balanced quality and speed. Full double-precision zoom depth.</summary>
         Standard = 1,
         /// <summary>Deep zoom with extended precision. Slower at depth.</summary>
-        High     = 2,
+        High = 2,
         /// <summary>Maximum zoom (~5×10²⁷) and detail. May be slow at extreme depth.</summary>
-        Ultra    = 3,
+        Ultra = 3,
     }
 
     /// <summary>
@@ -46,9 +46,9 @@ namespace FracturingFog.Models
     {
         // ── Identity ──────────────────────────────────────────────────────────
 
-        public QualityTier Tier        { get; init; }
-        public string      Name        { get; init; } = string.Empty;
-        public string      Description { get; init; } = string.Empty;
+        public QualityTier Tier { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public string Description { get; init; } = string.Empty;
 
         // ── Zoom control ──────────────────────────────────────────────────────
 
@@ -67,10 +67,10 @@ namespace FracturingFog.Models
         // ── Iteration control ─────────────────────────────────────────────────
 
         /// <summary>Iteration count at zoom = 1 (no zoom).</summary>
-        public int IterBase      { get; init; }
+        public int IterBase { get; init; }
 
         /// <summary>Hard cap on iterations regardless of zoom.</summary>
-        public int IterMax       { get; init; }
+        public int IterMax { get; init; }
 
         /// <summary>Additional iterations per decade of zoom (log₁₀ scale).</summary>
         public int IterPerDecade { get; init; }
@@ -119,16 +119,16 @@ namespace FracturingFog.Models
         /// </summary>
         public static readonly QualityPreset Draft = new()
         {
-            Tier              = QualityTier.Draft,
-            Name              = "Draft",
-            Description       = "Fast preview — shallow zoom (max 10⁵), low iteration cap (256).",
-            ZoomMin           = 0.5,
-            ZoomMax           = 1e5,
-            WheelZoomFactor   = 1.40,     // large steps: 40% per detent
-            IterBase          = 64,
-            IterMax           = 256,
-            IterPerDecade     = 20,        // +20 iters per decade of zoom
-            AllowHighPrecision= false,
+            Tier = QualityTier.Draft,
+            Name = "Draft",
+            Description = "Fast preview — shallow zoom (max 10⁵), low iteration cap (256).",
+            ZoomMin = 0.5,
+            ZoomMax = 1e5,
+            WheelZoomFactor = 1.40,     // large steps: 40% per detent
+            IterBase = 64,
+            IterMax = 256,
+            IterPerDecade = 20,        // +20 iters per decade of zoom
+            AllowHighPrecision = false,
         };
 
         /// <summary>
@@ -137,16 +137,16 @@ namespace FracturingFog.Models
         /// </summary>
         public static readonly QualityPreset Standard = new()
         {
-            Tier              = QualityTier.Standard,
-            Name              = "Standard",
-            Description       = "Balanced quality — full double-precision zoom depth (max 10¹³), up to 2048 iterations.",
-            ZoomMin           = 0.5,
-            ZoomMax           = 1e13,
-            WheelZoomFactor   = 1.20,     // 20% per detent
-            IterBase          = 256,
-            IterMax           = 2048,
-            IterPerDecade     = 128,       // +128 iters per decade
-            AllowHighPrecision= false,
+            Tier = QualityTier.Standard,
+            Name = "Standard",
+            Description = "Balanced quality — full double-precision zoom depth (max 10¹³), up to 2048 iterations.",
+            ZoomMin = 0.5,
+            ZoomMax = 1e13,
+            WheelZoomFactor = 1.20,     // 20% per detent
+            IterBase = 256,
+            IterMax = 2048,
+            IterPerDecade = 128,       // +128 iters per decade
+            AllowHighPrecision = false,
         };
 
         /// <summary>
@@ -156,17 +156,17 @@ namespace FracturingFog.Models
         /// </summary>
         public static readonly QualityPreset High = new()
         {
-            Tier              = QualityTier.High,
-            Name              = "High",
-            Description       = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. Slower at depth.",
-            ZoomMin           = 0.5,
-            ZoomMax           = 1e22,
-            WheelZoomFactor   = 1.12,     // 12% per detent — finer control at depth
-            IterBase          = 512,
-            IterMax           = 16384,
-            IterPerDecade     = 256,       // +256 iters per decade
-            AllowHighPrecision= true,
-            HPZoomThreshold   = 1e12,      // engage DD when double starts to degrade
+            Tier = QualityTier.High,
+            Name = "High",
+            Description = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. Slower at depth.",
+            ZoomMin = 0.5,
+            ZoomMax = 1e22,
+            WheelZoomFactor = 1.12,     // 12% per detent — finer control at depth
+            IterBase = 512,
+            IterMax = 16384,
+            IterPerDecade = 256,       // +256 iters per decade
+            AllowHighPrecision = true,
+            HPZoomThreshold = 1e12,      // engage DD when double starts to degrade
         };
 
         /// <summary>
@@ -175,17 +175,17 @@ namespace FracturingFog.Models
         /// </summary>
         public static readonly QualityPreset Ultra = new()
         {
-            Tier              = QualityTier.Ultra,
-            Name              = "Ultra",
-            Description       = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. Slow at extreme depth.",
-            ZoomMin           = 0.5,
-            ZoomMax           = 5e27,
-            WheelZoomFactor   = 1.08,     // 8% per detent — very fine control
-            IterBase          = 1024,
-            IterMax           = 65536,
-            IterPerDecade     = 512,       // +512 iters per decade
-            AllowHighPrecision= true,
-            HPZoomThreshold   = 1e12,
+            Tier = QualityTier.Ultra,
+            Name = "Ultra",
+            Description = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. Slow at extreme depth.",
+            ZoomMin = 0.5,
+            ZoomMax = 5e27,
+            WheelZoomFactor = 1.08,     // 8% per detent — very fine control
+            IterBase = 1024,
+            IterMax = 65536,
+            IterPerDecade = 512,       // +512 iters per decade
+            AllowHighPrecision = true,
+            HPZoomThreshold = 1e12,
         };
 
         // ── Lookup helpers ────────────────────────────────────────────────────
@@ -196,11 +196,24 @@ namespace FracturingFog.Models
         /// <summary>Returns the preset for the given tier.</summary>
         public static QualityPreset Get(QualityTier tier) => tier switch
         {
-            QualityTier.Draft    => Draft,
+            QualityTier.Draft => Draft,
             QualityTier.Standard => Standard,
-            QualityTier.High     => High,
-            QualityTier.Ultra    => Ultra,
-            _                    => Standard,
+            QualityTier.High => High,
+            QualityTier.Ultra => Ultra,
+            _ => Standard,
         };
+
+        internal static QualityPreset FromName(string value)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                foreach (var preset in All)
+                {
+                    if (string.Equals(preset.Name, value, StringComparison.OrdinalIgnoreCase))
+                        return preset;
+                }
+            }
+            return Standard; // default if not found or empty
+        }
     }
 }

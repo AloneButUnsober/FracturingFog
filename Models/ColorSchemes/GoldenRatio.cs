@@ -9,6 +9,9 @@ namespace FracturingFog.Models
     {
         public static string Name => "Golden Ratio";
 
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
+
+
         public int MaxIterations { get; set; } = 1000;
 
         private const float Phi = 0.61803398875f;

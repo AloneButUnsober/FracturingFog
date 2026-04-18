@@ -18,6 +18,9 @@ namespace FracturingFog.Models
     public class NeonReliefMap : IColorMap
     {
         public static string Name        => "Neon Relief";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
         public static string Category    => "3D Relief";
         public static string Description => "Dark surface, neon magenta/cyan/green rim lights — glowing outlined 3D structure.";
         public static ColorMapFeatures Features =>

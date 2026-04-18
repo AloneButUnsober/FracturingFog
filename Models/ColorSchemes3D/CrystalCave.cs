@@ -17,6 +17,9 @@ namespace FracturingFog.Models
     public class CrystalCaveMap : IColorMap
     {
         public static string Name        => "Crystal Cave";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
         public static string Category    => "3D Relief";
         public static string Description => "Ice-crystal facets — two opposing rim lights, high-frequency pinpoint specular.";
         public static ColorMapFeatures Features =>

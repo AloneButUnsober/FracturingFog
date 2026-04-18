@@ -25,6 +25,7 @@
 //
 //   For in-set pixels (iter >= maxIterations), both nx and ny are 0.
 using System;
+using System.Drawing.Imaging;
 
 namespace FracturingFog.Interefaces
 {
@@ -48,6 +49,20 @@ namespace FracturingFog.Interefaces
     }
 
     /// <summary>
+    /// Pallet categories for UI grouping and metadata.  Not a strict taxonomy, just
+    /// a convenient way to organize palettes in the user interface.
+    /// </summary>
+    public enum ColorPaletteType
+    {
+        GradientLinear,
+        GradientCyclic,
+        Algorithmic,
+        Relief3D,
+        Texture,
+        Scientific
+    }
+
+    /// <summary>
     /// Maps per-pixel fractal output data (smooth iteration count, exterior
     /// distance estimate) to a packed 32-bit ARGB integer colour value.
     /// Return format: <c>unchecked((int)0xFF_RR_GG_BB)</c>.
@@ -61,8 +76,13 @@ namespace FracturingFog.Interefaces
         // ── Static display metadata (override the default per implementation) ─
 
         public static string Name        { get; } = "Unnamed";
+
+        public ColorPaletteType Type { get; }
+
         public static string           Category    { get; } = "General";
+
         public static string           Description { get; } = "";
+
         public static ColorMapFeatures Features    { get; } = ColorMapFeatures.UsesSmooth;
 
 

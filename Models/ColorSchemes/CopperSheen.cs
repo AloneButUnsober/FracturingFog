@@ -16,6 +16,9 @@ namespace FracturingFog.Models
     public class CopperSheenMap : IColorMap
     {
         public static string Name        => "Copper Sheen";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
+
         public static string Category    => "Metallic";
         public static string Description => "Polished copper — power-curve R/G with distance specular.";
         public static ColorMapFeatures Features =>

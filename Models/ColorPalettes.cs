@@ -7,6 +7,7 @@ using FracturingFog.Interefaces;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace FracturingFog.Models
 {
@@ -73,7 +74,7 @@ namespace FracturingFog.Models
 
             // ── Algorithmic / artistic ────────────────────────────────────────
             new NebulaDustMap(),
-            new DistanceGlowMap(),
+            //new DistanceGlowMap(),
             new DigitalMatrixMap(),
             new PsychedelicMap(),
             new TwilightCyclicMap(),
@@ -141,6 +142,19 @@ namespace FracturingFog.Models
             return groups;
         }
 
+        public static Dictionary<string, List<IColorMap>> GetPalettesByType(ColorPaletteType type)
+        {
+            var groups = new Dictionary<string, List<IColorMap>>(StringComparer.Ordinal);
+            foreach (var p in Palettes)
+            {
+                if (p.Type != type) continue;
+                string cat = GetStaticName(p);
+                if (!groups.TryGetValue(cat, out var list))
+                    groups[cat] = list = new List<IColorMap>();
+                list.Add(p);
+            }
+            return groups;
+        }
         /// <summary>
         /// Returns the tooltip description for a palette name, or empty string.
         /// </summary>

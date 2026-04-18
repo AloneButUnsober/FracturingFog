@@ -16,6 +16,8 @@ namespace FracturingFog.Models
     public class WarpedHsvMap : IColorMap
     {
         public static string Name        => "Warped HSV";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
         public static string Category    => "Classic";
         public static string Description => "HSV with nonlinear sat/val curves and distance boundary glow.";
         public static ColorMapFeatures Features =>

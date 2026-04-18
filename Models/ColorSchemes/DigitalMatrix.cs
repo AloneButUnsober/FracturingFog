@@ -15,6 +15,9 @@ namespace FracturingFog.Models
     public class DigitalMatrixMap : IColorMap
     {
         public static string Name        => "Digital Matrix";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
+
         public static string Category    => "Artistic";
         public static string Description => "Phosphor-green-on-black with scan-line banding and edge glow.";
         public static ColorMapFeatures Features =>

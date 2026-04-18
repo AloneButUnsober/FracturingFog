@@ -16,6 +16,8 @@ namespace FracturingFog.Models
     public class PsychedelicMap : IColorMap
     {
         public static string Name        => "Psychedelic";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
         public static string Category    => "Artistic";
         public static string Description => "Ultra-fast rainbow cycling with interference-pattern ripple.";
         public static ColorMapFeatures Features =>

@@ -18,6 +18,9 @@ namespace FracturingFog.Models
     public class GoldReliefMap : IColorMap
     {
         public static string Name        => "Gold Relief";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
         public static string Category    => "3D Relief";
         public static string Description => "Hammered gold — warm key + cool fill, cycling burnished-to-polished gold tones.";
         public static ColorMapFeatures Features =>

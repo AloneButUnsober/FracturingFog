@@ -19,6 +19,9 @@ namespace FracturingFog.Models
     public class LunarSurfaceMap : IColorMap
     {
         public static string Name        => "Lunar Surface";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
         public static string Category    => "3D Relief";
         public static string Description => "Harsh single sunlight, deep black vacuum shadows — extreme 3D contrast.";
         public static ColorMapFeatures Features =>

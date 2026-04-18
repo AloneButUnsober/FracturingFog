@@ -18,6 +18,9 @@ namespace FracturingFog.Models
     public class MoltenMetalMap : IColorMap
     {
         public static string Name        => "Molten Metal";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
         public static string Category    => "3D Relief";
         public static string Description => "Incandescent metal surface — cool/hot colour gradient with sharp forge-light highlights.";
         public static ColorMapFeatures Features =>

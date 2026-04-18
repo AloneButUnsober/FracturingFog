@@ -18,6 +18,9 @@ namespace FracturingFog.Models
     public class VolcanicRockMap : IColorMap
     {
         public static string Name        => "Volcanic Rock";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
         public static string Category    => "3D Relief";
         public static string Description => "Dark basalt silhouetted against lava — cool overhead + warm orange back-rim light.";
         public static ColorMapFeatures Features =>

@@ -29,23 +29,35 @@ namespace FracturingFog.Models
     public sealed class FractalRegion
     {
         /// <summary>Display name shown in the UI.</summary>
-        public string Name        { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
 
         /// <summary>Real part of the complex-plane view centre.</summary>
-        public double CenterX     { get; set; }
+        public double CenterX { get; set; }
 
         /// <summary>Imaginary part of the complex-plane view centre.</summary>
-        public double CenterY     { get; set; }
+        public double CenterY { get; set; }
 
         /// <summary>
         /// Zoom factor: 1.0 = full set visible, higher = zoomed in.
         /// Stored as scale width (smaller = more zoomed in) for direct use with
         /// <see cref="MandelbrotCalculator.Zoom"/>.
         /// </summary>
-        public double Zoom        { get; set; }
+        public double Zoom { get; set; }
 
         /// <summary>Suggested maximum iteration count, or 0 to use auto.</summary>
-        public int    Iterations  { get; set; }
+        public int Iterations { get; set; }
+
+        /// <summary>
+        /// Quality tier to use when rendering this region.
+        /// </summary>
+        [JsonIgnore]
+        public QualityPreset QualityPreset { get; set; } = QualityPreset.Standard;
+
+        public string QualityPresetName
+        {
+            get { return QualityPreset.Name; }
+            set { QualityPreset = QualityPreset.FromName(value); }
+        }
 
         /// <summary>One-line description for the UI tooltip.</summary>
         public string Description { get; set; } = string.Empty;
@@ -69,7 +81,7 @@ namespace FracturingFog.Models
         // ── Singleton ─────────────────────────────────────────────────────────
 
         private static FractalRegionLibrary? _instance;
-        public  static FractalRegionLibrary   Instance
+        public static FractalRegionLibrary Instance
             => _instance ??= new FractalRegionLibrary();
 
         private FractalRegionLibrary() { }
@@ -93,10 +105,11 @@ namespace FracturingFog.Models
                 Name        = "Classic Full View",
                 CenterX     = -0.5,
                 CenterY     =  0.0,
-                Zoom        =  0.3,
+                Zoom        =  0.5,
                 Iterations  =  256,
                 Description = "The default overview showing the complete Mandelbrot set.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -106,7 +119,8 @@ namespace FracturingFog.Models
                 Zoom        =  400.0,
                 Iterations  =  800,
                 Description = "Classic seahorse-shaped spirals near the main cardioid neck.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -116,7 +130,8 @@ namespace FracturingFog.Models
                 Zoom        =  300.0,
                 Iterations  =  700,
                 Description = "Elephant-trunk filaments branching from the period-2 bulb.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -126,7 +141,8 @@ namespace FracturingFog.Models
                 Zoom        =  2500.0,
                 Iterations  = 1200,
                 Description = "Interleaved double spiral arms deep in Seahorse Valley.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -136,7 +152,8 @@ namespace FracturingFog.Models
                 Zoom        =  800.0,
                 Iterations  = 1000,
                 Description = "Jagged lightning-bolt filaments near the top of the main bulb.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -146,7 +163,8 @@ namespace FracturingFog.Models
                 Zoom        =  3000.0,
                 Iterations  = 1500,
                 Description = "Spiral arms resembling a barred galaxy in the upper limb.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -156,7 +174,8 @@ namespace FracturingFog.Models
                 Zoom        =  6000.0,
                 Iterations  = 2000,
                 Description = "A miniature copy of the whole set — self-similarity at depth.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -166,7 +185,8 @@ namespace FracturingFog.Models
                 Zoom        =  2000.0,
                 Iterations  = 1800,
                 Description = "The Feigenbaum accumulation point where period doublings converge.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -176,7 +196,8 @@ namespace FracturingFog.Models
                 Zoom        =  1200.0,
                 Iterations  = 1000,
                 Description = "Dense star-like radiating filaments above the main cardioid.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -186,7 +207,8 @@ namespace FracturingFog.Models
                 Zoom        =  8000.0,
                 Iterations  = 2500,
                 Description = "Extreme zoom at the tip of the real-axis needle.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Ultra
             },
             new()
             {
@@ -196,7 +218,8 @@ namespace FracturingFog.Models
                 Zoom        =  700.0,
                 Iterations  =  900,
                 Description = "Parabolic bifurcation site — two buds splitting from one.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.Standard
             },
             new()
             {
@@ -206,7 +229,8 @@ namespace FracturingFog.Models
                 Zoom        =  5000.0,
                 Iterations  = 2000,
                 Description = "Three interlocked spiral arms deep in the upper filament zone.",
-                RegionType  = RegionType.BuiltIn
+                RegionType  = RegionType.BuiltIn,
+                QualityPreset = QualityPreset.High
             },
         ];
 
@@ -225,7 +249,7 @@ namespace FracturingFog.Models
         {
             get
             {
-                foreach (var r in _builtIns)  yield return r;
+                foreach (var r in _builtIns) yield return r;
                 foreach (var r in UserRegions) yield return r;
             }
         }
@@ -242,8 +266,8 @@ namespace FracturingFog.Models
             {
                 if (!File.Exists(RegionsFile)) return;
 
-                string json    = File.ReadAllText(RegionsFile);
-                var    loaded  = JsonSerializer.Deserialize<List<FractalRegion>>(json);
+                string json = File.ReadAllText(RegionsFile);
+                var loaded = JsonSerializer.Deserialize<List<FractalRegion>>(json);
                 if (loaded == null) return;
 
                 UserRegions.Clear();

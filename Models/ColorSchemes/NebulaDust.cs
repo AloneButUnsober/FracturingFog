@@ -15,6 +15,8 @@ namespace FracturingFog.Models
     public class NebulaDustMap : IColorMap
     {
         public static string Name        => "Nebula Dust";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
         public static string Category    => "Artistic";
         public static string Description => "Cosmic fog — hue from iteration, brightness halo from distance.";
         public static ColorMapFeatures Features =>

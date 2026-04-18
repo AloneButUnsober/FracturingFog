@@ -3,11 +3,17 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Text;
 
+using FracturingFog.Interefaces;
+
 namespace FracturingFog.Models
 {
     public class AuroraColorMap : CyclingGradientColorMap
     {
         public static string Name => "Aurora Borealis";
+        public static string Category => "Gradient Linear";
+        public static string Description => "Three-point lit oxidised bronze — verdigris recesses, copper highlights.";
+        public static ColorMapFeatures Features =>
+            ColorMapFeatures.GradientBased | ColorMapFeatures.Cyclic;
 
         public AuroraColorMap()
         {

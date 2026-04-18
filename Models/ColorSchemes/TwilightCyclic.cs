@@ -15,6 +15,8 @@ namespace FracturingFog.Models
     public class TwilightCyclicMap : IColorMap
     {
         public static string Name        => "Twilight Cyclic";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
         public static string Category    => "Artistic";
         public static string Description => "Sinusoidal blue/purple/violet bands — soft dusk atmosphere.";
         public static ColorMapFeatures Features =>

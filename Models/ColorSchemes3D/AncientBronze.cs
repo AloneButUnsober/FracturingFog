@@ -17,13 +17,18 @@ namespace FracturingFog.Models
     public class AncientBronzeMap : IColorMap
     {
         public static string Name        => "Ancient Bronze";
+
+        public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
+
+        public int MaxIterations { get; set; } = 1000;
+
         public static string Category    => "3D Relief";
+
         public static string Description => "Three-point lit oxidised bronze — verdigris recesses, copper highlights.";
+
         public static ColorMapFeatures Features =>
             ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesNormals |
             ColorMapFeatures.ThreeDEffect;
-
-        public int MaxIterations { get; set; } = 1000;
 
         // Key: warm directional light from upper-left.
         private static readonly LightSource Key = new(

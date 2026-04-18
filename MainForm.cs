@@ -389,7 +389,7 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent,
             Checked = false,
-            
+
         };
 
         buttonLeft += _checkBoxShowCoordPanel.Width - 8;
@@ -425,9 +425,9 @@ public sealed class MainForm : Form
         {
             Left = 6, //buttonLeft + 8,
             Top = 0,
-            Width = 700,
-            Height = 22,
-            AutoSize = false,
+            //Width = 700,
+            //Height = 22,
+            AutoSize = true,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(140, 140, 140),
             BackColor = Color.Transparent,
@@ -436,7 +436,7 @@ public sealed class MainForm : Form
         };
 
         _footerPanel.Controls.Add(_statusLabel);
-        _footerPanel.Visible = true; 
+        _footerPanel.Visible = true;
 
         // Assign event handler to the checkbox to toggle the footer panel visibility.
         _checkBoxShowFooterPanel.Click += (s, e) =>
@@ -477,6 +477,7 @@ public sealed class MainForm : Form
         MakeLbl("Iter:", buttonLeft, _coordPanel);
         buttonLeft += 38;
         _txIter = MakeTx(buttonLeft, 64, _coordPanel, "Maximum iteration count (auto-computed by quality+zoom)");
+        _txIter.Enabled = false;
         buttonLeft += 72;
 
         _goButton = MakeBtn("Go", 38); //new Button
@@ -574,8 +575,16 @@ public sealed class MainForm : Form
     private void BuildColorThemesSelection()
     {
         _colorThemeCombo.Items.Clear();
-        foreach (var name in Models.ColorPalette.GetPaletteNames())
-            _colorThemeCombo.Items.Add(name);
+
+        foreach (var type in Enum.GetValues<ColorPaletteType>())
+        {
+            var palettes = Models.ColorPalette.GetPalettesByType(type);
+            if (palettes.Count == 0) continue;
+            // Add a non-selectable header item for the type.
+            _colorThemeCombo.Items.Add($"— {type} —");
+            foreach (var name in palettes.Keys)
+                _colorThemeCombo.Items.Add(name);
+        }
     }
 
     private void OnColorThemeChanged(object? sender, EventArgs e)
@@ -675,10 +684,16 @@ public sealed class MainForm : Form
 
         _centerX = region.CenterX;
         _centerY = region.CenterY;
+        _quality = region.QualityPreset;
+
+        _qualityCombo.Text = region.QualityPresetName;
         _zoom = System.Math.Clamp(region.Zoom, _quality.ZoomMin, _quality.ZoomMax);
 
         if (_calculator != null && region.Iterations > 0)
+        {
+            _calculator.Quality = region.QualityPreset;
             _calculator.MaxIterations = region.Iterations;
+        }
 
         ApplyViewState();
         TriggerCalculation();
@@ -707,6 +722,7 @@ public sealed class MainForm : Form
             CenterY = _centerY,
             Zoom = _zoom,
             Iterations = _calculator?.MaxIterations ?? 512,
+            QualityPresetName = _quality.Name,
             Description = $"Saved {DateTime.Now:yyyy-MM-dd HH:mm}"
         };
 
@@ -1009,10 +1025,8 @@ public sealed class MainForm : Form
 
         string colorName = _calculator.ColorMap?.GetType().GetProperty("Name")?.GetValue(null)?.ToString() ?? "Theme";
         string regionName = "";
-        if (_regionCombo.SelectedItem != null &&
-            !string.IsNullOrEmpty(_regionCombo.SelectedItem?.ToString()) &&
-            _regionCombo.SelectedItem?.ToString() != "— select region —")
-            regionName = _regionCombo.SelectedItem?.ToString()?.Replace(" ", "") + "_" ?? "";
+        if (!string.IsNullOrEmpty(CurrentRegionName()))
+            regionName = CurrentRegionName()?.Replace(" ", "") + "_" ?? "";
 
         // In span mode the suggested filename reflects the full desktop size.
         Rectangle vs = SystemInformation.VirtualScreen;
@@ -1041,16 +1055,19 @@ public sealed class MainForm : Form
         string path = dlg.FileName;
         string ext = Path.GetExtension(path).ToLowerInvariant();
         var format = ext switch { ".bmp" => ImageFormat.Bmp, ".tif" or ".tiff" => ImageFormat.Tiff, _ => ImageFormat.Png };
+        regionName = !string.IsNullOrEmpty(CurrentRegionName()) ? " - " + CurrentRegionName() : "";
+        string colorTag = !string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "";
+        string waterMark = $"Fracturing Fog{regionName}{colorTag}";
 
         if (_spanning)
-            TakeWallpaperScreenshot(path, format);
+            TakeWallpaperScreenshot(path, format, waterMark);
         else
-            TakeNormalScreenshot(path, format);
+            TakeNormalScreenshot(path, format, waterMark);
     }
 
     // ── Normal screenshot — saves the existing ColorBuffer directly ───────────
 
-    private void TakeNormalScreenshot(string path, ImageFormat format)
+    private void TakeNormalScreenshot(string path, ImageFormat format, string waterMark)
     {
         int w = _calculator!.Width;
         int h = _calculator!.Height;
@@ -1058,7 +1075,7 @@ public sealed class MainForm : Form
 
         try
         {
-            SavePixelsToFile(pixels, w, h, path, format);
+            SavePixelsToFile(pixels, w, h, path, format, waterMark);
             SetStatus($"Saved  {Path.GetFileName(path)}  ({w}×{h},  {new FileInfo(path).Length / 1024:N0} KB)");
         }
         catch (Exception ex)
@@ -1070,7 +1087,7 @@ public sealed class MainForm : Form
 
     // ── Wallpaper screenshot — offscreen render at full virtual-desktop size ──
 
-    private void TakeWallpaperScreenshot(string path, ImageFormat format)
+    private void TakeWallpaperScreenshot(string path, ImageFormat format, string waterMark)
     {
         // Full virtual desktop dimensions — what Windows expects for a spanning wallpaper.
         Rectangle vs = SystemInformation.VirtualScreen;
@@ -1155,7 +1172,7 @@ public sealed class MainForm : Form
 
                 try
                 {
-                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format);
+                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark);
                     long kb = new FileInfo(path).Length / 1024;
                     SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}" +
                               $"  ({result.Width}×{result.Height} px,  {kb:N0} KB)" +
@@ -1178,7 +1195,7 @@ public sealed class MainForm : Form
     // Layouts are identical — MemoryCopy is always correct.
 
     private static unsafe void SavePixelsToFile(
-        uint[] pixels, int w, int h, string path, ImageFormat format)
+        uint[] pixels, int w, int h, string path, ImageFormat format, string watermarkText = "")
     {
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
@@ -1215,8 +1232,30 @@ public sealed class MainForm : Form
             }
             else bmp.Save(path, format);
         }
-        else bmp.Save(path, format);
+        else
+        {
+            bmp.Save(path, format);
+        }
+        
+        if (!string.IsNullOrEmpty(watermarkText))
+        {
+            AddWaterMark(Graphics.FromImage(bmp), watermarkText, w, h);
+            bmp.Save(path, format);
+        }
     }
+
+    private static void AddWaterMark(Graphics g, string text, int width, int height)
+    {
+        using var font = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
+        var textSize = g.MeasureString(text, font);
+        var pos = new PointF(width - textSize.Width - 10, height - textSize.Height - 10);
+        using var brush = new SolidBrush(Color.FromArgb(128, Color.White));
+
+        Debug.WriteLine($"Adding watermark '{text}' at {pos} with size {textSize}");
+        g.DrawString(text, font, brush, pos);
+        g.Save();
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Mouse: zoom
     // ─────────────────────────────────────────────────────────────────────────
@@ -1343,6 +1382,22 @@ public sealed class MainForm : Form
                 _txIter.Text = _calculator.MaxIterations.ToString();
         }
         finally { _suppressCoordUpdate = false; }
+    }
+
+    private string CurrentRegionName()
+    {
+        string? selected = _regionCombo.SelectedItem?.ToString();
+        if (string.IsNullOrEmpty(selected) || selected == "— select region —")
+            return "";
+        return selected;
+    }
+
+    private string CurrentColorMapName()
+    {
+        if (_calculator?.ColorMap == null) return "";
+        var prop = _calculator.ColorMap.GetType().GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        if (prop == null) return "Theme";
+        return prop.GetValue(null)?.ToString() ?? "";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
