@@ -436,12 +436,6 @@ public sealed class MainForm : Form
         };
         new ToolTip().SetToolTip(checkBoxShowGrid,
             "Overlay a Cartesian complex-plane grid on the fractal view");
-        checkBoxShowGrid.Click += (s, e) =>
-        {
-            _gridVisible = checkBoxShowGrid.Checked;
-            _gridPanel.Visible = _gridVisible;
-            _gridPanel.Invalidate();
-        };
         _toolbar.Controls.Add(checkBoxShowGrid);
 
         _footerPanel = new Panel
@@ -547,10 +541,19 @@ public sealed class MainForm : Form
             })
         {
             Dock = DockStyle.Fill,
-            Visible = false,
+            Visible = true,
+            Capture = false, // Important: allows mouse events to pass through to _renderPanel.
+            
         };
         // Invalidate the grid whenever a new fractal frame arrives.
         _renderPanel.Controls.Add(_gridPanel);
+
+        checkBoxShowGrid.Click += (s, e) =>
+        {
+            _gridVisible = checkBoxShowGrid.Checked;
+            _gridPanel.Visible = _gridVisible;
+            _gridPanel.Invalidate();
+        };
 
         // Docking order: Fill first, then Top-docked panels in reverse order.
         Controls.Add(_renderPanel);
@@ -1502,6 +1505,8 @@ public sealed class MainForm : Form
                             $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
                             $"zoom={calc.Zoom:G6}  iter={calc.MaxIterations}  " +
                             $"{precTag}  [{ms} ms  {calc.Width}×{calc.Height}]");
+
+                    if (_gridVisible) _gridPanel.Invalidate();
                 });
             }
         }, TaskScheduler.Default);
@@ -1769,6 +1774,7 @@ internal sealed class GridOverlayPanel : Panel
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        Debug.WriteLine($"GridOverlayPanel.OnPaint: size={_getPanelSize()} center={_getCenter()} zoom={_getZoom()} swatch={_getSwatchColor()}");
         var g = e.Graphics;
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
@@ -1794,8 +1800,13 @@ internal sealed class GridOverlayPanel : Panel
 
         // ── Grid colour: complementary to the current swatch ─────────────────
         Color gridColor = ComputeContrastColor(_getSwatchColor());
+        Debug.WriteLine($"Grid color: R: {gridColor.R}; G: {gridColor.G}; B: {gridColor.B}");
         var gridPen = new Pen(Color.FromArgb(180, gridColor), 1.0f);
+        Debug.WriteLine($"Grid pen: R: {gridPen.Color.R}; G: {gridPen.Color.G}; B: {gridPen.Color.B}");
+
         var axisPen = new Pen(Color.FromArgb(220, gridColor), 1.5f);
+        Debug.WriteLine($"Axis pen: R: {axisPen.Color.R}; G: {axisPen.Color .G}; B: {axisPen.Color.B}");
+
         var labelBrush = new SolidBrush(Color.FromArgb(200, gridColor));
         using var labelFont = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
         using var zeroFont = new Font("Consolas", 8.5f, FontStyle.Bold, GraphicsUnit.Point);
