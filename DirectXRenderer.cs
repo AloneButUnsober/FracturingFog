@@ -1,4 +1,4 @@
-// DirectXRenderer.cs  — Vortice.DirectX 3.8.3
+// DirectXRenderer.cs  — Vortice.DirectX 3.8.3 (now implements IFractalRenderer)
 //
 // API conventions verified against Vortice 3.8.x source and official samples:
 //
@@ -43,7 +43,7 @@ namespace FracturingFog;
 /// Owns a D3D11 device, DXGI swap chain bound to a WinForms HWND, and a
 /// dynamic CPU-writable texture that is blitted to the screen each frame.
 /// </summary>
-public sealed class DirectXRenderer : IDisposable
+public sealed class DirectXRenderer : IFractalRenderer
 {
     // ── Embedded HLSL ─────────────────────────────────────────────────────────
     //
@@ -112,6 +112,16 @@ float4 PS(VSOut i) : SV_Target
     private int  _width;
     private int  _height;
     private bool _disposed;
+    
+    // ── IFractalRenderer ──────────────────────────────────────────────────────
+    public string RendererDescription
+    {
+        get
+        {
+            if (_device == null) return "DirectX 11";
+            return $"DirectX 11 (Feature Level {_device.FeatureLevel})";
+        }
+    }
 
     // ── Construction ──────────────────────────────────────────────────────────
 
