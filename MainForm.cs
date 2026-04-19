@@ -1,16 +1,16 @@
-// MainForm.cs  — v4
+// MainForm.cs  — v5
 //
-// Additions over v3
-//   • Quality ComboBox in the top toolbar (Draft / Standard / High / Ultra).
-//   • Quality-aware wheel zoom factor — coarser for exploration, finer for depth.
-//   • Quality-aware zoom clamp — prevents zooming beyond the active tier's limit.
-//   • Quality-aware iteration scaling — iterations auto-increase with zoom depth
-//     according to each tier's IterBase + IterPerDecade formula.
-//   • Precision indicator in the status bar: "SP" (standard double) or "DD"
-//     (double-double, ~31 decimal digits) shown in brackets.
-//   • When the user switches to a lower quality tier while zoomed beyond the new
-//     tier's ZoomMax, the zoom is clamped and the view recalculates automatically.
-//   • All v3 features (coordinate entry, region system, screenshot, span) preserved.
+// Changes over v4
+//   • FIX: GridOverlayPanel Win32Exception resolved — Visible is set to false
+//     in the constructor (no handle yet) and the grid checkbox handler defers
+//     showing the panel until after OnLoad completes.
+//   • FEATURE: Slideshow button — cycles random built-in regions every 30 s,
+//     changes colour theme every 10 s with a 2-second CPU-blended cross-fade
+//     between both theme changes and region transitions.
+//   • FEATURE: "Lock" checkbox in the Navigate bar — when checked, the current
+//     Iter value is kept fixed for all operations (pan, zoom, region change).
+//   • FEATURE: Iteration limit raised — values above 65535 are now accepted;
+//     validation upper bound removed, only minimum of 64 enforced.
 
 using System;
 using System.Collections.Generic;
@@ -36,6 +36,7 @@ public sealed class MainForm : Form
     private readonly Button _resetButton;
     private readonly Button _spanButton;
     private readonly Button _screenshotButton;
+    private readonly Button _slideshowButton;
     private readonly ComboBox _qualityCombo;
     private readonly ComboBox _colorThemeCombo;
     private readonly Label _statusLabel;
@@ -46,6 +47,7 @@ public sealed class MainForm : Form
     private readonly TextBox _txCY;
     private readonly TextBox _txZoom;
     private readonly TextBox _txIter;
+    private readonly CheckBox _chkLockIter;   // NEW: iteration lock
     private readonly Button _goButton;
     private readonly ComboBox _regionCombo;
     private readonly Button _saveViewButton;
@@ -56,11 +58,8 @@ public sealed class MainForm : Form
     // ── Render panel ──────────────────────────────────────────────────────────
     private readonly RenderPanel _renderPanel;
 
-    // Sibling of _renderPanel in the form's control hierarchy (NOT a child of
-    // _renderPanel). Added to Controls after _renderPanel so it sits above it
-    // in Z-order. Manually positioned/sized to match _renderPanel on every
-    // resize. Uses a layered-window approach (WS_EX_LAYERED + per-pixel alpha)
-    // so its GDI+ output genuinely composites over the DirectX surface.
+    // GridOverlayPanel — sibling of _renderPanel; see architecture note below.
+    // Visible is always false until the user ticks "Grid" AFTER OnLoad.
     private readonly GridOverlayPanel _gridPanel;
     private bool _gridVisible;
 
@@ -91,15 +90,11 @@ public sealed class MainForm : Form
     // ── Pan state ─────────────────────────────────────────────────────────────
 
     private bool _panning;
-    private Point _panStartScreen;   // screen coords where left-button was pressed
-    private double _panStartCX;       // complex-plane centre at that moment
+    private Point _panStartScreen;
+    private double _panStartCX;
     private double _panStartCY;
 
-    // ── Multi-monitor span state ─────────────────────────────────────────────
-    //
-    // When _spanning is true the form is borderless and positioned exactly over
-    // SystemInformation.VirtualScreen (the bounding rectangle of all monitors).
-    // _preSpanBounds and _preSpanBorderStyle store what to restore to.
+    // ── Multi-monitor span state ──────────────────────────────────────────────
 
     private bool _spanning;
     private Rectangle _preSpanBounds;
@@ -111,10 +106,20 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _calcCts;
     private readonly object _calcLock = new();
 
-    // Separate CTS for offscreen wallpaper renders so they can be cancelled
-    // independently of the live render (e.g. when the form is closed mid-render).
     private CancellationTokenSource? _wallpaperCts;
     private readonly object _wallpaperLock = new();
+
+    // ── Slideshow state ───────────────────────────────────────────────────────
+
+    private bool _slideshowRunning;
+    private CancellationTokenSource? _slideshowCts;
+    private readonly object _slideshowLock = new();
+    private readonly Random _slideshowRng = new();
+
+    // ── Iteration lock ────────────────────────────────────────────────────────
+
+    private bool _iterLocked;       // mirrors _chkLockIter.Checked
+    private int _lockedIterations; // value held while locked
 
     private bool _disposed;
 
@@ -125,11 +130,10 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Fracturing Fog  —  Mandelbrot Explorer  (DirectX 11 · Vortice 3.8.3)";
-        ClientSize = new Size(1285, 768); // -38 for toolbar and chrome
+        ClientSize = new Size(1285, 768);
         MinimumSize = new Size(1072, 384);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
-
         KeyPreview = true;
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -185,33 +189,33 @@ public sealed class MainForm : Form
         _resetButton.Left = buttonLeft;
         _resetButton.Click += OnResetClick;
         _toolbar.Controls.Add(_resetButton);
-
         buttonLeft += 58;
 
-        _spanButton = MakeBtn("Span", 55); // Monitors");
+        _spanButton = MakeBtn("Span", 55);
         _spanButton.Left = buttonLeft;
         _spanButton.Click += OnSpanMonitorsClick;
         _toolbar.Controls.Add(_spanButton);
-
         buttonLeft += 58;
 
-        _screenshotButton = MakeBtn("Image", 55); // "Screenshot");
+        _screenshotButton = MakeBtn("Image", 55);
         _screenshotButton.Left = buttonLeft;
         _screenshotButton.Click += OnScreenshotClick;
         _toolbar.Controls.Add(_screenshotButton);
-
         buttonLeft += 58;
 
-        // Thin separator.
-        _toolbar.Controls.Add(new Label
-        {
-            Left = buttonLeft,
-            Top = 4,
-            Width = 1,
-            Height = 30,
-            BackColor = Color.FromArgb(65, 65, 65)
-        });
+        // Slideshow button (NEW)
+        _slideshowButton = MakeBtn("Slideshow", 72);
+        _slideshowButton.Left = buttonLeft;
+        _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
+        _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
+        new ToolTip().SetToolTip(_slideshowButton,
+            "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
+        _slideshowButton.Click += OnSlideshowClick;
+        _toolbar.Controls.Add(_slideshowButton);
+        buttonLeft += 76;
 
+        // Thin separator.
+        _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 4, Width = 1, Height = 30, BackColor = Color.FromArgb(65, 65, 65) });
         buttonLeft += 8;
 
         // Quality label + combo.
@@ -232,7 +236,7 @@ public sealed class MainForm : Form
         {
             Left = buttonLeft,
             Top = 7,
-            Width = 80, //112, 
+            Width = 80,
             Height = 26,
             DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor = Color.FromArgb(45, 45, 45),
@@ -241,11 +245,9 @@ public sealed class MainForm : Form
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand
         };
-
         foreach (var p in QualityPreset.All) _qualityCombo.Items.Add(p.Name);
-        _qualityCombo.SelectedIndex = 1;  // Standard default
+        _qualityCombo.SelectedIndex = 1;
 
-        // Tooltip shows description of selected quality tier.
         var qualityTip = new ToolTip();
         _qualityCombo.SelectedIndexChanged += (s, e) =>
         {
@@ -254,21 +256,13 @@ public sealed class MainForm : Form
                 qualityTip.SetToolTip(_qualityCombo, QualityPreset.All[i].Description);
             OnQualityComboChanged(s, e);
         };
-
-        // Set initial tooltip.
         qualityTip.SetToolTip(_qualityCombo, QualityPreset.Standard.Description);
         _toolbar.Controls.Add(_qualityCombo);
-        buttonLeft += 80; // 120;
+        buttonLeft += 84;
 
         // Theme separator.
-        _toolbar.Controls.Add(new Label
-        {
-            Left = buttonLeft,
-            Top = 4,
-            Width = 1,
-            Height = 30,
-            BackColor = Color.FromArgb(65, 65, 65)
-        }); buttonLeft += 10;
+        _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 4, Width = 1, Height = 30, BackColor = Color.FromArgb(65, 65, 65) });
+        buttonLeft += 10;
 
         // Theme label + combo.
         var tlbl = new Label
@@ -295,24 +289,14 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
             Cursor = Cursors.Hand
         };
-
         BuildColorThemesSelection();
         _colorThemeCombo.SelectedIndex = 0;
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
-
         _toolbar.Controls.Add(_colorThemeCombo);
         buttonLeft += 170;
 
         // Regions separator.
-        _toolbar.Controls.Add(new Label
-        {
-            Left = buttonLeft,
-            Top = 2,
-            Width = 1,
-            Height = 30,
-            BackColor = Color.FromArgb(60, 60, 60)
-        });
-
+        _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
         buttonLeft += 10;
 
         var rlbl = new Label
@@ -341,24 +325,23 @@ public sealed class MainForm : Form
             FlatStyle = FlatStyle.Flat
         };
         _toolbar.Controls.Add(_regionCombo);
-        buttonLeft += 180; // 200;
+        buttonLeft += 180;
 
-        _saveViewButton = MakeBtn("Save", 55); //new Button
+        _saveViewButton = MakeBtn("Save", 55);
         _saveViewButton.Left = buttonLeft;
         _saveViewButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
         _saveViewButton.Click += OnSaveViewClick;
         _toolbar.Controls.Add(_saveViewButton);
+        buttonLeft += 58;
 
-        buttonLeft += 58; // 96;
-
-        _delRegionButton = MakeBtn("Delete", 55); //new Button
+        _delRegionButton = MakeBtn("Delete", 55);
         _delRegionButton.Left = buttonLeft;
         _delRegionButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
         _delRegionButton.Click += OnDelRegionClick;
         _toolbar.Controls.Add(_delRegionButton);
         buttonLeft += 58;
 
-        _exportRegionsButton = MakeBtn("Exp…", 55); //new Button
+        _exportRegionsButton = MakeBtn("Exp…", 55);
         _exportRegionsButton.Left = buttonLeft;
         _exportRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
         new ToolTip().SetToolTip(_exportRegionsButton, "Export all custom regions to a JSON file");
@@ -366,30 +349,21 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(_exportRegionsButton);
         buttonLeft += 58;
 
-        _importRegionsButton = MakeBtn("Imp…", 55); //new Button
+        _importRegionsButton = MakeBtn("Imp…", 55);
         _importRegionsButton.Left = buttonLeft;
         _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
         new ToolTip().SetToolTip(_importRegionsButton, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
         _importRegionsButton.Click += OnImportRegionsClick;
         _toolbar.Controls.Add(_importRegionsButton);
-
         buttonLeft += 58;
 
-        // Thin separator after import/export.
-        _toolbar.Controls.Add(new Label
-        {
-            Left = buttonLeft,
-            Top = 2,
-            Width = 1,
-            Height = 30,
-            BackColor = Color.FromArgb(60, 60, 60)
-        });
-
+        // Thin separator.
+        _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
         buttonLeft += 10;
 
-        CheckBox _checkBoxShowCoordPanel = new CheckBox
+        var checkBoxShowCoordPanel = new CheckBox
         {
-            Text = "Navigate", //"Show coordinate panel",
+            Text = "Navigate",
             Left = buttonLeft,
             Top = 9,
             AutoSize = true,
@@ -398,12 +372,10 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent,
             Checked = false,
-
         };
+        buttonLeft += checkBoxShowCoordPanel.PreferredSize.Width + 6;
 
-        buttonLeft += _checkBoxShowCoordPanel.Width - 8;
-
-        CheckBox _checkBoxShowFooterPanel = new CheckBox
+        var checkBoxShowFooterPanel = new CheckBox
         {
             Text = "Status",
             Left = buttonLeft,
@@ -414,15 +386,12 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent,
             Checked = true,
-
         };
+        _toolbar.Controls.Add(checkBoxShowCoordPanel);
+        _toolbar.Controls.Add(checkBoxShowFooterPanel);
+        buttonLeft += checkBoxShowFooterPanel.PreferredSize.Width + 12;
 
-        _toolbar.Controls.Add(_checkBoxShowCoordPanel);
-        _toolbar.Controls.Add(_checkBoxShowFooterPanel);
-
-        buttonLeft += _checkBoxShowCoordPanel.Width + 12;
-
-        // ── Grid overlay toggle ────────────────────────────────────────────────
+        // Grid overlay toggle.
         var checkBoxShowGrid = new CheckBox
         {
             Text = "Grid",
@@ -435,16 +404,10 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             Checked = false,
         };
-        new ToolTip().SetToolTip(checkBoxShowGrid,
-            "Overlay a Cartesian complex-plane grid on the fractal view");
+        new ToolTip().SetToolTip(checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
         _toolbar.Controls.Add(checkBoxShowGrid);
-        //checkBoxShowGrid.Click += (s, e) =>
-        //{
-        //    _gridVisible = checkBoxShowGrid.Checked;
-        //    _gridPanel.Visible = _gridVisible;
-        //    if (_gridVisible) _gridPanel.Invalidate();
-        //};
 
+        // ── Footer panel ──────────────────────────────────────────────────────
 
         _footerPanel = new Panel
         {
@@ -452,14 +415,10 @@ public sealed class MainForm : Form
             Dock = DockStyle.Bottom,
             BackColor = Color.FromArgb(18, 18, 18),
         };
-
-        // Status label — fills the remainder.
         _statusLabel = new Label
         {
-            Left = 6, //buttonLeft + 8,
+            Left = 6,
             Top = 6,
-            //Width = 700,
-            //Height = 22,
             AutoSize = true,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(140, 140, 140),
@@ -467,62 +426,61 @@ public sealed class MainForm : Form
             Font = new Font("Consolas", 8f),
             Text = "Initialising…"
         };
-
         _footerPanel.Controls.Add(_statusLabel);
         _footerPanel.Visible = true;
 
-        // Assign event handler to the checkbox to toggle the footer panel visibility.
-        _checkBoxShowFooterPanel.Click += (s, e) =>
-        {
-            _footerPanel.Visible = _checkBoxShowFooterPanel.Checked;
-        };
+        checkBoxShowFooterPanel.Click += (s, e) => _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
 
-        // ── Coordinate / region panel ─────────────────────────────────────────
+        // ── Coordinate / Navigate panel ───────────────────────────────────────
 
         _coordPanel = new Panel
         {
             Height = 34,
             Dock = DockStyle.Top,
             BackColor = Color.FromArgb(22, 22, 22),
-            Visible = _checkBoxShowCoordPanel.Checked,
+            Visible = false,   // hidden until user ticks Navigate
         };
+        checkBoxShowCoordPanel.Click += (s, e) => _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
 
-        // Assign event handler to the checkbox to toggle the coordinate panel visibility.
-        _checkBoxShowCoordPanel.Click += (s, e) =>
-        {
-            _coordPanel.Visible = _checkBoxShowCoordPanel.Checked;
-        };
-
-        //int cx = 8;
         buttonLeft = 8;
-        MakeLbl("CX:", buttonLeft, _coordPanel);
-        buttonLeft += 28;
-        _txCX = MakeTx(buttonLeft, 182, _coordPanel, "Real part of the view centre");
-        buttonLeft += 190;
-        MakeLbl("CY:", buttonLeft, _coordPanel);
-        buttonLeft += 28;
-        _txCY = MakeTx(buttonLeft, 182, _coordPanel, "Imaginary part of the view centre");
-        buttonLeft += 190;
-        MakeLbl("Zoom:", buttonLeft, _coordPanel);
-        buttonLeft += 44;
-        _txZoom = MakeTx(buttonLeft, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)");
-        buttonLeft += 120;
-        MakeLbl("Iter:", buttonLeft, _coordPanel);
-        buttonLeft += 38;
-        _txIter = MakeTx(buttonLeft, 64, _coordPanel, "Maximum iteration count (auto-computed by quality+zoom)");
-        //_txIter.Enabled = false;
-        buttonLeft += 72;
+        MakeLbl("CX:", buttonLeft, _coordPanel); buttonLeft += 28;
+        _txCX = MakeTx(buttonLeft, 182, _coordPanel, "Real part of the view centre"); buttonLeft += 190;
+        MakeLbl("CY:", buttonLeft, _coordPanel); buttonLeft += 28;
+        _txCY = MakeTx(buttonLeft, 182, _coordPanel, "Imaginary part of the view centre"); buttonLeft += 190;
+        MakeLbl("Zoom:", buttonLeft, _coordPanel); buttonLeft += 44;
+        _txZoom = MakeTx(buttonLeft, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)"); buttonLeft += 120;
+        MakeLbl("Iter:", buttonLeft, _coordPanel); buttonLeft += 38;
+        _txIter = MakeTx(buttonLeft, 72, _coordPanel, "Maximum iteration count (auto-computed by quality+zoom; no upper limit)");
+        buttonLeft += 80;
 
-        _goButton = MakeBtn("Go", 38); //new Button
+        // Lock checkbox — NEW
+        _chkLockIter = new CheckBox
+        {
+            Text = "Lock",
+            Left = buttonLeft,
+            Top = 8,
+            AutoSize = true,
+            AutoCheck = true,
+            ForeColor = Color.FromArgb(200, 200, 120),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent,
+            Checked = false,
+        };
+        new ToolTip().SetToolTip(_chkLockIter,
+            "When checked, the Iter value is locked — pan, zoom and region changes will not recalculate it");
+        _chkLockIter.CheckedChanged += OnIterLockChanged;
+        _coordPanel.Controls.Add(_chkLockIter);
+        buttonLeft += _chkLockIter.PreferredSize.Width + 8;
+
+        _goButton = MakeBtn("Go", 38);
         _goButton.BackColor = Color.FromArgb(40, 80, 40);
         _goButton.Left = buttonLeft;
         _goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
         _goButton.Click += OnGoClick;
         _coordPanel.Controls.Add(_goButton);
-        buttonLeft += 56;
-
 
         // ── Render panel ──────────────────────────────────────────────────────
+
         _renderPanel = new RenderPanel { Dock = DockStyle.Fill, Cursor = Cursors.Cross };
         _renderPanel.MouseWheel += OnMouseWheel;
         _renderPanel.MouseDown += OnMouseDown;
@@ -530,52 +488,42 @@ public sealed class MainForm : Form
         _renderPanel.MouseUp += OnMouseUp;
 
         // ── Grid overlay panel ────────────────────────────────────────────────
-        // The grid panel is a SIBLING of _renderPanel, not a child.
-        // _renderPanel uses WS_EX_NOREDIRECTIONBITMAP which prevents child
-        // windows from compositing over its DirectX surface.
-        //
-        // As a sibling added to Controls AFTER _renderPanel it sits above it in
-        // the form's Z-order. WS_EX_LAYERED + UpdateLayeredWindow lets Windows
-        // composite the GDI+ grid drawing directly over the D3D11 surface using
-        // the per-pixel alpha channel, which is the only approach that reliably
-        // works over a DirectX swap-chain on all Windows versions.
-        //
-        // Bounds are set manually on Load and in OnFormResize to match
-        // _renderPanel exactly. Mouse events pass through via WS_EX_TRANSPARENT.
+        // FIX: Visible = false here (in constructor, before handle is created).
+        // The handle for WS_EX_LAYERED windows is only valid once the form is
+        // shown.  Setting Visible = true before then throws Win32Exception.
+        // The grid checkbox handler (below) safely defers visibility until load.
         _gridPanel = new GridOverlayPanel(
             getCenter: () => (_centerX, _centerY),
             getZoom: () => _zoom,
             getPanelSize: () => _renderPanel.ClientSize,
-            getSwatchColor: () => GetSwatchColor()
-            )
+            getSwatchColor: () => GetSwatchColor())
         {
-            Visible = false,
+            Visible = false,   // never set true before handle exists
         };
 
+        // Grid toggle — safe: only runs after Load (user clicks the checkbox).
         checkBoxShowGrid.Click += (s, e) =>
         {
             _gridVisible = checkBoxShowGrid.Checked;
-            _gridPanel?.Visible = _gridVisible;            
-            if (_gridVisible && _gridPanel != null) _gridPanel.Invalidate();
+            if (_gridPanel.IsHandleCreated)
+            {
+                _gridPanel.Visible = _gridVisible;
+                if (_gridVisible) _gridPanel.Invalidate();
+            }
         };
 
-        // Docking order: Fill first, then Top-docked panels in reverse order,
-        // then the grid panel last so it sits on top of everything.
-
-        // Docking order: Fill first, then Top-docked panels in reverse order.
+        // Docking / Z-order: Fill first, then Top-docked in reverse, footer last.
         Controls.Add(_renderPanel);
         Controls.Add(_gridPanel);
         Controls.Add(_coordPanel);
         Controls.Add(_toolbar);
-        Controls.Add(_footerPanel);   // last = highest Z-order
+        Controls.Add(_footerPanel);
 
         // ── Events ───────────────────────────────────────────────────────────
         Load += OnLoad;
         Resize += OnFormResize;
         KeyDown += OnKeyDown;
         FormClosing += OnFormClosing;
-
-
         Application.Idle += OnApplicationIdle;
     }
 
@@ -585,7 +533,6 @@ public sealed class MainForm : Form
 
     private void OnLoad(object? sender, EventArgs e)
     {
-        // Load persisted user regions.
         FractalRegionLibrary.Instance.Load();
         RebuildRegionCombo();
         int w = _renderPanel.ClientSize.Width;
@@ -609,8 +556,8 @@ public sealed class MainForm : Form
             Application.Exit();
         }
 
-        // Position the grid panel to exactly cover the render panel.
-        // Must be done after layout so _renderPanel.Bounds is valid.
+        // Grid panel: handle now exists — safe to position (but NOT to show;
+        // that only happens when user ticks the Grid checkbox).
         PositionGridPanel();
     }
 
@@ -626,7 +573,6 @@ public sealed class MainForm : Form
         QualityPreset newQuality = QualityPreset.All[idx];
         _quality = newQuality;
 
-        // Clamp zoom into the new quality's range.
         double prevZoom = _zoom;
         _zoom = System.Math.Clamp(_zoom, _quality.ZoomMin, _quality.ZoomMax);
 
@@ -647,12 +593,10 @@ public sealed class MainForm : Form
     private void BuildColorThemesSelection()
     {
         _colorThemeCombo.Items.Clear();
-
         foreach (var type in Enum.GetValues<ColorPaletteType>())
         {
             var palettes = Models.ColorPalette.GetPalettesByType(type);
             if (palettes.Count == 0) continue;
-            // Add a non-selectable header item for the type.
             _colorThemeCombo.Items.Add($"— {type} —");
             foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
                 _colorThemeCombo.Items.Add(name);
@@ -685,7 +629,6 @@ public sealed class MainForm : Form
         float cmin = System.Math.Min(r, System.Math.Min(g, b));
         float delta = cmax - cmin;
         float l = (cmax + cmin) * 0.5f;
-
         float h2 = 0f;
         if (delta > 0.001f)
         {
@@ -695,27 +638,23 @@ public sealed class MainForm : Form
             h2 = (h2 / 6f + 1f) % 1f;
         }
         float s2 = delta < 0.001f ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
-
-        // Complementary hue + inverted/boosted luminance + boosted saturation.
         float hc = (h2 + 0.5f) % 1f;
         float lc = l < 0.5f
             ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
             : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
         float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
-
-        // HSL → RGB
-        float c = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
-        float xv = c * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
-        float m = lc - c * 0.5f;
+        float cv = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
+        float xv = cv * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
+        float m = lc - cv * 0.5f;
         float rr, gg, bb;
         switch ((int)(hc * 6f))
         {
-            case 0: rr = c; gg = xv; bb = 0; break;
-            case 1: rr = xv; gg = c; bb = 0; break;
-            case 2: rr = 0; gg = c; bb = xv; break;
-            case 3: rr = 0; gg = xv; bb = c; break;
-            case 4: rr = xv; gg = 0; bb = c; break;
-            default: rr = c; gg = 0; bb = xv; break;
+            case 0: rr = cv; gg = xv; bb = 0; break;
+            case 1: rr = xv; gg = cv; bb = 0; break;
+            case 2: rr = 0; gg = cv; bb = xv; break;
+            case 3: rr = 0; gg = xv; bb = cv; break;
+            case 4: rr = xv; gg = 0; bb = cv; break;
+            default: rr = cv; gg = 0; bb = xv; break;
         }
         return Color.FromArgb(
             fade ? 75 : 255,
@@ -730,6 +669,7 @@ public sealed class MainForm : Form
 
     private void OnResetClick(object? sender, EventArgs e)
     {
+        StopSlideshow();
         _centerX = DefaultCenterX;
         _centerY = DefaultCenterY;
         _zoom = DefaultZoom;
@@ -739,8 +679,31 @@ public sealed class MainForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Iteration Lock (NEW)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void OnIterLockChanged(object? sender, EventArgs e)
+    {
+        _iterLocked = _chkLockIter.Checked;
+        if (_iterLocked && _calculator != null)
+        {
+            // Capture current iteration value when lock is engaged.
+            if (int.TryParse(_txIter.Text.Trim(), out int parsed) && parsed >= 64)
+                _lockedIterations = parsed;
+            else
+                _lockedIterations = _calculator.MaxIterations;
+            _txIter.BackColor = Color.FromArgb(55, 50, 30);   // tinted to show locked state
+        }
+        else
+        {
+            _txIter.BackColor = Color.FromArgb(40, 40, 40);    // restore normal colour
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Coordinate entry — "Go"
     // ─────────────────────────────────────────────────────────────────────────
+
     private void OnGoClick(object? sender, EventArgs e)
     {
         if (!TryParseCoords(out double cx, out double cy, out double zoom, out int iter))
@@ -749,7 +712,7 @@ public sealed class MainForm : Form
                 "One or more values are invalid.\n\n" +
                 "CX / CY: decimal numbers  (e.g. -0.7435669)\n" +
                 "Zoom: positive number  (e.g. 400)\n" +
-                "Iter: integer 64–65536",
+                "Iter: integer ≥ 64",
                 "Invalid Coordinates",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
@@ -760,15 +723,14 @@ public sealed class MainForm : Form
         _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
 
         if (_calculator != null && iter > 0)
-        {
             _calculator.MaxIterations = iter;
-            Debug.WriteLine($"Go set max iter: {_calculator.MaxIterations}");
-        }
-            
 
-        ApplyViewState(Math.Clamp(iter,0,65534));
+        // When "Go" is pressed while locked, update the locked value too.
+        if (_iterLocked)
+            _lockedIterations = iter;
+
+        ApplyViewState(iter);
         TriggerCalculation();
-        Debug.WriteLine($"Go set max iter after calc: {_calculator?.MaxIterations}");
     }
 
     private bool TryParseCoords(out double cx, out double cy,
@@ -782,10 +744,11 @@ public sealed class MainForm : Form
         var ic = System.Globalization.CultureInfo.InvariantCulture;
         var ns = System.Globalization.NumberStyles.Float;
 
+        // Upper limit removed — only minimum of 64 enforced.
         return double.TryParse(_txCX.Text.Trim(), ns, ic, out cx)
             && double.TryParse(_txCY.Text.Trim(), ns, ic, out cy)
             && double.TryParse(_txZoom.Text.Trim(), ns, ic, out zoom) && zoom > 0
-            && int.TryParse(_txIter.Text.Trim(), out iter) && iter >= 64 && iter <= 65536;
+            && int.TryParse(_txIter.Text.Trim(), out iter) && iter >= 64;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -814,24 +777,31 @@ public sealed class MainForm : Form
         var region = FractalRegionLibrary.Instance.FindByName(name);
         if (region == null) return;
 
+        ApplyRegion(region);
+        TriggerCalculation();
+
+        new ToolTip().SetToolTip(_regionCombo, region.Description);
+    }
+
+    /// <summary>Applies a FractalRegion to the view state, respecting the iteration lock.</summary>
+    private void ApplyRegion(FractalRegion region)
+    {
         _centerX = region.CenterX;
         _centerY = region.CenterY;
         _quality = region.QualityPreset;
-
         _qualityCombo.Text = region.QualityPresetName;
         _zoom = System.Math.Clamp(region.Zoom, _quality.ZoomMin, _quality.ZoomMax);
 
-        if (_calculator != null && region.Iterations > 0)
+        if (_calculator != null)
         {
             _calculator.Quality = region.QualityPreset;
-            _calculator.MaxIterations = region.Iterations;
+            if (!_iterLocked && region.Iterations > 0)
+                _calculator.MaxIterations = region.Iterations;
+            else if (_iterLocked)
+                _calculator.MaxIterations = _lockedIterations;
         }
 
-        ApplyViewState();
-        TriggerCalculation();
-
-        // Set tooltip to region description.
-        new ToolTip().SetToolTip(_regionCombo, region.Description);
+        ApplyViewState(_iterLocked ? _lockedIterations : (region.Iterations > 0 ? region.Iterations : 0));
     }
 
     private void OnSaveViewClick(object? sender, EventArgs e)
@@ -866,7 +836,6 @@ public sealed class MainForm : Form
         }
 
         RebuildRegionCombo();
-
         for (int i = 0; i < _regionCombo.Items.Count; i++)
             if (_regionCombo.Items[i]?.ToString() == name) { _regionCombo.SelectedIndex = i; break; }
 
@@ -892,36 +861,23 @@ public sealed class MainForm : Form
     // ─────────────────────────────────────────────────────────────────────────
     // REGION EXPORT
     // ─────────────────────────────────────────────────────────────────────────
-    //
-    // Serialises the complete UserRegions list to a user-chosen JSON file.
-    // The format is identical to the internal regions.json so the file can
-    // be shared between installations and re-imported without conversion.
-    //
-    // Default filename: the currently selected region's name (if any user
-    // region is selected) + ".json", otherwise "regions.json".
 
     private void OnExportRegionsClick(object? sender, EventArgs e)
     {
         var userRegions = FractalRegionLibrary.Instance.UserRegions;
-
         if (userRegions.Count == 0)
         {
-            MessageBox.Show(
-                "There are no custom regions to export.\n\n" +
-                "Use \"Save View\" to create a custom region first.",
-                "Export Regions",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("There are no custom regions to export.\n\nUse \"Save View\" to create one first.",
+                "Export Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        // Default filename: selected region name (if it's a user region) else "regions".
         string defaultName = "regions";
         string? selected = _regionCombo.SelectedItem?.ToString();
         if (!string.IsNullOrEmpty(selected) && selected != "— select region —")
         {
             var sel = FractalRegionLibrary.Instance.FindByName(selected);
-            if (sel != null && !sel.IsBuiltIn)
-                defaultName = selected;
+            if (sel != null && !sel.IsBuiltIn) defaultName = selected;
         }
 
         using var dlg = new SaveFileDialog
@@ -931,15 +887,12 @@ public sealed class MainForm : Form
             DefaultExt = "json",
             FileName = defaultName + ".json"
         };
-
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
         try
         {
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            string json = JsonSerializer.Serialize(userRegions, options);
-            File.WriteAllText(dlg.FileName, json);
-
+            var opts = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(dlg.FileName, JsonSerializer.Serialize(userRegions, opts));
             SetStatus($"Exported {userRegions.Count} region(s)  →  {Path.GetFileName(dlg.FileName)}");
         }
         catch (Exception ex)
@@ -952,19 +905,6 @@ public sealed class MainForm : Form
     // ─────────────────────────────────────────────────────────────────────────
     // REGION IMPORT
     // ─────────────────────────────────────────────────────────────────────────
-    //
-    // Deserialises a JSON file (previously exported from this application or
-    // hand-authored to the same schema) and appends its entries to the current
-    // user-region library.
-    //
-    // Collision handling
-    //   • If an imported region's name already exists (case-insensitive match
-    //     against both built-in and user-defined regions), "-imp" is appended.
-    //   • If that name also collides, "-imp-2", "-imp-3" … are tried until a
-    //     unique name is found.  This prevents any silent overwrites.
-    //
-    // The internal regions.json is updated atomically (via
-    // FractalRegionLibrary.Save) once all entries have been appended.
 
     private void OnImportRegionsClick(object? sender, EventArgs e)
     {
@@ -973,49 +913,33 @@ public sealed class MainForm : Form
             Title = "Import Custom Regions",
             Filter = "JSON File (*.json)|*.json|All Files (*.*)|*.*"
         };
-
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-        // ── Deserialise the chosen file ───────────────────────────────────────
         List<FractalRegion>? imported;
         try
         {
-            string json = File.ReadAllText(dlg.FileName);
-            imported = JsonSerializer.Deserialize<List<FractalRegion>>(json);
+            imported = JsonSerializer.Deserialize<List<FractalRegion>>(File.ReadAllText(dlg.FileName));
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Could not read or parse the selected file:\n\n{ex.Message}\n\n" +
-                "The file must be a valid JSON array of region objects.",
-                "Import Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Could not read or parse the file:\n\n{ex.Message}",
+                "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
         if (imported == null || imported.Count == 0)
         {
-            MessageBox.Show(
-                "The selected file contains no region entries.",
-                "Import Regions",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("The file contains no region entries.",
+                "Import Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        // ── Append entries, resolving name collisions ─────────────────────────
-        int added = 0;
-        int renamed = 0;
-
+        int added = 0, renamed = 0;
         foreach (var region in imported)
         {
-            // Skip entries with a blank name.
             if (string.IsNullOrWhiteSpace(region.Name)) continue;
-
-            // Ensure RegionType is UserDefined (JsonIgnore means it won't be
-            // in the file; default is already UserDefined, but be explicit).
             region.RegionType = RegionType.UserDefined;
 
-            // Find a unique name: try original → original-imp → original-imp-2 …
             string candidate = region.Name;
             if (FractalRegionLibrary.Instance.FindByName(candidate) != null)
             {
@@ -1023,35 +947,26 @@ public sealed class MainForm : Form
                 int suffix = 2;
                 while (FractalRegionLibrary.Instance.FindByName(candidate) != null)
                     candidate = region.Name + "-imp-" + suffix++;
-
                 region.Name = candidate;
                 renamed++;
             }
 
-            // AddUserRegion also calls Save() after each entry; we skip that
-            // overhead by adding directly to the list and saving once at the end.
             FractalRegionLibrary.Instance.UserRegions.Add(region);
             added++;
         }
 
         if (added == 0)
         {
-            MessageBox.Show(
-                "No valid regions were found in the selected file.",
-                "Import Regions",
+            MessageBox.Show("No valid regions found.", "Import Regions",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        // Persist the updated list in one write.
         FractalRegionLibrary.Instance.Save();
-
-        // Refresh the combo box.
         RebuildRegionCombo();
 
         string summary = added == 1 ? "1 region imported" : $"{added} regions imported";
-        if (renamed > 0)
-            summary += $" ({renamed} renamed with '-imp' to avoid name collision)";
+        if (renamed > 0) summary += $" ({renamed} renamed with '-imp')";
         SetStatus(summary + $"  ←  {Path.GetFileName(dlg.FileName)}");
     }
 
@@ -1062,6 +977,318 @@ public sealed class MainForm : Form
         { _delRegionButton.Enabled = false; return; }
         var region = FractalRegionLibrary.Instance.FindByName(name);
         _delRegionButton.Enabled = region != null && !region.IsBuiltIn;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SLIDESHOW (NEW)
+    // ─────────────────────────────────────────────────────────────────────────
+    //
+    // Timing
+    //   • Each region is shown for 30 s total.
+    //   • Within each region the colour theme changes every 10 s.
+    //   • Theme and region transitions use a 2-second CPU cross-fade:
+    //     both the outgoing and incoming colour buffers are rendered and
+    //     blended pixel-by-pixel over 20 frames at ~100 ms each.
+    //
+    // Cross-fade implementation
+    //   Since the frame is ultimately a uint[] BGRA buffer delivered to
+    //   DirectXRenderer.UpdateTexture, a per-pixel lerp between old and new
+    //   buffers is trivially achievable on the CPU without any GPU blend state
+    //   changes.  The calculator always runs on a background thread; the fade
+    //   itself is done on the background thread too and the blended frames are
+    //   posted to the UI via Invoke.
+
+    private void OnSlideshowClick(object? sender, EventArgs e)
+    {
+        if (_slideshowRunning)
+            StopSlideshow();
+        else
+            StartSlideshow();
+    }
+
+    private void StartSlideshow()
+    {
+        if (_slideshowRunning) return;
+        _slideshowRunning = true;
+        _slideshowButton.Text = "■ Stop";
+        _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
+        _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(120, 50, 50);
+        SetStatus("Slideshow running…");
+
+        CancellationTokenSource cts;
+        lock (_slideshowLock)
+        {
+            _slideshowCts?.Cancel();
+            _slideshowCts = new CancellationTokenSource();
+            cts = _slideshowCts;
+        }
+
+        Task.Run(() => SlideshowLoop(cts.Token), cts.Token)
+            .ContinueWith(t =>
+            {
+                if (!IsHandleCreated || _disposed) return;
+                Invoke(() =>
+                {
+                    _slideshowRunning = false;
+                    _slideshowButton.Text = "Slideshow";
+                    _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
+                    _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
+                    if (!t.IsCanceled && t.IsFaulted)
+                        SetStatus($"Slideshow error: {t.Exception?.InnerException?.Message}");
+                    else
+                        SetStatus("Slideshow stopped.");
+                });
+            }, TaskScheduler.Default);
+    }
+
+    private void StopSlideshow()
+    {
+        lock (_slideshowLock) _slideshowCts?.Cancel();
+    }
+
+    // Returns all palettes whose Name does not start with "— " (i.e. header items excluded).
+    private List<string> GetAllPaletteNames()
+    {
+        var names = new List<string>();
+        foreach (var item in _colorThemeCombo.Items)
+        {
+            string s = item?.ToString() ?? "";
+            if (!s.StartsWith("—")) names.Add(s);
+        }
+        return names;
+    }
+
+    private async Task SlideshowLoop(CancellationToken ct)
+    {
+        var builtIns = new List<FractalRegion>(FractalRegionLibrary.Instance.BuiltIns);
+        var paletteNames = GetAllPaletteNames();
+        if (builtIns.Count == 0 || paletteNames.Count == 0) return;
+
+        const int regionDurationMs = 30_000;   // 30 s per region
+        const int themeDurationMs = 10_000;   // 10 s per theme within a region
+        const int fadeDurationMs = 2_000;   // 2 s cross-fade
+        const int fadeSteps = 20;        // frames during cross-fade
+        const int fadeStepMs = fadeDurationMs / fadeSteps;
+
+        int lastRegionIdx = -1;
+        int lastThemeIdx = -1;
+
+        while (!ct.IsCancellationRequested)
+        {
+            // ── Pick a new region different from the last ─────────────────────
+            int regionIdx;
+            do { regionIdx = _slideshowRng.Next(builtIns.Count); }
+            while (builtIns.Count > 1 && regionIdx == lastRegionIdx);
+            lastRegionIdx = regionIdx;
+            var region = builtIns[regionIdx];
+
+            // ── Pick an initial theme ─────────────────────────────────────────
+            int themeIdx;
+            do { themeIdx = _slideshowRng.Next(paletteNames.Count); }
+            while (paletteNames.Count > 1 && themeIdx == lastThemeIdx);
+            lastThemeIdx = themeIdx;
+            string themeName = paletteNames[themeIdx];
+
+            // ── Render the new region with the initial theme ───────────────────
+            // The calculation runs on this background thread.
+            uint[]? previousBuffer = null;
+            if (_calculator != null && _renderer != null)
+            {
+                // Snapshot old buffer for region cross-fade.
+                uint[] oldBuf = await Task.Run(() =>
+                {
+                    if (_calculator == null) return Array.Empty<uint>();
+                    var copy = new uint[_calculator.ColorBuffer.Length];
+                    _calculator.ColorBuffer.CopyTo(copy, 0);
+                    return copy;
+                }, ct);
+
+                // Apply region & theme on UI thread.
+                if (ct.IsCancellationRequested) return;
+                await InvokeAsync(() =>
+                {
+                    if (_disposed) return;
+                    ApplyRegion(region);
+                    var map = Models.ColorPalette.GetPaletteByName(themeName);
+                    if (_calculator != null) _calculator.ColorMap = map;
+                    // Update UI controls to reflect the active region/theme.
+                    for (int i = 0; i < _regionCombo.Items.Count; i++)
+                        if (_regionCombo.Items[i]?.ToString() == region.Name)
+                        { _regionCombo.SelectedIndex = i; break; }
+                    _colorThemeCombo.Text = themeName;
+                    SetStatus($"Slideshow: {region.Name}  •  {themeName}");
+                });
+
+                // Calculate the new frame (background thread).
+                if (ct.IsCancellationRequested) return;
+                uint[] newBuf = await Task.Run(() =>
+                {
+                    if (_calculator == null) return Array.Empty<uint>();
+                    _calculator.Calculate(ct);
+                    var copy = new uint[_calculator.ColorBuffer.Length];
+                    _calculator.ColorBuffer.CopyTo(copy, 0);
+                    return copy;
+                }, ct);
+
+                if (ct.IsCancellationRequested) return;
+
+                // Cross-fade from old region buffer to new region buffer.
+                if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0)
+                {
+                    await CrossFade(oldBuf, newBuf, fadeSteps, fadeStepMs, ct);
+                }
+                else
+                {
+                    // Sizes differ (resize happened) — just show the new frame.
+                    await InvokeAsync(() =>
+                    {
+                        if (!_disposed && _renderer != null && _calculator != null)
+                            _renderer.UpdateTexture(newBuf, _calculator.Width, _calculator.Height);
+                    });
+                }
+
+                previousBuffer = newBuf;
+            }
+
+            // ── Cycle through themes for the remainder of the region slot ─────
+            long regionStartMs = Environment.TickCount64;
+            while (!ct.IsCancellationRequested)
+            {
+                long elapsed = Environment.TickCount64 - regionStartMs;
+                if (elapsed >= regionDurationMs) break;
+
+                // Wait for the theme duration (minus fade time).
+                int themeWait = System.Math.Max(0, themeDurationMs - fadeDurationMs);
+                await DelayWithCancel(themeWait, ct);
+                if (ct.IsCancellationRequested) return;
+
+                elapsed = Environment.TickCount64 - regionStartMs;
+                if (elapsed >= regionDurationMs) break;
+
+                // Pick a new theme.
+                int newThemeIdx;
+                do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
+                while (paletteNames.Count > 1 && newThemeIdx == lastThemeIdx);
+                lastThemeIdx = newThemeIdx;
+                string newThemeName = paletteNames[newThemeIdx];
+
+                // Render with new theme on background thread.
+                if (_calculator == null || _renderer == null) break;
+
+                uint[] oldThemeBuf = previousBuffer ?? Array.Empty<uint>();
+
+                await InvokeAsync(() =>
+                {
+                    if (_disposed) return;
+                    var map = Models.ColorPalette.GetPaletteByName(newThemeName);
+                    if (_calculator != null) _calculator.ColorMap = map;
+                    _colorThemeCombo.Text = newThemeName;
+                    SetStatus($"Slideshow: {region.Name}  •  {newThemeName}");
+                });
+
+                if (ct.IsCancellationRequested) return;
+
+                uint[] newThemeBuf = await Task.Run(() =>
+                {
+                    if (_calculator == null) return Array.Empty<uint>();
+                    _calculator.Calculate(ct);
+                    var copy = new uint[_calculator.ColorBuffer.Length];
+                    _calculator.ColorBuffer.CopyTo(copy, 0);
+                    return copy;
+                }, ct);
+
+                if (ct.IsCancellationRequested) return;
+
+                if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
+                    await CrossFade(oldThemeBuf, newThemeBuf, fadeSteps, fadeStepMs, ct);
+                else
+                {
+                    await InvokeAsync(() =>
+                    {
+                        if (!_disposed && _renderer != null && _calculator != null)
+                            _renderer.UpdateTexture(newThemeBuf, _calculator.Width, _calculator.Height);
+                    });
+                }
+
+                previousBuffer = newThemeBuf;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Cross-fades two BGRA uint[] buffers by posting <paramref name="steps"/>
+    /// blended frames to the renderer.  Each frame alpha-blends the buffers by
+    /// an incrementing weight and posts the result to the UI thread.
+    /// </summary>
+    private async Task CrossFade(uint[] from, uint[] to, int steps, int stepMs, CancellationToken ct)
+    {
+        int len = System.Math.Min(from.Length, to.Length);
+        var blended = new uint[len];
+        int w = _calculator?.Width ?? 0;
+        int h = _calculator?.Height ?? 0;
+        if (w == 0 || h == 0 || w * h != len) return;
+
+        for (int step = 1; step <= steps; step++)
+        {
+            if (ct.IsCancellationRequested) return;
+            float alpha = step / (float)steps;
+
+            // CPU pixel-blend — runs on the calling background thread.
+            BlendBuffers(from, to, blended, len, alpha);
+
+            await InvokeAsync(() =>
+            {
+                if (!_disposed && _renderer != null)
+                    _renderer.UpdateTexture(blended, w, h);
+            });
+
+            await DelayWithCancel(stepMs, ct);
+        }
+    }
+
+    /// <summary>Per-pixel linear blend between two BGRA uint[] buffers.</summary>
+    private static void BlendBuffers(uint[] from, uint[] to, uint[] result, int len, float alpha)
+    {
+        float beta = 1f - alpha;
+        for (int i = 0; i < len; i++)
+        {
+            uint pF = from[i], pT = to[i];
+            byte bF = (byte)(pF & 0xFF);
+            byte gF = (byte)(pF >> 8 & 0xFF);
+            byte rF = (byte)(pF >> 16 & 0xFF);
+            byte bT = (byte)(pT & 0xFF);
+            byte gT = (byte)(pT >> 8 & 0xFF);
+            byte rT = (byte)(pT >> 16 & 0xFF);
+
+            byte bR = (byte)(bF * beta + bT * alpha);
+            byte gR = (byte)(gF * beta + gT * alpha);
+            byte rR = (byte)(rF * beta + rT * alpha);
+            result[i] = 0xFF000000u | ((uint)rR << 16) | ((uint)gR << 8) | bR;
+        }
+    }
+
+    /// <summary>Awaitable Task.Delay that tolerates cancellation silently.</summary>
+    private static async Task DelayWithCancel(int ms, CancellationToken ct)
+    {
+        try { await Task.Delay(ms, ct); }
+        catch (OperationCanceledException) { /* expected */ }
+    }
+
+    /// <summary>Awaitable Control.Invoke wrapper for use inside async methods.</summary>
+    private Task InvokeAsync(Action action)
+    {
+        if (!IsHandleCreated || _disposed) return Task.CompletedTask;
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            BeginInvoke(() =>
+            {
+                try { action(); tcs.TrySetResult(true); }
+                catch (Exception ex) { tcs.TrySetException(ex); }
+            });
+        }
+        catch (Exception ex) { tcs.TrySetException(ex); }
+        return tcs.Task;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1076,19 +1303,15 @@ public sealed class MainForm : Form
     private void EnterSpanMode()
     {
         if (_spanning) return;
-
         _preSpanWindowState = WindowState;
         _preSpanBorderStyle = FormBorderStyle;
         if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
         _preSpanBounds = Bounds;
-
         _spanning = true;
-        _spanButton.Text = "Back"; //"Restore";
-
+        _spanButton.Text = "Back";
         FormBorderStyle = FormBorderStyle.None;
         WindowState = FormWindowState.Normal;
         Bounds = SystemInformation.VirtualScreen;
-
         TopMost = true;
         Activate();
     }
@@ -1096,22 +1319,22 @@ public sealed class MainForm : Form
     private void ExitSpanMode()
     {
         if (!_spanning) return;
-
         _spanning = false;
         TopMost = false;
-        _spanButton.Text = "Span Monitors";
-
+        _spanButton.Text = "Span";
         FormBorderStyle = _preSpanBorderStyle;
         WindowState = FormWindowState.Normal;
         Bounds = _preSpanBounds;
-
         if (_preSpanWindowState == FormWindowState.Maximized)
             WindowState = FormWindowState.Maximized;
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape && _spanning) { ExitSpanMode(); e.Handled = true; return; }
+        if (e.KeyCode == Keys.Escape && _spanning)
+        { ExitSpanMode(); e.Handled = true; return; }
+        if (e.KeyCode == Keys.Escape && _slideshowRunning)
+        { StopSlideshow(); e.Handled = true; return; }
         if (e.KeyCode == Keys.Return &&
             (ActiveControl == _txCX || ActiveControl == _txCY ||
              ActiveControl == _txZoom || ActiveControl == _txIter))
@@ -1121,30 +1344,6 @@ public sealed class MainForm : Form
     // ─────────────────────────────────────────────────────────────────────────
     // SCREENSHOT
     // ─────────────────────────────────────────────────────────────────────────
-    //
-    // Two code paths:
-    //
-    //   NORMAL (not spanning)
-    //     Saves the current render-panel pixel buffer at its current dimensions.
-    //     Fast — no new computation; uses the ColorBuffer already in memory.
-    //
-    //   SPAN / WALLPAPER
-    //     In span mode the toolbar panels (top bar + coord bar, ~72 px total)
-    //     sit at the top of the window.  The render panel — and therefore every
-    //     screenshot saved from it — is that many pixels shorter than the full
-    //     virtual desktop.  When set as a desktop wallpaper with "Span" mode,
-    //     Windows adds black letterbox bars to pad the missing rows.
-    //
-    //     When _spanning is true this handler:
-    //       1. Shows the SaveFileDialog first (no waiting if the user cancels).
-    //       2. Allocates a temporary MandelbrotCalculator at VirtualScreen size
-    //          (toolbar pixels included — the exact dimensions Windows expects).
-    //       3. Copies the current view (CX, CY, Zoom, Iterations, ColorMap,
-    //          Quality) so the output is visually identical to what is on screen,
-    //          just taller by the toolbar height.
-    //       4. Runs the calculation off-screen on a background thread; the live
-    //          renderer continues unaffected throughout.
-    //       5. Saves and re-enables the button on completion.
 
     private void OnScreenshotClick(object? sender, EventArgs e)
     {
@@ -1160,7 +1359,6 @@ public sealed class MainForm : Form
         if (!string.IsNullOrEmpty(CurrentRegionName()))
             regionName = CurrentRegionName()?.Replace(" ", "") + "_" ?? "";
 
-        // In span mode the suggested filename reflects the full desktop size.
         Rectangle vs = SystemInformation.VirtualScreen;
         string sizeTag = _spanning
             ? $"{vs.Width}x{vs.Height}_wallpaper"
@@ -1168,36 +1366,28 @@ public sealed class MainForm : Form
 
         using var dlg = new SaveFileDialog
         {
-            Title = _spanning
-                ? "Save Wallpaper Screenshot (full desktop dimensions)"
-                : "Save Mandelbrot Screenshot",
+            Title = _spanning ? "Save Wallpaper Screenshot" : "Save Mandelbrot Screenshot",
             Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
             FilterIndex = 1,
             DefaultExt = "png",
             FileName = $"Mandelbrot_{colorName}_{regionName}" +
-                          $"x{_txCX.Text.Replace(".", "")}_" +
-                          $"y{_txCY.Text.Replace(".", "")}_" +
-                          $"z{_txZoom.Text.Replace(".", "")}_" +
-                          $"i{_txIter.Text.Replace(".", "")}_" +
-                          sizeTag
+                         $"x{_txCX.Text.Replace(".", "")}_" +
+                         $"y{_txCY.Text.Replace(".", "")}_" +
+                         $"z{_txZoom.Text.Replace(".", "")}_" +
+                         $"i{_txIter.Text.Replace(".", "")}_" +
+                         sizeTag
         };
-
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
         string path = dlg.FileName;
         string ext = Path.GetExtension(path).ToLowerInvariant();
         var format = ext switch { ".bmp" => ImageFormat.Bmp, ".tif" or ".tiff" => ImageFormat.Tiff, _ => ImageFormat.Png };
-        regionName = !string.IsNullOrEmpty(CurrentRegionName()) ? " - " + CurrentRegionName() : "";
-        string colorTag = !string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "";
-        string waterMark = $"Fracturing Fog{regionName}{colorTag}";
+        string wm = $"Fracturing Fog{(!string.IsNullOrEmpty(CurrentRegionName()) ? " - " + CurrentRegionName() : "")}" +
+                      $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
 
-        if (_spanning)
-            TakeWallpaperScreenshot(path, format, waterMark);
-        else
-            TakeNormalScreenshot(path, format, waterMark);
+        if (_spanning) TakeWallpaperScreenshot(path, format, wm);
+        else TakeNormalScreenshot(path, format, wm);
     }
-
-    // ── Normal screenshot — saves the existing ColorBuffer directly ───────────
 
     private void TakeNormalScreenshot(string path, ImageFormat format, string waterMark)
     {
@@ -1216,23 +1406,16 @@ public sealed class MainForm : Form
         }
     }
 
-    // ── Wallpaper screenshot — offscreen render at full virtual-desktop size ──
-
     private void TakeWallpaperScreenshot(string path, ImageFormat format, string waterMark)
     {
-        // Full virtual desktop dimensions — what Windows expects for a spanning wallpaper.
         Rectangle vs = SystemInformation.VirtualScreen;
         int fullW = vs.Width;
         int fullH = vs.Height;
 
-        // Compute the combined height of all DockStyle.Top panels dynamically
-        // so the code never hardcodes a pixel value that could change with UI updates.
         int toolbarH = 0;
         foreach (Control c in Controls)
             if (c.Dock == DockStyle.Top) toolbarH += c.Height;
 
-        // Snapshot current view onto the stack before the background thread starts.
-        // The live _calculator must never be accessed off the UI thread.
         double cx = _calculator!.CenterX;
         double cy = _calculator!.CenterY;
         double zoom = _calculator!.Zoom;
@@ -1241,13 +1424,10 @@ public sealed class MainForm : Form
         QualityPreset q = _quality;
 
         long mpix = (long)fullW * fullH / 1_000_000;
-
-        // Disable the button to prevent queuing a second wallpaper render.
         _screenshotButton.Enabled = false;
         _screenshotButton.Text = "Rendering…";
         SetStatus($"Rendering wallpaper  {fullW}×{fullH}  ({mpix} MP, +{toolbarH} px over render panel)  …");
 
-        // Cancel any previous wallpaper render still running.
         CancellationToken token;
         lock (_wallpaperLock)
         {
@@ -1260,53 +1440,43 @@ public sealed class MainForm : Form
 
         Task.Run(() =>
         {
-            // Temporary calculator — completely independent of the live one.
-            // The live renderer keeps running and presenting frames throughout.
-            var tempCalc = new MandelbrotCalculator(fullW, fullH);
-            tempCalc.CenterX = cx;
-            tempCalc.CenterY = cy;
-            tempCalc.Zoom = zoom;
-            tempCalc.MaxIterations = maxIter;
-            tempCalc.ColorMap = map;
-            tempCalc.Quality = q;
-
+            var tempCalc = new MandelbrotCalculator(fullW, fullH)
+            {
+                CenterX = cx,
+                CenterY = cy,
+                Zoom = zoom,
+                MaxIterations = maxIter,
+                ColorMap = map,
+                Quality = q
+            };
             tempCalc.Calculate(token);
             token.ThrowIfCancellationRequested();
             return tempCalc;
-
         }, token)
         .ContinueWith(t =>
         {
             if (!IsHandleCreated || _disposed) return;
             Invoke(() =>
             {
-                // Always restore the button regardless of outcome.
                 _screenshotButton.Enabled = true;
-                _screenshotButton.Text = "Screenshot";
+                _screenshotButton.Text = "Image";
 
-                if (t.IsCanceled)
-                {
-                    SetStatus("Wallpaper render cancelled.");
-                    return;
-                }
-
+                if (t.IsCanceled) { SetStatus("Wallpaper render cancelled."); return; }
                 if (t.IsFaulted)
                 {
-                    MessageBox.Show(
-                        $"Wallpaper render failed:\n\n{t.Exception?.InnerException?.Message}",
+                    MessageBox.Show($"Wallpaper render failed:\n\n{t.Exception?.InnerException?.Message}",
                         "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
-                MandelbrotCalculator result = t.Result;
                 sw.Stop();
-
+                MandelbrotCalculator result = t.Result;
                 try
                 {
-                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, ComputeContrastColor(GetSwatchColor(), true));
-                    long kb = new FileInfo(path).Length / 1024;
+                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height,
+                        path, format, waterMark, ComputeContrastColor(GetSwatchColor(), true));
                     SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}" +
-                              $"  ({result.Width}×{result.Height} px,  {kb:N0} KB)" +
+                              $"  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)" +
                               $"  [{sw.ElapsedMilliseconds} ms]");
                 }
                 catch (Exception ex)
@@ -1318,26 +1488,19 @@ public sealed class MainForm : Form
         }, TaskScheduler.Default);
     }
 
-    // ── Shared pixel-to-file helper ───────────────────────────────────────────
-    //
-    // ColorBuffer layout (PackBgra, little-endian x64):
-    //   uint = (A<<24)|(R<<16)|(G<<8)|B  →  memory bytes: B G R A
-    // GDI Format32bppArgb memory layout: B G R A
-    // Layouts are identical — MemoryCopy is always correct.
-
     private static unsafe void SavePixelsToFile(
-        uint[] pixels, int w, int h, string path, ImageFormat format, string watermarkText, Color fontColor)
+        uint[] pixels, int w, int h, string path, ImageFormat format,
+        string watermarkText, Color fontColor)
     {
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
-                                          ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                                ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
         try
         {
             fixed (uint* src = pixels)
             {
                 if (bmpData.Stride == w * 4)
-                    Buffer.MemoryCopy(src, (void*)bmpData.Scan0,
-                                      (long)w * h * 4, (long)w * h * 4);
+                    Buffer.MemoryCopy(src, (void*)bmpData.Scan0, (long)w * h * 4, (long)w * h * 4);
                 else
                 {
                     byte* dst = (byte*)bmpData.Scan0;
@@ -1363,14 +1526,12 @@ public sealed class MainForm : Form
             }
             else bmp.Save(path, format);
         }
-        else
-        {
-            bmp.Save(path, format);
-        }
+        else bmp.Save(path, format);
 
         if (!string.IsNullOrEmpty(watermarkText))
         {
-            AddWaterMark(Graphics.FromImage(bmp), watermarkText, w, h, fontColor);
+            using var g = Graphics.FromImage(bmp);
+            AddWaterMark(g, watermarkText, w, h, fontColor);
             bmp.Save(path, format);
         }
     }
@@ -1378,16 +1539,14 @@ public sealed class MainForm : Form
     private static void AddWaterMark(Graphics g, string text, int width, int height, Color fontColor)
     {
         using var font = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
-        var textSize = g.MeasureString(text, font);
-        var pos = new PointF(width - textSize.Width - 20, height - textSize.Height - 12);
-        using var brush = new SolidBrush(fontColor);// Color.FromArgb(128, Color.White));
-
-        Debug.WriteLine($"Adding watermark '{text}' at {pos} with size {textSize}");
+        var sz = g.MeasureString(text, font);
+        var pos = new PointF(width - sz.Width - 20, height - sz.Height - 12);
+        using var brush = new SolidBrush(fontColor);
         g.DrawString(text, font, brush, pos);
         using var fontSmall = new Font("Segoe UI", 8, FontStyle.Bold, GraphicsUnit.Pixel);
-        textSize = g.MeasureString(text, fontSmall);
-        pos = new PointF(width - textSize.Width - 105, height - textSize.Height - 2);
-        g.DrawString("Something mundane to include in the image.", fontSmall, brush, pos);
+        var sz2 = g.MeasureString(text, fontSmall);
+        g.DrawString("Something mundane to include in the image.", fontSmall, brush,
+            new PointF(width - sz2.Width - 105, height - sz2.Height - 2));
         g.Save();
     }
 
@@ -1397,19 +1556,16 @@ public sealed class MainForm : Form
 
     private void OnMouseWheel(object? sender, MouseEventArgs e)
     {
-        if (_calculator == null) return;
+        if (_calculator == null || _slideshowRunning) return;
 
-        // Use the quality preset's wheel factor for the active tier.
         double wf = _quality.WheelZoomFactor;
         double factor = e.Delta > 0 ? wf : 1.0 / wf;
-
         double scale = CurrentScale();
         double ox = e.X - _renderPanel.ClientSize.Width * 0.5;
         double oy = e.Y - _renderPanel.ClientSize.Height * 0.5;
         double compX = _centerX + ox * scale;
         double compY = _centerY + oy * scale;
 
-        // Clamp to the quality tier's zoom range.
         _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
 
         double ns = CurrentScale();
@@ -1426,7 +1582,7 @@ public sealed class MainForm : Form
 
     private void OnMouseDown(object? sender, MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left) return;
+        if (e.Button != MouseButtons.Left || _slideshowRunning) return;
         _panning = true;
         _panStartScreen = e.Location;
         _panStartCX = _centerX;
@@ -1437,11 +1593,9 @@ public sealed class MainForm : Form
     private void OnMouseMove(object? sender, MouseEventArgs e)
     {
         if (!_panning || _calculator == null) return;
-
         double scale = CurrentScale();
         _centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
         _centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
-
         ApplyViewState();
         TriggerCalculation();
     }
@@ -1470,19 +1624,13 @@ public sealed class MainForm : Form
         _calculator.Resize(w, h);
         ApplyViewState();
         TriggerCalculation();
-
-        // Keep the grid overlay exactly over the render panel after layout change.
         PositionGridPanel();
     }
 
-    // Positions the grid overlay to exactly cover _renderPanel in form coordinates.
     private void PositionGridPanel()
     {
-        // _renderPanel.Bounds gives position in the form's client area.
-        // The grid panel is a direct child of the form, so the same coordinate
-        // system applies — we can assign Bounds directly.
         _gridPanel.Bounds = _renderPanel.Bounds;
-        if (_gridVisible && _gridPanel != null) _gridPanel.Invalidate();
+        if (_gridVisible && _gridPanel.IsHandleCreated) _gridPanel.Invalidate();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1504,6 +1652,12 @@ public sealed class MainForm : Form
         return 3.5 / (System.Math.Max(_calculator.Width, _calculator.Height) * _zoom);
     }
 
+    /// <summary>
+    /// Pushes the current view state into the calculator.
+    /// When <paramref name="maxIters"/> is &gt; 0 it is used directly;
+    /// otherwise the quality preset auto-computes it — unless the lock is active,
+    /// in which case the locked value is always used.
+    /// </summary>
     private void ApplyViewState(int maxIters = 0)
     {
         if (_calculator == null) return;
@@ -1511,8 +1665,13 @@ public sealed class MainForm : Form
         _calculator.CenterY = _centerY;
         _calculator.Zoom = _zoom;
         _calculator.Quality = _quality;
-        // Auto-compute iterations from quality+zoom (may be overridden by Go button).
-        _calculator.MaxIterations = maxIters > 0 && maxIters < 65535 ? maxIters : _quality.ComputeIterations(_zoom);
+
+        if (_iterLocked)
+            _calculator.MaxIterations = _lockedIterations;
+        else if (maxIters > 0)
+            _calculator.MaxIterations = maxIters;
+        else
+            _calculator.MaxIterations = _quality.ComputeIterations(_zoom);
 
         UpdateCoordBoxes();
     }
@@ -1536,17 +1695,16 @@ public sealed class MainForm : Form
     private string CurrentRegionName()
     {
         string? selected = _regionCombo.SelectedItem?.ToString();
-        if (string.IsNullOrEmpty(selected) || selected == "— select region —")
-            return "";
+        if (string.IsNullOrEmpty(selected) || selected == "— select region —") return "";
         return selected;
     }
 
     private string CurrentColorMapName()
     {
         if (_calculator?.ColorMap == null) return "";
-        var prop = _calculator.ColorMap.GetType().GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-        if (prop == null) return "Theme";
-        return prop.GetValue(null)?.ToString() ?? "";
+        var prop = _calculator.ColorMap.GetType()
+            .GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        return prop?.GetValue(null)?.ToString() ?? "Theme";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1570,7 +1728,6 @@ public sealed class MainForm : Form
         var renderer = _renderer;
 
         SetStatus("Calculating…");
-
         var sw = Stopwatch.StartNew();
 
         Task.Run(() => { calc.Calculate(token); return sw.ElapsedMilliseconds; }, token)
@@ -1587,16 +1744,15 @@ public sealed class MainForm : Form
                 {
                     if (_disposed) return;
                     renderer.UpdateTexture(calc.ColorBuffer, calc.Width, calc.Height);
-                    // Refresh grid overlay whenever a new frame lands.
-                    if (_gridVisible && _gridPanel != null) _gridPanel.Invalidate();
-                    // Precision mode tag: [SP] or [DD].
+                    if (_gridVisible && _gridPanel.IsHandleCreated) _gridPanel.Invalidate();
                     string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
                     SetStatus(
-                            $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
-                            $"zoom={calc.Zoom:G6}  iter={calc.MaxIterations}  " +
-                            $"{precTag}  [{ms} ms  {calc.Width}×{calc.Height}]");
+                        $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
+                        $"zoom={calc.Zoom:G6}  iter={calc.MaxIterations}  " +
+                        $"{precTag}  [{ms} ms  {calc.Width}×{calc.Height}]" +
+                        (_iterLocked ? "  [ITER LOCKED]" : ""));
 
-                    if (_gridVisible) _gridPanel?.Invalidate();
+                    if (_gridVisible && _gridPanel.IsHandleCreated) _gridPanel.Invalidate();
                 });
             }
         }, TaskScheduler.Default);
@@ -1617,6 +1773,7 @@ public sealed class MainForm : Form
         _disposed = true;
         Application.Idle -= OnApplicationIdle;
 
+        StopSlideshow();
         lock (_calcLock) _calcCts?.Cancel();
         lock (_wallpaperLock) _wallpaperCts?.Cancel();
 
@@ -1649,6 +1806,7 @@ internal static class ControlExtensions
 // ─────────────────────────────────────────────────────────────────────────────
 // DirectX render panel
 // ─────────────────────────────────────────────────────────────────────────────
+
 internal sealed class RenderPanel : Panel
 {
     public RenderPanel()
@@ -1656,10 +1814,8 @@ internal sealed class RenderPanel : Panel
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.Opaque | ControlStyles.UserPaint, true);
         MouseEnter += (_, _) => Focus();
     }
-
     protected override void OnPaintBackground(PaintEventArgs e) { }
     protected override void OnPaint(PaintEventArgs e) { }
-
     protected override CreateParams CreateParams
     {
         get { var cp = base.CreateParams; cp.ExStyle |= 0x00200000; return cp; }
@@ -1685,27 +1841,19 @@ public class ColorComboBox : ComboBox
 
         string text = Items[e.Index]?.ToString() ?? "";
         IColorMap map = Models.ColorPalette.GetPaletteByName(text);
-
-        // ── Swatch: sample the palette at 30 % of MaxIterations ──────────────
-        // Uses SwatchSample (default interface method) instead of Map(0,0,0)
-        // which always returned black in the previous version.
         map.MaxIterations = 500;
         int argb = map.SwatchSample;
         var swatch = Color.FromArgb((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
 
-        // Draw the swatch rectangle on the left.
         var swatchRect = new Rectangle(e.Bounds.X + 2, e.Bounds.Y + 3, 18, e.Bounds.Height - 6);
         using var sb = new SolidBrush(swatch);
         e.Graphics.FillRectangle(sb, swatchRect);
         e.Graphics.DrawRectangle(Pens.DimGray, swatchRect);
 
-        // Draw the theme name to the right of the swatch.
         var textBrush = (e.State & DrawItemState.Selected) != 0 ? Brushes.White : Brushes.LightGray;
         e.Graphics.DrawString(text, Font, textBrush, swatchRect.Right + 4, e.Bounds.Y + 2);
-
         e.DrawFocusRectangle();
     }
-
     protected override void OnPaintBackground(PaintEventArgs pevent)
     {
         base.OnPaintBackground(pevent);
@@ -1714,6 +1862,7 @@ public class ColorComboBox : ComboBox
         pevent.Graphics.DrawRectangle(Pens.DarkGray, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
     }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Minimal text-input dialog (used by Save View)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1721,7 +1870,6 @@ public class ColorComboBox : ComboBox
 public sealed class InputDialog : Form
 {
     public string Input => _tx.Text;
-
     private readonly TextBox _tx;
 
     public InputDialog(string title, string prompt)
@@ -1781,92 +1929,66 @@ public sealed class InputDialog : Form
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
-
-        AcceptButton = ok; CancelButton = cancel;
-        Controls.Add(ok); Controls.Add(cancel);
+        AcceptButton = ok;
+        CancelButton = cancel;
+        Controls.Add(ok);
+        Controls.Add(cancel);
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cartesian grid overlay panel
 // ─────────────────────────────────────────────────────────────────────────────
-//// ARCHITECTURE NOTE — why sibling, not child
-// ────────────────────────────────────────────────────────────────────────────
-// RenderPanel sets WS_EX_NOREDIRECTIONBITMAP (0x00200000) so that the D3D11
-// swap-chain presents directly to the screen without going through the DWM
-// redirection surface.  A side-effect is that any GDI/GDI+ child windows of
-// RenderPanel are never composited over the D3D11 output — they paint into
-// the DWM surface which is then completely obscured by the D3D11 frame.
+// ARCHITECTURE NOTE — why sibling, not child:
+// RenderPanel sets WS_EX_NOREDIRECTIONBITMAP so that D3D11 presents directly
+// to the screen.  Child windows of such a panel never composite over it.
+// GridOverlayPanel is therefore a sibling (added after _renderPanel in the
+// form's Controls collection) and uses WS_EX_LAYERED + UpdateLayeredWindow
+// with per-pixel alpha to composite GDI+ over the D3D11 surface.
 //
-// Solution: GridOverlayPanel is added to the FORM's Controls collection after
-// _renderPanel, so it is above it in Z-order but independent of its DX surface.
-// Its bounds are manually kept equal to _renderPanel.Bounds (set in OnLoad and
-// OnFormResize).
-//
-// WS_EX_LAYERED + UpdateLayeredWindow
-// ────────────────────────────────────────────────────────────────────────────
-// To composite GDI+ over D3D11 we use the layered-window path:
-//   1. Apply WS_EX_LAYERED to the grid panel's HWND.
-//   2. After each paint, call UpdateLayeredWindow with the HBITMAP we drew into,
-//      supplying per-pixel alpha so transparent regions let the D3D11 frame show.
-//
-// This is the only mechanism that works reliably on Windows 10/11 over a
-// no-redirection-bitmap swap-chain.
-//
-// Mouse transparency: WS_EX_TRANSPARENT lets all mouse messages fall through
-// to the render panel underneath.
+// FIX (v5): Never set Visible = true before IsHandleCreated is true.
+// The underlying HWND for a WS_EX_LAYERED window is only valid once the
+// containing form has been shown.  Attempting to show the panel from the
+// constructor throws Win32Exception "Error creating window handle."
+// The grid checkbox handler now guards with IsHandleCreated.
 
 internal sealed class GridOverlayPanel : Control
 {
-    // Win32 structures for UpdateLayeredWindow.
-    [System.Runtime.InteropServices.StructLayout(
-        System.Runtime.InteropServices.LayoutKind.Sequential)]
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int x, y; }
 
-    [System.Runtime.InteropServices.StructLayout(
-        System.Runtime.InteropServices.LayoutKind.Sequential)]
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct SIZE { public int cx, cy; }
 
-    [System.Runtime.InteropServices.StructLayout(
-        System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)]
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)]
     private struct BLENDFUNCTION
     {
-        public byte BlendOp;       // AC_SRC_OVER = 0
-        public byte BlendFlags;    // 0
-        public byte SourceConstantAlpha; // 255 = use per-pixel alpha
-        public byte AlphaFormat;   // AC_SRC_ALPHA = 1
+        public byte BlendOp;
+        public byte BlendFlags;
+        public byte SourceConstantAlpha;
+        public byte AlphaFormat;
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-    private static extern bool UpdateLayeredWindow(
-        IntPtr hwnd, IntPtr hdcDst,
-        ref POINT pptDst, ref SIZE psize,
-        IntPtr hdcSrc, ref POINT pptSrc,
-        uint crKey,
-        ref BLENDFUNCTION pblend,
-        uint dwFlags);
+    private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst,
+        ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc,
+        uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
 
     [System.Runtime.InteropServices.DllImport("gdi32.dll")]
     private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
-
     [System.Runtime.InteropServices.DllImport("gdi32.dll")]
     private static extern bool DeleteDC(IntPtr hdc);
-
     [System.Runtime.InteropServices.DllImport("gdi32.dll")]
     private static extern IntPtr SelectObject(IntPtr hdc, IntPtr h);
-
     [System.Runtime.InteropServices.DllImport("gdi32.dll")]
     private static extern bool DeleteObject(IntPtr hObject);
-
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr GetDC(IntPtr hwnd);
-
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
 
     private const uint ULW_ALPHA = 2;
 
-    // Delegates into MainForm — evaluated at paint time.
     private readonly Func<(double cx, double cy)> _getCenter;
     private readonly Func<double> _getZoom;
     private readonly Func<Size> _getPanelSize;
@@ -1892,24 +2014,20 @@ internal sealed class GridOverlayPanel : Control
         {
             var cp = base.CreateParams;
             cp.ExStyle |= 0x00080000; // WS_EX_LAYERED
-            cp.ExStyle |= 0x00000020; // WS_EX_TRANSPARENT (mouse pass-through)
+            cp.ExStyle |= 0x00000020; // WS_EX_TRANSPARENT
             return cp;
         }
     }
 
-    // Block the default WM_PAINT — we push pixels via UpdateLayeredWindow.
     protected override void OnPaint(PaintEventArgs e) { }
     protected override void OnPaintBackground(PaintEventArgs e) { }
 
-    // Called by MainForm whenever the grid should refresh (after each render
-    // frame, on checkbox toggle, and on resize).
     public new void Invalidate()
     {
         if (!IsHandleCreated || Width < 1 || Height < 1) return;
         UpdateLayeredContent();
     }
 
-    // WndProc override: pass all mouse messages to the render panel underneath.
     protected override void WndProc(ref Message m)
     {
         const int WM_NCHITTEST = 0x0084;
@@ -1918,15 +2036,11 @@ internal sealed class GridOverlayPanel : Control
         base.WndProc(ref m);
     }
 
-    // ── Core render ───────────────────────────────────────────────────────────
-
     private void UpdateLayeredContent()
     {
-        int w = Width;
-        int h = Height;
+        int w = Width, h = Height;
         if (w < 1 || h < 1) return;
 
-        // Draw the grid into a 32-bpp ARGB bitmap (pre-multiplied alpha).
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
         {
@@ -1936,7 +2050,6 @@ internal sealed class GridOverlayPanel : Control
             DrawCartesianGrid(g, w, h);
         }
 
-        // Push the bitmap to the screen via UpdateLayeredWindow.
         IntPtr screenDC = GetDC(IntPtr.Zero);
         IntPtr memDC = CreateCompatibleDC(screenDC);
         IntPtr hBmp = bmp.GetHbitmap(Color.FromArgb(0, 0, 0, 0));
@@ -1945,16 +2058,9 @@ internal sealed class GridOverlayPanel : Control
         var pos = new POINT { x = Left, y = Top };
         var size = new SIZE { cx = w, cy = h };
         var srcPt = new POINT { x = 0, y = 0 };
-        var blend = new BLENDFUNCTION
-        {
-            BlendOp = 0,   // AC_SRC_OVER
-            BlendFlags = 0,
-            SourceConstantAlpha = 255, // rely on per-pixel alpha
-            AlphaFormat = 1    // AC_SRC_ALPHA
-        };
+        var blend = new BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
 
-        UpdateLayeredWindow(Handle, screenDC, ref pos, ref size,
-                            memDC, ref srcPt, 0, ref blend, ULW_ALPHA);
+        UpdateLayeredWindow(Handle, screenDC, ref pos, ref size, memDC, ref srcPt, 0, ref blend, ULW_ALPHA);
 
         SelectObject(memDC, hOld);
         DeleteObject(hBmp);
@@ -1962,26 +2068,16 @@ internal sealed class GridOverlayPanel : Control
         ReleaseDC(IntPtr.Zero, screenDC);
     }
 
-    // ── Grid drawing ──────────────────────────────────────────────────────────
-
     private void DrawCartesianGrid(Graphics g, int w, int h)
     {
         var (cx, cy) = _getCenter();
         double zoom = _getZoom();
-
-        // World-units per pixel — matches MainForm.CurrentScale().
         double scale = 3.5 / (System.Math.Max(w, h) * zoom);
 
-        double halfWW = w * scale * 0.5;
-        double halfHW = h * scale * 0.5;
-        double xMin = cx - halfWW;
-        double xMax = cx + halfWW;
-        double yMin = cy - halfHW;
-        double yMax = cy + halfHW;
+        double xMin = cx - w * scale * 0.5, xMax = cx + w * scale * 0.5;
+        double yMin = cy - h * scale * 0.5, yMax = cy + h * scale * 0.5;
 
-        // Derive grid colour contrasting the current swatch.
         Color gridColor = ComputeContrastColor(_getSwatchColor());
-
         using var gridPen = new Pen(Color.FromArgb(160, gridColor), 1.0f);
         using var axisPen = new Pen(Color.FromArgb(210, gridColor), 1.8f);
         using var labelBrush = new SolidBrush(Color.FromArgb(200, gridColor));
@@ -1989,50 +2085,38 @@ internal sealed class GridOverlayPanel : Control
         using var labelFont = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
         using var zeroFont = new Font("Consolas", 8.5f, FontStyle.Bold, GraphicsUnit.Point);
 
-        // "Nice" grid spacing: aim for ~7 visible lines across the wider axis.
         double gridStep = NiceStep((xMax - xMin) / 7.0);
 
-        // ── Vertical grid lines (constant Re) ─────────────────────────────────
-        double firstX = System.Math.Ceiling(xMin / gridStep) * gridStep;
-        for (double wx = firstX; wx <= xMax + gridStep * 0.01; wx += gridStep)
+        // Vertical lines.
+        for (double wx = System.Math.Ceiling(xMin / gridStep) * gridStep; wx <= xMax + gridStep * 0.01; wx += gridStep)
         {
             float px = W2SX(wx, cx, scale, w);
             if (px < 0 || px > w) continue;
-
             bool isAxis = System.Math.Abs(wx) < gridStep * 0.01;
             g.DrawLine(isAxis ? axisPen : gridPen, px, 0, px, h);
-
-            // Label at bottom — draw a shadow pass then the coloured text.
             string lbl = FormatCoord(wx);
             var sz = g.MeasureString(lbl, labelFont);
-            float lx = px - sz.Width * 0.5f;
-            float ly = h - sz.Height - 2;
+            float lx = px - sz.Width * 0.5f, ly = h - sz.Height - 2;
             if (ly < 0) ly = 2;
             g.DrawString(lbl, labelFont, shadowBrush, lx + 1, ly + 1);
             g.DrawString(lbl, labelFont, labelBrush, lx, ly);
         }
 
-        // ── Horizontal grid lines (constant Im) ───────────────────────────────
-        double firstY = System.Math.Ceiling(yMin / gridStep) * gridStep;
-        for (double wy = firstY; wy <= yMax + gridStep * 0.01; wy += gridStep)
+        // Horizontal lines.
+        for (double wy = System.Math.Ceiling(yMin / gridStep) * gridStep; wy <= yMax + gridStep * 0.01; wy += gridStep)
         {
             float py = W2SY(wy, cy, scale, h);
             if (py < 0 || py > h) continue;
-
             bool isAxis = System.Math.Abs(wy) < gridStep * 0.01;
             g.DrawLine(isAxis ? axisPen : gridPen, 0, py, w, py);
-
-            if (System.Math.Abs(wy) < gridStep * 0.01) continue; // zero label drawn separately
-
+            if (isAxis) continue;
             string lbl = FormatCoord(wy) + "i";
             var sz = g.MeasureString(lbl, labelFont);
-            float lx = 3;
-            float ly = py - sz.Height * 0.5f;
-            g.DrawString(lbl, labelFont, shadowBrush, lx + 1, ly + 1);
-            g.DrawString(lbl, labelFont, labelBrush, lx, ly);
+            g.DrawString(lbl, labelFont, shadowBrush, 4, py - sz.Height * 0.5f + 1);
+            g.DrawString(lbl, labelFont, labelBrush, 3, py - sz.Height * 0.5f);
         }
 
-        // ── Origin "0" label ──────────────────────────────────────────────────
+        // Origin label.
         float ox = W2SX(0, cx, scale, w);
         float oy = W2SY(0, cy, scale, h);
         if (ox >= 0 && ox <= w && oy >= 0 && oy <= h)
@@ -2042,13 +2126,11 @@ internal sealed class GridOverlayPanel : Control
         }
     }
 
-    // ── Coordinate helpers ────────────────────────────────────────────────────
-
     private static float W2SX(double wx, double cx, double scale, int w)
         => (float)((wx - cx) / scale + w * 0.5);
 
     private static float W2SY(double wy, double cy, double scale, int h)
-        => (float)(-(wy - cy) / scale + h * 0.5);   // complex y up ↔ screen y down
+        => (float)(-(wy - cy) / scale + h * 0.5);
 
     private static double NiceStep(double raw)
     {
@@ -2065,15 +2147,11 @@ internal sealed class GridOverlayPanel : Control
         if (abs == 0) return "0";
         if (abs >= 0.001 && abs < 10000)
         {
-            int d = System.Math.Clamp(
-                -(int)System.Math.Floor(System.Math.Log10(abs)) + 2, 0, 6);
-            return v.ToString("F" + d,
-                System.Globalization.CultureInfo.InvariantCulture);
+            int d = System.Math.Clamp(-(int)System.Math.Floor(System.Math.Log10(abs)) + 2, 0, 6);
+            return v.ToString("F" + d, System.Globalization.CultureInfo.InvariantCulture);
         }
         return v.ToString("G4", System.Globalization.CultureInfo.InvariantCulture);
     }
-
-    // ── Contrast colour ───────────────────────────────────────────────────────
 
     private static Color ComputeContrastColor(Color swatch)
     {
@@ -2082,7 +2160,6 @@ internal sealed class GridOverlayPanel : Control
         float cmin = System.Math.Min(r, System.Math.Min(g, b));
         float delta = cmax - cmin;
         float l = (cmax + cmin) * 0.5f;
-
         float h2 = 0f;
         if (delta > 0.001f)
         {
@@ -2092,27 +2169,23 @@ internal sealed class GridOverlayPanel : Control
             h2 = (h2 / 6f + 1f) % 1f;
         }
         float s2 = delta < 0.001f ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
-
-        // Complementary hue + inverted/boosted luminance + boosted saturation.
         float hc = (h2 + 0.5f) % 1f;
         float lc = l < 0.5f
             ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
             : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
         float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
-
-        // HSL → RGB
-        float c = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
-        float xv = c * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
-        float m = lc - c * 0.5f;
+        float cv = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
+        float xv = cv * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
+        float m = lc - cv * 0.5f;
         float rr, gg, bb;
         switch ((int)(hc * 6f))
         {
-            case 0: rr = c; gg = xv; bb = 0; break;
-            case 1: rr = xv; gg = c; bb = 0; break;
-            case 2: rr = 0; gg = c; bb = xv; break;
-            case 3: rr = 0; gg = xv; bb = c; break;
-            case 4: rr = xv; gg = 0; bb = c; break;
-            default: rr = c; gg = 0; bb = xv; break;
+            case 0: rr = cv; gg = xv; bb = 0; break;
+            case 1: rr = xv; gg = cv; bb = 0; break;
+            case 2: rr = 0; gg = cv; bb = xv; break;
+            case 3: rr = 0; gg = xv; bb = cv; break;
+            case 4: rr = xv; gg = 0; bb = cv; break;
+            default: rr = cv; gg = 0; bb = xv; break;
         }
         return Color.FromArgb(
             (int)System.Math.Clamp((rr + m) * 255f, 0, 255),
