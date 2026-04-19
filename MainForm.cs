@@ -39,6 +39,11 @@ public sealed class MainForm : Form
     private readonly Button _slideshowButton;
     private readonly ComboBox _qualityCombo;
     private readonly ComboBox _colorThemeCombo;
+    private readonly ComboBox _regionCombo;
+    private readonly Button _saveViewButton;
+    private readonly Button _delRegionButton;
+    private readonly Button _exportRegionsButton;
+    private readonly Button _importRegionsButton;
     private readonly Label _statusLabel;
 
     // ── UI: coordinate / region bar ───────────────────────────────────────────
@@ -49,11 +54,6 @@ public sealed class MainForm : Form
     private readonly TextBox _txIter;
     private readonly CheckBox _chkLockIter;   // NEW: iteration lock
     private readonly Button _goButton;
-    private readonly ComboBox _regionCombo;
-    private readonly Button _saveViewButton;
-    private readonly Button _delRegionButton;
-    private readonly Button _exportRegionsButton;
-    private readonly Button _importRegionsButton;
 
     // ── Render panel ──────────────────────────────────────────────────────────
     private readonly RenderPanel _renderPanel;
@@ -131,7 +131,7 @@ public sealed class MainForm : Form
     {
         Text = "Fracturing Fog  —  Mandelbrot Explorer  (DirectX 11 · Vortice 3.8.3)";
         ClientSize = new Size(1333, 768);
-        MinimumSize = new Size(1072, 384);
+        MinimumSize = new Size(880, 480);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
@@ -511,6 +511,28 @@ public sealed class MainForm : Form
                 if (_gridVisible) _gridPanel.Invalidate();
             }
         };
+
+        //Context menu for render panel (NEW)
+        var contextMenu = new ContextMenuStrip();
+        contextMenu.Items.Add("Save Image…", null, (s, e) => OnScreenshotClick(s, e));
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add("Reset View", null, (s, e) => OnResetClick(s, e));
+        contextMenu.Items.Add("Span Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add("Start/Stop Slideshow", null, (s, e) => OnSlideshowClick(s, e));
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add("Save Current View", null, (s, e) => OnSaveViewClick(s, e));
+        contextMenu.Items.Add("Navigate", null, (s, e) =>
+        {
+            checkBoxShowCoordPanel.Checked = !checkBoxShowCoordPanel.Checked;
+            _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
+        });
+        contextMenu.Items.Add("Status", null, (s, e) =>
+        {
+            checkBoxShowFooterPanel.Checked = !checkBoxShowFooterPanel.Checked;
+            _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
+        });
+        _renderPanel.ContextMenuStrip = contextMenu;
 
         // Docking / Z-order: Fill first, then Top-docked in reverse, footer last.
         Controls.Add(_renderPanel);
