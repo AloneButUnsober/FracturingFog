@@ -49,9 +49,9 @@ using System;
 
 namespace FracturingFog.Models
 {
-    public class HsvCLD : IColorMap
+    public class PaintedReversed : IColorMap
     {
-        public static string Name => "Hsv-CLD";
+        public static string Name => "Painted Reversed";
 
         public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
 

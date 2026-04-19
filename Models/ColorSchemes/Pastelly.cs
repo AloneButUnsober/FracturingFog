@@ -5,9 +5,9 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class HsvTst : IColorMap
+    public class Pastelly : IColorMap
     {
-        public static string Name => "Hsv-TST";
+        public static string Name => "Pastelly";
 
         public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
 

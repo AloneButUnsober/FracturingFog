@@ -147,10 +147,10 @@ namespace FracturingFog.Models
             new()
             {
                 Name        = "Lightning Storm",
-                CenterX     = -0.6180338,
-                CenterY     =  0.3832050,
-                Zoom        =  800.0,
-                Iterations  = 1000,
+                CenterX     = -0.7746806,
+                CenterY     =  0.1245250,
+                Zoom        =  1200.0,
+                Iterations  = 1400,
                 Description = "Jagged lightning-bolt filaments near the top of the main bulb.",
                 RegionType  = RegionType.BuiltIn,
                 QualityPreset = QualityPreset.Standard
@@ -191,10 +191,10 @@ namespace FracturingFog.Models
             new()
             {
                 Name        = "Star Cluster",
-                CenterX     = -0.1592,
-                CenterY     =  1.0317,
-                Zoom        =  1200.0,
-                Iterations  = 1000,
+                CenterX     = -0.5443,
+                CenterY     =  0.6070,
+                Zoom        =  800.0,
+                Iterations  = 1200,
                 Description = "Dense star-like radiating filaments above the main cardioid.",
                 RegionType  = RegionType.BuiltIn,
                 QualityPreset = QualityPreset.Standard
@@ -213,10 +213,10 @@ namespace FracturingFog.Models
             new()
             {
                 Name        = "Parabolic Bifurcation",
-                CenterX     = -0.1226,
-                CenterY     =  0.7449,
-                Zoom        =  700.0,
-                Iterations  =  900,
+                CenterX     = -0.1552,
+                CenterY     =  1.0300,
+                Zoom        =  600.0,
+                Iterations  = 1100,
                 Description = "Parabolic bifurcation site — two buds splitting from one.",
                 RegionType  = RegionType.BuiltIn,
                 QualityPreset = QualityPreset.Standard

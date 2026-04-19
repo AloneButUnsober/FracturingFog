@@ -45,9 +45,9 @@ namespace FracturingFog.Models
 
             // ── Classic / algorithmic ─────────────────────────────────────────
             new HsvPalette(),
-            new HsvModified(),
-            new HsvCLD(),
-            new HsvTst(),
+            new Painted(),
+            new PaintedReversed(),
+            new Pastelly(),
             new WarpedHsvMap(),
             new RainbowColorMap(),
             new GoldenRatioMap(),
