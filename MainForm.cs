@@ -130,7 +130,7 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Fracturing Fog  —  Mandelbrot Explorer  (DirectX 11 · Vortice 3.8.3)";
-        ClientSize = new Size(1285, 768);
+        ClientSize = new Size(1333, 768);
         MinimumSize = new Size(1072, 384);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;

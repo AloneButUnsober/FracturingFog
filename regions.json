@@ -259,6 +259,59 @@
     "Iterations": 2474,
     "QualityPresetName": "High",
     "Description": "Saved 2026-04-18 11:42"
+  },
+  {
+    "Name": "Marina",
+    "CenterX": -0.8166959533897611,
+    "CenterY": 0.17829091833221097,
+    "Zoom": 37039746442841656,
+    "Iterations": 9507,
+    "QualityPresetName": "Ultra",
+    "Description": "Saved 2026-04-18 14:43"
+  },
+  {
+    "Name": "Eyes",
+    "CenterX": -0.1385795388289538,
+    "CenterY": -0.6493603224068074,
+    "Zoom": 46138468.241281085,
+    "Iterations": 4948,
+    "QualityPresetName": "Ultra",
+    "Description": "Saved 2026-04-18 15:05"
+  },
+  {
+    "Name": "Bridges",
+    "CenterX": -0.13857953231322467,
+    "CenterY": -0.6493603302825924,
+    "Zoom": 2944055334.8597813,
+    "Iterations": 5872,
+    "QualityPresetName": "Ultra",
+    "Description": "Saved 2026-04-18 15:08"
+  },
+  {
+    "Name": "Coral Shelf",
+    "CenterX": -1.744452686838688,
+    "CenterY": -0.02201950826139906,
+    "Zoom": 537533968658.9468,
+    "Iterations": 1757,
+    "QualityPresetName": "Standard",
+    "Description": "Saved 2026-04-18 16:47"
+  },
+  {
+    "Name": "Spiral Galaxies",
+    "CenterX": -0.13857953787544702,
+    "CenterY": -0.6493603223159917,
+    "Zoom": 5415310281.973118,
+    "Iterations": 6007,
+    "QualityPresetName": "Ultra",
+    "Description": "Saved 2026-04-18 16:56"
+  },
+  {
+    "Name": "Trees",
+    "CenterX": -0.207551740482263,
+    "CenterY": 0.685607722964313,
+    "Zoom": 16466539000,
+    "Iterations": 65534,
+    "QualityPresetName": "Ultra",
+    "Description": "Saved 2026-04-18 17:42"
   }
-
 ]
