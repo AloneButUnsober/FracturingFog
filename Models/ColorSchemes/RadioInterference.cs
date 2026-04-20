@@ -9,7 +9,7 @@ namespace FracturingFog.Models
     {
         public static string Name => "Radio Interference";
 
-        public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
+        public ColorPaletteType Type { get; } = ColorPaletteType.Scientific;
 
         public int MaxIterations { get; set; } = 1000;
 

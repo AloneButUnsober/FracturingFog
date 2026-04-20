@@ -64,6 +64,9 @@ public sealed class MainForm : Form
     private readonly GridOverlayPanel _gridPanel;
     private bool _gridVisible;
 
+    // Force D3D11 mode for testing:  (change the next line, recompile, and run on a D3D12-capable machine)
+    private bool _forceD3D11 => true;
+
     // ── Mini-map ──────────────────────────────────────────────────────────────
     private MiniMapPanel? _miniMapPanel;
 
@@ -711,7 +714,7 @@ public sealed class MainForm : Form
 
         try
         {
-            _renderer   = RendererFactory.Create(_renderPanel.Handle, w, h);
+            _renderer   = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"Fracturing Fog  —  Mandelbrot Explorer  ({_renderer.RendererDescription} · Vortice 3.8.3)";
@@ -1434,12 +1437,17 @@ public sealed class MainForm : Form
         var paletteNames = GetAllPaletteNames();
         if (builtIns.Count == 0 || paletteNames.Count == 0) return;
 
-        const int regionDurationMs = 30_000;   // 30 s per region
-        const int themeDurationMs  = 10_000;   // 10 s per theme within a region
-        const int fadeDurationMs   =  2_000;   // 2 s cross-fade
-        const int fadeSteps        =     20;   // frames during cross-fade
-        const int fadeStepMs       = fadeDurationMs / fadeSteps;
-
+        // Timing design:
+        //   Each region shows exactly 3 colour themes.
+        //   Each theme is visible for themeDurationMs, then a fadeDurationMs cross-fade
+        //   transitions to the next theme (or the next region after the 3rd theme).
+        //   The fade is counted as part of the *outgoing* theme's slot, so the
+        //   incoming theme gets its full themeDurationMs of uninterrupted display.
+        const int themesPerRegion = 3;
+        const int themeDurationMs = 12_000;   // 12 s fully visible per theme
+        const int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
+        const int fadeSteps = 20;
+        const int fadeStepMs = fadeDurationMs / fadeSteps;
         int lastRegionIdx = -1;
         int lastThemeIdx  = -1;
 
@@ -1467,9 +1475,19 @@ public sealed class MainForm : Form
                 uint[] oldBuf = await Task.Run(() =>
                 {
                     if (_calculator == null) return Array.Empty<uint>();
-                    var copy = new uint[_calculator.ColorBuffer.Length];
-                    _calculator.ColorBuffer.CopyTo(copy, 0);
-                    return copy;
+                    // Use the last uploaded processed buffer if available so the
+                    // cross-fade starts from exactly what was on screen.
+                    if (_lastUploadedBuffer != null
+                        && _lastUploadedWidth == _calculator.Width
+                        && _lastUploadedHeight == _calculator.Height)
+                    {
+                        var copy = new uint[_lastUploadedBuffer.Length];
+                        _lastUploadedBuffer.CopyTo(copy, 0);
+                        return copy;
+                    }
+                    var raw = new uint[_calculator.ColorBuffer.Length];
+                    _calculator.ColorBuffer.CopyTo(raw, 0);
+                    return raw;
                 }, ct);
 
                 // 2. Apply region & theme on UI thread WITHOUT triggering a
@@ -1517,19 +1535,15 @@ public sealed class MainForm : Form
                 previousBuffer = newBuf;
             }
 
-            // ── Cycle through themes for the remainder of the region slot ─────
-            long regionStartMs = Environment.TickCount64;
-            while (!ct.IsCancellationRequested)
+            // ── Run exactly (themesPerRegion - 1) additional theme changes ────
+            // The first theme was shown above; now show 2 more for a total of 3.
+            for (int themeNum = 1; themeNum < themesPerRegion && !ct.IsCancellationRequested; themeNum++)
             {
-                long elapsed = Environment.TickCount64 - regionStartMs;
-                if (elapsed >= regionDurationMs) break;
-
-                int themeWait = System.Math.Max(0, themeDurationMs - fadeDurationMs);
-                await DelayWithCancel(themeWait, ct);
+                // Wait for the full theme display duration before starting the next fade.
+                await DelayWithCancel(themeDurationMs, ct);
                 if (ct.IsCancellationRequested) return;
 
-                elapsed = Environment.TickCount64 - regionStartMs;
-                if (elapsed >= regionDurationMs) break;
+                // Pick next theme.
 
                 int newThemeIdx;
                 do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
@@ -1575,6 +1589,10 @@ public sealed class MainForm : Form
 
                 previousBuffer = newThemeBuf;
             }
+
+            // Wait for the final theme to display its full duration before
+            // transitioning to the next region.
+            await DelayWithCancel(themeDurationMs, ct);
         }
     }
 
@@ -1659,11 +1677,21 @@ public sealed class MainForm : Form
 
             // CPU pixel-blend — runs on the calling background thread.
             BlendBuffers(from, to, blended, len, alpha);
+            if (_showSlideshowWatermark)
 
+                // Re-apply watermark on every fade frame so it never disappears
+                // during transitions (both region and theme cross-fades).
+                if (_showSlideshowWatermark)
+                    BlendWatermarkOverlay(blended, w, h);
+
+            // Take a snapshot for the upload so we're not mutating blended
+            // on the background thread while the UI thread may be reading it.
+            var frame = new uint[len];
+            Array.Copy(blended, frame, len);
             await InvokeAsync(() =>
             {
                 if (!_disposed && _renderer != null)
-                    _renderer.UpdateTexture(blended, w, h);
+                    _renderer.UpdateTexture(frame, w, h);
             });
 
             await DelayWithCancel(stepMs, ct);
@@ -2339,14 +2367,11 @@ public sealed class MainForm : Form
         bool needsProcess = _brightness != 0 || _contrast != 0
                          || _gridVisible || _showSlideshowWatermark;
 
-        if (!needsProcess)
-        {
-            renderer.UpdateTexture(src, w, h);
-            _lastUploadedBuffer = src;
-            _lastUploadedWidth = w;
-            _lastUploadedHeight = h;
-            return;
-        }
+        // Always allocate a destination buffer so that _lastUploadedBuffer always
+        // holds the post-processed result.  When no adjustments are active this is
+        // just a fast Array.Copy, but it ensures that the stale-frame re-upload in
+        // TriggerCalculation never flashes unprocessed pixels during zoom/pan.
+
 
         // Build a processed copy.
         var dst = new uint[n];
@@ -2356,10 +2381,8 @@ public sealed class MainForm : Form
         //   0  → 1.0×   (neutral)
         //  +100 → 2.0×   (doubled contrast)
         //  -100 → 0.0×   (flat grey)
-        float contrastFactor = (_contrast >= 0)
-            ? 1.0f + _contrast / 100.0f          // [1.0, 2.0]
-            : 1.0f + _contrast / 100.0f;          // [0.0, 1.0]  (same formula)
-
+        float contrastFactor = 1.0f + _contrast / 100.0f; 
+        
         float brightnessOffset = _brightness / 100.0f;  // [-1, 1]
 
         if (_brightness != 0 || _contrast != 0)
@@ -2398,6 +2421,11 @@ public sealed class MainForm : Form
         if (_showSlideshowWatermark) BlendWatermarkOverlay(dst, w, h);
 
         renderer.UpdateTexture(dst, w, h);
+        // Cache the fully processed buffer so stale-frame re-uploads during
+        // zoom/pan always show the correct brightness/contrast/grid state.
+        _lastUploadedBuffer = dst;
+        _lastUploadedWidth = w;
+        _lastUploadedHeight = h;
     }
 
     /// <summary>
@@ -2802,14 +2830,17 @@ internal sealed class GridOverlayPanel : System.Windows.Forms.Control
 
     private static string FormatCoord(double v)
     {
+        if (v == 0.0) return "0";
         double abs = System.Math.Abs(v);
-        if (abs == 0) return "0";
-        if (abs >= 0.001 && abs < 10000)
-        {
-            int d = System.Math.Clamp(-(int)System.Math.Floor(System.Math.Log10(abs)) + 2, 0, 6);
-            return v.ToString("F" + d, System.Globalization.CultureInfo.InvariantCulture);
-        }
-        return v.ToString("G4", System.Globalization.CultureInfo.InvariantCulture);
+        // Always render 7 significant digits so that deep-zoom grid lines
+        // show distinct labels even when graduations differ only in the 6th–7th
+        // decimal place (e.g. -1.744453 vs -1.744452).
+        // "mag" is the order of magnitude of the integer part:
+        //   abs = 1.744  → mag = 0  → decimals = 6
+        //   abs = 0.022  → mag = -2 → decimals = 8  (clamped to 15)
+        int mag = (int)System.Math.Floor(System.Math.Log10(abs));
+        int decimals = System.Math.Clamp(6 - mag, 0, 15);
+        return v.ToString("F" + decimals, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static Color ComputeContrastColor(Color swatch)

@@ -18,9 +18,9 @@ public static class RendererFactory
     /// Creates a DirectX 12 renderer if the GPU supports FL 12.0+, otherwise
     /// creates a DirectX 11 renderer.  Never throws — falls back silently.
     /// </summary>
-    public static IFractalRenderer Create(IntPtr hwnd, int width, int height)
+    public static IFractalRenderer Create(IntPtr hwnd, int width, int height, bool force_D3D11 = false)
     {
-        if (DirectX12Renderer.IsAvailable())
+        if (!force_D3D11 && DirectX12Renderer.IsAvailable())
         {
             try
             {

@@ -19,6 +19,7 @@
 //   buffer and marks a dirty flag.  The actual GPU upload happens at the
 //   beginning of Render() on whatever thread calls it (the UI idle loop).
 
+using SharpGen.Runtime;
 using System;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
@@ -135,7 +136,7 @@ public sealed class DirectX12Renderer : IFractalRenderer
     private void CreateCommandInfrastructure()
     {
         _cmdQueue = _device.CreateCommandQueue(
-            new CommandQueueDescription(CommandListType.Direct));
+            new CommandQueueDescription(CommandListType.Direct, flags: CommandQueueFlags.DisableGpuTimeout));
 
         _allocators = new ID3D12CommandAllocator[FrameCount];
         for (int i = 0; i < FrameCount; i++)
@@ -227,9 +228,10 @@ public sealed class DirectX12Renderer : IFractalRenderer
                 new[] { param },
                 new[] { staticSampler }));
 
-        _device.SerializeRootSignature(rootDesc, out Blob? rsBlob, out Blob? errBlob).CheckError();
-        //var rsBlob = _device.SerializeVersionedRootSignature(rootDesc);
+        //_device.SerializeRootSignature(rootDesc, out Blob? rsBlob, out Blob? errBlob).CheckError();
+        D3D12.D3D12SerializeVersionedRootSignature(rootDesc, out Blob? rsBlob);
         _rootSig = _device.CreateRootSignature(rsBlob);
+        rsBlob?.Dispose();
 
         // ── HLSL — identical full-screen triangle to the D3D11 version ─────────
         const string hlsl = @"
@@ -246,22 +248,55 @@ VSOut VS(uint vid : SV_VertexID)
 }
 float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
 
-        Vortice.D3DCompiler.Compiler.Compile(hlsl, "VS", "vs_5_0", "", out Blob? vsBlob, out Blob? vsErr).CheckError();
-        Vortice.D3DCompiler.Compiler.Compile(hlsl, "PS", "ps_5_0", "", out Blob? psBlob, out Blob? psErr).CheckError();
+        Vortice.D3DCompiler.Compiler.CreateBlob(SharpGen.Runtime.PointerUSize.Zero, out Blob? vsBlob); //, out psBlob);
+        Vortice.D3DCompiler.Compiler.CreateBlob(SharpGen.Runtime.PointerUSize.Zero, out Blob? vsErr);
+        try
+        {
+            Vortice.D3DCompiler.Compiler.Compile(hlsl, "VS","", "vs_5_0", out vsBlob, out vsErr).CheckError();
+        }
+        catch (Exception)
+        {
+            if (vsErr != null)
+            {
+                throw new Exception(vsErr != null ? vsErr.AsString() : "Unknown error during vertex shader compilation.");
+            }
+        }
+        finally
+        {
+            vsErr?.Dispose();
+        }
+
+        Vortice.D3DCompiler.Compiler.CreateBlob(SharpGen.Runtime.PointerUSize.Zero, out Blob? psBlob);
+        Vortice.D3DCompiler.Compiler.CreateBlob(SharpGen.Runtime.PointerUSize.Zero, out Blob? psErr);
+        try
+        {
+            Vortice.D3DCompiler.Compiler.Compile(hlsl, "PS", "", "ps_5_0", out psBlob, out psErr).CheckError();
+        }
+        catch (Exception)
+        {
+            if (psErr != null)
+            {
+                throw new Exception(psErr != null ? psErr.AsString() : "Unknown error during vertex shader compilation.");
+            }
+        }
+        finally
+        {
+            psErr?.Dispose();
+        }
 
         if (vsBlob == null || psBlob == null)
             throw new InvalidOperationException("D3D12 shader compilation failed.");
 
-        //ShaderBytecode vsBytecode = new ShaderBytecode(vsBlob.AsBytes()).;
+        ShaderBytecode vsBytecode = new ShaderBytecode(vsBlob.AsBytes());
         ReadOnlyMemory<byte> psBytes = psBlob.AsBytes();
-        //ShaderBytecode errBytecode = new ShaderBytecode(errBlob.AsBytes());
-        ReadOnlyMemory<byte> errBytes = errBlob.AsBytes();
+        ShaderBytecode errBytecode = new ShaderBytecode(psBlob.AsBytes());
+        ReadOnlyMemory<byte> vsBytes = vsBlob.AsBytes();
 
         _pso = _device.CreateGraphicsPipelineState(new GraphicsPipelineStateDescription
         {
             RootSignature = _rootSig,
-            VertexShader = psBytes,
-            PixelShader = errBytes,
+            VertexShader = vsBytes,
+            PixelShader = psBytes,
             PrimitiveTopologyType = PrimitiveTopologyType.Triangle,
             RenderTargetFormats = new[] { TexFormat },
             SampleDescription = new SampleDescription(1, 0),
@@ -269,6 +304,8 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
             BlendState = BlendDescription.Opaque,
             DepthStencilState = DepthStencilDescription.None,
         });
+        vsBlob.Dispose();
+        psBlob.Dispose();
     }
 
     private void CreateFence()
@@ -363,107 +400,122 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
         bool needNew = _texture == null
             || (int)_texture.Description.Width != pw
             || (int)_texture.Description.Height != ph;
-
-        if (needNew)
+        try
         {
-            _texture?.Dispose();
-            _uploadBuf?.Dispose();
+            if (needNew)
+            {
+                _texture?.Dispose();
+                _uploadBuf?.Dispose();
 
-            var texDesc = ResourceDescription.Texture2D(
-                TexFormat, (uint)pw, (uint)ph, 1, 1);
+                var texDesc = ResourceDescription.Texture2D(
+                    TexFormat, (uint)pw, (uint)ph, 1, 1);
 
-            _texture = _device.CreateCommittedResource(
-                HeapProperties.DefaultHeapProperties,
-                HeapFlags.None,
-                texDesc,
-                ResourceStates.CopyDest);
+                _texture = _device.CreateCommittedResource(
+                    HeapProperties.DefaultHeapProperties,
+                    HeapFlags.None,
+                    texDesc,
+                    ResourceStates.CopyDest);
 
-            // Upload buffer size: one row per row, aligned to D3D12 pitch rules.
-            int rowPitch = AlignUp(pw * 4, D3D12RowAlign);
-            ulong uploadSz = (ulong)(rowPitch * ph);
-            uploadSz = AlignUp64(uploadSz, D3D12TexAlign);
+                // Upload buffer size: one row per row, aligned to D3D12 pitch rules.
+                int rowPitch = AlignUp(pw * 4, D3D12RowAlign);
+                ulong uploadSz = (ulong)(rowPitch * ph);
+                uploadSz = AlignUp64(uploadSz, D3D12TexAlign);
 
-            _uploadBuf = _device.CreateCommittedResource(
-                HeapProperties.UploadHeapProperties,
-                HeapFlags.None,
-                ResourceDescription.Buffer(uploadSz),
-                ResourceStates.GenericRead);
+                _uploadBuf = _device.CreateCommittedResource(
+                    HeapProperties.UploadHeapProperties,
+                    HeapFlags.None,
+                    ResourceDescription.Buffer(uploadSz),
+                    ResourceStates.GenericRead);
 
-            // Create SRV pointing at the new texture.
-            _device.CreateShaderResourceView(
-                _texture,
-                new ShaderResourceViewDescription
-                {
-                    Format = TexFormat,
-                    ViewDimension = Vortice.Direct3D12.ShaderResourceViewDimension.Texture2D,
-                    Shader4ComponentMapping = D3D12DefaultShader4ComponentMapping,
-                    Texture2D = new Vortice.Direct3D12.Texture2DShaderResourceView { MipLevels = 1 },
-                },
-                _srvHeap.GetCPUDescriptorHandleForHeapStart());
-        }
-        else
-        {
-            // Texture already exists but may be in PixelShaderResource state.
-            // Transition back to CopyDest so we can update it.
-            WaitForAllFrames();  // ensure no in-flight reads
+                // Create SRV pointing at the new texture.
+                _device.CreateShaderResourceView(
+                    _texture,
+                    new ShaderResourceViewDescription
+                    {
+                        Format = TexFormat,
+                        ViewDimension = Vortice.Direct3D12.ShaderResourceViewDimension.Texture2D,
+                        Shader4ComponentMapping = D3D12DefaultShader4ComponentMapping,
+                        Texture2D = new Vortice.Direct3D12.Texture2DShaderResourceView { MipLevels = 1 },
+                    },
+                    _srvHeap.GetCPUDescriptorHandleForHeapStart());
+            }
+            else
+            {
+                // Texture already exists but may be in PixelShaderResource state.
+                // Transition back to CopyDest so we can update it.
+                WaitForAllFrames();  // ensure no in-flight reads
 
+                _allocators[_frameIndex].Reset();
+                _cmdList.Reset(_allocators[_frameIndex], null);
+                _cmdList.ResourceBarrierTransition(
+                    _texture!,
+                    ResourceStates.PixelShaderResource,
+                    ResourceStates.CopyDest);
+                _cmdList.Close();
+                _cmdQueue.ExecuteCommandList(_cmdList);
+                WaitForCurrentFrame();
+            }
+
+            // Map upload buffer and copy rows.
+            int srcPitch = pw * 4;
+            int dstPitch = AlignUp(srcPitch, D3D12RowAlign);
+
+            void* mapped = null;
+            _uploadBuf!.Map(0, null, &mapped).CheckError();
+            fixed (uint* srcPtr = pixels)
+            {
+                byte* src = (byte*)srcPtr;
+                byte* dst = (byte*)mapped;
+                for (int row = 0; row < ph; row++)
+                    Buffer.MemoryCopy(
+                        src + (long)row * srcPitch,
+                        dst + (long)row * dstPitch,
+                        srcPitch, srcPitch);
+            }
+            _uploadBuf.Unmap(0, null);
+
+            // Record CopyTextureRegion command.
             _allocators[_frameIndex].Reset();
             _cmdList.Reset(_allocators[_frameIndex], null);
+
+            var foot = new PlacedSubresourceFootPrint
+            {
+                Footprint = new SubresourceFootPrint
+                {
+                    Format = TexFormat,
+                    Width = (uint)pw,
+                    Height = (uint)ph,
+                    Depth = 1,
+                    RowPitch = (uint)dstPitch,
+                }
+            };
+            _cmdList.CopyTextureRegion(
+                new TextureCopyLocation(_texture!, 0), 0, 0, 0,
+                new TextureCopyLocation(_uploadBuf, foot), null);
+
+            // Transition texture to PixelShaderResource for rendering.
             _cmdList.ResourceBarrierTransition(
                 _texture!,
-                ResourceStates.PixelShaderResource,
-                ResourceStates.CopyDest);
+                ResourceStates.CopyDest,
+                ResourceStates.PixelShaderResource);
             _cmdList.Close();
+
             _cmdQueue.ExecuteCommandList(_cmdList);
             WaitForCurrentFrame();
+
         }
-
-        // Map upload buffer and copy rows.
-        int srcPitch = pw * 4;
-        int dstPitch = AlignUp(srcPitch, D3D12RowAlign);
-
-        void* mapped = null;
-        _uploadBuf!.Map(0, null, &mapped).CheckError();
-        fixed (uint* srcPtr = pixels)
+        catch (SharpGen.Runtime.SharpGenException sharpEX)
         {
-            byte* src = (byte*)srcPtr;
-            byte* dst = (byte*)mapped;
-            for (int row = 0; row < ph; row++)
-                Buffer.MemoryCopy(
-                    src + (long)row * srcPitch,
-                    dst + (long)row * dstPitch,
-                    srcPitch, srcPitch);
+            
+            SharpGen.Runtime.Result sharpResult = _device.DeviceRemovedReason;
+            ID3D12DeviceRemovedExtendedData drData = _device.QueryInterface<ID3D12DeviceRemovedExtendedData>();
+            string errorMsg = $"D3D12 operation failed: {sharpEX.Message}\n" +
+                $"Device Removed Reason: {sharpResult}\n"; // +
+                //$"DRED Category: {drData.Category}\n" +
+                //$"DRED ReasonCode: {drData.ReasonCode}\n" +
+                //$"DRED Description: {drData.Description}";
+            throw new Exception(errorMsg);
         }
-        _uploadBuf.Unmap(0, null);
-
-        // Record CopyTextureRegion command.
-        _allocators[_frameIndex].Reset();
-        _cmdList.Reset(_allocators[_frameIndex], null);
-
-        var foot = new PlacedSubresourceFootPrint
-        {
-            Footprint = new SubresourceFootPrint
-            {
-                Format = TexFormat,
-                Width = (uint)pw,
-                Height = (uint)ph,
-                Depth = 1,
-                RowPitch = (uint)dstPitch,
-            }
-        };
-        _cmdList.CopyTextureRegion(
-            new TextureCopyLocation(_texture!, 0), 0, 0, 0,
-            new TextureCopyLocation(_uploadBuf, foot), null);
-
-        // Transition texture to PixelShaderResource for rendering.
-        _cmdList.ResourceBarrierTransition(
-            _texture!,
-            ResourceStates.CopyDest,
-            ResourceStates.PixelShaderResource);
-        _cmdList.Close();
-
-        _cmdQueue.ExecuteCommandList(_cmdList);
-        WaitForCurrentFrame();
     }
 
     // ── Resize ────────────────────────────────────────────────────────────────
