@@ -118,6 +118,15 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _calcCts;
     private readonly object _calcLock = new();
 
+
+    // The most recently completed, post-processed colour buffer.
+    // Re-uploaded at the start of every new calculation so the previous
+    // frame stays visible while the next one is being computed, preventing
+    // the black-flash that occurs at High/Ultra quality (DD arithmetic).
+    private uint[]? _lastUploadedBuffer;
+    private int _lastUploadedWidth;
+    private int _lastUploadedHeight;
+
     private CancellationTokenSource? _wallpaperCts;
     private readonly object _wallpaperLock = new();
 
@@ -2118,6 +2127,9 @@ public sealed class MainForm : Form
         int h = _renderPanel.ClientSize.Height;
         if (w < 1 || h < 1) return;
 
+        // Discard the cached buffer — its dimensions no longer match.
+        _lastUploadedBuffer = null;
+
         _renderer.Resize(w, h);
         _calculator.Resize(w, h);
         ApplyViewState();
@@ -2222,6 +2234,19 @@ public sealed class MainForm : Form
             cts = _calcCts;
         }
 
+        // ── Keep the previous frame visible while the new one computes ────────
+        // Re-upload the last completed buffer immediately so the screen shows a
+        // stale (but correct) image rather than going black during a long
+        // High/Ultra-quality recalculation.  Skip if the dimensions changed
+        // (resize) — a size-mismatch upload would corrupt the texture.
+        if (_lastUploadedBuffer != null
+            && _renderer != null
+            && _lastUploadedWidth == _calculator.Width
+            && _lastUploadedHeight == _calculator.Height)
+        {
+            _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
+        }
+
         var token = cts.Token;
         var calc = _calculator;
         var renderer = _renderer;
@@ -2317,6 +2342,9 @@ public sealed class MainForm : Form
         if (!needsProcess)
         {
             renderer.UpdateTexture(src, w, h);
+            _lastUploadedBuffer = src;
+            _lastUploadedWidth = w;
+            _lastUploadedHeight = h;
             return;
         }
 

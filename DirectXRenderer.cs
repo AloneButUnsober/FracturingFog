@@ -407,8 +407,18 @@ float4 PS(VSOut i) : SV_Target
         _context.RSSetViewport(new Viewport(0f, 0f, _width, _height, 0f, 1f));
         _context.RSSetState(_rasterizer);
 
-        // Clear to solid black.
-        _context.ClearRenderTargetView(_rtv, new Color4(0f, 0f, 0f, 1f));
+        // Only clear to black when there is no texture yet.  Once a texture
+        // exists the full-screen triangle covers every pixel, so clearing
+        // would cause a black flash between the old and new frames during
+        // long recalculations (especially at High/Ultra quality with DD).
+        if (_tex == null)
+        {
+            _context.ClearRenderTargetView(_rtv, new Color4(0f, 0f, 0f, 1f));
+            _swapChain.Present(1, PresentFlags.None);
+            return;
+        }
+        
+        //_context.ClearRenderTargetView(_rtv, new Color4(0f, 0f, 0f, 1f));
 
         // Input assembler: no vertex buffer — SV_VertexID provides geometry.
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
