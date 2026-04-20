@@ -18,6 +18,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,7 +53,7 @@ public sealed class MainForm : Form
     private readonly TextBox _txCY;
     private readonly TextBox _txZoom;
     private readonly TextBox _txIter;
-    private readonly CheckBox _chkLockIter;   // NEW: iteration lock
+    private readonly CheckBox _chkLockIter;
     private readonly Button _goButton;
 
     // ── Render panel ──────────────────────────────────────────────────────────
@@ -63,13 +64,16 @@ public sealed class MainForm : Form
     private readonly GridOverlayPanel _gridPanel;
     private bool _gridVisible;
 
-    // ── UI: Footer panel ──────────────────────────────────────────────────────
+    // ── Mini-map ──────────────────────────────────────────────────────────────
+    private MiniMapPanel? _miniMapPanel;
+
+    // ── Footer ────────────────────────────────────────────────────────────────
     private readonly Label _statusLabel;
     private readonly Panel _footerPanel;
 
     // ── Core objects ──────────────────────────────────────────────────────────
 
-    private DirectXRenderer? _renderer;
+    private IFractalRenderer? _renderer;          // D3D12 or D3D11
     private MandelbrotCalculator? _calculator;
 
     // ── View state ────────────────────────────────────────────────────────────
@@ -94,6 +98,9 @@ public sealed class MainForm : Form
     private Point _panStartScreen;
     private double _panStartCX;
     private double _panStartCY;
+
+    // Pan-stop debounce timer — fires full-quality render after drag ends.
+    private readonly System.Windows.Forms.Timer _panStopTimer;
 
     // ── Multi-monitor span state ──────────────────────────────────────────────
 
@@ -120,6 +127,7 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _slideshowCts;
     private readonly object _slideshowLock = new();
     private readonly Random _slideshowRng = new();
+    private bool _showSlideshowWatermark;   // true only while slideshow runs
 
     // ── Iteration lock ────────────────────────────────────────────────────────
 
@@ -151,13 +159,20 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "Fracturing Fog  —  Mandelbrot Explorer  (DirectX 11 · Vortice 3.8.3)";
+        Text = $"Fracturing Fog  —  Mandelbrot Explorer  ({RendererFactory.ProbeDescription()} · Vortice 3.8.3)";
         ClientSize = new Size(1333, 768);
         MinimumSize = new Size(480, 480);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
 
+        // ── Pan-stop timer ────────────────────────────────────────────────────
+        _panStopTimer = new System.Windows.Forms.Timer { Interval = 300 };
+        _panStopTimer.Tick += (s, e) =>
+        {
+            _panStopTimer.Stop();
+            TriggerCalculation(progressive: false);   // full quality after drag stops
+        };
         // ── Helpers ───────────────────────────────────────────────────────────
 
         Button MakeBtn(string text, int w = 108) => new Button
@@ -211,18 +226,23 @@ public sealed class MainForm : Form
         _resetButton.Left = buttonLeft;
         _resetButton.Padding = new Padding(0);
         _resetButton.Margin = new Padding(0);
-        Image _resetImg = (Image)new Bitmap(Image.FromFile(@"Resources\reset.bmp")).GetThumbnailImage(24, 20, null, IntPtr.Zero);
-        _resetButton.Image = _resetImg;
+        try
+        {
+            Image resetImg = (Image)new Bitmap(Image.FromFile(@"Resources\reset.bmp"))
+                .GetThumbnailImage(24, 20, null, IntPtr.Zero);
+            _resetButton.Image = resetImg;
+        }
+        catch { _resetButton.Text = "R"; }
         _resetButton.Click += OnResetClick;
         _toolbar.Controls.Add(_resetButton);
         _toolTip.SetToolTip(_resetButton, "Reset view to default centre and zoom");
-        buttonLeft += 33; // 58;
+        buttonLeft += 33;
 
         _spanButton = MakeBtn("Span", 55);
         _spanButton.Left = buttonLeft;
         _spanButton.Click += OnSpanMonitorsClick;
         _toolbar.Controls.Add(_spanButton);
-        _toolTip.SetToolTip(_spanButton, "Span across all monitors (or revert to single-monitor if already spanning)");
+        _toolTip.SetToolTip(_spanButton, "Span across all monitors");
         buttonLeft += 58;
 
         _screenshotButton = MakeBtn("Image", 55);
@@ -231,7 +251,6 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(_screenshotButton);
         buttonLeft += 58;
 
-        // Slideshow button (NEW)
         _slideshowButton = MakeBtn("Slideshow", 72);
         _slideshowButton.Left = buttonLeft;
         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
@@ -357,14 +376,14 @@ public sealed class MainForm : Form
 
         _saveViewButton = MakeBtn("Save", 55);
         _saveViewButton.Left = buttonLeft;
-        _saveViewButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        //_saveViewButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
         _saveViewButton.Click += OnSaveViewClick;
         _toolbar.Controls.Add(_saveViewButton);
         buttonLeft += 58;
 
         _delRegionButton = MakeBtn("Delete", 55);
         _delRegionButton.Left = buttonLeft;
-        _delRegionButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        //_delRegionButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
         _delRegionButton.Click += OnDelRegionClick;
         _toolbar.Controls.Add(_delRegionButton);
         buttonLeft += 58;
@@ -478,8 +497,7 @@ public sealed class MainForm : Form
         MakeLbl("Zoom:", buttonLeft, _coordPanel); buttonLeft += 44;
         _txZoom = MakeTx(buttonLeft, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)"); buttonLeft += 120;
         MakeLbl("Iter:", buttonLeft, _coordPanel); buttonLeft += 38;
-        _txIter = MakeTx(buttonLeft, 72, _coordPanel, "Maximum iteration count (auto-computed by quality+zoom; no upper limit)");
-        buttonLeft += 80;
+        _txIter = MakeTx(buttonLeft, 72, _coordPanel, "Maximum iteration count"); buttonLeft += 80;
 
         // Lock checkbox — NEW
         _chkLockIter = new CheckBox
@@ -494,8 +512,7 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             Checked = false,
         };
-        _toolTip.SetToolTip(_chkLockIter,
-            "When checked, the Iter value is locked — pan, zoom and region changes will not recalculate it");
+        _toolTip.SetToolTip(_chkLockIter, "Lock the iteration count — pan/zoom will not recalculate it");
         _chkLockIter.CheckedChanged += OnIterLockChanged;
         _coordPanel.Controls.Add(_chkLockIter);
         buttonLeft += _chkLockIter.PreferredSize.Width + 8;
@@ -652,6 +669,9 @@ public sealed class MainForm : Form
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
         
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add("Mini Map",             null, (s, e) => ToggleMiniMap());
+        contextMenu.Items.Add("System Info…",         null, (s, e) => ShowSystemInfoDialog());
                
         _renderPanel.ContextMenuStrip = contextMenu;
 
@@ -682,24 +702,146 @@ public sealed class MainForm : Form
 
         try
         {
-            _renderer = new DirectXRenderer(_renderPanel.Handle, w, h);
+            _renderer   = RendererFactory.Create(_renderPanel.Handle, w, h);
             _calculator = new MandelbrotCalculator(w, h);
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
+            Text = $"Fracturing Fog  —  Mandelbrot Explorer  ({_renderer.RendererDescription} · Vortice 3.8.3)";
             ApplyViewState();
             TriggerCalculation();
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"DirectX 11 initialisation failed:\n\n{ex.Message}\n\n" +
+                $"Renderer initialisation failed:\n\n{ex.Message}\n\n" +
                 "Ensure your GPU supports Feature Level 10.0+\n" +
                 "and Vortice.DirectX 3.8.3 packages are installed.",
                 "Initialisation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         }
+    }
 
-        // Grid panel: no handle setup needed — grid is rendered into ColorBuffer directly.
-        // (PositionGridPanel is a no-op when _gridVisible is false.)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Mini-map
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ToggleMiniMap()
+    {
+        if (_miniMapPanel == null)
+        {
+            _miniMapPanel = new MiniMapPanel();
+            _miniMapPanel.Configure(
+                getCenter:      () => (_centerX, _centerY),
+                getZoom:        () => _zoom,
+                getColorMap:    () => _calculator?.ColorMap,
+                navigateTo:     (cx, cy) =>
+                {
+                    _centerX = cx; _centerY = cy;
+                    ApplyViewState();
+                    TriggerCalculation();
+                },
+                getSwatchColor: GetSwatchColor);
+
+            _miniMapPanel.Left   = _renderPanel.ClientSize.Width  - _miniMapPanel.Width  - 4;
+            _miniMapPanel.Top    = _renderPanel.ClientSize.Height - _miniMapPanel.Height - 4;
+            _miniMapPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+
+            _renderPanel.Controls.Add(_miniMapPanel);
+            _miniMapPanel.BringToFront();
+            _miniMapPanel.RequestRedraw();
+        }
+        else
+        {
+            _renderPanel.Controls.Remove(_miniMapPanel);
+            _miniMapPanel.Dispose();
+            _miniMapPanel = null;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // System Info dialog
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ShowSystemInfoDialog()
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("=== Renderer ===");
+        sb.AppendLine($"Active:          {_renderer?.RendererDescription ?? "none"}");
+        sb.AppendLine($"D3D12 available: {DirectX12Renderer.IsAvailable()}");
+        sb.AppendLine();
+
+        sb.AppendLine("=== GPU Adapters (DXGI) ===");
+        try
+        {
+            using var factory = Vortice.DXGI.DXGI.CreateDXGIFactory1<Vortice.DXGI.IDXGIFactory1>();
+            uint idx = 0;
+            while (factory.EnumAdapters1(idx, out var adapter).Success)
+            {
+                var desc = adapter.Description1;
+                sb.AppendLine($"Adapter {idx}: {desc.Description}");
+                sb.AppendLine($"  Vendor ID:   0x{desc.VendorId:X4}");
+                sb.AppendLine($"  Device ID:   0x{desc.DeviceId:X4}");
+                sb.AppendLine($"  Dedicated VRAM: {desc.DedicatedVideoMemory / (1024 * 1024)} MB");
+                sb.AppendLine($"  Shared RAM:     {desc.SharedSystemMemory   / (1024 * 1024)} MB");
+                adapter.Dispose();
+                idx++;
+            }
+        }
+        catch (Exception ex) { sb.AppendLine($"  (DXGI enumeration failed: {ex.Message})"); }
+
+        sb.AppendLine();
+        sb.AppendLine("=== D3D11 Feature Level ===");
+        try
+        {
+            Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+                null,
+                Vortice.Direct3D.DriverType.Hardware,
+                Vortice.Direct3D11.DeviceCreationFlags.None,
+                null,
+                out _, out var fl, out _);
+            sb.AppendLine($"Max Feature Level: {fl}");
+        }
+        catch { sb.AppendLine("  (Could not query D3D11 feature level.)"); }
+
+        sb.AppendLine();
+        sb.AppendLine("=== CPU / OS ===");
+        sb.AppendLine($"Logical CPUs:  {Environment.ProcessorCount}");
+        sb.AppendLine($"OS:            {Environment.OSVersion}");
+        sb.AppendLine($".NET Runtime:  {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+        sb.AppendLine($"Architecture:  {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
+
+        sb.AppendLine();
+        sb.AppendLine("=== Fractal Calculator ===");
+        if (_calculator != null)
+        {
+            sb.AppendLine($"SIMD vector width (double): {System.Numerics.Vector<double>.Count}");
+            sb.AppendLine($"Current size:    {_calculator.Width}×{_calculator.Height}");
+            sb.AppendLine($"Max iterations:  {_calculator.MaxIterations}");
+            sb.AppendLine($"Precision:       {((_calculator.IsHighPrecisionActive) ? "Double-Double (DD)" : "Double (SP)")}");
+        }
+
+        using var dlg = new Form
+        {
+            Text            = "System / Hardware Information",
+            ClientSize      = new Size(560, 500),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox     = false, MinimizeBox = false,
+            StartPosition   = FormStartPosition.CenterParent,
+            BackColor       = Color.FromArgb(28, 28, 28),
+        };
+        var txt = new TextBox
+        {
+            Multiline   = true, ReadOnly = true,
+            ScrollBars  = ScrollBars.Vertical,
+            Text        = sb.ToString(),
+            Dock        = DockStyle.Fill,
+            BackColor   = Color.FromArgb(18, 18, 18),
+            ForeColor   = Color.FromArgb(200, 200, 200),
+            Font        = new Font("Consolas", 9f),
+            BorderStyle = BorderStyle.None,
+        };
+        dlg.Controls.Add(txt);
+        dlg.ShowDialog(this);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -753,6 +895,7 @@ public sealed class MainForm : Form
             _calculator.ColorMap = map;
             TriggerCalculation();
         }
+        _miniMapPanel?.RequestRedraw();
     }
 
     private Color GetSwatchColor()
@@ -763,9 +906,64 @@ public sealed class MainForm : Form
         return Color.FromArgb((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
     }
 
-    private static Color ComputeContrastColor(Color swatch, bool fade = false)
+    // ─────────────────────────────────────────────────────────────────────────
+    // ComputeContrastColor
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns a colour that contrasts well against <paramref name="swatch"/>.
+    /// When <paramref name="watermark"/> is true and a pixel buffer is supplied,
+    /// the method samples the lower-right region of the image (where the
+    /// watermark will be placed) instead of using the swatch, yielding a colour
+    /// that is always readable against the actual rendered content.
+    /// </summary>
+    private static Color ComputeContrastColor(
+        Color swatch,
+        bool  watermark = false,
+        uint[]? pixels  = null,
+        int imgW        = 0,
+        int imgH        = 0)
     {
-        float r = swatch.R / 255f, g = swatch.G / 255f, b = swatch.B / 255f;
+        Color baseColor = swatch;
+
+        // When in watermark mode and we have pixel data, sample the region
+        // where the watermark text will land (lower-right corner).
+        if (watermark && pixels != null && imgW > 0 && imgH > 0)
+        {
+            // The watermark main line uses 16px bold; estimate ~300×22 px.
+            // The sub-line uses 8px bold; estimate ~300×12 px.
+            // Together the bounding box is roughly 320×42 px ending at
+            // (imgW-2, imgH-2) (from AddWaterMark positioning).
+            const int regionW = 320;
+            const int regionH = 46;
+            int x0 = Math.Max(0,    imgW - regionW - 20);
+            int y0 = Math.Max(0,    imgH - regionH - 2);
+            int x1 = Math.Min(imgW, imgW);
+            int y1 = Math.Min(imgH, imgH);
+
+            long sumR = 0, sumG = 0, sumB = 0, count = 0;
+            for (int row = y0; row < y1; row++)
+            {
+                int rb = row * imgW;
+                for (int col = x0; col < x1; col++)
+    {
+                    uint p  = pixels[rb + col];
+                    sumR   += (p >> 16) & 0xFF;
+                    sumG   += (p >>  8) & 0xFF;
+                    sumB   +=  p        & 0xFF;
+                    count++;
+                }
+            }
+
+            if (count > 0)
+                baseColor = Color.FromArgb(
+                    (int)(sumR / count),
+                    (int)(sumG / count),
+                    (int)(sumB / count));
+        }
+
+        // Compute complementary + luminance-adjusted colour.
+        float r = baseColor.R / 255f, g = baseColor.G / 255f, b = baseColor.B / 255f;
         float cmax = System.Math.Max(r, System.Math.Max(g, b));
         float cmin = System.Math.Min(r, System.Math.Min(g, b));
         float delta = cmax - cmin;
@@ -797,13 +995,21 @@ public sealed class MainForm : Form
             case 4: rr = xv; gg = 0; bb = cv; break;
             default: rr = cv; gg = 0; bb = xv; break;
         }
+        // Watermark mode is always fully opaque; fade flag kept for non-watermark uses.
+        int alpha = watermark ? 255 : 255;
         return Color.FromArgb(
-            fade ? 75 : 255,
+            alpha,
             (int)System.Math.Clamp((rr + m) * 255f, 0, 255),
             (int)System.Math.Clamp((gg + m) * 255f, 0, 255),
             (int)System.Math.Clamp((bb + m) * 255f, 0, 255));
     }
 
+    // Backward-compatible overload used by GridOverlayPanel (no pixel sampling).
+    private static Color ComputeContrastColorSimple(Color swatch, bool fade = false)
+    {
+        var c = ComputeContrastColor(swatch);
+        return fade ? Color.FromArgb(75, c.R, c.G, c.B) : c;
+    }
     // ─────────────────────────────────────────────────────────────────────────
     // Reset
     // ─────────────────────────────────────────────────────────────────────────
@@ -829,7 +1035,7 @@ public sealed class MainForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Iteration Lock (NEW)
+    // Iteration lock
     // ─────────────────────────────────────────────────────────────────────────
 
     private void OnIterLockChanged(object? sender, EventArgs e)
@@ -1160,6 +1366,8 @@ public sealed class MainForm : Form
     {
         if (_slideshowRunning) return;
         _slideshowRunning = true;
+        _showSlideshowWatermark = true;
+        RepaintWithBrightnessContrast();
         _slideshowButton.Text = "■ Stop";
         _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
         _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(120, 50, 50);
@@ -1180,6 +1388,8 @@ public sealed class MainForm : Form
                 Invoke(() =>
                 {
                     _slideshowRunning = false;
+                    _showSlideshowWatermark = false;
+                    RepaintWithBrightnessContrast();
                     _slideshowButton.Text = "Slideshow";
                     _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
                     _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
@@ -1602,7 +1812,10 @@ public sealed class MainForm : Form
         uint[] pixels = BuildProcessedBuffer(_calculator);
         try
         {
-            SavePixelsToFile(pixels, w, h, path, format, waterMark, ComputeContrastColor(GetSwatchColor(), true));
+            // Pixel-sampled contrast colour for the watermark.
+            var fontColor = ComputeContrastColor(GetSwatchColor(),
+                watermark: true, pixels: pixels, imgW: w, imgH: h);
+            SavePixelsToFile(pixels, w, h, path, format, waterMark, fontColor);
             SetStatus($"Saved  {Path.GetFileName(path)}  ({w}×{h},  {new FileInfo(path).Length / 1024:N0} KB)");
         }
         catch (Exception ex)
@@ -1720,17 +1933,13 @@ public sealed class MainForm : Form
                 MandelbrotCalculator result = t.Result;
                 try
                 {
-                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height,
-                        path, format, waterMark, ComputeContrastColor(GetSwatchColor(), true));
-                    SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}" +
-                              $"  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)" +
-                              $"  [{sw.ElapsedMilliseconds} ms]");
+                    var fontColor = ComputeContrastColor(GetSwatchColor(),
+                        watermark: true, pixels: result.ColorBuffer,
+                        imgW: result.Width, imgH: result.Height);
+                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, fontColor);
+                    SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Failed to save wallpaper:\n\n{ex.Message}",
-                        "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                catch (Exception ex) { MessageBox.Show($"Failed to save wallpaper:\n\n{ex.Message}", "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             });
         }, TaskScheduler.Default);
     }
@@ -1768,7 +1977,7 @@ public sealed class MainForm : Form
             if (codec != null)
             {
                 using var ep = new EncoderParameters(1);
-                ep.Param[0] = new EncoderParameter(Encoder.Compression, (long)EncoderValue.CompressionLZW);
+                ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Compression, (long)EncoderValue.CompressionLZW);
                 bmp.Save(path, codec, ep);
             }
             else bmp.Save(path, format);
@@ -1798,7 +2007,7 @@ public sealed class MainForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Mouse: zoom
+    // Mouse: wheel zoom  (with progressive preview)
     // ─────────────────────────────────────────────────────────────────────────
 
     private void OnMouseWheel(object? sender, MouseEventArgs e)
@@ -1820,11 +2029,11 @@ public sealed class MainForm : Form
         _centerY = compY - oy * ns;
 
         ApplyViewState();
-        TriggerCalculation();
+        TriggerCalculation(progressive: true);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Mouse: pan
+    // Mouse: pan  (throttled with debounce timer)
     // ─────────────────────────────────────────────────────────────────────────
 
     private void OnMouseDown(object? sender, MouseEventArgs e)
@@ -1869,14 +2078,31 @@ public sealed class MainForm : Form
         _centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
         _centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
         ApplyViewState();
-        TriggerCalculation();
+        // Throttled pan: fire a fast capped-iteration render immediately,
+        // schedule a full-quality render for 300 ms after movement stops.
+        _panStopTimer.Stop();
+        _panStopTimer.Start();
+        TriggerCalculationFast();
     }
 
     private void OnMouseUp(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
-        _panning = false;
-        _renderPanel.Cursor = Cursors.Cross;
+        _panning = false; _renderPanel.Cursor = Cursors.Cross;
+        // If the timer is still running let it fire the full render naturally.
+    }
+
+    /// <summary>
+    /// Fires a calculation with iterations capped for interactive responsiveness.
+    /// Full-quality render is triggered by _panStopTimer after dragging stops.
+    /// </summary>
+    private void TriggerCalculationFast()
+    {
+        if (_calculator == null) return;
+        int saved = _calculator.MaxIterations;
+        _calculator.MaxIterations = System.Math.Min(128, saved);
+        TriggerCalculation(progressive: false);
+        _calculator.MaxIterations = saved;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1981,10 +2207,10 @@ public sealed class MainForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Async calculation
+    // Async calculation  (with optional progressive preview)
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void TriggerCalculation()
+    private void TriggerCalculation(bool progressive = false)
     {
         if (_calculator == null) return;
 
@@ -2003,6 +2229,34 @@ public sealed class MainForm : Form
         SetStatus("Calculating…");
         var sw = Stopwatch.StartNew();
 
+        // ── Optional fast low-res preview ─────────────────────────────────────
+        // Fire a 1/4-resolution render first so navigation feels instant.
+        // Only worthwhile at moderate+ zoom where full render takes >300 ms.
+        if (progressive && _zoom > 5.0 && calc.Width > 200)
+        {
+            int pw = System.Math.Max(4, calc.Width  / 4);
+            int ph = System.Math.Max(4, calc.Height / 4);
+            var previewCalc = new MandelbrotCalculator(pw, ph)
+            {
+                CenterX = _centerX, CenterY = _centerY, Zoom = _zoom,
+                MaxIterations = System.Math.Min(64, calc.MaxIterations),
+                ColorMap      = calc.ColorMap,
+                Quality       = QualityPreset.Draft,
+            };
+            Task.Run(() => { previewCalc.Calculate(token); return previewCalc; }, token)
+                .ContinueWith(t =>
+                {
+                    if (t.IsCanceled || token.IsCancellationRequested) return;
+                    if (!IsHandleCreated || _disposed) return;
+                    Invoke(() =>
+                    {
+                        if (_disposed || token.IsCancellationRequested) return;
+                        renderer?.UpdateTexture(t.Result.ColorBuffer, pw, ph);
+                    });
+                }, TaskScheduler.Default);
+        }
+
+        // ── Full-resolution render ────────────────────────────────────────────
         Task.Run(() => { calc.Calculate(token); return sw.ElapsedMilliseconds; }, token)
         .ContinueWith(t =>
         {
@@ -2018,6 +2272,7 @@ public sealed class MainForm : Form
                     if (_disposed) return;
                     // Apply brightness/contrast and grid overlay, then upload to GPU.
                     UploadProcessedBuffer(calc, renderer);
+                    _miniMapPanel?.RefreshIndicator();
                     string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
                     SetStatus(
                         $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
@@ -2030,7 +2285,7 @@ public sealed class MainForm : Form
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Brightness / Contrast + Grid overlay post-processing
+    // Post-processing: brightness / contrast / grid / watermark
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -2049,14 +2304,15 @@ public sealed class MainForm : Form
     /// <paramref name="calc"/>.ColorBuffer, then uploads the result to the GPU.
     /// The original ColorBuffer is never modified — a temporary buffer is used.
     /// </summary>
-    private void UploadProcessedBuffer(MandelbrotCalculator calc, DirectXRenderer renderer)
+    private void UploadProcessedBuffer(MandelbrotCalculator calc, IFractalRenderer renderer)
     {
         int w = calc.Width;
         int h = calc.Height;
         uint[] src = calc.ColorBuffer;
         int n = w * h;
 
-        bool needsProcess = _brightness != 0 || _contrast != 0 || _gridVisible;
+        bool needsProcess = _brightness != 0 || _contrast != 0
+                         || _gridVisible || _showSlideshowWatermark;
 
         if (!needsProcess)
         {
@@ -2111,14 +2367,65 @@ public sealed class MainForm : Form
         // Grid overlay — blend GDI+ grid lines into the buffer.
         if (_gridVisible)
             BlendGridOverlay(dst, w, h);
+        if (_showSlideshowWatermark) BlendWatermarkOverlay(dst, w, h);
 
         renderer.UpdateTexture(dst, w, h);
     }
 
     /// <summary>
-    /// Renders the Cartesian grid into a GDI+ bitmap, then alpha-blends the
-    /// grid lines pixel-by-pixel into the destination BGRA buffer.
+    /// Blends the standard watermark text into a BGRA uint[] buffer using GDI+.
+    /// The contrast colour is sampled from the lower-right region of dst itself.
     /// </summary>
+    private unsafe void BlendWatermarkOverlay(uint[] dst, int w, int h)
+    {
+        using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.Transparent);
+            g.SmoothingMode   = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+
+            // Sample the destination buffer for a contrast colour.
+            Color fontColor = ComputeContrastColor(
+                GetSwatchColor(), watermark: true, pixels: dst, imgW: w, imgH: h);
+
+            string wm = $"Fracturing Fog" +
+                        $"{(!string.IsNullOrEmpty(CurrentRegionName())   ? " - " + CurrentRegionName()   : "")}" +
+                        $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
+            AddWaterMark(g, wm, w, h, fontColor);
+        }
+
+        var data = bmp.LockBits(new Rectangle(0, 0, w, h),
+            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            byte* srcPtr = (byte*)data.Scan0;
+            int stride   = data.Stride;
+            for (int row = 0; row < h; row++)
+            {
+                byte* rowPtr = srcPtr + (long)row * stride;
+                for (int col = 0; col < w; col++)
+                {
+                    byte gA = rowPtr[col * 4 + 3];
+                    if (gA == 0) continue;
+                    byte gB = rowPtr[col * 4 + 0];
+                    byte gG = rowPtr[col * 4 + 1];
+                    byte gR = rowPtr[col * 4 + 2];
+                    int  idx = row * w + col;
+                    uint p   = dst[idx];
+                    byte dR  = (byte)((p >> 16) & 0xFF);
+                    byte dG  = (byte)((p >>  8) & 0xFF);
+                    byte dB  = (byte)( p        & 0xFF);
+                    float a = gA / 255f, ia = 1f - a;
+                    dst[idx] = 0xFF000000u
+                        | ((uint)(byte)(gR * a + dR * ia) << 16)
+                        | ((uint)(byte)(gG * a + dG * ia) <<  8)
+                        |  (uint)(byte)(gB * a + dB * ia);
+                }
+            }
+        }
+        finally { bmp.UnlockBits(data); }
+    }
     private unsafe void BlendGridOverlay(uint[] dst, int w, int h)
     {
         using var bmp = new System.Drawing.Bitmap(w, h,
@@ -2185,6 +2492,7 @@ public sealed class MainForm : Form
         _disposed = true;
         Application.Idle -= OnApplicationIdle;
 
+        _panStopTimer.Stop(); _panStopTimer.Dispose();
         StopSlideshow();
         lock (_calcLock) _calcCts?.Cancel();
         lock (_wallpaperLock) _wallpaperCts?.Cancel();
