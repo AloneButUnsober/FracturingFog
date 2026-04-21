@@ -32,6 +32,10 @@ namespace FracturingFog;
 
 public sealed class MainForm : Form
 {
+    // ── Program  ───────────────────────────────────────────────────────
+    private readonly string _programVersion = "0.0.1";
+    private readonly string _programName = "Fracturing Fog";
+
     // ── UI: top toolbar ───────────────────────────────────────────────────────
     private readonly Panel _toolbar;
     private readonly Button _resetButton;
@@ -65,7 +69,7 @@ public sealed class MainForm : Form
     private bool _gridVisible;
 
     // Force D3D11 mode for testing:  (change the next line, recompile, and run on a D3D12-capable machine)
-    private bool _forceD3D11 => true;
+    private bool _forceD3D11 => false;
 
     // ── Mini-map ──────────────────────────────────────────────────────────────
     private MiniMapPanel? _miniMapPanel;
@@ -140,6 +144,8 @@ public sealed class MainForm : Form
     private readonly object _slideshowLock = new();
     private readonly Random _slideshowRng = new();
     private bool _showSlideshowWatermark;   // true only while slideshow runs
+    private string _slideshowRegionName = "";
+    private CancellationTokenSource? _slideshowSkipCts;   // cancelled to skip current region
 
     // ── Iteration lock ────────────────────────────────────────────────────────
 
@@ -150,8 +156,8 @@ public sealed class MainForm : Form
 
     private TrackBar? _brightnessSlider;
     private TrackBar? _contrastSlider;
-    private Label?    _brightnessLabel;
-    private Label?    _contrastLabel;
+    private Label? _brightnessLabel;
+    private Label? _contrastLabel;
 
     /// <summary>Brightness offset in [-100, 100]; 0 = neutral.</summary>
     private int _brightness = 0;
@@ -172,8 +178,8 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = $"Fracturing Fog  —  Mandelbrot Explorer  ({RendererFactory.ProbeDescription()} · Vortice 3.8.3)";
-        ClientSize = new Size(1333, 768);
-        MinimumSize = new Size(480, 480);
+        ClientSize = new Size(1365, 768);
+        MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
@@ -678,13 +684,17 @@ public sealed class MainForm : Form
         });
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Start/Stop Slideshow", null, (s, e) => OnSlideshowClick(s, e));
+        var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region") { Enabled = false };
+        skipItem.Click += (s, e) => SkipSlideshowRegion();
+        contextMenu.Items.Add(skipItem);
+        contextMenu.Opening += (s, e) => skipItem.Enabled = _slideshowRunning;
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
-        
+
         contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("Mini Map",             null, (s, e) => ToggleMiniMap());
-        contextMenu.Items.Add("System Info…",         null, (s, e) => ShowSystemInfoDialog());
-               
+        contextMenu.Items.Add("Mini Map", null, (s, e) => ToggleMiniMap());
+        contextMenu.Items.Add("System Info…", null, (s, e) => ShowSystemInfoDialog());
+
         _renderPanel.ContextMenuStrip = contextMenu;
 
         // Docking / Z-order: Fill first, then Top-docked in reverse, footer last.
@@ -714,7 +724,7 @@ public sealed class MainForm : Form
 
         try
         {
-            _renderer   = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
+            _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"Fracturing Fog  —  Mandelbrot Explorer  ({_renderer.RendererDescription} · Vortice 3.8.3)";
@@ -742,10 +752,10 @@ public sealed class MainForm : Form
         {
             _miniMapPanel = new MiniMapPanel();
             _miniMapPanel.Configure(
-                getCenter:      () => (_centerX, _centerY),
-                getZoom:        () => _zoom,
-                getColorMap:    () => _calculator?.ColorMap,
-                navigateTo:     (cx, cy) =>
+                getCenter: () => (_centerX, _centerY),
+                getZoom: () => _zoom,
+                getColorMap: () => _calculator?.ColorMap,
+                navigateTo: (cx, cy) =>
                 {
                     _centerX = cx; _centerY = cy;
                     ApplyViewState();
@@ -753,10 +763,9 @@ public sealed class MainForm : Form
                 },
                 getSwatchColor: GetSwatchColor);
 
-            _miniMapPanel.Left   = _renderPanel.ClientSize.Width  - _miniMapPanel.Width  - 4;
-            _miniMapPanel.Top    = _renderPanel.ClientSize.Height - _miniMapPanel.Height - 4;
+            _miniMapPanel.Left = _renderPanel.ClientSize.Width - _miniMapPanel.Width - 4;
+            _miniMapPanel.Top = _renderPanel.ClientSize.Height - _miniMapPanel.Height - 4;
             _miniMapPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-
             _renderPanel.Controls.Add(_miniMapPanel);
             _miniMapPanel.BringToFront();
             _miniMapPanel.RequestRedraw();
@@ -794,7 +803,7 @@ public sealed class MainForm : Form
                 sb.AppendLine($"  Vendor ID:   0x{desc.VendorId:X4}");
                 sb.AppendLine($"  Device ID:   0x{desc.DeviceId:X4}");
                 sb.AppendLine($"  Dedicated VRAM: {desc.DedicatedVideoMemory / (1024 * 1024)} MB");
-                sb.AppendLine($"  Shared RAM:     {desc.SharedSystemMemory   / (1024 * 1024)} MB");
+                sb.AppendLine($"  Shared RAM:     {desc.SharedSystemMemory / (1024 * 1024)} MB");
                 adapter.Dispose();
                 idx++;
             }
@@ -834,22 +843,24 @@ public sealed class MainForm : Form
 
         using var dlg = new Form
         {
-            Text            = "System / Hardware Information",
-            ClientSize      = new Size(560, 500),
+            Text = "System / Hardware Information",
+            ClientSize = new Size(560, 500),
             FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox     = false, MinimizeBox = false,
-            StartPosition   = FormStartPosition.CenterParent,
-            BackColor       = Color.FromArgb(28, 28, 28),
+            MaximizeBox = false,
+            MinimizeBox = false,
+            StartPosition = FormStartPosition.CenterParent,
+            BackColor = Color.FromArgb(28, 28, 28),
         };
         var txt = new TextBox
         {
-            Multiline   = true, ReadOnly = true,
-            ScrollBars  = ScrollBars.Vertical,
-            Text        = sb.ToString(),
-            Dock        = DockStyle.Fill,
-            BackColor   = Color.FromArgb(18, 18, 18),
-            ForeColor   = Color.FromArgb(200, 200, 200),
-            Font        = new Font("Consolas", 9f),
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Text = sb.ToString(),
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(18, 18, 18),
+            ForeColor = Color.FromArgb(200, 200, 200),
+            Font = new Font("Consolas", 9f),
             BorderStyle = BorderStyle.None,
         };
         dlg.Controls.Add(txt);
@@ -931,10 +942,10 @@ public sealed class MainForm : Form
     /// </summary>
     private static Color ComputeContrastColor(
         Color swatch,
-        bool  watermark = false,
-        uint[]? pixels  = null,
-        int imgW        = 0,
-        int imgH        = 0)
+        bool watermark = false,
+        uint[]? pixels = null,
+        int imgW = 0,
+        int imgH = 0)
     {
         Color baseColor = swatch;
 
@@ -948,8 +959,8 @@ public sealed class MainForm : Form
             // (imgW-2, imgH-2) (from AddWaterMark positioning).
             const int regionW = 320;
             const int regionH = 46;
-            int x0 = Math.Max(0,    imgW - regionW - 20);
-            int y0 = Math.Max(0,    imgH - regionH - 2);
+            int x0 = Math.Max(0, imgW - regionW - 20);
+            int y0 = Math.Max(0, imgH - regionH - 2);
             int x1 = Math.Min(imgW, imgW);
             int y1 = Math.Min(imgH, imgH);
 
@@ -958,11 +969,11 @@ public sealed class MainForm : Form
             {
                 int rb = row * imgW;
                 for (int col = x0; col < x1; col++)
-    {
-                    uint p  = pixels[rb + col];
-                    sumR   += (p >> 16) & 0xFF;
-                    sumG   += (p >>  8) & 0xFF;
-                    sumB   +=  p        & 0xFF;
+                {
+                    uint p = pixels[rb + col];
+                    sumR += (p >> 16) & 0xFF;
+                    sumG += (p >> 8) & 0xFF;
+                    sumB += p & 0xFF;
                     count++;
                 }
             }
@@ -1036,11 +1047,11 @@ public sealed class MainForm : Form
 
         // Reset brightness and contrast to defaults.
         _brightness = 0;
-        _contrast   = 0;
+        _contrast = 0;
         if (_brightnessSlider != null) _brightnessSlider.Value = 0;
-        if (_contrastSlider   != null) _contrastSlider.Value   = 0;
-        if (_brightnessLabel  != null) _brightnessLabel.Text   = "Brightness: 0";
-        if (_contrastLabel    != null) _contrastLabel.Text     = "Contrast: 0";
+        if (_contrastSlider != null) _contrastSlider.Value = 0;
+        if (_brightnessLabel != null) _brightnessLabel.Text = "Brightness: 0";
+        if (_contrastLabel != null) _contrastLabel.Text = "Contrast: 0";
 
         ApplyViewState();
         TriggerCalculation();
@@ -1417,6 +1428,12 @@ public sealed class MainForm : Form
     {
         lock (_slideshowLock) _slideshowCts?.Cancel();
     }
+    private void SkipSlideshowRegion()
+    {
+        if (!_slideshowRunning) return;
+        lock (_slideshowLock) _slideshowSkipCts?.Cancel();
+        SetStatus("Slideshow: skipping to next region…");
+    }
 
     // Returns all palettes whose Name does not start with "— " (i.e. header items excluded).
     private List<string> GetAllPaletteNames()
@@ -1432,8 +1449,8 @@ public sealed class MainForm : Form
 
     private async Task SlideshowLoop(CancellationToken ct)
     {
-        var builtIns = new List<FractalRegion>(FractalRegionLibrary.Instance.BuiltIns);
-        builtIns.AddRange(FractalRegionLibrary.Instance.UserRegions);
+        var builtIns = new List<FractalRegion>(FractalRegionLibrary.Instance.AllSlideshowRegions);
+        //builtIns.AddRange(FractalRegionLibrary.Instance.UserRegions);
         var paletteNames = GetAllPaletteNames();
         if (builtIns.Count == 0 || paletteNames.Count == 0) return;
 
@@ -1449,7 +1466,7 @@ public sealed class MainForm : Form
         const int fadeSteps = 20;
         const int fadeStepMs = fadeDurationMs / fadeSteps;
         int lastRegionIdx = -1;
-        int lastThemeIdx  = -1;
+        int lastThemeIdx = -1;
 
         while (!ct.IsCancellationRequested)
         {
@@ -1496,6 +1513,7 @@ public sealed class MainForm : Form
                 await InvokeAsync(() =>
                 {
                     if (_disposed) return;
+                    _slideshowRegionName = region.Name;
                     // ApplyRegionSilent sets calc state without firing TriggerCalculation.
                     ApplyRegionSilent(region);
                     var map = Models.ColorPalette.GetPaletteByName(themeName);
@@ -1612,7 +1630,7 @@ public sealed class MainForm : Form
         {
             _calculator.CenterX = _centerX;
             _calculator.CenterY = _centerY;
-            _calculator.Zoom    = _zoom;
+            _calculator.Zoom = _zoom;
             _calculator.Quality = region.QualityPreset;
             if (!_iterLocked && region.Iterations > 0)
                 _calculator.MaxIterations = region.Iterations;
@@ -1834,14 +1852,15 @@ public sealed class MainForm : Form
         string path = dlg.FileName;
         string ext = Path.GetExtension(path).ToLowerInvariant();
         var format = ext switch { ".bmp" => ImageFormat.Bmp, ".tif" or ".tiff" => ImageFormat.Tiff, _ => ImageFormat.Png };
-        string wm = $"Fracturing Fog{(!string.IsNullOrEmpty(CurrentRegionName()) ? " - " + CurrentRegionName() : "")}" +
+        string wm = $"{(!string.IsNullOrEmpty(CurrentRegionName()) ? CurrentRegionName() : "Fracturing Fog")}" +
                       $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
+        string subText = $"{_programName} v{_programVersion} {DateTime.Now.Year}";
 
-        if (_spanning) TakeWallpaperScreenshot(path, format, wm);
-        else TakeNormalScreenshot(path, format, wm);
+        if (_spanning) TakeWallpaperScreenshot(path, format, wm, subText);
+        else TakeNormalScreenshot(path, format, wm, subText);
     }
 
-    private void TakeNormalScreenshot(string path, ImageFormat format, string waterMark)
+    private void TakeNormalScreenshot(string path, ImageFormat format, string waterMark, string subText)
     {
         int w = _calculator!.Width;
         int h = _calculator!.Height;
@@ -1852,7 +1871,7 @@ public sealed class MainForm : Form
             // Pixel-sampled contrast colour for the watermark.
             var fontColor = ComputeContrastColor(GetSwatchColor(),
                 watermark: true, pixels: pixels, imgW: w, imgH: h);
-            SavePixelsToFile(pixels, w, h, path, format, waterMark, fontColor);
+            SavePixelsToFile(pixels, w, h, path, format, waterMark, fontColor, subText);
             SetStatus($"Saved  {Path.GetFileName(path)}  ({w}×{h},  {new FileInfo(path).Length / 1024:N0} KB)");
         }
         catch (Exception ex)
@@ -1884,8 +1903,8 @@ public sealed class MainForm : Form
             {
                 uint p = src[i];
                 float r = ((p >> 16) & 0xFF) / 255f;
-                float g = ((p >>  8) & 0xFF) / 255f;
-                float b = ( p        & 0xFF) / 255f;
+                float g = ((p >> 8) & 0xFF) / 255f;
+                float b = (p & 0xFF) / 255f;
                 r = (r - 0.5f) * cf + 0.5f + bo;
                 g = (g - 0.5f) * cf + 0.5f + bo;
                 b = (b - 0.5f) * cf + 0.5f + bo;
@@ -1903,7 +1922,7 @@ public sealed class MainForm : Form
         return dst;
     }
 
-    private void TakeWallpaperScreenshot(string path, ImageFormat format, string waterMark)
+    private void TakeWallpaperScreenshot(string path, ImageFormat format, string waterMark, string subText)
     {
         Rectangle vs = SystemInformation.VirtualScreen;
         int fullW = vs.Width;
@@ -1973,7 +1992,7 @@ public sealed class MainForm : Form
                     var fontColor = ComputeContrastColor(GetSwatchColor(),
                         watermark: true, pixels: result.ColorBuffer,
                         imgW: result.Width, imgH: result.Height);
-                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, fontColor);
+                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, fontColor, subText);
                     SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
                 }
                 catch (Exception ex) { MessageBox.Show($"Failed to save wallpaper:\n\n{ex.Message}", "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -1983,7 +2002,7 @@ public sealed class MainForm : Form
 
     private static unsafe void SavePixelsToFile(
         uint[] pixels, int w, int h, string path, ImageFormat format,
-        string watermarkText, Color fontColor)
+        string watermarkText, Color fontColor, string subText = "")
     {
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
@@ -2024,22 +2043,27 @@ public sealed class MainForm : Form
         if (!string.IsNullOrEmpty(watermarkText))
         {
             using var g = Graphics.FromImage(bmp);
-            AddWaterMark(g, watermarkText, w, h, fontColor);
+            AddWaterMark(g, watermarkText, w, h, fontColor, subText);
             bmp.Save(path, format);
         }
     }
 
-    private static void AddWaterMark(Graphics g, string text, int width, int height, Color fontColor)
+    private static void AddWaterMark(Graphics g, string text, int width, int height, Color fontColor, string subText = "")
     {
         using var font = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
         var sz = g.MeasureString(text, font);
         var pos = new PointF(width - sz.Width - 20, height - sz.Height - 12);
         using var brush = new SolidBrush(fontColor);
         g.DrawString(text, font, brush, pos);
-        using var fontSmall = new Font("Segoe UI", 8, FontStyle.Bold, GraphicsUnit.Pixel);
-        var sz2 = g.MeasureString(text, fontSmall);
-        g.DrawString("Something mundane to include in the image.", fontSmall, brush,
-            new PointF(width - sz2.Width - 105, height - sz2.Height - 2));
+
+        if (!string.IsNullOrEmpty(subText))
+        {
+            using var fontSmall = new Font("Segoe UI", 8, FontStyle.Bold, GraphicsUnit.Pixel);
+            var sz2 = g.MeasureString(subText, fontSmall);
+            g.DrawString($"{subText}", fontSmall, brush,
+                new PointF(width - sz2.Width - 55, height - sz2.Height - 2));
+        }
+
         g.Save();
     }
 
@@ -2066,7 +2090,7 @@ public sealed class MainForm : Form
         _centerY = compY - oy * ns;
 
         ApplyViewState();
-        TriggerCalculation(progressive: true);
+        TriggerCalculation(progressive: false);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -2098,7 +2122,7 @@ public sealed class MainForm : Form
 
         // Convert the clicked screen pixel to complex-plane coordinates.
         double scale = CurrentScale();
-        double ox = e.X - _renderPanel.ClientSize.Width  * 0.5;
+        double ox = e.X - _renderPanel.ClientSize.Width * 0.5;
         double oy = e.Y - _renderPanel.ClientSize.Height * 0.5;
         _centerX = _centerX + ox * scale;
         _centerY = _centerY + oy * scale;
@@ -2234,6 +2258,7 @@ public sealed class MainForm : Form
     private string CurrentRegionName()
     {
         string? selected = _regionCombo.SelectedItem?.ToString();
+        selected = !string.IsNullOrEmpty(_slideshowRegionName) ? _slideshowRegionName : selected;
         if (string.IsNullOrEmpty(selected) || selected == "— select region —") return "";
         return selected;
     }
@@ -2281,33 +2306,6 @@ public sealed class MainForm : Form
 
         SetStatus("Calculating…");
         var sw = Stopwatch.StartNew();
-
-        // ── Optional fast low-res preview ─────────────────────────────────────
-        // Fire a 1/4-resolution render first so navigation feels instant.
-        // Only worthwhile at moderate+ zoom where full render takes >300 ms.
-        if (progressive && _zoom > 5.0 && calc.Width > 200)
-        {
-            int pw = System.Math.Max(4, calc.Width  / 4);
-            int ph = System.Math.Max(4, calc.Height / 4);
-            var previewCalc = new MandelbrotCalculator(pw, ph)
-            {
-                CenterX = _centerX, CenterY = _centerY, Zoom = _zoom,
-                MaxIterations = System.Math.Min(64, calc.MaxIterations),
-                ColorMap      = calc.ColorMap,
-                Quality       = QualityPreset.Draft,
-            };
-            Task.Run(() => { previewCalc.Calculate(token); return previewCalc; }, token)
-                .ContinueWith(t =>
-                {
-                    if (t.IsCanceled || token.IsCancellationRequested) return;
-                    if (!IsHandleCreated || _disposed) return;
-                    Invoke(() =>
-                    {
-                        if (_disposed || token.IsCancellationRequested) return;
-                        renderer?.UpdateTexture(t.Result.ColorBuffer, pw, ph);
-                    });
-                }, TaskScheduler.Default);
-        }
 
         // ── Full-resolution render ────────────────────────────────────────────
         Task.Run(() => { calc.Calculate(token); return sw.ElapsedMilliseconds; }, token)
@@ -2381,8 +2379,8 @@ public sealed class MainForm : Form
         //   0  → 1.0×   (neutral)
         //  +100 → 2.0×   (doubled contrast)
         //  -100 → 0.0×   (flat grey)
-        float contrastFactor = 1.0f + _contrast / 100.0f; 
-        
+        float contrastFactor = 1.0f + _contrast / 100.0f;
+
         float brightnessOffset = _brightness / 100.0f;  // [-1, 1]
 
         if (_brightness != 0 || _contrast != 0)
@@ -2391,8 +2389,8 @@ public sealed class MainForm : Form
             {
                 uint p = src[i];
                 float r = ((p >> 16) & 0xFF) / 255f;
-                float g = ((p >>  8) & 0xFF) / 255f;
-                float b = ( p        & 0xFF) / 255f;
+                float g = ((p >> 8) & 0xFF) / 255f;
+                float b = (p & 0xFF) / 255f;
 
                 // Contrast: scale around 0.5 midpoint.
                 r = (r - 0.5f) * contrastFactor + 0.5f;
@@ -2438,17 +2436,17 @@ public sealed class MainForm : Form
         using (var g = Graphics.FromImage(bmp))
         {
             g.Clear(Color.Transparent);
-            g.SmoothingMode   = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
             // Sample the destination buffer for a contrast colour.
             Color fontColor = ComputeContrastColor(
                 GetSwatchColor(), watermark: true, pixels: dst, imgW: w, imgH: h);
 
-            string wm = $"Fracturing Fog" +
-                        $"{(!string.IsNullOrEmpty(CurrentRegionName())   ? " - " + CurrentRegionName()   : "")}" +
+            string wm = $"{(!string.IsNullOrEmpty(CurrentRegionName()) ? CurrentRegionName() : "")}" + // ? " - " + 
                         $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
-            AddWaterMark(g, wm, w, h, fontColor);
+            string subText = $"{_programName} v{_programVersion} {DateTime.Now.Year}";
+            AddWaterMark(g, wm, w, h, fontColor, subText);
         }
 
         var data = bmp.LockBits(new Rectangle(0, 0, w, h),
@@ -2456,7 +2454,7 @@ public sealed class MainForm : Form
         try
         {
             byte* srcPtr = (byte*)data.Scan0;
-            int stride   = data.Stride;
+            int stride = data.Stride;
             for (int row = 0; row < h; row++)
             {
                 byte* rowPtr = srcPtr + (long)row * stride;
@@ -2467,16 +2465,16 @@ public sealed class MainForm : Form
                     byte gB = rowPtr[col * 4 + 0];
                     byte gG = rowPtr[col * 4 + 1];
                     byte gR = rowPtr[col * 4 + 2];
-                    int  idx = row * w + col;
-                    uint p   = dst[idx];
-                    byte dR  = (byte)((p >> 16) & 0xFF);
-                    byte dG  = (byte)((p >>  8) & 0xFF);
-                    byte dB  = (byte)( p        & 0xFF);
+                    int idx = row * w + col;
+                    uint p = dst[idx];
+                    byte dR = (byte)((p >> 16) & 0xFF);
+                    byte dG = (byte)((p >> 8) & 0xFF);
+                    byte dB = (byte)(p & 0xFF);
                     float a = gA / 255f, ia = 1f - a;
                     dst[idx] = 0xFF000000u
                         | ((uint)(byte)(gR * a + dR * ia) << 16)
-                        | ((uint)(byte)(gG * a + dG * ia) <<  8)
-                        |  (uint)(byte)(gB * a + dB * ia);
+                        | ((uint)(byte)(gG * a + dG * ia) << 8)
+                        | (uint)(byte)(gB * a + dB * ia);
                 }
             }
         }
@@ -2518,8 +2516,8 @@ public sealed class MainForm : Form
                     int idx = row * w + col;
                     uint p = dst[idx];
                     byte dR = (byte)((p >> 16) & 0xFF);
-                    byte dG = (byte)((p >>  8) & 0xFF);
-                    byte dB = (byte)( p        & 0xFF);
+                    byte dG = (byte)((p >> 8) & 0xFF);
+                    byte dB = (byte)(p & 0xFF);
 
                     float a = gA / 255f;
                     float ia = 1f - a;
@@ -2727,19 +2725,19 @@ public sealed class InputDialog : Form
 internal sealed class GridOverlayPanel : System.Windows.Forms.Control
 {
     private readonly Func<(double cx, double cy)> _getCenter;
-    private readonly Func<double>                 _getZoom;
-    private readonly Func<Size>                   _getPanelSize;
-    private readonly Func<Color>                  _getSwatchColor;
+    private readonly Func<double> _getZoom;
+    private readonly Func<Size> _getPanelSize;
+    private readonly Func<Color> _getSwatchColor;
 
     public GridOverlayPanel(
         Func<(double, double)> getCenter,
-        Func<double>           getZoom,
-        Func<Size>             getPanelSize,
-        Func<Color>            getSwatchColor)
+        Func<double> getZoom,
+        Func<Size> getPanelSize,
+        Func<Color> getSwatchColor)
     {
-        _getCenter      = getCenter;
-        _getZoom        = getZoom;
-        _getPanelSize   = getPanelSize;
+        _getCenter = getCenter;
+        _getZoom = getZoom;
+        _getPanelSize = getPanelSize;
         _getSwatchColor = getSwatchColor;
     }
 
@@ -2756,19 +2754,19 @@ internal sealed class GridOverlayPanel : System.Windows.Forms.Control
     private void DrawCartesianGrid(Graphics g, int w, int h)
     {
         var (cx, cy) = _getCenter();
-        double zoom  = _getZoom();
+        double zoom = _getZoom();
         double scale = 3.5 / (System.Math.Max(w, h) * zoom);
 
         double xMin = cx - w * scale * 0.5, xMax = cx + w * scale * 0.5;
         double yMin = cy - h * scale * 0.5, yMax = cy + h * scale * 0.5;
 
-        Color gridColor  = ComputeContrastColor(_getSwatchColor());
-        using var gridPen    = new Pen(Color.FromArgb(160, gridColor), 1.0f);
-        using var axisPen    = new Pen(Color.FromArgb(210, gridColor), 1.8f);
+        Color gridColor = ComputeContrastColor(_getSwatchColor());
+        using var gridPen = new Pen(Color.FromArgb(160, gridColor), 1.0f);
+        using var axisPen = new Pen(Color.FromArgb(210, gridColor), 1.8f);
         using var labelBrush = new SolidBrush(Color.FromArgb(200, gridColor));
-        using var shadowBrush= new SolidBrush(Color.FromArgb(120, 0, 0, 0));
-        using var labelFont  = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
-        using var zeroFont   = new Font("Consolas", 8.5f, FontStyle.Bold,    GraphicsUnit.Point);
+        using var shadowBrush = new SolidBrush(Color.FromArgb(120, 0, 0, 0));
+        using var labelFont = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
+        using var zeroFont = new Font("Consolas", 8.5f, FontStyle.Bold, GraphicsUnit.Point);
 
         double gridStep = NiceStep((xMax - xMin) / 7.0);
 
@@ -2785,7 +2783,7 @@ internal sealed class GridOverlayPanel : System.Windows.Forms.Control
             float lx = px - sz.Width * 0.5f, ly = h - sz.Height - 2;
             if (ly < 0) ly = 2;
             g.DrawString(lbl, labelFont, shadowBrush, lx + 1, ly + 1);
-            g.DrawString(lbl, labelFont, labelBrush,  lx,     ly);
+            g.DrawString(lbl, labelFont, labelBrush, lx, ly);
         }
 
         // Horizontal lines.
@@ -2800,7 +2798,7 @@ internal sealed class GridOverlayPanel : System.Windows.Forms.Control
             string lbl = FormatCoord(wy) + "i";
             var sz = g.MeasureString(lbl, labelFont);
             g.DrawString(lbl, labelFont, shadowBrush, 4, py - sz.Height * 0.5f + 1);
-            g.DrawString(lbl, labelFont, labelBrush,  3, py - sz.Height * 0.5f);
+            g.DrawString(lbl, labelFont, labelBrush, 3, py - sz.Height * 0.5f);
         }
 
         // Origin label.
@@ -2809,7 +2807,7 @@ internal sealed class GridOverlayPanel : System.Windows.Forms.Control
         if (ox >= 0 && ox <= w && oy >= 0 && oy <= h)
         {
             g.DrawString("0", zeroFont, shadowBrush, ox + 3, oy + 3);
-            g.DrawString("0", zeroFont, labelBrush,  ox + 2, oy + 2);
+            g.DrawString("0", zeroFont, labelBrush, ox + 2, oy + 2);
         }
     }
 
@@ -2822,7 +2820,7 @@ internal sealed class GridOverlayPanel : System.Windows.Forms.Control
     private static double NiceStep(double raw)
     {
         if (raw <= 0) return 1.0;
-        double mag  = System.Math.Pow(10, System.Math.Floor(System.Math.Log10(raw)));
+        double mag = System.Math.Pow(10, System.Math.Floor(System.Math.Log10(raw)));
         double norm = raw / mag;
         double nice = norm <= 1.0 ? 1.0 : norm <= 2.0 ? 2.0 : norm <= 5.0 ? 5.0 : 10.0;
         return nice * mag;
@@ -2846,36 +2844,36 @@ internal sealed class GridOverlayPanel : System.Windows.Forms.Control
     private static Color ComputeContrastColor(Color swatch)
     {
         float r = swatch.R / 255f, g = swatch.G / 255f, b = swatch.B / 255f;
-        float cmax  = System.Math.Max(r, System.Math.Max(g, b));
-        float cmin  = System.Math.Min(r, System.Math.Min(g, b));
+        float cmax = System.Math.Max(r, System.Math.Max(g, b));
+        float cmin = System.Math.Min(r, System.Math.Min(g, b));
         float delta = cmax - cmin;
-        float l     = (cmax + cmin) * 0.5f;
-        float h2    = 0f;
+        float l = (cmax + cmin) * 0.5f;
+        float h2 = 0f;
         if (delta > 0.001f)
         {
-            if      (cmax == r) h2 = ((g - b) / delta) % 6f;
+            if (cmax == r) h2 = ((g - b) / delta) % 6f;
             else if (cmax == g) h2 = (b - r) / delta + 2f;
-            else                h2 = (r - g) / delta + 4f;
+            else h2 = (r - g) / delta + 4f;
             h2 = (h2 / 6f + 1f) % 1f;
         }
         float s2 = delta < 0.001f ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
-        float hc  = (h2 + 0.5f) % 1f;
-        float lc  = l < 0.5f
-            ? System.Math.Clamp(1f - l * 0.6f,  0.65f, 1.0f)
-            : System.Math.Clamp(1f - l * 1.4f,  0.0f,  0.35f);
-        float sc  = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
-        float cv  = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
-        float xv  = cv * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
-        float m   = lc - cv * 0.5f;
+        float hc = (h2 + 0.5f) % 1f;
+        float lc = l < 0.5f
+            ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
+            : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
+        float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
+        float cv = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
+        float xv = cv * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
+        float m = lc - cv * 0.5f;
         float rr, gg, bb;
         switch ((int)(hc * 6f))
         {
-            case 0: rr = cv; gg = xv; bb = 0;  break;
-            case 1: rr = xv; gg = cv; bb = 0;  break;
-            case 2: rr = 0;  gg = cv; bb = xv; break;
-            case 3: rr = 0;  gg = xv; bb = cv; break;
-            case 4: rr = xv; gg = 0;  bb = cv; break;
-            default: rr= cv; gg = 0;  bb = xv; break;
+            case 0: rr = cv; gg = xv; bb = 0; break;
+            case 1: rr = xv; gg = cv; bb = 0; break;
+            case 2: rr = 0; gg = cv; bb = xv; break;
+            case 3: rr = 0; gg = xv; bb = cv; break;
+            case 4: rr = xv; gg = 0; bb = cv; break;
+            default: rr = cv; gg = 0; bb = xv; break;
         }
         return Color.FromArgb(
             (int)System.Math.Clamp((rr + m) * 255f, 0, 255),

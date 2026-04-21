@@ -441,19 +441,33 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
             }
             else
             {
-                // Texture already exists but may be in PixelShaderResource state.
-                // Transition back to CopyDest so we can update it.
-                WaitForAllFrames();  // ensure no in-flight reads
+                // Texture already exists — wait for ALL in-flight frames before
+                // touching it, then transition back to CopyDest.
+                // We use a dedicated one-shot fence value so the wait is
+                // guaranteed to complete (no dependency on Render's SignalFrame).
+                WaitForAllFrames();
 
-                _allocators[_frameIndex].Reset();
-                _cmdList.Reset(_allocators[_frameIndex], null);
+                int fi = _frameIndex;
+                _allocators[fi].Reset();
+                _cmdList.Reset(_allocators[fi], null);
                 _cmdList.ResourceBarrierTransition(
                     _texture!,
                     ResourceStates.PixelShaderResource,
                     ResourceStates.CopyDest);
                 _cmdList.Close();
                 _cmdQueue.ExecuteCommandList(_cmdList);
-                WaitForCurrentFrame();
+
+                // Signal and wait inline — do NOT use WaitForCurrentFrame() here
+                // because _fenceValues[fi] may not have been incremented by
+                // Render() yet, making the wait return immediately on a stale value.
+                ulong uploadFenceVal = _fenceValues[fi] + 1000;  // out-of-band value
+                _cmdQueue.Signal(_fence, uploadFenceVal);
+                if (_fence.CompletedValue < uploadFenceVal)
+                {
+                    _fence.SetEventOnCompletion(uploadFenceVal, _fenceEvent);
+                    _ = WaitForSingleObject(_fenceEvent, uint.MaxValue);
+                }
+                // Do NOT update _fenceValues[fi] — Render() manages those.
             }
 
             // Map upload buffer and copy rows.
@@ -501,8 +515,16 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
             _cmdList.Close();
 
             _cmdQueue.ExecuteCommandList(_cmdList);
-            WaitForCurrentFrame();
 
+            // Wait for the copy to finish using an out-of-band fence value.
+            ulong copyDoneFenceVal = _fenceValues[_frameIndex] + 2000;
+            _cmdQueue.Signal(_fence, copyDoneFenceVal);
+            if (_fence.CompletedValue < copyDoneFenceVal)
+            {
+                _fence.SetEventOnCompletion(copyDoneFenceVal, _fenceEvent);
+                _ = WaitForSingleObject(_fenceEvent, uint.MaxValue);
+
+            }
         }
         catch (SharpGen.Runtime.SharpGenException sharpEX)
         {

@@ -37,12 +37,12 @@ namespace FracturingFog;
 public sealed class MiniMapPanel : Control
 {
     // ── Fixed overview parameters ─────────────────────────────────────────────
-    private const int MapW      = 200;    // pixel width  of the mini-map bitmap
-    private const int MapH      = 160;    // pixel height of the mini-map bitmap
+    private const int MapW      = 220;    // pixel width  of the mini-map bitmap
+    private const int MapH      = 180;    // pixel height of the mini-map bitmap
     private const int Pad       = 4;      // border padding around bitmap
     private const double FullCX = -0.5;  // classic full-set centre (real)
     private const double FullCY =  0.0;  // classic full-set centre (imag)
-    private const double FullZoom = 0.5; // zoom that shows the complete set
+    private const double FullZoom = 1.5; // zoom that shows the complete set
 
     // ── Callbacks ─────────────────────────────────────────────────────────────
     private Func<(double cx, double cy)>? _getCenter;

@@ -17,6 +17,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Vortice.Direct3D12.Video;
+
 namespace FracturingFog.Models
 {
     // ── Data model ────────────────────────────────────────────────────────────
@@ -234,6 +236,64 @@ namespace FracturingFog.Models
             },
         ];
 
+        // ── Interesting random-zoom regions for the slideshow ────────────────────
+        // These are hand-picked coordinates that are visually striking but not
+        // shown as named bookmarks in the UI.  The slideshow draws from both
+        // _builtIns (and user regions) and _randomPool.
+        private static readonly FractalRegion[] _randomPool =
+        [
+            // ── Deep seahorse spirals ──────────────────────────────────────────────
+            new() { Name="R:SeahorseA",  CenterX=-0.74878, CenterY=0.06508, Zoom=12000.0, Iterations=2000, QualityPreset=QualityPreset.High },
+            new() { Name="R:SeahorseB",  CenterX=-0.74529, CenterY=0.11307, Zoom=8000.0,  Iterations=1800, QualityPreset=QualityPreset.High },
+            new() { Name="R:SeahorseC",  CenterX=-0.74364, CenterY=0.13183, Zoom=5000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:SeahorseD",  CenterX=-0.77568, CenterY=0.13646, Zoom=15000.0, Iterations=2500, QualityPreset=QualityPreset.High },
+            // ── Elephant valley variations ─────────────────────────────────────────
+            new() { Name="R:ElephantA",  CenterX=0.32530,  CenterY=0.04868, Zoom=4000.0,  Iterations=1600, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:ElephantB",  CenterX=0.375534459723856,  CenterY=-0.221346110647405,Zoom=2000.0,  Iterations=1200, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:ElephantC",  CenterX=0.44068,  CenterY=0.36122, Zoom=6000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
+            // ── Mini Mandelbrots (self-similar copies) ─────────────────────────────
+            new() { Name="R:MiniA",      CenterX=-1.62917, CenterY=0.00000, Zoom=3000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:MiniB",      CenterX=-0.15652, CenterY=1.03225, Zoom=4000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:MiniC",      CenterX=-1.25067, CenterY=0.02012, Zoom=5000.0,  Iterations=2200, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:MiniD",      CenterX=0.37001,  CenterY=-0.67991,Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High },
+            new() { Name="R:MiniE",      CenterX=-1.94157, CenterY=0.00000, Zoom=12000.0, Iterations=3000, QualityPreset=QualityPreset.High },
+            // ── Spiral galaxies / triple spirals ───────────────────────────────────
+            new() { Name="R:SpiralA",    CenterX=-0.56220, CenterY=0.63900, Zoom=7000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
+            new() { Name="R:SpiralB",    CenterX=-0.09930, CenterY=0.65440, Zoom=9000.0,  Iterations=2200, QualityPreset=QualityPreset.High },
+            new() { Name="R:SpiralC",    CenterX=-0.52768, CenterY=0.52768, Zoom=3000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:SpiralD",    CenterX=-0.07100, CenterY=0.67400, Zoom=20000.0, Iterations=3000, QualityPreset=QualityPreset.High },
+            // ── Period-3 bulb and neighbourhood ───────────────────────────────────
+            new() { Name="R:Period3A",   CenterX=-0.12256, CenterY=0.74493, Zoom=3000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:Period3B",   CenterX=-0.13500, CenterY=0.65000, Zoom=1500.0,  Iterations=1200, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:Period3C",   CenterX=-0.16667, CenterY=1.04000, Zoom=2500.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            // ── Lightning / filament zones ─────────────────────────────────────────
+            new() { Name="R:LightA",     CenterX=-0.61803, CenterY=0.38320, Zoom=1500.0,  Iterations=1400, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:LightB",     CenterX=-0.50200, CenterY=0.53200, Zoom=2800.0,  Iterations=1600, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:LightC",     CenterX=-0.75000, CenterY=0.10500, Zoom=800.0,   Iterations=1000, QualityPreset=QualityPreset.Standard },
+            // ── Parabolic / satellite bulbs ────────────────────────────────────────
+            new() { Name="R:ParabA",     CenterX=-1.40115, CenterY=0.00000, Zoom=4000.0,  Iterations=2500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:ParabB",     CenterX=-1.31097, CenterY=0.07280, Zoom=3000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:ParabC",     CenterX=-0.79543, CenterY=0.12523, Zoom=10000.0, Iterations=2500, QualityPreset=QualityPreset.High },
+            // ── Deep double spirals ────────────────────────────────────────────────
+            new() { Name="R:DblSpiralA", CenterX=-0.72700, CenterY=0.18900, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
+            new() { Name="R:DblSpiralB", CenterX=-0.74108, CenterY=0.16858, Zoom=30000.0, Iterations=3500, QualityPreset=QualityPreset.High },
+            new() { Name="R:DblSpiralC", CenterX=-0.73657, CenterY=0.18781, Zoom=18000.0, Iterations=3000, QualityPreset=QualityPreset.High },
+            // ── Upper filament / star clusters ────────────────────────────────────
+            new() { Name="R:StarA",      CenterX=-0.15920, CenterY=1.03170, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:StarB",      CenterX=-0.17460, CenterY=1.02640, Zoom=4000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:StarC",      CenterX=-0.22700, CenterY=1.11600, Zoom=3500.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            // ── Needle tip zone ───────────────────────────────────────────────────
+            new() { Name="R:NeedleA",    CenterX=-1.99991, CenterY=0.00000, Zoom=15000.0, Iterations=3000, QualityPreset=QualityPreset.Ultra },
+            new() { Name="R:NeedleB",    CenterX=-1.99999, CenterY=0.00000, Zoom=50000.0, Iterations=5000, QualityPreset=QualityPreset.Ultra },
+            // ── Cauliflower / cardioid edge ────────────────────────────────────────
+            new() { Name="R:CauliA",     CenterX=0.25010,  CenterY=0.00000, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:CauliB",     CenterX=0.25001,  CenterY=0.00100, Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High },
+            // ── Deep zoom demo points (DD precision) ──────────────────────────────
+            new() { Name="R:DeepA",      CenterX=-0.743643887037151, CenterY=0.131825904205330, Zoom=1e14, Iterations=8000, QualityPreset=QualityPreset.High },
+            new() { Name="R:DeepB",      CenterX=-0.7336438924734, CenterY=0.2455211406827,     Zoom=5e13, Iterations=6000, QualityPreset=QualityPreset.High },
+            new() { Name="R:DeepC",      CenterX=0.001643721971153, CenterY=0.822467633298876,  Zoom=3e14, Iterations=10000,QualityPreset=QualityPreset.Ultra },
+        ];
+
         // ── Public collections ────────────────────────────────────────────────
 
         /// <summary>Read-only list of built-in regions.</summary>
@@ -251,6 +311,20 @@ namespace FracturingFog.Models
             {
                 foreach (var r in _builtIns) yield return r;
                 foreach (var r in UserRegions) yield return r;
+                //foreach(var r in _randomPool) yield return r;
+            }
+        }
+
+        /// <summary>
+        /// All slideshow-eligible regions: built-ins, user-defined, and interesting random pool.
+        /// </summary>
+        public IEnumerable<FractalRegion> AllSlideshowRegions
+        {
+            get
+            {
+                foreach (var r in _builtIns) yield return r;
+                foreach (var r in UserRegions) yield return r;
+                foreach (var r in _randomPool) yield return r;
             }
         }
 

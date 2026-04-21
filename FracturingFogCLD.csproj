@@ -24,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="C:\Users\bradl\Documents\regions.json" Link="regions.json" />
+    <None Include="C:\Users\bradl\Documents\regions.json" Link="Resources\regions.json" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
@@ -39,6 +39,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Resources\FFLogo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\regions.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Resources\reset.bmp">
