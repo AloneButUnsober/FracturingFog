@@ -119,7 +119,7 @@ float4 PS(VSOut i) : SV_Target
         get
         {
             if (_device == null) return "DirectX 11";
-            return $"DirectX 11 (Feature Level {_device.FeatureLevel})";
+            return $"DirectX 11"; // (Feature Level {_device.FeatureLevel})";
         }
     }
 

@@ -144,15 +144,6 @@
     "Description": "Saved 2026-04-13 18:23"
   },
   {
-    "Name": "Life After Death",
-    "CenterX": -0.14892675495024782,
-    "CenterY": 0.6518040529583666,
-    "Zoom": 2174435948.725894,
-    "Iterations": 5804,
-    "QualityPresetName": "Ultra",
-    "Description": "Saved 2026-04-14 18:43"
-  },
-  {
     "Name": "Rosette",
     "CenterX": -1.7687788319518845,
     "CenterY": 0.001738993325347507,
@@ -313,5 +304,68 @@
     "Iterations": 65534,
     "QualityPresetName": "Ultra",
     "Description": "Saved 2026-04-18 17:42"
+  },
+  {
+    "Name": "Ball Lightning",
+    "CenterX": 0.4408194209288772,
+    "CenterY": 0.3612301390662679,
+    "Zoom": 2436163.6113209003,
+    "Iterations": 2146,
+    "QualityPresetName": "High",
+    "Description": "Saved 2026-04-21 09:15"
+  },
+  {
+    "Name": "Lightning Pool",
+    "CenterX": 0.4408193676166251,
+    "CenterY": 0.3612300912949911,
+    "Zoom": 6827589812287.592,
+    "Iterations": 3797,
+    "QualityPresetName": "High",
+    "Description": "Saved 2026-04-21 09:19"
+  },
+  {
+    "Name": "Radiation",
+    "CenterX": 0.40679612541749804,
+    "CenterY": -0.5677880890625098,
+    "Zoom": 30041178727.581234,
+    "Iterations": 3194,
+    "QualityPresetName": "High",
+    "Description": "Saved 2026-04-21 09:38"
+  },
+  {
+    "Name": "Blackhole Sun",
+    "CenterX": 0.4067961254174476,
+    "CenterY": -0.5677880890624725,
+    "Zoom": 1264479279754.6765,
+    "Iterations": 3610,
+    "QualityPresetName": "High",
+    "Description": "Saved 2026-04-21 09:39"
+  },
+  {
+    "Name": "Four Leaft CLover",
+    "CenterX": -0.14892675495024782,
+    "CenterY": 0.6518040529583666,
+    "Zoom": 2174435948.725894,
+    "Iterations": 5804,
+    "QualityPresetName": "Ultra",
+    "Description": "Saved 2026-04-21 14:09"
+  },
+  {
+    "Name": "Wave N Twist",
+    "CenterX": 0.2500942583344724,
+    "CenterY": 1.3326285732846634E-06,
+    "Zoom": 1125237993846.3035,
+    "Iterations": 1798,
+    "QualityPresetName": "Standard",
+    "Description": "Saved 2026-04-21 14:47"
+  },
+  {
+    "Name": "Peanut",
+    "CenterX": -1.8601137857734173,
+    "CenterY": 9.968588716880535E-08,
+    "Zoom": 151427.50000000006,
+    "Iterations": 919,
+    "QualityPresetName": "Standard",
+    "Description": "Saved 2026-04-21 14:57"
   }
 ]

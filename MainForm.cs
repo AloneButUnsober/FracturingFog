@@ -177,7 +177,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = $"Fracturing Fog  —  Mandelbrot Explorer  ({RendererFactory.ProbeDescription()} · Vortice 3.8.3)";
+        Text = $"Fracturing Fog - {RendererFactory.ProbeDescription()}";
         ClientSize = new Size(1365, 768);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
@@ -727,7 +727,7 @@ public sealed class MainForm : Form
             _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
-            Text = $"Fracturing Fog  —  Mandelbrot Explorer  ({_renderer.RendererDescription} · Vortice 3.8.3)";
+            Text = $"Fracturing Fog  —  {_renderer.RendererDescription}";
             ApplyViewState();
             TriggerCalculation();
         }
