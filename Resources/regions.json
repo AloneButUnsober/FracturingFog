@@ -367,5 +367,14 @@
     "Iterations": 919,
     "QualityPresetName": "Standard",
     "Description": "Saved 2026-04-21 14:57"
+  },
+  {
+    "Name": "Sun",
+    "CenterX": -0.7765928682,
+    "CenterY": 0.13664084759882775,
+    "Zoom": 324049999.99999994,
+    "Iterations": 5381,
+    "QualityPresetName": "Ultra",
+    "Description": "Saved 2026-04-22 07:10"
   }
 ]

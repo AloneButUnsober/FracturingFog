@@ -34,13 +34,14 @@ namespace FracturingFog;
 public sealed class MainForm : Form
 {
     // ── Program  ───────────────────────────────────────────────────────
-    private readonly string _programVersion = "0.0.1";
+    private readonly string _programVersion = "0.1";
     private readonly string _programName = "Fracturing Fog";
 
     // ── UI: top toolbar ───────────────────────────────────────────────────────
     private readonly Panel _toolbar;
     private readonly Button _resetButton;
     private readonly Button _spanButton;
+    private readonly Button _posterButton;
     private readonly Button _screenshotButton;
     private readonly Button _slideshowButton;
     private readonly ComboBox _qualityCombo;
@@ -71,7 +72,7 @@ public sealed class MainForm : Form
     private bool _gridVisible;
 
     // Force D3D11 mode for testing:  (change the next line, recompile, and run on a D3D12-capable machine)
-    private bool _forceD3D11 => false;
+    private bool _forceD3D11 => true;
 
     // ── Mini-map ──────────────────────────────────────────────────────────────
     private MiniMapPanel? _miniMapPanel;
@@ -281,6 +282,12 @@ public sealed class MainForm : Form
         _screenshotButton.Left = buttonLeft;
         _screenshotButton.Click += OnScreenshotClick;
         _toolbar.Controls.Add(_screenshotButton);
+        buttonLeft += 58;
+
+        _posterButton = MakeBtn("Poster", 55);
+        _posterButton.Left = buttonLeft;
+        _posterButton.Click += OnPosterClick;
+        _toolbar.Controls.Add(_posterButton);
         buttonLeft += 58;
 
         _slideshowButton = MakeBtn("Slideshow", 72);
@@ -771,6 +778,74 @@ public sealed class MainForm : Form
         KeyDown += OnKeyDown;
         FormClosing += OnFormClosing;
         Application.Idle += OnApplicationIdle;
+    }
+
+    private void OnPosterClick(object? sender, EventArgs e)
+    {
+        if (_calculator == null)
+        {
+            MessageBox.Show("No fractal data to save yet.", "Poster",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dlg = new PosterDialog();
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        bool isPortrait = dlg.IsPortrait;
+        bool rotateImage = dlg.RotateImage;
+        int  width = int.TryParse(dlg.WidthInput, out var w) ? w : 0;
+        int height = int.TryParse(dlg.HeightInput, out var h) ? h : 0;
+        if (width <= 0 || height <= 0)
+        {
+            MessageBox.Show("Width and Height must be positive numbers.", "Save View",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (width > 20000 || height > 20000)
+        {
+            var result = MessageBox.Show(
+                $"Cannot use dimensions {width}x{height}. Maximum allowed is 20000x20000.",
+                "Maximums Exceeded", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+        }
+    
+        string colorName = _calculator.ColorMap?.GetType().GetProperty("Name")?.GetValue(null)?.ToString() ?? "Theme";
+        string regionName = "";
+        if (!string.IsNullOrEmpty(CurrentRegionName()))
+            regionName = CurrentRegionName()?.Replace(" ", "") + "_" ?? "";
+
+        int savedW = isPortrait ? height : width;
+        int savedH = isPortrait ? width : height;
+        string sizeTag = $"{savedW}x{savedH}_poster";
+        string rotatedTag = isPortrait ? "_portrait" : rotateImage ? "_rotated" : "";
+
+        using var saveDlg = new SaveFileDialog
+        {
+            Title = "Save Poster Image",
+            Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
+            FilterIndex = 1,
+            DefaultExt = "png",
+            FileName = $"{_programName}_{colorName}_{regionName}" +
+                         $"x{_txCX.Text.Replace(".", "")}_" +
+                         $"y{_txCY.Text.Replace(".", "")}_" +
+                         $"z{_txZoom.Text.Replace(".", "")}_" +
+                         $"i{_txIter.Text.Replace(".", "")}_" +
+                         sizeTag +
+                         rotatedTag
+        };
+        if (saveDlg.ShowDialog(this) != DialogResult.OK) return;
+
+        string path = saveDlg.FileName;
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+        var format = ext switch { ".bmp" => ImageFormat.Bmp, ".tif" or ".tiff" => ImageFormat.Tiff, _ => ImageFormat.Png };
+        string wm = $"{(!string.IsNullOrEmpty(CurrentRegionName()) ? CurrentRegionName() : "Fracturing Fog")}" +
+                      $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
+        string subText = $"{_programName} v{_programVersion} {DateTime.Now.Year}";
+
+        TakePosterScreenshot(width, height, isPortrait, rotateImage, path, format, wm, subText);
+
     }
 
     private void OnFlipClick(object? sender, EventArgs e)
@@ -2084,6 +2159,103 @@ public sealed class MainForm : Form
         }, TaskScheduler.Default);
     }
 
+    private void TakePosterScreenshot(int width, int height, bool isPortrait, bool rotateImage, string path, ImageFormat format, string waterMark, string subText)
+    {
+        int fullW = width;
+        int fullH = height;
+
+        int toolbarH = 0;
+        foreach (Control c in Controls)
+            if (c.Dock == DockStyle.Top) toolbarH += c.Height;
+
+        double cx = _calculator!.CenterX;
+        double cy = _calculator!.CenterY;
+        double zoom = _calculator!.Zoom;
+        int maxIter = _calculator!.MaxIterations;
+        IColorMap map = _calculator!.ColorMap;
+        QualityPreset q = _quality;
+
+        long mpix = (long)fullW * fullH / 1_000_000;
+        _screenshotButton.Enabled = false;
+        _posterButton.Enabled = false;
+        _posterButton.Text = "Rendering…";
+        SetStatus($"Rendering poster  {fullW}×{fullH}  ({mpix} MP, +{toolbarH} px over render panel)  …");
+
+        CancellationToken token;
+        lock (_wallpaperLock)
+        {
+            _wallpaperCts?.Cancel();
+            _wallpaperCts = new CancellationTokenSource();
+            token = _wallpaperCts.Token;
+        }
+
+        var sw = Stopwatch.StartNew();
+
+        Task.Run(() =>
+        {
+            var tempCalc = new MandelbrotCalculator(fullW, fullH)
+            {
+                CenterX = cx,
+                CenterY = cy,
+                Zoom = zoom,
+                MaxIterations = maxIter,
+                ColorMap = map,
+                Quality = q
+            };
+            tempCalc.Calculate(token);
+            token.ThrowIfCancellationRequested();
+            return tempCalc;
+        }, token)
+        .ContinueWith(t =>
+        {
+            if (!IsHandleCreated || _disposed) return;
+            Invoke(() =>
+            {
+                _screenshotButton.Enabled = true;
+                _screenshotButton.Text = "Image";
+                _posterButton.Enabled = true;
+                _posterButton.Text = "Poster";
+
+                if (t.IsCanceled) { SetStatus("Poster render cancelled."); return; }
+                if (t.IsFaulted)
+                {
+                    MessageBox.Show($"Poster render failed:\n\n{t.Exception?.InnerException?.Message}",
+                        "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                sw.Stop();
+                MandelbrotCalculator result = t.Result;
+                try
+                {
+                    // Rotate 90° clockwise when portrait or rotateImage is requested.
+                    // The landscape render (width × height) becomes portrait (height × width).
+                    if (isPortrait || rotateImage)
+                    {
+                        var rotated = new uint[result.ColorBuffer.Length];
+                        for (int y = 0; y < result.Height; y++)
+                            for (int x = 0; x < result.Width; x++)
+                                rotated[x * result.Height + (result.Height - 1 - y)] = result.ColorBuffer[y * result.Width + x];
+                        // After 90° CW rotation the saved dimensions are result.Height × result.Width.
+                        var fontColor = ComputeContrastColor(GetSwatchColor(),
+                            watermark: true, pixels: rotated, imgW: result.Height, imgH: result.Width);
+                        SavePixelsToFile(rotated, result.Height, result.Width, path, format, waterMark, fontColor, subText);
+                        SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Height}×{result.Width} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
+                    }
+                    else
+                    {
+                        var fontColor = ComputeContrastColor(GetSwatchColor(),
+                            watermark: true, pixels: result.ColorBuffer,
+                            imgW: result.Width, imgH: result.Height);
+                        SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, fontColor, subText);
+                        SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
+                    }
+                }
+                catch (Exception ex) { MessageBox.Show($"Failed to save poster:\n\n{ex.Message}", "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            });
+        }, TaskScheduler.Default);
+    }
+
     private static unsafe void SavePixelsToFile(
         uint[] pixels, int w, int h, string path, ImageFormat format,
         string watermarkText, Color fontColor, string subText = "")
@@ -2781,6 +2953,151 @@ public sealed class InputDialog : Form
             DialogResult = DialogResult.Cancel,
             Left = 276,
             Top = 66,
+            Width = 72,
+            Height = 26,
+            BackColor = Color.FromArgb(60, 60, 60),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        AcceptButton = ok;
+        CancelButton = cancel;
+        Controls.Add(ok);
+        Controls.Add(cancel);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Minimal text-input dialog (used by Save View)
+// ─────────────────────────────────────────────────────────────────────────────
+
+public sealed class PosterDialog : Form
+{
+    public string WidthInput => _widthTx.Text;
+    public string HeightInput => _heightTx.Text;
+
+    public bool IsPortrait => _portraitCB.Checked;
+
+    public bool RotateImage => _portraitCB.Checked;
+
+    private readonly Label _widthLabel;
+    private readonly TextBox _widthTx;
+
+    private readonly Label _heightLabel;
+    private readonly TextBox _heightTx;
+
+    private readonly CheckBox _portraitCB;
+    //private readonly CheckBox _rotateCB;
+
+    public PosterDialog()
+    {
+        Text = "Poster Print";
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        ClientSize = new Size(260, 140);
+        StartPosition = FormStartPosition.CenterParent;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        BackColor = Color.FromArgb(35, 35, 35);
+        TopMost = true;
+
+        _widthLabel = new Label
+        {
+            Text = "Width:",
+            Left = 12,
+            Top = 16,
+            Width = 50,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f)
+        };
+        Controls.Add(_widthLabel);
+
+        _widthTx = new TextBox
+        {
+            Left = 63,
+            Top = 14,
+            Width = 150,
+            BackColor = Color.FromArgb(50, 50, 50),
+            ForeColor = Color.White,
+            Font = new Font("Consolas", 10f),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        Controls.Add(_widthTx);
+
+        _heightLabel = new Label
+        {
+            Text = "Height:",
+            Left = 12,
+            Top = 42,
+            Width = 50,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f)
+        };
+        Controls.Add(_heightLabel);
+
+        _heightTx = new TextBox
+        {
+            Left = 63,
+            Top = 40,
+            Width = 150,
+            BackColor = Color.FromArgb(50, 50, 50),
+            ForeColor = Color.White,
+            Font = new Font("Consolas", 10f),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        Controls.Add(_heightTx);
+
+        _portraitCB = new CheckBox
+        {
+            Text = "Portrait Orientation",
+            Left = 63,
+            Top = 66,
+            Width = 200,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            Checked = true
+        };
+        Controls.Add(_portraitCB);
+        //_portraitCB.CheckedChanged += (_, _) =>
+        //{
+        //    _rotateCB?.Enabled = !_portraitCB.Checked;
+        //};
+        ToolTip _portraitTip = new ToolTip();
+        _portraitTip.SetToolTip(_portraitCB, "If checked, the output image will be formatted for portrait-oriented paper.  If unchecked, the image will be formatted for landscape-oriented paper.  When printing a poster taller than it is wide, select portrait orientation for the best results.");
+
+        //_rotateCB = new CheckBox
+        //    {
+        //        Text = "Rotate Image 90 Degrees",
+        //        Left = 63,
+        //        Top = 88,
+        //        Width = 200,
+        //        ForeColor = Color.LightGray,
+        //        Font = new Font("Segoe UI", 9f)
+        //    };
+        //Controls.Add(_rotateCB);
+        //_rotateCB.CheckedChanged += (_, _) =>
+        //{
+        //    _portraitCB?.Enabled = !_rotateCB.Checked;
+        //};
+        //ToolTip _rotateTip = new ToolTip();
+        //_rotateTip.SetToolTip(_rotateCB, "If checked, the output image will be rotated 90 degrees clockwise. This is useful for printing on landscape-oriented paper or when the poster is taller than it is wide.");
+
+        var ok = new Button
+        {
+            Text = "OK",
+            DialogResult = DialogResult.OK,
+            Left = 63,
+            Top = 108,
+            Width = 72,
+            Height = 26,
+            BackColor = Color.FromArgb(60, 60, 60),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        var cancel = new Button
+        {
+            Text = "Cancel",
+            DialogResult = DialogResult.Cancel,
+            Left = 143,
+            Top = 108,
             Width = 72,
             Height = 26,
             BackColor = Color.FromArgb(60, 60, 60),
