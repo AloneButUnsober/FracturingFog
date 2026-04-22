@@ -22,6 +22,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 using FracturingFog.Models;
@@ -176,6 +177,18 @@ public sealed class MainForm : Form
     // Constructor
     // ─────────────────────────────────────────────────────────────────────────
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MARGINS
+    {
+        public int cxLeftWidth;
+        public int cxRightWidth;
+        public int cyTopHeight;
+        public int cyBottomHeight;
+    }
+
     public MainForm()
     {
         Text = $"Fracturing Fog - {RendererFactory.ProbeDescription()}";
@@ -243,7 +256,7 @@ public sealed class MainForm : Form
 
         _resetButton = MakeBtn("", 30);
         _resetButton.Left = buttonLeft;
-        _resetButton.Padding = new Padding(0);
+        _resetButton.Padding = new Padding(0,0,1,1);
         _resetButton.Margin = new Padding(0);
         try
         {
@@ -706,6 +719,11 @@ public sealed class MainForm : Form
             _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
         });
         contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add("On Top", null, (s, e) =>
+        {
+            TopMost = !TopMost;
+        }); 
+
         contextMenu.Items.Add("Save Image…", null, (s, e) => OnScreenshotClick(s, e));
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Reset View", null, (s, e) => OnResetClick(s, e));
@@ -778,6 +796,9 @@ public sealed class MainForm : Form
 
         try
         {
+            //MARGINS margins = new MARGINS { cxLeftWidth = 0, cxRightWidth = 0, cyTopHeight = 30, cyBottomHeight = -1 };
+            //_ = DwmExtendFrameIntoClientArea(Handle, ref margins);
+
             _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
@@ -1443,7 +1464,7 @@ public sealed class MainForm : Form
     {
         if (_slideshowRunning) return;
         _slideshowRunning = true;
-        _showSlideshowWatermark = true;
+        _showSlideshowWatermark = false;
         RepaintWithBrightnessContrast();
         _slideshowButton.Text = "■ Stop";
         _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
