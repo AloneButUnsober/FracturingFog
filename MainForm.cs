@@ -59,6 +59,7 @@ public sealed class MainForm : Form
     private readonly TextBox _txIter;
     private readonly CheckBox _chkLockIter;
     private readonly Button _goButton;
+    private readonly Button _flipButton;
 
     // ── Render panel ──────────────────────────────────────────────────────────
     private readonly RenderPanel _renderPanel;
@@ -510,8 +511,18 @@ public sealed class MainForm : Form
         buttonLeft = 8;
         MakeLbl("CX:", buttonLeft, _coordPanel); buttonLeft += 28;
         _txCX = MakeTx(buttonLeft, 182, _coordPanel, "Real part of the view centre"); buttonLeft += 190;
+
         MakeLbl("CY:", buttonLeft, _coordPanel); buttonLeft += 28;
         _txCY = MakeTx(buttonLeft, 182, _coordPanel, "Imaginary part of the view centre"); buttonLeft += 190;
+        _flipButton = MakeBtn("Flip Y", 38);
+        _flipButton.BackColor = Color.FromArgb(40, 80, 40);
+        _flipButton.Left = buttonLeft;
+        _flipButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
+        _flipButton.Click += OnFlipClick;
+        _coordPanel.Controls.Add(_flipButton);
+        _toolTip.SetToolTip(_flipButton, "Flip the view vertically (negate CY)");
+        buttonLeft += 42;
+
         MakeLbl("Zoom:", buttonLeft, _coordPanel); buttonLeft += 44;
         _txZoom = MakeTx(buttonLeft, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)"); buttonLeft += 120;
         MakeLbl("Iter:", buttonLeft, _coordPanel); buttonLeft += 38;
@@ -658,6 +669,29 @@ public sealed class MainForm : Form
 
         //Context menu for render panel (NEW)
         var contextMenu = new ContextMenuStrip();
+        contextMenu.Opening += (s, e) =>
+        {
+            if (!_spanning)             {
+                contextMenu.Items["Span Monitors"]?.Visible = true;
+                contextMenu.Items["Restore Monitors"]?.Visible = false;
+            }
+            else
+            {
+                contextMenu.Items["Span Monitors"]?.Visible = false;
+                contextMenu.Items["Restore Monitors"]?.Visible = true;
+            }
+
+            if (!_slideshowRunning)
+            {
+                contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
+                contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = false;
+            }
+            else
+            {
+                contextMenu.Items["Start/Stop Slideshow"]?.Text = "Stop Slideshow";
+                contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = true;
+            }
+        };
         contextMenu.Items.Add("Toolbar", null, (s, e) =>
         {
             _toolbar.Visible = !_toolbar.Visible;
@@ -676,6 +710,9 @@ public sealed class MainForm : Form
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Reset View", null, (s, e) => OnResetClick(s, e));
         contextMenu.Items.Add("Span Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
+        contextMenu.Items.Add("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
+        contextMenu.Items["Restore Monitors"]?.Visible = false;
+
         contextMenu.Items.Add("Grid", null, (s, e) =>
         {
             checkBoxShowGrid.Checked = !checkBoxShowGrid.Checked;
@@ -683,7 +720,14 @@ public sealed class MainForm : Form
             RepaintWithBrightnessContrast();
         });
         contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("Start/Stop Slideshow", null, (s, e) => OnSlideshowClick(s, e));
+        contextMenu.Items.Add("Start/Stop Slideshow", null, (s, e) =>
+        {
+            OnSlideshowClick(s, e);
+            if (!_slideshowRunning) contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
+            else contextMenu.Items["Start/Stop Slideshow"]?.Text = "Stop Slideshow";
+        });
+        contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
+
         var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region") { Enabled = false };
         skipItem.Click += (s, e) => SkipSlideshowRegion();
         contextMenu.Items.Add(skipItem);
@@ -709,6 +753,16 @@ public sealed class MainForm : Form
         KeyDown += OnKeyDown;
         FormClosing += OnFormClosing;
         Application.Idle += OnApplicationIdle;
+    }
+
+    private void OnFlipClick(object? sender, EventArgs e)
+    {
+        double _tempCY = Double.TryParse(_txCY.Text, out var cy) ? cy : 0;
+        if (_tempCY != 0)
+        {
+            _txCY.Text = (-_tempCY).ToString();
+            OnGoClick(sender, e);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1019,7 +1073,7 @@ public sealed class MainForm : Form
             default: rr = cv; gg = 0; bb = xv; break;
         }
         // Watermark mode is always fully opaque; fade flag kept for non-watermark uses.
-        int alpha = watermark ? 255 : 255;
+        int alpha = watermark ? 205 : 255;
         return Color.FromArgb(
             alpha,
             (int)System.Math.Clamp((rr + m) * 255f, 0, 255),
@@ -1767,7 +1821,16 @@ public sealed class MainForm : Form
 
     private void OnSpanMonitorsClick(object? sender, EventArgs e)
     {
-        if (_spanning) ExitSpanMode(); else EnterSpanMode();
+        if (_spanning)
+        {
+            ExitSpanMode();
+        }
+        else
+        {
+            EnterSpanMode();
+            
+        }
+
     }
 
     private void EnterSpanMode()
