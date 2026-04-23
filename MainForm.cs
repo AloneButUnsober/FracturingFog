@@ -803,10 +803,10 @@ public sealed class MainForm : Form
             return;
         }
 
-        if (width > 20000 || height > 20000)
+        if (width > 200000 || height > 200000)
         {
             var result = MessageBox.Show(
-                $"Cannot use dimensions {width}x{height}. Maximum allowed is 20000x20000.",
+                $"Cannot use dimensions {width}x{height}. Maximum allowed is 200000x200000.",
                 "Maximums Exceeded", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
         }
@@ -2985,26 +2985,127 @@ public sealed class PosterDialog : Form
     private readonly Label _heightLabel;
     private readonly TextBox _heightTx;
 
+    private readonly Label _posterWLabel;
+    private readonly Label _posterHLabel;
+    private readonly TextBox _postWTx;
+    private readonly TextBox _postHTx;
+
     private readonly CheckBox _portraitCB;
-    //private readonly CheckBox _rotateCB;
+    private readonly CheckBox _lowDefCB;
+    private readonly CheckBox _medDefCB;
+    private readonly CheckBox _highDefCB;
+
 
     public PosterDialog()
     {
         Text = "Poster Print";
         FormBorderStyle = FormBorderStyle.FixedDialog;
-        ClientSize = new Size(260, 140);
+        ClientSize = new Size(440, 180);
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
         BackColor = Color.FromArgb(35, 35, 35);
         TopMost = true;
 
+        _posterHLabel = new Label
+        {
+            Text = "Poster Height (inches):",
+            Left = 12,
+            Top = 12,
+            Width = 150,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f)
+        };
+
+        _postHTx = new TextBox
+        {
+            Left = 163,
+            Top = 10,
+            Width = 50,
+            BackColor = Color.FromArgb(50, 50, 50),
+            ForeColor = Color.White,
+            Font = new Font("Consolas", 10f),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        _postHTx.TextChanged += (s, e) => CalculatePixelDimensions();
+
+        Controls.Add(_posterHLabel);
+        Controls.Add(_postHTx);
+
+        _postWTx = new TextBox
+        {
+            Left = 163,
+            Top = 36,
+            Width = 50,
+            BackColor = Color.FromArgb(50, 50, 50),
+            ForeColor = Color.White,
+            Font = new Font("Consolas", 10f),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        _postWTx.TextChanged += (s, e) => CalculatePixelDimensions();
+
+        _posterWLabel = new Label
+        {
+            Text = "Poster Width (inches):",
+            Left = 12,
+            Top = 38,
+            Width = 150,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f)
+        };
+
+        Controls.Add(_posterWLabel);
+        Controls.Add(_postWTx);
+
+        _lowDefCB = new CheckBox
+        {
+            Text = "Low Def (150 DPI)",
+            Left = 223,
+            Top = 36,
+            Width = 120,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            Checked = false
+        };
+        _lowDefCB.CheckedChanged += (s, e) => CalculatePixelDimensions();
+
+        Controls.Add(_lowDefCB);
+
+        _medDefCB = new CheckBox
+        {
+            Text = "Med Def (300 DPI)",
+            Left = 223,
+            Top = 60,
+            Width = 120,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            Checked = true
+        };
+        _medDefCB.CheckedChanged += (s, e) => CalculatePixelDimensions();
+
+        Controls.Add(_medDefCB);
+
+        _highDefCB = new CheckBox
+        {
+            Text = "High Def (600 DPI)",
+            Left = 223,
+            Top = 84,
+            Width = 120,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            Checked = false
+        };
+        _highDefCB.CheckedChanged += (s, e) => CalculatePixelDimensions();
+        Controls.Add(_highDefCB);
+
+
         _widthLabel = new Label
         {
-            Text = "Width:",
+            Text = "Pixel Width:",
             Left = 12,
-            Top = 16,
-            Width = 50,
+            Top = 70,
+            Width = 120,
+            TextAlign = ContentAlignment.MiddleRight,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 9f)
         };
@@ -3012,9 +3113,9 @@ public sealed class PosterDialog : Form
 
         _widthTx = new TextBox
         {
-            Left = 63,
-            Top = 14,
-            Width = 150,
+            Left = 163,
+            Top = 71,
+            Width = 50,
             BackColor = Color.FromArgb(50, 50, 50),
             ForeColor = Color.White,
             Font = new Font("Consolas", 10f),
@@ -3024,10 +3125,11 @@ public sealed class PosterDialog : Form
 
         _heightLabel = new Label
         {
-            Text = "Height:",
+            Text = "Pixel Height:",
             Left = 12,
-            Top = 42,
-            Width = 50,
+            Top = 98,
+            Width = 120,
+            TextAlign = ContentAlignment.MiddleRight,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 9f)
         };
@@ -3035,9 +3137,9 @@ public sealed class PosterDialog : Form
 
         _heightTx = new TextBox
         {
-            Left = 63,
-            Top = 40,
-            Width = 150,
+            Left = 163,
+            Top = 97,
+            Width = 50,
             BackColor = Color.FromArgb(50, 50, 50),
             ForeColor = Color.White,
             Font = new Font("Consolas", 10f),
@@ -3048,44 +3150,24 @@ public sealed class PosterDialog : Form
         _portraitCB = new CheckBox
         {
             Text = "Portrait Orientation",
-            Left = 63,
-            Top = 66,
+            Left = 223,
+            Top = 10,
             Width = 200,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 9f),
             Checked = true
         };
         Controls.Add(_portraitCB);
-        //_portraitCB.CheckedChanged += (_, _) =>
-        //{
-        //    _rotateCB?.Enabled = !_portraitCB.Checked;
-        //};
+
         ToolTip _portraitTip = new ToolTip();
         _portraitTip.SetToolTip(_portraitCB, "If checked, the output image will be formatted for portrait-oriented paper.  If unchecked, the image will be formatted for landscape-oriented paper.  When printing a poster taller than it is wide, select portrait orientation for the best results.");
-
-        //_rotateCB = new CheckBox
-        //    {
-        //        Text = "Rotate Image 90 Degrees",
-        //        Left = 63,
-        //        Top = 88,
-        //        Width = 200,
-        //        ForeColor = Color.LightGray,
-        //        Font = new Font("Segoe UI", 9f)
-        //    };
-        //Controls.Add(_rotateCB);
-        //_rotateCB.CheckedChanged += (_, _) =>
-        //{
-        //    _portraitCB?.Enabled = !_rotateCB.Checked;
-        //};
-        //ToolTip _rotateTip = new ToolTip();
-        //_rotateTip.SetToolTip(_rotateCB, "If checked, the output image will be rotated 90 degrees clockwise. This is useful for printing on landscape-oriented paper or when the poster is taller than it is wide.");
 
         var ok = new Button
         {
             Text = "OK",
             DialogResult = DialogResult.OK,
             Left = 63,
-            Top = 108,
+            Top = 138,
             Width = 72,
             Height = 26,
             BackColor = Color.FromArgb(60, 60, 60),
@@ -3097,7 +3179,7 @@ public sealed class PosterDialog : Form
             Text = "Cancel",
             DialogResult = DialogResult.Cancel,
             Left = 143,
-            Top = 108,
+            Top = 138,
             Width = 72,
             Height = 26,
             BackColor = Color.FromArgb(60, 60, 60),
@@ -3108,6 +3190,25 @@ public sealed class PosterDialog : Form
         CancelButton = cancel;
         Controls.Add(ok);
         Controls.Add(cancel);
+    }
+
+    private void CalculatePixelDimensions()
+    {
+        int posterHeightInches = 0;
+        int posterWidthInches = 0;
+
+        int.TryParse(_postHTx.Text, out posterHeightInches);
+        int.TryParse(_postWTx.Text, out posterWidthInches);
+        if (posterHeightInches < 0 || posterWidthInches < 0)
+        {
+            MessageBox.Show("Please enter valid integer values for poster width and height in inches.", "Invalid Input", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        int dpi = _lowDefCB.Checked ? 150 : _highDefCB.Checked ? 600 : 300;
+        int pixelWidth = posterWidthInches * dpi;
+        int pixelHeight = posterHeightInches * dpi;
+        _widthTx.Text = pixelWidth.ToString();
+        _heightTx.Text = pixelHeight.ToString();
     }
 }
 
