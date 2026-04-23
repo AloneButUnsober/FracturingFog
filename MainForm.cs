@@ -257,7 +257,7 @@ public sealed class MainForm : Form
 
         _resetButton = MakeBtn("", 30);
         _resetButton.Left = buttonLeft;
-        _resetButton.Padding = new Padding(0,0,1,1);
+        _resetButton.Padding = new Padding(0, 0, 1, 1);
         _resetButton.Margin = new Padding(0);
         try
         {
@@ -691,7 +691,8 @@ public sealed class MainForm : Form
         var contextMenu = new ContextMenuStrip();
         contextMenu.Opening += (s, e) =>
         {
-            if (!_spanning)             {
+            if (!_spanning)
+            {
                 contextMenu.Items["Span Monitors"]?.Visible = true;
                 contextMenu.Items["Restore Monitors"]?.Visible = false;
             }
@@ -729,7 +730,7 @@ public sealed class MainForm : Form
         contextMenu.Items.Add("On Top", null, (s, e) =>
         {
             TopMost = !TopMost;
-        }); 
+        });
 
         contextMenu.Items.Add("Save Image…", null, (s, e) => OnScreenshotClick(s, e));
         contextMenu.Items.Add(new ToolStripSeparator());
@@ -794,7 +795,7 @@ public sealed class MainForm : Form
 
         bool isPortrait = dlg.IsPortrait;
         bool rotateImage = dlg.RotateImage;
-        int  width = int.TryParse(dlg.WidthInput, out var w) ? w : 0;
+        int width = int.TryParse(dlg.WidthInput, out var w) ? w : 0;
         int height = int.TryParse(dlg.HeightInput, out var h) ? h : 0;
         if (width <= 0 || height <= 0)
         {
@@ -803,14 +804,29 @@ public sealed class MainForm : Form
             return;
         }
 
-        if (width > 200000 || height > 200000)
+        //if (width > 200000 || height > 200000)
+        //{
+        //    var result = MessageBox.Show(
+        //        $"Cannot use dimensions {width}x{height}. Maximum allowed is 200000x200000.",
+        //        "Maximums Exceeded", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        //    return;
+        //}
+
+        var (maxW, maxH) = ComputeMaxDimensions();
+        if (width > maxW || height > maxH)
         {
-            var result = MessageBox.Show(
-                $"Cannot use dimensions {width}x{height}. Maximum allowed is 200000x200000.",
-                "Maximums Exceeded", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+            long availMB = 0;
+            try { availMB = (long)(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024) * 0.60); }
+            catch { availMB = 512; }
+            MessageBox.Show(
+                $"Cannot use dimensions {width}×{height}.\n\n" +
+                $"Based on available memory (~{availMB} MB usable), the maximum\n" +
+                $"safe dimensions on this machine are approximately {maxW}×{maxH}.\n\n" +
+                "Try reducing the poster size or closing other applications.",
+                "Dimensions Too Large", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
         }
-    
+
         string colorName = _calculator.ColorMap?.GetType().GetProperty("Name")?.GetValue(null)?.ToString() ?? "Theme";
         string regionName = "";
         if (!string.IsNullOrEmpty(CurrentRegionName()))
@@ -856,6 +872,30 @@ public sealed class MainForm : Form
             _txCY.Text = (-_tempCY).ToString();
             OnGoClick(sender, e);
         }
+    }
+
+    // Compute max safe dimensions from available memory.
+    // Each pixel needs 4 bytes (BGRA uint[]), plus the calculator allocates
+    // 5 float[] buffers (smooth, distance, nx, ny) and 1 int[] (iterations)
+    // = 4 + 5*4 + 4 = 28 bytes per pixel.  We use 60% of available physical
+    // memory to leave headroom for the OS and other processes.
+    private static (int maxW, int maxH) ComputeMaxDimensions()
+    {
+        long available;
+        try
+        {
+            var gcInfo = GC.GetGCMemoryInfo();
+            available = (long)(gcInfo.TotalAvailableMemoryBytes * 0.60);
+        }
+        catch
+        {
+            available = 512L * 1024 * 1024; // 512 MB safe fallback
+        }
+        const int BytesPerPixel = 28; // see comment above
+        long maxPixels = available / BytesPerPixel;
+        // Cap each axis: assume square aspect as worst case.
+        int maxSide = (int)System.Math.Min(System.Math.Sqrt(maxPixels), 100_000);
+        return (maxSide, maxSide);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1924,7 +1964,7 @@ public sealed class MainForm : Form
         else
         {
             EnterSpanMode();
-            
+
         }
 
     }
