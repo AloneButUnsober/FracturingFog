@@ -31,13 +31,24 @@ using System.Collections.Immutable;
 
 namespace FracturingFog;
 
+/// <summary>
+/// Fracturing Fog main window and UI logic.  This class is responsible for:
+/// </summary>
 public sealed class MainForm : Form
 {
-    // ── Program  ───────────────────────────────────────────────────────
+    #region Private fields
+
+    #region Program
+
     private readonly string _programVersion = "0.1";
     private readonly string _programName = "Fracturing Fog";
+    private bool _disposed;
 
-    // ── UI: top toolbar ───────────────────────────────────────────────────────
+    #endregion Program
+
+    #region UI
+
+    // UI: top toolbar
     private readonly Panel _toolbar;
     private readonly Button _resetButton;
     private readonly Button _spanButton;
@@ -53,7 +64,7 @@ public sealed class MainForm : Form
     private readonly Button _importRegionsButton;
     private readonly ToolTip _toolTip = new();
 
-    // ── UI: coordinate / region bar ───────────────────────────────────────────
+    // UI: coordinate / region bar
     private readonly Panel _coordPanel;
     private readonly TextBox _txCX;
     private readonly TextBox _txCY;
@@ -63,7 +74,7 @@ public sealed class MainForm : Form
     private readonly Button _goButton;
     private readonly Button _flipButton;
 
-    // ── Render panel ──────────────────────────────────────────────────────────
+    // Render panel
     private readonly RenderPanel _renderPanel;
 
     // GridOverlayPanel — sibling of _renderPanel; see architecture note below.
@@ -74,19 +85,32 @@ public sealed class MainForm : Form
     // Force D3D11 mode for testing:  (change the next line, recompile, and run on a D3D12-capable machine)
     private bool _forceD3D11 => true;
 
-    // ── Mini-map ──────────────────────────────────────────────────────────────
+    // Mini-map
     private MiniMapPanel? _miniMapPanel;
 
-    // ── Footer ────────────────────────────────────────────────────────────────
+    // Footer
     private readonly Label _statusLabel;
     private readonly Panel _footerPanel;
 
-    // ── Core objects ──────────────────────────────────────────────────────────
+    // Brightness / Contrast
+    private TrackBar? _brightnessSlider;
+    private TrackBar? _contrastSlider;
+    private Label? _brightnessLabel;
+    private Label? _contrastLabel;
 
-    private IFractalRenderer? _renderer;          // D3D12 or D3D11
-    private MandelbrotCalculator? _calculator;
+    /// <summary>Brightness offset in [-100, 100]; 0 = neutral.</summary>
+    private int _brightness = 0;
 
-    // ── View state ────────────────────────────────────────────────────────────
+    /// <summary>Contrast multiplier encoded as integer [-100, 100]; 0 = neutral (1.0×).</summary>
+    private int _contrast = 0;
+
+    // Mouse click-n-drag window repositioning
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCAPTION = 0x2;
+
+    #endregion UI
+
+    #region View state
 
     private const double DefaultCenterX = -0.5;
     private const double DefaultCenterY = 0.0;
@@ -102,18 +126,26 @@ public sealed class MainForm : Form
     // Guard: prevents coord boxes being repopulated while user types.
     private bool _suppressCoordUpdate;
 
-    // ── Pan state ─────────────────────────────────────────────────────────────
+    // MiniMode flag: when true, the form is shrunk to its minimum size and borders removed.
+    private bool _miniMode = false;
+    private Size _miniPreviousSize;
+    private FormBorderStyle _miniPreviousBorderStyle;
 
+    // Pan state 
     private bool _panning;
     private Point _panStartScreen;
     private double _panStartCX;
     private double _panStartCY;
+    private FracturingFog.FFMath.DD _panStartDDCX;
+    private FracturingFog.FFMath.DD _panStartDDCY;
 
     // Pan-stop debounce timer — fires full-quality render after drag ends.
     private readonly System.Windows.Forms.Timer _panStopTimer;
 
-    // ── Multi-monitor span state ──────────────────────────────────────────────
+    // Double-click pan suppression
+    private Point _lastMouseDownPos;
 
+    // Multi-monitor span state
     private bool _spanning;
     private bool _fullScreen;
     private Rectangle _preSpanBounds;
@@ -123,11 +155,15 @@ public sealed class MainForm : Form
     private bool _preCoordBarVisible;
     private bool _preFooterVisible;
 
-    // ── Async calculation ─────────────────────────────────────────────────────
+    #endregion View state
 
+    #region Core objects - Async calculation - Buffer management
+
+    // Core Objects
+    private IFractalRenderer? _renderer;          // D3D12 or D3D11
+    private MandelbrotCalculator? _calculator;
     private CancellationTokenSource? _calcCts;
     private readonly object _calcLock = new();
-
 
     // The most recently completed, post-processed colour buffer.
     // Re-uploaded at the start of every new calculation so the previous
@@ -140,7 +176,13 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _wallpaperCts;
     private readonly object _wallpaperLock = new();
 
-    // ── Slideshow state ───────────────────────────────────────────────────────
+    // Iteration lock
+    private bool _iterLocked;       // mirrors _chkLockIter.Checked
+    private int _lockedIterations; // value held while locked
+
+    #endregion Async calculation - Buffer management
+
+    #region Slideshow state
 
     private bool _slideshowRunning;
     private CancellationTokenSource? _slideshowCts;
@@ -150,37 +192,27 @@ public sealed class MainForm : Form
     private string _slideshowRegionName = "";
     private CancellationTokenSource? _slideshowSkipCts;   // cancelled to skip current region
 
-    // ── Iteration lock ────────────────────────────────────────────────────────
+    #endregion Slideshow state
 
-    private bool _iterLocked;       // mirrors _chkLockIter.Checked
-    private int _lockedIterations; // value held while locked
-
-    // ── Brightness / Contrast ─────────────────────────────────────────────────
-
-    private TrackBar? _brightnessSlider;
-    private TrackBar? _contrastSlider;
-    private Label? _brightnessLabel;
-    private Label? _contrastLabel;
-
-    /// <summary>Brightness offset in [-100, 100]; 0 = neutral.</summary>
-    private int _brightness = 0;
-
-    /// <summary>Contrast multiplier encoded as integer [-100, 100]; 0 = neutral (1.0×).</summary>
-    private int _contrast = 0;
-
-    // ── Double-click pan suppression ──────────────────────────────────────────
-
-    private Point _lastMouseDownPos;
-
-    private bool _disposed;
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Constructor
-    // ─────────────────────────────────────────────────────────────────────────
+    #region DLL Imports
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
+    [DllImport("User32.dll")]
+    private static extern bool ReleaseCapture();
+    [DllImport("User32.dll")]
+    private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
 
+    #endregion DLL Imports
+
+    #endregion Private fields
+
+    #region Public Members
+
+    /// <summary>
+    /// MARGINS struct for DwmExtendFrameIntoClientArea call to enable Aero glass effect on the toolbar.  
+    /// All fields set to -1 to extend the glass over the entire toolbar area.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct MARGINS
     {
@@ -190,6 +222,13 @@ public sealed class MainForm : Form
         public int cyBottomHeight;
     }
 
+    #endregion Public Members
+
+    /// <summary>
+    /// MainForm constructor: sets up the UI and event handlers.  The actual fractal renderer and 
+    /// calculator are not initialised here; that happens in OnLoad to ensure the form is fully created 
+    /// before we attempt to create D3D devices or load shaders.
+    /// </summary>
     public MainForm()
     {
         Text = $"Fracturing Fog - {RendererFactory.ProbeDescription()}";
@@ -251,6 +290,15 @@ public sealed class MainForm : Form
             Height = 38,
             Dock = DockStyle.Top,
             BackColor = Color.FromArgb(28, 28, 28),
+        };
+        _toolbar.MouseDown += (s, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                // Drag the window when the user clicks and drags the toolbar.
+                ReleaseCapture();
+                SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            }
         };
 
         int buttonLeft = 6;
@@ -512,6 +560,26 @@ public sealed class MainForm : Form
             Font = new Font("Consolas", 8f),
             Text = "Initialising…"
         };
+        _statusLabel.MouseMove += (s, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                // Drag the window when the user clicks and drags the status label.
+                ReleaseCapture();
+                SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            }
+        };
+
+        _footerPanel.MouseMove += (s, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                // Drag the window when the user clicks and drags the footer panel.
+                ReleaseCapture();
+                SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+            }
+        };
+
         _footerPanel.Controls.Add(_statusLabel);
         _footerPanel.Visible = true;
 
@@ -689,81 +757,153 @@ public sealed class MainForm : Form
 
         //Context menu for render panel (NEW)
         var contextMenu = new ContextMenuStrip();
-        contextMenu.Opening += (s, e) =>
-        {
-            if (!_spanning)
-            {
-                contextMenu.Items["Span Monitors"]?.Visible = true;
-                contextMenu.Items["Restore Monitors"]?.Visible = false;
-            }
-            else
-            {
-                contextMenu.Items["Span Monitors"]?.Visible = false;
-                contextMenu.Items["Restore Monitors"]?.Visible = true;
-            }
+        //contextMenu.Opening += (s, e) =>
+        //{
+        //    if (!_spanning)
+        //    {
+        //        contextMenu.Items["Span Monitors"]?.Visible = true;
+        //        contextMenu.Items["Restore Monitors"]?.Visible = false;
+        //    }
+        //    else
+        //    {
+        //        contextMenu.Items["Span Monitors"]?.Visible = false;
+        //        contextMenu.Items["Restore Monitors"]?.Visible = true;
+        //    }
 
-            if (!_slideshowRunning)
-            {
-                contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
-                contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = false;
-            }
-            else
-            {
-                contextMenu.Items["Start/Stop Slideshow"]?.Text = "Stop Slideshow";
-                contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = true;
-            }
-        };
-        contextMenu.Items.Add("Toolbar", null, (s, e) =>
+        //    if (!_slideshowRunning)
+        //    {
+        //        contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
+        //        contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = false;
+        //    }
+        //    else
+        //    {
+        //        contextMenu.Items["Start/Stop Slideshow"]?.Text = "Stop Slideshow";
+        //        contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = true;
+        //    }
+        //};
+        var toolbarItem = new ToolStripMenuItem("Toolbar");
+        toolbarItem.Click += (s, e) =>
         {
             _toolbar.Visible = !_toolbar.Visible;
-        }); contextMenu.Items.Add("Navigate", null, (s, e) =>
+            toolbarItem.Checked = _toolbar.Visible;
+        };
+
+        toolbarItem.Checked = true;
+        contextMenu.Items.Add(toolbarItem);
+
+        var navigateItem = new ToolStripMenuItem("Navigate");
+        navigateItem.Click += (s, e) =>
         {
             checkBoxShowCoordPanel.Checked = !checkBoxShowCoordPanel.Checked;
             _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
-        });
-        contextMenu.Items.Add("Status", null, (s, e) =>
+            navigateItem.Checked = checkBoxShowCoordPanel.Checked;
+
+        };
+
+        contextMenu.Items.Add(navigateItem);
+        var statusItem = new ToolStripMenuItem("Status");
+        statusItem.Click += (s, e) =>
         {
             checkBoxShowFooterPanel.Checked = !checkBoxShowFooterPanel.Checked;
             _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
-        });
+            statusItem.Checked = _footerPanel.Visible;
+        };
+        contextMenu.Opening += (s, e) => statusItem.Checked = _footerPanel.Visible;
+
+        contextMenu.Items.Add(statusItem);
         contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("On Top", null, (s, e) =>
+
+        var onTopItem = new ToolStripMenuItem("On Top");
+        onTopItem.Click += (s, e) =>
         {
             TopMost = !TopMost;
-        });
+            onTopItem.Checked = TopMost;
+        };
 
+        contextMenu.Items.Add(onTopItem);
+        var miniModeItem = new ToolStripMenuItem("Mini Mode");
+        miniModeItem.Click += (s, e) =>
+        {
+            _miniMode = !_miniMode;
+
+            if (_miniMode)
+            {
+                _miniPreviousBorderStyle = FormBorderStyle;
+                _miniPreviousSize = Size;
+            }
+
+            OnFormResize(s, e);  // adjust size and borders
+            miniModeItem.Checked = _miniMode;
+        };
+
+        contextMenu.Items.Add(miniModeItem);
         contextMenu.Items.Add("Save Image…", null, (s, e) => OnScreenshotClick(s, e));
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Reset View", null, (s, e) => OnResetClick(s, e));
-        contextMenu.Items.Add("Span Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
-        contextMenu.Items.Add("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
-        contextMenu.Items["Restore Monitors"]?.Visible = false;
 
-        contextMenu.Items.Add("Grid", null, (s, e) =>
+        var spanMonitorsItem = new ToolStripMenuItem("Span Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
+        contextMenu.Opening += (s, e) => spanMonitorsItem.Visible = !_spanning;
+        contextMenu.Items.Add(spanMonitorsItem);
+        var restoreMonitorsItem = new ToolStripMenuItem("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
+        restoreMonitorsItem.Checked = true;
+        contextMenu.Opening += (s, e) => restoreMonitorsItem.Visible = _spanning;
+        contextMenu.Items.Add(restoreMonitorsItem);
+        restoreMonitorsItem.Visible = false;
+
+        var gridItem = new ToolStripMenuItem("Grid");
+        gridItem.Click += (s, e) =>
         {
             checkBoxShowGrid.Checked = !checkBoxShowGrid.Checked;
             _gridVisible = checkBoxShowGrid.Checked;
             RepaintWithBrightnessContrast();
-        });
+            gridItem.Checked = checkBoxShowGrid.Checked;
+        };
+        contextMenu.Opening += (s, e) => gridItem.Checked = _gridVisible;
+        contextMenu.Items.Add(gridItem);
         contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("Start/Stop Slideshow", null, (s, e) =>
+
+        var watermarkItem = new ToolStripMenuItem("Slideshow: Toggle Watermark");
+        watermarkItem.Click += (s, e) =>
+        {
+            _showSlideshowWatermark = !_showSlideshowWatermark;
+            watermarkItem.Checked = _showSlideshowWatermark;
+        };
+        watermarkItem.Enabled = false;
+
+        var slideshowItem = new ToolStripMenuItem("Start Slideshow");
+        slideshowItem.Click += (s, e) =>
         {
             OnSlideshowClick(s, e);
-            if (!_slideshowRunning) contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
-            else contextMenu.Items["Start/Stop Slideshow"]?.Text = "Stop Slideshow";
-        });
-        contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
+            if (!_slideshowRunning) slideshowItem.Text = "Start Slideshow";
+            else slideshowItem.Text = "Stop Slideshow";
+            slideshowItem.Checked = _slideshowRunning;
+            watermarkItem.Enabled = _slideshowRunning;
+        };
+        contextMenu.Items.Add(slideshowItem);
+        contextMenu.Items.Add(watermarkItem);
 
         var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region") { Enabled = false };
         skipItem.Click += (s, e) => SkipSlideshowRegion();
         contextMenu.Items.Add(skipItem);
         contextMenu.Opening += (s, e) => skipItem.Enabled = _slideshowRunning;
+
+
+
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
 
         contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("Mini Map", null, (s, e) => ToggleMiniMap());
-        contextMenu.Items.Add("System Info…", null, (s, e) => ShowSystemInfoDialog());
+
+        var miniMapItem = new ToolStripMenuItem("Mini Map");
+        miniMapItem.Click += (s, e) =>
+        {
+            ToggleMiniMap();
+            miniMapItem.Checked = _miniMapPanel?.Visible ?? false;
+        };
+        contextMenu.Items.Add(miniMapItem);
+        var systemInfoItem = new ToolStripMenuItem("System Info…");
+        systemInfoItem.Click += (s, e) => ShowSystemInfoDialog();
+        contextMenu.Items.Add(systemInfoItem);
 
         _renderPanel.ContextMenuStrip = contextMenu;
 
@@ -2376,14 +2516,40 @@ public sealed class MainForm : Form
         double scale = CurrentScale();
         double ox = e.X - _renderPanel.ClientSize.Width * 0.5;
         double oy = e.Y - _renderPanel.ClientSize.Height * 0.5;
-        double compX = _centerX + ox * scale;
-        double compY = _centerY + oy * scale;
+        //double compX = _centerX + ox * scale;
+        //double compY = _centerY + oy * scale;
 
-        _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
+        //_zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
 
-        double ns = CurrentScale();
-        _centerX = compX - ox * ns;
-        _centerY = compY - oy * ns;
+        //double ns = CurrentScale();
+        //_centerX = compX - ox * ns;
+        //_centerY = compY - oy * ns;
+
+        // ── FIX: use DD to preserve the anchor point at deep zoom ──
+        bool useDD = _quality.NeedsHighPrecision(_zoom);
+        double compX, compY;
+        if (useDD)
+        {
+            var ddCX = new FracturingFog.FFMath.DD(_centerX);
+            var ddCY = new FracturingFog.FFMath.DD(_centerY);
+            var anchorX = ddCX + ox * scale;   // DD + double is exact
+            var anchorY = ddCY + oy * scale;
+            _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
+            double ns = CurrentScale();
+            var newCX = anchorX - ox * ns;
+            var newCY = anchorY - oy * ns;
+            _centerX = newCX.Hi;  // store Hi; Lo is below double resolution anyway
+            _centerY = newCY.Hi;  // the calculator uses DD.FromCenterOffset per-pixel
+        }
+        else
+        {
+            compX = _centerX + ox * scale;
+            compY = _centerY + oy * scale;
+            _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
+            double ns = CurrentScale();
+            _centerX = compX - ox * ns;
+            _centerY = compY - oy * ns;
+        }
 
         ApplyViewState();
         TriggerCalculation(progressive: false);
@@ -2401,6 +2567,8 @@ public sealed class MainForm : Form
         _panStartScreen = e.Location;
         _panStartCX = _centerX;
         _panStartCY = _centerY;
+        _panStartDDCX = new FracturingFog.FFMath.DD(_centerX);  // capture at start
+        _panStartDDCY = new FracturingFog.FFMath.DD(_centerY);
         _renderPanel.Cursor = Cursors.SizeAll;
     }
 
@@ -2420,8 +2588,20 @@ public sealed class MainForm : Form
         double scale = CurrentScale();
         double ox = e.X - _renderPanel.ClientSize.Width * 0.5;
         double oy = e.Y - _renderPanel.ClientSize.Height * 0.5;
-        _centerX = _centerX + ox * scale;
-        _centerY = _centerY + oy * scale;
+        //_centerX = _centerX + ox * scale;
+        //_centerY = _centerY + oy * scale;
+        if (_quality.NeedsHighPrecision(_zoom))
+        {
+            var newCX = new FracturingFog.FFMath.DD(_centerX) + ox * scale;
+            var newCY = new FracturingFog.FFMath.DD(_centerY) + oy * scale;
+            _centerX = newCX.Hi;
+            _centerY = newCY.Hi;
+        }
+        else
+        {
+            _centerX = _centerX + ox * scale;
+            _centerY = _centerY + oy * scale;
+        }
 
         ApplyViewState();
         TriggerCalculation();
@@ -2432,8 +2612,24 @@ public sealed class MainForm : Form
     {
         if (!_panning || _calculator == null) return;
         double scale = CurrentScale();
-        _centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
-        _centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
+        //_centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
+        //_centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
+
+        if (_quality.NeedsHighPrecision(_zoom))
+        {
+            double dx = -(e.X - _panStartScreen.X) * scale;
+            double dy = -(e.Y - _panStartScreen.Y) * scale;
+            var newCX = _panStartDDCX + dx;
+            var newCY = _panStartDDCY + dy;
+            _centerX = newCX.Hi;
+            _centerY = newCY.Hi;
+        }
+        else
+        {
+            _centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
+            _centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
+        }
+
         ApplyViewState();
         // Throttled pan: fire a fast capped-iteration render immediately,
         // schedule a full-quality render for 300 ms after movement stops.
@@ -2470,6 +2666,18 @@ public sealed class MainForm : Form
     {
         if (_renderer == null || _calculator == null) return;
         if (WindowState == FormWindowState.Minimized) return;
+        Debug.WriteLine($"MiniMode: {_miniMode}  Size: {Size}  RenderPanel: {_renderPanel.ClientSize} Previous Size: {_miniPreviousSize}");
+
+        if (_miniMode)
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            Size = new Size(MinimumSize.Width, MinimumSize.Height);
+        }
+        else
+        {
+            FormBorderStyle = _miniPreviousBorderStyle;
+            Size = new Size(_miniPreviousSize.Width, _miniPreviousSize.Height);
+        }
 
         int w = _renderPanel.ClientSize.Width;
         int h = _renderPanel.ClientSize.Height;

@@ -12,8 +12,9 @@
     <Optimize>true</Optimize>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyName>MandelbrotExplorer</AssemblyName>
-    <RootNamespace>MandelbrotExplorer</RootNamespace>
+    <AssemblyName>FracturingFog</AssemblyName>
+    <RootNamespace>FracturingFog</RootNamespace>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

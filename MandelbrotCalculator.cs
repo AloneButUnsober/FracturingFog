@@ -160,20 +160,24 @@ public sealed class MandelbrotCalculator
     private void CalculateDoublePrecision(CancellationToken ct)
     {
         double scale = (3.5 / System.Math.Max(Width, Height)) / Zoom;
-        double xMin  = CenterX - Width  * scale * 0.5;
-        double yMin  = CenterY - Height * scale * 0.5;
+        //double xMin  = CenterX - Width  * scale * 0.5;
+        //double yMin  = CenterY - Height * scale * 0.5;
         int    maxIt = MaxIterations;
 
         var po = new ParallelOptions { CancellationToken = ct };
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
-            ComputeRowSP(yMin + y * scale, xMin, scale, maxIt, y * Width);
+            //ComputeRowSP(yMin + y * scale, xMin, scale, maxIt, y * Width);
+
+            // Compute cy as center + offset — numerically stable
+            double cy = CenterY + (y - Height * 0.5) * scale;
+            ComputeRowSP(cy, CenterX, scale, maxIt, y * Width);
         });
 
     }
 
-    private void ComputeRowSP(double cy, double xMin, double scale,
+    private void ComputeRowSP(double cy, double centerX, double scale,
                              int maxIter, int rowBase)
     {
         var escRad2V = new Vector<double>(EscapeRadius2);
@@ -190,7 +194,8 @@ public sealed class MandelbrotCalculator
         for (; x + VecLen <= Width; x += VecLen)
         {
             for (int k = 0; k < VecLen; k++)
-                cxBuf[k] = xMin + (x + k) * scale;
+                cxBuf[k] = centerX + ((x + k) - Width * 0.5) * scale; // ← offset from center
+                                                                      //cxBuf[k] = xMin + (x + k) * scale;
             var cx = new Vector<double>(cxBuf);
 
             var zr = zeroV;  var zi = zeroV;
@@ -223,8 +228,16 @@ public sealed class MandelbrotCalculator
                 zi = Vector.ConditionalSelect(notEscaped, newZi, zi);
 
                 // Check early exit every 8 iterations to amortise overhead.
-                if ((iter & 7) == 7 && !Vector.LessThanAny(mag2, escRad2V))
-                    break;
+                //if ((iter & 7) == 7 && !Vector.LessThanAny(mag2, escRad2V))
+                // Use updated zr/zi so the escape test is never stale — reading
+                // the pre-update mag2 caused false all-escaped detections that
+                // produced vertical banding aligned to the SIMD vector width.
+                if ((iter & 7) == 7)
+                {
+                    var newMag2 = zr * zr + zi * zi;
+                    if (!Vector.LessThanAny(newMag2, escRad2V))
+                        break;
+                }
             }
 
             // Extract results lane by lane.
@@ -240,7 +253,8 @@ public sealed class MandelbrotCalculator
 
         // ── Scalar tail ───────────────────────────────────────────────────────
         for (; x < Width; x++)
-            ComputePixelSP(xMin + x * scale, cy, maxIter, rowBase + x);
+            ComputePixelSP(centerX + (x - Width * 0.5) * scale, cy, maxIter, rowBase + x);
+            //ComputePixelSP(xMin + x * scale, cy, maxIter, rowBase + x);
     }
 
 

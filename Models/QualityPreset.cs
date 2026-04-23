@@ -46,8 +46,19 @@ namespace FracturingFog.Models
     {
         // ── Identity ──────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Quality Tier enum value corresponding to this preset.  Used for serialization and lookup.
+        /// </summary>
         public QualityTier Tier { get; init; }
+
+        /// <summary>
+        /// Name of this preset, shown in the UI and used for serialization.  Should be unique across presets.
+        /// </summary>
         public string Name { get; init; } = string.Empty;
+
+        /// <summary>
+        /// Descriptive text for this preset, shown in the UI.  Should be concise but informative about the tradeoffs.
+        /// </summary>
         public string Description { get; init; } = string.Empty;
 
         // ── Zoom control ──────────────────────────────────────────────────────
