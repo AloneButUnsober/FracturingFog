@@ -43,6 +43,10 @@ namespace FracturingFog.Models
             new Tropical3DMap(),
             new OceanDepth3DMap(),
             new CesiumSpectrumPhong3D(),
+            new WoodGrainPhong3D(),
+            new CesiumSpectrumPbr3D(),
+            new CesiumSpectrumPbr3D_Realistic(),
+            new CesiumSpectrumPbr3D_UltraGlow(),
 
             // ── Classic / algorithmic ─────────────────────────────────────────
             new HsvPalette(),
@@ -66,6 +70,7 @@ namespace FracturingFog.Models
             new AuroraColorMap(),
             new PolarNightMap(),
             new CesiumSpectrumGradient(),
+            new WoodGrainGradient(),
 
             // ── Gradient — cycling ────────────────────────────────────────────
             new FirePalette(),
@@ -74,6 +79,7 @@ namespace FracturingFog.Models
             new LavaLampMap(),
             new TriColorMap(),
             new CesiumSpectrumCycling(),
+            new WoodGrainCycling(),
 
             // ── Algorithmic / artistic ────────────────────────────────────────
             new NebulaDustMap(),

@@ -1770,51 +1770,55 @@ public sealed class MainForm : Form
             uint[]? previousBuffer = null;
             if (_calculator != null && _renderer != null)
             {
-                // 1. Snapshot the current display buffer (already post-processed).
-                uint[] oldBuf = await Task.Run(() =>
+                // ── FIX: snapshot the current on-screen buffer NOW, before any
+                //    region/theme state is changed.  _lastUploadedBuffer always
+                //    holds the most-recently-uploaded post-processed frame and is
+                //    updated on the UI thread, so reading it here (still on the
+                //    background slideshow task, but before any Invoke) is safe
+                //    because we copy it under no concurrent mutation.
+                uint[] oldBuf;
+                lock (_calcLock)   // brief lock to avoid racing with TriggerCalculation
                 {
-                    if (_calculator == null) return Array.Empty<uint>();
-                    // Use the last uploaded processed buffer if available so the
-                    // cross-fade starts from exactly what was on screen.
-                    Debug.WriteLine($"SldShwLp: Last uploaded buffer: {_lastUploadedBuffer?.Length} pixels, size {_lastUploadedWidth}×{_lastUploadedHeight}");
                     if (_lastUploadedBuffer != null
+                        && _calculator != null
                         && _lastUploadedWidth == _calculator.Width
                         && _lastUploadedHeight == _calculator.Height)
                     {
-                        var copy = new uint[_lastUploadedBuffer.Length];
-                        _lastUploadedBuffer.CopyTo(copy, 0);
-                        return copy;
+                        oldBuf = new uint[_lastUploadedBuffer.Length];
+                        _lastUploadedBuffer.CopyTo(oldBuf, 0);
                     }
-                    Debug.WriteLine($"SldShwLp: Falling back to direct ColorBuffer copy of {_calculator.ColorBuffer.Length} pixels");
-                    var raw = new uint[_calculator.ColorBuffer.Length];
-                    _calculator.ColorBuffer.CopyTo(raw, 0);
-                    return raw;
-                }, ct);
+                    else if (_calculator != null)
+                    {
+                        oldBuf = new uint[_calculator.ColorBuffer.Length];
+                        _calculator.ColorBuffer.CopyTo(oldBuf, 0);
+                    }
+                    else
+                    {
+                        oldBuf = Array.Empty<uint>();
+                    }
+                }
 
-                // 2. Apply region & theme on UI thread WITHOUT triggering a
-                //    normal TriggerCalculation — we manage rendering ourselves.
+                // Apply region & theme on UI thread WITHOUT triggering a
+                // normal TriggerCalculation — we manage rendering ourselves.
                 if (ct.IsCancellationRequested) return;
                 await InvokeAsync(() =>
                 {
                     if (_disposed) return;
                     _slideshowRegionName = region.Name;
-                    // ApplyRegionSilent sets calc state without firing TriggerCalculation.
                     ApplyRegionSilent(region);
                     var map = Models.ColorPalette.GetPaletteByName(themeName);
                     if (_calculator != null) _calculator.ColorMap = map;
-                    // Update combo UI without firing the SelectedIndexChanged handler.
                     SuppressedSetRegionCombo(region.Name);
                     ApplyColorThemeSilent(themeName);
                     SetStatus($"Slideshow: {region.Name}  •  {themeName}");
                 });
 
-                // 3. Calculate on background thread.
+                // Calculate on background thread.
                 if (ct.IsCancellationRequested) return;
                 uint[] newBuf = await Task.Run(() =>
                 {
                     if (_calculator == null) return Array.Empty<uint>();
                     _calculator.Calculate(ct);
-                    // Copy raw buffer (post-processing applied during cross-fade).
                     var copy = new uint[_calculator.ColorBuffer.Length];
                     _calculator.ColorBuffer.CopyTo(copy, 0);
                     return copy;
@@ -1822,15 +1826,13 @@ public sealed class MainForm : Form
 
                 if (ct.IsCancellationRequested) return;
 
-                // 4. Cross-fade — sizes must match (no resize during transition).
+                // Cross-fade between the captured on-screen frame and the new render.
                 if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0)
                 {
-                    Debug.WriteLine($"SldShwLp: Starting cross-fade between buffers of {oldBuf.Length} pixels");
                     await CrossFade(oldBuf, newBuf, fadeSteps, fadeStepMs, ct);
-                }                    
+                }
                 else
                 {
-                    Debug.WriteLine($"SldShwLp: Buffer size mismatch or empty (old: {oldBuf.Length}, new: {newBuf.Length}), skipping cross-fade");
                     await InvokeAsync(() =>
                     {
                         if (!_disposed && _renderer != null && _calculator != null)
@@ -1840,65 +1842,153 @@ public sealed class MainForm : Form
 
                 previousBuffer = newBuf;
             }
+            //// ── Pick a new region different from the last ─────────────────────
+            //int regionIdx;
+            //do { regionIdx = _slideshowRng.Next(builtIns.Count); }
+            //while (builtIns.Count > 1 && regionIdx == lastRegionIdx);
+            //lastRegionIdx = regionIdx;
+            //var region = builtIns[regionIdx];
 
-            // ── Run exactly (themesPerRegion - 1) additional theme changes ────
-            // The first theme was shown above; now show 2 more for a total of 3.
-            for (int themeNum = 1; themeNum < themesPerRegion && !ct.IsCancellationRequested; themeNum++)
-            {
-                // Wait for the full theme display duration before starting the next fade.
-                await DelayWithCancel(themeDurationMs, ct);
-                if (ct.IsCancellationRequested) return;
+            //// ── Pick an initial theme ─────────────────────────────────────────
+            //int themeIdx;
+            //do { themeIdx = _slideshowRng.Next(paletteNames.Count); }
+            //while (paletteNames.Count > 1 && themeIdx == lastThemeIdx);
+            //lastThemeIdx = themeIdx;
+            //string themeName = paletteNames[themeIdx];
 
-                // Pick next theme.
+            //// ── Render the new region with the initial theme ───────────────────
+            //uint[]? previousBuffer = null;
+            //if (_calculator != null && _renderer != null)
+            //{
+            //    // 1. Snapshot the current display buffer (already post-processed).
+            //    uint[] oldBuf = await Task.Run(() =>
+            //    {
+            //        if (_calculator == null) return Array.Empty<uint>();
+            //        // Use the last uploaded processed buffer if available so the
+            //        // cross-fade starts from exactly what was on screen.
+            //        Debug.WriteLine($"SldShwLp: Last uploaded buffer: {_lastUploadedBuffer?.Length} pixels, size {_lastUploadedWidth}×{_lastUploadedHeight}");
+            //        if (_lastUploadedBuffer != null
+            //            && _lastUploadedWidth == _calculator.Width
+            //            && _lastUploadedHeight == _calculator.Height)
+            //        {
+            //            var copy = new uint[_lastUploadedBuffer.Length];
+            //            _lastUploadedBuffer.CopyTo(copy, 0);
+            //            return copy;
+            //        }
+            //        Debug.WriteLine($"SldShwLp: Falling back to direct ColorBuffer copy of {_calculator.ColorBuffer.Length} pixels");
+            //        var raw = new uint[_calculator.ColorBuffer.Length];
+            //        _calculator.ColorBuffer.CopyTo(raw, 0);
+            //        return raw;
+            //    }, ct);
 
-                int newThemeIdx;
-                do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
-                while (paletteNames.Count > 1 && newThemeIdx == lastThemeIdx);
-                lastThemeIdx = newThemeIdx;
-                string newThemeName = paletteNames[newThemeIdx];
+            //    // 2. Apply region & theme on UI thread WITHOUT triggering a
+            //    //    normal TriggerCalculation — we manage rendering ourselves.
+            //    if (ct.IsCancellationRequested) return;
+            //    await InvokeAsync(() =>
+            //    {
+            //        if (_disposed) return;
+            //        _slideshowRegionName = region.Name;
+            //        // ApplyRegionSilent sets calc state without firing TriggerCalculation.
+            //        ApplyRegionSilent(region);
+            //        var map = Models.ColorPalette.GetPaletteByName(themeName);
+            //        if (_calculator != null) _calculator.ColorMap = map;
+            //        // Update combo UI without firing the SelectedIndexChanged handler.
+            //        SuppressedSetRegionCombo(region.Name);
+            //        ApplyColorThemeSilent(themeName);
+            //        SetStatus($"Slideshow: {region.Name}  •  {themeName}");
+            //    });
 
-                if (_calculator == null || _renderer == null) break;
+            //    // 3. Calculate on background thread.
+            //    if (ct.IsCancellationRequested) return;
+            //    uint[] newBuf = await Task.Run(() =>
+            //    {
+            //        if (_calculator == null) return Array.Empty<uint>();
+            //        _calculator.Calculate(ct);
+            //        // Copy raw buffer (post-processing applied during cross-fade).
+            //        var copy = new uint[_calculator.ColorBuffer.Length];
+            //        _calculator.ColorBuffer.CopyTo(copy, 0);
+            //        return copy;
+            //    }, ct);
 
-                uint[] oldThemeBuf = previousBuffer ?? Array.Empty<uint>();
+            //    if (ct.IsCancellationRequested) return;
 
-                // Apply new theme silently — no TriggerCalculation.
-                await InvokeAsync(() =>
-                {
-                    if (_disposed) return;
-                    ApplyColorThemeSilent(newThemeName);
-                    SetStatus($"Slideshow: {region.Name}  •  {newThemeName}");
-                });
+            //    // 4. Cross-fade — sizes must match (no resize during transition).
+            //    if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0)
+            //    {
+            //        Debug.WriteLine($"SldShwLp: Starting cross-fade between buffers of {oldBuf.Length} pixels");
+            //        await CrossFade(oldBuf, newBuf, fadeSteps, fadeStepMs, ct);
+            //    }                    
+            //    else
+            //    {
+            //        Debug.WriteLine($"SldShwLp: Buffer size mismatch or empty (old: {oldBuf.Length}, new: {newBuf.Length}), skipping cross-fade");
+            //        await InvokeAsync(() =>
+            //        {
+            //            if (!_disposed && _renderer != null && _calculator != null)
+            //                _renderer.UpdateTexture(newBuf, _calculator.Width, _calculator.Height);
+            //        });
+            //    }
 
-                if (ct.IsCancellationRequested) return;
+            //    previousBuffer = newBuf;
+            //}
 
-                uint[] newThemeBuf = await Task.Run(() =>
-                {
-                    if (_calculator == null) return Array.Empty<uint>();
-                    _calculator.Calculate(ct);
-                    var copy = new uint[_calculator.ColorBuffer.Length];
-                    _calculator.ColorBuffer.CopyTo(copy, 0);
-                    return copy;
-                }, ct);
+            //// ── Run exactly (themesPerRegion - 1) additional theme changes ────
+            //// The first theme was shown above; now show 2 more for a total of 3.
+            //for (int themeNum = 1; themeNum < themesPerRegion && !ct.IsCancellationRequested; themeNum++)
+            //{
+            //    // Wait for the full theme display duration before starting the next fade.
+            //    await DelayWithCancel(themeDurationMs, ct);
+            //    if (ct.IsCancellationRequested) return;
 
-                if (ct.IsCancellationRequested) return;
+            //    // Pick next theme.
 
-                if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
-                {
-                    Debug.WriteLine($"SldShwLp: Starting theme cross-fade between buffers of {oldThemeBuf.Length} pixels");
-                    await CrossFade(oldThemeBuf, newThemeBuf, fadeSteps, fadeStepMs, ct);
-                }                    
-                else
-                {
-                    Debug.WriteLine($"SldShwLp: Theme buffer size mismatch or empty (old: {oldThemeBuf.Length}, new: {newThemeBuf.Length}), skipping cross-fade");
-                    await InvokeAsync(() =>
-                    {
-                        if (!_disposed && _renderer != null && _calculator != null)
-                            _renderer.UpdateTexture(newThemeBuf, _calculator.Width, _calculator.Height);
-                    });
-                }
+            //    int newThemeIdx;
+            //    do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
+            //    while (paletteNames.Count > 1 && newThemeIdx == lastThemeIdx);
+            //    lastThemeIdx = newThemeIdx;
+            //    string newThemeName = paletteNames[newThemeIdx];
 
-                previousBuffer = newThemeBuf;
-            }
+            //    if (_calculator == null || _renderer == null) break;
+
+            //    uint[] oldThemeBuf = previousBuffer ?? Array.Empty<uint>();
+
+            //    // Apply new theme silently — no TriggerCalculation.
+            //    await InvokeAsync(() =>
+            //    {
+            //        if (_disposed) return;
+            //        ApplyColorThemeSilent(newThemeName);
+            //        SetStatus($"Slideshow: {region.Name}  •  {newThemeName}");
+            //    });
+
+            //    if (ct.IsCancellationRequested) return;
+
+            //    uint[] newThemeBuf = await Task.Run(() =>
+            //    {
+            //        if (_calculator == null) return Array.Empty<uint>();
+            //        _calculator.Calculate(ct);
+            //        var copy = new uint[_calculator.ColorBuffer.Length];
+            //        _calculator.ColorBuffer.CopyTo(copy, 0);
+            //        return copy;
+            //    }, ct);
+
+            //    if (ct.IsCancellationRequested) return;
+
+            //    if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
+            //    {
+            //        Debug.WriteLine($"SldShwLp: Starting theme cross-fade between buffers of {oldThemeBuf.Length} pixels");
+            //        await CrossFade(oldThemeBuf, newThemeBuf, fadeSteps, fadeStepMs, ct);
+            //    }                    
+            //    else
+            //    {
+            //        Debug.WriteLine($"SldShwLp: Theme buffer size mismatch or empty (old: {oldThemeBuf.Length}, new: {newThemeBuf.Length}), skipping cross-fade");
+            //        await InvokeAsync(() =>
+            //        {
+            //            if (!_disposed && _renderer != null && _calculator != null)
+            //                _renderer.UpdateTexture(newThemeBuf, _calculator.Width, _calculator.Height);
+            //        });
+            //    }
+
+            //    previousBuffer = newThemeBuf;
+            //}
 
             // Wait for the final theme to display its full duration before
             // transitioning to the next region.

@@ -23,9 +23,10 @@
 //   CesiumSpectrumCycling         — cycling gradient (repeats across zoom depths)
 //   CesiumSpectrumPhong3D         — cycling gradient + dual-light Phong (3D relief)
 
-using FracturingFog.Interefaces;
-
+using System;
 using System.Drawing;
+
+using FracturingFog.Interefaces;
 
 namespace FracturingFog.Models
 {
@@ -206,4 +207,181 @@ namespace FracturingFog.Models
                 shininess: 32f);
         }
     }
+    public sealed class CesiumSpectrumPbr3D : PbrGradient3DBase
+    {
+        public static string Name => "Cesium 3D (PBR Bright)";
+        public static string Category => "Spectral";
+        public static string Description =>
+            "HDR-boosted PBR Cesium emission spectrum — glowing metallic blues, " +
+            "icy highlights, and deep indigo shadows.";
+
+        public new ColorPaletteType Type => ColorPaletteType.Relief3D;
+
+        // Use the bright PBR profile
+        protected override PbrLightingMode LightingMode => PbrLightingMode.PBRBright;
+
+        protected override float CycleSpeed => 0.018f;
+        protected override float Steepness => 1.1f;
+        protected override float Ambient => 0.06f;
+
+        public CesiumSpectrumPbr3D()
+        {
+            Stops.AddRange(CesiumStops.Build());
+
+            // HDR key light
+            KeyLight = new LightSource(
+                lx: -0.55f, ly: 0.70f, lz: 0.75f,
+                diffR: 1.0f, diffG: 1.1f, diffB: 1.2f,
+                specR: 0f, specG: 0f, specB: 0f,
+                shininess: 1f);
+
+            // HDR indigo fill
+            FillLight = new LightSource(
+                lx: 0.60f, ly: -0.50f, lz: 0.45f,
+                diffR: 0.3f, diffG: 0.5f, diffB: 1.6f,
+                specR: 0f, specG: 0f, specB: 0f,
+                shininess: 1f);
+        }
+
+        // Cesium glow boost
+        protected override float GlowBoost(float t)
+        {
+            // Bright bands emit more light
+            return MathF.Pow(t, 8f) * 0.6f;
+        }
+
+        // Metal/Roughness profile across Cesium spectral bands
+        protected override PbrMaterial BuildMaterial(float t, float r, float g, float b)
+        {
+            float metal, rough;
+
+            if (t < 0.18f) { metal = 0.0f; rough = 0.85f; }
+            else if (t < 0.44f) { metal = 0.3f; rough = 0.55f; }
+            else if (t < 0.68f) { metal = 0.7f; rough = 0.30f; }
+            else if (t < 0.90f) { metal = 1.0f; rough = 0.12f; }
+            else { metal = 0.0f; rough = 0.80f; }
+
+            return new PbrMaterial(r, g, b, metal, rough);
+        }
+    }
+
+    /// <summary>
+    /// Physically grounded PBR Cesium — subtle glow, realistic contrast,
+    /// suitable as a "reference" Cesium PBR look.
+    /// </summary>
+    public sealed class CesiumSpectrumPbr3D_Realistic : PbrGradient3DBase
+    {
+        public static string Name => "Cesium 3D (PBR Realistic)";
+        public static string Category => "Spectral";
+        public static string Description =>
+            "Physically-based Cesium emission spectrum — realistic metallic blues, " +
+            "controlled highlights, and deep but readable shadows.";
+
+        public new ColorPaletteType Type => ColorPaletteType.Relief3D;
+
+        protected override PbrLightingMode LightingMode => PbrLightingMode.PBRRealistic;
+
+        protected override float CycleSpeed => 0.018f;
+        protected override float Steepness => 1.1f;
+        protected override float Ambient => 0.08f; // slightly higher for realism
+
+        public CesiumSpectrumPbr3D_Realistic()
+        {
+            Stops.AddRange(CesiumStops.Build());
+
+            // Daylight-like key light, moderate intensity
+            KeyLight = new LightSource(
+                lx: -0.55f, ly: 0.70f, lz: 0.75f,
+                diffR: 1.2f, diffG: 1.25f, diffB: 1.3f,
+                specR: 0f, specG: 0f, specB: 0f,
+                shininess: 1f);
+
+            // Indigo fill, softer than bright variant
+            FillLight = new LightSource(
+                lx: 0.60f, ly: -0.50f, lz: 0.45f,
+                diffR: 0.25f, diffG: 0.40f, diffB: 1.1f,
+                specR: 0f, specG: 0f, specB: 0f,
+                shininess: 1f);
+        }
+
+        // Minimal glow boost — mostly reflective, not emissive
+        protected override float GlowBoost(float t)
+        {
+            return MathF.Pow(t, 8f) * 0.25f;
+        }
+
+        protected override PbrMaterial BuildMaterial(float t, float r, float g, float b)
+        {
+            float metal, rough;
+
+            if (t < 0.18f) { metal = 0.0f; rough = 0.90f; }
+            else if (t < 0.44f) { metal = 0.25f; rough = 0.60f; }
+            else if (t < 0.68f) { metal = 0.6f; rough = 0.38f; }
+            else if (t < 0.90f) { metal = 0.9f; rough = 0.18f; }
+            else { metal = 0.0f; rough = 0.85f; }
+
+            return new PbrMaterial(r, g, b, metal, rough);
+        }
+    }
+
+    /// <summary>
+    /// Stylized, over-the-top glowing PBR Cesium — strong emission,
+    /// aggressive HDR, and very bright spectral cores.
+    /// </summary>
+    public sealed class CesiumSpectrumPbr3D_UltraGlow : PbrGradient3DBase
+    {
+        public static string Name => "Cesium 3D (PBR UltraGlow)";
+        public static string Category => "Spectral";
+        public static string Description =>
+            "Ultra-glowing PBR Cesium — extreme metallic cores, strong emission, " +
+            "and HDR-friendly highlights.";
+
+        public new ColorPaletteType Type => ColorPaletteType.Relief3D;
+
+        protected override PbrLightingMode LightingMode => PbrLightingMode.PBRBright;
+
+        protected override float CycleSpeed => 0.018f;
+        protected override float Steepness => 1.0f;
+        protected override float Ambient => 0.05f;
+
+        public CesiumSpectrumPbr3D_UltraGlow()
+        {
+            Stops.AddRange(CesiumStops.Build());
+
+            // Very strong key light
+            KeyLight = new LightSource(
+                lx: -0.55f, ly: 0.70f, lz: 0.75f,
+                diffR: 1.4f, diffG: 1.6f, diffB: 1.9f,
+                specR: 0f, specG: 0f, specB: 0f,
+                shininess: 1f);
+
+            // Strong, saturated indigo fill
+            FillLight = new LightSource(
+                lx: 0.60f, ly: -0.50f, lz: 0.45f,
+                diffR: 0.4f, diffG: 0.7f, diffB: 2.2f,
+                specR: 0f, specG: 0f, specB: 0f,
+                shininess: 1f);
+        }
+
+        // Aggressive emission for bright bands
+        protected override float GlowBoost(float t)
+        {
+            // Very low t contributes almost nothing; high t explodes
+            return MathF.Pow(t, 10f) * 1.2f;
+        }
+
+        protected override PbrMaterial BuildMaterial(float t, float r, float g, float b)
+        {
+            float metal, rough;
+
+            if (t < 0.18f) { metal = 0.0f; rough = 0.95f; }
+            else if (t < 0.44f) { metal = 0.4f; rough = 0.55f; }
+            else if (t < 0.68f) { metal = 0.8f; rough = 0.28f; }
+            else if (t < 0.90f) { metal = 1.0f; rough = 0.10f; }
+            else { metal = 0.0f; rough = 0.90f; }
+
+            return new PbrMaterial(r, g, b, metal, rough);
+        }
+    }
+
 }

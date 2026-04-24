@@ -23,7 +23,17 @@ namespace FracturingFog.Models
 {
     // ── Data model ────────────────────────────────────────────────────────────
 
-    public enum RegionType { BuiltIn, UserDefined }
+    /// <summary>
+    /// RegionType distinguishes built-in regions (read-only, defined in code) from
+    /// user-defined regions (modifiable and persisted to JSON).
+    /// </summary>
+    public enum RegionType
+    {
+        /// <summary>Built-In</summary>
+        BuiltIn,
+        /// <summary>User-Defined</summary>
+        UserDefined
+    }
 
     /// <summary>
     /// A named Mandelbrot coordinate bookmark.
@@ -55,6 +65,9 @@ namespace FracturingFog.Models
         [JsonIgnore]
         public QualityPreset QualityPreset { get; set; } = QualityPreset.Standard;
 
+        /// <summary>
+        /// Quality Preset Name for JSON serialization.  This is a string property that maps to the QualityPreset object.
+        /// </summary>
         public string QualityPresetName
         {
             get { return QualityPreset.Name; }
@@ -64,9 +77,16 @@ namespace FracturingFog.Models
         /// <summary>One-line description for the UI tooltip.</summary>
         public string Description { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
+        /// assumed to be user-defined unless explicitly marked as built-in.
+        /// </summary>
         [JsonIgnore]
         public RegionType RegionType { get; set; } = RegionType.UserDefined;
 
+        /// <summary>
+        /// Is Built In region (read-only, defined in code) vs User-Defined (modifiable and persisted to JSON).
+        /// </summary>
         [JsonIgnore]
         public bool IsBuiltIn => RegionType == RegionType.BuiltIn;
     }
@@ -83,6 +103,10 @@ namespace FracturingFog.Models
         // ── Singleton ─────────────────────────────────────────────────────────
 
         private static FractalRegionLibrary? _instance;
+
+        /// <summary>
+        /// Instance of the library.  Lazy-initialized on first access.
+        /// </summary>
         public static FractalRegionLibrary Instance
             => _instance ??= new FractalRegionLibrary();
 
@@ -245,34 +269,35 @@ namespace FracturingFog.Models
             // ── Deep seahorse spirals ──────────────────────────────────────────────
             new() { Name="R:SeahorseA",  CenterX=-0.74878, CenterY=0.06508, Zoom=12000.0, Iterations=2000, QualityPreset=QualityPreset.High },
             new() { Name="R:SeahorseB",  CenterX=-0.74529, CenterY=0.11307, Zoom=8000.0,  Iterations=1800, QualityPreset=QualityPreset.High },
-            new() { Name="R:SeahorseC",  CenterX=-0.74364, CenterY=0.13183, Zoom=5000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:SeahorseC",  CenterX=-0.74542, CenterY=0.13161, Zoom=290.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
             new() { Name="R:SeahorseD",  CenterX=-0.77568, CenterY=0.13646, Zoom=15000.0, Iterations=2500, QualityPreset=QualityPreset.High },
             // ── Elephant valley variations ─────────────────────────────────────────
             new() { Name="R:ElephantA",  CenterX=0.32530,  CenterY=0.04868, Zoom=4000.0,  Iterations=1600, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:ElephantB",  CenterX=0.375534459723856,  CenterY=-0.221346110647405,Zoom=2000.0,  Iterations=1200, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:ElephantC",  CenterX=0.44068,  CenterY=0.36122, Zoom=6000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
+            new() { Name="R:ElephantB",  CenterX=0.375534459723856,  CenterY=-0.221346110647405,Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.High },
+            new() { Name="R:ElephantC",  CenterX=0.35516,  CenterY=0.09486, Zoom=200.0,  Iterations=2000, QualityPreset=QualityPreset.High },
             // ── Mini Mandelbrots (self-similar copies) ─────────────────────────────
-            new() { Name="R:MiniA",      CenterX=-1.62917, CenterY=0.00000, Zoom=3000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:MiniB",      CenterX=-0.15652, CenterY=1.03225, Zoom=4000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:MiniC",      CenterX=-1.25067, CenterY=0.02012, Zoom=5000.0,  Iterations=2200, QualityPreset=QualityPreset.Standard },
-            //new() { Name="R:MiniD",      CenterX=0.37001,  CenterY=-0.67991,Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High },
-            new() { Name="R:MiniE",      CenterX=-1.94157, CenterY=0.00000, Zoom=12000.0, Iterations=3000, QualityPreset=QualityPreset.High },
+            new() { Name="R:MiniA",      CenterX=-1.6271862274936, CenterY=0.00000, Zoom=55.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:MiniB",      CenterX=-0.160229506084313, CenterY=1.03460261104092, Zoom=60.0,  Iterations=500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:MiniC",      CenterX=-1.25067386008417, CenterY=0.0201413514898332, Zoom=54602629.0,  Iterations=2500, QualityPreset=QualityPreset.High },
+            new() { Name="R:MiniD",      CenterX=0.366432439759528,  CenterY=-0.676487494685914,Zoom=3065.0,  Iterations=1400, QualityPreset=QualityPreset.High },
+            new() { Name="R:MiniE",      CenterX=-1.94157, CenterY=0.00000, Zoom=502.0, Iterations=1200, QualityPreset=QualityPreset.High },
             // ── Spiral galaxies / triple spirals ───────────────────────────────────
-            new() { Name="R:SpiralA",    CenterX=-0.56220, CenterY=0.63900, Zoom=7000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
-            //new() { Name="R:SpiralB",    CenterX=-0.09930, CenterY=0.65440, Zoom=9000.0,  Iterations=2200, QualityPreset=QualityPreset.High },
+            new() { Name="R:SpiralA",    CenterX=-0.562474314086615, CenterY=0.64138011514593, Zoom=91,  Iterations=1200, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:SpiralB",    CenterX=-0.0976515101078047, CenterY=0.654455924064267, Zoom=227,  Iterations=1114, QualityPreset=QualityPreset.High },
             new() { Name="R:SpiralC",    CenterX=-0.52768, CenterY=0.52768, Zoom=3000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:SpiralD",    CenterX=-0.07100, CenterY=0.67400, Zoom=20000.0, Iterations=3000, QualityPreset=QualityPreset.High },
+            new() { Name="R:SpiralD",    CenterX=-0.053974358974359, CenterY=0.663897435897436, Zoom=50.0, Iterations=500, QualityPreset=QualityPreset.Standard},
             // ── Period-3 bulb and neighbourhood ───────────────────────────────────
-            new() { Name="R:Period3A",   CenterX=-0.12256, CenterY=0.74493, Zoom=3000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:Period3A",   CenterX=-0.0958466539313279, CenterY=0.653567154869739, Zoom=93.0,  Iterations=500, QualityPreset=QualityPreset.Standard },
             new() { Name="R:Period3B",   CenterX=-0.13500, CenterY=0.65000, Zoom=1500.0,  Iterations=1200, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:Period3C",   CenterX=-0.16667, CenterY=1.04000, Zoom=2500.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:Period3C",   CenterX=-0.16667, CenterY=1.04000, Zoom=1736.0,  Iterations=670, QualityPreset=QualityPreset.Standard },
             // ── Lightning / filament zones ─────────────────────────────────────────
-            //new() { Name="R:LightA",     CenterX=-0.61803, CenterY=0.38320, Zoom=1500.0,  Iterations=1400, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:LightB",     CenterX=-0.50200, CenterY=0.53200, Zoom=2800.0,  Iterations=1600, QualityPreset=QualityPreset.Standard },
-            //new() { Name="R:LightC",     CenterX=-0.75000, CenterY=0.10500, Zoom=800.0,   Iterations=1000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:LightA",     CenterX=-0.626614850667933, CenterY=0.384657235048688, Zoom=744.0,  Iterations=650, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:LightB",     CenterX=-0.507263617832552, CenterY=0.526971432700647, Zoom=175.0,  Iterations=550, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:LightC",     CenterX=-0.740972025145092, CenterY=0.104494920892684, Zoom=800.0,   Iterations=650, QualityPreset=QualityPreset.Standard },
             // ── Parabolic / satellite bulbs ────────────────────────────────────────
             new() { Name="R:ParabA",     CenterX=-1.40115, CenterY=0.00000, Zoom=4000.0,  Iterations=2500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:ParabB",     CenterX=-1.31097, CenterY=0.07280, Zoom=3000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:ParabB",     CenterX=-1.31079592300444, CenterY=0.0731247515540183, Zoom=64694.7,  Iterations=1750, QualityPreset=QualityPreset.High },
+            // Stopped here.
             new() { Name="R:ParabC",     CenterX=-0.79543, CenterY=0.12523, Zoom=10000.0, Iterations=2500, QualityPreset=QualityPreset.High },
             // ── Deep double spirals ────────────────────────────────────────────────
             new() { Name="R:DblSpiralA", CenterX=-0.72700, CenterY=0.18900, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
@@ -280,7 +305,7 @@ namespace FracturingFog.Models
             new() { Name="R:DblSpiralC", CenterX=-0.73657, CenterY=0.18781, Zoom=18000.0, Iterations=3000, QualityPreset=QualityPreset.High },
             // ── Upper filament / star clusters ────────────────────────────────────
             new() { Name="R:StarA",      CenterX=-0.15920, CenterY=1.03170, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
-            //new() { Name="R:StarB",      CenterX=-0.17460, CenterY=1.02640, Zoom=4000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:StarB",      CenterX=-0.17460, CenterY=1.02640, Zoom=4000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
             new() { Name="R:StarC",      CenterX=-0.22700, CenterY=1.11600, Zoom=3500.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
             // ── Needle tip zone ───────────────────────────────────────────────────
             new() { Name="R:NeedleA",    CenterX=-1.99991, CenterY=0.00000, Zoom=15000.0, Iterations=3000, QualityPreset=QualityPreset.Ultra },
@@ -290,8 +315,8 @@ namespace FracturingFog.Models
             new() { Name="R:CauliB",     CenterX=0.25001,  CenterY=0.00100, Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High },
             // ── Deep zoom demo points (DD precision) ──────────────────────────────
             new() { Name="R:DeepA",      CenterX=-0.743643887037151, CenterY=0.131825904205330, Zoom=1e14, Iterations=8000, QualityPreset=QualityPreset.High },
-            //new() { Name="R:DeepB",      CenterX=-0.7336438924734, CenterY=0.2455211406827,     Zoom=5e13, Iterations=6000, QualityPreset=QualityPreset.High },
-            //new() { Name="R:DeepC",      CenterX=0.001643721971153, CenterY=0.822467633298876,  Zoom=3e14, Iterations=10000,QualityPreset=QualityPreset.Ultra },
+            new() { Name="R:DeepB",      CenterX=-0.73364389241974, CenterY=0.245521140671023, Zoom=5e13, Iterations=6000, QualityPreset=QualityPreset.High },
+            new() { Name="R:DeepC",      CenterX=0.001643721971153, CenterY=0.822467633298876,  Zoom=3e9, Iterations=10000,QualityPreset=QualityPreset.Ultra },
         ];
 
         // ── Public collections ────────────────────────────────────────────────
@@ -311,7 +336,7 @@ namespace FracturingFog.Models
             {
                 foreach (var r in _builtIns) yield return r;
                 foreach (var r in UserRegions) yield return r;
-                //foreach(var r in _randomPool) yield return r;
+                foreach (var r in _randomPool) yield return r;
             }
         }
 
