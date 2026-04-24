@@ -80,7 +80,7 @@ public sealed class MainForm : Form
     // GridOverlayPanel — sibling of _renderPanel; see architecture note below.
     // Visible is always false until the user ticks "Grid" AFTER OnLoad.
     private readonly GridOverlayPanel _gridPanel;
-    private bool _gridVisible;
+    private bool _gridVisible = false;
 
     // Force D3D11 mode for testing:  (change the next line, recompile, and run on a D3D12-capable machine)
     private bool _forceD3D11 => true;
@@ -127,6 +127,7 @@ public sealed class MainForm : Form
     private bool _suppressCoordUpdate;
 
     // MiniMode flag: when true, the form is shrunk to its minimum size and borders removed.
+    private bool _miniClick;
     private bool _miniMode = false;
     private Size _miniPreviousSize;
     private FormBorderStyle _miniPreviousBorderStyle;
@@ -231,50 +232,70 @@ public sealed class MainForm : Form
     /// </summary>
     public MainForm()
     {
-        Text = $"Fracturing Fog - {RendererFactory.ProbeDescription()}";
+        Text = $"{_programName} v{_programVersion} - {RendererFactory.ProbeDescription()}";
         ClientSize = new Size(1365, 768);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
+        _miniPreviousBorderStyle = FormBorderStyle;
+        _miniPreviousSize = Size;
 
-        // ── Pan-stop timer ────────────────────────────────────────────────────
+        #region Pan-stop timer 
         _panStopTimer = new System.Windows.Forms.Timer { Interval = 300 };
         _panStopTimer.Tick += (s, e) =>
         {
             _panStopTimer.Stop();
             TriggerCalculation(progressive: false);   // full quality after drag stops
         };
-        // ── Helpers ───────────────────────────────────────────────────────────
+        #endregion Pan-stop timer
 
-        Button MakeBtn(string text, int w = 108) => new Button
+        #region Form Helpers
+
+        Button MakeBtn(
+            string text,
+            int w = 108,
+            int left = 0,
+            int top = 6,
+            string toolTip = "")
         {
-            Text = text,
-            Width = w,
-            Height = 26,
-            Top = 6,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(55, 55, 55),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand
-        }.Also(b => b.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90));
+            Button _b = new Button
+            {
+                Text = text,
+                Width = w,
+                Height = 26,
+                Left = left,
+                Top = top,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(55, 55, 55),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            }.Also(b => b.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90));
 
-        Label MakeLbl(string text, int left, Panel p) => new Label
+            if (!string.IsNullOrEmpty(toolTip))
+            {
+                _toolTip.SetToolTip(_b, toolTip);
+            }
+
+            return _b;
+        }
+
+        Label MakeLbl(string text, int left, int top, Panel p) => new Label
         {
             Text = text,
             Left = left,
-            Top = 9,
+            Top = top,
             AutoSize = true,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         }.AlsoAdd(p);
 
-        TextBox MakeTx(int left, int w, Panel p, string tip) => new TextBox
+        TextBox MakeTx(int left, int top, int w, Panel p, string tip) => new TextBox
         {
             Left = left,
-            Top = 7,
+            Top = top,
             Width = w,
             Height = 22,
             BackColor = Color.FromArgb(40, 40, 40),
@@ -282,8 +303,9 @@ public sealed class MainForm : Form
             Font = new Font("Consolas", 9f),
             BorderStyle = BorderStyle.FixedSingle
         }.AlsoAdd(p, tip);
+        #endregion Form Helpers
 
-        // ── Top toolbar ───────────────────────────────────────────────────────
+        #region Top toolbar 
 
         _toolbar = new Panel
         {
@@ -302,11 +324,14 @@ public sealed class MainForm : Form
         };
 
         int buttonLeft = 6;
+        int buttonTop = 6;
+        int labelTop = 9;
+        int txTop = 7;
 
-        _resetButton = MakeBtn("", 30);
-        _resetButton.Left = buttonLeft;
+        _resetButton = MakeBtn("", 30, buttonLeft, buttonTop, "Reset view to default centre and zoom");
         _resetButton.Padding = new Padding(0, 0, 1, 1);
         _resetButton.Margin = new Padding(0);
+        _resetButton.Click += OnResetClick;
         try
         {
             Image resetImg = (Image)new Bitmap(Image.FromFile(@"Resources\reset.bmp"))
@@ -314,45 +339,36 @@ public sealed class MainForm : Form
             _resetButton.Image = resetImg;
         }
         catch { _resetButton.Text = "R"; }
-        _resetButton.Click += OnResetClick;
         _toolbar.Controls.Add(_resetButton);
-        _toolTip.SetToolTip(_resetButton, "Reset view to default centre and zoom");
         buttonLeft += 33;
 
-        _spanButton = MakeBtn("Span", 55);
-        _spanButton.Left = buttonLeft;
+        _spanButton = MakeBtn("Span", 55, buttonLeft, buttonTop, "Span across all monitors");
         _spanButton.Click += OnSpanMonitorsClick;
         _toolbar.Controls.Add(_spanButton);
-        _toolTip.SetToolTip(_spanButton, "Span across all monitors");
         buttonLeft += 58;
 
-        _screenshotButton = MakeBtn("Image", 55);
-        _screenshotButton.Left = buttonLeft;
+        _screenshotButton = MakeBtn("Image", 55, buttonLeft, buttonTop);
         _screenshotButton.Click += OnScreenshotClick;
         _toolbar.Controls.Add(_screenshotButton);
         buttonLeft += 58;
 
-        _posterButton = MakeBtn("Poster", 55);
-        _posterButton.Left = buttonLeft;
+        _posterButton = MakeBtn("Poster", 55, buttonLeft, buttonTop);
         _posterButton.Click += OnPosterClick;
         _toolbar.Controls.Add(_posterButton);
         buttonLeft += 58;
 
-        _slideshowButton = MakeBtn("Slideshow", 72);
-        _slideshowButton.Left = buttonLeft;
+        _slideshowButton = MakeBtn("Slideshow", 72, buttonLeft, buttonTop, "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
         _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
-        _toolTip.SetToolTip(_slideshowButton,
-            "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
         _slideshowButton.Click += OnSlideshowClick;
         _toolbar.Controls.Add(_slideshowButton);
         buttonLeft += 76;
+        #endregion Top toolbar
 
-        // Thin separator.
+        #region Quality label + combo.
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 4, Width = 1, Height = 30, BackColor = Color.FromArgb(65, 65, 65) });
         buttonLeft += 8;
 
-        // Quality label + combo.
         var qlbl = new Label
         {
             Text = "Quality:",
@@ -393,8 +409,9 @@ public sealed class MainForm : Form
         qualityTip.SetToolTip(_qualityCombo, QualityPreset.Standard.Description);
         _toolbar.Controls.Add(_qualityCombo);
         buttonLeft += 84;
+        #endregion
 
-        // Theme separator.
+        #region Theme
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 4, Width = 1, Height = 30, BackColor = Color.FromArgb(65, 65, 65) });
         buttonLeft += 10;
 
@@ -428,8 +445,9 @@ public sealed class MainForm : Form
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
         _toolbar.Controls.Add(_colorThemeCombo);
         buttonLeft += 170;
+        #endregion
 
-        // Regions separator.
+        #region Regions
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
         buttonLeft += 10;
 
@@ -461,37 +479,29 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(_regionCombo);
         buttonLeft += 180;
 
-        _saveViewButton = MakeBtn("Save", 55);
-        _saveViewButton.Left = buttonLeft;
-        //_saveViewButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        _saveViewButton = MakeBtn("Save", 55, buttonLeft, 6, "Save the current view as a region");
         _saveViewButton.Click += OnSaveViewClick;
         _toolbar.Controls.Add(_saveViewButton);
         buttonLeft += 58;
 
-        _delRegionButton = MakeBtn("Delete", 55);
-        _delRegionButton.Left = buttonLeft;
-        //_delRegionButton.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        _delRegionButton = MakeBtn("Delete", 55, buttonLeft, 6, "Delete the selected region");
         _delRegionButton.Click += OnDelRegionClick;
         _toolbar.Controls.Add(_delRegionButton);
         buttonLeft += 58;
 
-        _exportRegionsButton = MakeBtn("Exp…", 55);
-        _exportRegionsButton.Left = buttonLeft;
-        _exportRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-        _toolTip.SetToolTip(_exportRegionsButton, "Export all custom regions to a JSON file");
+        _exportRegionsButton = MakeBtn("Exp…", 55, buttonLeft, 6, "Export all custom regions to a JSON file");
         _exportRegionsButton.Click += OnExportRegionsClick;
         _toolbar.Controls.Add(_exportRegionsButton);
         buttonLeft += 58;
 
-        _importRegionsButton = MakeBtn("Imp…", 55);
-        _importRegionsButton.Left = buttonLeft;
+        _importRegionsButton = MakeBtn("Imp…", 55, buttonLeft, 6, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
         _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-        _toolTip.SetToolTip(_importRegionsButton, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
         _importRegionsButton.Click += OnImportRegionsClick;
         _toolbar.Controls.Add(_importRegionsButton);
         buttonLeft += 58;
+        #endregion
 
-        // Thin separator.
+        #region Checkboxes
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
         buttonLeft += 10;
 
@@ -540,8 +550,9 @@ public sealed class MainForm : Form
         };
         _toolTip.SetToolTip(checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
         _toolbar.Controls.Add(checkBoxShowGrid);
+        #endregion
 
-        // ── Footer panel ──────────────────────────────────────────────────────
+        #region Footer panel
 
         _footerPanel = new Panel
         {
@@ -584,8 +595,9 @@ public sealed class MainForm : Form
         _footerPanel.Visible = true;
 
         checkBoxShowFooterPanel.Click += (s, e) => _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
+        #endregion
 
-        // ── Coordinate / Navigate panel ───────────────────────────────────────
+        #region Coordinate / Navigate panel
 
         _coordPanel = new Panel
         {
@@ -597,26 +609,24 @@ public sealed class MainForm : Form
         checkBoxShowCoordPanel.Click += (s, e) => _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
 
         buttonLeft = 8;
-        MakeLbl("CX:", buttonLeft, _coordPanel); buttonLeft += 28;
-        _txCX = MakeTx(buttonLeft, 182, _coordPanel, "Real part of the view centre"); buttonLeft += 190;
+        MakeLbl("CX:", buttonLeft, labelTop, _coordPanel);
+        buttonLeft += 28;
+        _txCX = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Real part of the view centre"); buttonLeft += 190;
 
-        MakeLbl("CY:", buttonLeft, _coordPanel); buttonLeft += 28;
-        _txCY = MakeTx(buttonLeft, 182, _coordPanel, "Imaginary part of the view centre"); buttonLeft += 190;
-        _flipButton = MakeBtn("Flip Y", 38);
+        MakeLbl("CY:", buttonLeft, labelTop, _coordPanel); buttonLeft += 28;
+        _txCY = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Imaginary part of the view centre"); buttonLeft += 190;
+        _flipButton = MakeBtn("Flip Y", 38, buttonLeft, buttonTop, "Flip the view vertically (negate CY)");
         _flipButton.BackColor = Color.FromArgb(40, 80, 40);
-        _flipButton.Left = buttonLeft;
         _flipButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
         _flipButton.Click += OnFlipClick;
         _coordPanel.Controls.Add(_flipButton);
-        _toolTip.SetToolTip(_flipButton, "Flip the view vertically (negate CY)");
         buttonLeft += 42;
 
-        MakeLbl("Zoom:", buttonLeft, _coordPanel); buttonLeft += 44;
-        _txZoom = MakeTx(buttonLeft, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)"); buttonLeft += 120;
-        MakeLbl("Iter:", buttonLeft, _coordPanel); buttonLeft += 38;
-        _txIter = MakeTx(buttonLeft, 72, _coordPanel, "Maximum iteration count"); buttonLeft += 80;
+        MakeLbl("Zoom:", buttonLeft, labelTop, _coordPanel); buttonLeft += 44;
+        _txZoom = MakeTx(buttonLeft, txTop, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)"); buttonLeft += 120;
+        MakeLbl("Iter:", buttonLeft, labelTop, _coordPanel); buttonLeft += 38;
+        _txIter = MakeTx(buttonLeft, txTop, 72, _coordPanel, "Maximum iteration count"); buttonLeft += 80;
 
-        // Lock checkbox — NEW
         _chkLockIter = new CheckBox
         {
             Text = "Lock",
@@ -634,14 +644,13 @@ public sealed class MainForm : Form
         _coordPanel.Controls.Add(_chkLockIter);
         buttonLeft += _chkLockIter.PreferredSize.Width + 8;
 
-        _goButton = MakeBtn("Go", 38);
+        _goButton = MakeBtn("Go", 38, buttonLeft, buttonTop, "Go to the specified coordinates");
         _goButton.BackColor = Color.FromArgb(40, 80, 40);
-        _goButton.Left = buttonLeft;
         _goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
         _goButton.Click += OnGoClick;
         _coordPanel.Controls.Add(_goButton);
 
-        // ── Brightness & Contrast sliders ─────────────────────────────────────
+        #region Brightness & Contrast sliders 
         // Row 2 of the coord panel: labels + track bars
         int sliderTop = 34;
         int sliderLeft = 8;
@@ -722,8 +731,10 @@ public sealed class MainForm : Form
             RepaintWithBrightnessContrast();
         };
         _coordPanel.Controls.Add(_contrastSlider);
+        #endregion Brightness & Contrast sliders 
+        #endregion Coordinate / Navigate panel
 
-        // ── Render panel ──────────────────────────────────────────────────────
+        #region Render panel
 
         _renderPanel = new RenderPanel { Dock = DockStyle.Fill, Cursor = Cursors.Cross };
         _renderPanel.MouseWheel += OnMouseWheel;
@@ -732,7 +743,7 @@ public sealed class MainForm : Form
         _renderPanel.MouseUp += OnMouseUp;
         _renderPanel.MouseDoubleClick += OnMouseDoubleClick;
 
-        // ── Grid overlay panel ────────────────────────────────────────────────
+        // Grid overlay panel
         // The WS_EX_LAYERED sibling-panel approach was unreliable because the
         // D3D11 FlipDiscard swap chain presents directly to the compositor and
         // GDI layered windows cannot composite over it on modern Windows.
@@ -755,74 +766,27 @@ public sealed class MainForm : Form
             RepaintWithBrightnessContrast();
         };
 
-        //Context menu for render panel (NEW)
+        #region Context menu for render panel
         var contextMenu = new ContextMenuStrip();
-        //contextMenu.Opening += (s, e) =>
-        //{
-        //    if (!_spanning)
-        //    {
-        //        contextMenu.Items["Span Monitors"]?.Visible = true;
-        //        contextMenu.Items["Restore Monitors"]?.Visible = false;
-        //    }
-        //    else
-        //    {
-        //        contextMenu.Items["Span Monitors"]?.Visible = false;
-        //        contextMenu.Items["Restore Monitors"]?.Visible = true;
-        //    }
-
-        //    if (!_slideshowRunning)
-        //    {
-        //        contextMenu.Items["Start/Stop Slideshow"]?.Text = "Start Slideshow";
-        //        contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = false;
-        //    }
-        //    else
-        //    {
-        //        contextMenu.Items["Start/Stop Slideshow"]?.Text = "Stop Slideshow";
-        //        contextMenu.Items["Slideshow: Skip to Next Region"]?.Enabled = true;
-        //    }
-        //};
-        var toolbarItem = new ToolStripMenuItem("Toolbar");
-        toolbarItem.Click += (s, e) =>
+        var toolbarItem = new ToolStripMenuItem("Toolbar", null, (s, e) =>
         {
             _toolbar.Visible = !_toolbar.Visible;
-            toolbarItem.Checked = _toolbar.Visible;
-        };
-
-        toolbarItem.Checked = true;
-        contextMenu.Items.Add(toolbarItem);
-
-        var navigateItem = new ToolStripMenuItem("Navigate");
-        navigateItem.Click += (s, e) =>
+        }) {Checked = true };
+        var navigateItem = new ToolStripMenuItem("Navigate", null, (s, e) =>
         {
             checkBoxShowCoordPanel.Checked = !checkBoxShowCoordPanel.Checked;
             _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
-            navigateItem.Checked = checkBoxShowCoordPanel.Checked;
-
-        };
-
-        contextMenu.Items.Add(navigateItem);
-        var statusItem = new ToolStripMenuItem("Status");
-        statusItem.Click += (s, e) =>
+        });
+        var statusItem = new ToolStripMenuItem("Status", null, (s, e) =>
         {
             checkBoxShowFooterPanel.Checked = !checkBoxShowFooterPanel.Checked;
             _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
-            statusItem.Checked = _footerPanel.Visible;
-        };
-        contextMenu.Opening += (s, e) => statusItem.Checked = _footerPanel.Visible;
-
-        contextMenu.Items.Add(statusItem);
-        contextMenu.Items.Add(new ToolStripSeparator());
-
-        var onTopItem = new ToolStripMenuItem("On Top");
-        onTopItem.Click += (s, e) =>
+        });
+        var onTopItem = new ToolStripMenuItem("On Top", null, (s, e) =>
         {
             TopMost = !TopMost;
-            onTopItem.Checked = TopMost;
-        };
-
-        contextMenu.Items.Add(onTopItem);
-        var miniModeItem = new ToolStripMenuItem("Mini Mode");
-        miniModeItem.Click += (s, e) =>
+        });
+        var miniModeItem = new ToolStripMenuItem("Mini Mode", null, (s, e) =>
         {
             _miniMode = !_miniMode;
 
@@ -831,81 +795,77 @@ public sealed class MainForm : Form
                 _miniPreviousBorderStyle = FormBorderStyle;
                 _miniPreviousSize = Size;
             }
-
+            _miniClick = true;
             OnFormResize(s, e);  // adjust size and borders
-            miniModeItem.Checked = _miniMode;
-        };
-
-        contextMenu.Items.Add(miniModeItem);
-        contextMenu.Items.Add("Save Image…", null, (s, e) => OnScreenshotClick(s, e));
-        contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("Reset View", null, (s, e) => OnResetClick(s, e));
-
-        var spanMonitorsItem = new ToolStripMenuItem("Span Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
-        contextMenu.Opening += (s, e) => spanMonitorsItem.Visible = !_spanning;
-        contextMenu.Items.Add(spanMonitorsItem);
-        var restoreMonitorsItem = new ToolStripMenuItem("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
-        restoreMonitorsItem.Checked = true;
-        contextMenu.Opening += (s, e) => restoreMonitorsItem.Visible = _spanning;
-        contextMenu.Items.Add(restoreMonitorsItem);
-        restoreMonitorsItem.Visible = false;
-
-        var gridItem = new ToolStripMenuItem("Grid");
-        gridItem.Click += (s, e) =>
+            _miniClick = false;
+        });
+        var gridItem = new ToolStripMenuItem("Grid", null, (s, e) =>
         {
-            checkBoxShowGrid.Checked = !checkBoxShowGrid.Checked;
             _gridVisible = checkBoxShowGrid.Checked;
             RepaintWithBrightnessContrast();
-            gridItem.Checked = checkBoxShowGrid.Checked;
-        };
-        contextMenu.Opening += (s, e) => gridItem.Checked = _gridVisible;
-        contextMenu.Items.Add(gridItem);
-        contextMenu.Items.Add(new ToolStripSeparator());
+        });
 
-        var watermarkItem = new ToolStripMenuItem("Slideshow: Toggle Watermark");
-        watermarkItem.Click += (s, e) =>
-        {
-            _showSlideshowWatermark = !_showSlideshowWatermark;
-            watermarkItem.Checked = _showSlideshowWatermark;
-        };
-        watermarkItem.Enabled = false;
+        var watermarkItem = new ToolStripMenuItem("Slideshow: Toggle Watermark", null, (s, e) =>
+        _showSlideshowWatermark = !_showSlideshowWatermark)
+        { Enabled = false };
+        var spanMonitorsItem = new ToolStripMenuItem("Span Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
+        var restoreMonitorsItem = new ToolStripMenuItem("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e)) 
+        { Visible = false };
+        var slideshowItem = new ToolStripMenuItem("Start Slideshow", null, (s, e) => OnSlideshowClick(s, e));
+        var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region", null, (s, e) => SkipSlideshowRegion()) 
+        { Enabled = false };
+        var miniMapItem = new ToolStripMenuItem("Mini Map", null, (s, e) => ToggleMiniMap());
+        var systemInfoItem = new ToolStripMenuItem("System Info…", null, (s, e) => ShowSystemInfoDialog());
+        var saveRegionItem = new ToolStripMenuItem("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
+        var resetViewItem = new ToolStripMenuItem("Reset View", null, (s, e) => OnResetClick(s, e));
+        var saveImageItem = new ToolStripMenuItem("Save Image…", null, (s, e) => OnScreenshotClick(s, e));
 
-        var slideshowItem = new ToolStripMenuItem("Start Slideshow");
-        slideshowItem.Click += (s, e) =>
+        contextMenu.Opening += (s, e) =>
         {
-            OnSlideshowClick(s, e);
-            if (!_slideshowRunning) slideshowItem.Text = "Start Slideshow";
-            else slideshowItem.Text = "Stop Slideshow";
+            statusItem.Checked = _footerPanel.Visible;
+            miniModeItem.Enabled = !_spanning;
+            spanMonitorsItem.Visible = !_spanning;
+            spanMonitorsItem.Enabled = !_miniMode;
+            restoreMonitorsItem.Visible = _spanning;
+            restoreMonitorsItem.Checked = _spanning;
+            gridItem.Checked = _gridVisible;
+            skipItem.Enabled = _slideshowRunning;
+            miniMapItem.Checked = _miniMapPanel?.Visible ?? false;
             slideshowItem.Checked = _slideshowRunning;
             watermarkItem.Enabled = _slideshowRunning;
+            slideshowItem.Text = _slideshowRunning ? "Stop Slideshow" : "Start Slideshow";
+            watermarkItem.Checked = _showSlideshowWatermark;
+            checkBoxShowGrid.Checked = !checkBoxShowGrid.Checked;
+            miniModeItem.Checked = _miniMode;
+            onTopItem.Checked = TopMost;
+            statusItem.Checked = _footerPanel.Visible;
+            navigateItem.Checked = checkBoxShowCoordPanel.Checked;
+            toolbarItem.Checked = _toolbar.Visible;
         };
+
+        contextMenu.Items.Add(toolbarItem);
+        contextMenu.Items.Add(navigateItem);
+        contextMenu.Items.Add(statusItem);
+        contextMenu.Items.Add(resetViewItem);
+        contextMenu.Items.Add(gridItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add(onTopItem);
+        contextMenu.Items.Add(spanMonitorsItem);
+        contextMenu.Items.Add(restoreMonitorsItem);
+        contextMenu.Items.Add(miniModeItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(slideshowItem);
         contextMenu.Items.Add(watermarkItem);
-
-        var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region") { Enabled = false };
-        skipItem.Click += (s, e) => SkipSlideshowRegion();
         contextMenu.Items.Add(skipItem);
-        contextMenu.Opening += (s, e) => skipItem.Enabled = _slideshowRunning;
-
-
-
         contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
-
+        contextMenu.Items.Add(saveRegionItem);
+        contextMenu.Items.Add(saveImageItem);
         contextMenu.Items.Add(new ToolStripSeparator());
-
-        var miniMapItem = new ToolStripMenuItem("Mini Map");
-        miniMapItem.Click += (s, e) =>
-        {
-            ToggleMiniMap();
-            miniMapItem.Checked = _miniMapPanel?.Visible ?? false;
-        };
         contextMenu.Items.Add(miniMapItem);
-        var systemInfoItem = new ToolStripMenuItem("System Info…");
-        systemInfoItem.Click += (s, e) => ShowSystemInfoDialog();
         contextMenu.Items.Add(systemInfoItem);
-
         _renderPanel.ContextMenuStrip = contextMenu;
+        #endregion Context menu for render panel
+        #endregion Render panel
 
         // Docking / Z-order: Fill first, then Top-docked in reverse, footer last.
         Controls.Add(_renderPanel);
@@ -943,14 +903,6 @@ public sealed class MainForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-
-        //if (width > 200000 || height > 200000)
-        //{
-        //    var result = MessageBox.Show(
-        //        $"Cannot use dimensions {width}x{height}. Maximum allowed is 200000x200000.",
-        //        "Maximums Exceeded", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        //    return;
-        //}
 
         var (maxW, maxH) = ComputeMaxDimensions();
         if (width > maxW || height > maxH)
@@ -1057,7 +1009,7 @@ public sealed class MainForm : Form
             _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
-            Text = $"Fracturing Fog  —  {_renderer.RendererDescription}";
+            Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
             ApplyViewState();
             TriggerCalculation();
         }
@@ -1793,7 +1745,7 @@ public sealed class MainForm : Form
         const int themesPerRegion = 3;
         const int themeDurationMs = 12_000;   // 12 s fully visible per theme
         const int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
-        const int fadeSteps = 20;
+        const int fadeSteps = 22;
         const int fadeStepMs = fadeDurationMs / fadeSteps;
         int lastRegionIdx = -1;
         int lastThemeIdx = -1;
@@ -1824,6 +1776,7 @@ public sealed class MainForm : Form
                     if (_calculator == null) return Array.Empty<uint>();
                     // Use the last uploaded processed buffer if available so the
                     // cross-fade starts from exactly what was on screen.
+                    Debug.WriteLine($"SldShwLp: Last uploaded buffer: {_lastUploadedBuffer?.Length} pixels, size {_lastUploadedWidth}×{_lastUploadedHeight}");
                     if (_lastUploadedBuffer != null
                         && _lastUploadedWidth == _calculator.Width
                         && _lastUploadedHeight == _calculator.Height)
@@ -1832,6 +1785,7 @@ public sealed class MainForm : Form
                         _lastUploadedBuffer.CopyTo(copy, 0);
                         return copy;
                     }
+                    Debug.WriteLine($"SldShwLp: Falling back to direct ColorBuffer copy of {_calculator.ColorBuffer.Length} pixels");
                     var raw = new uint[_calculator.ColorBuffer.Length];
                     _calculator.ColorBuffer.CopyTo(raw, 0);
                     return raw;
@@ -1870,9 +1824,13 @@ public sealed class MainForm : Form
 
                 // 4. Cross-fade — sizes must match (no resize during transition).
                 if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0)
+                {
+                    Debug.WriteLine($"SldShwLp: Starting cross-fade between buffers of {oldBuf.Length} pixels");
                     await CrossFade(oldBuf, newBuf, fadeSteps, fadeStepMs, ct);
+                }                    
                 else
                 {
+                    Debug.WriteLine($"SldShwLp: Buffer size mismatch or empty (old: {oldBuf.Length}, new: {newBuf.Length}), skipping cross-fade");
                     await InvokeAsync(() =>
                     {
                         if (!_disposed && _renderer != null && _calculator != null)
@@ -1925,9 +1883,13 @@ public sealed class MainForm : Form
                 if (ct.IsCancellationRequested) return;
 
                 if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
+                {
+                    Debug.WriteLine($"SldShwLp: Starting theme cross-fade between buffers of {oldThemeBuf.Length} pixels");
                     await CrossFade(oldThemeBuf, newThemeBuf, fadeSteps, fadeStepMs, ct);
+                }                    
                 else
                 {
+                    Debug.WriteLine($"SldShwLp: Theme buffer size mismatch or empty (old: {oldThemeBuf.Length}, new: {newThemeBuf.Length}), skipping cross-fade");
                     await InvokeAsync(() =>
                     {
                         if (!_disposed && _renderer != null && _calculator != null)
@@ -2175,7 +2137,7 @@ public sealed class MainForm : Form
 
         using var dlg = new SaveFileDialog
         {
-            Title = _spanning ? "Save Wallpaper Screenshot" : "Save Mandelbrot Screenshot",
+            Title = _spanning ? "Save Wallpaper Screenshot" : "Save Fractal Screenshot",
             Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
             FilterIndex = 1,
             DefaultExt = "png",
@@ -2419,7 +2381,16 @@ public sealed class MainForm : Form
                         // After 90° CW rotation the saved dimensions are result.Height × result.Width.
                         var fontColor = ComputeContrastColor(GetSwatchColor(),
                             watermark: true, pixels: rotated, imgW: result.Height, imgH: result.Width);
-                        SavePixelsToFile(rotated, result.Height, result.Width, path, format, waterMark, fontColor, subText);
+                        SavePixelsToFile(
+                            rotated, 
+                            result.Height,
+                            result.Width, 
+                            path, 
+                            format, 
+                            waterMark, 
+                            fontColor, 
+                            subText,
+                            true);
                         SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Height}×{result.Width} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
                     }
                     else
@@ -2427,7 +2398,16 @@ public sealed class MainForm : Form
                         var fontColor = ComputeContrastColor(GetSwatchColor(),
                             watermark: true, pixels: result.ColorBuffer,
                             imgW: result.Width, imgH: result.Height);
-                        SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, fontColor, subText);
+                        SavePixelsToFile(
+                            result.ColorBuffer,
+                            result.Width, 
+                            result.Height, 
+                            path, 
+                            format,
+                            waterMark, 
+                            fontColor, 
+                            subText,
+                            true);
                         SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
                     }
                 }
@@ -2438,7 +2418,7 @@ public sealed class MainForm : Form
 
     private static unsafe void SavePixelsToFile(
         uint[] pixels, int w, int h, string path, ImageFormat format,
-        string watermarkText, Color fontColor, string subText = "")
+        string watermarkText, Color fontColor, string subText = "", bool poster = false)
     {
         using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
@@ -2476,28 +2456,43 @@ public sealed class MainForm : Form
         }
         else bmp.Save(path, format);
 
+        Debug.WriteLine($"Watersmark text: '{watermarkText}'");
         if (!string.IsNullOrEmpty(watermarkText))
         {
             using var g = Graphics.FromImage(bmp);
-            AddWaterMark(g, watermarkText, w, h, fontColor, subText);
+            AddWaterMark(g, watermarkText, w, h, fontColor, subText, poster);
             bmp.Save(path, format);
         }
     }
 
-    private static void AddWaterMark(Graphics g, string text, int width, int height, Color fontColor, string subText = "")
+    private static void AddWaterMark(
+        Graphics g, 
+        string text, 
+        int width, 
+        int height, 
+        Color fontColor, 
+        string subText = "",
+        bool poster = false)
     {
-        using var font = new Font("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
+        int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
+        Debug.WriteLine($"Watermark font size: {fontSize}px");
+
+        using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
         var sz = g.MeasureString(text, font);
-        var pos = new PointF(width - sz.Width - 20, height - sz.Height - 12);
+        int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
+        Debug.WriteLine($"Watermark position offset: {yOffset}px from bottom-right corner");
+        var pos = new PointF(width - sz.Width - 20, height - sz.Height - yOffset);
         using var brush = new SolidBrush(fontColor);
         g.DrawString(text, font, brush, pos);
 
         if (!string.IsNullOrEmpty(subText))
         {
-            using var fontSmall = new Font("Segoe UI", 8, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
             var sz2 = g.MeasureString(subText, fontSmall);
+            int subTextOffset = poster ? 0 : 2;
+            Debug.WriteLine($"Subtext font size: {fontSize / 2}px, offset: {subTextOffset}px");
             g.DrawString($"{subText}", fontSmall, brush,
-                new PointF(width - sz2.Width - 55, height - sz2.Height - 2));
+                new PointF(width - sz2.Width - 55, height - sz2.Height - subTextOffset));
         }
 
         g.Save();
@@ -2668,16 +2663,14 @@ public sealed class MainForm : Form
         if (WindowState == FormWindowState.Minimized) return;
         Debug.WriteLine($"MiniMode: {_miniMode}  Size: {Size}  RenderPanel: {_renderPanel.ClientSize} Previous Size: {_miniPreviousSize}");
 
-        if (_miniMode)
+        if (!_spanning && _miniClick)
         {
-            FormBorderStyle = FormBorderStyle.None;
-            Size = new Size(MinimumSize.Width, MinimumSize.Height);
+            FormBorderStyle = _miniMode ? FormBorderStyle.None : _miniPreviousBorderStyle;
+            Size = new Size(
+                _miniMode ? MinimumSize.Width : _miniPreviousSize.Width,
+                _miniMode ? MinimumSize.Height : _miniPreviousSize.Height);
         }
-        else
-        {
-            FormBorderStyle = _miniPreviousBorderStyle;
-            Size = new Size(_miniPreviousSize.Width, _miniPreviousSize.Height);
-        }
+
 
         int w = _renderPanel.ClientSize.Width;
         int h = _renderPanel.ClientSize.Height;
@@ -3243,12 +3236,11 @@ public sealed class PosterDialog : Form
     private readonly CheckBox _medDefCB;
     private readonly CheckBox _highDefCB;
 
-
     public PosterDialog()
     {
         Text = "Poster Print";
         FormBorderStyle = FormBorderStyle.FixedDialog;
-        ClientSize = new Size(440, 180);
+        ClientSize = new Size(340, 180);
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -3258,16 +3250,17 @@ public sealed class PosterDialog : Form
         _posterHLabel = new Label
         {
             Text = "Poster Height (inches):",
-            Left = 12,
-            Top = 12,
-            Width = 150,
+            Left = 4,
+            Top = 7,
+            Width = 130,
+            TextAlign = ContentAlignment.MiddleRight,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 9f)
         };
 
         _postHTx = new TextBox
         {
-            Left = 163,
+            Left = 136,
             Top = 10,
             Width = 50,
             BackColor = Color.FromArgb(50, 50, 50),
@@ -3282,7 +3275,7 @@ public sealed class PosterDialog : Form
 
         _postWTx = new TextBox
         {
-            Left = 163,
+            Left = 136,
             Top = 36,
             Width = 50,
             BackColor = Color.FromArgb(50, 50, 50),
@@ -3295,9 +3288,10 @@ public sealed class PosterDialog : Form
         _posterWLabel = new Label
         {
             Text = "Poster Width (inches):",
-            Left = 12,
+            Left = 4,
             Top = 38,
-            Width = 150,
+            Width = 130,
+            TextAlign = ContentAlignment.MiddleRight,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 9f)
         };
@@ -3305,54 +3299,12 @@ public sealed class PosterDialog : Form
         Controls.Add(_posterWLabel);
         Controls.Add(_postWTx);
 
-        _lowDefCB = new CheckBox
-        {
-            Text = "Low Def (150 DPI)",
-            Left = 223,
-            Top = 36,
-            Width = 120,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f),
-            Checked = false
-        };
-        _lowDefCB.CheckedChanged += (s, e) => CalculatePixelDimensions();
-
-        Controls.Add(_lowDefCB);
-
-        _medDefCB = new CheckBox
-        {
-            Text = "Med Def (300 DPI)",
-            Left = 223,
-            Top = 60,
-            Width = 120,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f),
-            Checked = true
-        };
-        _medDefCB.CheckedChanged += (s, e) => CalculatePixelDimensions();
-
-        Controls.Add(_medDefCB);
-
-        _highDefCB = new CheckBox
-        {
-            Text = "High Def (600 DPI)",
-            Left = 223,
-            Top = 84,
-            Width = 120,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f),
-            Checked = false
-        };
-        _highDefCB.CheckedChanged += (s, e) => CalculatePixelDimensions();
-        Controls.Add(_highDefCB);
-
-
         _widthLabel = new Label
         {
             Text = "Pixel Width:",
-            Left = 12,
+            Left = 4,
             Top = 70,
-            Width = 120,
+            Width = 130,
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 9f)
@@ -3361,7 +3313,7 @@ public sealed class PosterDialog : Form
 
         _widthTx = new TextBox
         {
-            Left = 163,
+            Left = 136,
             Top = 71,
             Width = 50,
             BackColor = Color.FromArgb(50, 50, 50),
@@ -3374,9 +3326,9 @@ public sealed class PosterDialog : Form
         _heightLabel = new Label
         {
             Text = "Pixel Height:",
-            Left = 12,
+            Left = 4,
             Top = 98,
-            Width = 120,
+            Width = 130,
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = Color.LightGray,
             Font = new Font("Segoe UI", 9f)
@@ -3385,7 +3337,7 @@ public sealed class PosterDialog : Form
 
         _heightTx = new TextBox
         {
-            Left = 163,
+            Left = 136,
             Top = 97,
             Width = 50,
             BackColor = Color.FromArgb(50, 50, 50),
@@ -3398,7 +3350,7 @@ public sealed class PosterDialog : Form
         _portraitCB = new CheckBox
         {
             Text = "Portrait Orientation",
-            Left = 223,
+            Left = 203,
             Top = 10,
             Width = 200,
             ForeColor = Color.LightGray,
@@ -3407,6 +3359,66 @@ public sealed class PosterDialog : Form
         };
         Controls.Add(_portraitCB);
 
+        _lowDefCB = new CheckBox
+        {
+            Text = "Low Def (150 DPI)",
+            Left = 203,
+            Top = 36,
+            Width = 120,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            Checked = false
+        };
+        _lowDefCB.CheckedChanged += (s, e) => {
+            CalculatePixelDimensions();
+            if (_lowDefCB.Checked)
+            {
+                _medDefCB?.Checked = false;
+                _highDefCB?.Checked = false;
+            }
+        };
+        Controls.Add(_lowDefCB);
+
+        _medDefCB = new CheckBox
+        {
+            Text = "Med Def (300 DPI)",
+            Left = 203,
+            Top = 60,
+            Width = 180,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            Checked = true
+        };
+        _medDefCB.CheckedChanged += (s, e) => {
+            CalculatePixelDimensions();
+            if (_medDefCB.Checked)
+            {
+                _lowDefCB?.Checked = false;
+                _highDefCB?.Checked = false;
+            }
+        };
+        Controls.Add(_medDefCB);
+
+        _highDefCB = new CheckBox
+        {
+            Text = "High Def (600 DPI)",
+            Left = 203,
+            Top = 84,
+            Width = 180,
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            Checked = false
+        };
+        _highDefCB.CheckedChanged += (s, e) => {
+            CalculatePixelDimensions();
+            if (_highDefCB.Checked)
+            {
+                _lowDefCB?.Checked = false;
+                _medDefCB?.Checked = false;
+            }
+        };
+        Controls.Add(_highDefCB);
+
         ToolTip _portraitTip = new ToolTip();
         _portraitTip.SetToolTip(_portraitCB, "If checked, the output image will be formatted for portrait-oriented paper.  If unchecked, the image will be formatted for landscape-oriented paper.  When printing a poster taller than it is wide, select portrait orientation for the best results.");
 
@@ -3414,7 +3426,7 @@ public sealed class PosterDialog : Form
         {
             Text = "OK",
             DialogResult = DialogResult.OK,
-            Left = 63,
+            Left = 82,
             Top = 138,
             Width = 72,
             Height = 26,
@@ -3426,7 +3438,7 @@ public sealed class PosterDialog : Form
         {
             Text = "Cancel",
             DialogResult = DialogResult.Cancel,
-            Left = 143,
+            Left = 162,
             Top = 138,
             Width = 72,
             Height = 26,
