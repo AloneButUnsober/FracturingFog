@@ -17,6 +17,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using FracturingFog.FFMath;
+
 using Vortice.Direct3D12.Video;
 
 namespace FracturingFog.Models
@@ -43,11 +45,38 @@ namespace FracturingFog.Models
         /// <summary>Display name shown in the UI.</summary>
         public string Name { get; set; } = string.Empty;
 
-        /// <summary>Real part of the complex-plane view centre.</summary>
+        /// <summary>Real part of the complex-plane view centre (Hi word of a double-double).</summary>
         public double CenterX { get; set; }
 
-        /// <summary>Imaginary part of the complex-plane view centre.</summary>
+        /// <summary>Imaginary part of the complex-plane view centre (Hi word of a double-double).</summary>
         public double CenterY { get; set; }
+
+        /// <summary>
+        /// Low (round-off) word of the real centre.  Captures the bits that fall
+        /// below ulp(CenterX) — essential at zoom ≳ 1e15 where pixel size is
+        /// smaller than what a single double can address.  Defaults to 0 for
+        /// backwards compatibility with regions saved before DD precision.
+        /// </summary>
+        public double CenterXLo { get; set; }
+
+        /// <summary>Low (round-off) word of the imaginary centre.  See <see cref="CenterXLo"/>.</summary>
+        public double CenterYLo { get; set; }
+
+        /// <summary>Full double-double real centre, assembled from CenterX (Hi) + CenterXLo (Lo).</summary>
+        [JsonIgnore]
+        public DD CenterDDX
+        {
+            get => new DD(CenterX, CenterXLo);
+            set { CenterX = value.Hi; CenterXLo = value.Lo; }
+        }
+
+        /// <summary>Full double-double imaginary centre.</summary>
+        [JsonIgnore]
+        public DD CenterDDY
+        {
+            get => new DD(CenterY, CenterYLo);
+            set { CenterY = value.Hi; CenterYLo = value.Lo; }
+        }
 
         /// <summary>
         /// Zoom factor: 1.0 = full set visible, higher = zoomed in.

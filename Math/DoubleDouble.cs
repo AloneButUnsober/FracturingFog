@@ -27,6 +27,8 @@
 //     when scale is a denormalized double below 1e-300.
 
 using System;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Runtime.CompilerServices;
 
 namespace FracturingFog.FFMath
@@ -48,7 +50,7 @@ namespace FracturingFog.FFMath
         // ── Constants ─────────────────────────────────────────────────────────
 
         public static readonly DD Zero = new(0.0, 0.0);
-        public static readonly DD One  = new(1.0, 0.0);
+        public static readonly DD One = new(1.0, 0.0);
 
         // ── Constructors ──────────────────────────────────────────────────────
 
@@ -238,6 +240,199 @@ namespace FracturingFog.FFMath
             return new DD(r1, r2);
         }
 
+        /// <summary>
+        /// DD-center variant of <see cref="FromCenterOffset(double, double, double)"/>.
+        /// The center's Lo bits are essential at zoom ≳ 1e15, where the Hi-only
+        /// form would round the per-pixel result back onto a coarse double grid.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD FromCenterOffset(DD center, double pixelOffset, double scale)
+        {
+            var (offHi, offLo) = TwoProduct(pixelOffset, scale);
+            var (s, e) = TwoSum(center.Hi, offHi);
+            e += offLo + center.Lo;
+            var (r1, r2) = QuickTwoSum(s, e);
+            return new DD(r1, r2);
+        }
+
         public override string ToString() => $"DD({Hi:G17} + {Lo:G6})";
+    }
+
+    // Math/DD4.cs
+    //
+    // 4-wide SIMD double-double arithmetic using AVX2 + FMA.
+    //
+    // Layout: Hi = [Hi0|Hi1|Hi2|Hi3], Lo = [Lo0|Lo1|Lo2|Lo3]
+    // The four lanes are independent Mandelbrot pixels, so all TwoProduct
+    // chains execute in parallel, hiding the ~4-cycle multiply latency
+    // that serialises the scalar DD path. Expected speedup: 3–3.5×.
+
+    public readonly struct DD4
+    {
+        public readonly Vector256<double> Hi;
+        public readonly Vector256<double> Lo;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public DD4(Vector256<double> hi, Vector256<double> lo) { Hi = hi; Lo = lo; }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 Broadcast(double v)
+            => new(Vector256.Create(v), Vector256<double>.Zero);
+
+        // ── Exact primitives ─────────────────────────────────────────────────
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static (Vector256<double> s, Vector256<double> e) TwoSum(
+            Vector256<double> a, Vector256<double> b)
+        {
+            var s = Avx.Add(a, b);
+            var v = Avx.Subtract(s, a);
+            var e = Avx.Add(Avx.Subtract(a, Avx.Subtract(s, v)),
+                            Avx.Subtract(b, v));
+            return (s, e);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static (Vector256<double> s, Vector256<double> e) QuickTwoSum(
+            Vector256<double> a, Vector256<double> b)
+        {
+            var s = Avx.Add(a, b);
+            var e = Avx.Subtract(b, Avx.Subtract(s, a));
+            return (s, e);
+        }
+
+        // VFNMADD: e = -(a*b) + p  →  exact round-off of p = a*b
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static (Vector256<double> p, Vector256<double> e) TwoProduct(
+            Vector256<double> a, Vector256<double> b)
+        {
+            var p = Avx.Multiply(a, b);
+            var e = Fma.MultiplyAddNegated(a, b, p);   // -(a*b)+p
+            return (p, e);
+        }
+
+        // ── Operators ────────────────────────────────────────────────────────
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 operator +(DD4 a, DD4 b)
+        {
+            var (s1, s2) = TwoSum(a.Hi, b.Hi);
+            var (t1, t2) = TwoSum(a.Lo, b.Lo);
+            s2 = Avx.Add(s2, t1);
+            var (r1, r2) = QuickTwoSum(s1, s2);
+            r2 = Avx.Add(r2, t2);
+            var (p1, p2) = QuickTwoSum(r1, r2);
+            return new DD4(p1, p2);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 operator -(DD4 a, DD4 b)
+        {
+            var negHi = Avx.Subtract(Vector256<double>.Zero, b.Hi);
+            var negLo = Avx.Subtract(Vector256<double>.Zero, b.Lo);
+            return a + new DD4(negHi, negLo);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 operator *(DD4 a, DD4 b)
+        {
+            var (p1, p2) = TwoProduct(a.Hi, b.Hi);
+            // Cross terms: Hi*Lo + Lo*Hi (FMA saves one ADD each)
+            p2 = Fma.MultiplyAdd(a.Hi, b.Lo,
+                 Fma.MultiplyAdd(a.Lo, b.Hi, p2));
+            var (r1, r2) = QuickTwoSum(p1, p2);
+            return new DD4(r1, r2);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 operator *(DD4 a, double b)
+        {
+            var bv = Vector256.Create(b);
+            var (p1, p2) = TwoProduct(a.Hi, bv);
+            p2 = Fma.MultiplyAdd(a.Lo, bv, p2);
+            var (r1, r2) = QuickTwoSum(p1, p2);
+            return new DD4(r1, r2);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 operator +(DD4 a, double b)
+        {
+            var bv = Vector256.Create(b);
+            var (s1, s2) = TwoSum(a.Hi, bv);
+            s2 = Avx.Add(s2, a.Lo);
+            var (r1, r2) = QuickTwoSum(s1, s2);
+            return new DD4(r1, r2);
+        }
+
+        /// <summary>Optimised squaring — saves one TwoProduct vs operator *.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public DD4 Square()
+        {
+            var two = Vector256.Create(2.0);
+            var (p1, p2) = TwoProduct(Hi, Hi);
+            p2 = Avx.Add(p2, Avx.Multiply(two, Avx.Multiply(Hi, Lo)));
+            var (r1, r2) = QuickTwoSum(p1, p2);
+            return new DD4(r1, r2);
+        }
+
+        // ── Escape check ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns a 4-bit mask (bits 0–3) where set = lane has |z|² >= threshold.
+        /// Comparing Hi is sufficient — see DD.cs for the rationale.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int EscapeMask(DD4 mag2, double threshold)
+            => Avx.MoveMask(
+                   Avx.CompareGreaterThanOrEqual(
+                       mag2.Hi, Vector256.Create(threshold)));
+
+        // ── Coordinate factory ────────────────────────────────────────────────
+
+        /// <summary>
+        /// center + pixelOffsets[0..3] × scale with full DD accuracy.
+        /// Equivalent to calling DD.FromCenterOffset four times, but uses
+        /// vectorised TwoProduct / TwoSum so all four results compute in parallel.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 FromCenterOffset(
+            double center, Vector256<double> pixelOffsets, double scale)
+        {
+            var sv = Vector256.Create(scale);
+            var cv = Vector256.Create(center);
+            var (offHi, offLo) = TwoProduct(pixelOffsets, sv);
+            var (s, e) = TwoSum(cv, offHi);
+            e = Avx.Add(e, offLo);
+            var (r1, r2) = QuickTwoSum(s, e);
+            return new DD4(r1, r2);
+        }
+
+        /// <summary>
+        /// Overload that accepts a DD centre so the Lo word (sub-double precision
+        /// accumulated over zoom steps) flows into every pixel's coordinate.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD4 FromCenterOffset(
+            DD center, Vector256<double> pixelOffsets, double scale)
+        {
+            var sv  = Vector256.Create(scale);
+            var cv  = Vector256.Create(center.Hi);
+            var clo = Vector256.Create(center.Lo);
+            var (offHi, offLo) = TwoProduct(pixelOffsets, sv);
+            var (s, e) = TwoSum(cv, offHi);
+            e = Avx.Add(e, Avx.Add(clo, offLo));
+            var (r1, r2) = QuickTwoSum(s, e);
+            return new DD4(r1, r2);
+        }
+
+        // ── Lane extraction ───────────────────────────────────────────────────
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double GetHi(int lane) => Hi.GetElement(lane);
+
+        // ── CPU capability guard ──────────────────────────────────────────────
+
+        /// <summary>True when AVX2 + FMA are both present. Fall back to scalar DD otherwise.</summary>
+        public static bool IsSupported => Avx2.IsSupported && Fma.IsSupported;
     }
 }

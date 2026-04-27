@@ -84,6 +84,9 @@ namespace FracturingFog.Models
     {
         protected readonly List<ColorStop> Stops = new();
 
+        /// <summary>Read-only view of the gradient stops, used by JSON export.</summary>
+        public IReadOnlyList<ColorStop> ExportStops => Stops;
+
         public ColorPaletteType Type => ColorPaletteType.GradientLinear;
 
         public int MaxIterations { get; set; } = 1000;
@@ -149,6 +152,9 @@ namespace FracturingFog.Models
         /// Default 0.02 gives roughly the same cycle rate as the HSV palette.
         /// </summary>
         protected virtual float CycleSpeed { get; } = 0.02f;
+
+        /// <summary>Effective cycle speed of this instance, for JSON export.</summary>
+        public float ExportCycleSpeed => CycleSpeed;
 
         public new ColorPaletteType Type => ColorPaletteType.GradientCyclic;
 

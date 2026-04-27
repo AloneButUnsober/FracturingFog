@@ -28,6 +28,7 @@ using System.Windows.Forms;
 using FracturingFog.Models;
 using FracturingFog.Interefaces;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace FracturingFog;
 
@@ -60,19 +61,27 @@ public sealed class MainForm : Form
     private readonly ComboBox _regionCombo;
     private readonly Button _saveViewButton;
     private readonly Button _delRegionButton;
-    private readonly Button _exportRegionsButton;
-    private readonly Button _importRegionsButton;
     private readonly ToolTip _toolTip = new();
 
     // UI: coordinate / region bar
     private readonly Panel _coordPanel;
+    private readonly Label _lblCX;
     private readonly TextBox _txCX;
+    private readonly Label _lblCY;
     private readonly TextBox _txCY;
+    private readonly Label _lblZoom;
     private readonly TextBox _txZoom;
+    private readonly Label _lblIter;
     private readonly TextBox _txIter;
     private readonly CheckBox _chkLockIter;
     private readonly Button _goButton;
     private readonly Button _flipButton;
+    private readonly Button _exportRegionsButton;
+    private readonly Button _importRegionsButton;
+    private readonly Button _exportColorThemeButton;
+    private readonly Button _importColorThemeButton;
+    private readonly Button _deleteColorThemeButton;
+    private readonly Button _loadColorThemesButton;
 
     // Render panel
     private readonly RenderPanel _renderPanel;
@@ -117,8 +126,12 @@ public sealed class MainForm : Form
     private const double DefaultZoom = 0.3;
 
     private double _centerX = DefaultCenterX;
+    private double _centerXLo = 0.0;
     private double _centerY = DefaultCenterY;
+    private double _centerYLo = 0.0;
     private double _zoom = DefaultZoom;
+
+    private IColorMap _defaultColorMap = new FirePalette();
 
     // Active quality preset — Standard by default.
     private QualityPreset _quality = QualityPreset.Standard;
@@ -187,11 +200,13 @@ public sealed class MainForm : Form
 
     private bool _slideshowRunning;
     private CancellationTokenSource? _slideshowCts;
+    private CancellationTokenSource? _slideshowRegionLockCts;   // cancelled to unlock region during slideshow
     private readonly object _slideshowLock = new();
     private readonly Random _slideshowRng = new();
     private bool _showSlideshowWatermark;   // true only while slideshow runs
     private string _slideshowRegionName = "";
     private CancellationTokenSource? _slideshowSkipCts;   // cancelled to skip current region
+    private bool _slideShowLockRegion;     // When true, the slideshow will not change regions; only themes.  Set by Shift+clicking the Slideshow button.
 
     #endregion Slideshow state
 
@@ -225,6 +240,8 @@ public sealed class MainForm : Form
 
     #endregion Public Members
 
+    #region Constructors
+
     /// <summary>
     /// MainForm constructor: sets up the UI and event handlers.  The actual fractal renderer and 
     /// calculator are not initialised here; that happens in OnLoad to ensure the form is fully created 
@@ -233,7 +250,7 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = $"{_programName} v{_programVersion} - {RendererFactory.ProbeDescription()}";
-        ClientSize = new Size(1365, 768);
+        ClientSize = new Size(1265, 728);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
@@ -281,12 +298,13 @@ public sealed class MainForm : Form
             return _b;
         }
 
-        Label MakeLbl(string text, int left, int top, Panel p) => new Label
+        Label MakeLbl(string text, int left, int top, Panel p, bool rightAlign) => new Label
         {
             Text = text,
             Left = left,
             Top = top,
-            AutoSize = true,
+            AutoSize = rightAlign ? false : true,
+            TextAlign = rightAlign ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
@@ -328,7 +346,7 @@ public sealed class MainForm : Form
         int labelTop = 9;
         int txTop = 7;
 
-        _resetButton = MakeBtn("", 30, buttonLeft, buttonTop, "Reset view to default centre and zoom");
+        _resetButton = MakeBtn("", 30, buttonLeft, buttonTop, "Reset view to default center and zoom");
         _resetButton.Padding = new Padding(0, 0, 1, 1);
         _resetButton.Margin = new Padding(0);
         _resetButton.Click += OnResetClick;
@@ -428,7 +446,7 @@ public sealed class MainForm : Form
         };
         _toolbar.Controls.Add(tlbl);
         buttonLeft += tlbl.PreferredWidth + 4;
-
+        Models.ColorPalette.LoadUserThemes();
         _colorThemeCombo = new ColorComboBox
         {
             Left = buttonLeft,
@@ -489,16 +507,16 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(_delRegionButton);
         buttonLeft += 58;
 
-        _exportRegionsButton = MakeBtn("Exp…", 55, buttonLeft, 6, "Export all custom regions to a JSON file");
-        _exportRegionsButton.Click += OnExportRegionsClick;
-        _toolbar.Controls.Add(_exportRegionsButton);
-        buttonLeft += 58;
+        //_exportRegionsButton = MakeBtn("Exp…", 55, buttonLeft, 6, "Export all custom regions to a JSON file");
+        //_exportRegionsButton.Click += OnExportRegionsClick;
+        //_toolbar.Controls.Add(_exportRegionsButton);
+        //buttonLeft += 58;
 
-        _importRegionsButton = MakeBtn("Imp…", 55, buttonLeft, 6, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
-        _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-        _importRegionsButton.Click += OnImportRegionsClick;
-        _toolbar.Controls.Add(_importRegionsButton);
-        buttonLeft += 58;
+        //_importRegionsButton = MakeBtn("Imp…", 55, buttonLeft, 6, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+        //_importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
+        //_importRegionsButton.Click += OnImportRegionsClick;
+        //_toolbar.Controls.Add(_importRegionsButton);
+        //buttonLeft += 58;
         #endregion
 
         #region Checkboxes
@@ -601,37 +619,71 @@ public sealed class MainForm : Form
 
         _coordPanel = new Panel
         {
-            Height = 58,
-            Dock = DockStyle.Top,
+            Width = 300,
+            //Height = 58,
+            //AutoSize = true,
+            Dock = DockStyle.Left,
             BackColor = Color.FromArgb(22, 22, 22),
             Visible = false,   // hidden until user ticks Navigate
         };
         checkBoxShowCoordPanel.Click += (s, e) => _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
 
         buttonLeft = 8;
-        MakeLbl("CX:", buttonLeft, labelTop, _coordPanel);
-        buttonLeft += 28;
-        _txCX = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Real part of the view centre"); buttonLeft += 190;
+        txTop = 6;
+        _lblCX = MakeLbl("CX:", buttonLeft, labelTop, _coordPanel, true);
+        _lblCX.Height = 12;
+        _lblCX.Width = 78;
+        _lblCX.Padding = new Padding(0);
+        buttonLeft += 88;
+        _txCX = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Real part of the view center");
+        _txCX.TextAlign = HorizontalAlignment.Right;
 
-        MakeLbl("CY:", buttonLeft, labelTop, _coordPanel); buttonLeft += 28;
-        _txCY = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Imaginary part of the view centre"); buttonLeft += 190;
-        _flipButton = MakeBtn("Flip Y", 38, buttonLeft, buttonTop, "Flip the view vertically (negate CY)");
-        _flipButton.BackColor = Color.FromArgb(40, 80, 40);
-        _flipButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
-        _flipButton.Click += OnFlipClick;
-        _coordPanel.Controls.Add(_flipButton);
-        buttonLeft += 42;
+        labelTop += 28;
+        txTop += 28;
+        buttonLeft = 8;
+        buttonTop += 28;
+        _lblCY = MakeLbl("CY:", buttonLeft, labelTop, _coordPanel, true);
+        _lblCY.Height = 12;
+        _lblCY.Width = 78;
+        _lblCY.Padding = new Padding(0);
+        buttonLeft += 88;
+        _txCY = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Imaginary part of the view center");
+        _txCY.TextAlign = HorizontalAlignment.Right;
 
-        MakeLbl("Zoom:", buttonLeft, labelTop, _coordPanel); buttonLeft += 44;
-        _txZoom = MakeTx(buttonLeft, txTop, 112, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)"); buttonLeft += 120;
-        MakeLbl("Iter:", buttonLeft, labelTop, _coordPanel); buttonLeft += 38;
-        _txIter = MakeTx(buttonLeft, txTop, 72, _coordPanel, "Maximum iteration count"); buttonLeft += 80;
 
+        labelTop += 28;
+        txTop += 28;
+        buttonLeft = 8;
+        buttonTop += 28;
+
+        _lblZoom = MakeLbl("Zoom:", buttonLeft, labelTop, _coordPanel, true);
+        _lblZoom.Height = 12;
+        _lblZoom.Width = 78;
+        _lblZoom.Padding = new Padding(0);
+        buttonLeft += 88;
+        _txZoom = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)");
+        _txZoom.TextAlign = HorizontalAlignment.Right;
+
+        labelTop += 28;
+        buttonLeft = 8;
+        buttonTop += 28;
+        txTop += 28;
+        _lblIter = MakeLbl("Iterations:", buttonLeft, labelTop, _coordPanel, true);
+        _lblIter.Height = 12;
+        _lblIter.Width = 78;
+        _lblIter.Padding = new Padding(0);
+
+        buttonLeft += 88;
+        _txIter = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Maximum iteration count");
+        _txIter.TextAlign = HorizontalAlignment.Right;
+
+        buttonTop += 28;
+        buttonLeft = 98;
         _chkLockIter = new CheckBox
         {
-            Text = "Lock",
+            Text = "Lock Iterations",
             Left = buttonLeft,
-            Top = 8,
+            Top = buttonTop + 2,
             AutoSize = true,
             AutoCheck = true,
             ForeColor = Color.FromArgb(200, 200, 120),
@@ -642,17 +694,28 @@ public sealed class MainForm : Form
         _toolTip.SetToolTip(_chkLockIter, "Lock the iteration count — pan/zoom will not recalculate it");
         _chkLockIter.CheckedChanged += OnIterLockChanged;
         _coordPanel.Controls.Add(_chkLockIter);
-        buttonLeft += _chkLockIter.PreferredSize.Width + 8;
 
-        _goButton = MakeBtn("Go", 38, buttonLeft, buttonTop, "Go to the specified coordinates");
+        buttonLeft = 98;
+        buttonTop += 38;
+        labelTop += 28;
+        txTop += 28;
+
+        _goButton = MakeBtn("Go", 54, buttonLeft, buttonTop, "Go to the specified coordinates");
         _goButton.BackColor = Color.FromArgb(40, 80, 40);
         _goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
         _goButton.Click += OnGoClick;
         _coordPanel.Controls.Add(_goButton);
 
+        buttonLeft += 62;
+        _flipButton = MakeBtn("Flip Y", 54, buttonLeft, buttonTop, "Flip the view vertically (negate CY)");
+        _flipButton.BackColor = Color.FromArgb(40, 80, 40);
+        _flipButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
+        _flipButton.Click += OnFlipClick;
+        _coordPanel.Controls.Add(_flipButton);
+
         #region Brightness & Contrast sliders 
-        // Row 2 of the coord panel: labels + track bars
-        int sliderTop = 34;
+
+        int sliderTop = buttonTop + 48;
         int sliderLeft = 8;
 
         _brightnessLabel = new Label
@@ -660,14 +723,18 @@ public sealed class MainForm : Form
             Text = "Brightness: 0",
             Left = sliderLeft,
             Top = sliderTop + 3,
-            AutoSize = true,
+            Width = 78,
+            Height = 12,
+            TextAlign = ContentAlignment.MiddleRight,
+            Padding = new Padding(0),
             ForeColor = Color.FromArgb(180, 180, 180),
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
         _coordPanel.Controls.Add(_brightnessLabel);
-        sliderLeft += 100;
+        sliderLeft += 86;
 
+        //sliderTop += 28;
         _brightnessSlider = new TrackBar
         {
             Left = sliderLeft,
@@ -692,14 +759,18 @@ public sealed class MainForm : Form
             RepaintWithBrightnessContrast();
         };
         _coordPanel.Controls.Add(_brightnessSlider);
-        sliderLeft += 210;
 
+        sliderLeft = 8;
+        sliderTop += 58;
         _contrastLabel = new Label
         {
             Text = "Contrast: 0",
             Left = sliderLeft,
             Top = sliderTop + 3,
-            AutoSize = true,
+            Width = 78,
+            Height = 12,
+            Padding = new Padding(0),
+            TextAlign = ContentAlignment.MiddleRight,
             ForeColor = Color.FromArgb(180, 180, 180),
             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
             BackColor = Color.Transparent
@@ -732,6 +803,63 @@ public sealed class MainForm : Form
         };
         _coordPanel.Controls.Add(_contrastSlider);
         #endregion Brightness & Contrast sliders 
+
+        #region Region Import/Export buttons
+        GroupBox regionBox = new GroupBox
+        {
+            Text = "Regions",
+            Left = 28,
+            Top = sliderTop + 58,
+            Width = 260,
+            Height = 60,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.FromArgb(22, 22, 22),
+        };
+
+        _coordPanel.Controls.Add(regionBox);
+        _exportRegionsButton = MakeBtn("Export", 65, 60, 20, "Export all custom regions to a JSON file");
+        _exportRegionsButton.Click += OnExportRegionsClick;
+        regionBox.Controls.Add(_exportRegionsButton);
+        buttonLeft += 58;
+
+        _importRegionsButton = MakeBtn("Import", 65, _exportRegionsButton.Width + 70, 20, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+        _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
+        _importRegionsButton.Click += OnImportRegionsClick;
+        regionBox.Controls.Add(_importRegionsButton);
+        buttonLeft += 58;
+        #endregion Region Import/Export buttons
+
+        #region Color Theme Import/Export buttons
+        GroupBox themeBox = new GroupBox
+        {
+            Text = "Color Themes",
+            Left = 28,
+            Top = sliderTop + 128,
+            Width = 260,
+            Height = 90,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.FromArgb(22, 22, 22),
+        };
+        _coordPanel.Controls.Add(themeBox);
+
+        _exportColorThemeButton = MakeBtn("Export", 65, 60, 20, "Export the current color theme to a JSON file");
+        _exportColorThemeButton.Click += OnExportColorThemeClick;
+        themeBox.Controls.Add(_exportColorThemeButton);
+        _importColorThemeButton = MakeBtn("Import", 65, _exportColorThemeButton.Width + 70, 20, "Import color themes from a JSON file");
+        _importColorThemeButton.Click += OnImportColorThemeClick;
+        themeBox.Controls.Add(_importColorThemeButton);
+
+        _deleteColorThemeButton = MakeBtn("Delete", 65, 60, 50, "Delete selected user-defined color theme");
+        _deleteColorThemeButton.Click += OnDeleteColorThemeClick;
+        themeBox.Controls.Add(_deleteColorThemeButton);
+
+        _loadColorThemesButton = MakeBtn("Reload", 65, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 10, 50, "Reload color themes from disk (useful if you edit the JSON files externally)");
+        _loadColorThemesButton.Click += OnLoadColorThemesClick;
+        themeBox.Controls.Add(_loadColorThemesButton);
+
+        #endregion Color Theme Import/Export buttons
         #endregion Coordinate / Navigate panel
 
         #region Render panel
@@ -771,7 +899,8 @@ public sealed class MainForm : Form
         var toolbarItem = new ToolStripMenuItem("Toolbar", null, (s, e) =>
         {
             _toolbar.Visible = !_toolbar.Visible;
-        }) {Checked = true };
+        })
+        { Checked = true };
         var navigateItem = new ToolStripMenuItem("Navigate", null, (s, e) =>
         {
             checkBoxShowCoordPanel.Checked = !checkBoxShowCoordPanel.Checked;
@@ -801,7 +930,8 @@ public sealed class MainForm : Form
         });
         var gridItem = new ToolStripMenuItem("Grid", null, (s, e) =>
         {
-            _gridVisible = checkBoxShowGrid.Checked;
+            _gridVisible = !_gridVisible;
+            checkBoxShowGrid.Checked = _gridVisible;
             RepaintWithBrightnessContrast();
         });
 
@@ -809,11 +939,15 @@ public sealed class MainForm : Form
         _showSlideshowWatermark = !_showSlideshowWatermark)
         { Enabled = false };
         var spanMonitorsItem = new ToolStripMenuItem("Span Monitors", null, (s, e) => OnSpanMonitorsClick(s, e));
-        var restoreMonitorsItem = new ToolStripMenuItem("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e)) 
+        var restoreMonitorsItem = new ToolStripMenuItem("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e))
         { Visible = false };
         var slideshowItem = new ToolStripMenuItem("Start Slideshow", null, (s, e) => OnSlideshowClick(s, e));
-        var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region", null, (s, e) => SkipSlideshowRegion()) 
+        var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region", null, (s, e) => SkipSlideshowRegion())
         { Enabled = false };
+        var slideshowLockRegionItem = new ToolStripMenuItem("Slideshow: Lock Region", null, (s, e) =>
+        {
+            ToggleSlideshowRegionLock();
+        });
         var miniMapItem = new ToolStripMenuItem("Mini Map", null, (s, e) => ToggleMiniMap());
         var systemInfoItem = new ToolStripMenuItem("System Info…", null, (s, e) => ShowSystemInfoDialog());
         var saveRegionItem = new ToolStripMenuItem("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
@@ -832,10 +966,10 @@ public sealed class MainForm : Form
             skipItem.Enabled = _slideshowRunning;
             miniMapItem.Checked = _miniMapPanel?.Visible ?? false;
             slideshowItem.Checked = _slideshowRunning;
+            slideshowLockRegionItem.Checked = _slideShowLockRegion;
             watermarkItem.Enabled = _slideshowRunning;
             slideshowItem.Text = _slideshowRunning ? "Stop Slideshow" : "Start Slideshow";
             watermarkItem.Checked = _showSlideshowWatermark;
-            checkBoxShowGrid.Checked = !checkBoxShowGrid.Checked;
             miniModeItem.Checked = _miniMode;
             onTopItem.Checked = TopMost;
             statusItem.Checked = _footerPanel.Visible;
@@ -856,6 +990,7 @@ public sealed class MainForm : Form
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(slideshowItem);
         contextMenu.Items.Add(watermarkItem);
+        contextMenu.Items.Add(slideshowLockRegionItem);
         contextMenu.Items.Add(skipItem);
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(saveRegionItem);
@@ -879,6 +1014,148 @@ public sealed class MainForm : Form
         KeyDown += OnKeyDown;
         FormClosing += OnFormClosing;
         Application.Idle += OnApplicationIdle;
+    }
+
+    #endregion Constructors
+
+    private void OnLoadColorThemesClick(object? sender, EventArgs e)
+    {
+        string? currentText = _colorThemeCombo.GetItemText(_colorThemeCombo.SelectedItem);
+        UserColorThemeLibrary.Instance.Load();
+        BuildColorThemesSelection();
+        int index = _colorThemeCombo.FindStringExact(currentText ?? string.Empty);
+        _colorThemeCombo.SelectedIndex = index;
+        
+        var map = Models.ColorPalette.GetPaletteByName(_colorThemeCombo.GetItemText(_colorThemeCombo.SelectedItem));
+        if (_calculator != null)
+        {
+            _calculator.ColorMap = map;
+            TriggerCalculation();
+        }
+        _miniMapPanel?.RequestRedraw();
+        SetStatus("Color themes reloaded.");
+    }
+
+    private void OnDeleteColorThemeClick(object? sender, EventArgs e)
+    {
+        string? name = _colorThemeCombo.SelectedItem as string;
+        if (string.IsNullOrEmpty(name) || name == "— select theme —") return;
+
+        if (MessageBox.Show($"Delete color theme \"{name}\"?", "Confirm Delete",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+        UserColorThemeLibrary.Instance.Remove(name);
+        UserColorThemeLibrary.Instance.Load();
+        BuildColorThemesSelection();
+        _colorThemeCombo.SelectedIndex = 0;
+        SetStatus($"Color theme \"{name}\" deleted.");
+    }
+
+    private void OnImportColorThemeClick(object? sender, EventArgs e)
+    {
+        using var dlg = new OpenFileDialog
+        {
+            Title           = "Import Color Theme",
+            Filter          = "JSON File (*.json)|*.json",
+            DefaultExt      = "json",
+            CheckFileExists = true,
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        try
+        {
+            string json = File.ReadAllText(dlg.FileName);
+            Debug.WriteLine($"Importing color data: Length: {json?.Length}  ←  {dlg.FileName}");
+
+            var opts = new JsonSerializerOptions();
+            opts.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            var data = JsonSerializer.Deserialize<ColorThemeData>(json ?? string.Empty, opts);
+
+            if (data == null
+                || string.IsNullOrWhiteSpace(data.Name)
+                || data.Stops == null
+                || data.Stops.Count < 2)
+            {
+                MessageBox.Show(
+                    "This file does not contain a valid color theme.\n\n" +
+                    "Expected a single ColorThemeData object with a Name and at least two Stops.",
+                    "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Avoid colliding with built-in or existing user themes.  Built-ins are
+            // matched first by GetPaletteByName, so a duplicate name would shadow
+            // the import and make it un-selectable; auto-rename with a suffix.
+            string originalName = data.Name;
+            if (NameExistsInPalettes(data.Name))
+            {
+                int n = 2;
+                while (NameExistsInPalettes($"{originalName} ({n})")) n++;
+                data.Name = $"{originalName} ({n})";
+            }
+
+            if (!UserColorThemeLibrary.Instance.Add(data))
+            {
+                MessageBox.Show(
+                    $"Failed to add theme '{data.Name}' to the user library.",
+                    "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // New theme is now in UserPalettes — rebuild the combo, select it,
+            // and re-render with it active.
+            BuildColorThemesSelection();
+            ApplyColorThemeSilent(data.Name);
+            TriggerCalculation();
+
+            string suffixNote = data.Name == originalName
+                ? string.Empty
+                : $" (renamed from '{originalName}')";
+            SetStatus($"Imported color theme '{data.Name}'{suffixNote}  ←  {Path.GetFileName(dlg.FileName)}");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Import failed:\n\n{ex.Message}", "Import Error",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static bool NameExistsInPalettes(string name)
+    {
+        foreach (var p in Models.ColorPalette.Palettes)
+            if (string.Equals(Models.ColorPalette.GetStaticName(p), name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    private void OnExportColorThemeClick(object? sender, EventArgs e)
+    {
+        if (_calculator != null && _calculator.ColorMap != null)
+        {
+            string defaultName = FracturingFog.Models.ColorPalette.GetStaticName(_calculator.ColorMap);
+            using var dlg = new SaveFileDialog
+            {
+                Title = "Export Color Theme",
+                Filter = "JSON File (*.json)|*.json",
+                DefaultExt = "json",
+                FileName = defaultName.Replace(" ", "") + ".json"
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                //var opts = new JsonSerializerOptions { WriteIndented = true };
+                string? _s = UserColorThemeLibrary.ExportToJson(_calculator.ColorMap);
+                Debug.WriteLine($"Exporting color data: Null: {string.IsNullOrWhiteSpace(_s)} Length: {_s?.Length}");
+                File.WriteAllText(dlg.FileName, _s);
+                SetStatus($"Exported color theme '{defaultName}'  →  {Path.GetFileName(dlg.FileName)}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Export failed:\n\n{ex.Message}", "Export Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 
     private void OnPosterClick(object? sender, EventArgs e)
@@ -1008,6 +1285,8 @@ public sealed class MainForm : Form
 
             _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
+
+            if (_defaultColorMap != null) _calculator.ColorMap = _defaultColorMap;
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
             ApplyViewState();
@@ -1039,7 +1318,7 @@ public sealed class MainForm : Form
                 getColorMap: () => _calculator?.ColorMap,
                 navigateTo: (cx, cy) =>
                 {
-                    _centerX = cx; _centerY = cy;
+                    _centerX = cx; _centerXLo = 0.0; _centerY = cy; _centerYLo = 0.0;
                     ApplyViewState();
                     TriggerCalculation();
                 },
@@ -1201,6 +1480,7 @@ public sealed class MainForm : Form
             TriggerCalculation();
         }
         _miniMapPanel?.RequestRedraw();
+        UpdateDeleteColorThemeButton();
     }
 
     private Color GetSwatchColor()
@@ -1322,8 +1602,8 @@ public sealed class MainForm : Form
     private void OnResetClick(object? sender, EventArgs e)
     {
         StopSlideshow();
-        _centerX = DefaultCenterX;
-        _centerY = DefaultCenterY;
+        _centerX = DefaultCenterX; _centerXLo = 0.0;
+        _centerY = DefaultCenterY; _centerYLo = 0.0;
         _zoom = DefaultZoom;
         _regionCombo.SelectedIndex = 0;
 
@@ -1373,14 +1653,14 @@ public sealed class MainForm : Form
                 "One or more values are invalid.\n\n" +
                 "CX / CY: decimal numbers  (e.g. -0.7435669)\n" +
                 "Zoom: positive number  (e.g. 400)\n" +
-                "Iter: integer ≥ 64",
+                "Iterations: integer ≥ 64",
                 "Invalid Coordinates",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        _centerX = cx;
-        _centerY = cy;
+        _centerX = cx; _centerXLo = 0.0;
+        _centerY = cy; _centerYLo = 0.0;
         _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
 
         if (_calculator != null && iter > 0)
@@ -1421,8 +1701,10 @@ public sealed class MainForm : Form
         _regionCombo.SelectedIndexChanged -= OnRegionComboChanged;
         _regionCombo.Items.Clear();
         _regionCombo.Items.Add("— select region —");
-        foreach (var r in FractalRegionLibrary.Instance.All)
+        var regions = FractalRegionLibrary.Instance.All.OrderBy(r => r.IsBuiltIn).ThenBy(r => r.Name);
+        foreach (var r in regions)
             _regionCombo.Items.Add(r.Name);
+
         _regionCombo.SelectedIndex = 0;
         _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
         UpdateDelRegionButton();
@@ -1447,10 +1729,16 @@ public sealed class MainForm : Form
     /// <summary>Applies a FractalRegion to the view state, respecting the iteration lock.</summary>
     private void ApplyRegion(FractalRegion region)
     {
-        _centerX = region.CenterX;
-        _centerY = region.CenterY;
+        // Round-trip both halves of the DD centre.  Legacy regions saved without
+        // Lo bits default to 0, matching the prior behaviour.
+        _centerX = region.CenterX; _centerXLo = region.CenterXLo;
+        _centerY = region.CenterY; _centerYLo = region.CenterYLo;
         _quality = region.QualityPreset;
+
+        _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
         _qualityCombo.Text = region.QualityPresetName;
+        _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
+
         _zoom = System.Math.Clamp(region.Zoom, _quality.ZoomMin, _quality.ZoomMax);
 
         if (_calculator != null)
@@ -1482,7 +1770,9 @@ public sealed class MainForm : Form
         {
             Name = name,
             CenterX = _centerX,
+            CenterXLo = _centerXLo,
             CenterY = _centerY,
+            CenterYLo = _centerYLo,
             Zoom = _zoom,
             Iterations = _calculator?.MaxIterations ?? 512,
             QualityPresetName = _quality.Name,
@@ -1640,6 +1930,16 @@ public sealed class MainForm : Form
         _delRegionButton.Enabled = region != null && !region.IsBuiltIn;
     }
 
+    private void UpdateDeleteColorThemeButton()
+    {
+        string? name = _colorThemeCombo.SelectedItem?.ToString();
+        if (string.IsNullOrEmpty(name) || name.StartsWith("—"))
+        { _deleteColorThemeButton.Enabled = false; return; }
+
+        _deleteColorThemeButton.Enabled = UserColorThemeLibrary.Instance.Themes
+            .Any(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // SLIDESHOW (NEW)
     // ─────────────────────────────────────────────────────────────────────────
@@ -1686,7 +1986,7 @@ public sealed class MainForm : Form
             cts = _slideshowCts;
         }
 
-        Task.Run(() => SlideshowLoop(cts.Token), cts.Token)
+        Task.Run(() => SlideshowLoop(cts.Token, () => IsSlideshowRegionLocked()), cts.Token)
             .ContinueWith(t =>
             {
                 if (!IsHandleCreated || _disposed) return;
@@ -1710,6 +2010,17 @@ public sealed class MainForm : Form
     {
         lock (_slideshowLock) _slideshowCts?.Cancel();
     }
+
+    private void ToggleSlideshowRegionLock()
+    {
+        _slideShowLockRegion = !_slideShowLockRegion;
+    }
+
+    public bool IsSlideshowRegionLocked()
+    {
+        lock (_slideshowLock) return _slideShowLockRegion;
+    }
+
     private void SkipSlideshowRegion()
     {
         if (!_slideshowRunning) return;
@@ -1729,10 +2040,9 @@ public sealed class MainForm : Form
         return names;
     }
 
-    private async Task SlideshowLoop(CancellationToken ct)
+    private async Task SlideshowLoop(CancellationToken ct, Func<bool> regionLockFunc)
     {
         var builtIns = new List<FractalRegion>(FractalRegionLibrary.Instance.AllSlideshowRegions);
-        //builtIns.AddRange(FractalRegionLibrary.Instance.UserRegions);
         var paletteNames = GetAllPaletteNames();
         if (builtIns.Count == 0 || paletteNames.Count == 0) return;
 
@@ -1754,9 +2064,18 @@ public sealed class MainForm : Form
         {
             // ── Pick a new region different from the last ─────────────────────
             int regionIdx;
+            bool[] regionsUsed = new bool[builtIns.Count];
             do { regionIdx = _slideshowRng.Next(builtIns.Count); }
             while (builtIns.Count > 1 && regionIdx == lastRegionIdx);
             lastRegionIdx = regionIdx;
+            if (regionsUsed[regionIdx]) continue;
+            if (!regionsUsed[regionIdx])
+            {
+                // Mark the just-used region to avoid immediate repeats until all have been shown.
+                regionsUsed[regionIdx] = true;
+                if (regionsUsed.All(u => u)) Array.Clear(regionsUsed, 0, regionsUsed.Length);
+            }
+
             var region = builtIns[regionIdx];
 
             // ── Pick an initial theme ─────────────────────────────────────────
@@ -1768,8 +2087,11 @@ public sealed class MainForm : Form
 
             // ── Render the new region with the initial theme ───────────────────
             uint[]? previousBuffer = null;
-            if (_calculator != null && _renderer != null)
+            int renderCounter = 0;
+            if (_calculator != null && _renderer != null &&
+                (!regionLockFunc() || renderCounter < 1))
             {
+                if (!regionLockFunc()) renderCounter = 0;   // reset counter when moving to a new region, if not locking
                 // ── FIX: snapshot the current on-screen buffer NOW, before any
                 //    region/theme state is changed.  _lastUploadedBuffer always
                 //    holds the most-recently-uploaded post-processed frame and is
@@ -1784,11 +2106,14 @@ public sealed class MainForm : Form
                         && _lastUploadedWidth == _calculator.Width
                         && _lastUploadedHeight == _calculator.Height)
                     {
+                        Debug.WriteLine($"SldShwLp: Capturing old buffer for cross-fade. " +
+                        $"Last uploaded buffer: Length: {_lastUploadedBuffer.Length} pixels, size {_lastUploadedWidth}×{_lastUploadedHeight}");
                         oldBuf = new uint[_lastUploadedBuffer.Length];
                         _lastUploadedBuffer.CopyTo(oldBuf, 0);
                     }
                     else if (_calculator != null)
                     {
+                        Debug.WriteLine($"SldShwLp: Falling back to direct ColorBuffer copy of {_calculator.ColorBuffer.Length} pixels");
                         oldBuf = new uint[_calculator.ColorBuffer.Length];
                         _calculator.ColorBuffer.CopyTo(oldBuf, 0);
                     }
@@ -1806,8 +2131,8 @@ public sealed class MainForm : Form
                     if (_disposed) return;
                     _slideshowRegionName = region.Name;
                     ApplyRegionSilent(region);
-                    var map = Models.ColorPalette.GetPaletteByName(themeName);
-                    if (_calculator != null) _calculator.ColorMap = map;
+                    //var map = Models.ColorPalette.GetPaletteByName(themeName);
+                    //if (_calculator != null) _calculator.ColorMap = map;
                     SuppressedSetRegionCombo(region.Name);
                     ApplyColorThemeSilent(themeName);
                     SetStatus($"Slideshow: {region.Name}  •  {themeName}");
@@ -1818,6 +2143,9 @@ public sealed class MainForm : Form
                 uint[] newBuf = await Task.Run(() =>
                 {
                     if (_calculator == null) return Array.Empty<uint>();
+                    Debug.WriteLine($"SldShwLp: Starting calculation for new region/theme. " +
+                        $"Calculator state: {_calculator.Width}×{_calculator.Height}, MaxIterations: {_calculator.MaxIterations}, " +
+                        $"Precision: {(_calculator.IsHighPrecisionActive ? "DD" : "SP")}");
                     _calculator.Calculate(ct);
                     var copy = new uint[_calculator.ColorBuffer.Length];
                     _calculator.ColorBuffer.CopyTo(copy, 0);
@@ -1841,158 +2169,82 @@ public sealed class MainForm : Form
                 }
 
                 previousBuffer = newBuf;
+                renderCounter += regionLockFunc() ? 1 : 0;
             }
-            //// ── Pick a new region different from the last ─────────────────────
-            //int regionIdx;
-            //do { regionIdx = _slideshowRng.Next(builtIns.Count); }
-            //while (builtIns.Count > 1 && regionIdx == lastRegionIdx);
-            //lastRegionIdx = regionIdx;
-            //var region = builtIns[regionIdx];
 
-            //// ── Pick an initial theme ─────────────────────────────────────────
-            //int themeIdx;
-            //do { themeIdx = _slideshowRng.Next(paletteNames.Count); }
-            //while (paletteNames.Count > 1 && themeIdx == lastThemeIdx);
-            //lastThemeIdx = themeIdx;
-            //string themeName = paletteNames[themeIdx];
+            // ── Run exactly (themesPerRegion - 1) additional theme changes ────
+            // The first theme was shown above; now show 2 more for a total of 3.
+            int themesCount = regionLockFunc() ? paletteNames.Count : themesPerRegion;
+            for (int themeNum = 1; themeNum < themesCount && !ct.IsCancellationRequested; themeNum++)
+            {
+                Debug.WriteLine($"SldShwLp: Theme {themeNum + 1} of {themesPerRegion} for region \"{region.Name}\" starting in {themeDurationMs} ms");
+                // Wait for the full theme display duration before starting the next fade.
+                await DelayWithCancel(themeDurationMs, ct);
+                if (ct.IsCancellationRequested) return;
 
-            //// ── Render the new region with the initial theme ───────────────────
-            //uint[]? previousBuffer = null;
-            //if (_calculator != null && _renderer != null)
-            //{
-            //    // 1. Snapshot the current display buffer (already post-processed).
-            //    uint[] oldBuf = await Task.Run(() =>
-            //    {
-            //        if (_calculator == null) return Array.Empty<uint>();
-            //        // Use the last uploaded processed buffer if available so the
-            //        // cross-fade starts from exactly what was on screen.
-            //        Debug.WriteLine($"SldShwLp: Last uploaded buffer: {_lastUploadedBuffer?.Length} pixels, size {_lastUploadedWidth}×{_lastUploadedHeight}");
-            //        if (_lastUploadedBuffer != null
-            //            && _lastUploadedWidth == _calculator.Width
-            //            && _lastUploadedHeight == _calculator.Height)
-            //        {
-            //            var copy = new uint[_lastUploadedBuffer.Length];
-            //            _lastUploadedBuffer.CopyTo(copy, 0);
-            //            return copy;
-            //        }
-            //        Debug.WriteLine($"SldShwLp: Falling back to direct ColorBuffer copy of {_calculator.ColorBuffer.Length} pixels");
-            //        var raw = new uint[_calculator.ColorBuffer.Length];
-            //        _calculator.ColorBuffer.CopyTo(raw, 0);
-            //        return raw;
-            //    }, ct);
+                // Pick next theme.
 
-            //    // 2. Apply region & theme on UI thread WITHOUT triggering a
-            //    //    normal TriggerCalculation — we manage rendering ourselves.
-            //    if (ct.IsCancellationRequested) return;
-            //    await InvokeAsync(() =>
-            //    {
-            //        if (_disposed) return;
-            //        _slideshowRegionName = region.Name;
-            //        // ApplyRegionSilent sets calc state without firing TriggerCalculation.
-            //        ApplyRegionSilent(region);
-            //        var map = Models.ColorPalette.GetPaletteByName(themeName);
-            //        if (_calculator != null) _calculator.ColorMap = map;
-            //        // Update combo UI without firing the SelectedIndexChanged handler.
-            //        SuppressedSetRegionCombo(region.Name);
-            //        ApplyColorThemeSilent(themeName);
-            //        SetStatus($"Slideshow: {region.Name}  •  {themeName}");
-            //    });
+                int newThemeIdx;
+                do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
+                while (paletteNames.Count > 1 && newThemeIdx == lastThemeIdx);
+                lastThemeIdx = newThemeIdx;
+                string newThemeName = paletteNames[newThemeIdx];
 
-            //    // 3. Calculate on background thread.
-            //    if (ct.IsCancellationRequested) return;
-            //    uint[] newBuf = await Task.Run(() =>
-            //    {
-            //        if (_calculator == null) return Array.Empty<uint>();
-            //        _calculator.Calculate(ct);
-            //        // Copy raw buffer (post-processing applied during cross-fade).
-            //        var copy = new uint[_calculator.ColorBuffer.Length];
-            //        _calculator.ColorBuffer.CopyTo(copy, 0);
-            //        return copy;
-            //    }, ct);
+                if (_calculator == null || _renderer == null) break;
 
-            //    if (ct.IsCancellationRequested) return;
+                uint[] oldThemeBuf = previousBuffer ?? Array.Empty<uint>();
 
-            //    // 4. Cross-fade — sizes must match (no resize during transition).
-            //    if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0)
-            //    {
-            //        Debug.WriteLine($"SldShwLp: Starting cross-fade between buffers of {oldBuf.Length} pixels");
-            //        await CrossFade(oldBuf, newBuf, fadeSteps, fadeStepMs, ct);
-            //    }                    
-            //    else
-            //    {
-            //        Debug.WriteLine($"SldShwLp: Buffer size mismatch or empty (old: {oldBuf.Length}, new: {newBuf.Length}), skipping cross-fade");
-            //        await InvokeAsync(() =>
-            //        {
-            //            if (!_disposed && _renderer != null && _calculator != null)
-            //                _renderer.UpdateTexture(newBuf, _calculator.Width, _calculator.Height);
-            //        });
-            //    }
+                // Apply new theme silently — no TriggerCalculation.
+                Debug.WriteLine($"Pre await invoke: Applying new theme \"{newThemeName}\"");
+                await InvokeAsync(() =>
+                {
+                    if (_disposed) return;
+                    ApplyColorThemeSilent(newThemeName);
+                    SetStatus($"Slideshow: {region.Name}  •  {newThemeName}");
+                });
 
-            //    previousBuffer = newBuf;
-            //}
+                if (ct.IsCancellationRequested) return;
 
-            //// ── Run exactly (themesPerRegion - 1) additional theme changes ────
-            //// The first theme was shown above; now show 2 more for a total of 3.
-            //for (int themeNum = 1; themeNum < themesPerRegion && !ct.IsCancellationRequested; themeNum++)
-            //{
-            //    // Wait for the full theme display duration before starting the next fade.
-            //    await DelayWithCancel(themeDurationMs, ct);
-            //    if (ct.IsCancellationRequested) return;
+                Debug.WriteLine($"Post await invoke: Starting calculation for new theme \"{newThemeName}\"");
+                uint[] newThemeBuf = await Task.Run(() =>
+                {
+                    if (_calculator == null) return Array.Empty<uint>();
+                    Debug.WriteLine($"SldShwLp: Calculating new theme \"{newThemeName}\" for region \"{region.Name}\"");
+                    _calculator.Calculate(ct);
+                    var copy = new uint[_calculator.ColorBuffer.Length];
+                    _calculator.ColorBuffer.CopyTo(copy, 0);
+                    return copy;
+                }, ct);
 
-            //    // Pick next theme.
+                if (ct.IsCancellationRequested) return;
 
-            //    int newThemeIdx;
-            //    do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
-            //    while (paletteNames.Count > 1 && newThemeIdx == lastThemeIdx);
-            //    lastThemeIdx = newThemeIdx;
-            //    string newThemeName = paletteNames[newThemeIdx];
+                if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
+                {
+                    Debug.WriteLine($"SldShwLp: Starting theme cross-fade between buffers of {oldThemeBuf.Length} pixels");
+                    await CrossFade(oldThemeBuf, newThemeBuf, fadeSteps, fadeStepMs, ct);
+                }
+                else
+                {
+                    Debug.WriteLine($"SldShwLp: Theme buffer size mismatch or empty (old: {oldThemeBuf.Length}, new: {newThemeBuf.Length}), skipping cross-fade");
+                    await InvokeAsync(() =>
+                    {
+                        if (!_disposed && _renderer != null && _calculator != null)
+                            _renderer.UpdateTexture(newThemeBuf, _calculator.Width, _calculator.Height);
+                    });
+                }
 
-            //    if (_calculator == null || _renderer == null) break;
-
-            //    uint[] oldThemeBuf = previousBuffer ?? Array.Empty<uint>();
-
-            //    // Apply new theme silently — no TriggerCalculation.
-            //    await InvokeAsync(() =>
-            //    {
-            //        if (_disposed) return;
-            //        ApplyColorThemeSilent(newThemeName);
-            //        SetStatus($"Slideshow: {region.Name}  •  {newThemeName}");
-            //    });
-
-            //    if (ct.IsCancellationRequested) return;
-
-            //    uint[] newThemeBuf = await Task.Run(() =>
-            //    {
-            //        if (_calculator == null) return Array.Empty<uint>();
-            //        _calculator.Calculate(ct);
-            //        var copy = new uint[_calculator.ColorBuffer.Length];
-            //        _calculator.ColorBuffer.CopyTo(copy, 0);
-            //        return copy;
-            //    }, ct);
-
-            //    if (ct.IsCancellationRequested) return;
-
-            //    if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
-            //    {
-            //        Debug.WriteLine($"SldShwLp: Starting theme cross-fade between buffers of {oldThemeBuf.Length} pixels");
-            //        await CrossFade(oldThemeBuf, newThemeBuf, fadeSteps, fadeStepMs, ct);
-            //    }                    
-            //    else
-            //    {
-            //        Debug.WriteLine($"SldShwLp: Theme buffer size mismatch or empty (old: {oldThemeBuf.Length}, new: {newThemeBuf.Length}), skipping cross-fade");
-            //        await InvokeAsync(() =>
-            //        {
-            //            if (!_disposed && _renderer != null && _calculator != null)
-            //                _renderer.UpdateTexture(newThemeBuf, _calculator.Width, _calculator.Height);
-            //        });
-            //    }
-
-            //    previousBuffer = newThemeBuf;
-            //}
+                previousBuffer = newThemeBuf;
+                Debug.WriteLine($"Region lock: {regionLockFunc()}, theme {themeNum + 1} of {themesCount} for region \"{region.Name}\" displayed");
+                if (!regionLockFunc() && themesCount >= themesPerRegion) break;  // move to next region if not locking; otherwise show all themes for this region before moving on
+                else if (regionLockFunc() && themesCount == themesPerRegion) themesCount = paletteNames.Count - themesCount;  // if locking and we've shown the preset number of themes, switch to showing all themes for the rest of the slideshow loop
+            }
 
             // Wait for the final theme to display its full duration before
             // transitioning to the next region.
+            Debug.WriteLine($"SldShwLp: Final theme for region \"{region.Name}\" displayed, waiting {themeDurationMs} ms before next region");
             await DelayWithCancel(themeDurationMs, ct);
+            Debug.WriteLine($"SldShwLp: Theme duration complete for region \"{region.Name}\"");
+            _lastUploadedBuffer = previousBuffer;
         }
     }
 
@@ -2002,16 +2254,19 @@ public sealed class MainForm : Form
     /// </summary>
     private void ApplyRegionSilent(FractalRegion region)
     {
-        _centerX = region.CenterX;
-        _centerY = region.CenterY;
+        _centerX = region.CenterX; _centerXLo = region.CenterXLo;
+        _centerY = region.CenterY; _centerYLo = region.CenterYLo;
         _quality = region.QualityPreset;
-        _qualityCombo.Text = region.QualityPresetName;
+        _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
+        //_qualityCombo.Text = region.QualityPresetName;
         _zoom = System.Math.Clamp(region.Zoom, _quality.ZoomMin, _quality.ZoomMax);
 
         if (_calculator != null)
         {
             _calculator.CenterX = _centerX;
+            _calculator.CenterXLo = _centerXLo;
             _calculator.CenterY = _centerY;
+            _calculator.CenterYLo = _centerYLo;
             _calculator.Zoom = _zoom;
             _calculator.Quality = region.QualityPreset;
             if (!_iterLocked && region.Iterations > 0)
@@ -2020,6 +2275,7 @@ public sealed class MainForm : Form
                 _calculator.MaxIterations = _lockedIterations;
         }
         UpdateCoordBoxes();
+        _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
     }
 
     private void ApplyColorThemeSilent(string themeName)
@@ -2077,12 +2333,12 @@ public sealed class MainForm : Form
 
             // CPU pixel-blend — runs on the calling background thread.
             BlendBuffers(from, to, blended, len, alpha);
-            if (_showSlideshowWatermark)
+            if (_showSlideshowWatermark) BlendWatermarkOverlay(blended, w, h);
 
-                // Re-apply watermark on every fade frame so it never disappears
-                // during transitions (both region and theme cross-fades).
-                if (_showSlideshowWatermark)
-                    BlendWatermarkOverlay(blended, w, h);
+            //// Re-apply watermark on every fade frame so it never disappears
+            //// during transitions (both region and theme cross-fades).
+            //if (_showSlideshowWatermark)
+            //        BlendWatermarkOverlay(blended, w, h);
 
             // Take a snapshot for the upload so we're not mutating blended
             // on the background thread while the UI thread may be reading it.
@@ -2156,9 +2412,7 @@ public sealed class MainForm : Form
         else
         {
             EnterSpanMode();
-
         }
-
     }
 
     private void EnterSpanMode()
@@ -2472,13 +2726,13 @@ public sealed class MainForm : Form
                         var fontColor = ComputeContrastColor(GetSwatchColor(),
                             watermark: true, pixels: rotated, imgW: result.Height, imgH: result.Width);
                         SavePixelsToFile(
-                            rotated, 
+                            rotated,
                             result.Height,
-                            result.Width, 
-                            path, 
-                            format, 
-                            waterMark, 
-                            fontColor, 
+                            result.Width,
+                            path,
+                            format,
+                            waterMark,
+                            fontColor,
                             subText,
                             true);
                         SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Height}×{result.Width} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
@@ -2490,12 +2744,12 @@ public sealed class MainForm : Form
                             imgW: result.Width, imgH: result.Height);
                         SavePixelsToFile(
                             result.ColorBuffer,
-                            result.Width, 
-                            result.Height, 
-                            path, 
+                            result.Width,
+                            result.Height,
+                            path,
                             format,
-                            waterMark, 
-                            fontColor, 
+                            waterMark,
+                            fontColor,
                             subText,
                             true);
                         SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
@@ -2546,7 +2800,7 @@ public sealed class MainForm : Form
         }
         else bmp.Save(path, format);
 
-        Debug.WriteLine($"Watersmark text: '{watermarkText}'");
+        Debug.WriteLine($"Watermark text: '{watermarkText}'");
         if (!string.IsNullOrEmpty(watermarkText))
         {
             using var g = Graphics.FromImage(bmp);
@@ -2556,11 +2810,11 @@ public sealed class MainForm : Form
     }
 
     private static void AddWaterMark(
-        Graphics g, 
-        string text, 
-        int width, 
-        int height, 
-        Color fontColor, 
+        Graphics g,
+        string text,
+        int width,
+        int height,
+        Color fontColor,
         string subText = "",
         bool poster = false)
     {
@@ -2615,16 +2869,16 @@ public sealed class MainForm : Form
         double compX, compY;
         if (useDD)
         {
-            var ddCX = new FracturingFog.FFMath.DD(_centerX);
-            var ddCY = new FracturingFog.FFMath.DD(_centerY);
-            var anchorX = ddCX + ox * scale;   // DD + double is exact
+            var ddCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo);
+            var ddCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo);
+            var anchorX = ddCX + ox * scale;
             var anchorY = ddCY + oy * scale;
             _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
             double ns = CurrentScale();
             var newCX = anchorX - ox * ns;
             var newCY = anchorY - oy * ns;
-            _centerX = newCX.Hi;  // store Hi; Lo is below double resolution anyway
-            _centerY = newCY.Hi;  // the calculator uses DD.FromCenterOffset per-pixel
+            _centerX = newCX.Hi; _centerXLo = newCX.Lo;
+            _centerY = newCY.Hi; _centerYLo = newCY.Lo;
         }
         else
         {
@@ -2632,8 +2886,8 @@ public sealed class MainForm : Form
             compY = _centerY + oy * scale;
             _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
             double ns = CurrentScale();
-            _centerX = compX - ox * ns;
-            _centerY = compY - oy * ns;
+            _centerX = compX - ox * ns; _centerXLo = 0.0;
+            _centerY = compY - oy * ns; _centerYLo = 0.0;
         }
 
         ApplyViewState();
@@ -2652,13 +2906,13 @@ public sealed class MainForm : Form
         _panStartScreen = e.Location;
         _panStartCX = _centerX;
         _panStartCY = _centerY;
-        _panStartDDCX = new FracturingFog.FFMath.DD(_centerX);  // capture at start
-        _panStartDDCY = new FracturingFog.FFMath.DD(_centerY);
+        _panStartDDCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo);
+        _panStartDDCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo);
         _renderPanel.Cursor = Cursors.SizeAll;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Mouse: double-click to centre
+    // Mouse: double-click to center
     // ─────────────────────────────────────────────────────────────────────────
 
     private void OnMouseDoubleClick(object? sender, MouseEventArgs e)
@@ -2677,10 +2931,10 @@ public sealed class MainForm : Form
         //_centerY = _centerY + oy * scale;
         if (_quality.NeedsHighPrecision(_zoom))
         {
-            var newCX = new FracturingFog.FFMath.DD(_centerX) + ox * scale;
-            var newCY = new FracturingFog.FFMath.DD(_centerY) + oy * scale;
-            _centerX = newCX.Hi;
-            _centerY = newCY.Hi;
+            var newCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo) + ox * scale;
+            var newCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo) + oy * scale;
+            _centerX = newCX.Hi; _centerXLo = newCX.Lo;
+            _centerY = newCY.Hi; _centerYLo = newCY.Lo;
         }
         else
         {
@@ -2690,7 +2944,7 @@ public sealed class MainForm : Form
 
         ApplyViewState();
         TriggerCalculation();
-        SetStatus($"Centred on  cx={_centerX:G12}  cy={_centerY:G12}");
+        SetStatus($"Centerd on  cx={_centerX:G12}  cy={_centerY:G12}");
     }
 
     private void OnMouseMove(object? sender, MouseEventArgs e)
@@ -2706,8 +2960,8 @@ public sealed class MainForm : Form
             double dy = -(e.Y - _panStartScreen.Y) * scale;
             var newCX = _panStartDDCX + dx;
             var newCY = _panStartDDCY + dy;
-            _centerX = newCX.Hi;
-            _centerY = newCY.Hi;
+            _centerX = newCX.Hi; _centerXLo = newCX.Lo;
+            _centerY = newCY.Hi; _centerYLo = newCY.Lo;
         }
         else
         {
@@ -2812,7 +3066,9 @@ public sealed class MainForm : Form
     {
         if (_calculator == null) return;
         _calculator.CenterX = _centerX;
+        _calculator.CenterXLo = _centerXLo;
         _calculator.CenterY = _centerY;
+        _calculator.CenterYLo = _centerYLo;
         _calculator.Zoom = _zoom;
         _calculator.Quality = _quality;
 
@@ -2864,6 +3120,8 @@ public sealed class MainForm : Form
 
     private void TriggerCalculation(bool progressive = false)
     {
+        var callingMethod = new StackTrace().GetFrame(1)?.GetMethod();
+        Debug.WriteLine($"TriggerCalculation called from {callingMethod?.DeclaringType?.Name}.{callingMethod?.Name}. Progressive: {progressive}");
         if (_calculator == null) return;
 
         CancellationTokenSource cts;
@@ -3459,7 +3717,8 @@ public sealed class PosterDialog : Form
             Font = new Font("Segoe UI", 9f),
             Checked = false
         };
-        _lowDefCB.CheckedChanged += (s, e) => {
+        _lowDefCB.CheckedChanged += (s, e) =>
+        {
             CalculatePixelDimensions();
             if (_lowDefCB.Checked)
             {
@@ -3479,7 +3738,8 @@ public sealed class PosterDialog : Form
             Font = new Font("Segoe UI", 9f),
             Checked = true
         };
-        _medDefCB.CheckedChanged += (s, e) => {
+        _medDefCB.CheckedChanged += (s, e) =>
+        {
             CalculatePixelDimensions();
             if (_medDefCB.Checked)
             {
@@ -3499,7 +3759,8 @@ public sealed class PosterDialog : Form
             Font = new Font("Segoe UI", 9f),
             Checked = false
         };
-        _highDefCB.CheckedChanged += (s, e) => {
+        _highDefCB.CheckedChanged += (s, e) =>
+        {
             CalculatePixelDimensions();
             if (_highDefCB.Checked)
             {

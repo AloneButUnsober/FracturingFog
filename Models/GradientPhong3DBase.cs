@@ -87,6 +87,17 @@ namespace FracturingFog.Models
         /// </summary>
         protected virtual float FillDiffScale => 0.35f;
 
+        // ── Export accessors (used by JSON serialisation) ─────────────────────
+
+        public LightSource ExportKeyLight => KeyLight;
+        public LightSource ExportFillLight => FillLight;
+        public float ExportCycleSpeed => CycleSpeed;
+        public float ExportSteepness => Steepness;
+        public float ExportAmbient => Ambient;
+        public float ExportKeySpecScale => KeySpecScale;
+        public float ExportFillSpecScale => FillSpecScale;
+        public float ExportFillDiffScale => FillDiffScale;
+
         // ── Interface routing — declared ONCE for all subclasses ──────────────
         //
         // This explicit interface implementation ensures that when the calculator

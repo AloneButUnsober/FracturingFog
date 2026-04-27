@@ -1,6 +1,9 @@
-﻿// Models/ColorSchemes/ColorPalettes.cs  — v5 (3D themes added)
+﻿// Models/ColorSchemes/ColorPalettes.cs  — v6 (user-defined JSON themes)
 //
-// Add new themes to the Palettes list; they appear automatically in the UI.
+// Add new built-in themes to the BuiltIns list; they appear automatically in
+// the UI.  User-defined themes loaded from %APPDATA%\FracturingFog\colorthemes.json
+// are appended via UserPalettes — call LoadUserThemes() once at startup.
+//
 // The "3D Relief" category groups all normal-mapped colour maps together at
 // the top of the list so users can find them immediately.
 using FracturingFog.Interefaces;
@@ -13,10 +16,10 @@ namespace FracturingFog.Models
 {
     public static class ColorPalette
     {
-        // ── Master palette list ───────────────────────────────────────────────
+        // ── Built-in palette list ─────────────────────────────────────────────
         // Order here controls the order in the UI combo box.
 
-        public static readonly List<IColorMap> Palettes = new()
+        public static readonly List<IColorMap> BuiltIns = new()
         {
             // ── 3D Relief (normal-mapped) ─────────────────────────────────────
             new PhongStoneMap(),
@@ -47,6 +50,8 @@ namespace FracturingFog.Models
             new CesiumSpectrumPbr3D(),
             new CesiumSpectrumPbr3D_Realistic(),
             new CesiumSpectrumPbr3D_UltraGlow(),
+            new RadioInterferencePhong3D(),
+            new RadioInterferencePbr3D(),
 
             // ── Classic / algorithmic ─────────────────────────────────────────
             new HsvPalette(),
@@ -58,6 +63,7 @@ namespace FracturingFog.Models
             new GoldenRatioMap(),
             new MonoBandMap(),
             new BernsteinMap(),
+            new RedAndBlack(),
 
             // ── Gradient — linear ─────────────────────────────────────────────
             new BlackbodyColorMap(),
@@ -71,6 +77,7 @@ namespace FracturingFog.Models
             new PolarNightMap(),
             new CesiumSpectrumGradient(),
             new WoodGrainGradient(),
+            new RadioInterferenceGradient(),
 
             // ── Gradient — cycling ────────────────────────────────────────────
             new FirePalette(),
@@ -80,6 +87,7 @@ namespace FracturingFog.Models
             new TriColorMap(),
             new CesiumSpectrumCycling(),
             new WoodGrainCycling(),
+            new RadioInterferenceCycling(),
 
             // ── Algorithmic / artistic ────────────────────────────────────────
             new NebulaDustMap(),
@@ -100,6 +108,59 @@ namespace FracturingFog.Models
             new ViridisColorMap(),
             new PlasmaColorMap(),
         };
+
+        /// <summary>
+        /// User-defined palettes loaded from JSON.  Mutated by
+        /// <see cref="LoadUserThemes"/> and by add/remove operations on
+        /// <see cref="UserColorThemeLibrary"/>.
+        /// </summary>
+        public static readonly List<IColorMap> UserPalettes = new();
+
+        /// <summary>
+        /// Back-compat alias for the original combined list.  Concatenates
+        /// built-in themes with any user-defined themes that have been loaded.
+        /// </summary>
+        public static IEnumerable<IColorMap> Palettes
+        {
+            get
+            {
+                foreach (var p in BuiltIns) yield return p;
+                foreach (var p in UserPalettes) yield return p;
+            }
+        }
+
+        // ── User-theme integration ────────────────────────────────────────────
+
+        /// <summary>
+        /// Loads user-defined themes from JSON via <see cref="UserColorThemeLibrary"/>
+        /// and populates <see cref="UserPalettes"/>.  Safe to call multiple times.
+        /// </summary>
+        public static void LoadUserThemes()
+        {
+            UserColorThemeLibrary.Instance.Load();
+            RebuildUserPalettes();
+        }
+
+        /// <summary>
+        /// Re-syncs <see cref="UserPalettes"/> from the current contents of
+        /// <see cref="UserColorThemeLibrary.Instance"/>.  Call after adding,
+        /// removing, or editing user themes.
+        /// </summary>
+        public static void RebuildUserPalettes()
+        {
+            UserPalettes.Clear();
+            foreach (var data in UserColorThemeLibrary.Instance.Themes)
+            {
+                var map = DataDrivenColorThemes.Create(data);
+                if (map != null) UserPalettes.Add(map);
+            }
+        }
+
+        // ── Lookup helpers ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the <see cref="IColorMap"/> whose name matches
+        /// <paramref name="name"/>, or a new <see cref="HsvPalette"/> if not found.
 
         // ── Lookup helpers ────────────────────────────────────────────────────
 
@@ -135,7 +196,7 @@ namespace FracturingFog.Models
         }
 
         /// <summary>
-        /// Returns palettes grouped by their static <c>Category</c> property.
+        /// Returns palettes grouped by category.
         /// Key = category string, Value = ordered list of palettes in that category.
         /// </summary>
         public static Dictionary<string, List<IColorMap>> GetPalettesByCategory()
@@ -174,17 +235,27 @@ namespace FracturingFog.Models
             return string.Empty;
         }
         // ── Reflection helpers ────────────────────────────────────────────────
-        // Static interface members are not accessible via the interface reference;
-        // use reflection to read the implementation type's static properties.
+        // Built-in themes carry Name/Category/Description as static type-level
+        // properties (read via reflection).  Data-driven themes implement
+        // INamedColorMap so a single runtime type can host many distinct themes.
 
         public static string GetStaticName(IColorMap map)
-            => map.GetType().GetProperty("Name")?.GetValue(null)?.ToString() ?? "Unnamed";
+        {
+            if (map is INamedColorMap n) return n.DisplayName;
+            return map.GetType().GetProperty("Name")?.GetValue(null)?.ToString() ?? "Unnamed";
+        }
 
         public static string GetStaticCategory(IColorMap map)
-            => map.GetType().GetProperty("Category")?.GetValue(null)?.ToString() ?? "General";
+        {
+            if (map is INamedColorMap n) return n.DisplayCategory;
+            return map.GetType().GetProperty("Category")?.GetValue(null)?.ToString() ?? "General";
+        }
 
         public static string GetStaticDescription(IColorMap map)
-            => map.GetType().GetProperty("Description")?.GetValue(null)?.ToString() ?? string.Empty;
+        {
+            if (map is INamedColorMap n) return n.DisplayDescription;
+            return map.GetType().GetProperty("Description")?.GetValue(null)?.ToString() ?? string.Empty;
+        }
 
         public static ColorMapFeatures GetStaticFeatures(IColorMap map)
         {

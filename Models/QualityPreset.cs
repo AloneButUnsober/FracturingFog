@@ -10,7 +10,7 @@
 // │ Tier     │ ZoomMax     │ Iter range   │ Wheel     │ Precision                              │
 // ├──────────┼─────────────┼──────────────┼───────────┼────────────────────────────────────────┤
 // │ Draft    │ 1×10⁵       │  64 –   256  │ ×1.40     │ double (SP) only                       │
-// │ Standard │ 1×10¹³      │ 256 –  2048  │ ×1.20     │ double (SP) only                       │
+// │ Standard │ 1×10¹³      │ 256 –  2048  │ ×1.20     │ SP below 10¹², DD above               │
 // │ High     │ 1×10²²      │ 512 – 16384  │ ×1.12     │ SP below 10¹², DD above               │
 // │ Ultra    │ 5×10²⁷      │1024 – 65536  │ ×1.08     │ SP below 10¹², DD above               │
 // └──────────┴─────────────┴──────────────┴───────────┴────────────────────────────────────────┘
@@ -150,14 +150,15 @@ namespace FracturingFog.Models
         {
             Tier = QualityTier.Standard,
             Name = "Standard",
-            Description = "Balanced quality — full double-precision zoom depth (max 10¹³), up to 2048 iterations.",
+            Description = "Balanced quality — zoom to 10¹³ (DD above 10¹²), up to 2048 iterations.",
             ZoomMin = 0.5,
             ZoomMax = 1e13,
             WheelZoomFactor = 1.20,     // 20% per detent
             IterBase = 256,
             IterMax = 2048,
             IterPerDecade = 128,       // +128 iters per decade
-            AllowHighPrecision = false,
+            AllowHighPrecision = true,
+            HPZoomThreshold = 1e12,
         };
 
         /// <summary>

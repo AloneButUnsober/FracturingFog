@@ -133,4 +133,18 @@ namespace FracturingFog.Interefaces
         int SwatchSample
             => Map(MaxIterations * 0.30f, 0.05f, MaxIterations, 0.30f, 0.20f);
     }
+
+    /// <summary>
+    /// Optional companion interface for colour maps whose display metadata is
+    /// per-instance rather than per-type.  Built-in themes expose Name/Category
+    /// /Description as static type-level properties (read via reflection); user-
+    /// defined / data-driven themes can implement this interface so a single
+    /// runtime type can carry many distinct named themes.
+    /// </summary>
+    public interface INamedColorMap
+    {
+        string DisplayName { get; }
+        string DisplayCategory { get; }
+        string DisplayDescription { get; }
+    }
 }

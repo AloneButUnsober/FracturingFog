@@ -7,7 +7,7 @@ namespace FracturingFog.Models
 {
     public class RedAndBlack : IColorMap
     {
-        public static string Name => "Radio Interference";
+        public static string Name => "Radio Interference Original";
 
         public ColorPaletteType Type { get; } = ColorPaletteType.Scientific;
 

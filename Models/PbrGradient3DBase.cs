@@ -1,4 +1,4 @@
-﻿////using FracturingFog.Interefaces;
+////using FracturingFog.Interefaces;
 ////using System;
 
 ////namespace FracturingFog.Models
@@ -270,6 +270,22 @@ namespace FracturingFog.Models
         protected virtual PbrMaterial BuildMaterial(float t, float r, float g, float b)
             => new PbrMaterial(r, g, b, metalness: 0.0f, roughness: 0.7f);
 
+        // ── Export accessors (used by JSON serialisation) ─────────────────────
+
+        public LightSource ExportKeyLight => KeyLight;
+        public LightSource ExportFillLight => FillLight;
+        public float ExportCycleSpeed => CycleSpeed;
+        public float ExportSteepness => Steepness;
+        public float ExportAmbient => Ambient;
+        public PbrLightingMode ExportLightingMode => LightingMode;
+
+        /// <summary>Sample the glow boost at <paramref name="t"/> for export.</summary>
+        public float ExportGlowBoost(float t) => GlowBoost(t);
+
+        /// <summary>Sample the metal/roughness function at <paramref name="t"/> for export.</summary>
+        public PbrMaterial ExportMaterial(float t)
+            => BuildMaterial(t, 1f, 1f, 1f);
+
         // Interface routing
         public sealed override int Map(float smooth, float distance, int maxIterations)
             => LitMapPbr(smooth, distance, maxIterations, 0f, 0f);
@@ -395,11 +411,11 @@ namespace FracturingFog.Models
     }
 
 
-// ─────────────────────────────────────────────────────────────────────────
-// Material struct
-// ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Material struct
+    // ─────────────────────────────────────────────────────────────────────────
 
-public readonly struct PbrMaterial
+    public readonly struct PbrMaterial
     {
         public readonly float BaseR, BaseG, BaseB;
         public readonly float Metalness;
@@ -451,6 +467,19 @@ public readonly struct PbrMaterial
             float g1L = NdotL / (NdotL * (1f - k) + k);
             return g1V * g1L;
         }
+
+        /// <summary>
+        /// Smooth-step interpolation between two values using Hermite blending.
+        /// Used to remove hard edges from material breakpoints in BuildMaterial().
+        /// <paramref name="edge0"/> and <paramref name="edge1"/> define the ramp range;
+        /// the return value is in [a, b].
+        /// </summary>
+        public static float SmoothLerp(float t, float edge0, float edge1, float a, float b)
+        {
+            // Clamp and smooth-step t into [0, 1] over [edge0, edge1].
+            float x = Math.Clamp((t - edge0) / (edge1 - edge0 + 1e-6f), 0f, 1f);
+            float s = x * x * (3f - 2f * x);   // Hermite cubic
+            return a + s * (b - a);
+        }
     }
 }
-
