@@ -917,15 +917,19 @@ public sealed class MainForm : Form
         });
         var miniModeItem = new ToolStripMenuItem("Mini Mode", null, (s, e) =>
         {
+            bool wasMini = _miniMode;
             _miniMode = !_miniMode;
 
             if (_miniMode)
             {
                 _miniPreviousBorderStyle = FormBorderStyle;
                 _miniPreviousSize = Size;
+                _coordPanel.Visible = false;   // hide coordinate panel in mini mode since it doesn't work well there
             }
             _miniClick = true;
             OnFormResize(s, e);  // adjust size and borders
+            if (wasMini && !_miniMode)
+                 CenterToScreen();  // re-center when exiting mini mode since we likely moved the window around while in mini mode
             _miniClick = false;
         });
         var gridItem = new ToolStripMenuItem("Grid", null, (s, e) =>
@@ -965,6 +969,8 @@ public sealed class MainForm : Form
             gridItem.Checked = _gridVisible;
             skipItem.Enabled = _slideshowRunning;
             miniMapItem.Checked = _miniMapPanel?.Visible ?? false;
+            miniMapItem.Enabled = !_miniMode;  // mini map doesn't work well in mini mode since it's already small and has no extra space for the inset
+            miniMapItem.Visible = !_miniMode;  // hide mini map option in mini mode since it doesn't work well there
             slideshowItem.Checked = _slideshowRunning;
             slideshowLockRegionItem.Checked = _slideShowLockRegion;
             watermarkItem.Enabled = _slideshowRunning;
@@ -974,6 +980,8 @@ public sealed class MainForm : Form
             onTopItem.Checked = TopMost;
             statusItem.Checked = _footerPanel.Visible;
             navigateItem.Checked = checkBoxShowCoordPanel.Checked;
+            navigateItem.Enabled = !_miniMode;  // navigating in mini mode is awkward and not worth supporting
+            navigateItem.Visible = !_miniMode;  // hide navigation option in mini mode since it doesn't work well there
             toolbarItem.Checked = _toolbar.Visible;
         };
 
