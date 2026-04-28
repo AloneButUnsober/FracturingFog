@@ -327,21 +327,21 @@ namespace FracturingFog.Models
             new() { Name="R:ParabA",     CenterX=-1.40115, CenterY=0.00000, Zoom=4000.0,  Iterations=2500, QualityPreset=QualityPreset.Standard },
             new() { Name="R:ParabB",     CenterX=-1.31079592300444, CenterY=0.0731247515540183, Zoom=64694.7,  Iterations=1750, QualityPreset=QualityPreset.High },
             // Stopped here.
-            new() { Name="R:ParabC",     CenterX=-0.79543, CenterY=0.12523, Zoom=10000.0, Iterations=2500, QualityPreset=QualityPreset.High },
+            new() { Name="R:ParabC",     CenterX=0.25033364354215, CenterY=0.25033364354215, Zoom=20003.0, Iterations=2500, QualityPreset=QualityPreset.High },
             // ── Deep double spirals ────────────────────────────────────────────────
             new() { Name="R:DblSpiralA", CenterX=-0.72700, CenterY=0.18900, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
             new() { Name="R:DblSpiralB", CenterX=-0.74108, CenterY=0.16858, Zoom=30000.0, Iterations=3500, QualityPreset=QualityPreset.High },
             new() { Name="R:DblSpiralC", CenterX=-0.73657, CenterY=0.18781, Zoom=18000.0, Iterations=3000, QualityPreset=QualityPreset.High },
             // ── Upper filament / star clusters ────────────────────────────────────
-            new() { Name="R:StarA",      CenterX=-0.15920, CenterY=1.03170, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:StarB",      CenterX=-0.17460, CenterY=1.02640, Zoom=4000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:StarA",      CenterX=-0.159158498023715, CenterY=1.02331660079051, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:StarB",      CenterX=1.02331660079051, CenterY=1.02525867534908, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
             new() { Name="R:StarC",      CenterX=-0.22700, CenterY=1.11600, Zoom=3500.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
             // ── Needle tip zone ───────────────────────────────────────────────────
             new() { Name="R:NeedleA",    CenterX=-1.99991, CenterY=0.00000, Zoom=15000.0, Iterations=3000, QualityPreset=QualityPreset.Ultra },
             new() { Name="R:NeedleB",    CenterX=-1.99999, CenterY=0.00000, Zoom=50000.0, Iterations=5000, QualityPreset=QualityPreset.Ultra },
             // ── Cauliflower / cardioid edge ────────────────────────────────────────
             new() { Name="R:CauliA",     CenterX=0.25010,  CenterY=0.00000, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:CauliB",     CenterX=0.25001,  CenterY=0.00100, Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High },
+            new() { Name="R:CauliB",     CenterX=0.25033364354215,  CenterY=3.9525691699605E-06, Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High },
             // ── Deep zoom demo points (DD precision) ──────────────────────────────
             new() { Name="R:DeepA",      CenterX=-0.743643887037151, CenterY=0.131825904205330, Zoom=1e14, Iterations=8000, QualityPreset=QualityPreset.High },
             new() { Name="R:DeepB",      CenterX=-0.73364389241974, CenterY=0.245521140671023, Zoom=5e13, Iterations=6000, QualityPreset=QualityPreset.High },

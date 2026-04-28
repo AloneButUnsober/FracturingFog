@@ -186,6 +186,7 @@ public sealed class MandelbrotCalculator
             case PastellyPhong3D m: CalculateCore(m, ct); break;
             case PsychedelicPhong3D m: CalculateCore(m, ct); break;
             case RadioInterferenceOriginalPhong3D m: CalculateCore(m, ct); break;
+            case RadioInterferenceOriginalBluePhong3D m: CalculateCore(m, ct); break;
             case RainbowPhong3D m: CalculateCore(m, ct); break;
             case SolarWindPhong3D m: CalculateCore(m, ct); break;
             case SolarWindModPhong3D m: CalculateCore(m, ct); break;

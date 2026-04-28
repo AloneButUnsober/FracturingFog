@@ -14,21 +14,21 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-using FracturingFog.Models;
 using FracturingFog.Interefaces;
-using System.Collections.Immutable;
-using System.Linq;
+using FracturingFog.Models;
 
 namespace FracturingFog;
 
@@ -78,6 +78,8 @@ public sealed class MainForm : Form
     private readonly Button _flipButton;
     private readonly Button _exportRegionsButton;
     private readonly Button _importRegionsButton;
+    private Label? _currentColorThemeLabel;
+    private readonly ComboBox _colorThemeCombo2;
     private readonly Button _exportColorThemeButton;
     private readonly Button _importColorThemeButton;
     private readonly Button _deleteColorThemeButton;
@@ -456,10 +458,11 @@ public sealed class MainForm : Form
             BackColor = Color.FromArgb(55, 55, 55),
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            DropDownWidth = Math.Max(300, Models.ColorPalette.GetMaxDescriptionLength() + 40)   // ensure descriptions fit in the dropdown
         };
-        BuildColorThemesSelection();
-        _colorThemeCombo.SelectedIndex = 0;
+        
+        //_colorThemeCombo.SelectedIndex = 0;
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
         _toolbar.Controls.Add(_colorThemeCombo);
         buttonLeft += 170;
@@ -837,25 +840,59 @@ public sealed class MainForm : Form
             Left = 28,
             Top = sliderTop + 128,
             Width = 260,
-            Height = 90,
+            Height = 150,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.FromArgb(22, 22, 22),
         };
         _coordPanel.Controls.Add(themeBox);
 
-        _exportColorThemeButton = MakeBtn("Export", 65, 60, 20, "Export the current color theme to a JSON file");
+        _currentColorThemeLabel = new Label()
+        {
+            Text = $"Current: {_colorThemeCombo?.SelectedItem}",
+            Left = 8,
+            Top = 18,
+            Width = 244,
+            Height = 12,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent
+        };
+        themeBox.Controls.Add(_currentColorThemeLabel);
+
+        _colorThemeCombo2 = new ColorComboBox
+        {
+            Left = 60,
+            Top = 40,
+            Width = 162,
+            Height = 26,
+            BackColor = Color.FromArgb(55, 55, 55),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            DropDownWidth = Math.Max(300, Models.ColorPalette.GetMaxDescriptionLength() + 40)   // ensure descriptions fit in the dropdown
+        };
+        _colorThemeCombo2.SelectedIndexChanged += (s, e) =>
+        {
+            // Sync the second combo with the main one; it's just there to show the new theme when you import it without having to re-select the theme in the main combo.
+            _colorThemeCombo?.SelectedIndex = _colorThemeCombo2.SelectedIndex;
+        };
+        themeBox.Controls.Add(_colorThemeCombo2);
+
+        _exportColorThemeButton = MakeBtn("Export", 65, 60, 75, "Export the current color theme to a JSON file");
         _exportColorThemeButton.Click += OnExportColorThemeClick;
         themeBox.Controls.Add(_exportColorThemeButton);
-        _importColorThemeButton = MakeBtn("Import", 65, _exportColorThemeButton.Width + 70, 20, "Import color themes from a JSON file");
+        _importColorThemeButton = MakeBtn("Import", 65, _exportColorThemeButton.Width + 70, 75, "Import color themes from a JSON file");
         _importColorThemeButton.Click += OnImportColorThemeClick;
         themeBox.Controls.Add(_importColorThemeButton);
 
-        _deleteColorThemeButton = MakeBtn("Delete", 65, 60, 50, "Delete selected user-defined color theme");
+        _deleteColorThemeButton = MakeBtn("Delete", 65, 60, 105, "Delete selected user-defined color theme");
         _deleteColorThemeButton.Click += OnDeleteColorThemeClick;
         themeBox.Controls.Add(_deleteColorThemeButton);
 
-        _loadColorThemesButton = MakeBtn("Reload", 65, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 10, 50, "Reload color themes from disk (useful if you edit the JSON files externally)");
+        _loadColorThemesButton = MakeBtn("Reload", 65, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 10, 105, "Reload color themes from disk (useful if you edit the JSON files externally)");
         _loadColorThemesButton.Click += OnLoadColorThemesClick;
         themeBox.Controls.Add(_loadColorThemesButton);
 
@@ -1008,6 +1045,11 @@ public sealed class MainForm : Form
         contextMenu.Items.Add(systemInfoItem);
         _renderPanel.ContextMenuStrip = contextMenu;
         #endregion Context menu for render panel
+
+        // Build list sources for combos that need it.
+        BuildColorThemesSelection();
+        _colorThemeCombo2.SelectedIndex = 0;
+
         #endregion Render panel
 
         // Docking / Z-order: Fill first, then Top-docked in reverse, footer last.
@@ -1473,14 +1515,18 @@ public sealed class MainForm : Form
             var palettes = Models.ColorPalette.GetPalettesByType(type);
             if (palettes.Count == 0) continue;
             _colorThemeCombo.Items.Add($"— {type} —");
+            _colorThemeCombo2?.Items.Add($"— {type} —");
             foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
+            {
                 _colorThemeCombo.Items.Add(name);
+                _colorThemeCombo2?.Items.Add(name);
+            }
         }
     }
 
     private void OnColorThemeChanged(object? sender, EventArgs e)
     {
-        string name = _colorThemeCombo.SelectedItem?.ToString() ?? "";
+        string name = _colorThemeCombo?.SelectedItem?.ToString() ?? "";
         var map = Models.ColorPalette.GetPaletteByName(name);
         if (_calculator != null)
         {
@@ -1489,6 +1535,7 @@ public sealed class MainForm : Form
         }
         _miniMapPanel?.RequestRedraw();
         UpdateDeleteColorThemeButton();
+        _currentColorThemeLabel?.Text = $"Current: {name}";
     }
 
     private Color GetSwatchColor()

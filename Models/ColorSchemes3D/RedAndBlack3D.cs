@@ -26,7 +26,7 @@ namespace FracturingFog.Models
     /// </summary>
     public class RedAndBlackPhong3D : IColorMap
     {
-        public static string Name => "Radio Interference Original 3D";
+        public static string Name => "RNB3D - Radio Interference Original 3D";
 
         public ColorPaletteType Type { get; } = ColorPaletteType.Relief3D;
 
@@ -44,8 +44,8 @@ namespace FracturingFog.Models
         // next to each other in the UI.
         private static readonly LightSource Key = new(
             lx: -0.60f, ly: 0.65f, lz: 0.80f,
-            diffR: 1.00f, diffG: 0.92f, diffB: 0.70f,
-            specR: 1.00f, specG: 0.98f, specB: 0.85f,
+            diffR: 0.5f, diffG: 0.92f, diffB: 0.70f,
+            specR: 0.5f, specG: 0.98f, specB: 0.85f,
             shininess: 180f);
 
         // Cool blue-violet fill from the lower-right lifts shadow regions

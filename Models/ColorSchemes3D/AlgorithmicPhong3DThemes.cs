@@ -660,7 +660,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class RadioInterferenceOriginalPhong3D : AlgorithmicPhong3DBase
     {
-        public static string Name => "Radio Interference Original 3D";
+        public static string Name => "Radio Interference Red Phong 3D";
         public static string Category => "3D Relief";
         public static string Description =>
             "Eight-cycle red/black spiral relief — harsh red key over deep ambient shadows.";
@@ -683,6 +683,51 @@ namespace FracturingFog.Models
                 lx: -0.65f, ly: -0.40f, lz: 0.45f,
                 diffR: 0.20f, diffG: 0.05f, diffB: 0.05f,
                 specR: 0.15f, specG: 0.05f, specB: 0.05f,
+                shininess: 10f);
+        }
+
+        protected override void ComputeAlbedo(float smooth, float distance, int maxIter,
+                                              out float aR, out float aG, out float aB)
+        {
+            float hue = (smooth * 8.0f) % 360.0f;
+            float saturation = 0.85f;
+            // Use smooth-relative value so deep iterations darken naturally.
+            float value = Math.Clamp(1.0f - MathF.Pow((float)smooth / MathF.Max(1, maxIter), 0.2f), 0f, 1f);
+            int packed = Fractals.HsvToRgb(hue, saturation, value);
+            aR = ((packed >> 16) & 0xFF) / 255f;
+            aG = ((packed >> 8) & 0xFF) / 255f;
+            aB = (packed & 0xFF) / 255f;
+        }
+    }
+
+    // =========================================================================
+    // RadioInterference (RedAndBlack) — 8-cycle hue at low value
+    // =========================================================================
+    public sealed class RadioInterferenceOriginalBluePhong3D : AlgorithmicPhong3DBase
+    {
+        public static string Name => "Radio Interference Not Red Phong 3D";
+        public static string Category => "3D Relief";
+        public static string Description =>
+            "Eight-cycle red/black spiral relief — harsh red key over deep ambient shadows.";
+        public static ColorMapFeatures Features =>
+            ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesNormals |
+            ColorMapFeatures.Cyclic | ColorMapFeatures.HighContrast |
+            ColorMapFeatures.ThreeDEffect;
+
+        protected override float Steepness => 1.3f;
+        protected override float Ambient => 0.08f;   // very dark recesses
+
+        public RadioInterferenceOriginalBluePhong3D()
+        {
+            KeyLight = new LightSource(
+                lx: 0.60f, ly: 0.60f, lz: 0.80f,
+                diffR: 0.40f, diffG: 0.30f, diffB: 1.00f,
+                specR: 0.30f, specG: 0.40f, specB: 1.00f,
+                shininess: 60f);
+            FillLight = new LightSource(
+                lx: -0.65f, ly: -0.40f, lz: 0.45f,
+                diffR: 0.09f, diffG: 0.05f, diffB: 0.20f,
+                specR: 0.09f, specG: 0.05f, specB: 0.15f,
                 shininess: 10f);
         }
 

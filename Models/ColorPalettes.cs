@@ -69,7 +69,9 @@ namespace FracturingFog.Models
             new PastellyPhong3D(),
             new PsychedelicPhong3D(),
             new RadioInterferenceOriginalPhong3D(),
+            new RadioInterferenceOriginalBluePhong3D(),
             new RainbowPhong3D(),
+            new RedAndBlackPhong3D(),
             new SolarWindPhong3D(),
             new SolarWindModPhong3D(),
             new TwilightCyclicPhong3D(),
@@ -280,6 +282,22 @@ namespace FracturingFog.Models
                 if (GetStaticName(p) == name) return GetStaticDescription(p);
             return string.Empty;
         }
+
+        /// <summary>
+        /// GetMaxDescriptionLength() is used to size the tooltip box for palette descriptions.
+        /// </summary>
+        /// <returns>The maximum length of all palette descriptions.</returns>
+        public static int GetMaxDescriptionLength()
+        {
+            int max = 0;
+            foreach (var p in Palettes)
+            {
+                int len = GetStaticDescription(p)?.Length ?? 0;
+                if (len > max) max = len;
+            }
+            return max;
+        }
+
         // ── Reflection helpers ────────────────────────────────────────────────
         // Built-in themes carry Name/Category/Description as static type-level
         // properties (read via reflection).  Data-driven themes implement
