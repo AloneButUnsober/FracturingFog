@@ -962,6 +962,7 @@ public sealed class MainForm : Form
                 _miniPreviousBorderStyle = FormBorderStyle;
                 _miniPreviousSize = Size;
                 _coordPanel.Visible = false;   // hide coordinate panel in mini mode since it doesn't work well there
+                TopMost = true;  // mini mode is meant for keeping the window visible while doing other things, so force it on top
             }
             _miniClick = true;
             OnFormResize(s, e);  // adjust size and borders
@@ -2290,8 +2291,8 @@ public sealed class MainForm : Form
 
                 previousBuffer = newThemeBuf;
                 Debug.WriteLine($"Region lock: {regionLockFunc()}, theme {themeNum + 1} of {themesCount} for region \"{region.Name}\" displayed");
-                if (!regionLockFunc() && themesCount >= themesPerRegion) break;  // move to next region if not locking; otherwise show all themes for this region before moving on
-                else if (regionLockFunc() && themesCount == themesPerRegion) themesCount = paletteNames.Count - themesCount;  // if locking and we've shown the preset number of themes, switch to showing all themes for the rest of the slideshow loop
+                if (!regionLockFunc() && themeNum >= themesPerRegion) break;  // move to next region if not locking; otherwise show all themes for this region before moving on
+                else if (regionLockFunc() && themeNum == themesPerRegion) themesCount = paletteNames.Count - themeNum;  // if locking and we've shown the preset number of themes, switch to showing all themes for the rest of the slideshow loop
             }
 
             // Wait for the final theme to display its full duration before
