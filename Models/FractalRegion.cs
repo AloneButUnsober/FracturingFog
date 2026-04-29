@@ -382,6 +382,18 @@ namespace FracturingFog.Models
             }
         }
 
+        public int MaxRegionNameLength
+        {
+            get
+            {
+                int max = 0;
+                foreach (var r in All)
+                    if (r.Name.Length > max)
+                        max = r.Name.Length;
+                return max;
+            }
+        }
+
         // ── Persistence ───────────────────────────────────────────────────────
 
         /// <summary>

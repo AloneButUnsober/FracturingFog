@@ -56,11 +56,22 @@ public sealed class MainForm : Form
     private readonly Button _posterButton;
     private readonly Button _screenshotButton;
     private readonly Button _slideshowButton;
+    private readonly Label _qualityLabel;
     private readonly ComboBox _qualityCombo;
+    private readonly Label _colorThemeLabel;
     private readonly ComboBox _colorThemeCombo;
+    private readonly Label _regionLabel;
     private readonly ComboBox _regionCombo;
     private readonly Button _saveViewButton;
+    private readonly Button _saveViewButton2;
     private readonly Button _delRegionButton;
+    private readonly Button _delRegionButton2;
+    private readonly CheckBox _checkBoxShowCoordPanel;
+    private readonly CheckBox _checkBoxShowCoordPanel2;
+    private readonly CheckBox _checkBoxShowFooterPanel;
+    private readonly CheckBox _checkBoxShowFooterPanel2;
+    private readonly CheckBox _checkBoxShowGrid;
+    private readonly CheckBox _checkBoxShowGrid2;
     private readonly ToolTip _toolTip = new();
 
     // UI: coordinate / region bar
@@ -78,6 +89,8 @@ public sealed class MainForm : Form
     private readonly Button _flipButton;
     private readonly Button _exportRegionsButton;
     private readonly Button _importRegionsButton;
+    private Label? _currentRegionLabel;
+    private readonly ComboBox _regionCombo2;
     private Label? _currentColorThemeLabel;
     private readonly ComboBox _colorThemeCombo2;
     private readonly Button _exportColorThemeButton;
@@ -389,7 +402,7 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 4, Width = 1, Height = 30, BackColor = Color.FromArgb(65, 65, 65) });
         buttonLeft += 8;
 
-        var qlbl = new Label
+        _qualityLabel = new Label
         {
             Text = "Quality:",
             Left = buttonLeft,
@@ -399,8 +412,8 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
-        _toolbar.Controls.Add(qlbl);
-        buttonLeft += qlbl.PreferredWidth + 4;
+        _toolbar.Controls.Add(_qualityLabel);
+        buttonLeft += _qualityLabel.PreferredWidth + 4;
 
         _qualityCombo = new ComboBox
         {
@@ -436,7 +449,7 @@ public sealed class MainForm : Form
         buttonLeft += 10;
 
         // Theme label + combo.
-        var tlbl = new Label
+        _colorThemeLabel = new Label
         {
             Text = "Theme:",
             Left = buttonLeft,
@@ -446,8 +459,8 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
-        _toolbar.Controls.Add(tlbl);
-        buttonLeft += tlbl.PreferredWidth + 4;
+        _toolbar.Controls.Add(_colorThemeLabel);
+        buttonLeft += _colorThemeLabel.PreferredWidth + 4;
         Models.ColorPalette.LoadUserThemes();
         _colorThemeCombo = new ColorComboBox
         {
@@ -461,8 +474,7 @@ public sealed class MainForm : Form
             Cursor = Cursors.Hand,
             DropDownWidth = Math.Max(300, Models.ColorPalette.GetMaxDescriptionLength() + 40)   // ensure descriptions fit in the dropdown
         };
-        
-        //_colorThemeCombo.SelectedIndex = 0;
+
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
         _toolbar.Controls.Add(_colorThemeCombo);
         buttonLeft += 170;
@@ -472,7 +484,7 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
         buttonLeft += 10;
 
-        var rlbl = new Label
+        _regionLabel = new Label
         {
             Text = "Region:",
             Left = buttonLeft,
@@ -482,8 +494,8 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
-        _toolbar.Controls.Add(rlbl);
-        buttonLeft += rlbl.PreferredWidth + 3;
+        _toolbar.Controls.Add(_regionLabel);
+        buttonLeft += _regionLabel.PreferredWidth + 3;
 
         _regionCombo = new ComboBox
         {
@@ -526,7 +538,7 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
         buttonLeft += 10;
 
-        var checkBoxShowCoordPanel = new CheckBox
+        _checkBoxShowCoordPanel = new CheckBox
         {
             Text = "Navigate",
             Left = buttonLeft,
@@ -538,9 +550,9 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             Checked = false,
         };
-        buttonLeft += checkBoxShowCoordPanel.PreferredSize.Width + 6;
+        buttonLeft += _checkBoxShowCoordPanel.PreferredSize.Width + 6;
 
-        var checkBoxShowFooterPanel = new CheckBox
+        _checkBoxShowFooterPanel = new CheckBox
         {
             Text = "Status",
             Left = buttonLeft,
@@ -552,12 +564,12 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             Checked = true,
         };
-        _toolbar.Controls.Add(checkBoxShowCoordPanel);
-        _toolbar.Controls.Add(checkBoxShowFooterPanel);
-        buttonLeft += checkBoxShowFooterPanel.PreferredSize.Width + 12;
+        _toolbar.Controls.Add(_checkBoxShowCoordPanel);
+        _toolbar.Controls.Add(_checkBoxShowFooterPanel);
+        buttonLeft += _checkBoxShowFooterPanel.PreferredSize.Width + 12;
 
         // Grid overlay toggle.
-        var checkBoxShowGrid = new CheckBox
+        _checkBoxShowGrid = new CheckBox
         {
             Text = "Grid",
             Left = buttonLeft,
@@ -569,8 +581,8 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             Checked = false,
         };
-        _toolTip.SetToolTip(checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
-        _toolbar.Controls.Add(checkBoxShowGrid);
+        _toolTip.SetToolTip(_checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
+        _toolbar.Controls.Add(_checkBoxShowGrid);
         #endregion
 
         #region Footer panel
@@ -615,7 +627,6 @@ public sealed class MainForm : Form
         _footerPanel.Controls.Add(_statusLabel);
         _footerPanel.Visible = true;
 
-        checkBoxShowFooterPanel.Click += (s, e) => _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
         #endregion
 
         #region Coordinate / Navigate panel
@@ -629,10 +640,59 @@ public sealed class MainForm : Form
             BackColor = Color.FromArgb(22, 22, 22),
             Visible = false,   // hidden until user ticks Navigate
         };
-        checkBoxShowCoordPanel.Click += (s, e) => _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
+
+        buttonLeft = 45;
+        labelTop = 38;
+        txTop = 35;
+
+        _checkBoxShowCoordPanel2 = new CheckBox
+        {
+            Text = "Navigate",
+            Left = buttonLeft,
+            Top = 9,
+            AutoSize = true,
+            AutoCheck = true,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent,
+            Checked = false,
+        };
+        buttonLeft += _checkBoxShowCoordPanel2.PreferredSize.Width + 6;
+
+        _checkBoxShowFooterPanel2 = new CheckBox
+        {
+            Text = "Status",
+            Left = buttonLeft,
+            Top = 9,
+            AutoSize = true,
+            AutoCheck = true,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent,
+            Checked = true,
+        };
+        _coordPanel.Controls.Add(_checkBoxShowCoordPanel2);
+        _coordPanel.Controls.Add(_checkBoxShowFooterPanel2);
+        buttonLeft += _checkBoxShowFooterPanel2.PreferredSize.Width + 12;
+
+        // Grid overlay toggle.
+        _checkBoxShowGrid2 = new CheckBox
+        {
+            Text = "Grid",
+            Left = buttonLeft,
+            Top = 9,
+            AutoSize = true,
+            AutoCheck = true,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent,
+            Checked = false,
+        };
+        _coordPanel.Controls.Add(_checkBoxShowGrid2);
+        _toolTip.SetToolTip(_checkBoxShowGrid2, "Overlay a Cartesian complex-plane grid on the fractal view");
 
         buttonLeft = 8;
-        txTop = 6;
+
         _lblCX = MakeLbl("CX:", buttonLeft, labelTop, _coordPanel, true);
         _lblCX.Height = 12;
         _lblCX.Width = 78;
@@ -814,19 +874,63 @@ public sealed class MainForm : Form
             Left = 28,
             Top = sliderTop + 58,
             Width = 260,
-            Height = 60,
+            Height = 150,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.FromArgb(22, 22, 22),
         };
 
         _coordPanel.Controls.Add(regionBox);
-        _exportRegionsButton = MakeBtn("Export", 65, 60, 20, "Export all custom regions to a JSON file");
+
+        _currentRegionLabel = new Label()
+        {
+            Left = 8,
+            Top = 18,
+            Width = regionBox.Width - 4,
+            Height = 20,
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent
+        };
+        regionBox.Controls.Add(_currentRegionLabel);
+
+        _regionCombo2 = new ComboBox
+        {
+            Left = 60,
+            Top = 50,
+            Width = 162,
+            Height = 26,
+            BackColor = Color.FromArgb(55, 55, 55),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            DropDownWidth = Math.Max(180, Models.FractalRegionLibrary.Instance.MaxRegionNameLength + 40)   // ensure descriptions fit in the dropdown
+        };
+        _regionCombo2.SelectedIndexChanged += (s, e) =>
+        {
+            // Sync the second combo with the main one; it's just there to show the new region when you import it without having to re-select the region in the main combo.
+            _regionCombo.SelectedIndex = _regionCombo2.SelectedIndex;
+        };
+        regionBox.Controls.Add(_regionCombo2);
+
+        _saveViewButton2 = MakeBtn("Save", 65, 60, 85, "Save the current view as a region");
+        _saveViewButton2.Click += OnSaveViewClick;
+        regionBox.Controls.Add(_saveViewButton2);
+        buttonLeft += 58;
+
+        _delRegionButton2 = MakeBtn("Delete", 65, _saveViewButton2.Left + _saveViewButton2.Width + 10, 85, "Delete the selected region");
+        _delRegionButton2.Click += OnDelRegionClick;
+        regionBox.Controls.Add(_delRegionButton2);
+        buttonLeft = 98;
+
+        _exportRegionsButton = MakeBtn("Export", 65, 60, 115, "Export all custom regions to a JSON file");
         _exportRegionsButton.Click += OnExportRegionsClick;
         regionBox.Controls.Add(_exportRegionsButton);
         buttonLeft += 58;
 
-        _importRegionsButton = MakeBtn("Import", 65, _exportRegionsButton.Width + 70, 20, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+        _importRegionsButton = MakeBtn("Import", 65, _exportRegionsButton.Width + 70, 115, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
         _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
         _importRegionsButton.Click += OnImportRegionsClick;
         regionBox.Controls.Add(_importRegionsButton);
@@ -838,7 +942,7 @@ public sealed class MainForm : Form
         {
             Text = "Color Themes",
             Left = 28,
-            Top = sliderTop + 128,
+            Top = regionBox.Top + regionBox.Height + 10,
             Width = 260,
             Height = 150,
             ForeColor = Color.FromArgb(155, 155, 155),
@@ -849,13 +953,12 @@ public sealed class MainForm : Form
 
         _currentColorThemeLabel = new Label()
         {
-            Text = $"Current: {_colorThemeCombo?.SelectedItem}",
             Left = 8,
             Top = 18,
-            Width = 244,
-            Height = 12,
+            Width = themeBox.Width - 4,
+            Height = 20,
             AutoSize = false,
-            TextAlign = ContentAlignment.MiddleLeft,
+            TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
@@ -865,7 +968,7 @@ public sealed class MainForm : Form
         _colorThemeCombo2 = new ColorComboBox
         {
             Left = 60,
-            Top = 40,
+            Top = 50,
             Width = 162,
             Height = 26,
             BackColor = Color.FromArgb(55, 55, 55),
@@ -881,18 +984,18 @@ public sealed class MainForm : Form
         };
         themeBox.Controls.Add(_colorThemeCombo2);
 
-        _exportColorThemeButton = MakeBtn("Export", 65, 60, 75, "Export the current color theme to a JSON file");
+        _exportColorThemeButton = MakeBtn("Export", 65, 60, 85, "Export the current color theme to a JSON file");
         _exportColorThemeButton.Click += OnExportColorThemeClick;
         themeBox.Controls.Add(_exportColorThemeButton);
-        _importColorThemeButton = MakeBtn("Import", 65, _exportColorThemeButton.Width + 70, 75, "Import color themes from a JSON file");
+        _importColorThemeButton = MakeBtn("Import", 65, _exportColorThemeButton.Width + 70, 85, "Import color themes from a JSON file");
         _importColorThemeButton.Click += OnImportColorThemeClick;
         themeBox.Controls.Add(_importColorThemeButton);
 
-        _deleteColorThemeButton = MakeBtn("Delete", 65, 60, 105, "Delete selected user-defined color theme");
+        _deleteColorThemeButton = MakeBtn("Delete", 65, 60, 115, "Delete selected user-defined color theme");
         _deleteColorThemeButton.Click += OnDeleteColorThemeClick;
         themeBox.Controls.Add(_deleteColorThemeButton);
 
-        _loadColorThemesButton = MakeBtn("Reload", 65, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 10, 105, "Reload color themes from disk (useful if you edit the JSON files externally)");
+        _loadColorThemesButton = MakeBtn("Reload", 65, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 10, 115, "Reload color themes from disk (useful if you edit the JSON files externally)");
         _loadColorThemesButton.Click += OnLoadColorThemesClick;
         themeBox.Controls.Add(_loadColorThemesButton);
 
@@ -924,13 +1027,6 @@ public sealed class MainForm : Form
             Visible = false,   // panel itself is never shown; only used for drawing logic
         };
 
-        // Grid toggle — re-render with or without the grid overlay.
-        checkBoxShowGrid.Click += (s, e) =>
-        {
-            _gridVisible = checkBoxShowGrid.Checked;
-            RepaintWithBrightnessContrast();
-        };
-
         #region Context menu for render panel
         var contextMenu = new ContextMenuStrip();
         var toolbarItem = new ToolStripMenuItem("Toolbar", null, (s, e) =>
@@ -940,13 +1036,13 @@ public sealed class MainForm : Form
         { Checked = true };
         var navigateItem = new ToolStripMenuItem("Navigate", null, (s, e) =>
         {
-            checkBoxShowCoordPanel.Checked = !checkBoxShowCoordPanel.Checked;
-            _coordPanel.Visible = checkBoxShowCoordPanel.Checked;
+            _checkBoxShowCoordPanel.Checked = !_checkBoxShowCoordPanel.Checked;
+            _coordPanel.Visible = _checkBoxShowCoordPanel.Checked;
         });
         var statusItem = new ToolStripMenuItem("Status", null, (s, e) =>
         {
-            checkBoxShowFooterPanel.Checked = !checkBoxShowFooterPanel.Checked;
-            _footerPanel.Visible = checkBoxShowFooterPanel.Checked;
+            _checkBoxShowFooterPanel.Checked = !_checkBoxShowFooterPanel.Checked;
+            _footerPanel.Visible = _checkBoxShowFooterPanel.Checked;
         });
         var onTopItem = new ToolStripMenuItem("On Top", null, (s, e) =>
         {
@@ -967,13 +1063,14 @@ public sealed class MainForm : Form
             _miniClick = true;
             OnFormResize(s, e);  // adjust size and borders
             if (wasMini && !_miniMode)
-                 CenterToScreen();  // re-center when exiting mini mode since we likely moved the window around while in mini mode
+                CenterToScreen();  // re-center when exiting mini mode since we likely moved the window around while in mini mode
             _miniClick = false;
         });
         var gridItem = new ToolStripMenuItem("Grid", null, (s, e) =>
         {
             _gridVisible = !_gridVisible;
-            checkBoxShowGrid.Checked = _gridVisible;
+            _checkBoxShowGrid.Checked = _gridVisible;
+            _checkBoxShowGrid2.Checked = _gridVisible;
             RepaintWithBrightnessContrast();
         });
 
@@ -1017,7 +1114,7 @@ public sealed class MainForm : Form
             miniModeItem.Checked = _miniMode;
             onTopItem.Checked = TopMost;
             statusItem.Checked = _footerPanel.Visible;
-            navigateItem.Checked = checkBoxShowCoordPanel.Checked;
+            navigateItem.Checked = _checkBoxShowCoordPanel.Checked;
             navigateItem.Enabled = !_miniMode;  // navigating in mini mode is awkward and not worth supporting
             navigateItem.Visible = !_miniMode;  // hide navigation option in mini mode since it doesn't work well there
             toolbarItem.Checked = _toolbar.Visible;
@@ -1051,6 +1148,42 @@ public sealed class MainForm : Form
         BuildColorThemesSelection();
         _colorThemeCombo2.SelectedIndex = 0;
 
+        _checkBoxShowCoordPanel.Click += (s, e) =>
+        {
+            _checkBoxShowCoordPanel2.Checked = _checkBoxShowCoordPanel.Checked;  // sync the coordinate panel checkbox in the coordinate panel with the main one
+            OnShowCoordPanelClick();
+        };
+
+        _checkBoxShowCoordPanel2.Click += (s, e) =>
+        {
+            _checkBoxShowCoordPanel.Checked = _checkBoxShowCoordPanel2.Checked;  // sync the coordinate panel checkbox in the main toolbar with the one in the coordinate panel
+            OnShowCoordPanelClick();
+        };
+        _checkBoxShowFooterPanel.Click += (s, e) =>
+        {
+            _checkBoxShowFooterPanel2.Checked = _checkBoxShowFooterPanel.Checked;  // sync the coordinate panel checkbox with the main one
+            OnCheckBoxShowFooterPanelClicked();
+        };
+
+        _checkBoxShowFooterPanel2.Click += (s, e) =>
+        {
+            _checkBoxShowFooterPanel.Checked = _checkBoxShowFooterPanel2.Checked;  // sync the coordinate panel checkbox with the main one
+            OnCheckBoxShowFooterPanelClicked();
+        };
+
+        // Grid toggle — re-render with or without the grid overlay.
+        _checkBoxShowGrid.Click += (s, e) =>
+        {
+            _checkBoxShowGrid2.Checked = _checkBoxShowGrid.Checked;  // sync the coordinate panel checkbox with the main one
+            OnCheckBoxShowGridClick();
+        };
+
+        _checkBoxShowGrid2.Click += (s, e) =>
+        {
+            _checkBoxShowGrid.Checked = _checkBoxShowGrid2.Checked;  // sync the main toolbar checkbox with the one in the coordinate panel
+            OnCheckBoxShowGridClick();
+        };
+
         #endregion Render panel
 
         // Docking / Z-order: Fill first, then Top-docked in reverse, footer last.
@@ -1067,6 +1200,35 @@ public sealed class MainForm : Form
         Application.Idle += OnApplicationIdle;
     }
 
+    private void OnCheckBoxShowGridClick()
+    {
+        _gridVisible = _checkBoxShowGrid.Checked;
+        RepaintWithBrightnessContrast();
+    }
+
+    private void OnCheckBoxShowFooterPanelClicked()
+    {
+        _footerPanel.Visible = !_footerPanel.Visible;
+        _checkBoxShowFooterPanel.Checked = _footerPanel.Visible;
+        _checkBoxShowFooterPanel2.Checked = _footerPanel.Visible;  // sync the coordinate panel checkbox with the main one
+    }
+
+    private void OnShowCoordPanelClick()
+    {
+        _coordPanel.Visible = !_coordPanel.Visible;
+        _checkBoxShowCoordPanel.Visible = !_coordPanel.Visible;  // only show the main toolbar checkbox when the coordinate panel itself is hidden, to avoid confusion between the two sets of checkboxes
+        _checkBoxShowFooterPanel.Visible = !_coordPanel.Visible;  // only show the main toolbar checkbox when the coordinate panel itself is hidden, to avoid confusion between the two sets of checkboxes
+        _checkBoxShowGrid.Visible = !_coordPanel.Visible;  // only show the main toolbar checkbox when the coordinate panel itself is hidden, to avoid confusion between the two sets of checkboxes
+        _qualityCombo.Visible = !_coordPanel.Visible;  // only show the main toolbar quality combo when the coordinate panel itself is hidden, to avoid confusion between the two sets of controls
+        _regionCombo.Visible = !_coordPanel.Visible;  // only show the main toolbar region combo when the coordinate panel itself is hidden, to avoid confusion between the two sets of controls
+        _saveViewButton.Visible = !_coordPanel.Visible;  // only show the main toolbar save view button when the coordinate panel itself is hidden, to avoid confusion between the two sets of controls
+        _delRegionButton.Visible = !_coordPanel.Visible;
+        _qualityLabel.Visible = !_coordPanel.Visible;
+        _colorThemeLabel.Visible = !_coordPanel.Visible;
+        _colorThemeCombo.Visible = !_coordPanel.Visible;
+        _regionLabel.Visible = !_coordPanel.Visible;
+    }
+
     #endregion Constructors
 
     private void OnLoadColorThemesClick(object? sender, EventArgs e)
@@ -1076,7 +1238,7 @@ public sealed class MainForm : Form
         BuildColorThemesSelection();
         int index = _colorThemeCombo.FindStringExact(currentText ?? string.Empty);
         _colorThemeCombo.SelectedIndex = index;
-        
+
         var map = Models.ColorPalette.GetPaletteByName(_colorThemeCombo.GetItemText(_colorThemeCombo.SelectedItem));
         if (_calculator != null)
         {
@@ -1106,9 +1268,9 @@ public sealed class MainForm : Form
     {
         using var dlg = new OpenFileDialog
         {
-            Title           = "Import Color Theme",
-            Filter          = "JSON File (*.json)|*.json",
-            DefaultExt      = "json",
+            Title = "Import Color Theme",
+            Filter = "JSON File (*.json)|*.json",
+            DefaultExt = "json",
             CheckFileExists = true,
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -1528,6 +1690,7 @@ public sealed class MainForm : Form
     private void OnColorThemeChanged(object? sender, EventArgs e)
     {
         string name = _colorThemeCombo?.SelectedItem?.ToString() ?? "";
+        _currentColorThemeLabel?.Text = name;
         var map = Models.ColorPalette.GetPaletteByName(name);
         if (_calculator != null)
         {
@@ -1536,7 +1699,6 @@ public sealed class MainForm : Form
         }
         _miniMapPanel?.RequestRedraw();
         UpdateDeleteColorThemeButton();
-        _currentColorThemeLabel?.Text = $"Current: {name}";
     }
 
     private Color GetSwatchColor()
@@ -1756,12 +1918,18 @@ public sealed class MainForm : Form
     {
         _regionCombo.SelectedIndexChanged -= OnRegionComboChanged;
         _regionCombo.Items.Clear();
+        _regionCombo2?.Items.Clear();
         _regionCombo.Items.Add("— select region —");
+        _regionCombo2?.Items.Add("— select region —");
         var regions = FractalRegionLibrary.Instance.All.OrderBy(r => r.IsBuiltIn).ThenBy(r => r.Name);
         foreach (var r in regions)
+        {
             _regionCombo.Items.Add(r.Name);
+            _regionCombo2?.Items.Add(r.Name);
+        }
 
         _regionCombo.SelectedIndex = 0;
+        _regionCombo2?.SelectedIndex = 0;
         _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
         UpdateDelRegionButton();
     }
@@ -1771,6 +1939,7 @@ public sealed class MainForm : Form
         UpdateDelRegionButton();
 
         string? name = _regionCombo.SelectedItem?.ToString();
+        _currentRegionLabel?.Text = name;
         if (string.IsNullOrEmpty(name) || name == "— select region —") return;
 
         var region = FractalRegionLibrary.Instance.FindByName(name);
@@ -1948,15 +2117,17 @@ public sealed class MainForm : Form
             region.RegionType = RegionType.UserDefined;
 
             string candidate = region.Name;
-            if (FractalRegionLibrary.Instance.FindByName(candidate) != null)
-            {
-                candidate = region.Name + "-imp";
-                int suffix = 2;
-                while (FractalRegionLibrary.Instance.FindByName(candidate) != null)
-                    candidate = region.Name + "-imp-" + suffix++;
-                region.Name = candidate;
-                renamed++;
-            }
+            if (FractalRegionLibrary.Instance.FindByName(candidate) != null) continue;
+            // Skip duplicates to avoid overwriting existing regions.
+            // Alternative would be to auto-rename with a suffix, but that could lead to many confusingly similar entries if the same file is imported multiple times.
+            //{
+            //candidate = region.Name + "-imp";
+            //int suffix = 2;
+            //while (FractalRegionLibrary.Instance.FindByName(candidate) != null)
+            //    candidate = region.Name + "-imp-" + suffix++;
+            //region.Name = candidate;
+            //renamed++;
+            //}
 
             FractalRegionLibrary.Instance.UserRegions.Add(region);
             added++;
@@ -2541,7 +2712,7 @@ public sealed class MainForm : Form
             Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
             FilterIndex = 1,
             DefaultExt = "png",
-            FileName = $"Mandelbrot_{colorName}_{regionName}" +
+            FileName = $"{_programName}_{colorName}_{regionName}" +
                          $"x{_txCX.Text.Replace(".", "")}_" +
                          $"y{_txCY.Text.Replace(".", "")}_" +
                          $"z{_txZoom.Text.Replace(".", "")}_" +
