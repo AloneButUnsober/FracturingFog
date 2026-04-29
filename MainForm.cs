@@ -740,7 +740,7 @@ public sealed class MainForm : Form
         _txIter = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Maximum iteration count");
         _txIter.TextAlign = HorizontalAlignment.Right;
 
-        buttonTop += 28;
+        buttonTop += 54;
         buttonLeft = 98;
         _chkLockIter = new CheckBox
         {
