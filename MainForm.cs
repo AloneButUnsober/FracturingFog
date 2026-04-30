@@ -215,12 +215,12 @@ public sealed class MainForm : Form
 
     private bool _slideshowRunning;
     private CancellationTokenSource? _slideshowCts;
-    private CancellationTokenSource? _slideshowRegionLockCts;   // cancelled to unlock region during slideshow
+    private CancellationTokenSource? _slideshowRegionSkipCts;   // cancelled to unlock region during slideshow
     private readonly object _slideshowLock = new();
     private readonly Random _slideshowRng = new();
     private bool _showSlideshowWatermark;   // true only while slideshow runs
     private string _slideshowRegionName = "";
-    private CancellationTokenSource? _slideshowSkipCts;   // cancelled to skip current region
+    private bool _slideshowSkipRegion;   // set to true to skip the current region and move to the next one immediately
     private bool _slideShowLockRegion;     // When true, the slideshow will not change regions; only themes.  Set by Shift+clicking the Slideshow button.
 
     #endregion Slideshow state
@@ -1448,12 +1448,18 @@ public sealed class MainForm : Form
 
     private void OnFlipClick(object? sender, EventArgs e)
     {
-        double _tempCY = Double.TryParse(_txCY.Text, out var cy) ? cy : 0;
-        if (_tempCY != 0)
-        {
-            _txCY.Text = (-_tempCY).ToString();
-            OnGoClick(sender, e);
-        }
+        // Mirror across the real axis on the full DD pair so deep-zoom
+        // positions don't drift. The textbox only carries the Hi half via
+        // G15, so re-parsing it would drop _centerYLo and lose Hi precision.
+        if (_centerY == 0.0 && _centerYLo == 0.0) return;
+
+        _centerY = -_centerY;
+        _centerYLo = -_centerYLo;
+
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        _txCY.Text = _centerY.ToString("G15", ic);
+
+        OnGoClick(sender, e);
     }
 
     // Compute max safe dimensions from available memory.
@@ -1877,8 +1883,19 @@ public sealed class MainForm : Form
             return;
         }
 
-        _centerX = cx; _centerXLo = 0.0;
-        _centerY = cy; _centerYLo = 0.0;
+        // The CX/CY textboxes display G15 of the Hi half of a DD pair and
+        // can't represent _centerXLo / _centerYLo. Only stomp the DD pair
+        // when the user actually edited the displayed text — otherwise
+        // pressing Go after panning at deep zoom would shift the location.
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        if (_txCX.Text.Trim() != _centerX.ToString("G15", ic))
+        {
+            _centerX = cx; _centerXLo = 0.0;
+        }
+        if (_txCY.Text.Trim() != _centerY.ToString("G15", ic))
+        {
+            _centerY = cy; _centerYLo = 0.0;
+        }
         _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
 
         if (_calculator != null && iter > 0)
@@ -2213,7 +2230,7 @@ public sealed class MainForm : Form
             cts = _slideshowCts;
         }
 
-        Task.Run(() => SlideshowLoop(cts.Token, () => IsSlideshowRegionLocked()), cts.Token)
+        Task.Run(() => SlideshowLoop(cts.Token, () => IsSlideshowRegionLocked(), () => IsSkipSlideshowRegion()), cts.Token)
             .ContinueWith(t =>
             {
                 if (!IsHandleCreated || _disposed) return;
@@ -2250,9 +2267,22 @@ public sealed class MainForm : Form
 
     private void SkipSlideshowRegion()
     {
-        if (!_slideshowRunning) return;
-        lock (_slideshowLock) _slideshowSkipCts?.Cancel();
+        _slideshowSkipRegion = true;
+        lock (_slideshowLock) 
         SetStatus("Slideshow: skipping to next region…");
+    }
+
+    public bool IsSkipSlideshowRegion()
+    {
+        lock (_slideshowLock)
+        {
+            if (_slideshowSkipRegion)
+            {
+                _slideshowSkipRegion = false;
+                return true;
+            }
+            return false;
+        }
     }
 
     // Returns all palettes whose Name does not start with "— " (i.e. header items excluded).
@@ -2267,7 +2297,7 @@ public sealed class MainForm : Form
         return names;
     }
 
-    private async Task SlideshowLoop(CancellationToken ct, Func<bool> regionLockFunc)
+    private async Task SlideshowLoop(CancellationToken ct, Func<bool> regionLockFunc, Func<bool> skipRegionFunc)
     {
         var builtIns = new List<FractalRegion>(FractalRegionLibrary.Instance.AllSlideshowRegions);
         var paletteNames = GetAllPaletteNames();
@@ -2286,24 +2316,38 @@ public sealed class MainForm : Form
         const int fadeStepMs = fadeDurationMs / fadeSteps;
         int lastRegionIdx = -1;
         int lastThemeIdx = -1;
+        int renderCounter = 0;
+        int regionIdx = -1;
+        bool[] regionsUsed = new bool[builtIns.Count];
+        FractalRegion? lockedRegion = null;
 
         while (!ct.IsCancellationRequested)
         {
-            // ── Pick a new region different from the last ─────────────────────
-            int regionIdx;
-            bool[] regionsUsed = new bool[builtIns.Count];
-            do { regionIdx = _slideshowRng.Next(builtIns.Count); }
-            while (builtIns.Count > 1 && regionIdx == lastRegionIdx);
-            lastRegionIdx = regionIdx;
-            if (regionsUsed[regionIdx]) continue;
-            if (!regionsUsed[regionIdx])
+            FractalRegion region;
+            if (regionLockFunc() && lockedRegion != null)
             {
-                // Mark the just-used region to avoid immediate repeats until all have been shown.
+                region = lockedRegion;
+            }
+            else
+            {
+                // ── Pick a new region different from the last ─────────────────────
+                do { regionIdx = _slideshowRng.Next(builtIns.Count); }
+                while (builtIns.Count > 1 && regionIdx == lastRegionIdx);
+                lastRegionIdx = regionIdx;
+                if (regionsUsed[regionIdx]) continue;
+                region = builtIns[regionIdx];
+                renderCounter = 0;   // reset theme counter when moving to a new region
+            }
+
+            lockedRegion = region;
+
+            string lockStatus = regionLockFunc() ? "(L)" : "";
+            // Mark the just-used region to avoid immediate repeats until all have been shown.
+            if (!regionLockFunc())
+            {
                 regionsUsed[regionIdx] = true;
                 if (regionsUsed.All(u => u)) Array.Clear(regionsUsed, 0, regionsUsed.Length);
             }
-
-            var region = builtIns[regionIdx];
 
             // ── Pick an initial theme ─────────────────────────────────────────
             int themeIdx;
@@ -2314,7 +2358,6 @@ public sealed class MainForm : Form
 
             // ── Render the new region with the initial theme ───────────────────
             uint[]? previousBuffer = null;
-            int renderCounter = 0;
             if (_calculator != null && _renderer != null &&
                 (!regionLockFunc() || renderCounter < 1))
             {
@@ -2362,7 +2405,7 @@ public sealed class MainForm : Form
                     //if (_calculator != null) _calculator.ColorMap = map;
                     SuppressedSetRegionCombo(region.Name);
                     ApplyColorThemeSilent(themeName);
-                    SetStatus($"Slideshow: {region.Name}  •  {themeName}");
+                    SetStatus($"Slideshow: {region.Name} {lockStatus}  •  {themeName}");
                 });
 
                 // Calculate on background thread.
@@ -2408,7 +2451,7 @@ public sealed class MainForm : Form
                 // Wait for the full theme display duration before starting the next fade.
                 await DelayWithCancel(themeDurationMs, ct);
                 if (ct.IsCancellationRequested) return;
-
+                lockStatus = regionLockFunc() ? "(L)" : "";
                 // Pick next theme.
 
                 int newThemeIdx;
@@ -2427,7 +2470,7 @@ public sealed class MainForm : Form
                 {
                     if (_disposed) return;
                     ApplyColorThemeSilent(newThemeName);
-                    SetStatus($"Slideshow: {region.Name}  •  {newThemeName}");
+                    SetStatus($"Slideshow: {region.Name}{lockStatus}  •  {newThemeName}");
                 });
 
                 if (ct.IsCancellationRequested) return;
@@ -2444,6 +2487,7 @@ public sealed class MainForm : Form
                 }, ct);
 
                 if (ct.IsCancellationRequested) return;
+                if (skipRegionFunc()) break;  // move to next region if skip requested
 
                 if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
                 {
@@ -2463,7 +2507,7 @@ public sealed class MainForm : Form
                 previousBuffer = newThemeBuf;
                 Debug.WriteLine($"Region lock: {regionLockFunc()}, theme {themeNum + 1} of {themesCount} for region \"{region.Name}\" displayed");
                 if (!regionLockFunc() && themeNum >= themesPerRegion) break;  // move to next region if not locking; otherwise show all themes for this region before moving on
-                else if (regionLockFunc() && themeNum == themesPerRegion) themesCount = paletteNames.Count - themeNum;  // if locking and we've shown the preset number of themes, switch to showing all themes for the rest of the slideshow loop
+                else if (regionLockFunc() && themeNum >= themesPerRegion) themesCount = paletteNames.Count - themeNum;  // if locking and we've shown the preset number of themes, switch to showing all themes for the rest of the slideshow loop
             }
 
             // Wait for the final theme to display its full duration before
@@ -2472,6 +2516,8 @@ public sealed class MainForm : Form
             await DelayWithCancel(themeDurationMs, ct);
             Debug.WriteLine($"SldShwLp: Theme duration complete for region \"{region.Name}\"");
             _lastUploadedBuffer = previousBuffer;
+            Debug.WriteLine($"Region lock: {regionLockFunc()}, completed region \"{region.Name}\" with final theme displayed for full duration");
+            lastRegionIdx = regionLockFunc() ? -1 : regionIdx;
         }
     }
 
