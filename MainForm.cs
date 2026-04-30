@@ -1059,6 +1059,7 @@ public sealed class MainForm : Form
                 _miniPreviousSize = Size;
                 _coordPanel.Visible = false;   // hide coordinate panel in mini mode since it doesn't work well there
                 TopMost = true;  // mini mode is meant for keeping the window visible while doing other things, so force it on top
+                _toolbar.Visible = false;
             }
             _miniClick = true;
             OnFormResize(s, e);  // adjust size and borders
