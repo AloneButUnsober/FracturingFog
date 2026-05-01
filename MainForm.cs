@@ -640,7 +640,7 @@ public sealed class MainForm : Form
 
         _coordPanel = new Panel
         {
-            Width = 300,
+            Width = 310,
             //Height = 58,
             AutoScroll = false,
             Dock = DockStyle.Left,
@@ -650,9 +650,6 @@ public sealed class MainForm : Form
         };
 
         _coordPanel.HorizontalScroll.Maximum = 0;  // disable horizontal scrolling
-        //_coordPanel.AutoScroll = false;
-        //_coordPanel.VerticalScroll.Visible = false;
-        //_coordPanel.AutoScroll = true;
 
         buttonLeft = 45;
         labelTop = 38;
