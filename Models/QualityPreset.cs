@@ -35,8 +35,10 @@ namespace FracturingFog.Models
         Standard = 1,
         /// <summary>Deep zoom with extended precision. Slower at depth.</summary>
         High = 2,
-        /// <summary>Maximum zoom (~5×10²⁷) and detail. May be slow at extreme depth.</summary>
+        /// <summary>Deep zoom with double-double precision (~5×10²⁷).</summary>
         Ultra = 3,
+        /// <summary>Quad-double precision — zoom up to ~5×10⁵⁸. Slow at extreme depth.</summary>
+        Extreme = 4,
     }
 
     /// <summary>
@@ -200,10 +202,29 @@ namespace FracturingFog.Models
             HPZoomThreshold = 1e12,
         };
 
+        /// <summary>
+        /// Quad-double precision — zoom up to ~5×10⁵⁸. The reference orbit uses
+        /// QD math (~62 digits) above 1e25; pixel deltas remain double-precision.
+        /// Very slow at extreme depth due to QD orbit cost (~5–10× DD).
+        /// </summary>
+        public static readonly QualityPreset Extreme = new()
+        {
+            Tier = QualityTier.Extreme,
+            Name = "Extreme",
+            Description = "Quad-double precision — zoom to 5×10⁵⁸, up to 131072 iterations. Slow.",
+            ZoomMin = 0.5,
+            ZoomMax = 5e58,
+            WheelZoomFactor = 1.06,     // very fine
+            IterBase = 2048,
+            IterMax = 131072,
+            IterPerDecade = 1024,
+            AllowHighPrecision = true,
+            HPZoomThreshold = 1e12,
+        };
         // ── Lookup helpers ────────────────────────────────────────────────────
 
-        /// <summary>All four presets in tier order.</summary>
-        public static readonly QualityPreset[] All = { Draft, Standard, High, Ultra };
+        /// <summary>All presets in tier order.</summary>
+        public static readonly QualityPreset[] All = { Draft, Standard, High, Ultra, Extreme };
 
         /// <summary>Returns the preset for the given tier.</summary>
         public static QualityPreset Get(QualityTier tier) => tier switch
@@ -212,6 +233,7 @@ namespace FracturingFog.Models
             QualityTier.Standard => Standard,
             QualityTier.High => High,
             QualityTier.Ultra => Ultra,
+            QualityTier.Extreme => Extreme,
             _ => Standard,
         };
 

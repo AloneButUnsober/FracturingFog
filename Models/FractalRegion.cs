@@ -61,6 +61,18 @@ namespace FracturingFog.Models
 
         /// <summary>Low (round-off) word of the imaginary centre.  See <see cref="CenterXLo"/>.</summary>
         public double CenterYLo { get; set; }
+        /// <summary>QD limb 2 of real centre — used at zoom > 1e25 (~62-digit precision).
+        /// Defaults to 0 for backwards compatibility with DD-only regions.</summary>
+        public double CenterX2 { get; set; }
+
+        /// <summary>QD limb 3 of real centre.  See <see cref="CenterX2"/>.</summary>
+        public double CenterX3 { get; set; }
+
+        /// <summary>QD limb 2 of imaginary centre.  See <see cref="CenterX2"/>.</summary>
+        public double CenterY2 { get; set; }
+
+        /// <summary>QD limb 3 of imaginary centre.  See <see cref="CenterX2"/>.</summary>
+        public double CenterY3 { get; set; }
 
         /// <summary>Full double-double real centre, assembled from CenterX (Hi) + CenterXLo (Lo).</summary>
         [JsonIgnore]

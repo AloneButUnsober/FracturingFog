@@ -73,6 +73,8 @@ public sealed class MainForm : Form
     private readonly CheckBox _checkBoxShowGrid;
     private readonly CheckBox _checkBoxShowGrid2;
     private readonly ToolTip _toolTip = new();
+    private int _toolbarLastWidth;
+    private int _toolbarLastHeight;
 
     // UI: coordinate / region bar
     private readonly Panel _coordPanel;
@@ -80,6 +82,8 @@ public sealed class MainForm : Form
     private readonly TextBox _txCX;
     private readonly Label _lblCY;
     private readonly TextBox _txCY;
+    private readonly Label _qualityLabel2;
+    private readonly ComboBox _qualityCombo2;
     private readonly Label _lblZoom;
     private readonly TextBox _txZoom;
     private readonly Label _lblIter;
@@ -142,9 +146,18 @@ public sealed class MainForm : Form
 
     private double _centerX = DefaultCenterX;
     private double _centerXLo = 0.0;
+    private double _centerX2 = 0.0;
+    private double _centerX3 = 0.0;
     private double _centerY = DefaultCenterY;
     private double _centerYLo = 0.0;
+    private double _centerY2 = 0.0;
+    private double _centerY3 = 0.0;
     private double _zoom = DefaultZoom;
+
+    // Above this zoom, pan/zoom math promotes to QD (4-double, ~62 digits).
+    // Below it, DD (~31 digits) is sufficient.
+    private const double QDZoomThreshold = 1e25;
+
 
     private IColorMap _defaultColorMap = new FirePalette();
 
@@ -167,6 +180,9 @@ public sealed class MainForm : Form
     private double _panStartCY;
     private FracturingFog.FFMath.DD _panStartDDCX;
     private FracturingFog.FFMath.DD _panStartDDCY;
+    private FracturingFog.FFMath.QD _panStartQDCX;
+    private FracturingFog.FFMath.QD _panStartQDCY;
+
 
     // Pan-stop debounce timer — fires full-quality render after drag ends.
     private readonly System.Windows.Forms.Timer _panStopTimer;
@@ -521,17 +537,6 @@ public sealed class MainForm : Form
         _delRegionButton.Click += OnDelRegionClick;
         _toolbar.Controls.Add(_delRegionButton);
         buttonLeft += 58;
-
-        //_exportRegionsButton = MakeBtn("Exp…", 55, buttonLeft, 6, "Export all custom regions to a JSON file");
-        //_exportRegionsButton.Click += OnExportRegionsClick;
-        //_toolbar.Controls.Add(_exportRegionsButton);
-        //buttonLeft += 58;
-
-        //_importRegionsButton = MakeBtn("Imp…", 55, buttonLeft, 6, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
-        //_importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-        //_importRegionsButton.Click += OnImportRegionsClick;
-        //_toolbar.Controls.Add(_importRegionsButton);
-        //buttonLeft += 58;
         #endregion
 
         #region Checkboxes
@@ -718,6 +723,40 @@ public sealed class MainForm : Form
         txTop += 28;
         buttonLeft = 8;
         buttonTop += 28;
+        _qualityLabel2 = MakeLbl("Quality:", buttonLeft, labelTop, _coordPanel, true);
+        _qualityLabel2.Height = 13;
+        _qualityLabel2.Width = 78;
+        _qualityLabel2.Padding = new Padding(0);
+        buttonLeft = _qualityLabel2.Left + _qualityLabel2.Width + 10;
+
+        _qualityCombo2 = new ComboBox
+        {
+            Left = buttonLeft,
+            Top = txTop,
+            Width = 182,
+            Height = 22,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = Color.FromArgb(45, 45, 45),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat,
+            Cursor = Cursors.Hand
+        };
+        foreach (var p in QualityPreset.All) _qualityCombo2.Items.Add(p.Name);
+        _qualityCombo2.SelectedIndexChanged += (s, e) =>
+        {
+            int i = _qualityCombo2.SelectedIndex;
+            if (i >= 0 && i < QualityPreset.All.Length)
+                qualityTip.SetToolTip(_qualityCombo2, QualityPreset.All[i].Description);
+            OnQualityComboChanged(s, e);
+        };
+        _coordPanel.Controls.Add(_qualityCombo2);
+        _qualityCombo2.Text = _qualityCombo.Text;   // sync with top combo
+
+        labelTop += 28;
+        buttonLeft = 8;
+        buttonTop += 28;
+        txTop += 28;
 
         _lblZoom = MakeLbl("Zoom:", buttonLeft, labelTop, _coordPanel, true);
         _lblZoom.Height = 12;
@@ -824,7 +863,7 @@ public sealed class MainForm : Form
         _coordPanel.Controls.Add(_brightnessSlider);
 
         sliderLeft = 8;
-        sliderTop += 58;
+        sliderTop += 44;
         _contrastLabel = new Label
         {
             Text = "Contrast: 0",
@@ -874,33 +913,18 @@ public sealed class MainForm : Form
             Left = 28,
             Top = sliderTop + 58,
             Width = 260,
-            Height = 150,
+            Height = 78,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.FromArgb(22, 22, 22),
         };
-
         _coordPanel.Controls.Add(regionBox);
-
-        _currentRegionLabel = new Label()
-        {
-            Left = 8,
-            Top = 18,
-            Width = regionBox.Width - 4,
-            Height = 20,
-            AutoSize = false,
-            TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent
-        };
-        regionBox.Controls.Add(_currentRegionLabel);
 
         _regionCombo2 = new ComboBox
         {
-            Left = 60,
-            Top = 50,
-            Width = 162,
+            Left = 16,
+            Top = 20,
+            Width = 230,
             Height = 26,
             BackColor = Color.FromArgb(55, 55, 55),
             ForeColor = Color.White,
@@ -915,22 +939,22 @@ public sealed class MainForm : Form
         };
         regionBox.Controls.Add(_regionCombo2);
 
-        _saveViewButton2 = MakeBtn("Save", 65, 60, 85, "Save the current view as a region");
+        _saveViewButton2 = MakeBtn("Save", 55, 16, 45, "Save the current view as a region");
         _saveViewButton2.Click += OnSaveViewClick;
         regionBox.Controls.Add(_saveViewButton2);
         buttonLeft += 58;
 
-        _delRegionButton2 = MakeBtn("Delete", 65, _saveViewButton2.Left + _saveViewButton2.Width + 10, 85, "Delete the selected region");
+        _delRegionButton2 = MakeBtn("Delete", 55, _saveViewButton2.Left + _saveViewButton2.Width + 3, 45, "Delete the selected region");
         _delRegionButton2.Click += OnDelRegionClick;
         regionBox.Controls.Add(_delRegionButton2);
         buttonLeft = 98;
 
-        _exportRegionsButton = MakeBtn("Export", 65, 60, 115, "Export all custom regions to a JSON file");
+        _exportRegionsButton = MakeBtn("Exp...", 55, _delRegionButton2.Left + _delRegionButton2.Width + 3, 45, "Export all custom regions to a JSON file");
         _exportRegionsButton.Click += OnExportRegionsClick;
         regionBox.Controls.Add(_exportRegionsButton);
         buttonLeft += 58;
 
-        _importRegionsButton = MakeBtn("Import", 65, _exportRegionsButton.Width + 70, 115, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+        _importRegionsButton = MakeBtn("Imp...", 55, _exportRegionsButton.Left + _exportRegionsButton.Width + 3, 45, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
         _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
         _importRegionsButton.Click += OnImportRegionsClick;
         regionBox.Controls.Add(_importRegionsButton);
@@ -944,32 +968,18 @@ public sealed class MainForm : Form
             Left = 28,
             Top = regionBox.Top + regionBox.Height + 10,
             Width = 260,
-            Height = 150,
+            Height = 81,
             ForeColor = Color.FromArgb(155, 155, 155),
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.FromArgb(22, 22, 22),
         };
         _coordPanel.Controls.Add(themeBox);
 
-        _currentColorThemeLabel = new Label()
-        {
-            Left = 8,
-            Top = 18,
-            Width = themeBox.Width - 4,
-            Height = 20,
-            AutoSize = false,
-            TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent
-        };
-        themeBox.Controls.Add(_currentColorThemeLabel);
-
         _colorThemeCombo2 = new ColorComboBox
         {
-            Left = 60,
-            Top = 50,
-            Width = 162,
+            Left = 16,
+            Top = 20,
+            Width = 230,
             Height = 26,
             BackColor = Color.FromArgb(55, 55, 55),
             ForeColor = Color.White,
@@ -984,18 +994,18 @@ public sealed class MainForm : Form
         };
         themeBox.Controls.Add(_colorThemeCombo2);
 
-        _exportColorThemeButton = MakeBtn("Export", 65, 60, 85, "Export the current color theme to a JSON file");
+        _exportColorThemeButton = MakeBtn("Exp...", 55, 16, 48, "Export the current color theme to a JSON file");
         _exportColorThemeButton.Click += OnExportColorThemeClick;
         themeBox.Controls.Add(_exportColorThemeButton);
-        _importColorThemeButton = MakeBtn("Import", 65, _exportColorThemeButton.Width + 70, 85, "Import color themes from a JSON file");
+        _importColorThemeButton = MakeBtn("Imp...", 55, _exportColorThemeButton.Left + _exportColorThemeButton.Width + 3, 48, "Import color themes from a JSON file");
         _importColorThemeButton.Click += OnImportColorThemeClick;
         themeBox.Controls.Add(_importColorThemeButton);
 
-        _deleteColorThemeButton = MakeBtn("Delete", 65, 60, 115, "Delete selected user-defined color theme");
+        _deleteColorThemeButton = MakeBtn("Delete", 55, _importColorThemeButton.Left + _importColorThemeButton.Width + 3, 48, "Delete selected user-defined color theme");
         _deleteColorThemeButton.Click += OnDeleteColorThemeClick;
         themeBox.Controls.Add(_deleteColorThemeButton);
 
-        _loadColorThemesButton = MakeBtn("Reload", 65, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 10, 115, "Reload color themes from disk (useful if you edit the JSON files externally)");
+        _loadColorThemesButton = MakeBtn("Reload", 55, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 3, 48, "Reload color themes from disk (useful if you edit the JSON files externally)");
         _loadColorThemesButton.Click += OnLoadColorThemesClick;
         themeBox.Controls.Add(_loadColorThemesButton);
 
@@ -1034,11 +1044,7 @@ public sealed class MainForm : Form
             _toolbar.Visible = !_toolbar.Visible;
         })
         { Checked = true };
-        var navigateItem = new ToolStripMenuItem("Navigate", null, (s, e) =>
-        {
-            _checkBoxShowCoordPanel.Checked = !_checkBoxShowCoordPanel.Checked;
-            _coordPanel.Visible = _checkBoxShowCoordPanel.Checked;
-        });
+        var navigateItem = new ToolStripMenuItem("Navigate");
         var statusItem = new ToolStripMenuItem("Status", null, (s, e) =>
         {
             _checkBoxShowFooterPanel.Checked = !_checkBoxShowFooterPanel.Checked;
@@ -1160,6 +1166,14 @@ public sealed class MainForm : Form
             _checkBoxShowCoordPanel.Checked = _checkBoxShowCoordPanel2.Checked;  // sync the coordinate panel checkbox in the main toolbar with the one in the coordinate panel
             OnShowCoordPanelClick();
         };
+
+        navigateItem.Click += (s, e) =>
+        {
+            _checkBoxShowCoordPanel.Checked = !_checkBoxShowCoordPanel.Checked;
+            _checkBoxShowCoordPanel2.Checked = _checkBoxShowCoordPanel.Checked;  // sync the coordinate panel checkbox in the coordinate panel with the main one
+            OnShowCoordPanelClick();
+        };
+
         _checkBoxShowFooterPanel.Click += (s, e) =>
         {
             _checkBoxShowFooterPanel2.Checked = _checkBoxShowFooterPanel.Checked;  // sync the coordinate panel checkbox with the main one
@@ -1228,6 +1242,18 @@ public sealed class MainForm : Form
         _colorThemeLabel.Visible = !_coordPanel.Visible;
         _colorThemeCombo.Visible = !_coordPanel.Visible;
         _regionLabel.Visible = !_coordPanel.Visible;
+
+        if (_coordPanel.Visible)
+        {
+            _toolbarLastWidth = _toolbar.Width;
+            _toolbarLastHeight = _toolbar.Height;
+            _toolbar.Width = _coordPanel.Left + _coordPanel.Width;
+        }
+        else
+        {
+            _toolbar.Width = _toolbarLastWidth;
+            _toolbar.Height = _toolbarLastHeight;
+        }
     }
 
     #endregion Constructors
@@ -1538,7 +1564,8 @@ public sealed class MainForm : Form
                 getColorMap: () => _calculator?.ColorMap,
                 navigateTo: (cx, cy) =>
                 {
-                    _centerX = cx; _centerXLo = 0.0; _centerY = cy; _centerYLo = 0.0;
+                    _centerX = cx; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
+                    _centerY = cy; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
                     ApplyViewState();
                     TriggerCalculation();
                 },
@@ -1654,7 +1681,10 @@ public sealed class MainForm : Form
 
     private void OnQualityComboChanged(object? sender, EventArgs e)
     {
-        int idx = _qualityCombo.SelectedIndex;
+        if (sender == null) return;
+
+        ComboBox combo = (ComboBox)sender;
+        int idx = combo.SelectedIndex;
         if (idx < 0 || idx >= QualityPreset.All.Length) return;
 
         QualityPreset newQuality = QualityPreset.All[idx];
@@ -1827,8 +1857,8 @@ public sealed class MainForm : Form
     private void OnResetClick(object? sender, EventArgs e)
     {
         StopSlideshow();
-        _centerX = DefaultCenterX; _centerXLo = 0.0;
-        _centerY = DefaultCenterY; _centerYLo = 0.0;
+        _centerX = DefaultCenterX; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
+        _centerY = DefaultCenterY; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
         _zoom = DefaultZoom;
         _regionCombo.SelectedIndex = 0;
 
@@ -1891,11 +1921,11 @@ public sealed class MainForm : Form
         var ic = System.Globalization.CultureInfo.InvariantCulture;
         if (_txCX.Text.Trim() != _centerX.ToString("G15", ic))
         {
-            _centerX = cx; _centerXLo = 0.0;
+            _centerX = cx; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
         }
         if (_txCY.Text.Trim() != _centerY.ToString("G15", ic))
         {
-            _centerY = cy; _centerYLo = 0.0;
+            _centerY = cy; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
         }
         _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
 
@@ -1972,10 +2002,12 @@ public sealed class MainForm : Form
     /// <summary>Applies a FractalRegion to the view state, respecting the iteration lock.</summary>
     private void ApplyRegion(FractalRegion region)
     {
-        // Round-trip both halves of the DD centre.  Legacy regions saved without
-        // Lo bits default to 0, matching the prior behaviour.
+        // Round-trip all four QD limbs. Legacy regions (DD or shallower) default
+        // X2/X3 to 0, matching prior behaviour.
         _centerX = region.CenterX; _centerXLo = region.CenterXLo;
+        _centerX2 = region.CenterX2; _centerX3 = region.CenterX3;
         _centerY = region.CenterY; _centerYLo = region.CenterYLo;
+        _centerY2 = region.CenterY2; _centerY3 = region.CenterY3;
         _quality = region.QualityPreset;
 
         _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
@@ -2014,8 +2046,12 @@ public sealed class MainForm : Form
             Name = name,
             CenterX = _centerX,
             CenterXLo = _centerXLo,
+            CenterX2 = _centerX2,
+            CenterX3 = _centerX3,
             CenterY = _centerY,
             CenterYLo = _centerYLo,
+            CenterY2 = _centerY2,
+            CenterY3 = _centerY3,
             Zoom = _zoom,
             Iterations = _calculator?.MaxIterations ?? 512,
             QualityPresetName = _quality.Name,
@@ -2269,8 +2305,8 @@ public sealed class MainForm : Form
     private void SkipSlideshowRegion()
     {
         _slideshowSkipRegion = true;
-        lock (_slideshowLock) 
-        SetStatus("Slideshow: skipping to next region…");
+        lock (_slideshowLock)
+            SetStatus("Slideshow: skipping to next region…");
     }
 
     public bool IsSkipSlideshowRegion()
@@ -2529,7 +2565,9 @@ public sealed class MainForm : Form
     private void ApplyRegionSilent(FractalRegion region)
     {
         _centerX = region.CenterX; _centerXLo = region.CenterXLo;
+        _centerX2 = region.CenterX2; _centerX3 = region.CenterX3;
         _centerY = region.CenterY; _centerYLo = region.CenterYLo;
+        _centerY2 = region.CenterY2; _centerY3 = region.CenterY3;
         _quality = region.QualityPreset;
         _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
         //_qualityCombo.Text = region.QualityPresetName;
@@ -2539,8 +2577,12 @@ public sealed class MainForm : Form
         {
             _calculator.CenterX = _centerX;
             _calculator.CenterXLo = _centerXLo;
+            _calculator.CenterX2 = _centerX2;
+            _calculator.CenterX3 = _centerX3;
             _calculator.CenterY = _centerY;
             _calculator.CenterYLo = _centerYLo;
+            _calculator.CenterY2 = _centerY2;
+            _calculator.CenterY3 = _centerY3;
             _calculator.Zoom = _zoom;
             _calculator.Quality = region.QualityPreset;
             if (!_iterLocked && region.Iterations > 0)
@@ -2851,8 +2893,10 @@ public sealed class MainForm : Form
         foreach (Control c in Controls)
             if (c.Dock == DockStyle.Top) toolbarH += c.Height;
 
-        double cx = _calculator!.CenterX;
-        double cy = _calculator!.CenterY;
+        double cx = _calculator!.CenterX, cxLo = _calculator!.CenterXLo;
+        double cx2 = _calculator!.CenterX2, cx3 = _calculator!.CenterX3;
+        double cy = _calculator!.CenterY, cyLo = _calculator!.CenterYLo;
+        double cy2 = _calculator!.CenterY2, cy3 = _calculator!.CenterY3;
         double zoom = _calculator!.Zoom;
         int maxIter = _calculator!.MaxIterations;
         IColorMap map = _calculator!.ColorMap;
@@ -2878,7 +2922,13 @@ public sealed class MainForm : Form
             var tempCalc = new MandelbrotCalculator(fullW, fullH)
             {
                 CenterX = cx,
+                CenterXLo = cxLo,
+                CenterX2 = cx2,
+                CenterX3 = cx3,
                 CenterY = cy,
+                CenterYLo = cyLo,
+                CenterY2 = cy2,
+                CenterY3 = cy3,
                 Zoom = zoom,
                 MaxIterations = maxIter,
                 ColorMap = map,
@@ -2928,8 +2978,10 @@ public sealed class MainForm : Form
         foreach (Control c in Controls)
             if (c.Dock == DockStyle.Top) toolbarH += c.Height;
 
-        double cx = _calculator!.CenterX;
-        double cy = _calculator!.CenterY;
+        double cx = _calculator!.CenterX, cxLo = _calculator!.CenterXLo;
+        double cx2 = _calculator!.CenterX2, cx3 = _calculator!.CenterX3;
+        double cy = _calculator!.CenterY, cyLo = _calculator!.CenterYLo;
+        double cy2 = _calculator!.CenterY2, cy3 = _calculator!.CenterY3;
         double zoom = _calculator!.Zoom;
         int maxIter = _calculator!.MaxIterations;
         IColorMap map = _calculator!.ColorMap;
@@ -2956,7 +3008,13 @@ public sealed class MainForm : Form
             var tempCalc = new MandelbrotCalculator(fullW, fullH)
             {
                 CenterX = cx,
+                CenterXLo = cxLo,
+                CenterX2 = cx2,
+                CenterX3 = cx3,
                 CenterY = cy,
+                CenterYLo = cyLo,
+                CenterY2 = cy2,
+                CenterY3 = cy3,
                 Zoom = zoom,
                 MaxIterations = maxIter,
                 ColorMap = map,
@@ -3138,10 +3196,24 @@ public sealed class MainForm : Form
         //_centerX = compX - ox * ns;
         //_centerY = compY - oy * ns;
 
-        // ── FIX: use DD to preserve the anchor point at deep zoom ──
-        bool useDD = _quality.NeedsHighPrecision(_zoom);
-        double compX, compY;
-        if (useDD)
+        // Anchor preservation: choose precision based on current zoom.
+        //   • Zoom > QDZoomThreshold (1e25) → QD math (~62 digits, supports 5e58).
+        //   • Above HP threshold (1e12)     → DD math (~31 digits, supports 5e27).
+        //   • Else                          → plain double.
+        if (_zoom > QDZoomThreshold)
+        {
+            var qdCX = new FracturingFog.FFMath.QD(_centerX, _centerXLo, _centerX2, _centerX3);
+            var qdCY = new FracturingFog.FFMath.QD(_centerY, _centerYLo, _centerY2, _centerY3);
+            var anchorX = qdCX + ox * scale;
+            var anchorY = qdCY + oy * scale;
+            _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
+            double ns = CurrentScale();
+            var newCX = anchorX + (-ox * ns);
+            var newCY = anchorY + (-oy * ns);
+            _centerX = newCX.X0; _centerXLo = newCX.X1; _centerX2 = newCX.X2; _centerX3 = newCX.X3;
+            _centerY = newCY.X0; _centerYLo = newCY.X1; _centerY2 = newCY.X2; _centerY3 = newCY.X3;
+        }
+        else if (_quality.NeedsHighPrecision(_zoom))
         {
             var ddCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo);
             var ddCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo);
@@ -3151,17 +3223,17 @@ public sealed class MainForm : Form
             double ns = CurrentScale();
             var newCX = anchorX - ox * ns;
             var newCY = anchorY - oy * ns;
-            _centerX = newCX.Hi; _centerXLo = newCX.Lo;
-            _centerY = newCY.Hi; _centerYLo = newCY.Lo;
+            _centerX = newCX.Hi; _centerXLo = newCX.Lo; _centerX2 = 0; _centerX3 = 0;
+            _centerY = newCY.Hi; _centerYLo = newCY.Lo; _centerY2 = 0; _centerY3 = 0;
         }
         else
         {
-            compX = _centerX + ox * scale;
-            compY = _centerY + oy * scale;
+            double compX = _centerX + ox * scale;
+            double compY = _centerY + oy * scale;
             _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
             double ns = CurrentScale();
-            _centerX = compX - ox * ns; _centerXLo = 0.0;
-            _centerY = compY - oy * ns; _centerYLo = 0.0;
+            _centerX = compX - ox * ns; _centerXLo = 0.0; _centerX2 = 0; _centerX3 = 0;
+            _centerY = compY - oy * ns; _centerYLo = 0.0; _centerY2 = 0; _centerY3 = 0;
         }
 
         ApplyViewState();
@@ -3182,6 +3254,8 @@ public sealed class MainForm : Form
         _panStartCY = _centerY;
         _panStartDDCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo);
         _panStartDDCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo);
+        _panStartQDCX = new FracturingFog.FFMath.QD(_centerX, _centerXLo, _centerX2, _centerX3);
+        _panStartQDCY = new FracturingFog.FFMath.QD(_centerY, _centerYLo, _centerY2, _centerY3);
         _renderPanel.Cursor = Cursors.SizeAll;
     }
 
@@ -3203,17 +3277,24 @@ public sealed class MainForm : Form
         double oy = e.Y - _renderPanel.ClientSize.Height * 0.5;
         //_centerX = _centerX + ox * scale;
         //_centerY = _centerY + oy * scale;
-        if (_quality.NeedsHighPrecision(_zoom))
+        if (_zoom > QDZoomThreshold)
+        {
+            var qdCX = new FracturingFog.FFMath.QD(_centerX, _centerXLo, _centerX2, _centerX3) + ox * scale;
+            var qdCY = new FracturingFog.FFMath.QD(_centerY, _centerYLo, _centerY2, _centerY3) + oy * scale;
+            _centerX = qdCX.X0; _centerXLo = qdCX.X1; _centerX2 = qdCX.X2; _centerX3 = qdCX.X3;
+            _centerY = qdCY.X0; _centerYLo = qdCY.X1; _centerY2 = qdCY.X2; _centerY3 = qdCY.X3;
+        }
+        else if (_quality.NeedsHighPrecision(_zoom))
         {
             var newCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo) + ox * scale;
             var newCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo) + oy * scale;
-            _centerX = newCX.Hi; _centerXLo = newCX.Lo;
-            _centerY = newCY.Hi; _centerYLo = newCY.Lo;
+            _centerX = newCX.Hi; _centerXLo = newCX.Lo; _centerX2 = 0; _centerX3 = 0;
+            _centerY = newCY.Hi; _centerYLo = newCY.Lo; _centerY2 = 0; _centerY3 = 0;
         }
         else
         {
-            _centerX = _centerX + ox * scale;
-            _centerY = _centerY + oy * scale;
+            _centerX = _centerX + ox * scale; _centerXLo = 0; _centerX2 = 0; _centerX3 = 0;
+            _centerY = _centerY + oy * scale; _centerYLo = 0; _centerY2 = 0; _centerY3 = 0;
         }
 
         ApplyViewState();
@@ -3228,19 +3309,28 @@ public sealed class MainForm : Form
         //_centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
         //_centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
 
-        if (_quality.NeedsHighPrecision(_zoom))
+        if (_zoom > QDZoomThreshold)
+        {
+            double dx = -(e.X - _panStartScreen.X) * scale;
+            double dy = -(e.Y - _panStartScreen.Y) * scale;
+            var newCX = _panStartQDCX + dx;
+            var newCY = _panStartQDCY + dy;
+            _centerX = newCX.X0; _centerXLo = newCX.X1; _centerX2 = newCX.X2; _centerX3 = newCX.X3;
+            _centerY = newCY.X0; _centerYLo = newCY.X1; _centerY2 = newCY.X2; _centerY3 = newCY.X3;
+        }
+        else if (_quality.NeedsHighPrecision(_zoom))
         {
             double dx = -(e.X - _panStartScreen.X) * scale;
             double dy = -(e.Y - _panStartScreen.Y) * scale;
             var newCX = _panStartDDCX + dx;
             var newCY = _panStartDDCY + dy;
-            _centerX = newCX.Hi; _centerXLo = newCX.Lo;
-            _centerY = newCY.Hi; _centerYLo = newCY.Lo;
+            _centerX = newCX.Hi; _centerXLo = newCX.Lo; _centerX2 = 0; _centerX3 = 0;
+            _centerY = newCY.Hi; _centerYLo = newCY.Lo; _centerY2 = 0; _centerY3 = 0;
         }
         else
         {
-            _centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
-            _centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
+            _centerX = _panStartCX - (e.X - _panStartScreen.X) * scale; _centerXLo = 0; _centerX2 = 0; _centerX3 = 0;
+            _centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale; _centerYLo = 0; _centerY2 = 0; _centerY3 = 0;
         }
 
         ApplyViewState();
@@ -3341,8 +3431,12 @@ public sealed class MainForm : Form
         if (_calculator == null) return;
         _calculator.CenterX = _centerX;
         _calculator.CenterXLo = _centerXLo;
+        _calculator.CenterX2 = _centerX2;
+        _calculator.CenterX3 = _centerX3;
         _calculator.CenterY = _centerY;
         _calculator.CenterYLo = _centerYLo;
+        _calculator.CenterY2 = _centerY2;
+        _calculator.CenterY3 = _centerY3;
         _calculator.Zoom = _zoom;
         _calculator.Quality = _quality;
 
