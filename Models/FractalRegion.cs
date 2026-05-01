@@ -362,6 +362,8 @@ namespace FracturingFog.Models
 
         // ── Public collections ────────────────────────────────────────────────
 
+        public bool IncludeExtremeInAll { get; set; } = false; // For now, we exclude extreme regions from the main list to keep the UI focused on more accessible areas.  This can be made user-configurable in the future.
+
         /// <summary>Read-only list of built-in regions.</summary>
         public IReadOnlyList<FractalRegion> BuiltIns => _builtIns;
 
@@ -376,8 +378,18 @@ namespace FracturingFog.Models
             get
             {
                 foreach (var r in _builtIns) yield return r;
-                foreach (var r in UserRegions) yield return r;
-                foreach (var r in _randomPool) yield return r;
+
+                if (IncludeExtremeInAll)
+                {
+                    foreach (var r in _randomPool) yield return r;
+                }
+                else
+                {
+                    foreach (var r in UserRegions.FindAll(r => !r.QualityPreset.Equals(QualityPreset.Extreme))) yield return r;
+                    //List<FractalRegion> userNoExtreme = UserRegions.FindAll(r => !r.RegionType.Equals(RegionType.Extreme));
+                }
+                
+                
             }
         }
 
@@ -388,6 +400,7 @@ namespace FracturingFog.Models
         {
             get
             {
+
                 foreach (var r in _builtIns) yield return r;
                 foreach (var r in UserRegions) yield return r;
                 foreach (var r in _randomPool) yield return r;

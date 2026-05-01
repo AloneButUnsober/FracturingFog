@@ -160,15 +160,19 @@ namespace FracturingFog.FFMath
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static QD operator -(QD a, QD b) => a + (-b);
 
-        // QD + double
+        // QD + double — cascade carry through all limbs via TwoSum chain.
+        // The sloppy form (s1 = a.X1 + e, no TwoSum) drops the carry into a
+        // discarded slot, keeping X2/X3 = 0 forever during navigation.  At
+        // zoom > ~1e40 that makes navigation completely unrepresentable at
+        // pixel precision.  The full chain costs two extra TwoSums (cheap).
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static QD operator +(QD a, double b)
         {
-            var (s0, e) = TwoSum(a.X0, b);
-            double s1 = a.X1 + e;
-            // No further error propagation needed — extra double absorbed
-            // into 2nd limb. Renormalize to canonical form.
-            var (r0, r1, r2, r3) = Renorm5(s0, s1, a.X2, a.X3, 0);
+            var (s0, e0) = TwoSum(a.X0, b);
+            var (s1, e1) = TwoSum(a.X1, e0);
+            var (s2, e2) = TwoSum(a.X2, e1);
+            double s3 = a.X3 + e2;
+            var (r0, r1, r2, r3) = Renorm5(s0, s1, s2, s3, 0);
             return new QD(r0, r1, r2, r3);
         }
 

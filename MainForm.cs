@@ -95,12 +95,14 @@ public sealed class MainForm : Form
     private readonly Button _importRegionsButton;
     private Label? _currentRegionLabel;
     private readonly ComboBox _regionCombo2;
+    private GroupBox? _themeBox;
     private Label? _currentColorThemeLabel;
     private readonly ComboBox _colorThemeCombo2;
     private readonly Button _exportColorThemeButton;
     private readonly Button _importColorThemeButton;
     private readonly Button _deleteColorThemeButton;
     private readonly Button _loadColorThemesButton;
+    private readonly CheckBox _chkSlideshowUseExtremeRegions;
 
     // Render panel
     private readonly RenderPanel _renderPanel;
@@ -640,11 +642,17 @@ public sealed class MainForm : Form
         {
             Width = 300,
             //Height = 58,
-            //AutoSize = true,
+            AutoScroll = false,
             Dock = DockStyle.Left,
+            AutoScrollMinSize = new Size(0, 200),   // ensure scroll appears if needed when more controls are added
             BackColor = Color.FromArgb(22, 22, 22),
             Visible = false,   // hidden until user ticks Navigate
         };
+
+        _coordPanel.HorizontalScroll.Maximum = 0;  // disable horizontal scrolling
+        //_coordPanel.AutoScroll = false;
+        //_coordPanel.VerticalScroll.Visible = false;
+        //_coordPanel.AutoScroll = true;
 
         buttonLeft = 45;
         labelTop = 38;
@@ -906,12 +914,30 @@ public sealed class MainForm : Form
         _coordPanel.Controls.Add(_contrastSlider);
         #endregion Brightness & Contrast sliders 
 
+        _chkSlideshowUseExtremeRegions = new CheckBox
+        {
+            Text = "Slideshow: Use Extreme Regions",
+            Left = 68,
+            Top = sliderTop + 48,
+            AutoSize = true,
+            AutoCheck = true,
+            ForeColor = Color.FromArgb(200, 120, 120),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent,
+            Checked = false,
+        };
+        _coordPanel.Controls.Add(_chkSlideshowUseExtremeRegions);
+        _chkSlideshowUseExtremeRegions.CheckedChanged += (s, e) =>
+        {
+            FractalRegionLibrary.Instance.IncludeExtremeInAll = _chkSlideshowUseExtremeRegions.Checked;
+        };
+
         #region Region Import/Export buttons
         GroupBox regionBox = new GroupBox
         {
             Text = "Regions",
             Left = 28,
-            Top = sliderTop + 58,
+            Top = sliderTop + 68,
             Width = 260,
             Height = 78,
             ForeColor = Color.FromArgb(155, 155, 155),
@@ -962,7 +988,7 @@ public sealed class MainForm : Form
         #endregion Region Import/Export buttons
 
         #region Color Theme Import/Export buttons
-        GroupBox themeBox = new GroupBox
+        _themeBox = new GroupBox
         {
             Text = "Color Themes",
             Left = 28,
@@ -973,7 +999,7 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.FromArgb(22, 22, 22),
         };
-        _coordPanel.Controls.Add(themeBox);
+        _coordPanel.Controls.Add(_themeBox);
 
         _colorThemeCombo2 = new ColorComboBox
         {
@@ -992,22 +1018,21 @@ public sealed class MainForm : Form
             // Sync the second combo with the main one; it's just there to show the new theme when you import it without having to re-select the theme in the main combo.
             _colorThemeCombo?.SelectedIndex = _colorThemeCombo2.SelectedIndex;
         };
-        themeBox.Controls.Add(_colorThemeCombo2);
+        _themeBox.Controls.Add(_colorThemeCombo2);
 
         _exportColorThemeButton = MakeBtn("Exp...", 55, 16, 48, "Export the current color theme to a JSON file");
         _exportColorThemeButton.Click += OnExportColorThemeClick;
-        themeBox.Controls.Add(_exportColorThemeButton);
+        _themeBox.Controls.Add(_exportColorThemeButton);
         _importColorThemeButton = MakeBtn("Imp...", 55, _exportColorThemeButton.Left + _exportColorThemeButton.Width + 3, 48, "Import color themes from a JSON file");
         _importColorThemeButton.Click += OnImportColorThemeClick;
-        themeBox.Controls.Add(_importColorThemeButton);
+        _themeBox.Controls.Add(_importColorThemeButton);
 
         _deleteColorThemeButton = MakeBtn("Delete", 55, _importColorThemeButton.Left + _importColorThemeButton.Width + 3, 48, "Delete selected user-defined color theme");
         _deleteColorThemeButton.Click += OnDeleteColorThemeClick;
-        themeBox.Controls.Add(_deleteColorThemeButton);
-
+        _themeBox.Controls.Add(_deleteColorThemeButton);
         _loadColorThemesButton = MakeBtn("Reload", 55, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 3, 48, "Reload color themes from disk (useful if you edit the JSON files externally)");
         _loadColorThemesButton.Click += OnLoadColorThemesClick;
-        themeBox.Controls.Add(_loadColorThemesButton);
+        _themeBox.Controls.Add(_loadColorThemesButton);
 
         #endregion Color Theme Import/Export buttons
         #endregion Coordinate / Navigate panel
@@ -1453,8 +1478,8 @@ public sealed class MainForm : Form
             FilterIndex = 1,
             DefaultExt = "png",
             FileName = $"{_programName}_{colorName}_{regionName}" +
-                         $"x{_txCX.Text.Replace(".", "")}_" +
-                         $"y{_txCY.Text.Replace(".", "")}_" +
+                         $"x{_txCX.Text.Split('|')[0].Replace(".", "")}_" +
+                         $"y{_txCY.Text.Split('|')[0].Replace(".", "")}_" +
                          $"z{_txZoom.Text.Replace(".", "")}_" +
                          $"i{_txIter.Text.Replace(".", "")}_" +
                          sizeTag +
@@ -1482,9 +1507,10 @@ public sealed class MainForm : Form
 
         _centerY = -_centerY;
         _centerYLo = -_centerYLo;
+        _centerY2 = -_centerY2;
+        _centerY3 = -_centerY3;
 
-        var ic = System.Globalization.CultureInfo.InvariantCulture;
-        _txCY.Text = _centerY.ToString("G15", ic);
+        _txCY.Text = FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3);
 
         OnGoClick(sender, e);
     }
@@ -1914,18 +1940,18 @@ public sealed class MainForm : Form
             return;
         }
 
-        // The CX/CY textboxes display G15 of the Hi half of a DD pair and
-        // can't represent _centerXLo / _centerYLo. Only stomp the DD pair
-        // when the user actually edited the displayed text — otherwise
-        // pressing Go after panning at deep zoom would shift the location.
-        var ic = System.Globalization.CultureInfo.InvariantCulture;
-        if (_txCX.Text.Trim() != _centerX.ToString("G15", ic))
+        // Textboxes now carry the full QD value as "Hi|Lo|X2|X3" (FormatCoord).
+        // Parse all limbs so that an unedited box preserves deep-zoom precision
+        // and a pasted full-precision string is honoured without zeroing Lo/X2/X3.
+        if (TryParseQDCoord(_txCX.Text, out double newCX, out double newCXLo,
+                             out double newCX2, out double newCX3))
         {
-            _centerX = cx; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
+            _centerX = newCX; _centerXLo = newCXLo; _centerX2 = newCX2; _centerX3 = newCX3;
         }
-        if (_txCY.Text.Trim() != _centerY.ToString("G15", ic))
+        if (TryParseQDCoord(_txCY.Text, out double newCY, out double newCYLo,
+                             out double newCY2, out double newCY3))
         {
-            _centerY = cy; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
+            _centerY = newCY; _centerYLo = newCYLo; _centerY2 = newCY2; _centerY3 = newCY3;
         }
         _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
 
@@ -1951,9 +1977,11 @@ public sealed class MainForm : Form
         var ic = System.Globalization.CultureInfo.InvariantCulture;
         var ns = System.Globalization.NumberStyles.Float;
 
-        // Upper limit removed — only minimum of 64 enforced.
-        return double.TryParse(_txCX.Text.Trim(), ns, ic, out cx)
-            && double.TryParse(_txCY.Text.Trim(), ns, ic, out cy)
+        // CX/CY may be plain decimals or pipe-separated QD format; validate Hi part only.
+        string cxHi = _txCX.Text.Trim().Split('|')[0].Trim();
+        string cyHi = _txCY.Text.Trim().Split('|')[0].Trim();
+        return double.TryParse(cxHi, ns, ic, out cx)
+            && double.TryParse(cyHi, ns, ic, out cy)
             && double.TryParse(_txZoom.Text.Trim(), ns, ic, out zoom) && zoom > 0
             && int.TryParse(_txIter.Text.Trim(), out iter) && iter >= 64;
     }
@@ -2030,6 +2058,21 @@ public sealed class MainForm : Form
 
     private void OnSaveViewClick(object? sender, EventArgs e)
     {
+        // Sync textboxes → internal state so manual edits land in the saved region
+        // even when the user hasn't pressed Go first.
+        if (TryParseQDCoord(_txCX.Text, out double sCX, out double sCXLo,
+                             out double sCX2, out double sCX3))
+        { _centerX = sCX; _centerXLo = sCXLo; _centerX2 = sCX2; _centerX3 = sCX3; }
+        if (TryParseQDCoord(_txCY.Text, out double sCY, out double sCYLo,
+                             out double sCY2, out double sCY3))
+        { _centerY = sCY; _centerYLo = sCYLo; _centerY2 = sCY2; _centerY3 = sCY3; }
+        var _ic = System.Globalization.CultureInfo.InvariantCulture;
+        var _ns = System.Globalization.NumberStyles.Float;
+        if (double.TryParse(_txZoom.Text.Trim(), _ns, _ic, out double tz) && tz > 0)
+            _zoom = tz;
+        if (int.TryParse(_txIter.Text.Trim(), out int ti) && ti >= 64 && _calculator != null)
+            _calculator.MaxIterations = ti;
+
         using var dlg = new InputDialog("Save Current View", "Region name:");
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
@@ -2253,6 +2296,7 @@ public sealed class MainForm : Form
         if (_slideshowRunning) return;
         _slideshowRunning = true;
         _showSlideshowWatermark = false;
+        _chkSlideshowUseExtremeRegions.Enabled = false;
         RepaintWithBrightnessContrast();
         _slideshowButton.Text = "■ Stop";
         _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
@@ -2275,6 +2319,7 @@ public sealed class MainForm : Form
                 {
                     _slideshowRunning = false;
                     _showSlideshowWatermark = false;
+                    _chkSlideshowUseExtremeRegions.Enabled = true;
                     RepaintWithBrightnessContrast();
                     _slideshowButton.Text = "Slideshow";
                     _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
@@ -2802,8 +2847,8 @@ public sealed class MainForm : Form
             FilterIndex = 1,
             DefaultExt = "png",
             FileName = $"{_programName}_{colorName}_{regionName}" +
-                         $"x{_txCX.Text.Replace(".", "")}_" +
-                         $"y{_txCY.Text.Replace(".", "")}_" +
+                         $"x{_txCX.Text.Split('|')[0].Replace(".", "")}_" +
+                         $"y{_txCY.Text.Split('|')[0].Replace(".", "")}_" +
                          $"z{_txZoom.Text.Replace(".", "")}_" +
                          $"i{_txIter.Text.Replace(".", "")}_" +
                          sizeTag
@@ -3382,7 +3427,7 @@ public sealed class MainForm : Form
 
         int w = _renderPanel.ClientSize.Width;
         int h = _renderPanel.ClientSize.Height;
-        if (w < 1 || h < 1) return;
+        if (w < 1 || h < 1) return;            
 
         // Discard the cached buffer — its dimensions no longer match.
         _lastUploadedBuffer = null;
@@ -3450,16 +3495,51 @@ public sealed class MainForm : Form
         UpdateCoordBoxes();
     }
 
+    // ── Coordinate formatting / parsing helpers ───────────────────────────────
+
+    // Formats a QD coordinate as a pipe-separated string of non-zero limbs.
+    // Uses "R" (round-trip) format so paste-back restores the exact bit pattern.
+    // Single-limb example:  "-0.5"
+    // DD example:           "-0.748392837462382|-1.23456789012345e-16"
+    // QD example:           "-0.748392837...|...|...|..."
+    private static string FormatCoord(double hi, double lo, double x2, double x3)
+    {
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        string s = hi.ToString("R", ic);
+        if (lo != 0.0) s += "|" + lo.ToString("R", ic);
+        if (x2 != 0.0) s += "|" + x2.ToString("R", ic);
+        if (x3 != 0.0) s += "|" + x3.ToString("R", ic);
+        return s;
+    }
+
+    // Parses a coordinate string: either a plain decimal or a pipe-separated
+    // "Hi|Lo|X2|X3" produced by FormatCoord. Returns false if Hi fails to parse.
+    private static bool TryParseQDCoord(string text,
+        out double hi, out double lo, out double x2, out double x3)
+    {
+        hi = lo = x2 = x3 = 0.0;
+        var ic = System.Globalization.CultureInfo.InvariantCulture;
+        var ns = System.Globalization.NumberStyles.Float;
+        var parts = text.Trim().Split('|');
+        if (!double.TryParse(parts[0].Trim(), ns, ic, out hi)) return false;
+        if (parts.Length > 1 && !double.TryParse(parts[1].Trim(), ns, ic, out lo)) return false;
+        if (parts.Length > 2 && !double.TryParse(parts[2].Trim(), ns, ic, out x2)) return false;
+        if (parts.Length > 3 && !double.TryParse(parts[3].Trim(), ns, ic, out x3)) return false;
+        return true;
+    }
+
     private void UpdateCoordBoxes()
     {
         if (_suppressCoordUpdate) return;
         _suppressCoordUpdate = true;
         try
         {
-            var ic = System.Globalization.CultureInfo.InvariantCulture;
-            if (ActiveControl != _txCX) _txCX.Text = _centerX.ToString("G15", ic);
-            if (ActiveControl != _txCY) _txCY.Text = _centerY.ToString("G15", ic);
-            if (ActiveControl != _txZoom) _txZoom.Text = _zoom.ToString("G8", ic);
+            if (ActiveControl != _txCX)
+                _txCX.Text = FormatCoord(_centerX, _centerXLo, _centerX2, _centerX3);
+            if (ActiveControl != _txCY)
+                _txCY.Text = FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3);
+            if (ActiveControl != _txZoom)
+                _txZoom.Text = _zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
             if (ActiveControl != _txIter && _calculator != null)
                 _txIter.Text = _calculator.MaxIterations.ToString();
         }

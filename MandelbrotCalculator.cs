@@ -588,7 +588,7 @@ public sealed class MandelbrotCalculator
         }
     }
 
-    // ── Full-DD per-pixel fallback (used for PT glitches) ────────────────────
+    // ── Full-DD per-pixel fallback (used for PT glitches at zoom ≤ QDZoomThreshold) ──
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ComputePixelHP<TMap>(DD cx, DD cy, int maxIter, int idx, TMap colorMap)
@@ -616,6 +616,37 @@ public sealed class MandelbrotCalculator
 
         IterationBuffer[idx] = iter;
         FillAuxAndColorHP(idx, iter, maxIter, zr.Hi, zi.Hi, dr, di, colorMap);
+    }
+
+    // ── Full-QD per-pixel fallback (used for PT glitches at zoom > QDZoomThreshold) ─
+    // DD cannot distinguish adjacent pixels at zoom > ~5e27 (pixel spacing falls below
+    // DD precision ~6e-32), causing all glitched pixels in a block to produce identical
+    // coordinates and colors. QD (~62 digits) resolves pixels down to zoom ~5e58.
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ComputePixelQD<TMap>(QD cx, QD cy, int maxIter, int idx, TMap colorMap)
+        where TMap : IColorMap
+    {
+        QD zr = QD.Zero, zi = QD.Zero;
+        double dr = 1.0, di = 0.0;
+        int iter;
+
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            double zrH = zr.X0, ziH = zi.X0;
+            if (zrH * zrH + ziH * ziH >= EscapeRadius2) break;
+
+            double newDr = 2.0 * (zrH * dr - ziH * di) + 1.0;
+            double newDi = 2.0 * (zrH * di + ziH * dr);
+            dr = newDr; di = newDi;
+
+            QD newZi = (zr * zi) * 2.0 + cy;
+            QD newZr = zr.Square() - zi.Square() + cx;
+            zr = newZr; zi = newZi;
+        }
+
+        IterationBuffer[idx] = iter;
+        FillAuxAndColorHP(idx, iter, maxIter, zr.X0, zi.X0, dr, di, colorMap);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -752,7 +783,11 @@ public sealed class MandelbrotCalculator
         double halfH = Height * 0.5;
         double halfW = Width * 0.5;
         double dcY = (y - halfH) * scale;
+        bool useQD = Zoom > QDZoomThreshold;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
+        QD cy_qd = useQD
+            ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
+            : QD.Zero;
 
         for (int x = 0; x < Width; x++)
         {
@@ -760,8 +795,17 @@ public sealed class MandelbrotCalculator
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), x - halfW, scale);
-                ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                if (useQD)
+                {
+                    QD cx_qd = QD.FromCenterOffset(
+                        new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);
+                    ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
+                }
+                else
+                {
+                    DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), x - halfW, scale);
+                    ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                }
             }
         }
     }
@@ -773,7 +817,11 @@ public sealed class MandelbrotCalculator
         double halfW = Width * 0.5;
         double halfH = Height * 0.5;
         double dcY = (y - halfH) * scale;
+        bool useQD = Zoom > QDZoomThreshold;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
+        QD cy_qd = useQD
+            ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
+            : QD.Zero;
 
         var er2v = Vector256.Create(EscapeRadius2);
         var one = Vector256.Create(1.0);
@@ -840,12 +888,23 @@ public sealed class MandelbrotCalculator
             for (int k = 0; k < 4; k++)
             {
                 int idx = rowBase + x + k;
-                // Glitched pixels that never escaped need full DD fallback
+                // Glitched pixels that never escaped need full fallback.
+                // At zoom > QDZoomThreshold, DD cannot distinguish adjacent pixels
+                // (pixel spacing ~2e-32 < DD precision ~6e-32); use QD instead.
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
-                    DD cx_dd = DD.FromCenterOffset(
-                        new DD(CenterX, CenterXLo), x + k - halfW, scale);
-                    ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                    if (useQD)
+                    {
+                        QD cx_qd = QD.FromCenterOffset(
+                            new QD(CenterX, CenterXLo, CenterX2, CenterX3), x + k - halfW, scale);
+                        ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
+                    }
+                    else
+                    {
+                        DD cx_dd = DD.FromCenterOffset(
+                            new DD(CenterX, CenterXLo), x + k - halfW, scale);
+                        ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                    }
                     continue;
                 }
                 int iters = (int)iterCount.GetElement(k);
@@ -865,8 +924,17 @@ public sealed class MandelbrotCalculator
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), x - halfW, scale);
-                ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                if (useQD)
+                {
+                    QD cx_qd = QD.FromCenterOffset(
+                        new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);
+                    ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
+                }
+                else
+                {
+                    DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), x - halfW, scale);
+                    ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                }
             }
         }
     }
