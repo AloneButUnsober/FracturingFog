@@ -1,0 +1,1908 @@
+[
+  {
+    "Name": "New 3D",
+    "Category": "3D Relief",
+    "Description": "Inferno with volcanic forge light \u2014 magma 3D relief.",
+    "Kind": "Phong3D",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 0,
+        "G": 0,
+        "B": 155
+      },
+      {
+        "Position": 0.2,
+        "R": 66,
+        "G": 0,
+        "B": 25
+      },
+      {
+        "Position": 0.4,
+        "R": 147,
+        "G": 10,
+        "B": 0
+      },
+      {
+        "Position": 0.6,
+        "R": 221,
+        "G": 60,
+        "B": 0
+      },
+      {
+        "Position": 0.8,
+        "R": 252,
+        "G": 180,
+        "B": 85
+      },
+      {
+        "Position": 1,
+        "R": 0,
+        "G": 0,
+        "B": 155
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.3,
+    "Ambient": 0.4,
+    "KeyLight": {
+      "Lx": -0.8578685,
+      "Ly": 0.3036554,
+      "Lz": 0.7325896,
+      "DiffR": 1,
+      "DiffG": 0.6,
+      "DiffB": 0.2,
+      "SpecR": 1,
+      "SpecG": 0.85,
+      "SpecB": 0.55,
+      "Shininess": 30
+    },
+    "FillLight": {
+      "Lx": 0.20104754,
+      "Ly": -0.9842062,
+      "Lz": 0.40894437,
+      "DiffR": 0.3,
+      "DiffG": 0.05,
+      "DiffB": 1,
+      "SpecR": 0.2,
+      "SpecG": 0.02,
+      "SpecB": 1,
+      "Shininess": 10
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "New 3D MOD",
+    "Category": "3D Relief",
+    "Description": "Inferno with volcanic forge light \u2014 magma 3D relief.",
+    "Kind": "Phong3D",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.15,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.32,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.5,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.65,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.8,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.92,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.3,
+    "Ambient": 0.09,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0.3,
+      "DiffG": 1,
+      "DiffB": 0.65,
+      "SpecR": 0.5,
+      "SpecG": 0.85,
+      "SpecB": 0.1,
+      "Shininess": 90
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 0.8,
+      "DiffG": 0.6,
+      "DiffB": 0.15,
+      "SpecR": 0.15,
+      "SpecG": 0.35,
+      "SpecB": 0.8,
+      "Shininess": 20
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "New 3D GRAD",
+    "Category": "3D Relief",
+    "Description": "Green 3D relief.",
+    "Kind": "Gradient",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.15,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.32,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.5,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.65,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.8,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.92,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.3,
+    "Ambient": 0.09,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0.3,
+      "DiffG": 1,
+      "DiffB": 0.65,
+      "SpecR": 0.5,
+      "SpecG": 0.85,
+      "SpecB": 0.1,
+      "Shininess": 90
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 0.8,
+      "DiffG": 0.6,
+      "DiffB": 0.15,
+      "SpecR": 0.15,
+      "SpecG": 0.35,
+      "SpecB": 0.8,
+      "Shininess": 20
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "New 3D CYC",
+    "Category": "3D Relief",
+    "Description": "Green 3D relief.",
+    "Kind": "Cycling",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.15,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.32,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.5,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.65,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.8,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.92,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.3,
+    "Ambient": 0.09,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0.3,
+      "DiffG": 1,
+      "DiffB": 0.65,
+      "SpecR": 0.5,
+      "SpecG": 0.85,
+      "SpecB": 0.1,
+      "Shininess": 90
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 0.8,
+      "DiffG": 0.6,
+      "DiffB": 0.15,
+      "SpecR": 0.15,
+      "SpecG": 0.35,
+      "SpecB": 0.8,
+      "Shininess": 20
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "New 3D PBR",
+    "Category": "3D Relief",
+    "Description": "Green 3D relief.",
+    "Kind": "Pbr3D",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.15,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.32,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.5,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.65,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.8,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.92,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.3,
+    "Ambient": 0.09,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0.3,
+      "DiffG": 1,
+      "DiffB": 0.65,
+      "SpecR": 0.5,
+      "SpecG": 0.85,
+      "SpecB": 0.1,
+      "Shininess": 90
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 0.8,
+      "DiffG": 0.6,
+      "DiffB": 0.15,
+      "SpecR": 0.15,
+      "SpecG": 0.35,
+      "SpecB": 0.8,
+      "Shininess": 20
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "New 3D CYC MOD",
+    "Category": "3D Relief",
+    "Description": "Green 3D relief.",
+    "Kind": "Cycling",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.15,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.32,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.5,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.65,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.8,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.92,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.015,
+    "Steepness": 1.3,
+    "Ambient": 0.09,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0.3,
+      "DiffG": 1,
+      "DiffB": 0.65,
+      "SpecR": 0.5,
+      "SpecG": 0.85,
+      "SpecB": 0.1,
+      "Shininess": 90
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 0.8,
+      "DiffG": 0.6,
+      "DiffB": 0.15,
+      "SpecR": 0.15,
+      "SpecG": 0.35,
+      "SpecB": 0.8,
+      "Shininess": 20
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Emerald Ghost",
+    "Category": "Cycling Gradient",
+    "Description": "Pale Green/black.",
+    "Kind": "Cycling",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.15,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.32,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.5,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.65,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.8,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.92,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.01,
+    "Steepness": 1.3,
+    "Ambient": 0.09,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0.3,
+      "DiffG": 1,
+      "DiffB": 0.65,
+      "SpecR": 0.5,
+      "SpecG": 0.85,
+      "SpecB": 0.1,
+      "Shininess": 90
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 0.8,
+      "DiffG": 0.6,
+      "DiffB": 0.15,
+      "SpecR": 0.15,
+      "SpecG": 0.35,
+      "SpecB": 0.8,
+      "Shininess": 20
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Emerald Ghost GRAD",
+    "Category": "Cycling Gradient",
+    "Description": "Pale Green/black.",
+    "Kind": "Gradient",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.15,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.32,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.5,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.65,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.8,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.92,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.01,
+    "Steepness": 1.3,
+    "Ambient": 0.09,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0.3,
+      "DiffG": 1,
+      "DiffB": 0.65,
+      "SpecR": 0.5,
+      "SpecG": 0.85,
+      "SpecB": 0.1,
+      "Shininess": 90
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 0.8,
+      "DiffG": 0.6,
+      "DiffB": 0.15,
+      "SpecR": 0.15,
+      "SpecG": 0.35,
+      "SpecB": 0.8,
+      "Shininess": 20
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Emerald Ghost GRAD2",
+    "Category": "Cycling Gradient",
+    "Description": "Pale Green/black.",
+    "Kind": "Gradient",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 2,
+        "G": 40,
+        "B": 12
+      },
+      {
+        "Position": 0.2,
+        "R": 8,
+        "G": 74,
+        "B": 55
+      },
+      {
+        "Position": 0.37,
+        "R": 13,
+        "G": 112,
+        "B": 89
+      },
+      {
+        "Position": 0.55,
+        "R": 45,
+        "G": 155,
+        "B": 140
+      },
+      {
+        "Position": 0.68,
+        "R": 12,
+        "G": 186,
+        "B": 50
+      },
+      {
+        "Position": 0.83,
+        "R": 82,
+        "G": 212,
+        "B": 35
+      },
+      {
+        "Position": 0.95,
+        "R": 82,
+        "G": 231,
+        "B": 30
+      },
+      {
+        "Position": 1,
+        "R": 19,
+        "G": 38,
+        "B": 13
+      }
+    ],
+    "CycleSpeed": 0.05,
+    "Steepness": 0.9,
+    "Ambient": 0.25,
+    "KeyLight": {
+      "Lx": -0.45,
+      "Ly": 0.55,
+      "Lz": 0.7,
+      "DiffR": 0,
+      "DiffG": 0.5,
+      "DiffB": 0,
+      "SpecR": 0,
+      "SpecG": 0,
+      "SpecB": 0.95,
+      "Shininess": 14
+    },
+    "FillLight": {
+      "Lx": 0.65,
+      "Ly": -0.5,
+      "Lz": 0.45,
+      "DiffR": 1,
+      "DiffG": 0,
+      "DiffB": 0,
+      "SpecR": 0,
+      "SpecG": 0.35,
+      "SpecB": 0,
+      "Shininess": 80
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Plasma 9 TST (4)",
+    "Category": "Scientific",
+    "Description": "Perceptually uniform violet\u2192pink\u2192orange\u2192yellow. High contrast.",
+    "Kind": "Cycling",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 13,
+        "G": 8,
+        "B": 135
+      },
+      {
+        "Position": 0.11,
+        "R": 84,
+        "G": 2,
+        "B": 163
+      },
+      {
+        "Position": 0.22,
+        "R": 139,
+        "G": 10,
+        "B": 165
+      },
+      {
+        "Position": 0.33,
+        "R": 185,
+        "G": 50,
+        "B": 137
+      },
+      {
+        "Position": 0.44,
+        "R": 219,
+        "G": 92,
+        "B": 104
+      },
+      {
+        "Position": 0.5,
+        "R": 244,
+        "G": 136,
+        "B": 73
+      },
+      {
+        "Position": 0.66,
+        "R": 254,
+        "G": 188,
+        "B": 43
+      },
+      {
+        "Position": 0.77,
+        "R": 255,
+        "G": 10,
+        "B": 25
+      },
+      {
+        "Position": 0.82,
+        "R": 7,
+        "G": 0,
+        "B": 20
+      },
+      {
+        "Position": 0.98,
+        "R": 254,
+        "G": 188,
+        "B": 43
+      },
+      {
+        "Position": 1,
+        "R": 240,
+        "G": 249,
+        "B": 33
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Plasma 9 TST (2)",
+    "Category": "Scientific",
+    "Description": "Perceptually uniform violet\u2192pink\u2192orange\u2192yellow. High contrast.",
+    "Kind": "Cycling",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 13,
+        "G": 8,
+        "B": 135
+      },
+      {
+        "Position": 0.11,
+        "R": 84,
+        "G": 2,
+        "B": 163
+      },
+      {
+        "Position": 0.22,
+        "R": 139,
+        "G": 10,
+        "B": 165
+      },
+      {
+        "Position": 0.33,
+        "R": 185,
+        "G": 50,
+        "B": 137
+      },
+      {
+        "Position": 0.44,
+        "R": 219,
+        "G": 92,
+        "B": 104
+      },
+      {
+        "Position": 0.5,
+        "R": 244,
+        "G": 136,
+        "B": 73
+      },
+      {
+        "Position": 0.66,
+        "R": 254,
+        "G": 188,
+        "B": 43
+      },
+      {
+        "Position": 0.77,
+        "R": 255,
+        "G": 255,
+        "B": 255
+      },
+      {
+        "Position": 0.82,
+        "R": 0,
+        "G": 0,
+        "B": 0
+      },
+      {
+        "Position": 0.98,
+        "R": 254,
+        "G": 188,
+        "B": 43
+      },
+      {
+        "Position": 1,
+        "R": 240,
+        "G": 249,
+        "B": 33
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Plasma 9 TST",
+    "Category": "Scientific",
+    "Description": "Perceptually uniform violet\u2192pink\u2192orange\u2192yellow. High contrast.",
+    "Kind": "Cycling",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 13,
+        "G": 8,
+        "B": 135
+      },
+      {
+        "Position": 0.11,
+        "R": 84,
+        "G": 2,
+        "B": 163
+      },
+      {
+        "Position": 0.22,
+        "R": 139,
+        "G": 10,
+        "B": 165
+      },
+      {
+        "Position": 0.33,
+        "R": 185,
+        "G": 50,
+        "B": 137
+      },
+      {
+        "Position": 0.44,
+        "R": 219,
+        "G": 92,
+        "B": 104
+      },
+      {
+        "Position": 0.55,
+        "R": 244,
+        "G": 136,
+        "B": 73
+      },
+      {
+        "Position": 0.66,
+        "R": 254,
+        "G": 188,
+        "B": 43
+      },
+      {
+        "Position": 0.77,
+        "R": 255,
+        "G": 255,
+        "B": 255
+      },
+      {
+        "Position": 0.88,
+        "R": 0,
+        "G": 0,
+        "B": 0
+      },
+      {
+        "Position": 0.98,
+        "R": 254,
+        "G": 188,
+        "B": 43
+      },
+      {
+        "Position": 1,
+        "R": 240,
+        "G": 249,
+        "B": 33
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Bird of Paradise Phong 3D",
+    "Category": "Nature",
+    "Description": "Tropical gradient with warm golden key light and cool cyan fill. Derived from birdofparidise.png.",
+    "Kind": "Phong3D",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 45,
+        "G": 0,
+        "B": 100
+      },
+      {
+        "Position": 0.1,
+        "R": 75,
+        "G": 10,
+        "B": 180
+      },
+      {
+        "Position": 0.22,
+        "R": 170,
+        "G": 0,
+        "B": 210
+      },
+      {
+        "Position": 0.33,
+        "R": 240,
+        "G": 0,
+        "B": 190
+      },
+      {
+        "Position": 0.45,
+        "R": 255,
+        "G": 20,
+        "B": 80
+      },
+      {
+        "Position": 0.55,
+        "R": 255,
+        "G": 80,
+        "B": 10
+      },
+      {
+        "Position": 0.65,
+        "R": 255,
+        "G": 155,
+        "B": 0
+      },
+      {
+        "Position": 0.75,
+        "R": 255,
+        "G": 225,
+        "B": 20
+      },
+      {
+        "Position": 0.85,
+        "R": 255,
+        "G": 255,
+        "B": 180
+      },
+      {
+        "Position": 0.92,
+        "R": 130,
+        "G": 248,
+        "B": 255
+      },
+      {
+        "Position": 1,
+        "R": 0,
+        "G": 210,
+        "B": 255
+      }
+    ],
+    "CycleSpeed": 0.016,
+    "Steepness": 1.55,
+    "Ambient": 0.1,
+    "KeyLight": {
+      "Lx": -0.5208651,
+      "Ly": 0.7102706,
+      "Lz": 0.47351372,
+      "DiffR": 1.2,
+      "DiffG": 0.85,
+      "DiffB": 0.4,
+      "SpecR": 1,
+      "SpecG": 0.9,
+      "SpecB": 0.7,
+      "Shininess": 52
+    },
+    "FillLight": {
+      "Lx": 0.7060631,
+      "Ly": -0.3801878,
+      "Lz": 0.59743804,
+      "DiffR": 0.2,
+      "DiffG": 0.55,
+      "DiffB": 0.8,
+      "SpecR": 0.3,
+      "SpecG": 0.65,
+      "SpecB": 0.85,
+      "Shininess": 28
+    },
+    "KeySpecScale": 0.9,
+    "FillSpecScale": 0.3,
+    "FillDiffScale": 0.4,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Bird of Paradise PBR",
+    "Category": "Nature",
+    "Description": "PBR tropical: vivid golden key, electric cyan fill, gold-metallic highlights. Derived from birdofparidise.png.",
+    "Kind": "Pbr3D",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 45,
+        "G": 0,
+        "B": 100
+      },
+      {
+        "Position": 0.1,
+        "R": 75,
+        "G": 10,
+        "B": 180
+      },
+      {
+        "Position": 0.22,
+        "R": 170,
+        "G": 0,
+        "B": 210
+      },
+      {
+        "Position": 0.33,
+        "R": 240,
+        "G": 0,
+        "B": 190
+      },
+      {
+        "Position": 0.45,
+        "R": 255,
+        "G": 20,
+        "B": 80
+      },
+      {
+        "Position": 0.55,
+        "R": 255,
+        "G": 80,
+        "B": 10
+      },
+      {
+        "Position": 0.65,
+        "R": 255,
+        "G": 155,
+        "B": 0
+      },
+      {
+        "Position": 0.75,
+        "R": 255,
+        "G": 225,
+        "B": 20
+      },
+      {
+        "Position": 0.85,
+        "R": 255,
+        "G": 255,
+        "B": 180
+      },
+      {
+        "Position": 0.92,
+        "R": 130,
+        "G": 248,
+        "B": 255
+      },
+      {
+        "Position": 1,
+        "R": 0,
+        "G": 210,
+        "B": 255
+      }
+    ],
+    "CycleSpeed": 0.016,
+    "Steepness": 1.4,
+    "Ambient": 0.12,
+    "KeyLight": {
+      "Lx": -0.5208651,
+      "Ly": 0.7102706,
+      "Lz": 0.47351372,
+      "DiffR": 1.4,
+      "DiffG": 1.05,
+      "DiffB": 0.55,
+      "SpecR": 0,
+      "SpecG": 0,
+      "SpecB": 0,
+      "Shininess": 1
+    },
+    "FillLight": {
+      "Lx": 0.7060631,
+      "Ly": -0.3801878,
+      "Lz": 0.59743804,
+      "DiffR": 0.25,
+      "DiffG": 0.7,
+      "DiffB": 0.95,
+      "SpecR": 0,
+      "SpecG": 0,
+      "SpecB": 0,
+      "Shininess": 1
+    },
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRBright",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0.5,
+    "MaterialBands": [
+      {
+        "UpperT": 0.28,
+        "Metal": 0,
+        "Roughness": 0.78
+      },
+      {
+        "UpperT": 0.58,
+        "Metal": 0.15,
+        "Roughness": 0.52
+      },
+      {
+        "UpperT": 0.8,
+        "Metal": 0.55,
+        "Roughness": 0.28
+      },
+      {
+        "UpperT": 0.9,
+        "Metal": 0.82,
+        "Roughness": 0.12
+      },
+      {
+        "UpperT": 1,
+        "Metal": 0.3,
+        "Roughness": 0.08
+      }
+    ]
+  },
+  {
+    "Name": "Bird of Paradise Cycling",
+    "Category": "Nature",
+    "Description": "Repeating tropical cycle: indigo-magenta-orange-gold-cyan. Derived from birdofparidise.png.",
+    "Kind": "Cycling",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 45,
+        "G": 0,
+        "B": 100
+      },
+      {
+        "Position": 0.1,
+        "R": 75,
+        "G": 10,
+        "B": 180
+      },
+      {
+        "Position": 0.22,
+        "R": 170,
+        "G": 0,
+        "B": 210
+      },
+      {
+        "Position": 0.33,
+        "R": 240,
+        "G": 0,
+        "B": 190
+      },
+      {
+        "Position": 0.45,
+        "R": 255,
+        "G": 20,
+        "B": 80
+      },
+      {
+        "Position": 0.55,
+        "R": 255,
+        "G": 80,
+        "B": 10
+      },
+      {
+        "Position": 0.65,
+        "R": 255,
+        "G": 155,
+        "B": 0
+      },
+      {
+        "Position": 0.75,
+        "R": 255,
+        "G": 225,
+        "B": 20
+      },
+      {
+        "Position": 0.85,
+        "R": 255,
+        "G": 255,
+        "B": 180
+      },
+      {
+        "Position": 0.92,
+        "R": 130,
+        "G": 248,
+        "B": 255
+      },
+      {
+        "Position": 1,
+        "R": 0,
+        "G": 210,
+        "B": 255
+      }
+    ],
+    "CycleSpeed": 0.016,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Bird of Paradise",
+    "Category": "Nature",
+    "Description": "Tropical gradient: deep indigo through hot magenta, orange, gold, and cyan. Derived from birdofparidise.png.",
+    "Kind": "Gradient",
+    "Stops": [
+      {
+        "Position": 0,
+        "R": 45,
+        "G": 0,
+        "B": 100
+      },
+      {
+        "Position": 0.1,
+        "R": 75,
+        "G": 10,
+        "B": 180
+      },
+      {
+        "Position": 0.22,
+        "R": 170,
+        "G": 0,
+        "B": 210
+      },
+      {
+        "Position": 0.33,
+        "R": 240,
+        "G": 0,
+        "B": 190
+      },
+      {
+        "Position": 0.45,
+        "R": 255,
+        "G": 20,
+        "B": 80
+      },
+      {
+        "Position": 0.55,
+        "R": 255,
+        "G": 80,
+        "B": 10
+      },
+      {
+        "Position": 0.65,
+        "R": 255,
+        "G": 155,
+        "B": 0
+      },
+      {
+        "Position": 0.75,
+        "R": 255,
+        "G": 225,
+        "B": 20
+      },
+      {
+        "Position": 0.85,
+        "R": 255,
+        "G": 255,
+        "B": 180
+      },
+      {
+        "Position": 0.92,
+        "R": 130,
+        "G": 248,
+        "B": 255
+      },
+      {
+        "Position": 1,
+        "R": 0,
+        "G": 210,
+        "B": 255
+      }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Blue (GradientLinear)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Classic Mandelbrot Standard palette — navy/royal/white/gold/burgundy, blue dominant phase. Linear stretch.",
+    "Kind": "Gradient",
+    "Stops": [
+      { "Position": 0.0,  "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.16, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.42, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.64, "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.86, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 1.0,  "R": 0,   "G": 7,   "B": 100 }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Blue (Gradient)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Classic Mandelbrot Standard palette — navy/royal/white/gold/burgundy, blue dominant phase. Cycling.",
+    "Kind": "Cycling",
+    "Stops": [
+      { "Position": 0.0,  "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.16, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.42, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.64, "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.86, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 1.0,  "R": 0,   "G": 7,   "B": 100 }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Blue (Phong3D)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Classic Mandelbrot Standard palette — blue phase. Phong relief.",
+    "Kind": "Phong3D",
+    "Stops": [
+      { "Position": 0.0,  "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.16, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.42, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.64, "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.86, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 1.0,  "R": 0,   "G": 7,   "B": 100 }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.5,
+    "Ambient": 0.15,
+    "KeyLight": {
+      "Lx": -0.5,
+      "Ly": 0.7,
+      "Lz": 0.6,
+      "DiffR": 1.0,
+      "DiffG": 1.0,
+      "DiffB": 1.0,
+      "SpecR": 1.0,
+      "SpecG": 0.95,
+      "SpecB": 0.85,
+      "Shininess": 64
+    },
+    "FillLight": {
+      "Lx": 0.6,
+      "Ly": -0.4,
+      "Lz": 0.5,
+      "DiffR": 0.35,
+      "DiffG": 0.4,
+      "DiffB": 0.55,
+      "SpecR": 0.25,
+      "SpecG": 0.3,
+      "SpecB": 0.45,
+      "Shininess": 32
+    },
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Blue (Pbr3D)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Classic Mandelbrot Standard palette — blue phase. PBR relief, mostly dielectric with subtle metallic peaks.",
+    "Kind": "Pbr3D",
+    "Stops": [
+      { "Position": 0.0,  "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.16, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.42, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.64, "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.86, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 1.0,  "R": 0,   "G": 7,   "B": 100 }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.5,
+    "Ambient": 0.12,
+    "KeyLight": {
+      "Lx": -0.5,
+      "Ly": 0.7,
+      "Lz": 0.7,
+      "DiffR": 1.2,
+      "DiffG": 1.2,
+      "DiffB": 1.3,
+      "SpecR": 0.0,
+      "SpecG": 0.0,
+      "SpecB": 0.0,
+      "Shininess": 1
+    },
+    "FillLight": {
+      "Lx": 0.6,
+      "Ly": -0.4,
+      "Lz": 0.5,
+      "DiffR": 0.3,
+      "DiffG": 0.4,
+      "DiffB": 0.6,
+      "SpecR": 0.0,
+      "SpecG": 0.0,
+      "SpecB": 0.0,
+      "Shininess": 1
+    },
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0.15,
+    "MaterialBands": [
+      { "UpperT": 0.42, "Metal": 0.0, "Roughness": 0.75 },
+      { "UpperT": 0.65, "Metal": 0.15, "Roughness": 0.45 },
+      { "UpperT": 1.0,  "Metal": 0.05, "Roughness": 0.6  }
+    ]
+  },
+  {
+    "Name": "MS Standard Amber (GradientLinear)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette rotated — burgundy/orange dominant, blue valleys, white peaks. Linear stretch.",
+    "Kind": "Gradient",
+    "Stops": [
+      { "Position": 0.0,  "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.14, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.30, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.56, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.78, "R": 255, "G": 170, "B": 0   },
+      { "Position": 1.0,  "R": 40,  "G": 5,   "B": 25  }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Amber (Gradient)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette rotated — burgundy/orange dominant, blue valleys, white peaks. Cycling.",
+    "Kind": "Cycling",
+    "Stops": [
+      { "Position": 0.0,  "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.14, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.30, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.56, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.78, "R": 255, "G": 170, "B": 0   },
+      { "Position": 1.0,  "R": 40,  "G": 5,   "B": 25  }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Amber (Phong3D)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette — amber phase. Phong relief.",
+    "Kind": "Phong3D",
+    "Stops": [
+      { "Position": 0.0,  "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.14, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.30, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.56, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.78, "R": 255, "G": 170, "B": 0   },
+      { "Position": 1.0,  "R": 40,  "G": 5,   "B": 25  }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.5,
+    "Ambient": 0.15,
+    "KeyLight": {
+      "Lx": -0.5,
+      "Ly": 0.7,
+      "Lz": 0.6,
+      "DiffR": 1.0,
+      "DiffG": 0.95,
+      "DiffB": 0.85,
+      "SpecR": 1.0,
+      "SpecG": 0.9,
+      "SpecB": 0.7,
+      "Shininess": 64
+    },
+    "FillLight": {
+      "Lx": 0.6,
+      "Ly": -0.4,
+      "Lz": 0.5,
+      "DiffR": 0.35,
+      "DiffG": 0.35,
+      "DiffB": 0.5,
+      "SpecR": 0.25,
+      "SpecG": 0.25,
+      "SpecB": 0.4,
+      "Shininess": 32
+    },
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Amber (Pbr3D)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette — amber phase. PBR relief with warm metallic gold highlights.",
+    "Kind": "Pbr3D",
+    "Stops": [
+      { "Position": 0.0,  "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.14, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.30, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.56, "R": 237, "G": 255, "B": 255 },
+      { "Position": 0.78, "R": 255, "G": 170, "B": 0   },
+      { "Position": 1.0,  "R": 40,  "G": 5,   "B": 25  }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.5,
+    "Ambient": 0.12,
+    "KeyLight": {
+      "Lx": -0.5,
+      "Ly": 0.7,
+      "Lz": 0.7,
+      "DiffR": 1.25,
+      "DiffG": 1.15,
+      "DiffB": 1.0,
+      "SpecR": 0.0,
+      "SpecG": 0.0,
+      "SpecB": 0.0,
+      "Shininess": 1
+    },
+    "FillLight": {
+      "Lx": 0.6,
+      "Ly": -0.4,
+      "Lz": 0.5,
+      "DiffR": 0.3,
+      "DiffG": 0.4,
+      "DiffB": 0.6,
+      "SpecR": 0.0,
+      "SpecG": 0.0,
+      "SpecB": 0.0,
+      "Shininess": 1
+    },
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0.2,
+    "MaterialBands": [
+      { "UpperT": 0.30, "Metal": 0.0,  "Roughness": 0.75 },
+      { "UpperT": 0.56, "Metal": 0.1,  "Roughness": 0.5  },
+      { "UpperT": 0.85, "Metal": 0.6,  "Roughness": 0.35 },
+      { "UpperT": 1.0,  "Metal": 0.1,  "Roughness": 0.65 }
+    ]
+  },
+  {
+    "Name": "MS Standard Sunrise (GradientLinear)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette rotated — gold/yellow background, deep blue spirals, white sparkle peaks. Linear stretch.",
+    "Kind": "Gradient",
+    "Stops": [
+      { "Position": 0.0,  "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.22, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.36, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.52, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.78, "R": 237, "G": 255, "B": 255 },
+      { "Position": 1.0,  "R": 255, "G": 170, "B": 0   }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Sunrise (Gradient)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette rotated — gold/yellow background, deep blue spirals, white sparkle peaks. Cycling.",
+    "Kind": "Cycling",
+    "Stops": [
+      { "Position": 0.0,  "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.22, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.36, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.52, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.78, "R": 237, "G": 255, "B": 255 },
+      { "Position": 1.0,  "R": 255, "G": 170, "B": 0   }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.6,
+    "Ambient": 0.12,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Sunrise (Phong3D)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette — sunrise phase. Phong relief with warm key.",
+    "Kind": "Phong3D",
+    "Stops": [
+      { "Position": 0.0,  "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.22, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.36, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.52, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.78, "R": 237, "G": 255, "B": 255 },
+      { "Position": 1.0,  "R": 255, "G": 170, "B": 0   }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.5,
+    "Ambient": 0.18,
+    "KeyLight": {
+      "Lx": -0.5,
+      "Ly": 0.7,
+      "Lz": 0.6,
+      "DiffR": 1.05,
+      "DiffG": 0.95,
+      "DiffB": 0.7,
+      "SpecR": 1.0,
+      "SpecG": 0.85,
+      "SpecB": 0.55,
+      "Shininess": 60
+    },
+    "FillLight": {
+      "Lx": 0.6,
+      "Ly": -0.4,
+      "Lz": 0.5,
+      "DiffR": 0.3,
+      "DiffG": 0.35,
+      "DiffB": 0.55,
+      "SpecR": 0.2,
+      "SpecG": 0.25,
+      "SpecB": 0.4,
+      "Shininess": 28
+    },
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "MS Standard Sunrise (Pbr3D)",
+    "Category": "Mandelbrot Standard",
+    "Description": "Mandelbrot Standard palette — sunrise phase. PBR relief, glowing yellow/orange dominant.",
+    "Kind": "Pbr3D",
+    "Stops": [
+      { "Position": 0.0,  "R": 255, "G": 170, "B": 0   },
+      { "Position": 0.22, "R": 40,  "G": 5,   "B": 25  },
+      { "Position": 0.36, "R": 0,   "G": 7,   "B": 100 },
+      { "Position": 0.52, "R": 32,  "G": 107, "B": 203 },
+      { "Position": 0.78, "R": 237, "G": 255, "B": 255 },
+      { "Position": 1.0,  "R": 255, "G": 170, "B": 0   }
+    ],
+    "CycleSpeed": 0.02,
+    "Steepness": 1.5,
+    "Ambient": 0.15,
+    "KeyLight": {
+      "Lx": -0.5,
+      "Ly": 0.7,
+      "Lz": 0.7,
+      "DiffR": 1.3,
+      "DiffG": 1.15,
+      "DiffB": 0.9,
+      "SpecR": 0.0,
+      "SpecG": 0.0,
+      "SpecB": 0.0,
+      "Shininess": 1
+    },
+    "FillLight": {
+      "Lx": 0.6,
+      "Ly": -0.4,
+      "Lz": 0.5,
+      "DiffR": 0.3,
+      "DiffG": 0.4,
+      "DiffB": 0.6,
+      "SpecR": 0.0,
+      "SpecG": 0.0,
+      "SpecB": 0.0,
+      "Shininess": 1
+    },
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.25,
+    "FillDiffScale": 0.35,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 6,
+    "GlowBoostScale": 0.3,
+    "MaterialBands": [
+      { "UpperT": 0.22, "Metal": 0.5, "Roughness": 0.4  },
+      { "UpperT": 0.52, "Metal": 0.0, "Roughness": 0.7  },
+      { "UpperT": 0.78, "Metal": 0.1, "Roughness": 0.5  },
+      { "UpperT": 1.0,  "Metal": 0.4, "Roughness": 0.35 }
+    ]
+  }
+]

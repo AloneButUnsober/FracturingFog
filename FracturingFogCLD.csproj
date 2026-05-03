@@ -14,7 +14,22 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>FracturingFog</AssemblyName>
     <RootNamespace>FracturingFog</RootNamespace>
-    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <GenerateDocumentationFile>False</GenerateDocumentationFile>
+    <Configurations>Debug;Release;Publish</Configurations>
+    <ProduceReferenceAssembly>False</ProduceReferenceAssembly>
+    <Title>Fracturing Fog</Title>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|x64'">
+    <DebugType>full</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +37,9 @@
     <None Remove="MainForm - Copy.cs.20260416-" />
     <None Remove="MainForm - Copy.cs.orig" />
     <None Remove="MNDD3D-VRT383.zip" />
+    <None Remove="Resources\FFLogo.bmp" />
+    <None Remove="Resources\FFLogo.png" />
+    <None Remove="Resources\ResolutionRatios.txt" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,10 +54,13 @@
     <PackageReference Include="Vortice.Mathematics" Version="2.1.0" />
   </ItemGroup>
   <ItemGroup>
-    <None Update="Resources\FFLogo.bmp">
+    <None Update="Resources\colorthemes.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Resources\FFLogo.png">
+    <None Update="Resources\copythemesregions.bat">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\FracturingFog.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Resources\regions.json">

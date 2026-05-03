@@ -378,18 +378,8 @@ namespace FracturingFog.Models
             get
             {
                 foreach (var r in _builtIns) yield return r;
-
-                if (IncludeExtremeInAll)
-                {
-                    foreach (var r in _randomPool) yield return r;
-                }
-                else
-                {
-                    foreach (var r in UserRegions.FindAll(r => !r.QualityPreset.Equals(QualityPreset.Extreme))) yield return r;
-                    //List<FractalRegion> userNoExtreme = UserRegions.FindAll(r => !r.RegionType.Equals(RegionType.Extreme));
-                }
-                
-                
+                foreach (var r in UserRegions) yield return r; 
+                foreach (var r in _randomPool) yield return r;
             }
         }
 
@@ -402,7 +392,16 @@ namespace FracturingFog.Models
             {
 
                 foreach (var r in _builtIns) yield return r;
-                foreach (var r in UserRegions) yield return r;
+                if (IncludeExtremeInAll)
+                {
+                    foreach (var r in UserRegions) yield return r;
+                }
+                else
+                {
+                    foreach (var r in UserRegions.FindAll(r => !r.QualityPreset.Equals(QualityPreset.Extreme))) yield return r;
+                    //List<FractalRegion> userNoExtreme = UserRegions.FindAll(r => !r.RegionType.Equals(RegionType.Extreme));
+                }
+
                 foreach (var r in _randomPool) yield return r;
             }
         }

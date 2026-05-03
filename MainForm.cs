@@ -29,19 +29,20 @@ using System.Windows.Forms;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Views;
 
 namespace FracturingFog;
 
 /// <summary>
 /// Fracturing Fog main window and UI logic.  This class is responsible for:
 /// </summary>
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
     #region Private fields
 
     #region Program
 
-    private readonly string _programVersion = "0.1";
+    private readonly string _programVersion = "0.2";
     private readonly string _programName = "Fracturing Fog";
     private bool _disposed;
 
@@ -78,6 +79,7 @@ public sealed class MainForm : Form
 
     // UI: coordinate / region bar
     private readonly Panel _coordPanel;
+    private readonly ComboBox _formResolutionCombo;
     private readonly Label _lblCX;
     private readonly TextBox _txCX;
     private readonly Label _lblCY;
@@ -236,10 +238,11 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _slideshowRegionSkipCts;   // cancelled to unlock region during slideshow
     private readonly object _slideshowLock = new();
     private readonly Random _slideshowRng = new();
-    private bool _showSlideshowWatermark;   // true only while slideshow runs
+    private bool _showSlideshowWatermark;   
     private string _slideshowRegionName = "";
     private bool _slideshowSkipRegion;   // set to true to skip the current region and move to the next one immediately
     private bool _slideShowLockRegion;     // When true, the slideshow will not change regions; only themes.  Set by Shift+clicking the Slideshow button.
+    private bool _slideshowFocusRegion = true;   // When true, the slideshow will focus on the current region.  Set by clicking the Slideshow Focus button.
 
     #endregion Slideshow state
 
@@ -282,8 +285,9 @@ public sealed class MainForm : Form
     /// </summary>
     public MainForm()
     {
+        Icon = new Icon(@".\Resources\FracturingFog.ico");
         Text = $"{_programName} v{_programVersion} - {RendererFactory.ProbeDescription()}";
-        ClientSize = new Size(1265, 728);
+        ClientSize = new Size(1115, 728);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
@@ -408,7 +412,7 @@ public sealed class MainForm : Form
         _toolbar.Controls.Add(_posterButton);
         buttonLeft += 58;
 
-        _slideshowButton = MakeBtn("Slideshow", 72, buttonLeft, buttonTop, "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
+        _slideshowButton = MakeBtn("Slideshow", 74, buttonLeft, buttonTop, "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
         _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
         _slideshowButton.Click += OnSlideshowClick;
@@ -547,7 +551,7 @@ public sealed class MainForm : Form
 
         _checkBoxShowCoordPanel = new CheckBox
         {
-            Text = "Navigate",
+            Text = "Menu",
             Left = buttonLeft,
             Top = 9,
             AutoSize = true,
@@ -572,8 +576,8 @@ public sealed class MainForm : Form
             Checked = true,
         };
         _toolbar.Controls.Add(_checkBoxShowCoordPanel);
-        _toolbar.Controls.Add(_checkBoxShowFooterPanel);
-        buttonLeft += _checkBoxShowFooterPanel.PreferredSize.Width + 12;
+        //_toolbar.Controls.Add(_checkBoxShowFooterPanel);
+        //buttonLeft += _checkBoxShowFooterPanel.PreferredSize.Width + 12;
 
         // Grid overlay toggle.
         _checkBoxShowGrid = new CheckBox
@@ -589,7 +593,7 @@ public sealed class MainForm : Form
             Checked = false,
         };
         _toolTip.SetToolTip(_checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
-        _toolbar.Controls.Add(_checkBoxShowGrid);
+        //_toolbar.Controls.Add(_checkBoxShowGrid);
         #endregion
 
         #region Footer panel
@@ -649,7 +653,8 @@ public sealed class MainForm : Form
             Visible = false,   // hidden until user ticks Navigate
         };
 
-        _coordPanel.HorizontalScroll.Maximum = 0;  // disable horizontal scrolling
+        // This didn't work
+        //_coordPanel.HorizontalScroll.Maximum = 0;  // disable horizontal scrolling
         //_coordPanel.AutoScroll = false;
         //_coordPanel.VerticalScroll.Visible = false;
         //_coordPanel.AutoScroll = true;
@@ -660,7 +665,7 @@ public sealed class MainForm : Form
 
         _checkBoxShowCoordPanel2 = new CheckBox
         {
-            Text = "Navigate",
+            Text = "Menu",
             Left = buttonLeft,
             Top = 9,
             AutoSize = true,
@@ -705,6 +710,29 @@ public sealed class MainForm : Form
         _toolTip.SetToolTip(_checkBoxShowGrid2, "Overlay a Cartesian complex-plane grid on the fractal view");
 
         buttonLeft = 8;
+
+        //_formResolutionCombo = new ComboBox
+        //{
+        //    Left = buttonLeft + 88,
+        //    Top = 28,
+        //    Width = 130,
+        //    Height = 26,
+        //    BackColor = Color.FromArgb(55, 55, 55),
+        //    ForeColor = Color.White,
+        //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+        //    Cursor = Cursors.Hand,
+        //    DropDownWidth = Math.Max(180, ResolutionDimensions.GetLongestResolutionName() + 40)   // ensure descriptions fit in the dropdown
+        //};
+        //_formResolutionCombo.SelectedIndexChanged += (s,e) =>
+        //{
+        //    Resolution? res = ResolutionDimensions.Resolutions.Where( r => r.Name == _formResolutionCombo.Text ).FirstOrDefault<Resolution>();
+        //    if (res == null) return;
+        //    Size = new Size(res.Width, res.Height);
+        //    CenterToParent();
+        //};
+        //_coordPanel.Controls.Add(_formResolutionCombo);
+        //labelTop += 28;
+        //txTop += 28;
 
         _lblCX = MakeLbl("CX:", buttonLeft, labelTop, _coordPanel, true);
         _lblCX.Height = 12;
@@ -1069,7 +1097,7 @@ public sealed class MainForm : Form
             _toolbar.Visible = !_toolbar.Visible;
         })
         { Checked = true };
-        var navigateItem = new ToolStripMenuItem("Navigate");
+        var navigateItem = new ToolStripMenuItem("Menu");
         var statusItem = new ToolStripMenuItem("Status", null, (s, e) =>
         {
             _checkBoxShowFooterPanel.Checked = !_checkBoxShowFooterPanel.Checked;
@@ -1113,6 +1141,19 @@ public sealed class MainForm : Form
         var restoreMonitorsItem = new ToolStripMenuItem("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e))
         { Visible = false };
         var slideshowItem = new ToolStripMenuItem("Start Slideshow", null, (s, e) => OnSlideshowClick(s, e));
+        var slideshowExtremeRegionsItem = new ToolStripMenuItem("Slideshow: Use Extreme Regions", null, (s, e) =>
+        {
+            FractalRegionLibrary.Instance.IncludeExtremeInAll = !FractalRegionLibrary.Instance.IncludeExtremeInAll;
+            _chkSlideshowUseExtremeRegions.Checked = FractalRegionLibrary.Instance.IncludeExtremeInAll;  // sync with coordinate panel checkbox
+        });
+        var slideshowFocusItem = new ToolStripMenuItem("Slideshow: More Colors", null, (s, e) =>
+        {
+            if (_slideshowRunning)
+            {
+                _slideshowFocusRegion = !_slideshowFocusRegion;
+            }
+        })
+        { Enabled = false };
         var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region", null, (s, e) => SkipSlideshowRegion())
         { Enabled = false };
         var slideshowLockRegionItem = new ToolStripMenuItem("Slideshow: Lock Region", null, (s, e) =>
@@ -1142,7 +1183,9 @@ public sealed class MainForm : Form
             slideshowLockRegionItem.Checked = _slideShowLockRegion;
             watermarkItem.Enabled = _slideshowRunning;
             slideshowItem.Text = _slideshowRunning ? "Stop Slideshow" : "Start Slideshow";
-            watermarkItem.Checked = _showSlideshowWatermark;
+            slideshowFocusItem.Enabled = _slideshowRunning;
+            slideshowFocusItem.Text = _slideshowFocusRegion ? "Slideshow: More Colors" : "Slideshow: More Regions";
+            watermarkItem.Checked = _slideshowRunning && _showSlideshowWatermark;
             miniModeItem.Checked = _miniMode;
             onTopItem.Checked = TopMost;
             statusItem.Checked = _footerPanel.Visible;
@@ -1164,6 +1207,7 @@ public sealed class MainForm : Form
         contextMenu.Items.Add(miniModeItem);
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(slideshowItem);
+        contextMenu.Items.Add(slideshowFocusItem);
         contextMenu.Items.Add(watermarkItem);
         contextMenu.Items.Add(slideshowLockRegionItem);
         contextMenu.Items.Add(skipItem);
@@ -1177,6 +1221,7 @@ public sealed class MainForm : Form
         #endregion Context menu for render panel
 
         // Build list sources for combos that need it.
+        BuildResolutionSelection();
         BuildColorThemesSelection();
         _colorThemeCombo2.SelectedIndex = 0;
 
@@ -1240,6 +1285,89 @@ public sealed class MainForm : Form
         Application.Idle += OnApplicationIdle;
     }
 
+    #endregion Constructors
+
+    #region Events
+
+    private void OnLoad(object? sender, EventArgs e)
+    {
+        FractalRegionLibrary.Instance.Load();
+        RebuildRegionCombo();
+        int w = _renderPanel.ClientSize.Width;
+        int h = _renderPanel.ClientSize.Height;
+
+        try
+        {
+            //MARGINS margins = new MARGINS { cxLeftWidth = 0, cxRightWidth = 0, cyTopHeight = 30, cyBottomHeight = -1 };
+            //_ = DwmExtendFrameIntoClientArea(Handle, ref margins);
+
+            _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
+            _calculator = new MandelbrotCalculator(w, h);
+
+            if (_defaultColorMap != null) _calculator.ColorMap = _defaultColorMap;
+            _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
+            Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
+            ApplyViewState();
+            TriggerCalculation();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Renderer initialisation failed:\n\n{ex.Message}\n\n" +
+                "Ensure your GPU supports Feature Level 10.0+\n" +
+                "and Vortice.DirectX 3.8.3 packages are installed.",
+                "Initialisation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Application.Exit();
+        }
+    }
+
+    private void OnFormResize(object? sender, EventArgs e)
+    {
+        if (_renderer == null || _calculator == null) return;
+        if (WindowState == FormWindowState.Minimized) return;
+        Debug.WriteLine($"MiniMode: {_miniMode}  Size: {Size}  RenderPanel: {_renderPanel.ClientSize} Previous Size: {_miniPreviousSize}");
+
+        if (!_spanning && _miniClick)
+        {
+            FormBorderStyle = _miniMode ? FormBorderStyle.None : _miniPreviousBorderStyle;
+            Size = new Size(
+                _miniMode ? MinimumSize.Width : _miniPreviousSize.Width,
+                _miniMode ? MinimumSize.Height : _miniPreviousSize.Height);
+        }
+
+
+        int w = _renderPanel.ClientSize.Width;
+        int h = _renderPanel.ClientSize.Height;
+        if (w < 1 || h < 1) return;
+
+        // Discard the cached buffer — its dimensions no longer match.
+        _lastUploadedBuffer = null;
+
+        _renderer.Resize(w, h);
+        _calculator.Resize(w, h);
+        ApplyViewState();
+        TriggerCalculation();
+        PositionGridPanel();
+    }
+
+    private void OnApplicationIdle(object? sender, EventArgs e)
+    {
+        if (!_disposed && _renderer != null) _renderer.Render();
+    }
+
+    private void OnFormClosing(object? sender, FormClosingEventArgs e)
+    {
+        _disposed = true;
+        Application.Idle -= OnApplicationIdle;
+
+        _panStopTimer.Stop(); _panStopTimer.Dispose();
+        StopSlideshow();
+        lock (_calcLock) _calcCts?.Cancel();
+        lock (_wallpaperLock) _wallpaperCts?.Cancel();
+
+        _renderer?.Dispose();
+    }
+
     private void OnCheckBoxShowGridClick()
     {
         _gridVisible = _checkBoxShowGrid.Checked;
@@ -1280,8 +1408,6 @@ public sealed class MainForm : Form
             _toolbar.Height = _toolbarLastHeight;
         }
     }
-
-    #endregion Constructors
 
     private void OnLoadColorThemesClick(object? sender, EventArgs e)
     {
@@ -1385,14 +1511,6 @@ public sealed class MainForm : Form
         }
     }
 
-    private static bool NameExistsInPalettes(string name)
-    {
-        foreach (var p in Models.ColorPalette.Palettes)
-            if (string.Equals(Models.ColorPalette.GetStaticName(p), name, StringComparison.OrdinalIgnoreCase))
-                return true;
-        return false;
-    }
-
     private void OnExportColorThemeClick(object? sender, EventArgs e)
     {
         if (_calculator != null && _calculator.ColorMap != null)
@@ -1478,10 +1596,10 @@ public sealed class MainForm : Form
             FilterIndex = 1,
             DefaultExt = "png",
             FileName = $"{_programName}_{colorName}_{regionName}" +
-                         $"x{_txCX.Text.Split('|')[0].Replace(".", "")}_" +
-                         $"y{_txCY.Text.Split('|')[0].Replace(".", "")}_" +
-                         $"z{_txZoom.Text.Replace(".", "")}_" +
-                         $"i{_txIter.Text.Replace(".", "")}_" +
+                         $"x{_centerX.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                         $"y{_centerY.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                         $"z{_zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                         $"i{(_calculator?.MaxIterations ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)}_" +
                          sizeTag +
                          rotatedTag
         };
@@ -1515,196 +1633,6 @@ public sealed class MainForm : Form
         OnGoClick(sender, e);
     }
 
-    // Compute max safe dimensions from available memory.
-    // Each pixel needs 4 bytes (BGRA uint[]), plus the calculator allocates
-    // 5 float[] buffers (smooth, distance, nx, ny) and 1 int[] (iterations)
-    // = 4 + 5*4 + 4 = 28 bytes per pixel.  We use 60% of available physical
-    // memory to leave headroom for the OS and other processes.
-    private static (int maxW, int maxH) ComputeMaxDimensions()
-    {
-        long available;
-        try
-        {
-            var gcInfo = GC.GetGCMemoryInfo();
-            available = (long)(gcInfo.TotalAvailableMemoryBytes * 0.60);
-        }
-        catch
-        {
-            available = 512L * 1024 * 1024; // 512 MB safe fallback
-        }
-        const int BytesPerPixel = 28; // see comment above
-        long maxPixels = available / BytesPerPixel;
-        // Cap each axis: assume square aspect as worst case.
-        int maxSide = (int)System.Math.Min(System.Math.Sqrt(maxPixels), 100_000);
-        return (maxSide, maxSide);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Initialisation
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnLoad(object? sender, EventArgs e)
-    {
-        FractalRegionLibrary.Instance.Load();
-        RebuildRegionCombo();
-        int w = _renderPanel.ClientSize.Width;
-        int h = _renderPanel.ClientSize.Height;
-
-        try
-        {
-            //MARGINS margins = new MARGINS { cxLeftWidth = 0, cxRightWidth = 0, cyTopHeight = 30, cyBottomHeight = -1 };
-            //_ = DwmExtendFrameIntoClientArea(Handle, ref margins);
-
-            _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
-            _calculator = new MandelbrotCalculator(w, h);
-
-            if (_defaultColorMap != null) _calculator.ColorMap = _defaultColorMap;
-            _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
-            Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
-            ApplyViewState();
-            TriggerCalculation();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                $"Renderer initialisation failed:\n\n{ex.Message}\n\n" +
-                "Ensure your GPU supports Feature Level 10.0+\n" +
-                "and Vortice.DirectX 3.8.3 packages are installed.",
-                "Initialisation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            Application.Exit();
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Mini-map
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void ToggleMiniMap()
-    {
-        if (_miniMapPanel == null)
-        {
-            _miniMapPanel = new MiniMapPanel();
-            _miniMapPanel.Configure(
-                getCenter: () => (_centerX, _centerY),
-                getZoom: () => _zoom,
-                getColorMap: () => _calculator?.ColorMap,
-                navigateTo: (cx, cy) =>
-                {
-                    _centerX = cx; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
-                    _centerY = cy; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
-                    ApplyViewState();
-                    TriggerCalculation();
-                },
-                getSwatchColor: GetSwatchColor);
-
-            _miniMapPanel.Left = _renderPanel.ClientSize.Width - _miniMapPanel.Width - 4;
-            _miniMapPanel.Top = _renderPanel.ClientSize.Height - _miniMapPanel.Height - 4;
-            _miniMapPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            _renderPanel.Controls.Add(_miniMapPanel);
-            _miniMapPanel.BringToFront();
-            _miniMapPanel.RequestRedraw();
-        }
-        else
-        {
-            _renderPanel.Controls.Remove(_miniMapPanel);
-            _miniMapPanel.Dispose();
-            _miniMapPanel = null;
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // System Info dialog
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void ShowSystemInfoDialog()
-    {
-        var sb = new StringBuilder();
-
-        sb.AppendLine("=== Renderer ===");
-        sb.AppendLine($"Active:          {_renderer?.RendererDescription ?? "none"}");
-        sb.AppendLine($"D3D12 available: {DirectX12Renderer.IsAvailable()}");
-        sb.AppendLine();
-
-        sb.AppendLine("=== GPU Adapters (DXGI) ===");
-        try
-        {
-            using var factory = Vortice.DXGI.DXGI.CreateDXGIFactory1<Vortice.DXGI.IDXGIFactory1>();
-            uint idx = 0;
-            while (factory.EnumAdapters1(idx, out var adapter).Success)
-            {
-                var desc = adapter.Description1;
-                sb.AppendLine($"Adapter {idx}: {desc.Description}");
-                sb.AppendLine($"  Vendor ID:   0x{desc.VendorId:X4}");
-                sb.AppendLine($"  Device ID:   0x{desc.DeviceId:X4}");
-                sb.AppendLine($"  Dedicated VRAM: {desc.DedicatedVideoMemory / (1024 * 1024)} MB");
-                sb.AppendLine($"  Shared RAM:     {desc.SharedSystemMemory / (1024 * 1024)} MB");
-                adapter.Dispose();
-                idx++;
-            }
-        }
-        catch (Exception ex) { sb.AppendLine($"  (DXGI enumeration failed: {ex.Message})"); }
-
-        sb.AppendLine();
-        sb.AppendLine("=== D3D11 Feature Level ===");
-        try
-        {
-            Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-                null,
-                Vortice.Direct3D.DriverType.Hardware,
-                Vortice.Direct3D11.DeviceCreationFlags.None,
-                null,
-                out _, out var fl, out _);
-            sb.AppendLine($"Max Feature Level: {fl}");
-        }
-        catch { sb.AppendLine("  (Could not query D3D11 feature level.)"); }
-
-        sb.AppendLine();
-        sb.AppendLine("=== CPU / OS ===");
-        sb.AppendLine($"Logical CPUs:  {Environment.ProcessorCount}");
-        sb.AppendLine($"OS:            {Environment.OSVersion}");
-        sb.AppendLine($".NET Runtime:  {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
-        sb.AppendLine($"Architecture:  {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
-
-        sb.AppendLine();
-        sb.AppendLine("=== Fractal Calculator ===");
-        if (_calculator != null)
-        {
-            sb.AppendLine($"SIMD vector width (double): {System.Numerics.Vector<double>.Count}");
-            sb.AppendLine($"Current size:    {_calculator.Width}×{_calculator.Height}");
-            sb.AppendLine($"Max iterations:  {_calculator.MaxIterations}");
-            sb.AppendLine($"Precision:       {((_calculator.IsHighPrecisionActive) ? "Double-Double (DD)" : "Double (SP)")}");
-        }
-
-        using var dlg = new Form
-        {
-            Text = "System / Hardware Information",
-            ClientSize = new Size(560, 500),
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            StartPosition = FormStartPosition.CenterParent,
-            BackColor = Color.FromArgb(28, 28, 28),
-        };
-        var txt = new TextBox
-        {
-            Multiline = true,
-            ReadOnly = true,
-            ScrollBars = ScrollBars.Vertical,
-            Text = sb.ToString(),
-            Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(18, 18, 18),
-            ForeColor = Color.FromArgb(200, 200, 200),
-            Font = new Font("Consolas", 9f),
-            BorderStyle = BorderStyle.None,
-        };
-        dlg.Controls.Add(txt);
-        dlg.ShowDialog(this);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Quality
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void OnQualityComboChanged(object? sender, EventArgs e)
     {
         if (sender == null) return;
@@ -1729,9 +1657,403 @@ public sealed class MainForm : Form
             SetStatus($"Quality → {_quality.Name}.  Zoom clamped to {_quality.ZoomMax:G3}.");
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Colour theme
-    // ─────────────────────────────────────────────────────────────────────────
+    private void OnColorThemeChanged(object? sender, EventArgs e)
+    {
+        string name = _colorThemeCombo?.SelectedItem?.ToString() ?? "";
+        _currentColorThemeLabel?.Text = name;
+        var map = Models.ColorPalette.GetPaletteByName(name);
+        if (_calculator != null)
+        {
+            _calculator.ColorMap = map;
+            TriggerCalculation();
+        }
+        _miniMapPanel?.RequestRedraw();
+        UpdateDeleteColorThemeButton();
+    }
+
+    private void OnResetClick(object? sender, EventArgs e)
+    {
+        StopSlideshow();
+        _centerX = DefaultCenterX; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
+        _centerY = DefaultCenterY; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
+        _zoom = DefaultZoom;
+        _regionCombo.SelectedIndex = 0;
+
+        // Reset brightness and contrast to defaults.
+        _brightness = 0;
+        _contrast = 0;
+        if (_brightnessSlider != null) _brightnessSlider.Value = 0;
+        if (_contrastSlider != null) _contrastSlider.Value = 0;
+        if (_brightnessLabel != null) _brightnessLabel.Text = "Brightness: 0";
+        if (_contrastLabel != null) _contrastLabel.Text = "Contrast: 0";
+
+        ApplyViewState();
+        TriggerCalculation();
+    }
+    
+    private void OnIterLockChanged(object? sender, EventArgs e)
+    {
+        _iterLocked = _chkLockIter.Checked;
+        if (_iterLocked && _calculator != null)
+        {
+            // Capture current iteration value when lock is engaged.
+            if (int.TryParse(_txIter.Text.Trim(), out int parsed) && parsed >= 64)
+                _lockedIterations = parsed;
+            else
+                _lockedIterations = _calculator.MaxIterations;
+            _txIter.BackColor = Color.FromArgb(55, 50, 30);   // tinted to show locked state
+        }
+        else
+        {
+            _txIter.BackColor = Color.FromArgb(40, 40, 40);    // restore normal colour
+        }
+    }
+    
+    private void OnGoClick(object? sender, EventArgs e)
+    {
+        if (!TryParseCoords(out double cx, out double cy, out double zoom, out int iter))
+        {
+            MessageBox.Show(
+                "One or more values are invalid.\n\n" +
+                "CX / CY: decimal numbers  (e.g. -0.7435669)\n" +
+                "Zoom: positive number  (e.g. 400)\n" +
+                "Iterations: integer ≥ 64",
+                "Invalid Coordinates",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // Textboxes now carry the full QD value as "Hi|Lo|X2|X3" (FormatCoord).
+        // Parse all limbs so that an unedited box preserves deep-zoom precision
+        // and a pasted full-precision string is honoured without zeroing Lo/X2/X3.
+        if (TryParseQDCoord(_txCX.Text, out double newCX, out double newCXLo,
+                             out double newCX2, out double newCX3))
+        {
+            _centerX = newCX; _centerXLo = newCXLo; _centerX2 = newCX2; _centerX3 = newCX3;
+        }
+        if (TryParseQDCoord(_txCY.Text, out double newCY, out double newCYLo,
+                             out double newCY2, out double newCY3))
+        {
+            _centerY = newCY; _centerYLo = newCYLo; _centerY2 = newCY2; _centerY3 = newCY3;
+        }
+
+        // Auto-promote quality preset when typed/pasted zoom exceeds current ZoomMax,
+        // so deep coords aren't silently clamped to a shallow render.
+        if (zoom > _quality.ZoomMax)
+        {
+            QualityPreset? promoted = null;
+            foreach (var p in QualityPreset.All)
+                if (p.ZoomMax >= zoom) { promoted = p; break; }
+            promoted ??= QualityPreset.Extreme;
+            if (promoted.Tier != _quality.Tier)
+            {
+                _quality = promoted;
+                if (_calculator != null) _calculator.Quality = _quality;
+                _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
+                _qualityCombo.Text = _quality.Name;
+                _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
+                if (_qualityCombo2 != null) _qualityCombo2.Text = _quality.Name;
+                SetStatus($"Quality → {_quality.Name} (zoom {zoom:G3} requires it).");
+            }
+        }
+        _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
+
+        if (_calculator != null && iter > 0)
+            _calculator.MaxIterations = iter;
+
+        // When "Go" is pressed while locked, update the locked value too.
+        if (_iterLocked)
+            _lockedIterations = iter;
+
+        ApplyViewState(iter);
+        TriggerCalculation();
+    }
+
+    private void OnRegionComboChanged(object? sender, EventArgs e)
+    {
+        UpdateDelRegionButton();
+
+        string? name = _regionCombo.SelectedItem?.ToString();
+        _currentRegionLabel?.Text = name;
+        if (string.IsNullOrEmpty(name) || name == "— select region —") return;
+
+        var region = FractalRegionLibrary.Instance.FindByName(name);
+        if (region == null) return;
+
+        ApplyRegion(region);
+        TriggerCalculation();
+
+        _toolTip.SetToolTip(_regionCombo, region.Description);
+    }
+
+    private void OnSaveViewClick(object? sender, EventArgs e)
+    {
+        // Sync textboxes → internal state so manual edits land in the saved region
+        // even when the user hasn't pressed Go first.
+        if (TryParseQDCoord(_txCX.Text, out double sCX, out double sCXLo,
+                             out double sCX2, out double sCX3))
+        { _centerX = sCX; _centerXLo = sCXLo; _centerX2 = sCX2; _centerX3 = sCX3; }
+        if (TryParseQDCoord(_txCY.Text, out double sCY, out double sCYLo,
+                             out double sCY2, out double sCY3))
+        { _centerY = sCY; _centerYLo = sCYLo; _centerY2 = sCY2; _centerY3 = sCY3; }
+        var _ic = System.Globalization.CultureInfo.InvariantCulture;
+        var _ns = System.Globalization.NumberStyles.Float;
+        if (double.TryParse(_txZoom.Text.Trim(), _ns, _ic, out double tz) && tz > 0)
+            _zoom = tz;
+        if (int.TryParse(_txIter.Text.Trim(), out int ti) && ti >= 64 && _calculator != null)
+            _calculator.MaxIterations = ti;
+
+        using var dlg = new InputDialog("Save Current View", "Region name:");
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        string name = dlg.Input.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            MessageBox.Show("Name cannot be empty.", "Save View",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var region = new FractalRegion
+        {
+            Name = name,
+            CenterX = _centerX,
+            CenterXLo = _centerXLo,
+            CenterX2 = _centerX2,
+            CenterX3 = _centerX3,
+            CenterY = _centerY,
+            CenterYLo = _centerYLo,
+            CenterY2 = _centerY2,
+            CenterY3 = _centerY3,
+            Zoom = _zoom,
+            Iterations = _calculator?.MaxIterations ?? 512,
+            QualityPresetName = _quality.Name,
+            Description = $"Saved {DateTime.Now:yyyy-MM-dd HH:mm}"
+        };
+
+        if (!FractalRegionLibrary.Instance.AddUserRegion(region))
+        {
+            MessageBox.Show($"\"{name}\" already exists.", "Duplicate Name",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        RebuildRegionCombo();
+        for (int i = 0; i < _regionCombo.Items.Count; i++)
+            if (_regionCombo.Items[i]?.ToString() == name) { _regionCombo.SelectedIndex = i; break; }
+
+        SetStatus($"Region \"{name}\" saved.");
+    }
+
+    private void OnDelRegionClick(object? sender, EventArgs e)
+    {
+        string? name = _regionCombo.SelectedItem?.ToString();
+        if (string.IsNullOrEmpty(name) || name == "— select region —") return;
+
+        var region = FractalRegionLibrary.Instance.FindByName(name);
+        if (region == null || region.IsBuiltIn) return;
+
+        if (MessageBox.Show($"Delete region \"{name}\"?", "Confirm Delete",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+        FractalRegionLibrary.Instance.RemoveUserRegion(name);
+        RebuildRegionCombo();
+        SetStatus($"Region \"{name}\" deleted.");
+    }
+
+    private void OnExportRegionsClick(object? sender, EventArgs e)
+    {
+        var userRegions = FractalRegionLibrary.Instance.UserRegions;
+        if (userRegions.Count == 0)
+        {
+            MessageBox.Show("There are no custom regions to export.\n\nUse \"Save View\" to create one first.",
+                "Export Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        string defaultName = "regions";
+        string? selected = _regionCombo.SelectedItem?.ToString();
+        if (!string.IsNullOrEmpty(selected) && selected != "— select region —")
+        {
+            var sel = FractalRegionLibrary.Instance.FindByName(selected);
+            if (sel != null && !sel.IsBuiltIn) defaultName = selected;
+        }
+
+        using var dlg = new SaveFileDialog
+        {
+            Title = "Export Custom Regions",
+            Filter = "JSON File (*.json)|*.json",
+            DefaultExt = "json",
+            FileName = defaultName + ".json"
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        try
+        {
+            var opts = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(dlg.FileName, JsonSerializer.Serialize(userRegions, opts));
+            SetStatus($"Exported {userRegions.Count} region(s)  →  {Path.GetFileName(dlg.FileName)}");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Export failed:\n\n{ex.Message}", "Export Error",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OnImportRegionsClick(object? sender, EventArgs e)
+    {
+        using var dlg = new OpenFileDialog
+        {
+            Title = "Import Custom Regions",
+            Filter = "JSON File (*.json)|*.json|All Files (*.*)|*.*"
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        List<FractalRegion>? imported;
+        try
+        {
+            imported = JsonSerializer.Deserialize<List<FractalRegion>>(File.ReadAllText(dlg.FileName));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not read or parse the file:\n\n{ex.Message}",
+                "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (imported == null || imported.Count == 0)
+        {
+            MessageBox.Show("The file contains no region entries.",
+                "Import Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        int added = 0, renamed = 0;
+        foreach (var region in imported)
+        {
+            if (string.IsNullOrWhiteSpace(region.Name)) continue;
+            region.RegionType = RegionType.UserDefined;
+
+            string candidate = region.Name;
+            if (FractalRegionLibrary.Instance.FindByName(candidate) != null) continue;
+            // Skip duplicates to avoid overwriting existing regions.
+            // Alternative would be to auto-rename with a suffix, but that could lead to many confusingly similar entries if the same file is imported multiple times.
+            //{
+            //candidate = region.Name + "-imp";
+            //int suffix = 2;
+            //while (FractalRegionLibrary.Instance.FindByName(candidate) != null)
+            //    candidate = region.Name + "-imp-" + suffix++;
+            //region.Name = candidate;
+            //renamed++;
+            //}
+
+            FractalRegionLibrary.Instance.UserRegions.Add(region);
+            added++;
+        }
+
+        if (added == 0)
+        {
+            MessageBox.Show("No valid regions found.", "Import Regions",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        FractalRegionLibrary.Instance.Save();
+        RebuildRegionCombo();
+
+        string summary = added == 1 ? "1 region imported" : $"{added} regions imported";
+        if (renamed > 0) summary += $" ({renamed} renamed with '-imp')";
+        SetStatus(summary + $"  ←  {Path.GetFileName(dlg.FileName)}");
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _renderer?.Dispose();
+        base.Dispose(disposing);
+    }
+
+    #endregion Events
+
+    #region Utilities
+
+    private static bool NameExistsInPalettes(string name)
+    {
+        foreach (var p in Models.ColorPalette.Palettes)
+            if (string.Equals(Models.ColorPalette.GetStaticName(p), name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    // Compute max safe dimensions from available memory.
+    // Each pixel needs 4 bytes (BGRA uint[]), plus the calculator allocates
+    // 5 float[] buffers (smooth, distance, nx, ny) and 1 int[] (iterations)
+    // = 4 + 5*4 + 4 = 28 bytes per pixel.  We use 60% of available physical
+    // memory to leave headroom for the OS and other processes.
+    private static (int maxW, int maxH) ComputeMaxDimensions()
+    {
+        long available;
+        try
+        {
+            var gcInfo = GC.GetGCMemoryInfo();
+            available = (long)(gcInfo.TotalAvailableMemoryBytes * 0.60);
+        }
+        catch
+        {
+            available = 512L * 1024 * 1024; // 512 MB safe fallback
+        }
+        const int BytesPerPixel = 28; // see comment above
+        long maxPixels = available / BytesPerPixel;
+        // Cap each axis: assume square aspect as worst case.
+        int maxSide = (int)System.Math.Min(System.Math.Sqrt(maxPixels), 100_000);
+        return (maxSide, maxSide);
+    }
+
+    private void BuildResolutionSelection()
+    {
+        return;
+        //int totalW = 0;
+        //int totalH = 0;
+        //foreach (var s in Screen.AllScreens)
+        //{
+        //    totalH += s.Bounds.Height;
+        //    totalW += s.Bounds.Width;
+        //}
+
+        //_formResolutionCombo.Items.Clear();
+        //foreach (var rt in ResolutionDimensions.ResolutionTypeName)
+        //{
+        //    string restypeName = rt.Value;
+        //    _formResolutionCombo.Items.Add($" -- {rt.Value} -- ");
+        //    foreach (Resolution res in ResolutionDimensions.Resolutions.Where(r => r.ResolutionType == rt.Key))
+        //    {
+        //        if (res == null) continue;
+        //        if (res.Width == 0 || res.Width > totalW) return;
+        //        if (res.Height == 0 || res.Height > totalH) return;
+        //        _formResolutionCombo.Items.Add(res.Name);
+        //    }
+        //}
+    }
+
+    private void RebuildRegionCombo()
+    {
+        _regionCombo.SelectedIndexChanged -= OnRegionComboChanged;
+        _regionCombo.Items.Clear();
+        _regionCombo2?.Items.Clear();
+        _regionCombo.Items.Add("— select region —");
+        _regionCombo2?.Items.Add("— select region —");
+        var regions = FractalRegionLibrary.Instance.All.OrderBy(r => r.IsBuiltIn).ThenBy(r => r.Name);
+        foreach (var r in regions)
+        {
+            _regionCombo.Items.Add(r.Name);
+            _regionCombo2?.Items.Add(r.Name);
+        }
+
+        _regionCombo.SelectedIndex = 0;
+        _regionCombo2?.SelectedIndex = 0;
+        _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
+        UpdateDelRegionButton();
+    }
 
     private void BuildColorThemesSelection()
     {
@@ -1750,20 +2072,6 @@ public sealed class MainForm : Form
         }
     }
 
-    private void OnColorThemeChanged(object? sender, EventArgs e)
-    {
-        string name = _colorThemeCombo?.SelectedItem?.ToString() ?? "";
-        _currentColorThemeLabel?.Text = name;
-        var map = Models.ColorPalette.GetPaletteByName(name);
-        if (_calculator != null)
-        {
-            _calculator.ColorMap = map;
-            TriggerCalculation();
-        }
-        _miniMapPanel?.RequestRedraw();
-        UpdateDeleteColorThemeButton();
-    }
-
     private Color GetSwatchColor()
     {
         if (_calculator?.ColorMap == null) return Color.White;
@@ -1771,10 +2079,6 @@ public sealed class MainForm : Form
         int argb = _calculator.ColorMap.SwatchSample;
         return Color.FromArgb((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // ComputeContrastColor
-    // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Returns a colour that contrasts well against <paramref name="swatch"/>.
@@ -1876,94 +2180,123 @@ public sealed class MainForm : Form
         var c = ComputeContrastColor(swatch);
         return fade ? Color.FromArgb(75, c.R, c.G, c.B) : c;
     }
-    // ─────────────────────────────────────────────────────────────────────────
-    // Reset
-    // ─────────────────────────────────────────────────────────────────────────
 
-    private void OnResetClick(object? sender, EventArgs e)
+    private void ToggleMiniMap()
     {
-        StopSlideshow();
-        _centerX = DefaultCenterX; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
-        _centerY = DefaultCenterY; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
-        _zoom = DefaultZoom;
-        _regionCombo.SelectedIndex = 0;
-
-        // Reset brightness and contrast to defaults.
-        _brightness = 0;
-        _contrast = 0;
-        if (_brightnessSlider != null) _brightnessSlider.Value = 0;
-        if (_contrastSlider != null) _contrastSlider.Value = 0;
-        if (_brightnessLabel != null) _brightnessLabel.Text = "Brightness: 0";
-        if (_contrastLabel != null) _contrastLabel.Text = "Contrast: 0";
-
-        ApplyViewState();
-        TriggerCalculation();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Iteration lock
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnIterLockChanged(object? sender, EventArgs e)
-    {
-        _iterLocked = _chkLockIter.Checked;
-        if (_iterLocked && _calculator != null)
+        if (_miniMapPanel == null)
         {
-            // Capture current iteration value when lock is engaged.
-            if (int.TryParse(_txIter.Text.Trim(), out int parsed) && parsed >= 64)
-                _lockedIterations = parsed;
-            else
-                _lockedIterations = _calculator.MaxIterations;
-            _txIter.BackColor = Color.FromArgb(55, 50, 30);   // tinted to show locked state
+            _miniMapPanel = new MiniMapPanel();
+            _miniMapPanel.Configure(
+                getCenter: () => (_centerX, _centerY),
+                getZoom: () => _zoom,
+                getColorMap: () => _calculator?.ColorMap,
+                navigateTo: (cx, cy) =>
+                {
+                    _centerX = cx; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
+                    _centerY = cy; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
+                    ApplyViewState();
+                    TriggerCalculation();
+                },
+                getSwatchColor: GetSwatchColor);
+
+            _miniMapPanel.Left = _renderPanel.ClientSize.Width - _miniMapPanel.Width - 4;
+            _miniMapPanel.Top = _renderPanel.ClientSize.Height - _miniMapPanel.Height - 4;
+            _miniMapPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            _renderPanel.Controls.Add(_miniMapPanel);
+            _miniMapPanel.BringToFront();
+            _miniMapPanel.RequestRedraw();
         }
         else
         {
-            _txIter.BackColor = Color.FromArgb(40, 40, 40);    // restore normal colour
+            _renderPanel.Controls.Remove(_miniMapPanel);
+            _miniMapPanel.Dispose();
+            _miniMapPanel = null;
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Coordinate entry — "Go"
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnGoClick(object? sender, EventArgs e)
+    private void ShowSystemInfoDialog()
     {
-        if (!TryParseCoords(out double cx, out double cy, out double zoom, out int iter))
+        var sb = new StringBuilder();
+
+        sb.AppendLine("=== Renderer ===");
+        sb.AppendLine($"Active:          {_renderer?.RendererDescription ?? "none"}");
+        sb.AppendLine($"D3D12 available: {DirectX12Renderer.IsAvailable()}");
+        sb.AppendLine();
+
+        sb.AppendLine("=== GPU Adapters (DXGI) ===");
+        try
         {
-            MessageBox.Show(
-                "One or more values are invalid.\n\n" +
-                "CX / CY: decimal numbers  (e.g. -0.7435669)\n" +
-                "Zoom: positive number  (e.g. 400)\n" +
-                "Iterations: integer ≥ 64",
-                "Invalid Coordinates",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            using var factory = Vortice.DXGI.DXGI.CreateDXGIFactory1<Vortice.DXGI.IDXGIFactory1>();
+            uint idx = 0;
+            while (factory.EnumAdapters1(idx, out var adapter).Success)
+            {
+                var desc = adapter.Description1;
+                sb.AppendLine($"Adapter {idx}: {desc.Description}");
+                sb.AppendLine($"  Vendor ID:   0x{desc.VendorId:X4}");
+                sb.AppendLine($"  Device ID:   0x{desc.DeviceId:X4}");
+                sb.AppendLine($"  Dedicated VRAM: {desc.DedicatedVideoMemory / (1024 * 1024)} MB");
+                sb.AppendLine($"  Shared RAM:     {desc.SharedSystemMemory / (1024 * 1024)} MB");
+                adapter.Dispose();
+                idx++;
+            }
+        }
+        catch (Exception ex) { sb.AppendLine($"  (DXGI enumeration failed: {ex.Message})"); }
+
+        sb.AppendLine();
+        sb.AppendLine("=== D3D11 Feature Level ===");
+        try
+        {
+            Vortice.Direct3D11.D3D11.D3D11CreateDevice(
+                null,
+                Vortice.Direct3D.DriverType.Hardware,
+                Vortice.Direct3D11.DeviceCreationFlags.None,
+                null,
+                out _, out var fl, out _);
+            sb.AppendLine($"Max Feature Level: {fl}");
+        }
+        catch { sb.AppendLine("  (Could not query D3D11 feature level.)"); }
+
+        sb.AppendLine();
+        sb.AppendLine("=== CPU / OS ===");
+        sb.AppendLine($"Logical CPUs:  {Environment.ProcessorCount}");
+        sb.AppendLine($"OS:            {Environment.OSVersion}");
+        sb.AppendLine($".NET Runtime:  {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+        sb.AppendLine($"Architecture:  {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
+
+        sb.AppendLine();
+        sb.AppendLine("=== Fractal Calculator ===");
+        if (_calculator != null)
+        {
+            sb.AppendLine($"SIMD vector width (double): {System.Numerics.Vector<double>.Count}");
+            sb.AppendLine($"Current size:    {_calculator.Width}×{_calculator.Height}");
+            sb.AppendLine($"Max iterations:  {_calculator.MaxIterations}");
+            sb.AppendLine($"Precision:       {((_calculator.IsHighPrecisionActive) ? "Double-Double (DD)" : "Double (SP)")}");
         }
 
-        // Textboxes now carry the full QD value as "Hi|Lo|X2|X3" (FormatCoord).
-        // Parse all limbs so that an unedited box preserves deep-zoom precision
-        // and a pasted full-precision string is honoured without zeroing Lo/X2/X3.
-        if (TryParseQDCoord(_txCX.Text, out double newCX, out double newCXLo,
-                             out double newCX2, out double newCX3))
+        using var dlg = new Form
         {
-            _centerX = newCX; _centerXLo = newCXLo; _centerX2 = newCX2; _centerX3 = newCX3;
-        }
-        if (TryParseQDCoord(_txCY.Text, out double newCY, out double newCYLo,
-                             out double newCY2, out double newCY3))
+            Text = "System / Hardware Information",
+            ClientSize = new Size(560, 500),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            StartPosition = FormStartPosition.CenterParent,
+            BackColor = Color.FromArgb(28, 28, 28),
+        };
+        var txt = new TextBox
         {
-            _centerY = newCY; _centerYLo = newCYLo; _centerY2 = newCY2; _centerY3 = newCY3;
-        }
-        _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
-
-        if (_calculator != null && iter > 0)
-            _calculator.MaxIterations = iter;
-
-        // When "Go" is pressed while locked, update the locked value too.
-        if (_iterLocked)
-            _lockedIterations = iter;
-
-        ApplyViewState(iter);
-        TriggerCalculation();
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Text = sb.ToString(),
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(18, 18, 18),
+            ForeColor = Color.FromArgb(200, 200, 200),
+            Font = new Font("Consolas", 9f),
+            BorderStyle = BorderStyle.None,
+        };
+        dlg.Controls.Add(txt);
+        dlg.ShowDialog(this);
     }
 
     private bool TryParseCoords(out double cx, out double cy,
@@ -1986,46 +2319,29 @@ public sealed class MainForm : Form
             && int.TryParse(_txIter.Text.Trim(), out iter) && iter >= 64;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // REGION MANAGEMENT
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void RebuildRegionCombo()
+    private void SetStatus(string text)
     {
-        _regionCombo.SelectedIndexChanged -= OnRegionComboChanged;
-        _regionCombo.Items.Clear();
-        _regionCombo2?.Items.Clear();
-        _regionCombo.Items.Add("— select region —");
-        _regionCombo2?.Items.Add("— select region —");
-        var regions = FractalRegionLibrary.Instance.All.OrderBy(r => r.IsBuiltIn).ThenBy(r => r.Name);
-        foreach (var r in regions)
-        {
-            _regionCombo.Items.Add(r.Name);
-            _regionCombo2?.Items.Add(r.Name);
-        }
-
-        _regionCombo.SelectedIndex = 0;
-        _regionCombo2?.SelectedIndex = 0;
-        _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
-        UpdateDelRegionButton();
+        if (InvokeRequired) Invoke(() => _statusLabel.Text = text);
+        else _statusLabel.Text = text;
     }
 
-    private void OnRegionComboChanged(object? sender, EventArgs e)
+    private string CurrentRegionName()
     {
-        UpdateDelRegionButton();
-
-        string? name = _regionCombo.SelectedItem?.ToString();
-        _currentRegionLabel?.Text = name;
-        if (string.IsNullOrEmpty(name) || name == "— select region —") return;
-
-        var region = FractalRegionLibrary.Instance.FindByName(name);
-        if (region == null) return;
-
-        ApplyRegion(region);
-        TriggerCalculation();
-
-        _toolTip.SetToolTip(_regionCombo, region.Description);
+        string? selected = _regionCombo.SelectedItem?.ToString();
+        selected = !string.IsNullOrEmpty(_slideshowRegionName) ? _slideshowRegionName : selected;
+        if (string.IsNullOrEmpty(selected) || selected == "— select region —") return "";
+        return selected;
     }
+
+    private string CurrentColorMapName()
+    {
+        if (_calculator?.ColorMap == null) return "";
+        var prop = _calculator.ColorMap.GetType()
+            .GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        return prop?.GetValue(null)?.ToString() ?? "Theme";
+    }
+
+    #region Region management
 
     /// <summary>Applies a FractalRegion to the view state, respecting the iteration lock.</summary>
     private void ApplyRegion(FractalRegion region)
@@ -2056,195 +2372,6 @@ public sealed class MainForm : Form
         ApplyViewState(_iterLocked ? _lockedIterations : (region.Iterations > 0 ? region.Iterations : 0));
     }
 
-    private void OnSaveViewClick(object? sender, EventArgs e)
-    {
-        // Sync textboxes → internal state so manual edits land in the saved region
-        // even when the user hasn't pressed Go first.
-        if (TryParseQDCoord(_txCX.Text, out double sCX, out double sCXLo,
-                             out double sCX2, out double sCX3))
-        { _centerX = sCX; _centerXLo = sCXLo; _centerX2 = sCX2; _centerX3 = sCX3; }
-        if (TryParseQDCoord(_txCY.Text, out double sCY, out double sCYLo,
-                             out double sCY2, out double sCY3))
-        { _centerY = sCY; _centerYLo = sCYLo; _centerY2 = sCY2; _centerY3 = sCY3; }
-        var _ic = System.Globalization.CultureInfo.InvariantCulture;
-        var _ns = System.Globalization.NumberStyles.Float;
-        if (double.TryParse(_txZoom.Text.Trim(), _ns, _ic, out double tz) && tz > 0)
-            _zoom = tz;
-        if (int.TryParse(_txIter.Text.Trim(), out int ti) && ti >= 64 && _calculator != null)
-            _calculator.MaxIterations = ti;
-
-        using var dlg = new InputDialog("Save Current View", "Region name:");
-        if (dlg.ShowDialog(this) != DialogResult.OK) return;
-
-        string name = dlg.Input.Trim();
-        if (string.IsNullOrEmpty(name))
-        {
-            MessageBox.Show("Name cannot be empty.", "Save View",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        var region = new FractalRegion
-        {
-            Name = name,
-            CenterX = _centerX,
-            CenterXLo = _centerXLo,
-            CenterX2 = _centerX2,
-            CenterX3 = _centerX3,
-            CenterY = _centerY,
-            CenterYLo = _centerYLo,
-            CenterY2 = _centerY2,
-            CenterY3 = _centerY3,
-            Zoom = _zoom,
-            Iterations = _calculator?.MaxIterations ?? 512,
-            QualityPresetName = _quality.Name,
-            Description = $"Saved {DateTime.Now:yyyy-MM-dd HH:mm}"
-        };
-
-        if (!FractalRegionLibrary.Instance.AddUserRegion(region))
-        {
-            MessageBox.Show($"\"{name}\" already exists.", "Duplicate Name",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        RebuildRegionCombo();
-        for (int i = 0; i < _regionCombo.Items.Count; i++)
-            if (_regionCombo.Items[i]?.ToString() == name) { _regionCombo.SelectedIndex = i; break; }
-
-        SetStatus($"Region \"{name}\" saved.");
-    }
-
-    private void OnDelRegionClick(object? sender, EventArgs e)
-    {
-        string? name = _regionCombo.SelectedItem?.ToString();
-        if (string.IsNullOrEmpty(name) || name == "— select region —") return;
-
-        var region = FractalRegionLibrary.Instance.FindByName(name);
-        if (region == null || region.IsBuiltIn) return;
-
-        if (MessageBox.Show($"Delete region \"{name}\"?", "Confirm Delete",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-
-        FractalRegionLibrary.Instance.RemoveUserRegion(name);
-        RebuildRegionCombo();
-        SetStatus($"Region \"{name}\" deleted.");
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // REGION EXPORT
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnExportRegionsClick(object? sender, EventArgs e)
-    {
-        var userRegions = FractalRegionLibrary.Instance.UserRegions;
-        if (userRegions.Count == 0)
-        {
-            MessageBox.Show("There are no custom regions to export.\n\nUse \"Save View\" to create one first.",
-                "Export Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        string defaultName = "regions";
-        string? selected = _regionCombo.SelectedItem?.ToString();
-        if (!string.IsNullOrEmpty(selected) && selected != "— select region —")
-        {
-            var sel = FractalRegionLibrary.Instance.FindByName(selected);
-            if (sel != null && !sel.IsBuiltIn) defaultName = selected;
-        }
-
-        using var dlg = new SaveFileDialog
-        {
-            Title = "Export Custom Regions",
-            Filter = "JSON File (*.json)|*.json",
-            DefaultExt = "json",
-            FileName = defaultName + ".json"
-        };
-        if (dlg.ShowDialog(this) != DialogResult.OK) return;
-
-        try
-        {
-            var opts = new JsonSerializerOptions { WriteIndented = true };
-            File.WriteAllText(dlg.FileName, JsonSerializer.Serialize(userRegions, opts));
-            SetStatus($"Exported {userRegions.Count} region(s)  →  {Path.GetFileName(dlg.FileName)}");
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Export failed:\n\n{ex.Message}", "Export Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // REGION IMPORT
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnImportRegionsClick(object? sender, EventArgs e)
-    {
-        using var dlg = new OpenFileDialog
-        {
-            Title = "Import Custom Regions",
-            Filter = "JSON File (*.json)|*.json|All Files (*.*)|*.*"
-        };
-        if (dlg.ShowDialog(this) != DialogResult.OK) return;
-
-        List<FractalRegion>? imported;
-        try
-        {
-            imported = JsonSerializer.Deserialize<List<FractalRegion>>(File.ReadAllText(dlg.FileName));
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Could not read or parse the file:\n\n{ex.Message}",
-                "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-
-        if (imported == null || imported.Count == 0)
-        {
-            MessageBox.Show("The file contains no region entries.",
-                "Import Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        int added = 0, renamed = 0;
-        foreach (var region in imported)
-        {
-            if (string.IsNullOrWhiteSpace(region.Name)) continue;
-            region.RegionType = RegionType.UserDefined;
-
-            string candidate = region.Name;
-            if (FractalRegionLibrary.Instance.FindByName(candidate) != null) continue;
-            // Skip duplicates to avoid overwriting existing regions.
-            // Alternative would be to auto-rename with a suffix, but that could lead to many confusingly similar entries if the same file is imported multiple times.
-            //{
-            //candidate = region.Name + "-imp";
-            //int suffix = 2;
-            //while (FractalRegionLibrary.Instance.FindByName(candidate) != null)
-            //    candidate = region.Name + "-imp-" + suffix++;
-            //region.Name = candidate;
-            //renamed++;
-            //}
-
-            FractalRegionLibrary.Instance.UserRegions.Add(region);
-            added++;
-        }
-
-        if (added == 0)
-        {
-            MessageBox.Show("No valid regions found.", "Import Regions",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        FractalRegionLibrary.Instance.Save();
-        RebuildRegionCombo();
-
-        string summary = added == 1 ? "1 region imported" : $"{added} regions imported";
-        if (renamed > 0) summary += $" ({renamed} renamed with '-imp')";
-        SetStatus(summary + $"  ←  {Path.GetFileName(dlg.FileName)}");
-    }
-
     private void UpdateDelRegionButton()
     {
         string? name = _regionCombo.SelectedItem?.ToString();
@@ -2264,505 +2391,11 @@ public sealed class MainForm : Form
             .Any(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // SLIDESHOW (NEW)
-    // ─────────────────────────────────────────────────────────────────────────
-    //
-    // Timing
-    //   • Each region is shown for 30 s total.
-    //   • Within each region the colour theme changes every 10 s.
-    //   • Theme and region transitions use a 2-second CPU cross-fade:
-    //     both the outgoing and incoming colour buffers are rendered and
-    //     blended pixel-by-pixel over 20 frames at ~100 ms each.
-    //
-    // Cross-fade implementation
-    //   Since the frame is ultimately a uint[] BGRA buffer delivered to
-    //   DirectXRenderer.UpdateTexture, a per-pixel lerp between old and new
-    //   buffers is trivially achievable on the CPU without any GPU blend state
-    //   changes.  The calculator always runs on a background thread; the fade
-    //   itself is done on the background thread too and the blended frames are
-    //   posted to the UI via Invoke.
+    #endregion Region management
 
-    private void OnSlideshowClick(object? sender, EventArgs e)
-    {
-        if (_slideshowRunning)
-            StopSlideshow();
-        else
-            StartSlideshow();
-    }
+    #endregion Utilities
 
-    private void StartSlideshow()
-    {
-        if (_slideshowRunning) return;
-        _slideshowRunning = true;
-        _showSlideshowWatermark = false;
-        _chkSlideshowUseExtremeRegions.Enabled = false;
-        RepaintWithBrightnessContrast();
-        _slideshowButton.Text = "■ Stop";
-        _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
-        _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(120, 50, 50);
-        SetStatus("Slideshow running…");
-
-        CancellationTokenSource cts;
-        lock (_slideshowLock)
-        {
-            _slideshowCts?.Cancel();
-            _slideshowCts = new CancellationTokenSource();
-            cts = _slideshowCts;
-        }
-
-        Task.Run(() => SlideshowLoop(cts.Token, () => IsSlideshowRegionLocked(), () => IsSkipSlideshowRegion()), cts.Token)
-            .ContinueWith(t =>
-            {
-                if (!IsHandleCreated || _disposed) return;
-                Invoke(() =>
-                {
-                    _slideshowRunning = false;
-                    _showSlideshowWatermark = false;
-                    _chkSlideshowUseExtremeRegions.Enabled = true;
-                    RepaintWithBrightnessContrast();
-                    _slideshowButton.Text = "Slideshow";
-                    _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
-                    _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
-                    if (!t.IsCanceled && t.IsFaulted)
-                        SetStatus($"Slideshow error: {t.Exception?.InnerException?.Message}");
-                    else
-                        SetStatus("Slideshow stopped.");
-                });
-            }, TaskScheduler.Default);
-    }
-
-    private void StopSlideshow()
-    {
-        lock (_slideshowLock) _slideshowCts?.Cancel();
-    }
-
-    private void ToggleSlideshowRegionLock()
-    {
-        _slideShowLockRegion = !_slideShowLockRegion;
-    }
-
-    public bool IsSlideshowRegionLocked()
-    {
-        lock (_slideshowLock) return _slideShowLockRegion;
-    }
-
-    private void SkipSlideshowRegion()
-    {
-        _slideshowSkipRegion = true;
-        lock (_slideshowLock)
-            SetStatus("Slideshow: skipping to next region…");
-    }
-
-    public bool IsSkipSlideshowRegion()
-    {
-        lock (_slideshowLock)
-        {
-            if (_slideshowSkipRegion)
-            {
-                _slideshowSkipRegion = false;
-                return true;
-            }
-            return false;
-        }
-    }
-
-    // Returns all palettes whose Name does not start with "— " (i.e. header items excluded).
-    private List<string> GetAllPaletteNames()
-    {
-        var names = new List<string>();
-        foreach (var item in _colorThemeCombo.Items)
-        {
-            string s = item?.ToString() ?? "";
-            if (!s.StartsWith("—")) names.Add(s);
-        }
-        return names;
-    }
-
-    private async Task SlideshowLoop(CancellationToken ct, Func<bool> regionLockFunc, Func<bool> skipRegionFunc)
-    {
-        var builtIns = new List<FractalRegion>(FractalRegionLibrary.Instance.AllSlideshowRegions);
-        var paletteNames = GetAllPaletteNames();
-        if (builtIns.Count == 0 || paletteNames.Count == 0) return;
-
-        // Timing design:
-        //   Each region shows exactly 3 colour themes.
-        //   Each theme is visible for themeDurationMs, then a fadeDurationMs cross-fade
-        //   transitions to the next theme (or the next region after the 3rd theme).
-        //   The fade is counted as part of the *outgoing* theme's slot, so the
-        //   incoming theme gets its full themeDurationMs of uninterrupted display.
-        const int themesPerRegion = 3;
-        const int themeDurationMs = 12_000;   // 12 s fully visible per theme
-        const int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
-        const int fadeSteps = 22;
-        const int fadeStepMs = fadeDurationMs / fadeSteps;
-        int lastRegionIdx = -1;
-        int lastThemeIdx = -1;
-        int renderCounter = 0;
-        int regionIdx = -1;
-        bool[] regionsUsed = new bool[builtIns.Count];
-        FractalRegion? lockedRegion = null;
-
-        while (!ct.IsCancellationRequested)
-        {
-            FractalRegion region;
-            if (regionLockFunc() && lockedRegion != null)
-            {
-                region = lockedRegion;
-            }
-            else
-            {
-                // ── Pick a new region different from the last ─────────────────────
-                do { regionIdx = _slideshowRng.Next(builtIns.Count); }
-                while (builtIns.Count > 1 && regionIdx == lastRegionIdx);
-                lastRegionIdx = regionIdx;
-                if (regionsUsed[regionIdx]) continue;
-                region = builtIns[regionIdx];
-                renderCounter = 0;   // reset theme counter when moving to a new region
-            }
-
-            lockedRegion = region;
-
-            string lockStatus = regionLockFunc() ? "(L)" : "";
-            // Mark the just-used region to avoid immediate repeats until all have been shown.
-            if (!regionLockFunc())
-            {
-                regionsUsed[regionIdx] = true;
-                if (regionsUsed.All(u => u)) Array.Clear(regionsUsed, 0, regionsUsed.Length);
-            }
-
-            // ── Pick an initial theme ─────────────────────────────────────────
-            int themeIdx;
-            do { themeIdx = _slideshowRng.Next(paletteNames.Count); }
-            while (paletteNames.Count > 1 && themeIdx == lastThemeIdx);
-            lastThemeIdx = themeIdx;
-            string themeName = paletteNames[themeIdx];
-
-            // ── Render the new region with the initial theme ───────────────────
-            uint[]? previousBuffer = null;
-            if (_calculator != null && _renderer != null &&
-                (!regionLockFunc() || renderCounter < 1))
-            {
-                if (!regionLockFunc()) renderCounter = 0;   // reset counter when moving to a new region, if not locking
-                // ── FIX: snapshot the current on-screen buffer NOW, before any
-                //    region/theme state is changed.  _lastUploadedBuffer always
-                //    holds the most-recently-uploaded post-processed frame and is
-                //    updated on the UI thread, so reading it here (still on the
-                //    background slideshow task, but before any Invoke) is safe
-                //    because we copy it under no concurrent mutation.
-                uint[] oldBuf;
-                lock (_calcLock)   // brief lock to avoid racing with TriggerCalculation
-                {
-                    if (_lastUploadedBuffer != null
-                        && _calculator != null
-                        && _lastUploadedWidth == _calculator.Width
-                        && _lastUploadedHeight == _calculator.Height)
-                    {
-                        Debug.WriteLine($"SldShwLp: Capturing old buffer for cross-fade. " +
-                        $"Last uploaded buffer: Length: {_lastUploadedBuffer.Length} pixels, size {_lastUploadedWidth}×{_lastUploadedHeight}");
-                        oldBuf = new uint[_lastUploadedBuffer.Length];
-                        _lastUploadedBuffer.CopyTo(oldBuf, 0);
-                    }
-                    else if (_calculator != null)
-                    {
-                        Debug.WriteLine($"SldShwLp: Falling back to direct ColorBuffer copy of {_calculator.ColorBuffer.Length} pixels");
-                        oldBuf = new uint[_calculator.ColorBuffer.Length];
-                        _calculator.ColorBuffer.CopyTo(oldBuf, 0);
-                    }
-                    else
-                    {
-                        oldBuf = Array.Empty<uint>();
-                    }
-                }
-
-                // Apply region & theme on UI thread WITHOUT triggering a
-                // normal TriggerCalculation — we manage rendering ourselves.
-                if (ct.IsCancellationRequested) return;
-                await InvokeAsync(() =>
-                {
-                    if (_disposed) return;
-                    _slideshowRegionName = region.Name;
-                    ApplyRegionSilent(region);
-                    //var map = Models.ColorPalette.GetPaletteByName(themeName);
-                    //if (_calculator != null) _calculator.ColorMap = map;
-                    SuppressedSetRegionCombo(region.Name);
-                    ApplyColorThemeSilent(themeName);
-                    SetStatus($"Slideshow: {region.Name} {lockStatus}  •  {themeName}");
-                });
-
-                // Calculate on background thread.
-                if (ct.IsCancellationRequested) return;
-                uint[] newBuf = await Task.Run(() =>
-                {
-                    if (_calculator == null) return Array.Empty<uint>();
-                    Debug.WriteLine($"SldShwLp: Starting calculation for new region/theme. " +
-                        $"Calculator state: {_calculator.Width}×{_calculator.Height}, MaxIterations: {_calculator.MaxIterations}, " +
-                        $"Precision: {(_calculator.IsHighPrecisionActive ? "DD" : "SP")}");
-                    _calculator.Calculate(ct);
-                    var copy = new uint[_calculator.ColorBuffer.Length];
-                    _calculator.ColorBuffer.CopyTo(copy, 0);
-                    return copy;
-                }, ct);
-
-                if (ct.IsCancellationRequested) return;
-
-                // Cross-fade between the captured on-screen frame and the new render.
-                if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0)
-                {
-                    await CrossFade(oldBuf, newBuf, fadeSteps, fadeStepMs, ct);
-                }
-                else
-                {
-                    await InvokeAsync(() =>
-                    {
-                        if (!_disposed && _renderer != null && _calculator != null)
-                            _renderer.UpdateTexture(newBuf, _calculator.Width, _calculator.Height);
-                    });
-                }
-
-                previousBuffer = newBuf;
-                renderCounter += regionLockFunc() ? 1 : 0;
-            }
-
-            // ── Run exactly (themesPerRegion - 1) additional theme changes ────
-            // The first theme was shown above; now show 2 more for a total of 3.
-            int themesCount = regionLockFunc() ? paletteNames.Count : themesPerRegion;
-            for (int themeNum = 1; themeNum < themesCount && !ct.IsCancellationRequested; themeNum++)
-            {
-                Debug.WriteLine($"SldShwLp: Theme {themeNum + 1} of {themesPerRegion} for region \"{region.Name}\" starting in {themeDurationMs} ms");
-                // Wait for the full theme display duration before starting the next fade.
-                await DelayWithCancel(themeDurationMs, ct);
-                if (ct.IsCancellationRequested) return;
-                lockStatus = regionLockFunc() ? "(L)" : "";
-                // Pick next theme.
-
-                int newThemeIdx;
-                do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
-                while (paletteNames.Count > 1 && newThemeIdx == lastThemeIdx);
-                lastThemeIdx = newThemeIdx;
-                string newThemeName = paletteNames[newThemeIdx];
-
-                if (_calculator == null || _renderer == null) break;
-
-                uint[] oldThemeBuf = previousBuffer ?? Array.Empty<uint>();
-
-                // Apply new theme silently — no TriggerCalculation.
-                Debug.WriteLine($"Pre await invoke: Applying new theme \"{newThemeName}\"");
-                await InvokeAsync(() =>
-                {
-                    if (_disposed) return;
-                    ApplyColorThemeSilent(newThemeName);
-                    SetStatus($"Slideshow: {region.Name}{lockStatus}  •  {newThemeName}");
-                });
-
-                if (ct.IsCancellationRequested) return;
-
-                Debug.WriteLine($"Post await invoke: Starting calculation for new theme \"{newThemeName}\"");
-                uint[] newThemeBuf = await Task.Run(() =>
-                {
-                    if (_calculator == null) return Array.Empty<uint>();
-                    Debug.WriteLine($"SldShwLp: Calculating new theme \"{newThemeName}\" for region \"{region.Name}\"");
-                    _calculator.Calculate(ct);
-                    var copy = new uint[_calculator.ColorBuffer.Length];
-                    _calculator.ColorBuffer.CopyTo(copy, 0);
-                    return copy;
-                }, ct);
-
-                if (ct.IsCancellationRequested) return;
-                if (skipRegionFunc()) break;  // move to next region if skip requested
-
-                if (oldThemeBuf.Length == newThemeBuf.Length && oldThemeBuf.Length > 0)
-                {
-                    Debug.WriteLine($"SldShwLp: Starting theme cross-fade between buffers of {oldThemeBuf.Length} pixels");
-                    await CrossFade(oldThemeBuf, newThemeBuf, fadeSteps, fadeStepMs, ct);
-                }
-                else
-                {
-                    Debug.WriteLine($"SldShwLp: Theme buffer size mismatch or empty (old: {oldThemeBuf.Length}, new: {newThemeBuf.Length}), skipping cross-fade");
-                    await InvokeAsync(() =>
-                    {
-                        if (!_disposed && _renderer != null && _calculator != null)
-                            _renderer.UpdateTexture(newThemeBuf, _calculator.Width, _calculator.Height);
-                    });
-                }
-
-                previousBuffer = newThemeBuf;
-                Debug.WriteLine($"Region lock: {regionLockFunc()}, theme {themeNum + 1} of {themesCount} for region \"{region.Name}\" displayed");
-                if (!regionLockFunc() && themeNum >= themesPerRegion) break;  // move to next region if not locking; otherwise show all themes for this region before moving on
-                else if (regionLockFunc() && themeNum >= themesPerRegion) themesCount = paletteNames.Count - themeNum;  // if locking and we've shown the preset number of themes, switch to showing all themes for the rest of the slideshow loop
-            }
-
-            // Wait for the final theme to display its full duration before
-            // transitioning to the next region.
-            Debug.WriteLine($"SldShwLp: Final theme for region \"{region.Name}\" displayed, waiting {themeDurationMs} ms before next region");
-            await DelayWithCancel(themeDurationMs, ct);
-            Debug.WriteLine($"SldShwLp: Theme duration complete for region \"{region.Name}\"");
-            _lastUploadedBuffer = previousBuffer;
-            Debug.WriteLine($"Region lock: {regionLockFunc()}, completed region \"{region.Name}\" with final theme displayed for full duration");
-            lastRegionIdx = regionLockFunc() ? -1 : regionIdx;
-        }
-    }
-
-    /// <summary>
-    /// Applies a region to the calculator state without triggering a render
-    /// (used by the slideshow, which manages rendering explicitly).
-    /// </summary>
-    private void ApplyRegionSilent(FractalRegion region)
-    {
-        _centerX = region.CenterX; _centerXLo = region.CenterXLo;
-        _centerX2 = region.CenterX2; _centerX3 = region.CenterX3;
-        _centerY = region.CenterY; _centerYLo = region.CenterYLo;
-        _centerY2 = region.CenterY2; _centerY3 = region.CenterY3;
-        _quality = region.QualityPreset;
-        _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
-        //_qualityCombo.Text = region.QualityPresetName;
-        _zoom = System.Math.Clamp(region.Zoom, _quality.ZoomMin, _quality.ZoomMax);
-
-        if (_calculator != null)
-        {
-            _calculator.CenterX = _centerX;
-            _calculator.CenterXLo = _centerXLo;
-            _calculator.CenterX2 = _centerX2;
-            _calculator.CenterX3 = _centerX3;
-            _calculator.CenterY = _centerY;
-            _calculator.CenterYLo = _centerYLo;
-            _calculator.CenterY2 = _centerY2;
-            _calculator.CenterY3 = _centerY3;
-            _calculator.Zoom = _zoom;
-            _calculator.Quality = region.QualityPreset;
-            if (!_iterLocked && region.Iterations > 0)
-                _calculator.MaxIterations = region.Iterations;
-            else if (_iterLocked)
-                _calculator.MaxIterations = _lockedIterations;
-        }
-        UpdateCoordBoxes();
-        _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
-    }
-
-    private void ApplyColorThemeSilent(string themeName)
-    {
-        _colorThemeCombo.SelectedIndexChanged -= OnColorThemeChanged;
-        try
-        {
-            var map = Models.ColorPalette.GetPaletteByName(themeName);
-            _calculator?.ColorMap = map;
-            _colorThemeCombo.Text = themeName;
-        }
-        finally
-        {
-            _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
-        }
-    }
-
-    /// <summary>
-    /// Sets the region combo to the named entry without firing
-    /// <see cref="OnRegionComboChanged"/> (which would call TriggerCalculation).
-    /// </summary>
-    private void SuppressedSetRegionCombo(string name)
-    {
-        _regionCombo.SelectedIndexChanged -= OnRegionComboChanged;
-        try
-        {
-            for (int i = 0; i < _regionCombo.Items.Count; i++)
-                if (_regionCombo.Items[i]?.ToString() == name)
-                { _regionCombo.SelectedIndex = i; break; }
-        }
-        finally
-        {
-            UpdateDelRegionButton();
-            _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
-        }
-    }
-
-    /// <summary>
-    /// Cross-fades two BGRA uint[] buffers by posting <paramref name="steps"/>
-    /// blended frames to the renderer.  Each frame alpha-blends the buffers by
-    /// an incrementing weight and posts the result to the UI thread.
-    /// </summary>
-    private async Task CrossFade(uint[] from, uint[] to, int steps, int stepMs, CancellationToken ct)
-    {
-        int len = System.Math.Min(from.Length, to.Length);
-        var blended = new uint[len];
-        int w = _calculator?.Width ?? 0;
-        int h = _calculator?.Height ?? 0;
-        if (w == 0 || h == 0 || w * h != len) return;
-
-        for (int step = 1; step <= steps; step++)
-        {
-            if (ct.IsCancellationRequested) return;
-            float alpha = step / (float)steps;
-
-            // CPU pixel-blend — runs on the calling background thread.
-            BlendBuffers(from, to, blended, len, alpha);
-            if (_showSlideshowWatermark) BlendWatermarkOverlay(blended, w, h);
-
-            //// Re-apply watermark on every fade frame so it never disappears
-            //// during transitions (both region and theme cross-fades).
-            //if (_showSlideshowWatermark)
-            //        BlendWatermarkOverlay(blended, w, h);
-
-            // Take a snapshot for the upload so we're not mutating blended
-            // on the background thread while the UI thread may be reading it.
-            var frame = new uint[len];
-            Array.Copy(blended, frame, len);
-            await InvokeAsync(() =>
-            {
-                if (!_disposed && _renderer != null)
-                    _renderer.UpdateTexture(frame, w, h);
-            });
-
-            await DelayWithCancel(stepMs, ct);
-        }
-    }
-
-    /// <summary>Per-pixel linear blend between two BGRA uint[] buffers.</summary>
-    private static void BlendBuffers(uint[] from, uint[] to, uint[] result, int len, float alpha)
-    {
-        float beta = 1f - alpha;
-        for (int i = 0; i < len; i++)
-        {
-            uint pF = from[i], pT = to[i];
-            byte bF = (byte)(pF & 0xFF);
-            byte gF = (byte)(pF >> 8 & 0xFF);
-            byte rF = (byte)(pF >> 16 & 0xFF);
-            byte bT = (byte)(pT & 0xFF);
-            byte gT = (byte)(pT >> 8 & 0xFF);
-            byte rT = (byte)(pT >> 16 & 0xFF);
-
-            byte bR = (byte)(bF * beta + bT * alpha);
-            byte gR = (byte)(gF * beta + gT * alpha);
-            byte rR = (byte)(rF * beta + rT * alpha);
-            result[i] = 0xFF000000u | ((uint)rR << 16) | ((uint)gR << 8) | bR;
-        }
-    }
-
-    /// <summary>Awaitable Task.Delay that tolerates cancellation silently.</summary>
-    private static async Task DelayWithCancel(int ms, CancellationToken ct)
-    {
-        try { await Task.Delay(ms, ct); }
-        catch (OperationCanceledException) { /* expected */ }
-    }
-
-    /// <summary>Awaitable Control.Invoke wrapper for use inside async methods.</summary>
-    private Task InvokeAsync(Action action)
-    {
-        if (!IsHandleCreated || _disposed) return Task.CompletedTask;
-        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        try
-        {
-            BeginInvoke(() =>
-            {
-                try { action(); tcs.TrySetResult(true); }
-                catch (Exception ex) { tcs.TrySetException(ex); }
-            });
-        }
-        catch (Exception ex) { tcs.TrySetException(ex); }
-        return tcs.Task;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // MULTI-MONITOR SPAN
-    // ─────────────────────────────────────────────────────────────────────────
+    #region Monitor Spanning
 
     private void OnSpanMonitorsClick(object? sender, EventArgs e)
     {
@@ -2805,6 +2438,10 @@ public sealed class MainForm : Form
             WindowState = FormWindowState.Maximized;
     }
 
+    #endregion Monitor Spanning
+
+    #region Mouse/Keyboard
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.KeyCode == Keys.Escape && _spanning)
@@ -2816,412 +2453,6 @@ public sealed class MainForm : Form
              ActiveControl == _txZoom || ActiveControl == _txIter))
         { OnGoClick(null, EventArgs.Empty); e.Handled = true; }
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // SCREENSHOT
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnScreenshotClick(object? sender, EventArgs e)
-    {
-        if (_calculator == null)
-        {
-            MessageBox.Show("No fractal data to save yet.", "Screenshot",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        string colorName = _calculator.ColorMap?.GetType().GetProperty("Name")?.GetValue(null)?.ToString() ?? "Theme";
-        string regionName = "";
-        if (!string.IsNullOrEmpty(CurrentRegionName()))
-            regionName = CurrentRegionName()?.Replace(" ", "") + "_" ?? "";
-
-        Rectangle vs = SystemInformation.VirtualScreen;
-        string sizeTag = _spanning
-            ? $"{vs.Width}x{vs.Height}_wallpaper"
-            : $"{_calculator.Width}x{_calculator.Height}";
-
-        using var dlg = new SaveFileDialog
-        {
-            Title = _spanning ? "Save Wallpaper Screenshot" : "Save Fractal Screenshot",
-            Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
-            FilterIndex = 1,
-            DefaultExt = "png",
-            FileName = $"{_programName}_{colorName}_{regionName}" +
-                         $"x{_txCX.Text.Split('|')[0].Replace(".", "")}_" +
-                         $"y{_txCY.Text.Split('|')[0].Replace(".", "")}_" +
-                         $"z{_txZoom.Text.Replace(".", "")}_" +
-                         $"i{_txIter.Text.Replace(".", "")}_" +
-                         sizeTag
-        };
-        if (dlg.ShowDialog(this) != DialogResult.OK) return;
-
-        string path = dlg.FileName;
-        string ext = Path.GetExtension(path).ToLowerInvariant();
-        var format = ext switch { ".bmp" => ImageFormat.Bmp, ".tif" or ".tiff" => ImageFormat.Tiff, _ => ImageFormat.Png };
-        string wm = $"{(!string.IsNullOrEmpty(CurrentRegionName()) ? CurrentRegionName() : "Fracturing Fog")}" +
-                      $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
-        string subText = $"{_programName} v{_programVersion} {DateTime.Now.Year}";
-
-        if (_spanning) TakeWallpaperScreenshot(path, format, wm, subText);
-        else TakeNormalScreenshot(path, format, wm, subText);
-    }
-
-    private void TakeNormalScreenshot(string path, ImageFormat format, string waterMark, string subText)
-    {
-        int w = _calculator!.Width;
-        int h = _calculator!.Height;
-        // Apply the same brightness/contrast post-processing as the live view.
-        uint[] pixels = BuildProcessedBuffer(_calculator);
-        try
-        {
-            // Pixel-sampled contrast colour for the watermark.
-            var fontColor = ComputeContrastColor(GetSwatchColor(),
-                watermark: true, pixels: pixels, imgW: w, imgH: h);
-            SavePixelsToFile(pixels, w, h, path, format, waterMark, fontColor, subText);
-            SetStatus($"Saved  {Path.GetFileName(path)}  ({w}×{h},  {new FileInfo(path).Length / 1024:N0} KB)");
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Save failed:\n{ex.Message}", "Screenshot Error",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    /// <summary>
-    /// Returns a BGRA buffer with brightness/contrast applied (and grid overlay
-    /// if visible).  Returns the original ColorBuffer reference if no adjustments
-    /// are active (avoids unnecessary allocation).
-    /// </summary>
-    private uint[] BuildProcessedBuffer(MandelbrotCalculator calc)
-    {
-        bool needsProcess = _brightness != 0 || _contrast != 0 || _gridVisible;
-        if (!needsProcess) return calc.ColorBuffer;
-
-        int n = calc.Width * calc.Height;
-        var dst = new uint[n];
-        float cf = 1.0f + _contrast / 100.0f;
-        float bo = _brightness / 100.0f;
-        uint[] src = calc.ColorBuffer;
-
-        if (_brightness != 0 || _contrast != 0)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                uint p = src[i];
-                float r = ((p >> 16) & 0xFF) / 255f;
-                float g = ((p >> 8) & 0xFF) / 255f;
-                float b = (p & 0xFF) / 255f;
-                r = (r - 0.5f) * cf + 0.5f + bo;
-                g = (g - 0.5f) * cf + 0.5f + bo;
-                b = (b - 0.5f) * cf + 0.5f + bo;
-                byte R = (byte)(System.Math.Clamp(r, 0f, 1f) * 255f);
-                byte G = (byte)(System.Math.Clamp(g, 0f, 1f) * 255f);
-                byte B = (byte)(System.Math.Clamp(b, 0f, 1f) * 255f);
-                dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
-            }
-        }
-        else
-        {
-            Array.Copy(src, dst, n);
-        }
-        if (_gridVisible) BlendGridOverlay(dst, calc.Width, calc.Height);
-        return dst;
-    }
-
-    private void TakeWallpaperScreenshot(string path, ImageFormat format, string waterMark, string subText)
-    {
-        Rectangle vs = SystemInformation.VirtualScreen;
-        int fullW = vs.Width;
-        int fullH = vs.Height;
-
-        int toolbarH = 0;
-        foreach (Control c in Controls)
-            if (c.Dock == DockStyle.Top) toolbarH += c.Height;
-
-        double cx = _calculator!.CenterX, cxLo = _calculator!.CenterXLo;
-        double cx2 = _calculator!.CenterX2, cx3 = _calculator!.CenterX3;
-        double cy = _calculator!.CenterY, cyLo = _calculator!.CenterYLo;
-        double cy2 = _calculator!.CenterY2, cy3 = _calculator!.CenterY3;
-        double zoom = _calculator!.Zoom;
-        int maxIter = _calculator!.MaxIterations;
-        IColorMap map = _calculator!.ColorMap;
-        QualityPreset q = _quality;
-
-        long mpix = (long)fullW * fullH / 1_000_000;
-        _screenshotButton.Enabled = false;
-        _screenshotButton.Text = "Rendering…";
-        SetStatus($"Rendering wallpaper  {fullW}×{fullH}  ({mpix} MP, +{toolbarH} px over render panel)  …");
-
-        CancellationToken token;
-        lock (_wallpaperLock)
-        {
-            _wallpaperCts?.Cancel();
-            _wallpaperCts = new CancellationTokenSource();
-            token = _wallpaperCts.Token;
-        }
-
-        var sw = Stopwatch.StartNew();
-
-        Task.Run(() =>
-        {
-            var tempCalc = new MandelbrotCalculator(fullW, fullH)
-            {
-                CenterX = cx,
-                CenterXLo = cxLo,
-                CenterX2 = cx2,
-                CenterX3 = cx3,
-                CenterY = cy,
-                CenterYLo = cyLo,
-                CenterY2 = cy2,
-                CenterY3 = cy3,
-                Zoom = zoom,
-                MaxIterations = maxIter,
-                ColorMap = map,
-                Quality = q
-            };
-            tempCalc.Calculate(token);
-            token.ThrowIfCancellationRequested();
-            return tempCalc;
-        }, token)
-        .ContinueWith(t =>
-        {
-            if (!IsHandleCreated || _disposed) return;
-            Invoke(() =>
-            {
-                _screenshotButton.Enabled = true;
-                _screenshotButton.Text = "Image";
-
-                if (t.IsCanceled) { SetStatus("Wallpaper render cancelled."); return; }
-                if (t.IsFaulted)
-                {
-                    MessageBox.Show($"Wallpaper render failed:\n\n{t.Exception?.InnerException?.Message}",
-                        "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                sw.Stop();
-                MandelbrotCalculator result = t.Result;
-                try
-                {
-                    var fontColor = ComputeContrastColor(GetSwatchColor(),
-                        watermark: true, pixels: result.ColorBuffer,
-                        imgW: result.Width, imgH: result.Height);
-                    SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, fontColor, subText);
-                    SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
-                }
-                catch (Exception ex) { MessageBox.Show($"Failed to save wallpaper:\n\n{ex.Message}", "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-            });
-        }, TaskScheduler.Default);
-    }
-
-    private void TakePosterScreenshot(int width, int height, bool isPortrait, bool rotateImage, string path, ImageFormat format, string waterMark, string subText)
-    {
-        int fullW = width;
-        int fullH = height;
-
-        int toolbarH = 0;
-        foreach (Control c in Controls)
-            if (c.Dock == DockStyle.Top) toolbarH += c.Height;
-
-        double cx = _calculator!.CenterX, cxLo = _calculator!.CenterXLo;
-        double cx2 = _calculator!.CenterX2, cx3 = _calculator!.CenterX3;
-        double cy = _calculator!.CenterY, cyLo = _calculator!.CenterYLo;
-        double cy2 = _calculator!.CenterY2, cy3 = _calculator!.CenterY3;
-        double zoom = _calculator!.Zoom;
-        int maxIter = _calculator!.MaxIterations;
-        IColorMap map = _calculator!.ColorMap;
-        QualityPreset q = _quality;
-
-        long mpix = (long)fullW * fullH / 1_000_000;
-        _screenshotButton.Enabled = false;
-        _posterButton.Enabled = false;
-        _posterButton.Text = "Rendering…";
-        SetStatus($"Rendering poster  {fullW}×{fullH}  ({mpix} MP, +{toolbarH} px over render panel)  …");
-
-        CancellationToken token;
-        lock (_wallpaperLock)
-        {
-            _wallpaperCts?.Cancel();
-            _wallpaperCts = new CancellationTokenSource();
-            token = _wallpaperCts.Token;
-        }
-
-        var sw = Stopwatch.StartNew();
-
-        Task.Run(() =>
-        {
-            var tempCalc = new MandelbrotCalculator(fullW, fullH)
-            {
-                CenterX = cx,
-                CenterXLo = cxLo,
-                CenterX2 = cx2,
-                CenterX3 = cx3,
-                CenterY = cy,
-                CenterYLo = cyLo,
-                CenterY2 = cy2,
-                CenterY3 = cy3,
-                Zoom = zoom,
-                MaxIterations = maxIter,
-                ColorMap = map,
-                Quality = q
-            };
-            tempCalc.Calculate(token);
-            token.ThrowIfCancellationRequested();
-            return tempCalc;
-        }, token)
-        .ContinueWith(t =>
-        {
-            if (!IsHandleCreated || _disposed) return;
-            Invoke(() =>
-            {
-                _screenshotButton.Enabled = true;
-                _screenshotButton.Text = "Image";
-                _posterButton.Enabled = true;
-                _posterButton.Text = "Poster";
-
-                if (t.IsCanceled) { SetStatus("Poster render cancelled."); return; }
-                if (t.IsFaulted)
-                {
-                    MessageBox.Show($"Poster render failed:\n\n{t.Exception?.InnerException?.Message}",
-                        "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                sw.Stop();
-                MandelbrotCalculator result = t.Result;
-                try
-                {
-                    // Rotate 90° clockwise when portrait or rotateImage is requested.
-                    // The landscape render (width × height) becomes portrait (height × width).
-                    if (isPortrait || rotateImage)
-                    {
-                        var rotated = new uint[result.ColorBuffer.Length];
-                        for (int y = 0; y < result.Height; y++)
-                            for (int x = 0; x < result.Width; x++)
-                                rotated[x * result.Height + (result.Height - 1 - y)] = result.ColorBuffer[y * result.Width + x];
-                        // After 90° CW rotation the saved dimensions are result.Height × result.Width.
-                        var fontColor = ComputeContrastColor(GetSwatchColor(),
-                            watermark: true, pixels: rotated, imgW: result.Height, imgH: result.Width);
-                        SavePixelsToFile(
-                            rotated,
-                            result.Height,
-                            result.Width,
-                            path,
-                            format,
-                            waterMark,
-                            fontColor,
-                            subText,
-                            true);
-                        SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Height}×{result.Width} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
-                    }
-                    else
-                    {
-                        var fontColor = ComputeContrastColor(GetSwatchColor(),
-                            watermark: true, pixels: result.ColorBuffer,
-                            imgW: result.Width, imgH: result.Height);
-                        SavePixelsToFile(
-                            result.ColorBuffer,
-                            result.Width,
-                            result.Height,
-                            path,
-                            format,
-                            waterMark,
-                            fontColor,
-                            subText,
-                            true);
-                        SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
-                    }
-                }
-                catch (Exception ex) { MessageBox.Show($"Failed to save poster:\n\n{ex.Message}", "Screenshot Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-            });
-        }, TaskScheduler.Default);
-    }
-
-    private static unsafe void SavePixelsToFile(
-        uint[] pixels, int w, int h, string path, ImageFormat format,
-        string watermarkText, Color fontColor, string subText = "", bool poster = false)
-    {
-        using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-        var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
-                                ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-        try
-        {
-            fixed (uint* src = pixels)
-            {
-                if (bmpData.Stride == w * 4)
-                    Buffer.MemoryCopy(src, (void*)bmpData.Scan0, (long)w * h * 4, (long)w * h * 4);
-                else
-                {
-                    byte* dst = (byte*)bmpData.Scan0;
-                    for (int row = 0; row < h; row++)
-                        Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
-                                          dst + (long)row * bmpData.Stride,
-                                          (long)w * 4, (long)w * 4);
-                }
-            }
-        }
-        finally { bmp.UnlockBits(bmpData); }
-
-        if (format == ImageFormat.Tiff)
-        {
-            ImageCodecInfo? codec = null;
-            foreach (var c in ImageCodecInfo.GetImageEncoders())
-                if (c.MimeType == "image/tiff") { codec = c; break; }
-            if (codec != null)
-            {
-                using var ep = new EncoderParameters(1);
-                ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Compression, (long)EncoderValue.CompressionLZW);
-                bmp.Save(path, codec, ep);
-            }
-            else bmp.Save(path, format);
-        }
-        else bmp.Save(path, format);
-
-        Debug.WriteLine($"Watermark text: '{watermarkText}'");
-        if (!string.IsNullOrEmpty(watermarkText))
-        {
-            using var g = Graphics.FromImage(bmp);
-            AddWaterMark(g, watermarkText, w, h, fontColor, subText, poster);
-            bmp.Save(path, format);
-        }
-    }
-
-    private static void AddWaterMark(
-        Graphics g,
-        string text,
-        int width,
-        int height,
-        Color fontColor,
-        string subText = "",
-        bool poster = false)
-    {
-        int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-        Debug.WriteLine($"Watermark font size: {fontSize}px");
-
-        using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-        var sz = g.MeasureString(text, font);
-        int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-        Debug.WriteLine($"Watermark position offset: {yOffset}px from bottom-right corner");
-        var pos = new PointF(width - sz.Width - 20, height - sz.Height - yOffset);
-        using var brush = new SolidBrush(fontColor);
-        g.DrawString(text, font, brush, pos);
-
-        if (!string.IsNullOrEmpty(subText))
-        {
-            using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
-            var sz2 = g.MeasureString(subText, fontSmall);
-            int subTextOffset = poster ? 0 : 2;
-            Debug.WriteLine($"Subtext font size: {fontSize / 2}px, offset: {subTextOffset}px");
-            g.DrawString($"{subText}", fontSmall, brush,
-                new PointF(width - sz2.Width - 55, height - sz2.Height - subTextOffset));
-        }
-
-        g.Save();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Mouse: wheel zoom  (with progressive preview)
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void OnMouseWheel(object? sender, MouseEventArgs e)
     {
@@ -3285,10 +2516,6 @@ public sealed class MainForm : Form
         TriggerCalculation(progressive: false);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Mouse: pan  (throttled with debounce timer)
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void OnMouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left || _slideshowRunning) return;
@@ -3303,10 +2530,6 @@ public sealed class MainForm : Form
         _panStartQDCY = new FracturingFog.FFMath.QD(_centerY, _centerYLo, _centerY2, _centerY3);
         _renderPanel.Cursor = Cursors.SizeAll;
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Mouse: double-click to center
-    // ─────────────────────────────────────────────────────────────────────────
 
     private void OnMouseDoubleClick(object? sender, MouseEventArgs e)
     {
@@ -3393,6 +2616,10 @@ public sealed class MainForm : Form
         // If the timer is still running let it fire the full render naturally.
     }
 
+    #endregion Mouse/Keyboard
+
+    #region Rendering/Calculating
+
     /// <summary>
     /// Fires a calculation with iterations capped for interactive responsiveness.
     /// Full-quality render is triggered by _panStopTimer after dragging stops.
@@ -3406,39 +2633,6 @@ public sealed class MainForm : Form
         _calculator.MaxIterations = saved;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Resize
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnFormResize(object? sender, EventArgs e)
-    {
-        if (_renderer == null || _calculator == null) return;
-        if (WindowState == FormWindowState.Minimized) return;
-        Debug.WriteLine($"MiniMode: {_miniMode}  Size: {Size}  RenderPanel: {_renderPanel.ClientSize} Previous Size: {_miniPreviousSize}");
-
-        if (!_spanning && _miniClick)
-        {
-            FormBorderStyle = _miniMode ? FormBorderStyle.None : _miniPreviousBorderStyle;
-            Size = new Size(
-                _miniMode ? MinimumSize.Width : _miniPreviousSize.Width,
-                _miniMode ? MinimumSize.Height : _miniPreviousSize.Height);
-        }
-
-
-        int w = _renderPanel.ClientSize.Width;
-        int h = _renderPanel.ClientSize.Height;
-        if (w < 1 || h < 1) return;            
-
-        // Discard the cached buffer — its dimensions no longer match.
-        _lastUploadedBuffer = null;
-
-        _renderer.Resize(w, h);
-        _calculator.Resize(w, h);
-        ApplyViewState();
-        TriggerCalculation();
-        PositionGridPanel();
-    }
-
     private void PositionGridPanel()
     {
         // The grid is blended into the ColorBuffer directly; no window to reposition.
@@ -3446,18 +2640,71 @@ public sealed class MainForm : Form
         if (_gridVisible) RepaintWithBrightnessContrast();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Idle render loop
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnApplicationIdle(object? sender, EventArgs e)
+    private void TriggerCalculation(bool progressive = false)
     {
-        if (!_disposed && _renderer != null) _renderer.Render();
+        var callingMethod = new StackTrace().GetFrame(1)?.GetMethod();
+        Debug.WriteLine($"TriggerCalculation called from {callingMethod?.DeclaringType?.Name}.{callingMethod?.Name}. Progressive: {progressive}");
+        if (_calculator == null) return;
+
+        CancellationTokenSource cts;
+        lock (_calcLock)
+        {
+            _calcCts?.Cancel();
+            _calcCts = new CancellationTokenSource();
+            cts = _calcCts;
+        }
+
+        // ── Keep the previous frame visible while the new one computes ────────
+        // Re-upload the last completed buffer immediately so the screen shows a
+        // stale (but correct) image rather than going black during a long
+        // High/Ultra-quality recalculation.  Skip if the dimensions changed
+        // (resize) — a size-mismatch upload would corrupt the texture.
+        if (_lastUploadedBuffer != null
+            && _renderer != null
+            && _lastUploadedWidth == _calculator.Width
+            && _lastUploadedHeight == _calculator.Height)
+        {
+            _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
+        }
+
+        var token = cts.Token;
+        var calc = _calculator;
+        var renderer = _renderer;
+
+        SetStatus("Calculating…");
+        var sw = Stopwatch.StartNew();
+
+        // ── Full-resolution render ────────────────────────────────────────────
+        Task.Run(() => { calc.Calculate(token); return sw.ElapsedMilliseconds; }, token)
+        .ContinueWith(t =>
+        {
+            if (t.IsCanceled || token.IsCancellationRequested) return;
+            if (renderer == null) return;
+
+            long ms = t.IsCompletedSuccessfully ? t.Result : -1;
+
+            if (IsHandleCreated && !_disposed)
+            {
+                Invoke(() =>
+                {
+                    if (_disposed) return;
+                    // Apply brightness/contrast and grid overlay, then upload to GPU.
+                    UploadProcessedBuffer(calc, renderer);
+                    _miniMapPanel?.RefreshIndicator();
+                    string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
+                    SetStatus(
+                        $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
+                        $"zoom={calc.Zoom:G6}  iter={calc.MaxIterations}  " +
+                        $"{precTag}  [{ms} ms  {calc.Width}×{calc.Height}]" +
+                        (_iterLocked ? "  [ITER LOCKED]" : ""));
+                });
+            }
+        }, TaskScheduler.Default);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // View state helpers
-    // ─────────────────────────────────────────────────────────────────────────
+    #endregion Rendering/Calculating
+
+    #region View state helpers
 
     private double CurrentScale()
     {
@@ -3546,91 +2793,9 @@ public sealed class MainForm : Form
         finally { _suppressCoordUpdate = false; }
     }
 
-    private string CurrentRegionName()
-    {
-        string? selected = _regionCombo.SelectedItem?.ToString();
-        selected = !string.IsNullOrEmpty(_slideshowRegionName) ? _slideshowRegionName : selected;
-        if (string.IsNullOrEmpty(selected) || selected == "— select region —") return "";
-        return selected;
-    }
+    #endregion View state helpers
 
-    private string CurrentColorMapName()
-    {
-        if (_calculator?.ColorMap == null) return "";
-        var prop = _calculator.ColorMap.GetType()
-            .GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-        return prop?.GetValue(null)?.ToString() ?? "Theme";
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Async calculation  (with optional progressive preview)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void TriggerCalculation(bool progressive = false)
-    {
-        var callingMethod = new StackTrace().GetFrame(1)?.GetMethod();
-        Debug.WriteLine($"TriggerCalculation called from {callingMethod?.DeclaringType?.Name}.{callingMethod?.Name}. Progressive: {progressive}");
-        if (_calculator == null) return;
-
-        CancellationTokenSource cts;
-        lock (_calcLock)
-        {
-            _calcCts?.Cancel();
-            _calcCts = new CancellationTokenSource();
-            cts = _calcCts;
-        }
-
-        // ── Keep the previous frame visible while the new one computes ────────
-        // Re-upload the last completed buffer immediately so the screen shows a
-        // stale (but correct) image rather than going black during a long
-        // High/Ultra-quality recalculation.  Skip if the dimensions changed
-        // (resize) — a size-mismatch upload would corrupt the texture.
-        if (_lastUploadedBuffer != null
-            && _renderer != null
-            && _lastUploadedWidth == _calculator.Width
-            && _lastUploadedHeight == _calculator.Height)
-        {
-            _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
-        }
-
-        var token = cts.Token;
-        var calc = _calculator;
-        var renderer = _renderer;
-
-        SetStatus("Calculating…");
-        var sw = Stopwatch.StartNew();
-
-        // ── Full-resolution render ────────────────────────────────────────────
-        Task.Run(() => { calc.Calculate(token); return sw.ElapsedMilliseconds; }, token)
-        .ContinueWith(t =>
-        {
-            if (t.IsCanceled || token.IsCancellationRequested) return;
-            if (renderer == null) return;
-
-            long ms = t.IsCompletedSuccessfully ? t.Result : -1;
-
-            if (IsHandleCreated && !_disposed)
-            {
-                Invoke(() =>
-                {
-                    if (_disposed) return;
-                    // Apply brightness/contrast and grid overlay, then upload to GPU.
-                    UploadProcessedBuffer(calc, renderer);
-                    _miniMapPanel?.RefreshIndicator();
-                    string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
-                    SetStatus(
-                        $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
-                        $"zoom={calc.Zoom:G6}  iter={calc.MaxIterations}  " +
-                        $"{precTag}  [{ms} ms  {calc.Width}×{calc.Height}]" +
-                        (_iterLocked ? "  [ITER LOCKED]" : ""));
-                });
-            }
-        }, TaskScheduler.Default);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Post-processing: brightness / contrast / grid / watermark
-    // ─────────────────────────────────────────────────────────────────────────
+    #region Post-Processing: brightness / contrast / grid / watermark
 
     /// <summary>
     /// Called when brightness/contrast sliders change or the grid is toggled.
@@ -3773,6 +2938,7 @@ public sealed class MainForm : Form
         }
         finally { bmp.UnlockBits(data); }
     }
+
     private unsafe void BlendGridOverlay(uint[] dst, int w, int h)
     {
         using var bmp = new System.Drawing.Bitmap(w, h,
@@ -3824,621 +2990,6 @@ public sealed class MainForm : Form
         finally { bmp.UnlockBits(data); }
     }
 
-    private void SetStatus(string text)
-    {
-        if (InvokeRequired) Invoke(() => _statusLabel.Text = text);
-        else _statusLabel.Text = text;
-    }
+    #endregion Post-Processing: brightness / contrast / grid / watermark
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Disposal
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void OnFormClosing(object? sender, FormClosingEventArgs e)
-    {
-        _disposed = true;
-        Application.Idle -= OnApplicationIdle;
-
-        _panStopTimer.Stop(); _panStopTimer.Dispose();
-        StopSlideshow();
-        lock (_calcLock) _calcCts?.Cancel();
-        lock (_wallpaperLock) _wallpaperCts?.Cancel();
-
-        _renderer?.Dispose();
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing) _renderer?.Dispose();
-        base.Dispose(disposing);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Extension helpers for fluent control construction
-// ─────────────────────────────────────────────────────────────────────────────
-
-internal static class ControlExtensions
-{
-    public static T Also<T>(this T ctrl, Action<T> action) where T : Control
-    { action(ctrl); return ctrl; }
-
-    public static T AlsoAdd<T>(this T ctrl, Panel parent) where T : Control
-    { parent.Controls.Add(ctrl); return ctrl; }
-
-    public static T AlsoAdd<T>(this T ctrl, Panel parent, string tooltip) where T : Control
-    { new ToolTip().SetToolTip(ctrl, tooltip); parent.Controls.Add(ctrl); return ctrl; }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DirectX render panel
-// ─────────────────────────────────────────────────────────────────────────────
-
-internal sealed class RenderPanel : Panel
-{
-    public RenderPanel()
-    {
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.Opaque | ControlStyles.UserPaint, true);
-        MouseEnter += (_, _) => Focus();
-    }
-    protected override void OnPaintBackground(PaintEventArgs e) { }
-    protected override void OnPaint(PaintEventArgs e) { }
-    protected override CreateParams CreateParams
-    {
-        get { var cp = base.CreateParams; cp.ExStyle |= 0x00200000; return cp; }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Colour theme combo with swatch preview
-// ─────────────────────────────────────────────────────────────────────────────
-
-public class ColorComboBox : ComboBox
-{
-    public ColorComboBox()
-    {
-        DrawMode = DrawMode.OwnerDrawFixed;
-        DropDownStyle = ComboBoxStyle.DropDownList;
-        ItemHeight = 20;
-    }
-    protected override void OnDrawItem(DrawItemEventArgs e)
-    {
-        if (e.Index < 0) return;
-        e.DrawBackground();
-
-        string text = Items[e.Index]?.ToString() ?? "";
-        IColorMap map = Models.ColorPalette.GetPaletteByName(text);
-        map.MaxIterations = 500;
-        int argb = map.SwatchSample;
-        var swatch = Color.FromArgb((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
-
-        var swatchRect = new Rectangle(e.Bounds.X + 2, e.Bounds.Y + 3, 18, e.Bounds.Height - 6);
-        using var sb = new SolidBrush(swatch);
-        e.Graphics.FillRectangle(sb, swatchRect);
-        e.Graphics.DrawRectangle(Pens.DimGray, swatchRect);
-
-        var textBrush = (e.State & DrawItemState.Selected) != 0 ? Brushes.White : Brushes.LightGray;
-        e.Graphics.DrawString(text, Font, textBrush, swatchRect.Right + 4, e.Bounds.Y + 2);
-        e.DrawFocusRectangle();
-    }
-    protected override void OnPaintBackground(PaintEventArgs pevent)
-    {
-        base.OnPaintBackground(pevent);
-        using var b = new SolidBrush(BackColor);
-        pevent.Graphics.FillRectangle(b, ClientRectangle);
-        pevent.Graphics.DrawRectangle(Pens.DarkGray, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Minimal text-input dialog (used by Save View)
-// ─────────────────────────────────────────────────────────────────────────────
-
-public sealed class InputDialog : Form
-{
-    public string Input => _tx.Text;
-    private readonly TextBox _tx;
-
-    public InputDialog(string title, string prompt)
-    {
-        Text = title;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        ClientSize = new Size(360, 100);
-        StartPosition = FormStartPosition.CenterParent;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        BackColor = Color.FromArgb(35, 35, 35);
-        TopMost = true;
-
-        Controls.Add(new Label
-        {
-            Text = prompt,
-            Left = 12,
-            Top = 14,
-            AutoSize = true,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f)
-        });
-
-        _tx = new TextBox
-        {
-            Left = 12,
-            Top = 36,
-            Width = 336,
-            BackColor = Color.FromArgb(50, 50, 50),
-            ForeColor = Color.White,
-            Font = new Font("Consolas", 10f),
-            BorderStyle = BorderStyle.FixedSingle
-        };
-        Controls.Add(_tx);
-
-        var ok = new Button
-        {
-            Text = "OK",
-            DialogResult = DialogResult.OK,
-            Left = 196,
-            Top = 66,
-            Width = 72,
-            Height = 26,
-            BackColor = Color.FromArgb(60, 60, 60),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat
-        };
-        var cancel = new Button
-        {
-            Text = "Cancel",
-            DialogResult = DialogResult.Cancel,
-            Left = 276,
-            Top = 66,
-            Width = 72,
-            Height = 26,
-            BackColor = Color.FromArgb(60, 60, 60),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat
-        };
-        AcceptButton = ok;
-        CancelButton = cancel;
-        Controls.Add(ok);
-        Controls.Add(cancel);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Minimal text-input dialog (used by Save View)
-// ─────────────────────────────────────────────────────────────────────────────
-
-public sealed class PosterDialog : Form
-{
-    public string WidthInput => _widthTx.Text;
-    public string HeightInput => _heightTx.Text;
-
-    public bool IsPortrait => _portraitCB.Checked;
-
-    public bool RotateImage => _portraitCB.Checked;
-
-    private readonly Label _widthLabel;
-    private readonly TextBox _widthTx;
-
-    private readonly Label _heightLabel;
-    private readonly TextBox _heightTx;
-
-    private readonly Label _posterWLabel;
-    private readonly Label _posterHLabel;
-    private readonly TextBox _postWTx;
-    private readonly TextBox _postHTx;
-
-    private readonly CheckBox _portraitCB;
-    private readonly CheckBox _lowDefCB;
-    private readonly CheckBox _medDefCB;
-    private readonly CheckBox _highDefCB;
-
-    public PosterDialog()
-    {
-        Text = "Poster Print";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        ClientSize = new Size(340, 180);
-        StartPosition = FormStartPosition.CenterParent;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        BackColor = Color.FromArgb(35, 35, 35);
-        TopMost = true;
-
-        _posterHLabel = new Label
-        {
-            Text = "Poster Height (inches):",
-            Left = 4,
-            Top = 7,
-            Width = 130,
-            TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f)
-        };
-
-        _postHTx = new TextBox
-        {
-            Left = 136,
-            Top = 10,
-            Width = 50,
-            BackColor = Color.FromArgb(50, 50, 50),
-            ForeColor = Color.White,
-            Font = new Font("Consolas", 10f),
-            BorderStyle = BorderStyle.FixedSingle
-        };
-        _postHTx.TextChanged += (s, e) => CalculatePixelDimensions();
-
-        Controls.Add(_posterHLabel);
-        Controls.Add(_postHTx);
-
-        _postWTx = new TextBox
-        {
-            Left = 136,
-            Top = 36,
-            Width = 50,
-            BackColor = Color.FromArgb(50, 50, 50),
-            ForeColor = Color.White,
-            Font = new Font("Consolas", 10f),
-            BorderStyle = BorderStyle.FixedSingle
-        };
-        _postWTx.TextChanged += (s, e) => CalculatePixelDimensions();
-
-        _posterWLabel = new Label
-        {
-            Text = "Poster Width (inches):",
-            Left = 4,
-            Top = 38,
-            Width = 130,
-            TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f)
-        };
-
-        Controls.Add(_posterWLabel);
-        Controls.Add(_postWTx);
-
-        _widthLabel = new Label
-        {
-            Text = "Pixel Width:",
-            Left = 4,
-            Top = 70,
-            Width = 130,
-            TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f)
-        };
-        Controls.Add(_widthLabel);
-
-        _widthTx = new TextBox
-        {
-            Left = 136,
-            Top = 71,
-            Width = 50,
-            BackColor = Color.FromArgb(50, 50, 50),
-            ForeColor = Color.White,
-            Font = new Font("Consolas", 10f),
-            BorderStyle = BorderStyle.FixedSingle
-        };
-        Controls.Add(_widthTx);
-
-        _heightLabel = new Label
-        {
-            Text = "Pixel Height:",
-            Left = 4,
-            Top = 98,
-            Width = 130,
-            TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f)
-        };
-        Controls.Add(_heightLabel);
-
-        _heightTx = new TextBox
-        {
-            Left = 136,
-            Top = 97,
-            Width = 50,
-            BackColor = Color.FromArgb(50, 50, 50),
-            ForeColor = Color.White,
-            Font = new Font("Consolas", 10f),
-            BorderStyle = BorderStyle.FixedSingle
-        };
-        Controls.Add(_heightTx);
-
-        _portraitCB = new CheckBox
-        {
-            Text = "Portrait Orientation",
-            Left = 203,
-            Top = 10,
-            Width = 200,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f),
-            Checked = true
-        };
-        Controls.Add(_portraitCB);
-
-        _lowDefCB = new CheckBox
-        {
-            Text = "Low Def (150 DPI)",
-            Left = 203,
-            Top = 36,
-            Width = 120,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f),
-            Checked = false
-        };
-        _lowDefCB.CheckedChanged += (s, e) =>
-        {
-            CalculatePixelDimensions();
-            if (_lowDefCB.Checked)
-            {
-                _medDefCB?.Checked = false;
-                _highDefCB?.Checked = false;
-            }
-        };
-        Controls.Add(_lowDefCB);
-
-        _medDefCB = new CheckBox
-        {
-            Text = "Med Def (300 DPI)",
-            Left = 203,
-            Top = 60,
-            Width = 180,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f),
-            Checked = true
-        };
-        _medDefCB.CheckedChanged += (s, e) =>
-        {
-            CalculatePixelDimensions();
-            if (_medDefCB.Checked)
-            {
-                _lowDefCB?.Checked = false;
-                _highDefCB?.Checked = false;
-            }
-        };
-        Controls.Add(_medDefCB);
-
-        _highDefCB = new CheckBox
-        {
-            Text = "High Def (600 DPI)",
-            Left = 203,
-            Top = 84,
-            Width = 180,
-            ForeColor = Color.LightGray,
-            Font = new Font("Segoe UI", 9f),
-            Checked = false
-        };
-        _highDefCB.CheckedChanged += (s, e) =>
-        {
-            CalculatePixelDimensions();
-            if (_highDefCB.Checked)
-            {
-                _lowDefCB?.Checked = false;
-                _medDefCB?.Checked = false;
-            }
-        };
-        Controls.Add(_highDefCB);
-
-        ToolTip _portraitTip = new ToolTip();
-        _portraitTip.SetToolTip(_portraitCB, "If checked, the output image will be formatted for portrait-oriented paper.  If unchecked, the image will be formatted for landscape-oriented paper.  When printing a poster taller than it is wide, select portrait orientation for the best results.");
-
-        var ok = new Button
-        {
-            Text = "OK",
-            DialogResult = DialogResult.OK,
-            Left = 82,
-            Top = 138,
-            Width = 72,
-            Height = 26,
-            BackColor = Color.FromArgb(60, 60, 60),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat
-        };
-        var cancel = new Button
-        {
-            Text = "Cancel",
-            DialogResult = DialogResult.Cancel,
-            Left = 162,
-            Top = 138,
-            Width = 72,
-            Height = 26,
-            BackColor = Color.FromArgb(60, 60, 60),
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat
-        };
-        AcceptButton = ok;
-        CancelButton = cancel;
-        Controls.Add(ok);
-        Controls.Add(cancel);
-    }
-
-    private void CalculatePixelDimensions()
-    {
-        int posterHeightInches = 0;
-        int posterWidthInches = 0;
-
-        int.TryParse(_postHTx.Text, out posterHeightInches);
-        int.TryParse(_postWTx.Text, out posterWidthInches);
-        if (posterHeightInches < 0 || posterWidthInches < 0)
-        {
-            MessageBox.Show("Please enter valid integer values for poster width and height in inches.", "Invalid Input", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-        int dpi = _lowDefCB.Checked ? 150 : _highDefCB.Checked ? 600 : 300;
-        int pixelWidth = posterWidthInches * dpi;
-        int pixelHeight = posterHeightInches * dpi;
-        _widthTx.Text = pixelWidth.ToString();
-        _heightTx.Text = pixelHeight.ToString();
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cartesian grid helper
-// ─────────────────────────────────────────────────────────────────────────────
-// The previous WS_EX_LAYERED sibling-window approach could not composite over
-// the D3D11 FlipDiscard swap chain on modern Windows.  The grid is now blended
-// directly into the fractal ColorBuffer by MainForm.BlendGridOverlay() before
-// the texture is uploaded to the GPU — see UploadProcessedBuffer().
-//
-// This class is purely a drawing helper: it holds the view-state accessors and
-// exposes DrawGrid(Graphics,w,h) which renders the Cartesian grid into any
-// Graphics context (typically a 32bpp ARGB Bitmap with a transparent background).
-
-internal sealed class GridOverlayPanel : System.Windows.Forms.Control
-{
-    private readonly Func<(double cx, double cy)> _getCenter;
-    private readonly Func<double> _getZoom;
-    private readonly Func<Size> _getPanelSize;
-    private readonly Func<Color> _getSwatchColor;
-
-    public GridOverlayPanel(
-        Func<(double, double)> getCenter,
-        Func<double> getZoom,
-        Func<Size> getPanelSize,
-        Func<Color> getSwatchColor)
-    {
-        _getCenter = getCenter;
-        _getZoom = getZoom;
-        _getPanelSize = getPanelSize;
-        _getSwatchColor = getSwatchColor;
-    }
-
-    /// <summary>
-    /// Renders the Cartesian grid into <paramref name="g"/> at the given pixel
-    /// dimensions.  The caller is responsible for clearing the bitmap to
-    /// Transparent before calling this method.
-    /// </summary>
-    public void DrawGrid(Graphics g, int w, int h)
-        => DrawCartesianGrid(g, w, h);
-
-    // ── Drawing implementation ────────────────────────────────────────────────
-
-    private void DrawCartesianGrid(Graphics g, int w, int h)
-    {
-        var (cx, cy) = _getCenter();
-        double zoom = _getZoom();
-        double scale = 3.5 / (System.Math.Max(w, h) * zoom);
-
-        double xMin = cx - w * scale * 0.5, xMax = cx + w * scale * 0.5;
-        double yMin = cy - h * scale * 0.5, yMax = cy + h * scale * 0.5;
-
-        Color gridColor = ComputeContrastColor(_getSwatchColor());
-        using var gridPen = new Pen(Color.FromArgb(160, gridColor), 1.0f);
-        using var axisPen = new Pen(Color.FromArgb(210, gridColor), 1.8f);
-        using var labelBrush = new SolidBrush(Color.FromArgb(200, gridColor));
-        using var shadowBrush = new SolidBrush(Color.FromArgb(120, 0, 0, 0));
-        using var labelFont = new Font("Consolas", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
-        using var zeroFont = new Font("Consolas", 8.5f, FontStyle.Bold, GraphicsUnit.Point);
-
-        double gridStep = NiceStep((xMax - xMin) / 7.0);
-
-        // Vertical lines.
-        for (double wx = System.Math.Ceiling(xMin / gridStep) * gridStep;
-             wx <= xMax + gridStep * 0.01; wx += gridStep)
-        {
-            float px = W2SX(wx, cx, scale, w);
-            if (px < 0 || px > w) continue;
-            bool isAxis = System.Math.Abs(wx) < gridStep * 0.01;
-            g.DrawLine(isAxis ? axisPen : gridPen, px, 0, px, h);
-            string lbl = FormatCoord(wx);
-            var sz = g.MeasureString(lbl, labelFont);
-            float lx = px - sz.Width * 0.5f, ly = h - sz.Height - 2;
-            if (ly < 0) ly = 2;
-            g.DrawString(lbl, labelFont, shadowBrush, lx + 1, ly + 1);
-            g.DrawString(lbl, labelFont, labelBrush, lx, ly);
-        }
-
-        // Horizontal lines.
-        for (double wy = System.Math.Ceiling(yMin / gridStep) * gridStep;
-             wy <= yMax + gridStep * 0.01; wy += gridStep)
-        {
-            float py = W2SY(wy, cy, scale, h);
-            if (py < 0 || py > h) continue;
-            bool isAxis = System.Math.Abs(wy) < gridStep * 0.01;
-            g.DrawLine(isAxis ? axisPen : gridPen, 0, py, w, py);
-            if (isAxis) continue;
-            string lbl = FormatCoord(wy) + "i";
-            var sz = g.MeasureString(lbl, labelFont);
-            g.DrawString(lbl, labelFont, shadowBrush, 4, py - sz.Height * 0.5f + 1);
-            g.DrawString(lbl, labelFont, labelBrush, 3, py - sz.Height * 0.5f);
-        }
-
-        // Origin label.
-        float ox = W2SX(0, cx, scale, w);
-        float oy = W2SY(0, cy, scale, h);
-        if (ox >= 0 && ox <= w && oy >= 0 && oy <= h)
-        {
-            g.DrawString("0", zeroFont, shadowBrush, ox + 3, oy + 3);
-            g.DrawString("0", zeroFont, labelBrush, ox + 2, oy + 2);
-        }
-    }
-
-    private static float W2SX(double wx, double cx, double scale, int w)
-        => (float)((wx - cx) / scale + w * 0.5);
-
-    private static float W2SY(double wy, double cy, double scale, int h)
-        => (float)(-(wy - cy) / scale + h * 0.5);
-
-    private static double NiceStep(double raw)
-    {
-        if (raw <= 0) return 1.0;
-        double mag = System.Math.Pow(10, System.Math.Floor(System.Math.Log10(raw)));
-        double norm = raw / mag;
-        double nice = norm <= 1.0 ? 1.0 : norm <= 2.0 ? 2.0 : norm <= 5.0 ? 5.0 : 10.0;
-        return nice * mag;
-    }
-
-    private static string FormatCoord(double v)
-    {
-        if (v == 0.0) return "0";
-        double abs = System.Math.Abs(v);
-        // Always render 7 significant digits so that deep-zoom grid lines
-        // show distinct labels even when graduations differ only in the 6th–7th
-        // decimal place (e.g. -1.744453 vs -1.744452).
-        // "mag" is the order of magnitude of the integer part:
-        //   abs = 1.744  → mag = 0  → decimals = 6
-        //   abs = 0.022  → mag = -2 → decimals = 8  (clamped to 15)
-        int mag = (int)System.Math.Floor(System.Math.Log10(abs));
-        int decimals = System.Math.Clamp(6 - mag, 0, 15);
-        return v.ToString("F" + decimals, System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static Color ComputeContrastColor(Color swatch)
-    {
-        float r = swatch.R / 255f, g = swatch.G / 255f, b = swatch.B / 255f;
-        float cmax = System.Math.Max(r, System.Math.Max(g, b));
-        float cmin = System.Math.Min(r, System.Math.Min(g, b));
-        float delta = cmax - cmin;
-        float l = (cmax + cmin) * 0.5f;
-        float h2 = 0f;
-        if (delta > 0.001f)
-        {
-            if (cmax == r) h2 = ((g - b) / delta) % 6f;
-            else if (cmax == g) h2 = (b - r) / delta + 2f;
-            else h2 = (r - g) / delta + 4f;
-            h2 = (h2 / 6f + 1f) % 1f;
-        }
-        float s2 = delta < 0.001f ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
-        float hc = (h2 + 0.5f) % 1f;
-        float lc = l < 0.5f
-            ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
-            : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
-        float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
-        float cv = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
-        float xv = cv * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
-        float m = lc - cv * 0.5f;
-        float rr, gg, bb;
-        switch ((int)(hc * 6f))
-        {
-            case 0: rr = cv; gg = xv; bb = 0; break;
-            case 1: rr = xv; gg = cv; bb = 0; break;
-            case 2: rr = 0; gg = cv; bb = xv; break;
-            case 3: rr = 0; gg = xv; bb = cv; break;
-            case 4: rr = xv; gg = 0; bb = cv; break;
-            default: rr = cv; gg = 0; bb = xv; break;
-        }
-        return Color.FromArgb(
-            (int)System.Math.Clamp((rr + m) * 255f, 0, 255),
-            (int)System.Math.Clamp((gg + m) * 255f, 0, 255),
-            (int)System.Math.Clamp((bb + m) * 255f, 0, 255));
-    }
 }
