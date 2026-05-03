@@ -759,6 +759,12 @@ public sealed class MandelbrotCalculator
                 break;
             }
 
+            // Precision glitch: dr/di absorbed by Z in double arithmetic
+            // (|dc| << ULP(Z) at extreme zoom). All pixels share identical
+            // escape check → wrong iteration counts. Fall back to DD or QD.
+            if (zr == Zr && zi == Zi && (dr != 0.0 || di != 0.0))
+                return false;
+
             double newDrv = 2.0 * (zr * drv - zi * div) + 1.0;
             double newDiv = 2.0 * (zr * div + zi * drv);
             drv = newDrv; div = newDiv;
@@ -865,6 +871,21 @@ public sealed class MandelbrotCalculator
                 escapedMask |= newEsc;
                 int active = ~escapedMask & 0b1111;
                 if (active == 0) break;
+
+                // Precision glitch at extreme zoom: δ absorbed by Z in double arithmetic.
+                // Only check in QD range where dc << ULP(Z) always holds.
+                if (useQD && !glitched)
+                {
+                    double Zr_s = _refZr[iter], Zi_s = _refZi[iter];
+                    for (int k = 0; k < 4; k++)
+                    {
+                        double drk = dr.GetElement(k), dik = di.GetElement(k);
+                        if ((drk != 0.0 || dik != 0.0) &&
+                            zr.GetElement(k) == Zr_s && zi.GetElement(k) == Zi_s)
+                        { glitched = true; break; }
+                    }
+                    if (glitched) break;
+                }
 
                 iterCount = Avx.Add(iterCount, Avx.And(one, MaskToVector(active)));
 
