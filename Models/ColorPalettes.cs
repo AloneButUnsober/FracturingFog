@@ -192,6 +192,18 @@ namespace FracturingFog.Models
             new LambertShadingMap(),
             new SlopeShadingMap(),
 
+            // ── Post-process effects (Phase 3) ───────────────────────────────
+            new EmbossBumpMap(),
+            new AmbientOcclusionMap(),
+            new SoftShadowMap(),
+
+            // ── Interior colouring (Phase 4) ─────────────────────────────────
+            new CyclePeriodMap(),
+            new MultiplierMap(),
+            new AtomDomainsMap(),
+            new InteriorArgumentMap(),
+            new FakeDistanceEstimateMap(),
+
             // ── Distance Estimation ───────────────────────────────────────────
             new DistanceFieldChromaticMap(),
             new DistanceFieldGlowMap(),
