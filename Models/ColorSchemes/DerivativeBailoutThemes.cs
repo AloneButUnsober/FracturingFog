@@ -43,10 +43,10 @@ namespace FracturingFog.Models
         public override int Map(float smooth, float distance, int maxIterations) =>
             MapNormalized(0f, distance);
 
-        public int Map(float smooth, float distance, int iterations,
-                       float nx, float ny,
-                       float finalZr, float finalZi,
-                       float dzdcR, float dzdcI)
+        public override int Map(float smooth, float distance, int iterations,
+                                float nx, float ny,
+                                float finalZr, float finalZi,
+                                float dzdcR, float dzdcI)
         {
             double dMag = Math.Sqrt((double)dzdcR * dzdcR + (double)dzdcI * dzdcI);
             if (dMag < 1.0) dMag = 1.0;
