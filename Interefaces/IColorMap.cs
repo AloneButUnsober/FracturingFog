@@ -48,6 +48,9 @@ namespace FracturingFog.Interefaces
         ThreeDEffect = 1 << 7,   // map produces a strong 3D visual
         UsesOrbitTrap = 1 << 8,   // samples z each iteration for trap-shape distance
         UsesStripeAvg = 1 << 9,   // samples z each iteration for stripe / TIA averaging
+        UsesFinalZ = 1 << 10,  // reads z (zr, zi) at escape — binary/angle decomp, potential, field lines, domain coloring
+        UsesDerivative = 1 << 11,  // reads dz/dc at escape — derivative bailout colourings
+        UsesHistogram = 1 << 12,  // designed for histogram equalisation; pair with the EQ slider
     }
 
     /// <summary>
@@ -131,6 +134,28 @@ namespace FracturingFog.Interefaces
         /// </param>
         int Map(float smooth, float distance, int iterations, float nx, float ny)
             => Map(smooth, distance, iterations);   // default: ignore normals
+
+        // ── Extended mapping — NINE-PARAMETER (final-state-aware themes) ─────
+
+        /// <summary>
+        /// Maps fractal sample data plus surface normal AND the final values of
+        /// z and dz/dc at escape to a packed ARGB colour.  Used by themes that
+        /// need the actual escape z (binary decomposition, angle decomposition,
+        /// Douady-Hubbard potential, field lines, domain coloring) or the
+        /// escape-time derivative (derivative bailout colourings).
+        ///
+        /// Default implementation delegates to the five-parameter overload, so
+        /// existing themes ignore the extra data without modification.
+        ///
+        /// All four extra parameters are 0 for in-set pixels.
+        /// </summary>
+        /// <param name="finalZr">Real part of z at the escape iteration.</param>
+        /// <param name="finalZi">Imaginary part of z at the escape iteration.</param>
+        /// <param name="dzdcR">Real part of dz/dc at the escape iteration.</param>
+        /// <param name="dzdcI">Imaginary part of dz/dc at the escape iteration.</param>
+        int Map(float smooth, float distance, int iterations, float nx, float ny,
+                float finalZr, float finalZi, float dzdcR, float dzdcI)
+            => Map(smooth, distance, iterations, nx, ny);   // default: ignore final state
 
         // ── Convenience helpers ───────────────────────────────────────────────
 

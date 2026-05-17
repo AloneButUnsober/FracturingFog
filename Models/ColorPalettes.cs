@@ -176,6 +176,48 @@ namespace FracturingFog.Models
             new DistanceFieldChromaticMap(),
             new DistanceFieldGlowMap(),
             new DistanceFieldSilverMap(),
+
+            // ── Binary Compression  ───────────────────────────────────────────\
+            new BinaryDecompClassicMap(),
+            new BinaryDecompContourMap(),
+            new BinaryDecompGoldMap(),
+
+            // ── Derivative Magnitude Map ──────────────────────────────────────\
+            new DerivativeAngleMap(),
+            new DerivativeFlowMap(),
+            new DerivativeMagnitudeMap(),
+
+            // ── Domain Color Map ──────────────────────────────────────\
+            new DomainColorClassicMap(),
+            new DomainColorPhasePortraitMap(),
+            new DomainColorRiemannMap(),
+
+            // ── Escape Time ────────────────────────────────────────────\
+            new RawIterationBandsMap(),
+            new LevelSetStaircaseMap(),
+            new BinaryDwellRingsMap(),
+
+            // ── Field Lines ────────────────────────────────────────────\
+            new FieldLinesBinaryComboMap(),
+            new FieldLinesContinuousMap(),
+            new FieldLinesDiscreteMap(),
+
+            // ── Histogram Themes ────────────────────────────────────────────\
+            new HistogramSpectralMap(),
+            new HistogramTwilightMap(),
+            new HistogramViridisMap(),
+
+            // ── Lemniscate Edge Maps ────────────────────────────────────────────\
+            new LemniscateContourMap(),
+            new LemniscateEdgeMap(),
+            new LemniscateFilledMap(),
+
+            // ── Potnetial Themes ────────────────────────────────────────────\
+            new PotentialContourMap(),
+            new PotentialEquipotentialMap(),
+            new PotentialSmoothMap(),
+
+
         };
 
         /// <summary>

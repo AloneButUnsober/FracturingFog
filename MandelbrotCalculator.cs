@@ -114,6 +114,16 @@ public sealed class MandelbrotCalculator
     public float[] StripeBuffer { get; private set; } = Array.Empty<float>();
     public float[] TiaBuffer { get; private set; } = Array.Empty<float>();
 
+    // Final-state buffers — z and dz/dc at escape.  Populated on every
+    // Calculate() so the recolor / histogram paths can pass them to the
+    // 9-parameter Map() overload used by final-state-aware themes
+    // (binary decomp, angle decomp, potential, field lines, domain coloring,
+    // derivative bailout).  0 for in-set pixels.
+    public float[] FinalZrBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalZiBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalDrBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalDiBuffer { get; private set; } = Array.Empty<float>();
+
     // ── Constants ─────────────────────────────────────────────────────────────
 
     private const double EscapeRadius = 512.0;
@@ -153,6 +163,10 @@ public sealed class MandelbrotCalculator
         TrapBuffer = new float[n];
         StripeBuffer = new float[n];
         TiaBuffer = new float[n];
+        FinalZrBuffer = new float[n];
+        FinalZiBuffer = new float[n];
+        FinalDrBuffer = new float[n];
+        FinalDiBuffer = new float[n];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -472,10 +486,18 @@ public sealed class MandelbrotCalculator
 
             FillNormal(idx, zr, zi, dr, di);
 
+            float fzr = (float)zr, fzi = (float)zi;
+            float fdr = (float)dr, fdi = (float)di;
+            FinalZrBuffer[idx] = fzr;
+            FinalZiBuffer[idx] = fzi;
+            FinalDrBuffer[idx] = fdr;
+            FinalDiBuffer[idx] = fdi;
+
             // HIGH IMPACT 3: color computed HERE, no second pass
             ColorBuffer[idx] = (uint)colorMap.Map(
                 smooth, dist, maxIter,
-                NormalXBuffer[idx], NormalYBuffer[idx]);
+                NormalXBuffer[idx], NormalYBuffer[idx],
+                fzr, fzi, fdr, fdi);
         }
         else
         {
@@ -483,6 +505,10 @@ public sealed class MandelbrotCalculator
             DistanceBuffer[idx] = 0f;
             NormalXBuffer[idx] = 0f;
             NormalYBuffer[idx] = 0f;
+            FinalZrBuffer[idx] = 0f;
+            FinalZiBuffer[idx] = 0f;
+            FinalDrBuffer[idx] = 0f;
+            FinalDiBuffer[idx] = 0f;
             ColorBuffer[idx] = colorMap.InSetColor; // theme-defined interior, default opaque black
         }
     }
@@ -583,6 +609,11 @@ public sealed class MandelbrotCalculator
             StripeBuffer[idx] = acc.StripeCount > 0 ? (float)(acc.StripeSum / acc.StripeCount) : 0f;
             TiaBuffer[idx] = acc.TiaCount > 0 ? (float)(acc.TiaSum / acc.TiaCount) : 0f;
 
+            FinalZrBuffer[idx] = (float)zr;
+            FinalZiBuffer[idx] = (float)zi;
+            FinalDrBuffer[idx] = (float)dr;
+            FinalDiBuffer[idx] = (float)di;
+
             ColorBuffer[idx] = (uint)colorMap.MapWithOrbit(
                 smooth, dist, maxIter,
                 NormalXBuffer[idx], NormalYBuffer[idx], in acc);
@@ -596,6 +627,10 @@ public sealed class MandelbrotCalculator
             TrapBuffer[idx] = 0f;
             StripeBuffer[idx] = 0f;
             TiaBuffer[idx] = 0f;
+            FinalZrBuffer[idx] = 0f;
+            FinalZiBuffer[idx] = 0f;
+            FinalDrBuffer[idx] = 0f;
+            FinalDiBuffer[idx] = 0f;
             ColorBuffer[idx] = colorMap.InSetColor;
         }
     }
@@ -703,9 +738,17 @@ public sealed class MandelbrotCalculator
 
             FillNormal(idx, zrD, ziD, drD, diD);
 
+            float fzr = (float)zrD, fzi = (float)ziD;
+            float fdr = (float)drD, fdi = (float)diD;
+            FinalZrBuffer[idx] = fzr;
+            FinalZiBuffer[idx] = fzi;
+            FinalDrBuffer[idx] = fdr;
+            FinalDiBuffer[idx] = fdi;
+
             ColorBuffer[idx] = (uint)colorMap.Map(
                 smooth, dist, maxIter,
-                NormalXBuffer[idx], NormalYBuffer[idx]);
+                NormalXBuffer[idx], NormalYBuffer[idx],
+                fzr, fzi, fdr, fdi);
         }
         else
         {
@@ -713,6 +756,10 @@ public sealed class MandelbrotCalculator
             DistanceBuffer[idx] = 0f;
             NormalXBuffer[idx] = 0f;
             NormalYBuffer[idx] = 0f;
+            FinalZrBuffer[idx] = 0f;
+            FinalZiBuffer[idx] = 0f;
+            FinalDrBuffer[idx] = 0f;
+            FinalDiBuffer[idx] = 0f;
             ColorBuffer[idx] = colorMap.InSetColor;
         }
     }
@@ -1175,7 +1222,9 @@ public sealed class MandelbrotCalculator
                 float smoothEq = (float)(tBlend * maxIter);
                 ColorBuffer[idx] = (uint)ColorMap.Map(
                     smoothEq, DistanceBuffer[idx], maxIter,
-                    NormalXBuffer[idx], NormalYBuffer[idx]);
+                    NormalXBuffer[idx], NormalYBuffer[idx],
+                    FinalZrBuffer[idx], FinalZiBuffer[idx],
+                    FinalDrBuffer[idx], FinalDiBuffer[idx]);
             }
         });
     }
@@ -1203,7 +1252,9 @@ public sealed class MandelbrotCalculator
                 {
                     ColorBuffer[idx] = (uint)ColorMap.Map(
                         SmoothBuffer[idx], DistanceBuffer[idx], maxIter,
-                        NormalXBuffer[idx], NormalYBuffer[idx]);
+                        NormalXBuffer[idx], NormalYBuffer[idx],
+                        FinalZrBuffer[idx], FinalZiBuffer[idx],
+                        FinalDrBuffer[idx], FinalDiBuffer[idx]);
                 }
             }
         });
