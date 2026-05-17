@@ -112,6 +112,9 @@ public sealed partial class MainForm : Form
     /// <summary>Contrast multiplier encoded as integer [-100, 100]; 0 = neutral (1.0×).</summary>
     private int _contrast = 0;
 
+    /// <summary>Histogram-equalization strength as integer [0, 100]; 0 = disabled, 100 = full eq.</summary>
+    private int _histogramEq = 0;
+
     // Mouse click-n-drag window repositioning
     private const int WM_NCLBUTTONDOWN = 0xA1;
     private const int HTCAPTION = 0x2;
@@ -813,6 +816,21 @@ public sealed partial class MainForm : Form
         }
     }
 
+    private void OnAdjustHistogramEq(object? s, EventArgs e, object? l)
+    {
+        if (s == null) return;
+        _histogramEq = ((TrackBar)s).Value;
+        if (l != null) ((Label)l).Text = $"Adaptive: {_histogramEq}";
+        if (_calculator == null || _renderer == null || _disposed) return;
+        // Re-color from cached aux buffers using the new strength, then re-apply
+        // brightness/contrast/grid post-processing.
+        if (_histogramEq > 0)
+            _calculator.ApplyHistogramEqualization(_histogramEq / 100.0);
+        else
+            _calculator.ApplyHistogramEqualization(0.0); // restores identity coloring
+        UploadProcessedBuffer(_calculator, _renderer);
+    }
+
     private void OnCheckBoxShowGridClick(object? s, EventArgs e)
     {
         if (s != null)
@@ -871,6 +889,7 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnStatusClick += (s, e) => { _footerPanel.Visible = !_footerPanel.Visible; };
         _floatingMenu.OnBrightnessSlide += (s, e, l) => OnAdjustBrightness(s, e, l);
         _floatingMenu.OnContrastSlide += (s, e, l) => OnAdjustContrast(s, e, l);
+        _floatingMenu.OnHistogramEqSlide += (s, e, l) => OnAdjustHistogramEq(s, e, l);
 
         UpdateCoordBoxes();
         if (!_regionCombo.IsDisposed) _floatingMenu.RegionName = _currentRegionName;
@@ -2191,6 +2210,12 @@ public sealed partial class MainForm : Form
                 Invoke(() =>
                 {
                     if (_disposed) return;
+                    // Adaptive contrast (histogram equalization) — re-colors
+                    // the buffer in place using the current strength.  Runs
+                    // before brightness/contrast so those operate on the
+                    // equalized colors.
+                    if (_histogramEq > 0)
+                        calc.ApplyHistogramEqualization(_histogramEq / 100.0);
                     // Apply brightness/contrast and grid overlay, then upload to GPU.
                     UploadProcessedBuffer(calc, renderer);
                     _miniMapPanel?.RefreshIndicator();

@@ -959,4 +959,124 @@ public sealed class MandelbrotCalculator
             }
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Histogram equalization — adaptive contrast post-pass
+    // ─────────────────────────────────────────────────────────────────────────
+    //
+    // Builds a CDF over the smooth iteration distribution of escaped pixels,
+    // then re-samples the active color map using an iteration value blended
+    // between the original linear value and the equalized value.
+    //
+    //   strength = 0.0 → identity (recolor matches inline color pass)
+    //   strength = 1.0 → full equalization (iteration density flattened)
+    //
+    // Operates on the SmoothBuffer / IterationBuffer that Calculate() already
+    // fills, so it can be re-run at any strength without recomputing the
+    // fractal.  Always overwrites ColorBuffer from scratch using the current
+    // ColorMap, so successive calls with different strengths compose correctly.
+    public void ApplyHistogramEqualization(double strength)
+    {
+        if (strength < 0.0) strength = 0.0;
+        if (strength > 1.0) strength = 1.0;
+
+        int w = Width, h = Height;
+        int n = w * h;
+        int maxIter = MaxIterations;
+        if (n == 0 || maxIter <= 0) return;
+
+        ColorMap.MaxIterations = maxIter;
+
+        // ── Build histogram over escaped pixels ──────────────────────────────
+        // Bin count: enough resolution for smooth gradients, capped to avoid
+        // sparse bins on small images.
+        int bins = Math.Min(2048, Math.Max(256, maxIter));
+        int[] hist = new int[bins];
+        int totalEscaped = 0;
+        float invMax = 1.0f / maxIter;
+
+        for (int i = 0; i < n; i++)
+        {
+            if (IterationBuffer[i] >= maxIter) continue;
+            float s = SmoothBuffer[i];
+            float t = s * invMax;
+            if (t < 0f) t = 0f; else if (t > 0.9999999f) t = 0.9999999f;
+            int b = (int)(t * bins);
+            hist[b]++;
+            totalEscaped++;
+        }
+
+        // No escaped pixels (entire view interior) — nothing to equalize.
+        if (totalEscaped == 0)
+        {
+            RecolorFromBuffers();
+            return;
+        }
+
+        // CDF normalized to [0, 1].
+        double[] cdf = new double[bins];
+        long cum = 0;
+        double invTotal = 1.0 / totalEscaped;
+        for (int i = 0; i < bins; i++)
+        {
+            cum += hist[i];
+            cdf[i] = cum * invTotal;
+        }
+
+        // ── Re-color every pixel using lerp(linear t, cdf t, strength) ───────
+        var po = new ParallelOptions();
+        Parallel.For(0, h, po, y =>
+        {
+            int rowBase = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                int idx = rowBase + x;
+                int iters = IterationBuffer[idx];
+                if (iters >= maxIter)
+                {
+                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    continue;
+                }
+                float s = SmoothBuffer[idx];
+                float tLin = s * invMax;
+                float tLinC = tLin < 0f ? 0f : (tLin > 0.9999999f ? 0.9999999f : tLin);
+                int b = (int)(tLinC * bins);
+                double tEq = cdf[b];
+                double tBlend = tLin + (tEq - tLin) * strength;
+                float smoothEq = (float)(tBlend * maxIter);
+                ColorBuffer[idx] = (uint)ColorMap.Map(
+                    smoothEq, DistanceBuffer[idx], maxIter,
+                    NormalXBuffer[idx], NormalYBuffer[idx]);
+            }
+        });
+    }
+
+    // Recompute ColorBuffer from filled aux buffers without changing iteration
+    // values.  Used as the strength=0 / no-escape fast path of equalization.
+    private void RecolorFromBuffers()
+    {
+        int w = Width, h = Height;
+        int maxIter = MaxIterations;
+        ColorMap.MaxIterations = maxIter;
+        var po = new ParallelOptions();
+        Parallel.For(0, h, po, y =>
+        {
+            int rowBase = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                int idx = rowBase + x;
+                int iters = IterationBuffer[idx];
+                if (iters >= maxIter)
+                {
+                    ColorBuffer[idx] = ColorMap.InSetColor;
+                }
+                else
+                {
+                    ColorBuffer[idx] = (uint)ColorMap.Map(
+                        SmoothBuffer[idx], DistanceBuffer[idx], maxIter,
+                        NormalXBuffer[idx], NormalYBuffer[idx]);
+                }
+            }
+        });
+    }
 }
