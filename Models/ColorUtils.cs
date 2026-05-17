@@ -98,6 +98,18 @@ namespace FracturingFog.Models
             return MapNormalized(System.Math.Clamp(t, 0f, 1f), distance);
         }
 
+        // Virtual 9-arg overload exists at the class level so derived themes that
+        // need finalZ / dz-dc can override it directly. Without this, a plain
+        // public 9-arg method in a derived class is NOT in the interface map
+        // (the map is fixed at GradientColorMap, where IColorMap is declared),
+        // so calls through an IColorMap reference fall to the interface default
+        // implementation and miss the override.
+        public virtual int Map(float smooth, float distance, int iterations,
+                               float nx, float ny,
+                               float finalZr, float finalZi,
+                               float dzdcR, float dzdcI)
+            => Map(smooth, distance, iterations);
+
         /// <summary>
         /// Evaluates the gradient at normalised position <paramref name="t"/> ∈ [0,1].
         /// Subclasses can call this directly with a custom <c>t</c>.
