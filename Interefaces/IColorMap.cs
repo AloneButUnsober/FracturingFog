@@ -206,6 +206,13 @@ namespace FracturingFog.Interefaces
         /// <summary>Running minimum trap-shape distance.  Initialise to <see cref="float.MaxValue"/>.</summary>
         public float TrapMin;
 
+        /// <summary>Secondary trap distance (e.g. for Pickover stalks: TrapMin = min|Re|, TrapMin2 = min|Im|).</summary>
+        public float TrapMin2;
+
+        /// <summary>Location (Re, Im) of orbit point at which TrapMin was achieved.  Used by image / texture traps.</summary>
+        public double TrapZr;
+        public double TrapZi;
+
         /// <summary>Sum of stripe samples 0.5+0.5·sin(s·arg(z_n)).</summary>
         public double StripeSum;
         public int StripeCount;
@@ -217,6 +224,32 @@ namespace FracturingFog.Interefaces
         /// <summary>Last stripe / TIA sample, used for fractional smoothing at escape.</summary>
         public double LastStripe;
         public double LastTia;
+
+        // ── Curvature average ─────────────────────────────────────────────────
+        /// <summary>Previous orbit point z_{n-1}, for segment construction.</summary>
+        public double PrevZr;
+        public double PrevZi;
+        /// <summary>Previous segment vector z_{n-1} − z_{n-2}, for angle change.</summary>
+        public double PrevSegR;
+        public double PrevSegI;
+        /// <summary>Sum of |Δ arg(seg)| per iteration.</summary>
+        public double CurvatureSum;
+        public int CurvatureCount;
+
+        // ── Lyapunov exponent ─────────────────────────────────────────────────
+        /// <summary>Sum of log|f'(z_n)| = log|2 z_n|.</summary>
+        public double LyapunovSum;
+        public int LyapunovCount;
+
+        // ── Gaussian integer trap ─────────────────────────────────────────────
+        /// <summary>Sum of min distance from z_n to nearest Gaussian integer.</summary>
+        public double GaussianSum;
+        public int GaussianCount;
+
+        // ── Exponential smoothing (Kerry Mitchell) ────────────────────────────
+        /// <summary>Sum of e^{−|z_n|} along the orbit.</summary>
+        public double ExpSum;
+        public int ExpCount;
     }
 
     /// <summary>

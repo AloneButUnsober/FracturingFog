@@ -166,11 +166,31 @@ namespace FracturingFog.Models
             new OrbitTrapPointMap(),
             new OrbitTrapCrossMap(),
             new OrbitTrapCircleMap(),
+            new OrbitTrapLineMap(),
+            new OrbitTrapStarMap(),
+            new OrbitTrapPickoverStalksMap(),
+            new OrbitTrapBiomorphMap(),
+            new OrbitTrapImageRainbowMap(),
 
             // ── Stripe Average + TIA (Ultra Fractal look) ─────────────────────
             new StripeAverageClassicMap(),
             new TriangleInequalityMap(),
             new StripeTiaBlendMap(),
+
+            // ── Statistical averaging ────────────────────────────────────────
+            new CurvatureAverageMap(),
+            new LyapunovExponentMap(),
+            new GaussianIntegerMap(),
+            new ExponentialSmoothingMap(),
+
+            // ── Distance Estimation ───────────────────────────────────────────
+            new DistanceFieldChromaticMap(),
+            new DistanceFieldGlowMap(),
+            new DistanceFieldSilverMap(),
+
+            // ── Lambert / slope standalone shading ───────────────────────────
+            new LambertShadingMap(),
+            new SlopeShadingMap(),
 
             // ── Distance Estimation ───────────────────────────────────────────
             new DistanceFieldChromaticMap(),
