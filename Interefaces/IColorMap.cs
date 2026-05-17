@@ -37,15 +37,17 @@ namespace FracturingFog.Interefaces
     [Flags]
     public enum ColorMapFeatures
     {
-        None         = 0,
-        UsesSmooth   = 1 << 0,   // iteration count drives the colour
+        None = 0,
+        UsesSmooth = 1 << 0,   // iteration count drives the colour
         UsesDistance = 1 << 1,   // exterior distance estimate influences colour
-        UsesNormals   = 1 << 2,   // map reads nx, ny for 3D lighting
-        Cyclic       = 1 << 3,   // gradient repeats — doesn't go dark at deep zoom
-        Perceptual   = 1 << 4,   // perceptually uniform (lightness progression)
+        UsesNormals = 1 << 2,   // map reads nx, ny for 3D lighting
+        Cyclic = 1 << 3,   // gradient repeats — doesn't go dark at deep zoom
+        Perceptual = 1 << 4,   // perceptually uniform (lightness progression)
         HighContrast = 1 << 5,   // strong light/dark contrast
-        GradientBased= 1 << 6,   // uses linear stop interpolation
-        ThreeDEffect  = 1 << 7,   // map produces a strong 3D visual
+        GradientBased = 1 << 6,   // uses linear stop interpolation
+        ThreeDEffect = 1 << 7,   // map produces a strong 3D visual
+        UsesOrbitTrap = 1 << 8,   // samples z each iteration for trap-shape distance
+        UsesStripeAvg = 1 << 9,   // samples z each iteration for stripe / TIA averaging
     }
 
     /// <summary>
@@ -75,15 +77,15 @@ namespace FracturingFog.Interefaces
     {
         // ── Static display metadata (override the default per implementation) ─
 
-        public static string Name        { get; } = "Unnamed";
+        public static string Name { get; } = "Unnamed";
 
         public ColorPaletteType Type { get; }
 
-        public static string           Category    { get; } = "General";
+        public static string Category { get; } = "General";
 
-        public static string           Description { get; } = "";
+        public static string Description { get; } = "";
 
-        public static ColorMapFeatures Features    { get; } = ColorMapFeatures.UsesSmooth;
+        public static ColorMapFeatures Features { get; } = ColorMapFeatures.UsesSmooth;
 
 
         // ── Per-instance state ────────────────────────────────────────────────
@@ -153,5 +155,64 @@ namespace FracturingFog.Interefaces
         string DisplayName { get; }
         string DisplayCategory { get; }
         string DisplayDescription { get; }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Orbit-aware extension
+    //
+    // Orbit traps, stripe average and triangle-inequality average colourings all
+    // need access to z at EVERY iteration step — not just the final escape
+    // value.  The standard fast SP / PT calculator paths do not surface this
+    // data, so themes that need it implement IOrbitAwareColorMap and the
+    // calculator dispatches them through a dedicated scalar path.
+    //
+    // The path is opt-in and slower than the fast SIMD path.  HP / perturbation
+    // are NOT supported on the orbit-aware path; deep zoom themes should rely
+    // on the existing fast path.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Per-pixel state accumulated by an orbit-aware colour map while iterating
+    /// z_{n+1} = z_n^2 + c.  Fields are populated by <see cref="IOrbitAwareColorMap.Sample"/>
+    /// and consumed by <see cref="IOrbitAwareColorMap.MapWithOrbit"/>.
+    /// </summary>
+    public struct OrbitAccumulator
+    {
+        /// <summary>Running minimum trap-shape distance.  Initialise to <see cref="float.MaxValue"/>.</summary>
+        public float TrapMin;
+
+        /// <summary>Sum of stripe samples 0.5+0.5·sin(s·arg(z_n)).</summary>
+        public double StripeSum;
+        public int StripeCount;
+
+        /// <summary>Sum of triangle-inequality samples (|z_n|−m_n)/(M_n−m_n).</summary>
+        public double TiaSum;
+        public int TiaCount;
+
+        /// <summary>Last stripe / TIA sample, used for fractional smoothing at escape.</summary>
+        public double LastStripe;
+        public double LastTia;
+    }
+
+    /// <summary>
+    /// Colour map that requires per-iteration z samples to compute its colour.
+    /// The calculator routes any IColorMap implementing this interface through
+    /// a scalar SP path that calls <see cref="Sample"/> once per iteration and
+    /// <see cref="MapWithOrbit"/> once at escape.
+    /// </summary>
+    public interface IOrbitAwareColorMap : IColorMap
+    {
+        /// <summary>Initialise the accumulator before iteration begins.</summary>
+        void InitOrbit(out OrbitAccumulator acc);
+
+        /// <summary>
+        /// Called once per iteration with the current z = z_n and c = c.
+        /// Implementations update <paramref name="acc"/> as needed.
+        /// </summary>
+        /// <param name="iter">Iteration index (0 = before first squaring step).</param>
+        void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter);
+
+        /// <summary>Final colour produced from the standard inputs plus the accumulated orbit state.</summary>
+        int MapWithOrbit(float smooth, float distance, int iterations, float nx, float ny, in OrbitAccumulator acc);
     }
 }
