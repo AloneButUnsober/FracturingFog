@@ -106,6 +106,30 @@ namespace FracturingFog.Models
     }
 
     /// <summary>
+    /// Optional override colour for in-set (interior) pixels.  When present on a
+    /// theme, the calculator paints unescaped pixels with this colour instead of
+    /// the default opaque black (0xFF000000).  Themes that omit this field keep
+    /// the historical black interior.
+    /// </summary>
+    public sealed class InSetColorData
+    {
+        public byte R { get; set; }
+        public byte G { get; set; }
+        public byte B { get; set; }
+
+        public InSetColorData() { }
+
+        public InSetColorData(byte r, byte g, byte b)
+        {
+            R = r; G = g; B = b;
+        }
+
+        /// <summary>Packs the colour as opaque 0xFFRRGGBB.</summary>
+        public uint ToPackedArgb()
+            => 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+    }
+
+    /// <summary>
     /// Full data definition of a colour theme.  Persisted to JSON; consumed by
     /// the data-driven runtime classes in <see cref="DataDrivenColorThemes"/>.
     /// </summary>
@@ -156,5 +180,12 @@ namespace FracturingFog.Models
         /// fallback band (metal 0, roughness 0.7).
         /// </summary>
         public List<PbrMaterialBandData> MaterialBands { get; set; } = new();
+
+        // ── In-set override (all kinds) ───────────────────────────────────────
+
+        /// <summary>
+        /// Optional alternative colour for in-set pixels.  Null = default black.
+        /// </summary>
+        public InSetColorData? InSetColor { get; set; }
     }
 }

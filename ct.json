@@ -2657,2098 +2657,446 @@
     ]
   },
   {
-    "Name": "Christmas Classic (GradientLinear)",
-    "Category": "Holiday",
-    "Description": "Evergreen / gold / snow / crimson — classic Christmas palette. Linear stretch.",
+    "Name": "Cosmic Mandala (Linear)",
+    "Category": "Cosmic Mandala",
+    "Description": "Single-pass violet → copper → amber → cyan bloom inspired by a jewelled fractal mandala. Linear stretch across iteration range.",
     "Kind": "Gradient",
     "Stops": [
       {
         "Position": 0.0,
-        "R": 5,
+        "R": 6,
+        "G": 3,
+        "B": 14
+      },
+      {
+        "Position": 0.1,
+        "R": 38,
+        "G": 14,
+        "B": 70
+      },
+      {
+        "Position": 0.22,
+        "R": 88,
         "G": 38,
-        "B": 22
+        "B": 145
       },
       {
-        "Position": 0.18,
-        "R": 18,
-        "G": 90,
-        "B": 42
+        "Position": 0.34,
+        "R": 152,
+        "G": 78,
+        "B": 210
       },
       {
-        "Position": 0.36,
-        "R": 218,
-        "G": 168,
-        "B": 58
+        "Position": 0.46,
+        "R": 198,
+        "G": 122,
+        "B": 235
       },
       {
-        "Position": 0.55,
-        "R": 245,
-        "G": 250,
-        "B": 255
+        "Position": 0.56,
+        "R": 168,
+        "G": 88,
+        "B": 38
       },
       {
-        "Position": 0.72,
-        "R": 190,
-        "G": 30,
-        "B": 35
+        "Position": 0.66,
+        "R": 232,
+        "G": 138,
+        "B": 48
       },
       {
-        "Position": 0.88,
-        "R": 75,
-        "G": 10,
-        "B": 18
+        "Position": 0.76,
+        "R": 255,
+        "G": 178,
+        "B": 70
+      },
+      {
+        "Position": 0.85,
+        "R": 255,
+        "G": 215,
+        "B": 110
+      },
+      {
+        "Position": 0.92,
+        "R": 120,
+        "G": 220,
+        "B": 232
+      },
+      {
+        "Position": 0.97,
+        "R": 195,
+        "G": 240,
+        "B": 248
       },
       {
         "Position": 1.0,
-        "R": 5,
-        "G": 38,
-        "B": 22
+        "R": 255,
+        "G": 250,
+        "B": 232
       }
     ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.6,
-    "Ambient": 0.14,
-    "KeySpecScale": 0.85,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
+    "CycleSpeed": 0.0,
+    "Steepness": 1.0,
+    "Ambient": 0.0,
+    "KeySpecScale": 1.0,
+    "FillSpecScale": 0.0,
+    "FillDiffScale": 0.0,
     "PbrLightingMode": "PBRRealistic",
     "GlowBoostExponent": 8,
     "GlowBoostScale": 0,
     "MaterialBands": []
   },
   {
-    "Name": "Christmas Classic (Gradient)",
-    "Category": "Holiday",
-    "Description": "Evergreen / gold / snow / crimson — classic Christmas palette. Cycling.",
+    "Name": "Cosmic Mandala",
+    "Category": "Cosmic Mandala",
+    "Description": "Cycling violet/copper/amber/cyan bloom — jewelled fractal mandala palette repeating through deep zooms.",
     "Kind": "Cycling",
     "Stops": [
       {
         "Position": 0.0,
-        "R": 5,
-        "G": 38,
-        "B": 22
-      },
-      {
-        "Position": 0.18,
-        "R": 18,
-        "G": 90,
-        "B": 42
-      },
-      {
-        "Position": 0.36,
-        "R": 218,
-        "G": 168,
-        "B": 58
-      },
-      {
-        "Position": 0.55,
-        "R": 245,
-        "G": 250,
-        "B": 255
-      },
-      {
-        "Position": 0.72,
-        "R": 190,
-        "G": 30,
-        "B": 35
-      },
-      {
-        "Position": 0.88,
-        "R": 75,
-        "G": 10,
+        "R": 8,
+        "G": 4,
         "B": 18
       },
       {
+        "Position": 0.12,
+        "R": 50,
+        "G": 20,
+        "B": 92
+      },
+      {
+        "Position": 0.24,
+        "R": 110,
+        "G": 50,
+        "B": 175
+      },
+      {
+        "Position": 0.36,
+        "R": 175,
+        "G": 95,
+        "B": 222
+      },
+      {
+        "Position": 0.46,
+        "R": 205,
+        "G": 130,
+        "B": 235
+      },
+      {
+        "Position": 0.55,
+        "R": 162,
+        "G": 80,
+        "B": 32
+      },
+      {
+        "Position": 0.65,
+        "R": 228,
+        "G": 132,
+        "B": 44
+      },
+      {
+        "Position": 0.74,
+        "R": 255,
+        "G": 175,
+        "B": 70
+      },
+      {
+        "Position": 0.82,
+        "R": 255,
+        "G": 220,
+        "B": 122
+      },
+      {
+        "Position": 0.9,
+        "R": 110,
+        "G": 215,
+        "B": 230
+      },
+      {
+        "Position": 0.96,
+        "R": 188,
+        "G": 240,
+        "B": 248
+      },
+      {
         "Position": 1.0,
-        "R": 5,
-        "G": 38,
-        "B": 22
+        "R": 8,
+        "G": 4,
+        "B": 18
       }
     ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.6,
-    "Ambient": 0.14,
-    "KeySpecScale": 0.85,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
+    "CycleSpeed": 0.03,
+    "Steepness": 1.0,
+    "Ambient": 0.0,
+    "KeySpecScale": 1.0,
+    "FillSpecScale": 0.0,
+    "FillDiffScale": 0.0,
     "PbrLightingMode": "PBRRealistic",
     "GlowBoostExponent": 8,
     "GlowBoostScale": 0,
     "MaterialBands": []
   },
   {
-    "Name": "Christmas Classic (Phong3D)",
-    "Category": "Holiday",
-    "Description": "Evergreen / gold / snow / crimson Christmas palette. Phong relief with warm hearth key + cool moonlight fill.",
+    "Name": "Cosmic Mandala (Phong3D)",
+    "Category": "Cosmic Mandala",
+    "Description": "Jewelled mandala palette under Blinn-Phong relief — warm amber key light + cool violet fill bring out copper filigree and turquoise bulbs.",
     "Kind": "Phong3D",
     "Stops": [
       {
         "Position": 0.0,
-        "R": 5,
-        "G": 38,
-        "B": 22
-      },
-      {
-        "Position": 0.18,
-        "R": 18,
-        "G": 90,
-        "B": 42
-      },
-      {
-        "Position": 0.36,
-        "R": 218,
-        "G": 168,
-        "B": 58
-      },
-      {
-        "Position": 0.55,
-        "R": 245,
-        "G": 250,
-        "B": 255
-      },
-      {
-        "Position": 0.72,
-        "R": 190,
-        "G": 30,
-        "B": 35
-      },
-      {
-        "Position": 0.88,
-        "R": 75,
-        "G": 10,
+        "R": 8,
+        "G": 4,
         "B": 18
       },
       {
-        "Position": 1.0,
-        "R": 5,
-        "G": 38,
-        "B": 22
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.16,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.65,
-      "Lz": 0.65,
-      "DiffR": 1.0,
-      "DiffG": 0.9,
-      "DiffB": 0.7,
-      "SpecR": 1.0,
-      "SpecG": 0.92,
-      "SpecB": 0.7,
-      "Shininess": 64
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.5,
-      "DiffR": 0.3,
-      "DiffG": 0.45,
-      "DiffB": 0.6,
-      "SpecR": 0.25,
-      "SpecG": 0.35,
-      "SpecB": 0.5,
-      "Shininess": 32
-    },
-    "KeySpecScale": 0.85,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Christmas Classic (Pbr3D)",
-    "Category": "Holiday",
-    "Description": "Evergreen / gold / snow / crimson Christmas palette. PBR relief — metallic gold tinsel band, lacquered red ornaments, matte snow and pine.",
-    "Kind": "Pbr3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 5,
-        "G": 38,
-        "B": 22
+        "Position": 0.12,
+        "R": 50,
+        "G": 20,
+        "B": 92
       },
       {
-        "Position": 0.18,
-        "R": 18,
-        "G": 90,
-        "B": 42
+        "Position": 0.24,
+        "R": 110,
+        "G": 50,
+        "B": 175
       },
       {
         "Position": 0.36,
-        "R": 218,
-        "G": 168,
-        "B": 58
+        "R": 175,
+        "G": 95,
+        "B": 222
+      },
+      {
+        "Position": 0.46,
+        "R": 205,
+        "G": 130,
+        "B": 235
       },
       {
         "Position": 0.55,
-        "R": 245,
-        "G": 250,
-        "B": 255
+        "R": 162,
+        "G": 80,
+        "B": 32
       },
       {
-        "Position": 0.72,
-        "R": 190,
-        "G": 30,
-        "B": 35
+        "Position": 0.65,
+        "R": 228,
+        "G": 132,
+        "B": 44
       },
       {
-        "Position": 0.88,
-        "R": 75,
-        "G": 10,
+        "Position": 0.74,
+        "R": 255,
+        "G": 175,
+        "B": 70
+      },
+      {
+        "Position": 0.82,
+        "R": 255,
+        "G": 220,
+        "B": 122
+      },
+      {
+        "Position": 0.9,
+        "R": 110,
+        "G": 215,
+        "B": 230
+      },
+      {
+        "Position": 0.96,
+        "R": 188,
+        "G": 240,
+        "B": 248
+      },
+      {
+        "Position": 1.0,
+        "R": 8,
+        "G": 4,
         "B": 18
-      },
-      {
-        "Position": 1.0,
-        "R": 5,
-        "G": 38,
-        "B": 22
       }
     ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.13,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.65,
-      "Lz": 0.7,
-      "DiffR": 1.2,
-      "DiffG": 1.1,
-      "DiffB": 0.9,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.5,
-      "DiffR": 0.35,
-      "DiffG": 0.45,
-      "DiffB": 0.65,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "KeySpecScale": 0.85,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.18,
-    "MaterialBands": [
-      {
-        "UpperT": 0.28,
-        "Metal": 0.0,
-        "Roughness": 0.75
-      },
-      {
-        "UpperT": 0.46,
-        "Metal": 0.85,
-        "Roughness": 0.28
-      },
-      {
-        "UpperT": 0.62,
-        "Metal": 0.0,
-        "Roughness": 0.6
-      },
-      {
-        "UpperT": 0.82,
-        "Metal": 0.3,
-        "Roughness": 0.32
-      },
-      {
-        "UpperT": 1.0,
-        "Metal": 0.0,
-        "Roughness": 0.7
-      }
-    ]
-  },
-  {
-    "Name": "Gryffindor (GradientLinear)",
-    "Category": "House Colors",
-    "Description": "Scarlet / crimson / burnished gold / parchment — Gryffindor heraldry. Linear stretch.",
-    "Kind": "Gradient",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 110,
-        "G": 12,
-        "B": 14
-      },
-      {
-        "Position": 0.34,
-        "R": 196,
-        "G": 30,
-        "B": 28
-      },
-      {
-        "Position": 0.5,
-        "R": 232,
-        "G": 110,
-        "B": 38
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 192,
-        "B": 60
-      },
-      {
-        "Position": 0.82,
-        "R": 250,
-        "G": 230,
-        "B": 168
-      },
-      {
-        "Position": 1.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.6,
-    "Ambient": 0.13,
-    "KeySpecScale": 0.85,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Gryffindor (Gradient)",
-    "Category": "House Colors",
-    "Description": "Scarlet / crimson / burnished gold / parchment — Gryffindor heraldry. Cycling.",
-    "Kind": "Cycling",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 110,
-        "G": 12,
-        "B": 14
-      },
-      {
-        "Position": 0.34,
-        "R": 196,
-        "G": 30,
-        "B": 28
-      },
-      {
-        "Position": 0.5,
-        "R": 232,
-        "G": 110,
-        "B": 38
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 192,
-        "B": 60
-      },
-      {
-        "Position": 0.82,
-        "R": 250,
-        "G": 230,
-        "B": 168
-      },
-      {
-        "Position": 1.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.6,
-    "Ambient": 0.13,
-    "KeySpecScale": 0.85,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Gryffindor (Phong3D)",
-    "Category": "House Colors",
-    "Description": "Scarlet / crimson / burnished gold / parchment — Gryffindor heraldry. Phong relief, candlelit hall key + cool stone fill.",
-    "Kind": "Phong3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 110,
-        "G": 12,
-        "B": 14
-      },
-      {
-        "Position": 0.34,
-        "R": 196,
-        "G": 30,
-        "B": 28
-      },
-      {
-        "Position": 0.5,
-        "R": 232,
-        "G": 110,
-        "B": 38
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 192,
-        "B": 60
-      },
-      {
-        "Position": 0.82,
-        "R": 250,
-        "G": 230,
-        "B": 168
-      },
-      {
-        "Position": 1.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.15,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.65,
-      "DiffR": 1.0,
-      "DiffG": 0.78,
-      "DiffB": 0.5,
-      "SpecR": 1.0,
-      "SpecG": 0.88,
-      "SpecB": 0.55,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.3,
-      "DiffG": 0.35,
-      "DiffB": 0.5,
-      "SpecR": 0.25,
-      "SpecG": 0.3,
-      "SpecB": 0.45,
-      "Shininess": 32
-    },
-    "KeySpecScale": 0.9,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Gryffindor (Pbr3D)",
-    "Category": "House Colors",
-    "Description": "Scarlet / crimson / burnished gold / parchment — Gryffindor heraldry. PBR relief — polished gold band, lacquered scarlet velvet, matte parchment.",
-    "Kind": "Pbr3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 110,
-        "G": 12,
-        "B": 14
-      },
-      {
-        "Position": 0.34,
-        "R": 196,
-        "G": 30,
-        "B": 28
-      },
-      {
-        "Position": 0.5,
-        "R": 232,
-        "G": 110,
-        "B": 38
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 192,
-        "B": 60
-      },
-      {
-        "Position": 0.82,
-        "R": 250,
-        "G": 230,
-        "B": 168
-      },
-      {
-        "Position": 1.0,
-        "R": 30,
-        "G": 6,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
+    "CycleSpeed": 0.025,
+    "Steepness": 1.45,
     "Ambient": 0.12,
     "KeyLight": {
-      "Lx": -0.55,
+      "Lx": 0.6,
+      "Ly": 0.55,
+      "Lz": 0.75,
+      "DiffR": 1.0,
+      "DiffG": 0.78,
+      "DiffB": 0.42,
+      "SpecR": 1.0,
+      "SpecG": 0.88,
+      "SpecB": 0.6,
+      "Shininess": 75
+    },
+    "FillLight": {
+      "Lx": -0.7,
+      "Ly": -0.35,
+      "Lz": 0.5,
+      "DiffR": 0.45,
+      "DiffG": 0.3,
+      "DiffB": 0.85,
+      "SpecR": 0.4,
+      "SpecG": 0.25,
+      "SpecB": 0.9,
+      "Shininess": 22
+    },
+    "KeySpecScale": 0.95,
+    "FillSpecScale": 0.35,
+    "FillDiffScale": 0.4,
+    "PbrLightingMode": "PBRRealistic",
+    "GlowBoostExponent": 8,
+    "GlowBoostScale": 0,
+    "MaterialBands": []
+  },
+  {
+    "Name": "Cosmic Mandala (Pbr3D)",
+    "Category": "Cosmic Mandala",
+    "Description": "Jewelled mandala under Cook-Torrance PBR. Polished copper filigree, matte violet bulbs, satin turquoise glass, gold-leaf highlights.",
+    "Kind": "Pbr3D",
+    "Stops": [
+      {
+        "Position": 0.0,
+        "R": 8,
+        "G": 4,
+        "B": 18
+      },
+      {
+        "Position": 0.12,
+        "R": 50,
+        "G": 20,
+        "B": 92
+      },
+      {
+        "Position": 0.24,
+        "R": 110,
+        "G": 50,
+        "B": 175
+      },
+      {
+        "Position": 0.36,
+        "R": 175,
+        "G": 95,
+        "B": 222
+      },
+      {
+        "Position": 0.46,
+        "R": 205,
+        "G": 130,
+        "B": 235
+      },
+      {
+        "Position": 0.55,
+        "R": 162,
+        "G": 80,
+        "B": 32
+      },
+      {
+        "Position": 0.65,
+        "R": 228,
+        "G": 132,
+        "B": 44
+      },
+      {
+        "Position": 0.74,
+        "R": 255,
+        "G": 175,
+        "B": 70
+      },
+      {
+        "Position": 0.82,
+        "R": 255,
+        "G": 220,
+        "B": 122
+      },
+      {
+        "Position": 0.9,
+        "R": 110,
+        "G": 215,
+        "B": 230
+      },
+      {
+        "Position": 0.96,
+        "R": 188,
+        "G": 240,
+        "B": 248
+      },
+      {
+        "Position": 1.0,
+        "R": 255,
+        "G": 250,
+        "B": 232
+      }
+    ],
+    "CycleSpeed": 0.022,
+    "Steepness": 1.55,
+    "Ambient": 0.14,
+    "KeyLight": {
+      "Lx": 0.55,
       "Ly": 0.6,
       "Lz": 0.7,
       "DiffR": 1.25,
       "DiffG": 1.05,
+      "DiffB": 0.75,
+      "SpecR": 0.0,
+      "SpecG": 0.0,
+      "SpecB": 0.0,
+      "Shininess": 1
+    },
+    "FillLight": {
+      "Lx": -0.7,
+      "Ly": -0.4,
+      "Lz": 0.55,
+      "DiffR": 0.4,
+      "DiffG": 0.32,
       "DiffB": 0.8,
       "SpecR": 0.0,
       "SpecG": 0.0,
       "SpecB": 0.0,
       "Shininess": 1
     },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.35,
-      "DiffG": 0.4,
-      "DiffB": 0.55,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "KeySpecScale": 0.9,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": [
-      {
-        "UpperT": 0.22,
-        "Metal": 0.0,
-        "Roughness": 0.7
-      },
-      {
-        "UpperT": 0.42,
-        "Metal": 0.1,
-        "Roughness": 0.35
-      },
-      {
-        "UpperT": 0.58,
-        "Metal": 0.4,
-        "Roughness": 0.3
-      },
-      {
-        "UpperT": 0.78,
-        "Metal": 0.92,
-        "Roughness": 0.22
-      },
-      {
-        "UpperT": 1.0,
-        "Metal": 0.0,
-        "Roughness": 0.6
-      }
-    ]
-  },
-  {
-    "Name": "Christmas Red (GradientLinear)",
-    "Category": "Holiday",
-    "Description": "Crimson black / dark red / Christmas scarlet / ember / holly gold / snow — linear gradient stretch over iteration depth.",
-    "Kind": "Gradient",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      },
-      {
-        "Position": 0.15,
-        "R": 110,
-        "G": 12,
-        "B": 18
-      },
-      {
-        "Position": 0.32,
-        "R": 200,
-        "G": 28,
-        "B": 30
-      },
-      {
-        "Position": 0.5,
-        "R": 235,
-        "G": 90,
-        "B": 60
-      },
-      {
-        "Position": 0.66,
-        "R": 220,
-        "G": 170,
-        "B": 55
-      },
-      {
-        "Position": 0.82,
-        "R": 245,
-        "G": 248,
-        "B": 250
-      },
-      {
-        "Position": 1.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.3,
-      "DiffG": 1.0,
-      "DiffB": 0.78,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.4,
-      "DiffG": 0.5,
-      "DiffB": 0.65,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
+    "KeySpecScale": 0.85,
+    "FillSpecScale": 0.28,
     "FillDiffScale": 0.4,
     "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Christmas Red (Gradient)",
-    "Category": "Holiday",
-    "Description": "Crimson black / dark red / Christmas scarlet / ember / holly gold / snow — cyclic palette.",
-    "Kind": "Cycling",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      },
-      {
-        "Position": 0.15,
-        "R": 110,
-        "G": 12,
-        "B": 18
-      },
-      {
-        "Position": 0.32,
-        "R": 200,
-        "G": 28,
-        "B": 30
-      },
-      {
-        "Position": 0.5,
-        "R": 235,
-        "G": 90,
-        "B": 60
-      },
-      {
-        "Position": 0.66,
-        "R": 220,
-        "G": 170,
-        "B": 55
-      },
-      {
-        "Position": 0.82,
-        "R": 245,
-        "G": 248,
-        "B": 250
-      },
-      {
-        "Position": 1.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.3,
-      "DiffG": 1.0,
-      "DiffB": 0.78,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.4,
-      "DiffG": 0.5,
-      "DiffB": 0.65,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
-    "FillDiffScale": 0.4,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Christmas Red (Phong3D)",
-    "Category": "Holiday",
-    "Description": "Crimson black / dark red / Christmas scarlet / ember / holly gold / snow — Blinn-Phong 3D relief lighting.",
-    "Kind": "Phong3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      },
-      {
-        "Position": 0.15,
-        "R": 110,
-        "G": 12,
-        "B": 18
-      },
-      {
-        "Position": 0.32,
-        "R": 200,
-        "G": 28,
-        "B": 30
-      },
-      {
-        "Position": 0.5,
-        "R": 235,
-        "G": 90,
-        "B": 60
-      },
-      {
-        "Position": 0.66,
-        "R": 220,
-        "G": 170,
-        "B": 55
-      },
-      {
-        "Position": 0.82,
-        "R": 245,
-        "G": 248,
-        "B": 250
-      },
-      {
-        "Position": 1.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.3,
-      "DiffG": 1.0,
-      "DiffB": 0.78,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.4,
-      "DiffG": 0.5,
-      "DiffB": 0.65,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.55,
-    "FillSpecScale": 0.18,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Christmas Red (Pbr3D)",
-    "Category": "Holiday",
-    "Description": "Crimson black / dark red / Christmas scarlet / ember / holly gold / snow — PBR relief, banded materials.",
-    "Kind": "Pbr3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      },
-      {
-        "Position": 0.15,
-        "R": 110,
-        "G": 12,
-        "B": 18
-      },
-      {
-        "Position": 0.32,
-        "R": 200,
-        "G": 28,
-        "B": 30
-      },
-      {
-        "Position": 0.5,
-        "R": 235,
-        "G": 90,
-        "B": 60
-      },
-      {
-        "Position": 0.66,
-        "R": 220,
-        "G": 170,
-        "B": 55
-      },
-      {
-        "Position": 0.82,
-        "R": 245,
-        "G": 248,
-        "B": 250
-      },
-      {
-        "Position": 1.0,
-        "R": 35,
-        "G": 4,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.3,
-      "DiffG": 1.0,
-      "DiffB": 0.78,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.4,
-      "DiffG": 0.5,
-      "DiffB": 0.65,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "KeySpecScale": 0.9,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
+    "GlowBoostExponent": 6,
+    "GlowBoostScale": 0.3,
     "MaterialBands": [
       {
-        "UpperT": 0.18,
+        "UpperT": 0.12,
         "Metal": 0.0,
-        "Roughness": 0.78
+        "Roughness": 0.85
       },
       {
         "UpperT": 0.36,
-        "Metal": 0.2,
-        "Roughness": 0.35
+        "Metal": 0.1,
+        "Roughness": 0.55
       },
       {
-        "UpperT": 0.55,
-        "Metal": 0.3,
-        "Roughness": 0.3
+        "UpperT": 0.46,
+        "Metal": 0.0,
+        "Roughness": 0.65
       },
       {
-        "UpperT": 0.7,
-        "Metal": 0.55,
-        "Roughness": 0.28
-      },
-      {
-        "UpperT": 0.85,
+        "UpperT": 0.65,
         "Metal": 0.9,
         "Roughness": 0.22
       },
       {
-        "UpperT": 1.0,
-        "Metal": 0.0,
-        "Roughness": 0.62
-      }
-    ]
-  },
-  {
-    "Name": "Ravenclaw (GradientLinear)",
-    "Category": "House Colors",
-    "Description": "Midnight blue / navy / royal blue / sky / antique bronze / cream — Ravenclaw heraldry — linear gradient stretch over iteration depth.",
-    "Kind": "Gradient",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      },
-      {
-        "Position": 0.16,
-        "R": 16,
-        "G": 40,
-        "B": 90
-      },
-      {
-        "Position": 0.34,
-        "R": 40,
-        "G": 80,
-        "B": 160
-      },
-      {
-        "Position": 0.5,
-        "R": 90,
-        "G": 140,
-        "B": 210
-      },
-      {
-        "Position": 0.66,
-        "R": 180,
-        "G": 120,
-        "B": 50
-      },
-      {
-        "Position": 0.82,
-        "R": 230,
-        "G": 200,
-        "B": 140
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.0,
-      "DiffG": 1.05,
-      "DiffB": 1.25,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.55,
-      "DiffG": 0.5,
-      "DiffB": 0.4,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
-    "FillDiffScale": 0.4,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Ravenclaw (Gradient)",
-    "Category": "House Colors",
-    "Description": "Midnight blue / navy / royal blue / sky / antique bronze / cream — Ravenclaw heraldry — cyclic palette.",
-    "Kind": "Cycling",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      },
-      {
-        "Position": 0.16,
-        "R": 16,
-        "G": 40,
-        "B": 90
-      },
-      {
-        "Position": 0.34,
-        "R": 40,
-        "G": 80,
-        "B": 160
-      },
-      {
-        "Position": 0.5,
-        "R": 90,
-        "G": 140,
-        "B": 210
-      },
-      {
-        "Position": 0.66,
-        "R": 180,
-        "G": 120,
-        "B": 50
-      },
-      {
-        "Position": 0.82,
-        "R": 230,
-        "G": 200,
-        "B": 140
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.0,
-      "DiffG": 1.05,
-      "DiffB": 1.25,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.55,
-      "DiffG": 0.5,
-      "DiffB": 0.4,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
-    "FillDiffScale": 0.4,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Ravenclaw (Phong3D)",
-    "Category": "House Colors",
-    "Description": "Midnight blue / navy / royal blue / sky / antique bronze / cream — Ravenclaw heraldry — Blinn-Phong 3D relief lighting.",
-    "Kind": "Phong3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      },
-      {
-        "Position": 0.16,
-        "R": 16,
-        "G": 40,
-        "B": 90
-      },
-      {
-        "Position": 0.34,
-        "R": 40,
-        "G": 80,
-        "B": 160
-      },
-      {
-        "Position": 0.5,
-        "R": 90,
-        "G": 140,
-        "B": 210
-      },
-      {
-        "Position": 0.66,
-        "R": 180,
-        "G": 120,
-        "B": 50
-      },
-      {
-        "Position": 0.82,
-        "R": 230,
-        "G": 200,
-        "B": 140
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.0,
-      "DiffG": 1.05,
-      "DiffB": 1.25,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.55,
-      "DiffG": 0.5,
-      "DiffB": 0.4,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.55,
-    "FillSpecScale": 0.18,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Ravenclaw (Pbr3D)",
-    "Category": "House Colors",
-    "Description": "Midnight blue / navy / royal blue / sky / antique bronze / cream — Ravenclaw heraldry — PBR relief, banded materials.",
-    "Kind": "Pbr3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      },
-      {
-        "Position": 0.16,
-        "R": 16,
-        "G": 40,
-        "B": 90
-      },
-      {
-        "Position": 0.34,
-        "R": 40,
-        "G": 80,
-        "B": 160
-      },
-      {
-        "Position": 0.5,
-        "R": 90,
-        "G": 140,
-        "B": 210
-      },
-      {
-        "Position": 0.66,
-        "R": 180,
-        "G": 120,
-        "B": 50
-      },
-      {
-        "Position": 0.82,
-        "R": 230,
-        "G": 200,
-        "B": 140
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 8,
-        "B": 28
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.0,
-      "DiffG": 1.05,
-      "DiffB": 1.25,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.55,
-      "DiffG": 0.5,
-      "DiffB": 0.4,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "KeySpecScale": 0.9,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": [
-      {
-        "UpperT": 0.2,
-        "Metal": 0.0,
-        "Roughness": 0.8
-      },
-      {
-        "UpperT": 0.4,
-        "Metal": 0.15,
-        "Roughness": 0.4
-      },
-      {
-        "UpperT": 0.58,
-        "Metal": 0.1,
-        "Roughness": 0.32
-      },
-      {
-        "UpperT": 0.72,
-        "Metal": 0.05,
+        "UpperT": 0.82,
+        "Metal": 0.75,
         "Roughness": 0.3
       },
       {
-        "UpperT": 0.88,
-        "Metal": 0.85,
-        "Roughness": 0.3
-      },
-      {
-        "UpperT": 1.0,
-        "Metal": 0.0,
-        "Roughness": 0.6
-      }
-    ]
-  },
-  {
-    "Name": "Hufflepuff (GradientLinear)",
-    "Category": "House Colors",
-    "Description": "Coal black / dark umber / bronze brown / honey / Hufflepuff yellow / cream — linear gradient stretch over iteration depth.",
-    "Kind": "Gradient",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      },
-      {
-        "Position": 0.16,
-        "R": 40,
-        "G": 30,
-        "B": 10
-      },
-      {
-        "Position": 0.34,
-        "R": 90,
-        "G": 65,
-        "B": 15
-      },
-      {
-        "Position": 0.5,
-        "R": 180,
-        "G": 130,
-        "B": 30
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 200,
-        "B": 40
-      },
-      {
-        "Position": 0.82,
-        "R": 252,
-        "G": 235,
-        "B": 150
-      },
-      {
-        "Position": 1.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.25,
-      "DiffG": 1.1,
-      "DiffB": 0.7,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.45,
-      "DiffG": 0.45,
-      "DiffB": 0.55,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
-    "FillDiffScale": 0.4,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Hufflepuff (Gradient)",
-    "Category": "House Colors",
-    "Description": "Coal black / dark umber / bronze brown / honey / Hufflepuff yellow / cream — cyclic palette.",
-    "Kind": "Cycling",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      },
-      {
-        "Position": 0.16,
-        "R": 40,
-        "G": 30,
-        "B": 10
-      },
-      {
-        "Position": 0.34,
-        "R": 90,
-        "G": 65,
-        "B": 15
-      },
-      {
-        "Position": 0.5,
-        "R": 180,
-        "G": 130,
-        "B": 30
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 200,
-        "B": 40
-      },
-      {
-        "Position": 0.82,
-        "R": 252,
-        "G": 235,
-        "B": 150
-      },
-      {
-        "Position": 1.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.25,
-      "DiffG": 1.1,
-      "DiffB": 0.7,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.45,
-      "DiffG": 0.45,
-      "DiffB": 0.55,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
-    "FillDiffScale": 0.4,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Hufflepuff (Phong3D)",
-    "Category": "House Colors",
-    "Description": "Coal black / dark umber / bronze brown / honey / Hufflepuff yellow / cream — Blinn-Phong 3D relief lighting.",
-    "Kind": "Phong3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      },
-      {
-        "Position": 0.16,
-        "R": 40,
-        "G": 30,
-        "B": 10
-      },
-      {
-        "Position": 0.34,
-        "R": 90,
-        "G": 65,
-        "B": 15
-      },
-      {
-        "Position": 0.5,
-        "R": 180,
-        "G": 130,
-        "B": 30
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 200,
-        "B": 40
-      },
-      {
-        "Position": 0.82,
-        "R": 252,
-        "G": 235,
-        "B": 150
-      },
-      {
-        "Position": 1.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.25,
-      "DiffG": 1.1,
-      "DiffB": 0.7,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.45,
-      "DiffG": 0.45,
-      "DiffB": 0.55,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.55,
-    "FillSpecScale": 0.18,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Hufflepuff (Pbr3D)",
-    "Category": "House Colors",
-    "Description": "Coal black / dark umber / bronze brown / honey / Hufflepuff yellow / cream — PBR relief, banded materials.",
-    "Kind": "Pbr3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      },
-      {
-        "Position": 0.16,
-        "R": 40,
-        "G": 30,
-        "B": 10
-      },
-      {
-        "Position": 0.34,
-        "R": 90,
-        "G": 65,
-        "B": 15
-      },
-      {
-        "Position": 0.5,
-        "R": 180,
-        "G": 130,
-        "B": 30
-      },
-      {
-        "Position": 0.66,
-        "R": 240,
-        "G": 200,
-        "B": 40
-      },
-      {
-        "Position": 0.82,
-        "R": 252,
-        "G": 235,
-        "B": 150
-      },
-      {
-        "Position": 1.0,
-        "R": 10,
-        "G": 8,
-        "B": 4
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 1.25,
-      "DiffG": 1.1,
-      "DiffB": 0.7,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.45,
-      "DiffG": 0.45,
-      "DiffB": 0.55,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "KeySpecScale": 0.9,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": [
-      {
-        "UpperT": 0.22,
-        "Metal": 0.0,
-        "Roughness": 0.82
-      },
-      {
-        "UpperT": 0.4,
-        "Metal": 0.2,
-        "Roughness": 0.5
-      },
-      {
-        "UpperT": 0.58,
-        "Metal": 0.55,
-        "Roughness": 0.32
-      },
-      {
-        "UpperT": 0.74,
-        "Metal": 0.3,
-        "Roughness": 0.28
-      },
-      {
-        "UpperT": 0.88,
-        "Metal": 0.85,
-        "Roughness": 0.22
-      },
-      {
-        "UpperT": 1.0,
-        "Metal": 0.0,
-        "Roughness": 0.6
-      }
-    ]
-  },
-  {
-    "Name": "Slytherin (GradientLinear)",
-    "Category": "House Colors",
-    "Description": "Black-green / deep forest / emerald / bright green / sage silver / silver white — linear gradient stretch over iteration depth.",
-    "Kind": "Gradient",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 12,
-        "G": 50,
-        "B": 30
-      },
-      {
-        "Position": 0.34,
-        "R": 20,
-        "G": 90,
-        "B": 55
-      },
-      {
-        "Position": 0.5,
-        "R": 40,
-        "G": 140,
-        "B": 80
-      },
-      {
-        "Position": 0.66,
-        "R": 140,
-        "G": 180,
-        "B": 150
-      },
-      {
-        "Position": 0.82,
-        "R": 220,
-        "G": 228,
-        "B": 225
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 0.95,
-      "DiffG": 1.2,
-      "DiffB": 1.0,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.5,
-      "DiffG": 0.55,
-      "DiffB": 0.55,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
-    "FillDiffScale": 0.4,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Slytherin (Gradient)",
-    "Category": "House Colors",
-    "Description": "Black-green / deep forest / emerald / bright green / sage silver / silver white — cyclic palette.",
-    "Kind": "Cycling",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 12,
-        "G": 50,
-        "B": 30
-      },
-      {
-        "Position": 0.34,
-        "R": 20,
-        "G": 90,
-        "B": 55
-      },
-      {
-        "Position": 0.5,
-        "R": 40,
-        "G": 140,
-        "B": 80
-      },
-      {
-        "Position": 0.66,
-        "R": 140,
-        "G": 180,
-        "B": 150
-      },
-      {
-        "Position": 0.82,
-        "R": 220,
-        "G": 228,
-        "B": 225
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 0.95,
-      "DiffG": 1.2,
-      "DiffB": 1.0,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.5,
-      "DiffG": 0.55,
-      "DiffB": 0.55,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.0,
-    "FillSpecScale": 0.0,
-    "FillDiffScale": 0.4,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Slytherin (Phong3D)",
-    "Category": "House Colors",
-    "Description": "Black-green / deep forest / emerald / bright green / sage silver / silver white — Blinn-Phong 3D relief lighting.",
-    "Kind": "Phong3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 12,
-        "G": 50,
-        "B": 30
-      },
-      {
-        "Position": 0.34,
-        "R": 20,
-        "G": 90,
-        "B": 55
-      },
-      {
-        "Position": 0.5,
-        "R": 40,
-        "G": 140,
-        "B": 80
-      },
-      {
-        "Position": 0.66,
-        "R": 140,
-        "G": 180,
-        "B": 150
-      },
-      {
-        "Position": 0.82,
-        "R": 220,
-        "G": 228,
-        "B": 225
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 0.95,
-      "DiffG": 1.2,
-      "DiffB": 1.0,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.5,
-      "DiffG": 0.55,
-      "DiffB": 0.55,
-      "SpecR": 1.0,
-      "SpecG": 1.0,
-      "SpecB": 1.0,
-      "Shininess": 72
-    },
-    "KeySpecScale": 0.55,
-    "FillSpecScale": 0.18,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": []
-  },
-  {
-    "Name": "Slytherin (Pbr3D)",
-    "Category": "House Colors",
-    "Description": "Black-green / deep forest / emerald / bright green / sage silver / silver white — PBR relief, banded materials.",
-    "Kind": "Pbr3D",
-    "Stops": [
-      {
-        "Position": 0.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      },
-      {
-        "Position": 0.16,
-        "R": 12,
-        "G": 50,
-        "B": 30
-      },
-      {
-        "Position": 0.34,
-        "R": 20,
-        "G": 90,
-        "B": 55
-      },
-      {
-        "Position": 0.5,
-        "R": 40,
-        "G": 140,
-        "B": 80
-      },
-      {
-        "Position": 0.66,
-        "R": 140,
-        "G": 180,
-        "B": 150
-      },
-      {
-        "Position": 0.82,
-        "R": 220,
-        "G": 228,
-        "B": 225
-      },
-      {
-        "Position": 1.0,
-        "R": 4,
-        "G": 14,
-        "B": 8
-      }
-    ],
-    "CycleSpeed": 0.02,
-    "Steepness": 1.5,
-    "Ambient": 0.12,
-    "KeyLight": {
-      "Lx": -0.55,
-      "Ly": 0.6,
-      "Lz": 0.7,
-      "DiffR": 0.95,
-      "DiffG": 1.2,
-      "DiffB": 1.0,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "FillLight": {
-      "Lx": 0.6,
-      "Ly": -0.45,
-      "Lz": 0.55,
-      "DiffR": 0.5,
-      "DiffG": 0.55,
-      "DiffB": 0.55,
-      "SpecR": 0.0,
-      "SpecG": 0.0,
-      "SpecB": 0.0,
-      "Shininess": 1
-    },
-    "KeySpecScale": 0.9,
-    "FillSpecScale": 0.25,
-    "FillDiffScale": 0.35,
-    "PbrLightingMode": "PBRRealistic",
-    "GlowBoostExponent": 8,
-    "GlowBoostScale": 0.2,
-    "MaterialBands": [
-      {
-        "UpperT": 0.2,
-        "Metal": 0.0,
-        "Roughness": 0.78
-      },
-      {
-        "UpperT": 0.38,
-        "Metal": 0.15,
-        "Roughness": 0.4
-      },
-      {
-        "UpperT": 0.56,
+        "UpperT": 0.96,
         "Metal": 0.25,
-        "Roughness": 0.32
-      },
-      {
-        "UpperT": 0.72,
-        "Metal": 0.1,
-        "Roughness": 0.3
-      },
-      {
-        "UpperT": 0.88,
-        "Metal": 0.85,
-        "Roughness": 0.22
+        "Roughness": 0.4
       },
       {
         "UpperT": 1.0,
         "Metal": 0.0,
-        "Roughness": 0.58
+        "Roughness": 0.35
       }
     ]
   }

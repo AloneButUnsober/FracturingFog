@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.Text;
 using System.Windows.Forms;
+
+using FracturingFog.Models;
 
 namespace FracturingFog.Views
 {
@@ -347,5 +350,538 @@ namespace FracturingFog.Views
             _widthTx.Text = pixelWidth.ToString();
             _heightTx.Text = pixelHeight.ToString();
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Video zoom dialog — select target (region or manual coords + zoom) and speed
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    public sealed class VideoDialog : Form
+    {
+        private readonly ComboBox _regionCombo;
+        private readonly TextBox _txCX;
+        private readonly TextBox _txCY;
+        private readonly TextBox _txZoom;
+        private readonly RadioButton _rbSlow;
+        private readonly RadioButton _rbMed;
+        private readonly RadioButton _rbFast;
+        private readonly RadioButton _rbCustom;
+        private readonly TextBox _txCustomSecs;
+        private readonly Label _capWarn;
+        private readonly CheckBox _chkConstantRate;
+        private readonly CheckBox _chkReverse;
+        private readonly CheckBox _chkSaveVideo;
+        private readonly CheckBox _chkSaveLossless;
+        private readonly ComboBox _losslessEncodeCombo;
+
+        // Custom duration bounds (seconds).
+        private const double CustomSecsMin = 0.5;
+        private const double CustomSecsMax = 300.0;
+
+        /// <summary>
+        /// True when user clicked the Slideshow button instead of Start.
+        /// Caller should ignore target inputs and launch the video slideshow.
+        /// </summary>
+        public bool IsSlideshow { get; private set; }
+
+        /// <summary>
+        /// Per-leg duration override for the slideshow.  Set only when the user
+        /// chose the Custom radio with a valid value at the time the Slideshow
+        /// button was clicked; null means "use the slideshow's default duration".
+        /// </summary>
+        public double? SlideshowSecondsOverride { get; private set; }
+
+        /// <summary>
+        /// True when "Constant Rate" was checked at click time.  In this mode
+        /// the slideshow holds the log-zoom rate constant across regions and
+        /// scales per-leg duration with region depth; the user-supplied time
+        /// acts as the *minimum* duration applied to the shallowest region.
+        /// </summary>
+        public bool IsConstantRate { get; private set; }
+
+        /// <summary>
+        /// True when "Reverse zoom" was checked at click time.  In reverse mode
+        /// the video starts at the user-supplied target coordinates/zoom and
+        /// animates back to the classic view, instead of zooming from classic
+        /// into the target.  Applies to both single-shot Start and Slideshow.
+        /// </summary>
+        public bool IsReverse { get; private set; }
+
+        /// <summary>
+        /// True when "Save video" was checked at click time. Ignored when the
+        /// user clicks Slideshow (per-leg recording isn't supported).
+        /// </summary>
+        public bool IsSaveVideo { get; private set; }
+
+        /// <summary>
+        /// True when "Save lossless (PNG sequence)" was checked at click time.
+        /// MP4 + lossless can both be on simultaneously (parallel capture).
+        /// </summary>
+        public bool IsSaveLossless { get; private set; }
+
+        /// <summary>
+        /// Post-capture encoding choice for the PNG sequence. "None" keeps the
+        /// PNG folder as-is; the others invoke a bundled/PATH ffmpeg.
+        /// </summary>
+        public enum LosslessEncodeChoice { None, LosslessH264Mp4, Ffv1Mkv, HighQualityH264Mp4 }
+        public LosslessEncodeChoice LosslessEncode { get; private set; } = LosslessEncodeChoice.None;
+
+        /// <summary>
+        /// Per-region iteration count captured when the user picks a region
+        /// from the combo. Zero when the dialog is in manual-entry mode (no
+        /// region selected) — caller should fall back to the quality preset's
+        /// auto-computed iteration count. Deep regions ship with a higher
+        /// recommended iter cap than the preset formula would produce, and
+        /// honouring this value avoids in-set black at the target frame.
+        /// </summary>
+        public int TargetIterations { get; private set; }
+
+        // Full QD precision limbs for the chosen target. Hi mirrors the textbox
+        // contents; Lo/X2/X3 carry the extended-precision tail stored on regions
+        // and are needed to land on the correct pixel at deep zoom (~1e15+).
+        private double _targetCXLo, _targetCX2, _targetCX3;
+        private double _targetCYLo, _targetCY2, _targetCY3;
+
+        public VideoDialog(double currentCX, double currentCY, double currentZoom)
+        {
+            Text = "Video Zoom";
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            ClientSize = new Size(420, 472);
+            StartPosition = FormStartPosition.CenterParent;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            BackColor = Color.FromArgb(35, 35, 35);
+            TopMost = true;
+
+            Font lblFont = new("Segoe UI", 9f);
+            Color lblColor = Color.LightGray;
+            Color txBack = Color.FromArgb(50, 50, 50);
+            Color txFore = Color.White;
+            Font txFont = new("Consolas", 9.5f);
+
+            Label MkLabel(string text, int left, int top, int width = 90) => new()
+            {
+                Text = text,
+                Left = left,
+                Top = top,
+                Width = width,
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent
+            };
+            TextBox MkTx(int left, int top, int width = 290) => new()
+            {
+                Left = left,
+                Top = top,
+                Width = width,
+                BackColor = txBack,
+                ForeColor = txFore,
+                Font = txFont,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            // ── Region selector (pre-fills target boxes) ──────────────────────
+            Controls.Add(MkLabel("Region:", 8, 14, 90));
+
+            _regionCombo = new ComboBox
+            {
+                Left = 104,
+                Top = 11,
+                Width = 296,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(55, 55, 55),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            _regionCombo.Items.Add("— manual entry —");
+            FormHelpers.RebuildRegionComboNoExtreme(_regionCombo, OnRegionPicked);
+            foreach (var r in FractalRegionLibrary.Instance.All)
+                _regionCombo.Items.Add(r.Name);
+            Controls.Add(_regionCombo);
+
+            // ── Target coordinates ────────────────────────────────────────────
+            Controls.Add(MkLabel("Target CX:", 8, 50));
+            _txCX = MkTx(104, 47);
+            _txCX.Text = currentCX.ToString("R", CultureInfo.InvariantCulture);
+            _txCX.TextChanged += TxCXChangedClearLimbs;
+            Controls.Add(_txCX);
+
+            Controls.Add(MkLabel("Target CY:", 8, 80));
+            _txCY = MkTx(104, 77);
+            _txCY.Text = currentCY.ToString("R", CultureInfo.InvariantCulture);
+            _txCY.TextChanged += TxCYChangedClearLimbs;
+            Controls.Add(_txCY);
+
+            Controls.Add(MkLabel("Target Zoom:", 8, 110));
+            _txZoom = MkTx(104, 107);
+            _txZoom.Text = Math.Max(currentZoom * 10.0, 100.0).ToString("G6", CultureInfo.InvariantCulture);
+            Controls.Add(_txZoom);
+
+            double ultraMax = QualityPreset.Ultra.ZoomMax;
+            _capWarn = new Label
+            {
+                Text = $"Max target zoom: {ultraMax:G3} (Ultra). Deeper values are clamped.",
+                Left = 104,
+                Top = 132,
+                Width = 296,
+                ForeColor = Color.FromArgb(180, 160, 100),
+                Font = new Font("Segoe UI", 8f, FontStyle.Italic),
+                BackColor = Color.Transparent
+            };
+            Controls.Add(_capWarn);
+
+            // ── Speed radios ──────────────────────────────────────────────────
+            var speedBox = new GroupBox
+            {
+                Text = "Zoom Speed",
+                Left = 8,
+                Top = 158,
+                Width = 392,
+                Height = 96,
+                ForeColor = Color.LightGray,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            Controls.Add(speedBox);
+
+            _rbSlow = new RadioButton { Text = "Slow (15 s)", Left = 16, Top = 26, Width = 110, ForeColor = lblColor, Font = lblFont, BackColor = Color.Transparent };
+            _rbMed = new RadioButton { Text = "Medium (8 s)", Left = 140, Top = 26, Width = 120, ForeColor = lblColor, Font = lblFont, BackColor = Color.Transparent, Checked = true };
+            _rbFast = new RadioButton { Text = "Fast (4 s)", Left = 270, Top = 26, Width = 110, ForeColor = lblColor, Font = lblFont, BackColor = Color.Transparent };
+            speedBox.Controls.Add(_rbSlow);
+            speedBox.Controls.Add(_rbMed);
+            speedBox.Controls.Add(_rbFast);
+
+            _rbCustom = new RadioButton { Text = "Custom:", Left = 16, Top = 56, Width = 78, ForeColor = lblColor, Font = lblFont, BackColor = Color.Transparent };
+            _txCustomSecs = new TextBox
+            {
+                Left = 96,
+                Top = 54,
+                Width = 70,
+                BackColor = txBack,
+                ForeColor = txFore,
+                Font = txFont,
+                BorderStyle = BorderStyle.FixedSingle,
+                Text = "30"
+            };
+            // Auto-select Custom radio when user types in the box.
+            _txCustomSecs.Enter += (_, _) => _rbCustom.Checked = true;
+            _txCustomSecs.TextChanged += (_, _) => { if (_txCustomSecs.Focused) _rbCustom.Checked = true; };
+            var customHint = new Label
+            {
+                Text = $"seconds (0.5 – {CustomSecsMax:F0})",
+                Left = 172,
+                Top = 56,
+                Width = 210,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            speedBox.Controls.Add(_rbCustom);
+            speedBox.Controls.Add(_txCustomSecs);
+            speedBox.Controls.Add(customHint);
+
+            // ── Constant Rate (slideshow-only) ────────────────────────────────
+            _chkConstantRate = new CheckBox
+            {
+                Text = "Constant Rate (slideshow): scale duration by depth",
+                Left = 12,
+                Top = 260,
+                Width = 396,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                Checked = false
+            };
+            ToolTip ttConstRate = new ToolTip();
+            ttConstRate.SetToolTip(_chkConstantRate,
+                "Slideshow only.\n" +
+                "Off: every video uses the same duration; deep zooms appear fast,\n" +
+                "shallow zooms appear slow.\n" +
+                "On: the log-zoom rate is held constant across regions.  The chosen\n" +
+                "duration is the minimum (applied to the shallowest region); deeper\n" +
+                "regions take proportionally longer so the visual zoom speed matches.");
+            Controls.Add(_chkConstantRate);
+
+            // ── Save Video ────────────────────────────────────────────────────
+            _chkSaveVideo = new CheckBox
+            {
+                Text = "Save video as MP4 (single-shot only — ignored for slideshow)",
+                Left = 12,
+                Top = 286,
+                Width = 396,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                Checked = false
+            };
+            ToolTip ttSaveVideo = new ToolTip();
+            ttSaveVideo.SetToolTip(_chkSaveVideo,
+                "Records the zoom animation while it plays. When the zoom finishes\n" +
+                "you'll be prompted for a destination MP4 file.\n" +
+                "Has no effect when launching a slideshow.");
+            Controls.Add(_chkSaveVideo);
+
+            // ── Save Lossless (PNG sequence + optional ffmpeg) ─────────────────
+            _chkSaveLossless = new CheckBox
+            {
+                Text = "Save lossless (PNG sequence — single-shot only)",
+                Left = 12,
+                Top = 312,
+                Width = 396,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                Checked = false
+            };
+            ToolTip ttSaveLossless = new ToolTip();
+            ttSaveLossless.SetToolTip(_chkSaveLossless,
+                "Captures every frame as a numbered PNG into a folder. Truly\n" +
+                "lossless, large on disk. After the zoom finishes you'll pick a\n" +
+                "destination folder, and (if ffmpeg is available) optionally\n" +
+                "post-encode to a lossless video file.\n" +
+                "Has no effect when launching a slideshow.");
+            Controls.Add(_chkSaveLossless);
+
+            Controls.Add(MkLabel("Post-encode:", 8, 343, 90));
+            _losslessEncodeCombo = new ComboBox
+            {
+                Left = 104,
+                Top = 340,
+                Width = 296,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(55, 55, 55),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f),
+                FlatStyle = FlatStyle.Flat,
+                Enabled = false,
+            };
+            _losslessEncodeCombo.Items.Add("Keep PNG sequence only");
+            bool ffmpegHere = FracturingFog.FfmpegEncoder.IsAvailable();
+            if (ffmpegHere)
+            {
+                _losslessEncodeCombo.Items.Add("Lossless H.264 (CRF 0) → .mp4");
+                _losslessEncodeCombo.Items.Add("FFV1 → .mkv");
+                _losslessEncodeCombo.Items.Add("Visually-lossless H.264 (CRF 18) → .mp4");
+            }
+            else
+            {
+                _losslessEncodeCombo.Items.Add("(ffmpeg.exe not found — only PNG output available)");
+            }
+            _losslessEncodeCombo.SelectedIndex = 0;
+            Controls.Add(_losslessEncodeCombo);
+
+            _chkSaveLossless.CheckedChanged += (_, _) =>
+            {
+                _losslessEncodeCombo.Enabled = _chkSaveLossless.Checked && ffmpegHere;
+            };
+
+            ToolTip ttEncode = new ToolTip();
+            ttEncode.SetToolTip(_losslessEncodeCombo,
+                "After the PNG frames are written, optionally invoke ffmpeg to\n" +
+                "produce a video file alongside (or instead of) the PNG folder.\n" +
+                "Requires ffmpeg.exe next to the app, in a Tools/ subfolder, or\n" +
+                "on PATH.");
+
+            // ── Reverse zoom ──────────────────────────────────────────────────
+            _chkReverse = new CheckBox
+            {
+                Text = "Reverse zoom (start at target, end at classic view)",
+                Left = 12,
+                Top = 372,
+                Width = 396,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                Checked = false
+            };
+            ToolTip ttReverse = new ToolTip();
+            ttReverse.SetToolTip(_chkReverse,
+                "Off: zoom in from the classic view to the target.\n" +
+                "On: begin the video at the target coordinates and zoom, then\n" +
+                "animate back out to the classic full-set view by the end of the\n" +
+                "video run. Applies to single-shot Start and to Slideshow.");
+            Controls.Add(_chkReverse);
+
+            // ── Slideshow / OK / Cancel ───────────────────────────────────────
+            var slideshow = new Button
+            {
+                Text = "Slideshow",
+                Left = 12,
+                Top = 428,
+                Width = 96,
+                Height = 28,
+                BackColor = Color.FromArgb(55, 40, 70),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            slideshow.FlatAppearance.BorderColor = Color.FromArgb(100, 70, 130);
+            slideshow.Click += (_, _) =>
+            {
+                // Ignore target CX/CY/zoom (slideshow picks them randomly).
+                // Only validate the Custom duration field if the user chose
+                // the Custom radio — Slow/Med/Fast radios mean "use slideshow
+                // default duration".
+                SlideshowSecondsOverride = null;
+                if (_rbCustom.Checked)
+                {
+                    var ic = CultureInfo.InvariantCulture;
+                    if (!double.TryParse(_txCustomSecs.Text.Trim(),
+                                         NumberStyles.Float, ic, out double secs)
+                        || secs < CustomSecsMin || secs > CustomSecsMax)
+                    {
+                        MessageBox.Show(
+                            $"Custom duration must be between {CustomSecsMin} and {CustomSecsMax:F0} seconds.",
+                            "Video Slideshow",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    SlideshowSecondsOverride = secs;
+                }
+                IsConstantRate = _chkConstantRate.Checked;
+                IsReverse = _chkReverse.Checked;
+                IsSlideshow = true;
+                DialogResult = DialogResult.OK;
+                Close();
+            };
+            ToolTip ttSlideshow = new ToolTip();
+            ttSlideshow.SetToolTip(slideshow,
+                "Auto video slideshow: random non-Extreme region + random theme,\n" +
+                "reset to classic between each zoom, 7-second pause between videos.");
+
+            var ok = new Button
+            {
+                Text = "Start",
+                DialogResult = DialogResult.OK,
+                Left = 244,
+                Top = 428,
+                Width = 76,
+                Height = 28,
+                BackColor = Color.FromArgb(60, 80, 60),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            var cancel = new Button
+            {
+                Text = "Cancel",
+                DialogResult = DialogResult.Cancel,
+                Left = 328,
+                Top = 428,
+                Width = 76,
+                Height = 28,
+                BackColor = Color.FromArgb(60, 60, 60),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            ok.Click += (_, _) =>
+            {
+                IsSaveVideo = _chkSaveVideo.Checked;
+                IsSaveLossless = _chkSaveLossless.Checked;
+                IsReverse = _chkReverse.Checked;
+                if (IsSaveLossless && _losslessEncodeCombo.Enabled)
+                {
+                    LosslessEncode = _losslessEncodeCombo.SelectedIndex switch
+                    {
+                        1 => LosslessEncodeChoice.LosslessH264Mp4,
+                        2 => LosslessEncodeChoice.Ffv1Mkv,
+                        3 => LosslessEncodeChoice.HighQualityH264Mp4,
+                        _ => LosslessEncodeChoice.None,
+                    };
+                }
+                else
+                {
+                    LosslessEncode = LosslessEncodeChoice.None;
+                }
+            };
+            AcceptButton = ok;
+            CancelButton = cancel;
+            Controls.Add(slideshow);
+            Controls.Add(ok);
+            Controls.Add(cancel);
+        }
+
+        private bool TryGetSeconds(out double seconds)
+        {
+            if (_rbCustom.Checked)
+            {
+                var ic = CultureInfo.InvariantCulture;
+                if (!double.TryParse(_txCustomSecs.Text.Trim(), NumberStyles.Float, ic, out seconds))
+                    return false;
+                if (seconds < CustomSecsMin || seconds > CustomSecsMax) return false;
+                return true;
+            }
+            seconds = _rbSlow.Checked ? 15.0 : _rbFast.Checked ? 4.0 : 8.0;
+            return true;
+        }
+
+        public bool TryGetTarget(out double cx, out double cy, out double zoom, out double seconds)
+        {
+            var ic = CultureInfo.InvariantCulture;
+            var ns = NumberStyles.Float;
+            bool okCX = double.TryParse(_txCX.Text.Trim(), ns, ic, out cx);
+            bool okCY = double.TryParse(_txCY.Text.Trim(), ns, ic, out cy);
+            bool okZ = double.TryParse(_txZoom.Text.Trim(), ns, ic, out zoom);
+            bool okS = TryGetSeconds(out seconds);
+            return okCX && okCY && okZ && zoom > 0 && okS;
+        }
+
+        /// <summary>Returns the full QD-precision target coordinates.</summary>
+        public bool TryGetTargetQD(
+            out double cxHi, out double cxLo, out double cx2, out double cx3,
+            out double cyHi, out double cyLo, out double cy2, out double cy3,
+            out double zoom, out double seconds)
+        {
+            cxLo = _targetCXLo; cx2 = _targetCX2; cx3 = _targetCX3;
+            cyLo = _targetCYLo; cy2 = _targetCY2; cy3 = _targetCY3;
+            if (!TryGetTarget(out cxHi, out cyHi, out zoom, out seconds))
+            {
+                cxHi = cyHi = zoom = seconds = 0;
+                return false;
+            }
+            return true;
+        }
+
+        private void OnRegionPicked(object? sender, EventArgs e)
+        {
+            int idx = _regionCombo.SelectedIndex;
+            if (idx <= 0) return;
+            string? name = _regionCombo.SelectedItem?.ToString();
+            if (string.IsNullOrEmpty(name)) return;
+            var region = FractalRegionLibrary.Instance.FindByName(name);
+            if (region == null) return;
+
+            var ic = CultureInfo.InvariantCulture;
+            // Capture extended-precision limbs first, then set Hi via the
+            // textbox — the TextChanged handler would otherwise clear them.
+            _targetCXLo = region.CenterXLo;
+            _targetCX2 = region.CenterX2;
+            _targetCX3 = region.CenterX3;
+            _targetCYLo = region.CenterYLo;
+            _targetCY2 = region.CenterY2;
+            _targetCY3 = region.CenterY3;
+
+            _txCX.TextChanged -= TxCXChangedClearLimbs;
+            _txCY.TextChanged -= TxCYChangedClearLimbs;
+            _txCX.Text = region.CenterX.ToString("R", ic);
+            _txCY.Text = region.CenterY.ToString("R", ic);
+            _txCX.TextChanged += TxCXChangedClearLimbs;
+            _txCY.TextChanged += TxCYChangedClearLimbs;
+
+            double z = region.Zoom;
+            double cap = QualityPreset.Ultra.ZoomMax;
+            if (z > cap) z = cap;
+            _txZoom.Text = z.ToString("G6", ic);
+
+            TargetIterations = region.Iterations;
+        }
+
+        private void TxCXChangedClearLimbs(object? s, EventArgs e)
+        { _targetCXLo = _targetCX2 = _targetCX3 = 0.0; TargetIterations = 0; }
+
+        private void TxCYChangedClearLimbs(object? s, EventArgs e)
+        { _targetCYLo = _targetCY2 = _targetCY3 = 0.0; TargetIterations = 0; }
     }
 }

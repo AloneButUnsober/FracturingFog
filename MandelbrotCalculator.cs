@@ -445,7 +445,7 @@ public sealed class MandelbrotCalculator
             DistanceBuffer[idx] = 0f;
             NormalXBuffer[idx] = 0f;
             NormalYBuffer[idx] = 0f;
-            ColorBuffer[idx] = 0xFF000000u; // black for in-set pixels
+            ColorBuffer[idx] = colorMap.InSetColor; // theme-defined interior, default opaque black
         }
     }
 
@@ -584,7 +584,7 @@ public sealed class MandelbrotCalculator
             DistanceBuffer[idx] = 0f;
             NormalXBuffer[idx] = 0f;
             NormalYBuffer[idx] = 0f;
-            ColorBuffer[idx] = 0xFF000000u;
+            ColorBuffer[idx] = colorMap.InSetColor;
         }
     }
 

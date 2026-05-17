@@ -6,6 +6,8 @@ using System.Drawing;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
+using static FracturingFog.Views.FormHelpers;
 
 namespace FracturingFog
 {
@@ -39,7 +41,7 @@ namespace FracturingFog
             if (_slideshowRunning) return;
             _slideshowRunning = true;
             _showSlideshowWatermark = true;
-            _chkSlideshowUseExtremeRegions.Enabled = false;
+            //_chkSlideshowUseExtremeRegions.Enabled = false;
             RepaintWithBrightnessContrast();
             _slideshowButton.Text = "■ Stop";
             _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
@@ -65,7 +67,7 @@ namespace FracturingFog
                     {
                         _slideshowRunning = false;
                         _showSlideshowWatermark = false;
-                        _chkSlideshowUseExtremeRegions.Enabled = true;
+                        //_chkSlideshowUseExtremeRegions.Enabled = true;
                         RepaintWithBrightnessContrast();
                         _slideshowButton.Text = "Slideshow";
                         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
@@ -107,6 +109,7 @@ namespace FracturingFog
                 return _slideshowFocusRegion;
             }
         }
+
         public bool IsSkipSlideshowRegion()
         {
             lock (_slideshowLock)
@@ -442,7 +445,7 @@ namespace FracturingFog
             }
             finally
             {
-                UpdateDelRegionButton();
+                UpdateDelRegionButton(_regionCombo, _delRegionButton);
                 _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
             }
         }

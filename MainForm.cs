@@ -25,11 +25,13 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 using System.Windows.Forms;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Views;
+using static FracturingFog.Views.FormHelpers;
 
 namespace FracturingFog;
 
@@ -42,13 +44,16 @@ public sealed partial class MainForm : Form
 
     #region Program
 
-    private readonly string _programVersion = "0.2";
+    private readonly string _programVersion = "0.4.8";
     private readonly string _programName = "Fracturing Fog";
     private bool _disposed;
 
     #endregion Program
 
     #region UI
+
+    // Floating Menu form
+    FloatingMenu _floatingMenu;
 
     // UI: top toolbar
     private readonly Panel _toolbar;
@@ -57,6 +62,7 @@ public sealed partial class MainForm : Form
     private readonly Button _posterButton;
     private readonly Button _screenshotButton;
     private readonly Button _slideshowButton;
+    private readonly Button _videoButton;
     private readonly Label _qualityLabel;
     private readonly ComboBox _qualityCombo;
     private readonly Label _colorThemeLabel;
@@ -64,47 +70,23 @@ public sealed partial class MainForm : Form
     private readonly Label _regionLabel;
     private readonly ComboBox _regionCombo;
     private readonly Button _saveViewButton;
-    private readonly Button _saveViewButton2;
     private readonly Button _delRegionButton;
-    private readonly Button _delRegionButton2;
-    private readonly CheckBox _checkBoxShowCoordPanel;
-    private readonly CheckBox _checkBoxShowCoordPanel2;
-    private readonly CheckBox _checkBoxShowFooterPanel;
-    private readonly CheckBox _checkBoxShowFooterPanel2;
-    private readonly CheckBox _checkBoxShowGrid;
-    private readonly CheckBox _checkBoxShowGrid2;
+    private readonly Button _menuButton;
     private readonly ToolTip _toolTip = new();
     private int _toolbarLastWidth;
     private int _toolbarLastHeight;
 
-    // UI: coordinate / region bar
-    private readonly Panel _coordPanel;
-    private readonly ComboBox _formResolutionCombo;
-    private readonly Label _lblCX;
-    private readonly TextBox _txCX;
-    private readonly Label _lblCY;
-    private readonly TextBox _txCY;
-    private readonly Label _qualityLabel2;
-    private readonly ComboBox _qualityCombo2;
-    private readonly Label _lblZoom;
-    private readonly TextBox _txZoom;
-    private readonly Label _lblIter;
-    private readonly TextBox _txIter;
-    private readonly CheckBox _chkLockIter;
-    private readonly Button _goButton;
-    private readonly Button _flipButton;
-    private readonly Button _exportRegionsButton;
-    private readonly Button _importRegionsButton;
-    private Label? _currentRegionLabel;
-    private readonly ComboBox _regionCombo2;
-    private GroupBox? _themeBox;
+    // Current values
+    private string _currentRegionName;
+    private int _currentRegionSelection;
+    private string _currentColorThemeName;
+    private int _currentColorThemeSelection;
+    private string _currentQualityName;
+    private int _currentQualitySelection;
+
+    //// UI: coordinate / region bar
     private Label? _currentColorThemeLabel;
-    private readonly ComboBox _colorThemeCombo2;
-    private readonly Button _exportColorThemeButton;
-    private readonly Button _importColorThemeButton;
-    private readonly Button _deleteColorThemeButton;
-    private readonly Button _loadColorThemesButton;
-    private readonly CheckBox _chkSlideshowUseExtremeRegions;
+    private bool _slideshowUseExtremeRegions = false;
 
     // Render panel
     private readonly RenderPanel _renderPanel;
@@ -124,12 +106,6 @@ public sealed partial class MainForm : Form
     private readonly Label _statusLabel;
     private readonly Panel _footerPanel;
 
-    // Brightness / Contrast
-    private TrackBar? _brightnessSlider;
-    private TrackBar? _contrastSlider;
-    private Label? _brightnessLabel;
-    private Label? _contrastLabel;
-
     /// <summary>Brightness offset in [-100, 100]; 0 = neutral.</summary>
     private int _brightness = 0;
 
@@ -139,6 +115,9 @@ public sealed partial class MainForm : Form
     // Mouse click-n-drag window repositioning
     private const int WM_NCLBUTTONDOWN = 0xA1;
     private const int HTCAPTION = 0x2;
+
+    // Floating menu flag
+    private bool _showFloatingMenu = false;
 
     #endregion UI
 
@@ -238,7 +217,7 @@ public sealed partial class MainForm : Form
     private CancellationTokenSource? _slideshowRegionSkipCts;   // cancelled to unlock region during slideshow
     private readonly object _slideshowLock = new();
     private readonly Random _slideshowRng = new();
-    private bool _showSlideshowWatermark;   
+    private bool _showSlideshowWatermark;
     private string _slideshowRegionName = "";
     private bool _slideshowSkipRegion;   // set to true to skip the current region and move to the next one immediately
     private bool _slideShowLockRegion;     // When true, the slideshow will not change regions; only themes.  Set by Shift+clicking the Slideshow button.
@@ -259,22 +238,22 @@ public sealed partial class MainForm : Form
 
     #endregion Private fields
 
-    #region Public Members
+    //#region Public Members
 
-    /// <summary>
-    /// MARGINS struct for DwmExtendFrameIntoClientArea call to enable Aero glass effect on the toolbar.  
-    /// All fields set to -1 to extend the glass over the entire toolbar area.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MARGINS
-    {
-        public int cxLeftWidth;
-        public int cxRightWidth;
-        public int cyTopHeight;
-        public int cyBottomHeight;
-    }
+    ///// <summary>
+    ///// MARGINS struct for DwmExtendFrameIntoClientArea call to enable Aero glass effect on the toolbar.  
+    ///// All fields set to -1 to extend the glass over the entire toolbar area.
+    ///// </summary>
+    //[StructLayout(LayoutKind.Sequential)]
+    //public struct MARGINS
+    //{
+    //    public int cxLeftWidth;
+    //    public int cxRightWidth;
+    //    public int cyTopHeight;
+    //    public int cyBottomHeight;
+    //}
 
-    #endregion Public Members
+    //#endregion Public Members
 
     #region Constructors
 
@@ -287,13 +266,15 @@ public sealed partial class MainForm : Form
     {
         Icon = new Icon(@".\Resources\FracturingFog.ico");
         Text = $"{_programName} v{_programVersion} - {RendererFactory.ProbeDescription()}";
-        ClientSize = new Size(1115, 728);
+        ClientSize = new Size(1165, 728);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
         _miniPreviousBorderStyle = FormBorderStyle;
         _miniPreviousSize = Size;
+
+        _floatingMenu = new FloatingMenu(this);
 
         #region Pan-stop timer 
         _panStopTimer = new System.Windows.Forms.Timer { Interval = 300 };
@@ -303,62 +284,6 @@ public sealed partial class MainForm : Form
             TriggerCalculation(progressive: false);   // full quality after drag stops
         };
         #endregion Pan-stop timer
-
-        #region Form Helpers
-
-        Button MakeBtn(
-            string text,
-            int w = 108,
-            int left = 0,
-            int top = 6,
-            string toolTip = "")
-        {
-            Button _b = new Button
-            {
-                Text = text,
-                Width = w,
-                Height = 26,
-                Left = left,
-                Top = top,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(55, 55, 55),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                Cursor = Cursors.Hand
-            }.Also(b => b.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90));
-
-            if (!string.IsNullOrEmpty(toolTip))
-            {
-                _toolTip.SetToolTip(_b, toolTip);
-            }
-
-            return _b;
-        }
-
-        Label MakeLbl(string text, int left, int top, Panel p, bool rightAlign) => new Label
-        {
-            Text = text,
-            Left = left,
-            Top = top,
-            AutoSize = rightAlign ? false : true,
-            TextAlign = rightAlign ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent
-        }.AlsoAdd(p);
-
-        TextBox MakeTx(int left, int top, int w, Panel p, string tip) => new TextBox
-        {
-            Left = left,
-            Top = top,
-            Width = w,
-            Height = 22,
-            BackColor = Color.FromArgb(40, 40, 40),
-            ForeColor = Color.FromArgb(220, 220, 220),
-            Font = new Font("Consolas", 9f),
-            BorderStyle = BorderStyle.FixedSingle
-        }.AlsoAdd(p, tip);
-        #endregion Form Helpers
 
         #region Top toolbar 
 
@@ -380,8 +305,8 @@ public sealed partial class MainForm : Form
 
         int buttonLeft = 6;
         int buttonTop = 6;
-        int labelTop = 9;
-        int txTop = 7;
+        //int labelTop = 9;
+        //int txTop = 7;
 
         _resetButton = MakeBtn("", 30, buttonLeft, buttonTop, "Reset view to default center and zoom");
         _resetButton.Padding = new Padding(0, 0, 1, 1);
@@ -395,34 +320,46 @@ public sealed partial class MainForm : Form
         }
         catch { _resetButton.Text = "R"; }
         _toolbar.Controls.Add(_resetButton);
-        buttonLeft += 33;
+        buttonLeft += _resetButton.PreferredSize.Width - 1;
 
         _spanButton = MakeBtn("Span", 55, buttonLeft, buttonTop, "Span across all monitors");
         _spanButton.Click += OnSpanMonitorsClick;
         _toolbar.Controls.Add(_spanButton);
-        buttonLeft += 58;
+        buttonLeft += _spanButton.PreferredSize.Width + 2;
 
         _screenshotButton = MakeBtn("Image", 55, buttonLeft, buttonTop);
         _screenshotButton.Click += OnScreenshotClick;
         _toolbar.Controls.Add(_screenshotButton);
-        buttonLeft += 58;
+        buttonLeft += _spanButton.PreferredSize.Width + 2;
 
         _posterButton = MakeBtn("Poster", 55, buttonLeft, buttonTop);
         _posterButton.Click += OnPosterClick;
         _toolbar.Controls.Add(_posterButton);
-        buttonLeft += 58;
+        buttonLeft += _posterButton.PreferredSize.Width + 2;
 
         _slideshowButton = MakeBtn("Slideshow", 74, buttonLeft, buttonTop, "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
         _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
         _slideshowButton.Click += OnSlideshowClick;
         _toolbar.Controls.Add(_slideshowButton);
-        buttonLeft += 76;
+        buttonLeft += _slideshowButton.PreferredSize.Width + 1;
+
+        _videoButton = MakeBtn("Video", 55, buttonLeft, buttonTop, "Smooth animated zoom from current view to a target region/coordinate");
+        _videoButton.BackColor = Color.FromArgb(55, 40, 70);
+        _videoButton.FlatAppearance.BorderColor = Color.FromArgb(100, 70, 130);
+        _videoButton.Click += OnVideoClick;
+        _toolbar.Controls.Add(_videoButton);
+        buttonLeft += _videoButton.PreferredSize.Width + 2;
+
+        _menuButton = MakeBtn("Menu", 55, buttonLeft, buttonTop, "Diplay floating menu...");
+        _menuButton.Click += (s, e) => OnShowCoordPanelClick();
+        _toolbar.Controls.Add(_menuButton);
+        buttonLeft += _menuButton.PreferredSize.Width + 4;
         #endregion Top toolbar
 
         #region Quality label + combo.
         _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 4, Width = 1, Height = 30, BackColor = Color.FromArgb(65, 65, 65) });
-        buttonLeft += 8;
+        buttonLeft += 5;
 
         _qualityLabel = new Label
         {
@@ -435,7 +372,7 @@ public sealed partial class MainForm : Form
             BackColor = Color.Transparent
         };
         _toolbar.Controls.Add(_qualityLabel);
-        buttonLeft += _qualityLabel.PreferredWidth + 4;
+        buttonLeft += _qualityLabel.PreferredWidth + 3;
 
         _qualityCombo = new ComboBox
         {
@@ -463,7 +400,7 @@ public sealed partial class MainForm : Form
         };
         qualityTip.SetToolTip(_qualityCombo, QualityPreset.Standard.Description);
         _toolbar.Controls.Add(_qualityCombo);
-        buttonLeft += 84;
+        buttonLeft += _qualityCombo.PreferredSize.Width + 2;
         #endregion
 
         #region Theme
@@ -482,7 +419,7 @@ public sealed partial class MainForm : Form
             BackColor = Color.Transparent
         };
         _toolbar.Controls.Add(_colorThemeLabel);
-        buttonLeft += _colorThemeLabel.PreferredWidth + 4;
+        buttonLeft += _colorThemeLabel.PreferredWidth + 3;
         Models.ColorPalette.LoadUserThemes();
         _colorThemeCombo = new ColorComboBox
         {
@@ -499,7 +436,7 @@ public sealed partial class MainForm : Form
 
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
         _toolbar.Controls.Add(_colorThemeCombo);
-        buttonLeft += 170;
+        buttonLeft += _colorThemeCombo.PreferredSize.Width + 2;
         #endregion
 
         #region Regions
@@ -532,68 +469,17 @@ public sealed partial class MainForm : Form
             FlatStyle = FlatStyle.Flat
         };
         _toolbar.Controls.Add(_regionCombo);
-        buttonLeft += 180;
+        buttonLeft += _regionCombo.PreferredSize.Width + 3;
 
         _saveViewButton = MakeBtn("Save", 55, buttonLeft, 6, "Save the current view as a region");
         _saveViewButton.Click += OnSaveViewClick;
         _toolbar.Controls.Add(_saveViewButton);
-        buttonLeft += 58;
+        buttonLeft += _saveViewButton.PreferredSize.Width + 2;
 
         _delRegionButton = MakeBtn("Delete", 55, buttonLeft, 6, "Delete the selected region");
         _delRegionButton.Click += OnDelRegionClick;
         _toolbar.Controls.Add(_delRegionButton);
-        buttonLeft += 58;
-        #endregion
-
-        #region Checkboxes
-        _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
-        buttonLeft += 10;
-
-        _checkBoxShowCoordPanel = new CheckBox
-        {
-            Text = "Menu",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = false,
-        };
-        buttonLeft += _checkBoxShowCoordPanel.PreferredSize.Width + 6;
-
-        _checkBoxShowFooterPanel = new CheckBox
-        {
-            Text = "Status",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = true,
-        };
-        _toolbar.Controls.Add(_checkBoxShowCoordPanel);
-        //_toolbar.Controls.Add(_checkBoxShowFooterPanel);
-        //buttonLeft += _checkBoxShowFooterPanel.PreferredSize.Width + 12;
-
-        // Grid overlay toggle.
-        _checkBoxShowGrid = new CheckBox
-        {
-            Text = "Grid",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = false,
-        };
-        _toolTip.SetToolTip(_checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
-        //_toolbar.Controls.Add(_checkBoxShowGrid);
+        buttonLeft += _delRegionButton.PreferredSize.Width + 2;
         #endregion
 
         #region Footer panel
@@ -640,431 +526,6 @@ public sealed partial class MainForm : Form
 
         #endregion
 
-        #region Coordinate / Navigate panel
-
-        _coordPanel = new Panel
-        {
-            Width = 300,
-            //Height = 58,
-            AutoScroll = false,
-            Dock = DockStyle.Left,
-            AutoScrollMinSize = new Size(0, 200),   // ensure scroll appears if needed when more controls are added
-            BackColor = Color.FromArgb(22, 22, 22),
-            Visible = false,   // hidden until user ticks Navigate
-        };
-
-        // This didn't work
-        //_coordPanel.HorizontalScroll.Maximum = 0;  // disable horizontal scrolling
-        //_coordPanel.AutoScroll = false;
-        //_coordPanel.VerticalScroll.Visible = false;
-        //_coordPanel.AutoScroll = true;
-
-        buttonLeft = 45;
-        labelTop = 38;
-        txTop = 35;
-
-        _checkBoxShowCoordPanel2 = new CheckBox
-        {
-            Text = "Menu",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = false,
-        };
-        buttonLeft += _checkBoxShowCoordPanel2.PreferredSize.Width + 6;
-
-        _checkBoxShowFooterPanel2 = new CheckBox
-        {
-            Text = "Status",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = true,
-        };
-        _coordPanel.Controls.Add(_checkBoxShowCoordPanel2);
-        _coordPanel.Controls.Add(_checkBoxShowFooterPanel2);
-        buttonLeft += _checkBoxShowFooterPanel2.PreferredSize.Width + 12;
-
-        // Grid overlay toggle.
-        _checkBoxShowGrid2 = new CheckBox
-        {
-            Text = "Grid",
-            Left = buttonLeft,
-            Top = 9,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = false,
-        };
-        _coordPanel.Controls.Add(_checkBoxShowGrid2);
-        _toolTip.SetToolTip(_checkBoxShowGrid2, "Overlay a Cartesian complex-plane grid on the fractal view");
-
-        buttonLeft = 8;
-
-        //_formResolutionCombo = new ComboBox
-        //{
-        //    Left = buttonLeft + 88,
-        //    Top = 28,
-        //    Width = 130,
-        //    Height = 26,
-        //    BackColor = Color.FromArgb(55, 55, 55),
-        //    ForeColor = Color.White,
-        //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-        //    Cursor = Cursors.Hand,
-        //    DropDownWidth = Math.Max(180, ResolutionDimensions.GetLongestResolutionName() + 40)   // ensure descriptions fit in the dropdown
-        //};
-        //_formResolutionCombo.SelectedIndexChanged += (s,e) =>
-        //{
-        //    Resolution? res = ResolutionDimensions.Resolutions.Where( r => r.Name == _formResolutionCombo.Text ).FirstOrDefault<Resolution>();
-        //    if (res == null) return;
-        //    Size = new Size(res.Width, res.Height);
-        //    CenterToParent();
-        //};
-        //_coordPanel.Controls.Add(_formResolutionCombo);
-        //labelTop += 28;
-        //txTop += 28;
-
-        _lblCX = MakeLbl("CX:", buttonLeft, labelTop, _coordPanel, true);
-        _lblCX.Height = 12;
-        _lblCX.Width = 78;
-        _lblCX.Padding = new Padding(0);
-        buttonLeft += 88;
-        _txCX = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Real part of the view center");
-        _txCX.TextAlign = HorizontalAlignment.Right;
-
-        labelTop += 28;
-        txTop += 28;
-        buttonLeft = 8;
-        buttonTop += 28;
-        _lblCY = MakeLbl("CY:", buttonLeft, labelTop, _coordPanel, true);
-        _lblCY.Height = 12;
-        _lblCY.Width = 78;
-        _lblCY.Padding = new Padding(0);
-        buttonLeft += 88;
-        _txCY = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Imaginary part of the view center");
-        _txCY.TextAlign = HorizontalAlignment.Right;
-
-
-        labelTop += 28;
-        txTop += 28;
-        buttonLeft = 8;
-        buttonTop += 28;
-        _qualityLabel2 = MakeLbl("Quality:", buttonLeft, labelTop, _coordPanel, true);
-        _qualityLabel2.Height = 13;
-        _qualityLabel2.Width = 78;
-        _qualityLabel2.Padding = new Padding(0);
-        buttonLeft = _qualityLabel2.Left + _qualityLabel2.Width + 10;
-
-        _qualityCombo2 = new ComboBox
-        {
-            Left = buttonLeft,
-            Top = txTop,
-            Width = 182,
-            Height = 22,
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            BackColor = Color.FromArgb(45, 45, 45),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand
-        };
-        foreach (var p in QualityPreset.All) _qualityCombo2.Items.Add(p.Name);
-        _qualityCombo2.SelectedIndexChanged += (s, e) =>
-        {
-            int i = _qualityCombo2.SelectedIndex;
-            if (i >= 0 && i < QualityPreset.All.Length)
-                qualityTip.SetToolTip(_qualityCombo2, QualityPreset.All[i].Description);
-            OnQualityComboChanged(s, e);
-        };
-        _coordPanel.Controls.Add(_qualityCombo2);
-        _qualityCombo2.Text = _qualityCombo.Text;   // sync with top combo
-
-        labelTop += 28;
-        buttonLeft = 8;
-        buttonTop += 28;
-        txTop += 28;
-
-        _lblZoom = MakeLbl("Zoom:", buttonLeft, labelTop, _coordPanel, true);
-        _lblZoom.Height = 12;
-        _lblZoom.Width = 78;
-        _lblZoom.Padding = new Padding(0);
-        buttonLeft += 88;
-        _txZoom = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)");
-        _txZoom.TextAlign = HorizontalAlignment.Right;
-
-        labelTop += 28;
-        buttonLeft = 8;
-        buttonTop += 28;
-        txTop += 28;
-        _lblIter = MakeLbl("Iterations:", buttonLeft, labelTop, _coordPanel, true);
-        _lblIter.Height = 12;
-        _lblIter.Width = 78;
-        _lblIter.Padding = new Padding(0);
-
-        buttonLeft += 88;
-        _txIter = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Maximum iteration count");
-        _txIter.TextAlign = HorizontalAlignment.Right;
-
-        buttonTop += 54;
-        buttonLeft = 98;
-        _chkLockIter = new CheckBox
-        {
-            Text = "Lock Iterations",
-            Left = buttonLeft,
-            Top = buttonTop + 2,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(200, 200, 120),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = false,
-        };
-        _toolTip.SetToolTip(_chkLockIter, "Lock the iteration count — pan/zoom will not recalculate it");
-        _chkLockIter.CheckedChanged += OnIterLockChanged;
-        _coordPanel.Controls.Add(_chkLockIter);
-
-        buttonLeft = 98;
-        buttonTop += 38;
-        labelTop += 28;
-        txTop += 28;
-
-        _goButton = MakeBtn("Go", 54, buttonLeft, buttonTop, "Go to the specified coordinates");
-        _goButton.BackColor = Color.FromArgb(40, 80, 40);
-        _goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
-        _goButton.Click += OnGoClick;
-        _coordPanel.Controls.Add(_goButton);
-
-        buttonLeft += 62;
-        _flipButton = MakeBtn("Flip Y", 54, buttonLeft, buttonTop, "Flip the view vertically (negate CY)");
-        _flipButton.BackColor = Color.FromArgb(40, 80, 40);
-        _flipButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
-        _flipButton.Click += OnFlipClick;
-        _coordPanel.Controls.Add(_flipButton);
-
-        #region Brightness & Contrast sliders 
-
-        int sliderTop = buttonTop + 48;
-        int sliderLeft = 8;
-
-        _brightnessLabel = new Label
-        {
-            Text = "Brightness: 0",
-            Left = sliderLeft,
-            Top = sliderTop + 3,
-            Width = 78,
-            Height = 12,
-            TextAlign = ContentAlignment.MiddleRight,
-            Padding = new Padding(0),
-            ForeColor = Color.FromArgb(180, 180, 180),
-            Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-            BackColor = Color.Transparent
-        };
-        _coordPanel.Controls.Add(_brightnessLabel);
-        sliderLeft += 86;
-
-        //sliderTop += 28;
-        _brightnessSlider = new TrackBar
-        {
-            Left = sliderLeft,
-            Top = sliderTop,
-            Width = 200,
-            Height = 22,
-            Minimum = -100,
-            Maximum = 100,
-            Value = 0,
-            TickFrequency = 25,
-            SmallChange = 1,
-            LargeChange = 10,
-            BackColor = Color.FromArgb(22, 22, 22),
-        };
-        _toolTip.SetToolTip(_brightnessSlider,
-            "Adjust brightness of the rendered fractal  (−100 to +100, default 0)");
-        _brightnessSlider.ValueChanged += (s, e) =>
-        {
-            _brightness = _brightnessSlider.Value;
-            if (_brightnessLabel != null)
-                _brightnessLabel.Text = $"Brightness: {_brightness:+0;-0;0}";
-            RepaintWithBrightnessContrast();
-        };
-        _coordPanel.Controls.Add(_brightnessSlider);
-
-        sliderLeft = 8;
-        sliderTop += 44;
-        _contrastLabel = new Label
-        {
-            Text = "Contrast: 0",
-            Left = sliderLeft,
-            Top = sliderTop + 3,
-            Width = 78,
-            Height = 12,
-            Padding = new Padding(0),
-            TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = Color.FromArgb(180, 180, 180),
-            Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-            BackColor = Color.Transparent
-        };
-        _coordPanel.Controls.Add(_contrastLabel);
-        sliderLeft += 86;
-
-        _contrastSlider = new TrackBar
-        {
-            Left = sliderLeft,
-            Top = sliderTop,
-            Width = 200,
-            Height = 22,
-            Minimum = -100,
-            Maximum = 100,
-            Value = 0,
-            TickFrequency = 25,
-            SmallChange = 1,
-            LargeChange = 10,
-            BackColor = Color.FromArgb(22, 22, 22),
-        };
-        _toolTip.SetToolTip(_contrastSlider,
-            "Adjust contrast of the rendered fractal  (−100 to +100, default 0)");
-        _contrastSlider.ValueChanged += (s, e) =>
-        {
-            _contrast = _contrastSlider.Value;
-            if (_contrastLabel != null)
-                _contrastLabel.Text = $"Contrast: {_contrast:+0;-0;0}";
-            RepaintWithBrightnessContrast();
-        };
-        _coordPanel.Controls.Add(_contrastSlider);
-        #endregion Brightness & Contrast sliders 
-
-        _chkSlideshowUseExtremeRegions = new CheckBox
-        {
-            Text = "Slideshow: Use Extreme Regions",
-            Left = 68,
-            Top = sliderTop + 48,
-            AutoSize = true,
-            AutoCheck = true,
-            ForeColor = Color.FromArgb(200, 120, 120),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.Transparent,
-            Checked = false,
-        };
-        _coordPanel.Controls.Add(_chkSlideshowUseExtremeRegions);
-        _chkSlideshowUseExtremeRegions.CheckedChanged += (s, e) =>
-        {
-            FractalRegionLibrary.Instance.IncludeExtremeInAll = _chkSlideshowUseExtremeRegions.Checked;
-        };
-
-        #region Region Import/Export buttons
-        GroupBox regionBox = new GroupBox
-        {
-            Text = "Regions",
-            Left = 28,
-            Top = sliderTop + 68,
-            Width = 260,
-            Height = 78,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.FromArgb(22, 22, 22),
-        };
-        _coordPanel.Controls.Add(regionBox);
-
-        _regionCombo2 = new ComboBox
-        {
-            Left = 16,
-            Top = 20,
-            Width = 230,
-            Height = 26,
-            BackColor = Color.FromArgb(55, 55, 55),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand,
-            DropDownWidth = Math.Max(180, Models.FractalRegionLibrary.Instance.MaxRegionNameLength + 40)   // ensure descriptions fit in the dropdown
-        };
-        _regionCombo2.SelectedIndexChanged += (s, e) =>
-        {
-            // Sync the second combo with the main one; it's just there to show the new region when you import it without having to re-select the region in the main combo.
-            _regionCombo.SelectedIndex = _regionCombo2.SelectedIndex;
-        };
-        regionBox.Controls.Add(_regionCombo2);
-
-        _saveViewButton2 = MakeBtn("Save", 55, 16, 45, "Save the current view as a region");
-        _saveViewButton2.Click += OnSaveViewClick;
-        regionBox.Controls.Add(_saveViewButton2);
-        buttonLeft += 58;
-
-        _delRegionButton2 = MakeBtn("Delete", 55, _saveViewButton2.Left + _saveViewButton2.Width + 3, 45, "Delete the selected region");
-        _delRegionButton2.Click += OnDelRegionClick;
-        regionBox.Controls.Add(_delRegionButton2);
-        buttonLeft = 98;
-
-        _exportRegionsButton = MakeBtn("Exp...", 55, _delRegionButton2.Left + _delRegionButton2.Width + 3, 45, "Export all custom regions to a JSON file");
-        _exportRegionsButton.Click += OnExportRegionsClick;
-        regionBox.Controls.Add(_exportRegionsButton);
-        buttonLeft += 58;
-
-        _importRegionsButton = MakeBtn("Imp...", 55, _exportRegionsButton.Left + _exportRegionsButton.Width + 3, 45, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
-        _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-        _importRegionsButton.Click += OnImportRegionsClick;
-        regionBox.Controls.Add(_importRegionsButton);
-        buttonLeft += 58;
-        #endregion Region Import/Export buttons
-
-        #region Color Theme Import/Export buttons
-        _themeBox = new GroupBox
-        {
-            Text = "Color Themes",
-            Left = 28,
-            Top = regionBox.Top + regionBox.Height + 10,
-            Width = 260,
-            Height = 81,
-            ForeColor = Color.FromArgb(155, 155, 155),
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            BackColor = Color.FromArgb(22, 22, 22),
-        };
-        _coordPanel.Controls.Add(_themeBox);
-
-        _colorThemeCombo2 = new ColorComboBox
-        {
-            Left = 16,
-            Top = 20,
-            Width = 230,
-            Height = 26,
-            BackColor = Color.FromArgb(55, 55, 55),
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            Cursor = Cursors.Hand,
-            DropDownWidth = Math.Max(300, Models.ColorPalette.GetMaxDescriptionLength() + 40)   // ensure descriptions fit in the dropdown
-        };
-        _colorThemeCombo2.SelectedIndexChanged += (s, e) =>
-        {
-            // Sync the second combo with the main one; it's just there to show the new theme when you import it without having to re-select the theme in the main combo.
-            _colorThemeCombo?.SelectedIndex = _colorThemeCombo2.SelectedIndex;
-        };
-        _themeBox.Controls.Add(_colorThemeCombo2);
-
-        _exportColorThemeButton = MakeBtn("Exp...", 55, 16, 48, "Export the current color theme to a JSON file");
-        _exportColorThemeButton.Click += OnExportColorThemeClick;
-        _themeBox.Controls.Add(_exportColorThemeButton);
-        _importColorThemeButton = MakeBtn("Imp...", 55, _exportColorThemeButton.Left + _exportColorThemeButton.Width + 3, 48, "Import color themes from a JSON file");
-        _importColorThemeButton.Click += OnImportColorThemeClick;
-        _themeBox.Controls.Add(_importColorThemeButton);
-
-        _deleteColorThemeButton = MakeBtn("Delete", 55, _importColorThemeButton.Left + _importColorThemeButton.Width + 3, 48, "Delete selected user-defined color theme");
-        _deleteColorThemeButton.Click += OnDeleteColorThemeClick;
-        _themeBox.Controls.Add(_deleteColorThemeButton);
-        _loadColorThemesButton = MakeBtn("Reload", 55, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 3, 48, "Reload color themes from disk (useful if you edit the JSON files externally)");
-        _loadColorThemesButton.Click += OnLoadColorThemesClick;
-        _themeBox.Controls.Add(_loadColorThemesButton);
-
-        #endregion Color Theme Import/Export buttons
-        #endregion Coordinate / Navigate panel
-
         #region Render panel
 
         _renderPanel = new RenderPanel { Dock = DockStyle.Fill, Cursor = Cursors.Cross };
@@ -1098,15 +559,8 @@ public sealed partial class MainForm : Form
         })
         { Checked = true };
         var navigateItem = new ToolStripMenuItem("Menu");
-        var statusItem = new ToolStripMenuItem("Status", null, (s, e) =>
-        {
-            _checkBoxShowFooterPanel.Checked = !_checkBoxShowFooterPanel.Checked;
-            _footerPanel.Visible = _checkBoxShowFooterPanel.Checked;
-        });
-        var onTopItem = new ToolStripMenuItem("On Top", null, (s, e) =>
-        {
-            TopMost = !TopMost;
-        });
+        var statusItem = new ToolStripMenuItem("Status", null, (s, e) => _footerPanel.Visible = !_footerPanel.Visible);
+        var onTopItem = new ToolStripMenuItem("On Top", null, (s, e) => TopMost = !TopMost);
         var miniModeItem = new ToolStripMenuItem("Mini Mode", null, (s, e) =>
         {
             bool wasMini = _miniMode;
@@ -1116,7 +570,6 @@ public sealed partial class MainForm : Form
             {
                 _miniPreviousBorderStyle = FormBorderStyle;
                 _miniPreviousSize = Size;
-                _coordPanel.Visible = false;   // hide coordinate panel in mini mode since it doesn't work well there
                 TopMost = true;  // mini mode is meant for keeping the window visible while doing other things, so force it on top
                 _toolbar.Visible = false;
             }
@@ -1126,13 +579,7 @@ public sealed partial class MainForm : Form
                 CenterToScreen();  // re-center when exiting mini mode since we likely moved the window around while in mini mode
             _miniClick = false;
         });
-        var gridItem = new ToolStripMenuItem("Grid", null, (s, e) =>
-        {
-            _gridVisible = !_gridVisible;
-            _checkBoxShowGrid.Checked = _gridVisible;
-            _checkBoxShowGrid2.Checked = _gridVisible;
-            RepaintWithBrightnessContrast();
-        });
+        var gridItem = new ToolStripMenuItem("Grid", null, (s, e) => OnCheckBoxShowGridClick(s, e));
 
         var watermarkItem = new ToolStripMenuItem("Slideshow: Toggle Watermark", null, (s, e) =>
         _showSlideshowWatermark = !_showSlideshowWatermark)
@@ -1141,11 +588,14 @@ public sealed partial class MainForm : Form
         var restoreMonitorsItem = new ToolStripMenuItem("Restore Monitors", null, (s, e) => OnSpanMonitorsClick(s, e))
         { Visible = false };
         var slideshowItem = new ToolStripMenuItem("Start Slideshow", null, (s, e) => OnSlideshowClick(s, e));
-        var slideshowExtremeRegionsItem = new ToolStripMenuItem("Slideshow: Use Extreme Regions", null, (s, e) =>
+        var videoActivateItem = new ToolStripMenuItem("Video", null, (s, e) => OnVideoClick(s, e));
+        var videoSlideshowItem = new ToolStripMenuItem("Start Video Slideshow", null, (s, e) =>
         {
-            FractalRegionLibrary.Instance.IncludeExtremeInAll = !FractalRegionLibrary.Instance.IncludeExtremeInAll;
-            _chkSlideshowUseExtremeRegions.Checked = FractalRegionLibrary.Instance.IncludeExtremeInAll;  // sync with coordinate panel checkbox
+            if (_videoSlideshowRunning) StopVideoSlideshow();
+            else StartVideoSlideshow();
         });
+        var slideshowExtremeRegionsItem = new ToolStripMenuItem("Slideshow: Use Extreme Regions", null, (s, e) =>
+        FractalRegionLibrary.Instance.IncludeExtremeInAll = !FractalRegionLibrary.Instance.IncludeExtremeInAll);
         var slideshowFocusItem = new ToolStripMenuItem("Slideshow: More Colors", null, (s, e) =>
         {
             if (_slideshowRunning)
@@ -1169,30 +619,38 @@ public sealed partial class MainForm : Form
         contextMenu.Opening += (s, e) =>
         {
             statusItem.Checked = _footerPanel.Visible;
-            miniModeItem.Enabled = !_spanning;
+            statusItem.Checked = _footerPanel.Visible;
+            toolbarItem.Checked = _toolbar.Visible;
+
             spanMonitorsItem.Visible = !_spanning;
             spanMonitorsItem.Enabled = !_miniMode;
             restoreMonitorsItem.Visible = _spanning;
             restoreMonitorsItem.Checked = _spanning;
+
+            onTopItem.Checked = TopMost;
             gridItem.Checked = _gridVisible;
-            skipItem.Enabled = _slideshowRunning;
+            miniModeItem.Enabled = !_spanning;
+            miniModeItem.Checked = _miniMode;
             miniMapItem.Checked = _miniMapPanel?.Visible ?? false;
             miniMapItem.Enabled = !_miniMode;  // mini map doesn't work well in mini mode since it's already small and has no extra space for the inset
             miniMapItem.Visible = !_miniMode;  // hide mini map option in mini mode since it doesn't work well there
+
+            skipItem.Enabled = _slideshowRunning;
+            slideshowItem.Enabled = !_videoRunning && !_videoSlideshowRunning;
             slideshowItem.Checked = _slideshowRunning;
+            slideshowLockRegionItem.Enabled = _slideshowRunning && !_videoRunning && !_videoSlideshowRunning;
             slideshowLockRegionItem.Checked = _slideShowLockRegion;
             watermarkItem.Enabled = _slideshowRunning;
-            slideshowItem.Text = _slideshowRunning ? "Stop Slideshow" : "Start Slideshow";
-            slideshowFocusItem.Enabled = _slideshowRunning;
-            slideshowFocusItem.Text = _slideshowFocusRegion ? "Slideshow: More Colors" : "Slideshow: More Regions";
             watermarkItem.Checked = _slideshowRunning && _showSlideshowWatermark;
-            miniModeItem.Checked = _miniMode;
-            onTopItem.Checked = TopMost;
-            statusItem.Checked = _footerPanel.Visible;
-            navigateItem.Checked = _checkBoxShowCoordPanel.Checked;
-            navigateItem.Enabled = !_miniMode;  // navigating in mini mode is awkward and not worth supporting
-            navigateItem.Visible = !_miniMode;  // hide navigation option in mini mode since it doesn't work well there
-            toolbarItem.Checked = _toolbar.Visible;
+            slideshowItem.Text = _slideshowRunning ? "Stop Slideshow" : "Start Slideshow";
+            slideshowFocusItem.Enabled = _slideshowRunning && !_videoRunning && !_videoSlideshowRunning;
+            slideshowFocusItem.Text = _slideshowFocusRegion ? "Slideshow: More Colors" : "Slideshow: More Regions";
+
+            videoActivateItem.Enabled = !_videoSlideshowRunning && !_slideshowRunning && !_videoRunning;
+            videoSlideshowItem.Text = _videoSlideshowRunning ? "Stop Video Slideshow" : "Start Video Slideshow";
+            videoSlideshowItem.Visible = true;
+            videoSlideshowItem.Checked = _videoSlideshowRunning;
+            videoSlideshowItem.Enabled = !_slideshowRunning;
         };
 
         contextMenu.Items.Add(toolbarItem);
@@ -1212,6 +670,9 @@ public sealed partial class MainForm : Form
         contextMenu.Items.Add(slideshowLockRegionItem);
         contextMenu.Items.Add(skipItem);
         contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add(videoActivateItem);
+        contextMenu.Items.Add(videoSlideshowItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(saveRegionItem);
         contextMenu.Items.Add(saveImageItem);
         contextMenu.Items.Add(new ToolStripSeparator());
@@ -1223,57 +684,12 @@ public sealed partial class MainForm : Form
         // Build list sources for combos that need it.
         BuildResolutionSelection();
         BuildColorThemesSelection();
-        _colorThemeCombo2.SelectedIndex = 0;
-
-        _checkBoxShowCoordPanel.Click += (s, e) =>
-        {
-            _checkBoxShowCoordPanel2.Checked = _checkBoxShowCoordPanel.Checked;  // sync the coordinate panel checkbox in the coordinate panel with the main one
-            OnShowCoordPanelClick();
-        };
-
-        _checkBoxShowCoordPanel2.Click += (s, e) =>
-        {
-            _checkBoxShowCoordPanel.Checked = _checkBoxShowCoordPanel2.Checked;  // sync the coordinate panel checkbox in the main toolbar with the one in the coordinate panel
-            OnShowCoordPanelClick();
-        };
-
-        navigateItem.Click += (s, e) =>
-        {
-            _checkBoxShowCoordPanel.Checked = !_checkBoxShowCoordPanel.Checked;
-            _checkBoxShowCoordPanel2.Checked = _checkBoxShowCoordPanel.Checked;  // sync the coordinate panel checkbox in the coordinate panel with the main one
-            OnShowCoordPanelClick();
-        };
-
-        _checkBoxShowFooterPanel.Click += (s, e) =>
-        {
-            _checkBoxShowFooterPanel2.Checked = _checkBoxShowFooterPanel.Checked;  // sync the coordinate panel checkbox with the main one
-            OnCheckBoxShowFooterPanelClicked();
-        };
-
-        _checkBoxShowFooterPanel2.Click += (s, e) =>
-        {
-            _checkBoxShowFooterPanel.Checked = _checkBoxShowFooterPanel2.Checked;  // sync the coordinate panel checkbox with the main one
-            OnCheckBoxShowFooterPanelClicked();
-        };
-
-        // Grid toggle — re-render with or without the grid overlay.
-        _checkBoxShowGrid.Click += (s, e) =>
-        {
-            _checkBoxShowGrid2.Checked = _checkBoxShowGrid.Checked;  // sync the coordinate panel checkbox with the main one
-            OnCheckBoxShowGridClick();
-        };
-
-        _checkBoxShowGrid2.Click += (s, e) =>
-        {
-            _checkBoxShowGrid.Checked = _checkBoxShowGrid2.Checked;  // sync the main toolbar checkbox with the one in the coordinate panel
-            OnCheckBoxShowGridClick();
-        };
+        navigateItem.Click += (s, e) => OnShowCoordPanelClick();
 
         #endregion Render panel
 
         // Docking / Z-order: Fill first, then Top-docked in reverse, footer last.
         Controls.Add(_renderPanel);
-        Controls.Add(_coordPanel);
         Controls.Add(_toolbar);
         Controls.Add(_footerPanel);
 
@@ -1285,6 +701,12 @@ public sealed partial class MainForm : Form
         Application.Idle += OnApplicationIdle;
     }
 
+    private void OnChangeIncludeExtremeRegionsChange(object s, EventArgs e)
+    {
+        _slideshowUseExtremeRegions = !_slideshowUseExtremeRegions;
+        FractalRegionLibrary.Instance.IncludeExtremeInAll = _slideshowUseExtremeRegions;
+    }
+
     #endregion Constructors
 
     #region Events
@@ -1293,6 +715,7 @@ public sealed partial class MainForm : Form
     {
         FractalRegionLibrary.Instance.Load();
         RebuildRegionCombo();
+        UserColorThemeLibrary.Instance.UpdateCheck();
         int w = _renderPanel.ClientSize.Width;
         int h = _renderPanel.ClientSize.Height;
 
@@ -1360,7 +783,9 @@ public sealed partial class MainForm : Form
         _disposed = true;
         Application.Idle -= OnApplicationIdle;
 
-        _panStopTimer.Stop(); _panStopTimer.Dispose();
+        _floatingMenu?.Close();
+        _panStopTimer.Stop();
+        _panStopTimer.Dispose();
         StopSlideshow();
         lock (_calcLock) _calcCts?.Cancel();
         lock (_wallpaperLock) _wallpaperCts?.Cancel();
@@ -1368,44 +793,99 @@ public sealed partial class MainForm : Form
         _renderer?.Dispose();
     }
 
-    private void OnCheckBoxShowGridClick()
+    private void OnAdjustBrightness(object? s, EventArgs e, object? l)
     {
-        _gridVisible = _checkBoxShowGrid.Checked;
-        RepaintWithBrightnessContrast();
+        if (s != null)
+        {
+            _brightness = ((TrackBar)s).Value;
+            if (l != null) ((Label)l).Text = $"Brightness: {_brightness:+0;-0;0}";
+            RepaintWithBrightnessContrast();
+        }
     }
 
-    private void OnCheckBoxShowFooterPanelClicked()
+    private void OnAdjustContrast(object? s, EventArgs e, object? l)
     {
-        _footerPanel.Visible = !_footerPanel.Visible;
-        _checkBoxShowFooterPanel.Checked = _footerPanel.Visible;
-        _checkBoxShowFooterPanel2.Checked = _footerPanel.Visible;  // sync the coordinate panel checkbox with the main one
+        if (s != null)
+        {
+            _contrast = ((TrackBar)s).Value;
+            if (l != null) ((Label)l).Text = $"Contrast: {_contrast:+0;-0;0}";
+            RepaintWithBrightnessContrast();
+        }
+    }
+
+    private void OnCheckBoxShowGridClick(object? s, EventArgs e)
+    {
+        if (s != null)
+        {
+            _gridVisible = !_gridVisible;
+            RepaintWithBrightnessContrast();
+        }
+    }
+
+    private void OnCheckBoxShowFooterPanelClicked(object? s, EventArgs e)
+    {
+        if (s != null)
+        {
+            _footerPanel.Visible = !_footerPanel.Visible;
+            ((CheckBox)s).Checked = _footerPanel.Visible;
+        }
     }
 
     private void OnShowCoordPanelClick()
     {
-        _coordPanel.Visible = !_coordPanel.Visible;
-        _checkBoxShowCoordPanel.Visible = !_coordPanel.Visible;  // only show the main toolbar checkbox when the coordinate panel itself is hidden, to avoid confusion between the two sets of checkboxes
-        _checkBoxShowFooterPanel.Visible = !_coordPanel.Visible;  // only show the main toolbar checkbox when the coordinate panel itself is hidden, to avoid confusion between the two sets of checkboxes
-        _checkBoxShowGrid.Visible = !_coordPanel.Visible;  // only show the main toolbar checkbox when the coordinate panel itself is hidden, to avoid confusion between the two sets of checkboxes
-        _qualityCombo.Visible = !_coordPanel.Visible;  // only show the main toolbar quality combo when the coordinate panel itself is hidden, to avoid confusion between the two sets of controls
-        _regionCombo.Visible = !_coordPanel.Visible;  // only show the main toolbar region combo when the coordinate panel itself is hidden, to avoid confusion between the two sets of controls
-        _saveViewButton.Visible = !_coordPanel.Visible;  // only show the main toolbar save view button when the coordinate panel itself is hidden, to avoid confusion between the two sets of controls
-        _delRegionButton.Visible = !_coordPanel.Visible;
-        _qualityLabel.Visible = !_coordPanel.Visible;
-        _colorThemeLabel.Visible = !_coordPanel.Visible;
-        _colorThemeCombo.Visible = !_coordPanel.Visible;
-        _regionLabel.Visible = !_coordPanel.Visible;
-
-        if (_coordPanel.Visible)
+        if (_floatingMenu.IsDisposed)
         {
-            _toolbarLastWidth = _toolbar.Width;
-            _toolbarLastHeight = _toolbar.Height;
-            _toolbar.Width = _coordPanel.Left + _coordPanel.Width;
+            SetStatus("Floating menu unavailable.");
+            return;
         }
-        else
+
+        _showFloatingMenu = true;
+        _toolbar.Visible = !_showFloatingMenu;
+
+        _floatingMenu.OnCloseCoordPanelClick += (s, e) => OnCloseCoordPanelClick(s, e);
+        _floatingMenu.OnExportColorThemeClick += (s, e) => OnExportColorThemeClick(s, e);
+        _floatingMenu.OnFlipClick += (s, e) => OnFlipClick(s, e);
+        _floatingMenu.OnGoClick += (s, e) => OnGoClick(s, e);
+        _floatingMenu.OnResetClick += (s, e) => OnResetClick(s, e);
+        _floatingMenu.OnSpanMonitorsClick += (s, e) => OnSpanMonitorsClick(s, e);
+        _floatingMenu.OnPosterClick += (s, e) => OnPosterClick(s, e);
+        _floatingMenu.OnSlideshowClick += (s, e) => OnSlideshowClick(s, e);
+        _floatingMenu.OnImportColorThemeClick += (s, e) => OnImportColorThemeClick(s, e);
+        _floatingMenu.OnDeleteColorThemeClick += (s, e) => OnDeleteColorThemeClick(s, e);
+        _floatingMenu.OnLoadColorThemesClick += (s, e) => OnLoadColorThemesClick(s, e);
+        _floatingMenu.OnColorThemeChanged += (s, e) => OnColorThemeChanged(s, e);
+        _floatingMenu.OnCheckBoxShowGridClick += (s, e) => OnCheckBoxShowGridClick(s, e);
+        _floatingMenu.OnCheckBoxShowFooterClick += (s, e) => OnCheckBoxShowFooterPanelClicked(s, e);
+        _floatingMenu.OnFlipClick += (s, e) => OnFlipClick(s, e);
+        _floatingMenu.OnQualityComboChanged += (s, e) => OnQualityComboChanged(s, e);
+        _floatingMenu.OnIterLockChanged += (s, e, t, i) => OnIterLockChanged(s, e, t, i);
+        _floatingMenu.OnRegionComboChanged += (s, e) => OnRegionComboChanged(s, e);
+        _floatingMenu.OnSaveViewClick += (s, e) => OnSaveViewClick(s, e);
+        _floatingMenu.OnDelRegionClick += (s, e) => OnDelRegionClick(s, e);
+        _floatingMenu.OnExportRegionsClick += (s, e) => OnExportRegionsClick(s, e);
+        _floatingMenu.OnImportRegionsClick += (s, e) => OnImportRegionsClick(s, e);
+        _floatingMenu.OnChangeIncludeExtremeRegionsChange += (s, e) => OnChangeIncludeExtremeRegionsChange(s, e);
+        _floatingMenu.OnScreenshotClick += (s, e) => OnScreenshotClick(s, e);
+        _floatingMenu.OnVideoClick += (s, e) => OnVideoClick(s, e);
+        _floatingMenu.OnGridClick += (s, e) => OnCheckBoxShowGridClick(s, e);
+        _floatingMenu.OnStatusClick += (s, e) => { _footerPanel.Visible = !_footerPanel.Visible; };
+        _floatingMenu.OnBrightnessSlide += (s, e, l) => OnAdjustBrightness(s, e, l);
+        _floatingMenu.OnContrastSlide += (s, e, l) => OnAdjustContrast(s, e, l);
+
+        UpdateCoordBoxes();
+        if (!_regionCombo.IsDisposed) _floatingMenu.RegionName = _currentRegionName;
+        if (!_colorThemeCombo.IsDisposed) _floatingMenu.ColorTheme = _currentColorThemeName;
+        if (!_qualityCombo.IsDisposed) _floatingMenu.Quality = _currentQualityName;
+        _floatingMenu.Show();
+    }
+
+    public void OnCloseCoordPanelClick(object? s, EventArgs e)
+    {
+        if (s != null)
         {
-            _toolbar.Width = _toolbarLastWidth;
-            _toolbar.Height = _toolbarLastHeight;
+            _floatingMenu.Hide();
+            _showFloatingMenu = false;
+            _toolbar.Visible = !_showFloatingMenu;
         }
     }
 
@@ -1628,7 +1108,11 @@ public sealed partial class MainForm : Form
         _centerY2 = -_centerY2;
         _centerY3 = -_centerY3;
 
-        _txCY.Text = FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3);
+        if (_floatingMenu != null &&
+            !_floatingMenu.IsDisposed)
+        {
+            _floatingMenu.CY = FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3);
+        }
 
         OnGoClick(sender, e);
     }
@@ -1638,11 +1122,13 @@ public sealed partial class MainForm : Form
         if (sender == null) return;
 
         ComboBox combo = (ComboBox)sender;
-        int idx = combo.SelectedIndex;
-        if (idx < 0 || idx >= QualityPreset.All.Length) return;
+        _currentQualitySelection = combo.SelectedIndex;
+        if (_currentQualitySelection < 0 ||
+            _currentQualitySelection >= QualityPreset.All.Length) return;
 
-        QualityPreset newQuality = QualityPreset.All[idx];
+        QualityPreset newQuality = QualityPreset.All[_currentQualitySelection];
         _quality = newQuality;
+        _currentQualityName = _quality.Name;
 
         double prevZoom = _zoom;
         _zoom = System.Math.Clamp(_zoom, _quality.ZoomMin, _quality.ZoomMax);
@@ -1659,16 +1145,20 @@ public sealed partial class MainForm : Form
 
     private void OnColorThemeChanged(object? sender, EventArgs e)
     {
-        string name = _colorThemeCombo?.SelectedItem?.ToString() ?? "";
-        _currentColorThemeLabel?.Text = name;
-        var map = Models.ColorPalette.GetPaletteByName(name);
-        if (_calculator != null)
+        if (sender != null)
         {
-            _calculator.ColorMap = map;
-            TriggerCalculation();
+            ComboBox _cb = (ComboBox)sender;
+            _currentColorThemeName = _cb.SelectedItem?.ToString() ?? "";
+            _currentColorThemeLabel?.Text = _currentColorThemeName;
+            _currentColorThemeSelection = _cb.SelectedIndex;
+            var map = Models.ColorPalette.GetPaletteByName(_currentColorThemeName);
+            if (_calculator != null)
+            {
+                _calculator.ColorMap = map;
+                TriggerCalculation();
+            }
+            _miniMapPanel?.RequestRedraw();
         }
-        _miniMapPanel?.RequestRedraw();
-        UpdateDeleteColorThemeButton();
     }
 
     private void OnResetClick(object? sender, EventArgs e)
@@ -1682,33 +1172,31 @@ public sealed partial class MainForm : Form
         // Reset brightness and contrast to defaults.
         _brightness = 0;
         _contrast = 0;
-        if (_brightnessSlider != null) _brightnessSlider.Value = 0;
-        if (_contrastSlider != null) _contrastSlider.Value = 0;
-        if (_brightnessLabel != null) _brightnessLabel.Text = "Brightness: 0";
-        if (_contrastLabel != null) _contrastLabel.Text = "Contrast: 0";
+        if (_floatingMenu != null) _floatingMenu.ResetView(_centerX, _centerY, _zoom);
 
         ApplyViewState();
         TriggerCalculation();
     }
-    
-    private void OnIterLockChanged(object? sender, EventArgs e)
+
+    private void OnIterLockChanged(object? s, EventArgs e, object? t, int iterations)
     {
-        _iterLocked = _chkLockIter.Checked;
+        _iterLocked = !_iterLocked;
         if (_iterLocked && _calculator != null)
         {
+            _lockedIterations = iterations;
             // Capture current iteration value when lock is engaged.
-            if (int.TryParse(_txIter.Text.Trim(), out int parsed) && parsed >= 64)
-                _lockedIterations = parsed;
-            else
-                _lockedIterations = _calculator.MaxIterations;
-            _txIter.BackColor = Color.FromArgb(55, 50, 30);   // tinted to show locked state
+            //if (int.TryParse(_txIter.Text.Trim(), out int parsed) && parsed >= 64)
+            //    _lockedIterations = parsed;
+            //else
+            //    _lockedIterations = _calculator.MaxIterations;
+            if (t != null && t.GetType() == typeof(TextBox)) ((TextBox)t).BackColor = Color.FromArgb(55, 50, 30);   // tinted to show locked state
         }
         else
         {
-            _txIter.BackColor = Color.FromArgb(40, 40, 40);    // restore normal colour
+            if (t != null && t.GetType() == typeof(TextBox)) ((TextBox)t).BackColor = Color.FromArgb(40, 40, 40);    // restore normal colour
         }
     }
-    
+
     private void OnGoClick(object? sender, EventArgs e)
     {
         if (!TryParseCoords(out double cx, out double cy, out double zoom, out int iter))
@@ -1723,85 +1211,103 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        // Textboxes now carry the full QD value as "Hi|Lo|X2|X3" (FormatCoord).
-        // Parse all limbs so that an unedited box preserves deep-zoom precision
-        // and a pasted full-precision string is honoured without zeroing Lo/X2/X3.
-        if (TryParseQDCoord(_txCX.Text, out double newCX, out double newCXLo,
-                             out double newCX2, out double newCX3))
+        if (_floatingMenu != null &&
+            !_floatingMenu.IsDisposed)
         {
-            _centerX = newCX; _centerXLo = newCXLo; _centerX2 = newCX2; _centerX3 = newCX3;
-        }
-        if (TryParseQDCoord(_txCY.Text, out double newCY, out double newCYLo,
-                             out double newCY2, out double newCY3))
-        {
-            _centerY = newCY; _centerYLo = newCYLo; _centerY2 = newCY2; _centerY3 = newCY3;
-        }
 
-        // Auto-promote quality preset when typed/pasted zoom exceeds current ZoomMax,
-        // so deep coords aren't silently clamped to a shallow render.
-        if (zoom > _quality.ZoomMax)
-        {
-            QualityPreset? promoted = null;
-            foreach (var p in QualityPreset.All)
-                if (p.ZoomMax >= zoom) { promoted = p; break; }
-            promoted ??= QualityPreset.Extreme;
-            if (promoted.Tier != _quality.Tier)
+            // Textboxes now carry the full QD value as "Hi|Lo|X2|X3" (FormatCoord).
+            // Parse all limbs so that an unedited box preserves deep-zoom precision
+            // and a pasted full-precision string is honoured without zeroing Lo/X2/X3.
+            if (TryParseQDCoord(_floatingMenu.CX, out double newCX, out double newCXLo,
+                                 out double newCX2, out double newCX3))
             {
-                _quality = promoted;
-                if (_calculator != null) _calculator.Quality = _quality;
-                _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
-                _qualityCombo.Text = _quality.Name;
-                _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
-                if (_qualityCombo2 != null) _qualityCombo2.Text = _quality.Name;
-                SetStatus($"Quality → {_quality.Name} (zoom {zoom:G3} requires it).");
+                _centerX = newCX; _centerXLo = newCXLo; _centerX2 = newCX2; _centerX3 = newCX3;
             }
+            if (TryParseQDCoord(_floatingMenu.CY, out double newCY, out double newCYLo,
+                                 out double newCY2, out double newCY3))
+            {
+                _centerY = newCY; _centerYLo = newCYLo; _centerY2 = newCY2; _centerY3 = newCY3;
+            }
+
+            // Auto-promote quality preset when typed/pasted zoom exceeds current ZoomMax,
+            // so deep coords aren't silently clamped to a shallow render.
+            if (zoom > _quality.ZoomMax)
+            {
+                QualityPreset? promoted = null;
+                foreach (var p in QualityPreset.All)
+                    if (p.ZoomMax >= zoom) { promoted = p; break; }
+                promoted ??= QualityPreset.Extreme;
+                if (promoted.Tier != _quality.Tier)
+                {
+                    _quality = promoted;
+                    if (_calculator != null) _calculator.Quality = _quality;
+                    _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
+                    _qualityCombo.Text = _quality.Name;
+                    _floatingMenu.Quality = _quality.Name;
+                    _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
+                    //if (_qualityCombo2 != null) _qualityCombo2.Text = _quality.Name;
+                    SetStatus($"Quality → {_quality.Name} (zoom {zoom:G3} requires it).");
+                }
+            }
+            _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
+            _floatingMenu.Zoom = _zoom;
+
+            if (_calculator != null && iter > 0)
+                _calculator.MaxIterations = iter;
+
+            // When "Go" is pressed while locked, update the locked value too.
+            if (_iterLocked)
+                _lockedIterations = iter;
+
+            ApplyViewState(iter);
+            TriggerCalculation();
         }
-        _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
-
-        if (_calculator != null && iter > 0)
-            _calculator.MaxIterations = iter;
-
-        // When "Go" is pressed while locked, update the locked value too.
-        if (_iterLocked)
-            _lockedIterations = iter;
-
-        ApplyViewState(iter);
-        TriggerCalculation();
     }
 
     private void OnRegionComboChanged(object? sender, EventArgs e)
     {
-        UpdateDelRegionButton();
+        if (sender != null)
+        {
+            ComboBox _cb = (ComboBox)sender;
+            UpdateDelRegionButton(_cb, _delRegionButton);
 
-        string? name = _regionCombo.SelectedItem?.ToString();
-        _currentRegionLabel?.Text = name;
-        if (string.IsNullOrEmpty(name) || name == "— select region —") return;
+            _currentRegionName = _cb.SelectedItem?.ToString();
+            //_currentRegionLabel?.Text = _currentRegionName;
+            if (string.IsNullOrEmpty(_currentRegionName) ||
+                _currentRegionName == "— select region —") return;
 
-        var region = FractalRegionLibrary.Instance.FindByName(name);
-        if (region == null) return;
+            var region = FractalRegionLibrary.Instance.FindByName(_currentRegionName);
+            if (region == null) return;
 
-        ApplyRegion(region);
-        TriggerCalculation();
+            ApplyRegion(region);
+            TriggerCalculation();
 
-        _toolTip.SetToolTip(_regionCombo, region.Description);
+            _toolTip.SetToolTip(_cb, region.Description);
+        }
     }
 
     private void OnSaveViewClick(object? sender, EventArgs e)
     {
         // Sync textboxes → internal state so manual edits land in the saved region
         // even when the user hasn't pressed Go first.
-        if (TryParseQDCoord(_txCX.Text, out double sCX, out double sCXLo,
-                             out double sCX2, out double sCX3))
-        { _centerX = sCX; _centerXLo = sCXLo; _centerX2 = sCX2; _centerX3 = sCX3; }
-        if (TryParseQDCoord(_txCY.Text, out double sCY, out double sCYLo,
-                             out double sCY2, out double sCY3))
-        { _centerY = sCY; _centerYLo = sCYLo; _centerY2 = sCY2; _centerY3 = sCY3; }
-        var _ic = System.Globalization.CultureInfo.InvariantCulture;
-        var _ns = System.Globalization.NumberStyles.Float;
-        if (double.TryParse(_txZoom.Text.Trim(), _ns, _ic, out double tz) && tz > 0)
-            _zoom = tz;
-        if (int.TryParse(_txIter.Text.Trim(), out int ti) && ti >= 64 && _calculator != null)
-            _calculator.MaxIterations = ti;
+        if (_calculator == null) return;
+        //if (TryParseQDCoord(_txCX.Text, out double sCX, out double sCXLo,
+        //                     out double sCX2, out double sCX3))
+        //{ _centerX = sCX; _centerXLo = sCXLo; _centerX2 = sCX2; _centerX3 = sCX3; }
+        //if (TryParseQDCoord(_txCY.Text, out double sCY, out double sCYLo,
+        //                     out double sCY2, out double sCY3))
+        //{ _centerY = sCY; _centerYLo = sCYLo; _centerY2 = sCY2; _centerY3 = sCY3; }
+
+        _centerX = _calculator.CenterX; _centerXLo = _calculator.CenterXLo; _centerX2 = _calculator.CenterX2; _centerX3 = _calculator.CenterY3;
+        _centerY = _calculator.CenterY; _centerYLo = _calculator.CenterYLo; _centerY2 = _calculator.CenterY2; _centerY3 = _calculator.CenterY3;
+        //var _ic = System.Globalization.CultureInfo.InvariantCulture;
+        //var _ns = System.Globalization.NumberStyles.Float;
+        //if (double.TryParse(_txZoom.Text.Trim(), _ns, _ic, out double tz) && tz > 0)
+        //    _zoom = tz;
+        _zoom = _calculator.Zoom;
+        //if (int.TryParse(_txIter.Text.Trim(), out int ti) && ti >= 64 && _calculator != null)
+        //    _calculator.MaxIterations = ti;
+
 
         using var dlg = new InputDialog("Save Current View", "Region name:");
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -2037,22 +1543,8 @@ public sealed partial class MainForm : Form
 
     private void RebuildRegionCombo()
     {
-        _regionCombo.SelectedIndexChanged -= OnRegionComboChanged;
-        _regionCombo.Items.Clear();
-        _regionCombo2?.Items.Clear();
-        _regionCombo.Items.Add("— select region —");
-        _regionCombo2?.Items.Add("— select region —");
-        var regions = FractalRegionLibrary.Instance.All.OrderBy(r => r.IsBuiltIn).ThenBy(r => r.Name);
-        foreach (var r in regions)
-        {
-            _regionCombo.Items.Add(r.Name);
-            _regionCombo2?.Items.Add(r.Name);
-        }
-
-        _regionCombo.SelectedIndex = 0;
-        _regionCombo2?.SelectedIndex = 0;
-        _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
-        UpdateDelRegionButton();
+        FormHelpers.RebuildRegionCombo(_regionCombo, OnRegionComboChanged);
+        UpdateDelRegionButton(_regionCombo, _delRegionButton);
     }
 
     private void BuildColorThemesSelection()
@@ -2063,11 +1555,9 @@ public sealed partial class MainForm : Form
             var palettes = Models.ColorPalette.GetPalettesByType(type);
             if (palettes.Count == 0) continue;
             _colorThemeCombo.Items.Add($"— {type} —");
-            _colorThemeCombo2?.Items.Add($"— {type} —");
             foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
             {
                 _colorThemeCombo.Items.Add(name);
-                _colorThemeCombo2?.Items.Add(name);
             }
         }
     }
@@ -2310,13 +1800,19 @@ public sealed partial class MainForm : Form
         var ic = System.Globalization.CultureInfo.InvariantCulture;
         var ns = System.Globalization.NumberStyles.Float;
 
-        // CX/CY may be plain decimals or pipe-separated QD format; validate Hi part only.
-        string cxHi = _txCX.Text.Trim().Split('|')[0].Trim();
-        string cyHi = _txCY.Text.Trim().Split('|')[0].Trim();
-        return double.TryParse(cxHi, ns, ic, out cx)
-            && double.TryParse(cyHi, ns, ic, out cy)
-            && double.TryParse(_txZoom.Text.Trim(), ns, ic, out zoom) && zoom > 0
-            && int.TryParse(_txIter.Text.Trim(), out iter) && iter >= 64;
+        if (_floatingMenu != null &&
+            !_floatingMenu.IsDisposed)
+        {
+            // CX/CY may be plain decimals or pipe-separated QD format; validate Hi part only.
+            string cxHi = _floatingMenu.CX.Trim().Split('|')[0].Trim();
+            string cyHi = _floatingMenu.CY.Trim().Split('|')[0].Trim();
+            return double.TryParse(cxHi, ns, ic, out cx)
+                && double.TryParse(cyHi, ns, ic, out cy)
+                && double.TryParse(_floatingMenu.ZoomString.Trim(), ns, ic, out zoom) && zoom > 0
+                && int.TryParse(_floatingMenu.Iter.Trim(), out iter) && iter >= 64;
+
+        }
+        else return false;
     }
 
     private void SetStatus(string text)
@@ -2339,6 +1835,11 @@ public sealed partial class MainForm : Form
         var prop = _calculator.ColorMap.GetType()
             .GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
         return prop?.GetValue(null)?.ToString() ?? "Theme";
+    }
+
+    private void CheckForNewColorThemes()
+    {
+        //if (string.IsNullOrEmpty(ColorPalette.))
     }
 
     #region Region management
@@ -2372,24 +1873,24 @@ public sealed partial class MainForm : Form
         ApplyViewState(_iterLocked ? _lockedIterations : (region.Iterations > 0 ? region.Iterations : 0));
     }
 
-    private void UpdateDelRegionButton()
-    {
-        string? name = _regionCombo.SelectedItem?.ToString();
-        if (string.IsNullOrEmpty(name) || name == "— select region —")
-        { _delRegionButton.Enabled = false; return; }
-        var region = FractalRegionLibrary.Instance.FindByName(name);
-        _delRegionButton.Enabled = region != null && !region.IsBuiltIn;
-    }
+    //private void UpdateDelRegionButton()
+    //{
+    //    string? name = _regionCombo.SelectedItem?.ToString();
+    //    if (string.IsNullOrEmpty(name) || name == "— select region —")
+    //    { _delRegionButton.Enabled = false; return; }
+    //    var region = FractalRegionLibrary.Instance.FindByName(name);
+    //    _delRegionButton.Enabled = region != null && !region.IsBuiltIn;
+    //}
 
-    private void UpdateDeleteColorThemeButton()
-    {
-        string? name = _colorThemeCombo.SelectedItem?.ToString();
-        if (string.IsNullOrEmpty(name) || name.StartsWith("—"))
-        { _deleteColorThemeButton.Enabled = false; return; }
+    //private void UpdateDeleteColorThemeButton()
+    //{
+    //    string? name = _colorThemeCombo.SelectedItem?.ToString();
+    //    if (string.IsNullOrEmpty(name) || name.StartsWith("—"))
+    //    { _deleteColorThemeButton.Enabled = false; return; }
 
-        _deleteColorThemeButton.Enabled = UserColorThemeLibrary.Instance.Themes
-            .Any(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-    }
+    //    _deleteColorThemeButton.Enabled = UserColorThemeLibrary.Instance.Themes
+    //        .Any(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    //}
 
     #endregion Region management
 
@@ -2422,6 +1923,12 @@ public sealed partial class MainForm : Form
         WindowState = FormWindowState.Normal;
         Bounds = SystemInformation.VirtualScreen;
         TopMost = true;
+
+        if (_floatingMenu != null && _floatingMenu.Visible)
+        {
+            _floatingMenu.TopMost = true;
+            _floatingMenu.BringToFront();
+        }
         Activate();
     }
 
@@ -2448,10 +1955,6 @@ public sealed partial class MainForm : Form
         { ExitSpanMode(); e.Handled = true; return; }
         if (e.KeyCode == Keys.Escape && _slideshowRunning)
         { StopSlideshow(); e.Handled = true; return; }
-        if (e.KeyCode == Keys.Return &&
-            (ActiveControl == _txCX || ActiveControl == _txCY ||
-             ActiveControl == _txZoom || ActiveControl == _txIter))
-        { OnGoClick(null, EventArgs.Empty); e.Handled = true; }
     }
 
     private void OnMouseWheel(object? sender, MouseEventArgs e)
@@ -2742,22 +2245,7 @@ public sealed partial class MainForm : Form
         UpdateCoordBoxes();
     }
 
-    // ── Coordinate formatting / parsing helpers ───────────────────────────────
 
-    // Formats a QD coordinate as a pipe-separated string of non-zero limbs.
-    // Uses "R" (round-trip) format so paste-back restores the exact bit pattern.
-    // Single-limb example:  "-0.5"
-    // DD example:           "-0.748392837462382|-1.23456789012345e-16"
-    // QD example:           "-0.748392837...|...|...|..."
-    private static string FormatCoord(double hi, double lo, double x2, double x3)
-    {
-        var ic = System.Globalization.CultureInfo.InvariantCulture;
-        string s = hi.ToString("R", ic);
-        if (lo != 0.0) s += "|" + lo.ToString("R", ic);
-        if (x2 != 0.0) s += "|" + x2.ToString("R", ic);
-        if (x3 != 0.0) s += "|" + x3.ToString("R", ic);
-        return s;
-    }
 
     // Parses a coordinate string: either a plain decimal or a pipe-separated
     // "Hi|Lo|X2|X3" produced by FormatCoord. Returns false if Hi fails to parse.
@@ -2781,14 +2269,18 @@ public sealed partial class MainForm : Form
         _suppressCoordUpdate = true;
         try
         {
-            if (ActiveControl != _txCX)
-                _txCX.Text = FormatCoord(_centerX, _centerXLo, _centerX2, _centerX3);
-            if (ActiveControl != _txCY)
-                _txCY.Text = FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3);
-            if (ActiveControl != _txZoom)
-                _txZoom.Text = _zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
-            if (ActiveControl != _txIter && _calculator != null)
-                _txIter.Text = _calculator.MaxIterations.ToString();
+            if (_calculator != null && _floatingMenu != null)
+            {
+                _floatingMenu.UpdateCoordBoxes(
+                FormatCoord(_centerX, _centerXLo, _centerX2, _centerX3),
+                FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3),
+                _zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                _calculator.MaxIterations.ToString());
+
+                _floatingMenu.RegionName = _currentRegionName;
+                _floatingMenu.ColorTheme = _currentColorThemeName; ;
+                _floatingMenu.Quality = _currentQualityName;
+            }
         }
         finally { _suppressCoordUpdate = false; }
     }

@@ -90,6 +90,13 @@ namespace FracturingFog.Interefaces
 
         public int MaxIterations { get; set; }
 
+        /// <summary>
+        /// Packed ARGB colour painted for in-set (interior) pixels.  Defaults to
+        /// opaque black (0xFF000000).  Themes that want a different interior
+        /// colour override this property.
+        /// </summary>
+        uint InSetColor => 0xFF000000u;
+
         // ── Core mapping — THREE-PARAMETER ────────────────────────────────────
         /// <summary>
         /// Maps fractal sample data to a packed ARGB colour.

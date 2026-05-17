@@ -43,10 +43,10 @@ namespace FracturingFog
                 FilterIndex = 1,
                 DefaultExt = "png",
                 FileName = $"{_programName}_{colorName}_{regionName}" +
-                             $"x{_txCX.Text.Split('|')[0].Replace(".", "")}_" +
-                             $"y{_txCY.Text.Split('|')[0].Replace(".", "")}_" +
-                             $"z{_txZoom.Text.Replace(".", "")}_" +
-                             $"i{_txIter.Text.Replace(".", "")}_" +
+                             $"x{_calculator.CenterX.ToString().Replace(".", "")}_" +
+                             $"y{_calculator.CenterY.ToString().Replace(".", "")}_" +
+                             $"z{_calculator.Zoom.ToString().Replace(".", "")}_" +
+                             $"i{_calculator.MaxIterations.ToString().Replace(".", "")}_" +
                              sizeTag
             };
             if (dlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;

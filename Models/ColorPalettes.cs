@@ -114,6 +114,7 @@ namespace FracturingFog.Models
             new GoldenRatioMap(),
             new MonoBandMap(),
             new BernsteinMap(),
+            new CosmicMandalaMap(),
             new RedAndBlack(),
 
             // ── Gradient — linear ─────────────────────────────────────────────
@@ -267,6 +268,7 @@ namespace FracturingFog.Models
 
         public static Dictionary<string, List<IColorMap>> GetPalettesByType(ColorPaletteType type)
         {
+            LoadUserThemes();
             var groups = new Dictionary<string, List<IColorMap>>(StringComparer.Ordinal);
             foreach (var p in Palettes)
             {

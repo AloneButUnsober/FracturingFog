@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="Fracturing Fog"
+           Manufacturer="Alone But Unsober"
+           Version="0.4.0"
+           UpgradeCode="205ADAF3-B278-43C8-B099-5A592A3705FC"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="Fracturing Fog - Mandelbrot Explorer"
+                        Manufacturer="Alone But Unsober" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon.ico" SourceFile="Stage\Resources\FracturingFog.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Fracturing Fog" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomAction Id="SetWixShellExecTarget"
+                  Property="WixShellExecTarget"
+                  Value="[INSTALLFOLDER]FracturingFog.exe" />
+    <CustomAction Id="LaunchApplication"
+                  DllEntry="WixShellExec"
+                  BinaryRef="Wix4UtilCA_X64"
+                  Impersonate="yes" />
+    <UI>
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="SetWixShellExecTarget"
+               Order="1"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="LaunchApplication"
+               Order="2"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="ManufacturerFolder" Name="AloneButUnsober">
+        <Directory Id="INSTALLFOLDER" Name="Fracturing Fog" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="Fracturing Fog" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Fracturing Fog" Level="1">
+      <Files Include="Stage\**" Directory="INSTALLFOLDER" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+    <DirectoryRef Id="ProgramMenuDir">
+      <Component Id="StartMenuShortcut" Guid="6F1B7C42-9A85-4D31-BBA1-9FA7C6B81E40">
+        <Shortcut Id="StartMenuShortcutFile"
+                  Name="Fracturing Fog"
+                  Description="Mandelbrot Explorer"
+                  Target="[INSTALLFOLDER]FracturingFog.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+        <RemoveFolder Id="RemoveProgramMenuDir" Directory="ProgramMenuDir" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\AloneButUnsober\FracturingFog"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="A2DC891E-7B6C-4F2A-92B9-3D8E0F1A7C4D">
+        <Shortcut Id="DesktopShortcutFile"
+                  Name="Fracturing Fog"
+                  Description="Mandelbrot Explorer"
+                  Target="[INSTALLFOLDER]FracturingFog.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\AloneButUnsober\FracturingFog"
+                       Name="DesktopShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+  </Package>
+</Wix>
