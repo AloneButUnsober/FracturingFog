@@ -48,9 +48,11 @@ namespace FracturingFog.Interefaces
         ThreeDEffect = 1 << 7,   // map produces a strong 3D visual
         UsesOrbitTrap = 1 << 8,   // samples z each iteration for trap-shape distance
         UsesStripeAvg = 1 << 9,   // samples z each iteration for stripe / TIA averaging
-        UsesFinalZ = 1 << 10,  // reads z (zr, zi) at escape — binary/angle decomp, potential, field lines, domain coloring
+        UsesPostProcess = 1 << 10, // runs an extra full-screen pass after main render
         UsesDerivative = 1 << 11,  // reads dz/dc at escape — derivative bailout colourings
         UsesHistogram = 1 << 12,  // designed for histogram equalisation; pair with the EQ slider
+        UsesFinalZ = 1 << 13,  // reads z (zr, zi) at escape — binary/angle decomp, potential, field lines, domain coloring
+        UsesInterior = 1 << 14,  // reads per-pixel cycle period / attractor / multiplier for in-set colouring
     }
 
     /// <summary>
@@ -183,6 +185,40 @@ namespace FracturingFog.Interefaces
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Post-process extension
+    //
+    // Some effects need to read NEIGHBOURING pixels — Sobel emboss, ambient
+    // occlusion, soft shadows.  These cannot be computed inside the per-pixel
+    // Map() call.  A colour map can opt into a second pass over the finished
+    // ColorBuffer by implementing IPostProcessColorMap.  The calculator invokes
+    // PostProcess() once after the main render completes, giving the theme
+    // access to the full screen-sized buffers.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Colour map that runs an extra full-screen pass after the per-pixel
+    /// Map() / MapWithOrbit() calls have populated ColorBuffer.  The pass may
+    /// read neighbour samples from any of the input float buffers
+    /// (smooth/distance/normal) and modify <paramref name="colorBuf"/> in place.
+    /// </summary>
+    public interface IPostProcessColorMap : IColorMap
+    {
+        /// <summary>
+        /// Apply post-process effect over the full framebuffer.
+        /// Called once per render, after all per-pixel Map() calls have finished.
+        /// </summary>
+        /// <param name="colorBuf">ARGB output buffer (read/write).</param>
+        /// <param name="smooth">Smooth iteration count per pixel.</param>
+        /// <param name="nx">Surface normal X component per pixel.</param>
+        /// <param name="ny">Surface normal Y component per pixel.</param>
+        /// <param name="width">Frame width in pixels.</param>
+        /// <param name="height">Frame height in pixels.</param>
+        /// <param name="iterations">Max iterations for the current frame.</param>
+        void PostProcess(uint[] colorBuf, float[] smooth, float[] nx, float[] ny,
+                         int width, int height, int iterations);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Orbit-aware extension
     //
     // Orbit traps, stripe average and triangle-inequality average colourings all
@@ -272,5 +308,39 @@ namespace FracturingFog.Interefaces
 
         /// <summary>Final colour produced from the standard inputs plus the accumulated orbit state.</summary>
         int MapWithOrbit(float smooth, float distance, int iterations, float nx, float ny, in OrbitAccumulator acc);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Interior-aware extension
+    //
+    // Mandelbrot in-set points orbit toward a finite attracting cycle of some
+    // period p ≥ 1.  Five colourings — Atom Domains, Argument, Multiplier,
+    // Cycle Period, Fake DE — colour the interior of the set using this orbit
+    // structure rather than escape time (which is meaningless for in-set
+    // pixels).  Themes that need it implement IInteriorAwareColorMap; the
+    // calculator runs a separate cycle-detection pass (Brent's algorithm) over
+    // in-set pixels and fills InteriorPeriodBuffer / AttractorZrBuffer /
+    // AttractorZiBuffer / MultiplierMagBuffer.  MapInterior() is then invoked
+    // once per in-set pixel to produce the interior colour.
+    //
+    // Exterior pixels are coloured normally via Map().
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Colour map that colours the in-set (interior) region of the Mandelbrot
+    /// set using attracting-cycle data captured by Brent cycle detection.
+    /// </summary>
+    public interface IInteriorAwareColorMap : IColorMap
+    {
+        /// <summary>
+        /// Colour an in-set pixel from its detected cycle data.
+        /// </summary>
+        /// <param name="period">Detected attracting-cycle period (1..MaxPeriod); 0 if no cycle detected within search budget.</param>
+        /// <param name="attractorZr">Real part of a point on the detected cycle (0 if undetected).</param>
+        /// <param name="attractorZi">Imaginary part of a point on the detected cycle.</param>
+        /// <param name="multiplierMag">|λ| = magnitude of the cycle multiplier ∏ 2 z_k over one period (0 if undetected). 0 ≤ |λ| ≤ 1 for hyperbolic in-set components.</param>
+        /// <param name="cx">c.real (used by atom-domain / argument themes).</param>
+        /// <param name="cy">c.imag.</param>
+        int MapInterior(int period, float attractorZr, float attractorZi, float multiplierMag, double cx, double cy);
     }
 }
