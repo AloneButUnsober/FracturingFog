@@ -161,6 +161,21 @@ namespace FracturingFog.Models
             // ── Scientific / perceptual ───────────────────────────────────────
             new ViridisColorMap(),
             new PlasmaColorMap(),
+
+            // ── Orbit Trap ────────────────────────────────────────────────────
+            new OrbitTrapPointMap(),
+            new OrbitTrapCrossMap(),
+            new OrbitTrapCircleMap(),
+
+            // ── Stripe Average + TIA (Ultra Fractal look) ─────────────────────
+            new StripeAverageClassicMap(),
+            new TriangleInequalityMap(),
+            new StripeTiaBlendMap(),
+
+            // ── Distance Estimation ───────────────────────────────────────────
+            new DistanceFieldChromaticMap(),
+            new DistanceFieldGlowMap(),
+            new DistanceFieldSilverMap(),
         };
 
         /// <summary>

@@ -90,6 +90,13 @@ public sealed class MandelbrotCalculator
     /// <summary>True when the last Calculate() used double-double arithmetic.</summary>
     public bool IsHighPrecisionActive { get; private set; }
 
+    /// <summary>
+    /// Complex-plane units per pixel for the most recent <see cref="Calculate"/>
+    /// invocation.  Set at entry so colour maps (notably distance-estimation
+    /// themes) can normalise the raw exterior distance value to pixel units.
+    /// </summary>
+    public static double LastPixelScale { get; private set; } = 1.0;
+
     public IColorMap ColorMap { get; set; } = new HsvPalette();
 
     // ── Output buffers ────────────────────────────────────────────────────────
@@ -100,6 +107,12 @@ public sealed class MandelbrotCalculator
     public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
     public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // Orbit-aware auxiliary buffers — populated only when an
+    // IOrbitAwareColorMap is active.  Zero-filled otherwise.
+    public float[] TrapBuffer { get; private set; } = Array.Empty<float>();
+    public float[] StripeBuffer { get; private set; } = Array.Empty<float>();
+    public float[] TiaBuffer { get; private set; } = Array.Empty<float>();
 
     // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -137,6 +150,9 @@ public sealed class MandelbrotCalculator
         NormalXBuffer = new float[n];
         NormalYBuffer = new float[n];
         ColorBuffer = new uint[n];
+        TrapBuffer = new float[n];
+        StripeBuffer = new float[n];
+        TiaBuffer = new float[n];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -152,6 +168,25 @@ public sealed class MandelbrotCalculator
         var callingMethod = new StackTrace().GetFrame(1)?.GetMethod();
         Debug.WriteLine($"Calculate() called from {callingMethod?.DeclaringType?.Name}.{callingMethod?.Name}{Environment.NewLine} with ColorMap={ColorMap.GetType().Name}, MaxIterations={MaxIterations}");
         ColorMap.MaxIterations = MaxIterations;
+
+        // Update pixel scale so DE-style themes can normalise raw distance
+        // (complex-plane units) into pixel units for stable rendering at any zoom.
+        LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
+
+        // ── Orbit-aware dispatch ─────────────────────────────────────────────
+        // Orbit traps, stripe average and triangle-inequality average themes
+        // need per-iteration z samples and run on a dedicated scalar SP path.
+        // Each concrete orbit theme is enumerated so the generic dispatch
+        // CalculateOrbitAware<TMap> JIT-specialises and inlines Sample().
+        switch (ColorMap)
+        {
+            case OrbitTrapPointMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCrossMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCircleMap m: CalculateOrbitAware(m, ct); return;
+            case StripeAverageClassicMap m: CalculateOrbitAware(m, ct); return;
+            case TriangleInequalityMap m: CalculateOrbitAware(m, ct); return;
+            case StripeTiaBlendMap m: CalculateOrbitAware(m, ct); return;
+        }
 
         // Pattern-match to the concrete type so the JIT sees a non-virtual call
         // inside Calculate<TMap> and can inline Map() completely.
@@ -277,6 +312,9 @@ public sealed class MandelbrotCalculator
             case GrayscalePalette m: CalculateCore(m, ct); break;
             case ViridisColorMap m: CalculateCore(m, ct); break;
             case PlasmaColorMap m: CalculateCore(m, ct); break;
+            case DistanceFieldChromaticMap m: CalculateCore(m, ct); break;
+            case DistanceFieldGlowMap m: CalculateCore(m, ct); break;
+            case DistanceFieldSilverMap m: CalculateCore(m, ct); break;
             default:
                 // Unknown concrete type — fall back to virtual dispatch.
                 // Still correct; just not devirtualized.
@@ -468,6 +506,97 @@ public sealed class MandelbrotCalculator
         {
             NormalXBuffer[idx] = 0f;
             NormalYBuffer[idx] = 0f;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PATH C — orbit-aware scalar (SP only)
+    //
+    // Used for orbit traps, stripe average, and triangle-inequality average
+    // colour maps that require per-iteration z samples.  No SIMD, no high
+    // precision — these themes are not supported at extreme zoom.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void CalculateOrbitAware<TMap>(TMap colorMap, CancellationToken ct)
+        where TMap : IOrbitAwareColorMap
+    {
+        bool useHP = Quality.NeedsHighPrecision(Zoom);
+        IsHighPrecisionActive = useHP;
+
+        double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        int maxIt = MaxIterations;
+
+        var po = new ParallelOptions { CancellationToken = ct };
+        Parallel.For(0, Height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            double cy = CenterY + (y - Height * 0.5) * scale;
+            int rowBase = y * Width;
+            for (int x = 0; x < Width; x++)
+            {
+                double cx = CenterX + (x - Width * 0.5) * scale;
+                ComputePixelOrbit(cx, cy, maxIt, rowBase + x, colorMap);
+            }
+        });
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ComputePixelOrbit<TMap>(
+        double cx, double cy, int maxIter, int idx, TMap colorMap)
+        where TMap : IOrbitAwareColorMap
+    {
+        double zr = 0, zi = 0, dr = 1, di = 0;
+        colorMap.InitOrbit(out var acc);
+        int iter;
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            double zr2 = zr * zr, zi2 = zi * zi;
+            if (zr2 + zi2 >= EscapeRadius2) break;
+
+            // Sample BEFORE update so iter==0 is skipped (z_0 = 0 has no arg).
+            if (iter > 0) colorMap.Sample(ref acc, zr, zi, cx, cy, iter);
+
+            double newDr = 2.0 * (zr * dr - zi * di) + 1.0;
+            double newDi = 2.0 * (zr * di + zi * dr);
+            dr = newDr; di = newDi;
+
+            double newZr = zr2 - zi2 + cx;
+            zi = 2.0 * zr * zi + cy;
+            zr = newZr;
+        }
+        IterationBuffer[idx] = iter;
+
+        if (iter < maxIter)
+        {
+            double mag = Math.Sqrt(zr * zr + zi * zi);
+            float smooth = (float)(iter + 1.0
+                - Math.Log(Math.Log(mag) / Math.Log(2.0)) / Math.Log(2.0));
+            SmoothBuffer[idx] = smooth;
+
+            double dMag = Math.Sqrt(dr * dr + di * di);
+            float dist = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+            DistanceBuffer[idx] = dist;
+
+            FillNormal(idx, zr, zi, dr, di);
+
+            TrapBuffer[idx] = acc.TrapMin == float.MaxValue ? 0f : acc.TrapMin;
+            StripeBuffer[idx] = acc.StripeCount > 0 ? (float)(acc.StripeSum / acc.StripeCount) : 0f;
+            TiaBuffer[idx] = acc.TiaCount > 0 ? (float)(acc.TiaSum / acc.TiaCount) : 0f;
+
+            ColorBuffer[idx] = (uint)colorMap.MapWithOrbit(
+                smooth, dist, maxIter,
+                NormalXBuffer[idx], NormalYBuffer[idx], in acc);
+        }
+        else
+        {
+            SmoothBuffer[idx] = 0f;
+            DistanceBuffer[idx] = 0f;
+            NormalXBuffer[idx] = 0f;
+            NormalYBuffer[idx] = 0f;
+            TrapBuffer[idx] = 0f;
+            StripeBuffer[idx] = 0f;
+            TiaBuffer[idx] = 0f;
+            ColorBuffer[idx] = colorMap.InSetColor;
         }
     }
 
