@@ -124,6 +124,14 @@ public sealed class MandelbrotCalculator
     public float[] FinalDrBuffer { get; private set; } = Array.Empty<float>();
     public float[] FinalDiBuffer { get; private set; } = Array.Empty<float>();
 
+    // Interior-cycle buffers — populated only when an IInteriorAwareColorMap
+    // is active.  Phase 4 infrastructure (Atom Domains, Argument, Multiplier,
+    // Cycle Period, Fake DE themes consume these).  Zero-filled otherwise.
+    public int[] InteriorPeriodBuffer { get; private set; } = Array.Empty<int>();
+    public float[] AttractorZrBuffer { get; private set; } = Array.Empty<float>();
+    public float[] AttractorZiBuffer { get; private set; } = Array.Empty<float>();
+    public float[] MultiplierMagBuffer { get; private set; } = Array.Empty<float>();
+
     // ── Constants ─────────────────────────────────────────────────────────────
 
     private const double EscapeRadius = 512.0;
@@ -167,6 +175,10 @@ public sealed class MandelbrotCalculator
         FinalZiBuffer = new float[n];
         FinalDrBuffer = new float[n];
         FinalDiBuffer = new float[n];
+        InteriorPeriodBuffer = new int[n];
+        AttractorZrBuffer = new float[n];
+        AttractorZiBuffer = new float[n];
+        MultiplierMagBuffer = new float[n];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -340,12 +352,187 @@ public sealed class MandelbrotCalculator
             case DistanceFieldSilverMap m: CalculateCore(m, ct); break;
             case LambertShadingMap m: CalculateCore(m, ct); break;
             case SlopeShadingMap m: CalculateCore(m, ct); break;
+            case EmbossBumpMap m: CalculateCore(m, ct); break;
+            case AmbientOcclusionMap m: CalculateCore(m, ct); break;
+            case SoftShadowMap m: CalculateCore(m, ct); break;
+            case CyclePeriodMap m: CalculateCore(m, ct); break;
+            case MultiplierMap m: CalculateCore(m, ct); break;
+            case AtomDomainsMap m: CalculateCore(m, ct); break;
+            case InteriorArgumentMap m: CalculateCore(m, ct); break;
+            case FakeDistanceEstimateMap m: CalculateCore(m, ct); break;
             default:
                 // Unknown concrete type — fall back to virtual dispatch.
                 // Still correct; just not devirtualized.
                 CalculateCore(ColorMap, ct);
                 break;
         }
+
+        // ── Optional interior-aware pass ─────────────────────────────────────
+        // Themes that colour the in-set region (Atom Domains, Multiplier,
+        // Cycle Period, Fake DE, Argument) implement IInteriorAwareColorMap.
+        // For each in-set pixel we run Brent cycle detection on z² + c starting
+        // from 0, recover (period, attractor, |multiplier|), and let the theme
+        // colour the pixel.  Exterior pixels are untouched.
+        if (ColorMap is IInteriorAwareColorMap interiorMap)
+            RunInteriorPass(interiorMap, ct);
+
+        // ── Optional post-process pass ───────────────────────────────────────
+        // Themes that need neighbourhood information (emboss, AO, soft shadow)
+        // implement IPostProcessColorMap and run a second pass over the
+        // finished ColorBuffer + aux float buffers.  No-op for everything else.
+        if (ColorMap is IPostProcessColorMap pp)
+            pp.PostProcess(ColorBuffer, SmoothBuffer,
+                           NormalXBuffer, NormalYBuffer,
+                           Width, Height, MaxIterations);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 4 — Interior orbit / attracting-cycle detection
+    //
+    // For each in-set pixel we want to know:
+    //   • period p of the attracting cycle (1, 2, 3, …)
+    //   • a point on the cycle (the attractor sample)
+    //   • the cycle multiplier |λ| = |∏_{k=0}^{p−1} 2 z_k|, which classifies
+    //     the bulb (hyperbolic if < 1, parabolic if = 1).
+    //
+    // Algorithm — Brent's cycle detection on z_{n+1} = z_n² + c:
+    //   1. SETTLE: iterate from z=0 for `Settle` steps so we land near the
+    //      attractor (transient dies out).  Settle = MaxIterations gives the
+    //      cleanest result but is expensive; Settle = min(MaxIter, 2000) is
+    //      a good compromise.
+    //   2. BRENT: search for a cycle.  Tortoise is fixed, hare advances; when
+    //      the hare lands within ε of the tortoise we have a cycle of length
+    //      lam.  Power-of-two snapshots make this O(p) memory-free.
+    //   3. MULTIPLIER: walk the detected cycle once and accumulate the complex
+    //      product ∏ 2 z_k.
+    //
+    // Cost: every in-set pixel pays roughly (Settle + 2·MaxPeriod) extra
+    // iterations.  Only invoked when a theme actually consumes the data.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void RunInteriorPass(IInteriorAwareColorMap interiorMap, CancellationToken ct)
+    {
+        int maxIt = MaxIterations;
+        if (maxIt <= 0) return;
+
+        int w = Width, h = Height;
+        double scale = (3.5 / Math.Max(w, h)) / Zoom;
+        double cx0 = CenterX, cy0 = CenterY;
+
+        // Settle budget — long enough to reach the attractor for high-period
+        // bulbs.  Capped so deep-zoom renders don't pay an unbounded cost.
+        int settle = Math.Min(maxIt, 2000);
+        // Period search budget — covers all visible secondary / tertiary bulbs.
+        const int maxPeriod = 1024;
+
+        var po = new ParallelOptions { CancellationToken = ct };
+        Parallel.For(0, h, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            double cy = cy0 + (y - h * 0.5) * scale;
+            int rowBase = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                int idx = rowBase + x;
+                if (IterationBuffer[idx] < maxIt) continue;     // exterior pixel
+
+                double cx = cx0 + (x - w * 0.5) * scale;
+                DetectCycle(cx, cy, settle, maxPeriod,
+                            out int period, out double aZr, out double aZi, out double multMag);
+
+                InteriorPeriodBuffer[idx] = period;
+                AttractorZrBuffer[idx] = (float)aZr;
+                AttractorZiBuffer[idx] = (float)aZi;
+                MultiplierMagBuffer[idx] = (float)multMag;
+
+                ColorBuffer[idx] = (uint)interiorMap.MapInterior(
+                    period, (float)aZr, (float)aZi, (float)multMag, cx, cy);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Brent cycle detection on the Mandelbrot iteration z² + c starting from
+    /// z = 0.  Returns the detected cycle period, a point on the cycle, and
+    /// |∏ 2 z_k| over one period.  Period = 0 if no cycle found within budget.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void DetectCycle(
+        double cx, double cy, int settle, int maxPeriod,
+        out int period, out double attractorZr, out double attractorZi, out double multMag)
+    {
+        // ── Step 1: settle near the attractor ───────────────────────────────
+        double zr = 0.0, zi = 0.0;
+        for (int i = 0; i < settle; i++)
+        {
+            double zr2 = zr * zr, zi2 = zi * zi;
+            if (zr2 + zi2 > 4.0) { period = 0; attractorZr = 0; attractorZi = 0; multMag = 0; return; }
+            double nzr = zr2 - zi2 + cx;
+            zi = 2.0 * zr * zi + cy;
+            zr = nzr;
+        }
+
+        // ── Step 2: Brent's algorithm — find cycle length `lam` ─────────────
+        // Tortoise snapshot resets at power-of-two boundaries; hare always
+        // advances.  Cycle detected when |hare − tortoise|² < eps².  The
+        // tolerance scales with attractor magnitude so deeply nested bulbs
+        // (small attractors) still detect cleanly.
+        double tZr = zr, tZi = zi;
+        double hZr = zr, hZi = zi;
+        int power = 1, lam = 0;
+        double eps2Base = 1e-12;
+        // Search budget: enough hops to find any period ≤ maxPeriod.
+        int budget = maxPeriod * 4 + 16;
+
+        for (int step = 0; step < budget; step++)
+        {
+            if (power == lam)
+            {
+                tZr = hZr; tZi = hZi;
+                power *= 2;
+                lam = 0;
+            }
+            double hzr2 = hZr * hZr, hzi2 = hZi * hZi;
+            if (hzr2 + hzi2 > 4.0) { period = 0; attractorZr = 0; attractorZi = 0; multMag = 0; return; }
+            double nhr = hzr2 - hzi2 + cx;
+            hZi = 2.0 * hZr * hZi + cy;
+            hZr = nhr;
+            lam++;
+
+            double dx = hZr - tZr, dy = hZi - tZi;
+            double dd = dx * dx + dy * dy;
+            // Scale tolerance by attractor radius² (with floor) so we don't
+            // miss tight cycles near origin.
+            double scale2 = Math.Max(1.0, hzr2 + hzi2);
+            if (dd < eps2Base * scale2 && lam <= maxPeriod)
+            {
+                period = lam;
+                attractorZr = hZr;
+                attractorZi = hZi;
+
+                // ── Step 3: cycle multiplier λ = ∏_{k=0}^{p−1} 2 z_k ────────
+                // Walk one full period; accumulate the complex product.
+                double mr = 1.0, mi = 0.0;
+                double pr = hZr, pi = hZi;
+                for (int k = 0; k < period; k++)
+                {
+                    // m *= 2 p
+                    double twoPr = 2.0 * pr, twoPi = 2.0 * pi;
+                    double nmr = mr * twoPr - mi * twoPi;
+                    double nmi = mr * twoPi + mi * twoPr;
+                    mr = nmr; mi = nmi;
+                    // p = p² + c
+                    double p2r = pr * pr - pi * pi + cx;
+                    pi = 2.0 * pr * pi + cy;
+                    pr = p2r;
+                }
+                multMag = Math.Sqrt(mr * mr + mi * mi);
+                return;
+            }
+        }
+
+        period = 0;
+        attractorZr = 0; attractorZi = 0; multMag = 0;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
