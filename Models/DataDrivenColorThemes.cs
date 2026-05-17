@@ -192,17 +192,21 @@ namespace FracturingFog.Models
     // 1. Linear gradient
     // =========================================================================
 
-    public sealed class DataDrivenGradient : GradientColorMap, INamedColorMap
+    public sealed class DataDrivenGradient : GradientColorMap, IColorMap, INamedColorMap
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
+
+        private readonly uint _inSetColor;
+        uint IColorMap.InSetColor => _inSetColor;
 
         public DataDrivenGradient(ColorThemeData data)
         {
             DisplayName = data.Name;
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
+            _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -212,7 +216,7 @@ namespace FracturingFog.Models
     // 2. Cycling gradient
     // =========================================================================
 
-    public sealed class DataDrivenCyclingGradient : CyclingGradientColorMap, INamedColorMap
+    public sealed class DataDrivenCyclingGradient : CyclingGradientColorMap, IColorMap, INamedColorMap
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
@@ -221,12 +225,16 @@ namespace FracturingFog.Models
         private readonly float _cycleSpeed;
         protected override float CycleSpeed => _cycleSpeed;
 
+        private readonly uint _inSetColor;
+        uint IColorMap.InSetColor => _inSetColor;
+
         public DataDrivenCyclingGradient(ColorThemeData data)
         {
             DisplayName = data.Name;
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
             _cycleSpeed = data.CycleSpeed;
+            _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -236,7 +244,7 @@ namespace FracturingFog.Models
     // 3. Phong 3D
     // =========================================================================
 
-    public sealed class DataDrivenPhong3D : GradientPhong3DBase, INamedColorMap
+    public sealed class DataDrivenPhong3D : GradientPhong3DBase, IColorMap, INamedColorMap
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
@@ -252,6 +260,9 @@ namespace FracturingFog.Models
         protected override float FillSpecScale => _fillSpecScale;
         protected override float FillDiffScale => _fillDiffScale;
 
+        private readonly uint _inSetColor;
+        uint IColorMap.InSetColor => _inSetColor;
+
         public DataDrivenPhong3D(ColorThemeData data)
         {
             DisplayName = data.Name;
@@ -264,6 +275,7 @@ namespace FracturingFog.Models
             _keySpecScale = data.KeySpecScale;
             _fillSpecScale = data.FillSpecScale;
             _fillDiffScale = data.FillDiffScale;
+            _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
 
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
@@ -305,7 +317,7 @@ namespace FracturingFog.Models
     // 4. PBR 3D
     // =========================================================================
 
-    public sealed class DataDrivenPbr3D : PbrGradient3DBase, INamedColorMap
+    public sealed class DataDrivenPbr3D : PbrGradient3DBase, IColorMap, INamedColorMap
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
@@ -321,6 +333,9 @@ namespace FracturingFog.Models
         protected override float Ambient => _ambient;
         protected override PbrLightingMode LightingMode => _lightingMode;
 
+        private readonly uint _inSetColor;
+        uint IColorMap.InSetColor => _inSetColor;
+
         public DataDrivenPbr3D(ColorThemeData data)
         {
             DisplayName = data.Name;
@@ -333,6 +348,7 @@ namespace FracturingFog.Models
             _lightingMode = data.PbrLightingMode;
             _glowExp = data.GlowBoostExponent;
             _glowScale = data.GlowBoostScale;
+            _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             _bands = (data.MaterialBands?.Count ?? 0) > 0
                                 ? data.MaterialBands!.ToArray()
                                 : new[]

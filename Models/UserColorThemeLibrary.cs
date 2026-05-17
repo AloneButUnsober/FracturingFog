@@ -25,11 +25,16 @@
 //   ColorPalette.LoadUserThemes();              // re-reads file
 
 using FracturingFog.Interefaces;
-
+using FracturingFog.Views;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace FracturingFog.Models
@@ -57,6 +62,86 @@ namespace FracturingFog.Models
 
         private static string ThemesFile =>
             Path.Combine(SettingsDir, "colorthemes.json");
+
+        private static string ThemesFileHash => FormHelpers.GetFileHash(ThemesFile);
+
+        // ── New Pallets file paths ─────────────────────────────────────────────────────
+        // Source ships read-only inside the install dir. Use AppContext.BaseDirectory
+        // so the path is stable regardless of the process's working directory
+        // (Start Menu shortcuts set cwd = INSTALLFOLDER, but launches from a
+        // command prompt or other location would otherwise misresolve).
+        private static string ColorThemesDir => Path.Combine(AppContext.BaseDirectory, "Resources", "ColorThemes");
+
+        private static string NewPalletsFile => Path.Combine(ColorThemesDir, "colorthemes.json");
+
+        private static string NewPalletsFileHash => FormHelpers.GetFileHash(NewPalletsFile);
+
+        // Per-user marker that records the hash of the source palette file we
+        // already merged. Lives in AppData (writable); avoids re-merging every
+        // launch and means we never have to mutate the install dir.
+        private static string MergedSourceHashMarker =>
+            Path.Combine(SettingsDir, "colorthemes.source.hash");
+
+        private static void CheckForNewColorPallets()
+        {
+            if (string.IsNullOrEmpty(ThemesFile) ||
+                string.IsNullOrEmpty(NewPalletsFile) ||
+                !File.Exists(ThemesFile) ||
+                !File.Exists(NewPalletsFile)) return;
+
+            string sourceHash = NewPalletsFileHash;
+            if (string.IsNullOrEmpty(sourceHash)) return;
+
+            // Skip if we already merged this exact source file.
+            if (File.Exists(MergedSourceHashMarker))
+            {
+                try
+                {
+                    if (string.Equals(File.ReadAllText(MergedSourceHashMarker).Trim(),
+                                      sourceHash, StringComparison.OrdinalIgnoreCase))
+                        return;
+                }
+                catch { /* fall through and re-merge */ }
+            }
+
+            JsonNode? themesJN;
+            JsonNode? newthemesJN;
+            try
+            {
+                themesJN = JsonNode.Parse(File.ReadAllText(ThemesFile));
+                newthemesJN = JsonNode.Parse(File.ReadAllText(NewPalletsFile));
+            }
+            catch
+            {
+                return;
+            }
+            if (themesJN is not JsonArray themesJA || newthemesJN is not JsonArray newJA) return;
+
+            for (int i = 0; i < newJA.Count; i++)
+            {
+                if (themesJA.Contains(newJA[i])) continue;
+                themesJA.Add(newJA[i]?.DeepClone());
+            }
+
+            // Backup the user's existing AppData themes file (writable location).
+            try
+            {
+                string backup = $"{ThemesFile}.{DateTime.Now:yyyyMMddHHmmss}";
+                File.Copy(ThemesFile, backup, overwrite: false);
+            }
+            catch { /* non-fatal */ }
+
+            try
+            {
+                Directory.CreateDirectory(SettingsDir);
+                File.WriteAllText(ThemesFile, themesJA.ToString());
+                File.WriteAllText(MergedSourceHashMarker, sourceHash);
+            }
+            catch
+            {
+                // Non-fatal — user keeps their existing themes; we'll retry next launch.
+            }
+        }
 
         // ── In-memory contents ────────────────────────────────────────────────
 
@@ -160,6 +245,11 @@ namespace FracturingFog.Models
                 }
             }
             return false;
+        }
+
+        public void UpdateCheck()
+        {
+            CheckForNewColorPallets();
         }
 
         /// <summary>

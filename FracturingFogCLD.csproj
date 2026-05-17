@@ -18,6 +18,7 @@
     <Configurations>Debug;Release;Publish</Configurations>
     <ProduceReferenceAssembly>False</ProduceReferenceAssembly>
     <Title>Fracturing Fog</Title>
+    <ApplicationIcon>Resources\FracturingFog.ico</ApplicationIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -43,6 +44,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Resources\FracturingFog.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="C:\Users\bradl\Documents\regions.json" Link="Resources\regions.json" />
   </ItemGroup>
   <ItemGroup>
@@ -57,6 +62,12 @@
     <None Update="Resources\colorthemes.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Resources\ColorThemes\colorthemes.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\ColorThemes\colorthemes.json.20260513">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\copythemesregions.bat">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -66,12 +77,21 @@
     <None Update="Resources\regions.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Resources\regions.json.20260514">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\reset.bmp">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Resources\reset.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Tools\ffmpeg.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Tools\" />
   </ItemGroup>
 
 </Project>
