@@ -197,9 +197,18 @@ public sealed class MandelbrotCalculator
             case OrbitTrapPointMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapCrossMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapCircleMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapLineMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapStarMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapPickoverStalksMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapBiomorphMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapImageRainbowMap m: CalculateOrbitAware(m, ct); return;
             case StripeAverageClassicMap m: CalculateOrbitAware(m, ct); return;
             case TriangleInequalityMap m: CalculateOrbitAware(m, ct); return;
             case StripeTiaBlendMap m: CalculateOrbitAware(m, ct); return;
+            case CurvatureAverageMap m: CalculateOrbitAware(m, ct); return;
+            case LyapunovExponentMap m: CalculateOrbitAware(m, ct); return;
+            case GaussianIntegerMap m: CalculateOrbitAware(m, ct); return;
+            case ExponentialSmoothingMap m: CalculateOrbitAware(m, ct); return;
         }
 
         // Pattern-match to the concrete type so the JIT sees a non-virtual call
@@ -329,6 +338,8 @@ public sealed class MandelbrotCalculator
             case DistanceFieldChromaticMap m: CalculateCore(m, ct); break;
             case DistanceFieldGlowMap m: CalculateCore(m, ct); break;
             case DistanceFieldSilverMap m: CalculateCore(m, ct); break;
+            case LambertShadingMap m: CalculateCore(m, ct); break;
+            case SlopeShadingMap m: CalculateCore(m, ct); break;
             default:
                 // Unknown concrete type — fall back to virtual dispatch.
                 // Still correct; just not devirtualized.
