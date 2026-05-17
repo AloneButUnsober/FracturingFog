@@ -95,27 +95,46 @@ namespace FracturingFog.Models
     // =========================================================================
 
     /// <summary>
-    /// Slope shading: treats the smooth-iteration field as a height map and
-    /// modulates the gradient colour by the magnitude of its in-plane gradient
-    /// (read directly from the surface normal's tangent component).  Bright on
-    /// flats, darker on steep slopes — gives topographic-relief contour look.
+    /// Slope shading: gradient albedo modulated by exterior distance estimate
+    /// (small distance = steep gradient = darker) combined with Lambert relief
+    /// from a top-front key light.  Bright on flats, darker on steep slopes —
+    /// gives topographic-relief contour look.
     /// </summary>
+    /// <remarks>
+    /// IMPORTANT: the calculator's (nx, ny) are UNIT-NORMALISED partial
+    /// derivatives — <c>nx² + ny² == 1</c> for every escaped pixel.  Magnitude
+    /// information is lost.  The earlier <c>sqrt(nx²+ny²)</c> formula therefore
+    /// produced <c>slope ≈ 1</c> everywhere → k ≈ Ambient → uniformly dark,
+    /// no 3D effect.  The distance-estimator carries the magnitude signal we
+    /// need; (nx, ny) is reused for directional Lambert shading.
+    /// </remarks>
     public sealed class SlopeShadingMap : GradientColorMap, IColorMap
     {
         public static string Name => "Slope Relief";
         public static string Category => "3D Relief";
         public static string Description =>
-            "Topographic slope shading: gradient albedo darkened on steep slopes derived from " +
-            "the in-plane component of the surface normal.  Contour-map aesthetic.";
+            "Topographic slope shading: gradient albedo darkened near the boundary " +
+            "(steep potential gradient) with Lambert relief from a top-front key " +
+            "light.  Contour-map aesthetic.";
         public static ColorMapFeatures Features =>
-            ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesNormals |
-            ColorMapFeatures.GradientBased | ColorMapFeatures.ThreeDEffect;
+            ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesDistance |
+            ColorMapFeatures.UsesNormals | ColorMapFeatures.GradientBased |
+            ColorMapFeatures.ThreeDEffect;
 
         public new ColorPaletteType Type => ColorPaletteType.Relief3D;
 
-        /// <summary>Slope contrast: higher → darker shadows on steep regions.</summary>
-        private const float SlopeIntensity = 1.8f;
-        private const float Ambient = 0.25f;
+        // Top-front key light — high elevation so flat areas read bright.
+        private const float Lx = 0.30f;
+        private const float Ly = -0.25f;
+        private const float Lz = 0.918f;
+
+        /// <summary>Surface steepness for the 3D normal build (smaller = more relief).</summary>
+        private const float Steepness = 1.2f;
+        /// <summary>How quickly distance maps to flatness; higher = sharper contours.</summary>
+        private const float DistanceFalloff = 5.0f;
+        /// <summary>Lambert weight blended into the topographic shading.</summary>
+        private const float LambertWeight = 0.55f;
+        private const float Ambient = 0.22f;
 
         public SlopeShadingMap()
         {
@@ -137,9 +156,22 @@ namespace FracturingFog.Models
             float aG = ((albedo >>  8) & 0xFF) / 255f;
             float aB = ( albedo        & 0xFF) / 255f;
 
-            // |N_xy| ∈ [0, 1] from the unit 2D normal.
-            float slope = MathF.Sqrt(nx * nx + ny * ny);
-            float k = Ambient + (1f - Ambient) * MathF.Pow(1f - slope, SlopeIntensity);
+            // Topographic magnitude from the exterior distance estimator.
+            // distance → 0 near the boundary (steep), grows away from it (flat).
+            float flatness = 1f - MathF.Exp(-distance * DistanceFalloff);
+
+            // Build 3D normal with steepness (same convention as the 3D bases).
+            float ry  = -ny;
+            float len = MathF.Sqrt(nx * nx + ry * ry + Steepness * Steepness);
+            float Nx, Ny, Nz;
+            if (len > 1e-8f) { Nx = nx / len; Ny = ry / len; Nz = Steepness / len; }
+            else             { Nx = 0f;       Ny = 0f;       Nz = 1f; }
+
+            float NL = MathF.Max(0f, Nx * Lx + Ny * Ly + Nz * Lz);
+
+            // Blend topographic darkening (distance) with Lambert relief (normal).
+            float shade = (1f - LambertWeight) * flatness + LambertWeight * NL;
+            float k = Ambient + (1f - Ambient) * shade;
 
             byte R = (byte)(System.Math.Clamp(aR * k, 0f, 1f) * 255f);
             byte G = (byte)(System.Math.Clamp(aG * k, 0f, 1f) * 255f);
