@@ -104,11 +104,16 @@ namespace FracturingFog.Models
         // (the map is fixed at GradientColorMap, where IColorMap is declared),
         // so calls through an IColorMap reference fall to the interface default
         // implementation and miss the override.
+        //
+        // Default delegates to the 5-arg IColorMap.Map(s,d,i,nx,ny) — NOT the
+        // 3-arg overload — so 3D subclasses (GradientPhong3DBase, PbrGradient3DBase)
+        // that provide an explicit IColorMap.Map(s,d,i,nx,ny) still receive the
+        // normal data they need for lighting.
         public virtual int Map(float smooth, float distance, int iterations,
                                float nx, float ny,
                                float finalZr, float finalZi,
                                float dzdcR, float dzdcI)
-            => Map(smooth, distance, iterations);
+            => ((IColorMap)this).Map(smooth, distance, iterations, nx, ny);
 
         /// <summary>
         /// Evaluates the gradient at normalised position <paramref name="t"/> ∈ [0,1].
