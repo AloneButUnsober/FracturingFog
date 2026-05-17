@@ -60,11 +60,13 @@ namespace FracturingFog.Views
         private readonly CheckBox _checkBoxShowGrid;
         private readonly ToolTip _toolTip = new();
 
-        // Brightness / Contrast
+        // Brightness / Contrast / Adaptive contrast (histogram eq)
         private TrackBar? _brightnessSlider;
         private TrackBar? _contrastSlider;
+        private TrackBar? _histogramEqSlider;
         private Label? _brightnessLabel;
         private Label? _contrastLabel;
+        private Label? _histogramEqLabel;
 
         /// <summary>Brightness offset in [-100, 100]; 0 = neutral.</summary>
         private int _brightness = 0;
@@ -110,6 +112,7 @@ namespace FracturingFog.Views
         public event EventHandler OnStatusClick;
         public event Action<object?, EventArgs, object?> OnBrightnessSlide;
         public event Action<object?, EventArgs, object?> OnContrastSlide;
+        public event Action<object?, EventArgs, object?> OnHistogramEqSlide;
 
         #endregion Events
 
@@ -196,7 +199,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(370, 600);
+            ClientSize = new System.Drawing.Size(370, 644);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -537,7 +540,45 @@ namespace FracturingFog.Views
                 "Adjust contrast of the rendered fractal  (−100 to +100, default 0)");
             _contrastSlider.ValueChanged += (s, e) => OnContrastSlider(s, e, _contrastLabel);
             _coordPanel.Controls.Add(_contrastSlider);
-            #endregion Brightness & Contrast sliders 
+
+            sliderLeft = 8;
+            sliderTop += 44;
+            _histogramEqLabel = new Label
+            {
+                Text = "Adaptive: 0",
+                Left = sliderLeft,
+                Top = sliderTop + 3,
+                Width = 78,
+                Height = 12,
+                Padding = new Padding(0),
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(180, 180, 180),
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            _coordPanel.Controls.Add(_histogramEqLabel);
+            sliderLeft += 86;
+
+            _histogramEqSlider = new TrackBar
+            {
+                Left = sliderLeft,
+                Top = sliderTop,
+                Width = 200,
+                Height = 22,
+                Minimum = 0,
+                Maximum = 100,
+                Value = 0,
+                TickFrequency = 25,
+                SmallChange = 1,
+                LargeChange = 10,
+                BackColor = Color.FromArgb(22, 22, 22),
+            };
+            _toolTip.SetToolTip(_histogramEqSlider,
+                "Adaptive contrast (histogram equalization) — redistributes iteration density to "
+                + "reveal hidden detail in flat-looking regions  (0 = off, 100 = full)");
+            _histogramEqSlider.ValueChanged += (s, e) => OnHistogramEqSlider(s, e, _histogramEqLabel);
+            _coordPanel.Controls.Add(_histogramEqSlider);
+            #endregion Brightness & Contrast sliders
 
             _chkSlideshowUseExtremeRegions = new CheckBox
             {
@@ -809,6 +850,9 @@ namespace FracturingFog.Views
         private void OnContrastSlider(object? s, EventArgs e, object? l) =>
             OnContrastSlide?.DynamicInvoke(s, e, l);
 
+        private void OnHistogramEqSlider(object? s, EventArgs e, object? l) =>
+            OnHistogramEqSlide?.DynamicInvoke(s, e, l);
+
         #endregion Private Methods
 
         #region Public Methods
@@ -820,8 +864,10 @@ namespace FracturingFog.Views
             _txZoom.Text = zoom.ToString();
             _brightnessSlider?.Value = 0;
             _contrastSlider?.Value = 0;
+            _histogramEqSlider?.Value = 0;
             _brightnessLabel?.Text = "Brightness: 0";
             _contrastLabel?.Text = "Contrast: 0";
+            _histogramEqLabel?.Text = "Adaptive: 0";
 
             _regionCombo.SelectedIndex = 0;
         }

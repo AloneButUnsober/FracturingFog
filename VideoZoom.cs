@@ -793,6 +793,11 @@ namespace FracturingFog
             await InvokeAsync(() =>
             {
                 if (_disposed || _calculator == null || _renderer == null) return;
+                // Adaptive contrast (histogram equalization) — re-colors the
+                // buffer in place before brightness/contrast/grid overlay and
+                // before MP4/PNG capture, matching the interactive Calculate path.
+                if (_histogramEq > 0)
+                    _calculator.ApplyHistogramEqualization(_histogramEq / 100.0);
                 UploadProcessedBuffer(_calculator, _renderer);
                 CaptureMp4Frame();
             });
@@ -1143,10 +1148,15 @@ namespace FracturingFog
                 if (ct.IsCancellationRequested) break;
 
                 // Pre-render the classic starting frame on a background thread.
+                // Snapshot eq strength once so a slider change mid-render does
+                // not split the result across two values.
+                int eqStrengthSnapshot = _histogramEq;
                 uint[] newLegBuf = await Task.Run(() =>
                 {
                     if (_calculator == null) return Array.Empty<uint>();
                     _calculator.Calculate(ct);
+                    if (eqStrengthSnapshot > 0)
+                        _calculator.ApplyHistogramEqualization(eqStrengthSnapshot / 100.0);
                     var copy = new uint[_calculator.ColorBuffer.Length];
                     _calculator.ColorBuffer.CopyTo(copy, 0);
                     return copy;
