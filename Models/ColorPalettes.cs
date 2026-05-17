@@ -249,7 +249,58 @@ namespace FracturingFog.Models
             new PotentialEquipotentialMap(),
             new PotentialSmoothMap(),
 
+            // Eyetrick Themes
+            new AcidCarnivalNeonMap(),
+            new BubblegumRiotMap(),
+            new ChromostereopsisMap(),
+            new OilslickIridescenceMap(),
+            new SaturdayMorningCartoonMap(),
+            new VermillionStabMap(),
 
+            // Bird of Paradise themes
+            new BirdOfParadiseCyclingMap(),
+            new BirdOfParadiseMap(),
+            new BirdOfParadisePbr3DMap(),
+            new BirdOfParadisePhong3DMap(),
+
+            // Emerold Ghost themes
+            new EmeraldGhostCyclingMap(),
+            new EmeraldGhostGrad2Map(),
+            new EmeraldGhostGradMap(),
+
+            // MS Standard themes
+            new MSStandardAmberCyclingMap(),
+            new MSStandardAmberLinearMap(),
+            new MSStandardAmberPbr3DMap(),
+            new MSStandardAmberPhong3DMap(),
+            new MSStandardBlueCyclingMap(),
+            new MSStandardBlueLinearMap(),
+            new MSStandardBluePbr3DMap(),
+            new MSStandardBluePhong3DMap(),
+            new MSStandardSunriseCyclingMap(),
+            new MSStandardSunriseLinearMap(),
+            new MSStandardSunrisePbr3DMap(),
+            new MSStandardSunrisePhong3DMap(),
+
+            // "New" 3D
+            new New3DCycMap(),
+            new New3DCycModMap(),
+            new New3DGradMap(),
+            new New3DModPhongMap(),
+            new New3DPbrMap(),
+            new New3DPhongMap(),
+            
+            // Pastel Spiral
+            new PastelSpiralBloomCyclingMap(),
+            new PastelSpiralBloomLinearMap(),
+            new PastelSpiralBloomPbr3DMap(),
+            new PastelSpiralBloomPhong3DMap(),
+
+            // Plasma 9 themes
+            new Plasma9Tst2Map(),
+            new Plasma9Tst4Map(),
+            new Plasma9TstMap(),
+            
         };
 
         /// <summary>
