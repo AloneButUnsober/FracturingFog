@@ -1974,6 +1974,31 @@ public sealed partial class MainForm : Form
         { ExitSpanMode(); e.Handled = true; return; }
         if (e.KeyCode == Keys.Escape && _slideshowRunning)
         { StopSlideshow(); e.Handled = true; return; }
+
+        // HP-path acceleration toggles — diagnostic aids for visual artefacts
+        // at deep zoom. Status text reports the new state; render is retriggered
+        // so the change is immediately visible.
+        //   Ctrl+Shift+S → toggle Series Approximation prelude (BLA stays on)
+        //   Ctrl+Shift+A → toggle ALL HP acceleration (SA + BLA)
+        if (_calculator != null && e.Control && e.Shift)
+        {
+            if (e.KeyCode == Keys.S)
+            {
+                _calculator.DisableSeriesApproximation = !_calculator.DisableSeriesApproximation;
+                Text = $"SA {(_calculator.DisableSeriesApproximation ? "OFF" : "ON")}";
+                TriggerCalculation(progressive: false);
+                e.Handled = true;
+                return;
+            }
+            if (e.KeyCode == Keys.A)
+            {
+                _calculator.DisableAcceleration = !_calculator.DisableAcceleration;
+                Text = $"HP accel {(_calculator.DisableAcceleration ? "OFF" : "ON")}";
+                TriggerCalculation(progressive: false);
+                e.Handled = true;
+                return;
+            }
+        }
     }
 
     private void OnMouseWheel(object? sender, MouseEventArgs e)
