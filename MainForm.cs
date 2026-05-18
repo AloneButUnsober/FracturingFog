@@ -102,6 +102,9 @@ public sealed partial class MainForm : Form
     // Mini-map
     private MiniMapPanel? _miniMapPanel;
 
+    // Mini-depth indicator
+    private MiniDepthPanel? _miniDepthPanel;
+
     // Footer
     private readonly Label _statusLabel;
     private readonly Panel _footerPanel;
@@ -614,6 +617,7 @@ public sealed partial class MainForm : Form
             ToggleSlideshowRegionLock();
         });
         var miniMapItem = new ToolStripMenuItem("Mini Map", null, (s, e) => ToggleMiniMap());
+        var miniDepthItem = new ToolStripMenuItem("Mini Depth", null, (s, e) => ToggleMiniDepth());
         var systemInfoItem = new ToolStripMenuItem("System Info…", null, (s, e) => ShowSystemInfoDialog());
         var saveRegionItem = new ToolStripMenuItem("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
         var resetViewItem = new ToolStripMenuItem("Reset View", null, (s, e) => OnResetClick(s, e));
@@ -637,6 +641,9 @@ public sealed partial class MainForm : Form
             miniMapItem.Checked = _miniMapPanel?.Visible ?? false;
             miniMapItem.Enabled = !_miniMode;  // mini map doesn't work well in mini mode since it's already small and has no extra space for the inset
             miniMapItem.Visible = !_miniMode;  // hide mini map option in mini mode since it doesn't work well there
+            miniDepthItem.Checked = _miniDepthPanel?.Visible ?? false;
+            miniDepthItem.Enabled = !_miniMode;
+            miniDepthItem.Visible = !_miniMode;
 
             skipItem.Enabled = _slideshowRunning;
             slideshowItem.Enabled = !_videoRunning && !_videoSlideshowRunning;
@@ -680,6 +687,7 @@ public sealed partial class MainForm : Form
         contextMenu.Items.Add(saveImageItem);
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(miniMapItem);
+        contextMenu.Items.Add(miniDepthItem);
         contextMenu.Items.Add(systemInfoItem);
         _renderPanel.ContextMenuStrip = contextMenu;
         #endregion Context menu for render panel
@@ -923,6 +931,7 @@ public sealed partial class MainForm : Form
             TriggerCalculation();
         }
         _miniMapPanel?.RequestRedraw();
+        _miniDepthPanel?.RequestRedraw();
         SetStatus("Color themes reloaded.");
     }
 
@@ -1177,6 +1186,7 @@ public sealed partial class MainForm : Form
                 TriggerCalculation();
             }
             _miniMapPanel?.RequestRedraw();
+        _miniDepthPanel?.RequestRedraw();
         }
     }
 
@@ -1249,25 +1259,10 @@ public sealed partial class MainForm : Form
             }
 
             // Auto-promote quality preset when typed/pasted zoom exceeds current ZoomMax,
-            // so deep coords aren't silently clamped to a shallow render.
-            if (zoom > _quality.ZoomMax)
-            {
-                QualityPreset? promoted = null;
-                foreach (var p in QualityPreset.All)
-                    if (p.ZoomMax >= zoom) { promoted = p; break; }
-                promoted ??= QualityPreset.Extreme;
-                if (promoted.Tier != _quality.Tier)
-                {
-                    _quality = promoted;
-                    if (_calculator != null) _calculator.Quality = _quality;
-                    _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
-                    _qualityCombo.Text = _quality.Name;
-                    _floatingMenu.Quality = _quality.Name;
-                    _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
-                    //if (_qualityCombo2 != null) _qualityCombo2.Text = _quality.Name;
-                    SetStatus($"Quality → {_quality.Name} (zoom {zoom:G3} requires it).");
-                }
-            }
+            // so deep coords aren't silently clamped to a shallow render. Paste only
+            // promotes — never demotes — to avoid surprising the user mid-edit.
+            if (zoom > _quality.ZoomMax && AdaptQualityForZoom(zoom))
+                SetStatus($"Quality → {_quality.Name} (zoom {zoom:G3} requires it).");
             _zoom = System.Math.Clamp(zoom, _quality.ZoomMin, _quality.ZoomMax);
             _floatingMenu.Zoom = _zoom;
 
@@ -1690,6 +1685,32 @@ public sealed partial class MainForm : Form
         return fade ? Color.FromArgb(75, c.R, c.G, c.B) : c;
     }
 
+    private void ToggleMiniDepth()
+    {
+        if (_miniDepthPanel == null)
+        {
+            _miniDepthPanel = new MiniDepthPanel();
+            _miniDepthPanel.Configure(
+                getZoom: () => _zoom,
+                getZoomMax: () => _quality.ZoomMax,
+                getColorMap: () => _calculator?.ColorMap,
+                getSwatchColor: GetSwatchColor);
+
+            _miniDepthPanel.Left = 4;
+            _miniDepthPanel.Top  = _renderPanel.ClientSize.Height - _miniDepthPanel.Height - 4;
+            _miniDepthPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            _renderPanel.Controls.Add(_miniDepthPanel);
+            _miniDepthPanel.BringToFront();
+            _miniDepthPanel.RequestRedraw();
+        }
+        else
+        {
+            _renderPanel.Controls.Remove(_miniDepthPanel);
+            _miniDepthPanel.Dispose();
+            _miniDepthPanel = null;
+        }
+    }
+
     private void ToggleMiniMap()
     {
         if (_miniMapPanel == null)
@@ -2001,6 +2022,30 @@ public sealed partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Auto-promote / demote the quality preset to the smallest tier whose
+    /// ZoomMax accommodates <paramref name="targetZoom"/>.  Keeps UI combos
+    /// and the calculator in sync.  No-op if the current tier already fits.
+    /// </summary>
+    private bool AdaptQualityForZoom(double targetZoom)
+    {
+        QualityPreset? fit = null;
+        foreach (var p in QualityPreset.All)
+            if (p.ZoomMax >= targetZoom) { fit = p; break; }
+        fit ??= QualityPreset.Extreme;
+        if (fit.Tier == _quality.Tier) return false;
+
+        _quality = fit;
+        if (_calculator != null) _calculator.Quality = _quality;
+
+        _qualityCombo.SelectedIndexChanged -= OnQualityComboChanged;
+        _qualityCombo.Text = _quality.Name;
+        _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
+        if (_floatingMenu != null && !_floatingMenu.IsDisposed)
+            _floatingMenu.Quality = _quality.Name;
+        return true;
+    }
+
     private void OnMouseWheel(object? sender, MouseEventArgs e)
     {
         if (_calculator == null || _slideshowRunning) return;
@@ -2010,6 +2055,16 @@ public sealed partial class MainForm : Form
         double scale = CurrentScale();
         double ox = e.X - _renderPanel.ClientSize.Width * 0.5;
         double oy = e.Y - _renderPanel.ClientSize.Height * 0.5;
+
+        // Adapt quality preset to the post-wheel zoom BEFORE the per-precision
+        // anchor math runs, so the Clamp() inside each branch uses the right
+        // ZoomMax. Wheel factor may cross tier boundaries either direction.
+        double targetZoom = System.Math.Clamp(
+            _zoom * factor,
+            QualityPreset.Draft.ZoomMin,
+            QualityPreset.Extreme.ZoomMax);
+        if (AdaptQualityForZoom(targetZoom))
+            SetStatus($"Quality → {_quality.Name} (zoom {targetZoom:G3}).");
         //double compX = _centerX + ox * scale;
         //double compY = _centerY + oy * scale;
 
@@ -2244,6 +2299,7 @@ public sealed partial class MainForm : Form
                     // Apply brightness/contrast and grid overlay, then upload to GPU.
                     UploadProcessedBuffer(calc, renderer);
                     _miniMapPanel?.RefreshIndicator();
+                    _miniDepthPanel?.RefreshIndicator();
                     string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
                     SetStatus(
                         $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
