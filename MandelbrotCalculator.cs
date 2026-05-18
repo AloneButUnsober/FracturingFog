@@ -155,6 +155,18 @@ public sealed class MandelbrotCalculator
 
     private double[] _refZr = Array.Empty<double>();
     private double[] _refZi = Array.Empty<double>();
+    // Low limbs of the reference orbit. Populated by ComputeReferenceOrbit (DD:
+    // Lo only, X2/X3 = 0) and ComputeReferenceOrbitQD (all three). Consumed by
+    // the high-precision per-pixel SA seed in ComputePixelHP / ComputePixelQD
+    // to avoid the precision loss that otherwise paints the image-centre as a
+    // single colour at extreme zoom (SIMD PT path keeps using only _refZr/_refZi
+    // — perturbation by design tracks Z at double precision).
+    private double[] _refZrLo = Array.Empty<double>();
+    private double[] _refZiLo = Array.Empty<double>();
+    private double[] _refZrX2 = Array.Empty<double>();
+    private double[] _refZiX2 = Array.Empty<double>();
+    private double[] _refZrX3 = Array.Empty<double>();
+    private double[] _refZiX3 = Array.Empty<double>();
     private int _refOrbitLen;
 
     // Reference-orbit cache: zoom-only / theme-only / pan-stable redraws skip
@@ -1268,8 +1280,12 @@ public sealed class MandelbrotCalculator
             {
                 sa.EvalDelta(k, dcR, dcI, out double dR, out double dI);
                 sa.EvalDDelta(k, dcR, dcI, out double ddR, out double ddI);
-                zr = new DD(_refZr[k], 0) + new DD(dR, 0);
-                zi = new DD(_refZi[k], 0) + new DD(dI, 0);
+                // Seed from full-precision reference orbit limbs. Using only
+                // _refZr[k] (Hi limb) drops DD precision of ref_k, so all
+                // near-centre pixels start from the same wrong z and converge
+                // to one colour at deep zoom — the "growing centre dot" bug.
+                zr = new DD(_refZr[k], _refZrLo[k]) + new DD(dR, 0);
+                zi = new DD(_refZi[k], _refZiLo[k]) + new DD(dI, 0);
                 dr = ddR;
                 di = ddI;
                 iterStart = k;
@@ -1329,8 +1345,15 @@ public sealed class MandelbrotCalculator
             {
                 sa.EvalDelta(k, dcR, dcI, out double dR, out double dI);
                 sa.EvalDDelta(k, dcR, dcI, out double ddR, out double ddI);
-                zr = new QD(_refZr[k] + dR);
-                zi = new QD(_refZi[k] + dI);
+                // Seed from full QD reference orbit. Constructing the QD from
+                // only `_refZr[k] + dR` discards X1/X2/X3 of ref_k — at deep
+                // zoom (>~1e32) the lost limbs swamp pixel-level differences,
+                // collapsing near-centre pixels to a single trajectory and a
+                // single colour ("growing centre dot" bug).
+                QD refZk = new QD(_refZr[k], _refZrLo[k], _refZrX2[k], _refZrX3[k]);
+                QD refIk = new QD(_refZi[k], _refZiLo[k], _refZiX2[k], _refZiX3[k]);
+                zr = refZk + new QD(dR);
+                zi = refIk + new QD(dI);
                 dr = ddR;
                 di = ddI;
                 iterStart = k;
@@ -1374,22 +1397,33 @@ public sealed class MandelbrotCalculator
 
         if (_refZr.Length <= maxIter)
         {
-            _refZr = new double[maxIter + 1];
-            _refZi = new double[maxIter + 1];
+            int sz = maxIter + 1;
+            _refZr = new double[sz];
+            _refZi = new double[sz];
+            _refZrLo = new double[sz];
+            _refZiLo = new double[sz];
+            _refZrX2 = new double[sz];
+            _refZiX2 = new double[sz];
+            _refZrX3 = new double[sz];
+            _refZiX3 = new double[sz];
         }
         DD zr = DD.Zero, zi = DD.Zero;
         int n;
         for (n = 0; n < maxIter; n++)
         {
-            _refZr[n] = zr.Hi;
-            _refZi[n] = zi.Hi;
+            _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
+            _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
+            _refZrX2[n] = 0;    _refZrX3[n] = 0;
+            _refZiX2[n] = 0;    _refZiX3[n] = 0;
             if (zr.Hi * zr.Hi + zi.Hi * zi.Hi >= EscapeRadius2) break;
             DD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
-        _refZr[n] = zr.Hi;
-        _refZi[n] = zi.Hi;
+        _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
+        _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
+        _refZrX2[n] = 0;    _refZrX3[n] = 0;
+        _refZiX2[n] = 0;    _refZiX3[n] = 0;
         _refOrbitLen = n;  // == maxIter when centre is interior
 
         _refCxHi = cx.Hi; _refCxLo = cx.Lo; _refCx2 = 0; _refCx3 = 0;
@@ -1414,22 +1448,29 @@ public sealed class MandelbrotCalculator
 
         if (_refZr.Length <= maxIter)
         {
-            _refZr = new double[maxIter + 1];
-            _refZi = new double[maxIter + 1];
+            int sz = maxIter + 1;
+            _refZr = new double[sz];
+            _refZi = new double[sz];
+            _refZrLo = new double[sz];
+            _refZiLo = new double[sz];
+            _refZrX2 = new double[sz];
+            _refZiX2 = new double[sz];
+            _refZrX3 = new double[sz];
+            _refZiX3 = new double[sz];
         }
         QD zr = QD.Zero, zi = QD.Zero;
         int n;
         for (n = 0; n < maxIter; n++)
         {
-            _refZr[n] = zr.X0;
-            _refZi[n] = zi.X0;
+            _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
+            _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
             if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= EscapeRadius2) break;
             QD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
-        _refZr[n] = zr.X0;
-        _refZi[n] = zi.X0;
+        _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
+        _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
         _refOrbitLen = n;
 
         _refCxHi = cx.X0; _refCxLo = cx.X1; _refCx2 = cx.X2; _refCx3 = cx.X3;
