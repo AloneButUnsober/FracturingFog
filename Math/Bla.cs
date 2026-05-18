@@ -59,8 +59,10 @@ namespace FracturingFog.FFMath
         public readonly Bla[] Data;
 
         // Linearisation tolerance: |δ|·|2Z+δ| dominated by 2Zδ requires |δ| ≤ ε·|Z|.
-        // 1e-6 keeps the dropped δ² term ≥ 12 orders of magnitude below 2Zδ — safely
-        // below the double-precision floor for the per-pixel δ iteration.
+        // 1e-6 keeps the dropped δ² term ≥ 12 orders of magnitude below 2Zδ —
+        // safely below the double-precision floor for the per-pixel δ iteration.
+        // (1e-4 was tried but produced visible banding at medium zoom near
+        // near-zero |Z| crossings of the reference orbit.)
         private const double Epsilon = 1e-6;
 
         /// <summary>

@@ -91,6 +91,19 @@ public sealed class MandelbrotCalculator
     public bool IsHighPrecisionActive { get; private set; }
 
     /// <summary>
+    /// When true the HP path runs the perturbation loop without SA prelude
+    /// or BLA skip — used by the benchmark harness to measure raw AVX2/AVX-512
+    /// loop cost as a baseline against the accelerated path.
+    /// </summary>
+    public bool DisableAcceleration { get; set; } = false;
+
+    /// <summary>
+    /// Disable SA prelude only (BLA still applies). Use this to isolate
+    /// SA-induced visual artefacts at problem zoom levels.
+    /// </summary>
+    public bool DisableSeriesApproximation { get; set; } = false;
+
+    /// <summary>
     /// Complex-plane units per pixel for the most recent <see cref="Calculate"/>
     /// invocation.  Set at entry so colour maps (notably distance-estimation
     /// themes) can normalise the raw exterior distance value to pixel units.
@@ -150,6 +163,33 @@ public sealed class MandelbrotCalculator
     private double _refCyHi, _refCyLo, _refCy2, _refCy3;
     private int _refCachedMaxIter = -1;
     private bool _refCachedEscaped;  // true when orbit terminated by escape
+
+    // BLA (Bilinear Approximation) cache — skip thousands of perturbation
+    // iterations per pixel when |δ| stays inside the validity radius. Built
+    // lazily after reference orbit is ready, invalidated on orbit change
+    // or significant dcMaxAbs drift.
+    private BlaTable? _blaTable;
+    private double _blaDcMaxAbs;
+    private int _blaForRefMaxIter = -1;
+    private int _blaForRefOrbitLen = -1;
+    // Diagnostic counters — reset per Calculate, totalled after Parallel.For
+    private long _blaSkipsTotal;
+    private long _blaIterSkippedTotal;
+
+    // Series approximation prelude — third-order polynomial in dc, used to
+    // skip the early perturbation iterations from z=0 where BLA validity
+    // radius is tiny (Z near origin). SA picks up the loose slack BLA leaves.
+    private SeriesApproximation? _sa;
+    private int _saForRefOrbitLen = -1;
+    private int _saForRefMaxIter = -1;
+    // Tolerance for truncation bound. 1e-3 is the classical Zhuoran / KF
+    // default. Tested visually stable when paired with BLA Epsilon=1e-6.
+    // (Was preemptively tightened to 1e-9 during banding investigation;
+    // root cause turned out to be BLA's Epsilon at 1e-4, not SA tolerance.)
+    private const double SaTolerance = 1e-3;
+    private long _saAppliedTotal;
+    private long _saIterSkippedTotal;
+    private bool _loggedSimdPath;
 
     // ── Constructor / resize ──────────────────────────────────────────────────
 
@@ -615,21 +655,74 @@ public sealed class MandelbrotCalculator
                 zr = Vector.ConditionalSelect(notEscaped, newZr, zr);
                 zi = Vector.ConditionalSelect(notEscaped, newZi, zi);
 
-                if ((iter & 7) == 7)
-                {
-                    var newMag2 = zr * zr + zi * zi;
-                    if (!Vector.LessThanAny(newMag2, escRad2V)) break;
-                }
+                // Per-iter escape check: break as soon as every lane has
+                // escaped. Cheaper than every-8 gating because branch predictor
+                // handles the steady "still iterating" path, and we save up to
+                // 7 iterations per block when all lanes diverge quickly.
+                if (!Vector.LessThanAny(mag2, escRad2V)) break;
             }
 
-            for (int k = 0; k < VecLen; k++)
+            // SIMD-batched color path: when the active theme implements
+            // IVectorColorMap and VecLen == 4 (AVX2 double-lane width), gather
+            // the four lanes' aux outputs into Vector128<float> packs and call
+            // MapV once instead of four scalar Map() calls. Cast is constant-
+            // folded by JIT generic specialisation when TMap is a concrete
+            // type known not to implement the interface.
+            var vMap = colorMap as IVectorColorMap;
+            if (vMap != null && VecLen == 4)
             {
-                int idx = rowBase + x + k;
-                int iters = (int)iterCountV[k];
-                IterationBuffer[idx] = iters;
-                // HIGH IMPACT 3: fill aux buffers AND color in one pass
-                FillAuxAndColorSP(idx, iters, maxIter,
-                    zr[k], zi[k], dr[k], di[k], colorMap);
+                Span<float> sm = stackalloc float[4];
+                Span<float> ds = stackalloc float[4];
+                Span<float> nxs = stackalloc float[4];
+                Span<float> nys = stackalloc float[4];
+                Span<float> fzrS = stackalloc float[4];
+                Span<float> fziS = stackalloc float[4];
+                Span<float> fdrS = stackalloc float[4];
+                Span<float> fdiS = stackalloc float[4];
+                int inSetBits = 0;
+
+                for (int k = 0; k < 4; k++)
+                {
+                    int idx = rowBase + x + k;
+                    int iters = (int)iterCountV[k];
+                    IterationBuffer[idx] = iters;
+                    FillAuxOnlySP(idx, iters, maxIter,
+                        zr[k], zi[k], dr[k], di[k],
+                        out sm[k], out ds[k], out nxs[k], out nys[k],
+                        out fzrS[k], out fziS[k], out fdrS[k], out fdiS[k]);
+                    if (iters >= maxIter) inSetBits |= 1 << k;
+                }
+
+                var smV  = Vector128.Create(sm[0],   sm[1],   sm[2],   sm[3]);
+                var dsV  = Vector128.Create(ds[0],   ds[1],   ds[2],   ds[3]);
+                var nxV  = Vector128.Create(nxs[0],  nxs[1],  nxs[2],  nxs[3]);
+                var nyV  = Vector128.Create(nys[0],  nys[1],  nys[2],  nys[3]);
+                var fzrV = Vector128.Create(fzrS[0], fzrS[1], fzrS[2], fzrS[3]);
+                var fziV = Vector128.Create(fziS[0], fziS[1], fziS[2], fziS[3]);
+                var fdrV = Vector128.Create(fdrS[0], fdrS[1], fdrS[2], fdrS[3]);
+                var fdiV = Vector128.Create(fdiS[0], fdiS[1], fdiS[2], fdiS[3]);
+                var colorV = vMap.MapV(smV, dsV, maxIter, nxV, nyV, fzrV, fziV, fdrV, fdiV);
+
+                Span<int> colors = stackalloc int[4];
+                colorV.CopyTo(colors);
+                uint inSetColor = colorMap.InSetColor;
+                for (int k = 0; k < 4; k++)
+                {
+                    int idx = rowBase + x + k;
+                    ColorBuffer[idx] = ((inSetBits >> k) & 1) != 0 ? inSetColor : (uint)colors[k];
+                }
+            }
+            else
+            {
+                for (int k = 0; k < VecLen; k++)
+                {
+                    int idx = rowBase + x + k;
+                    int iters = (int)iterCountV[k];
+                    IterationBuffer[idx] = iters;
+                    // HIGH IMPACT 3: fill aux buffers AND color in one pass
+                    FillAuxAndColorSP(idx, iters, maxIter,
+                        zr[k], zi[k], dr[k], di[k], colorMap);
+                }
             }
         }
 
@@ -638,6 +731,58 @@ public sealed class MandelbrotCalculator
         {
             double cx2 = centerX + (x - Width * 0.5) * scale;
             ComputePixelSP(cx2, cy, maxIter, rowBase + x, colorMap);
+        }
+    }
+
+    /// <summary>
+    /// Aux-only twin of FillAuxAndColorSP — writes per-pixel buffers but
+    /// emits the values it computed via out-params so the batched color
+    /// stage can gather them into Vector128 packs without an extra read of
+    /// SmoothBuffer / NormalXBuffer / etc. Color stage is then a single
+    /// MapV() call per 4-pixel block.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void FillAuxOnlySP(
+        int idx, int iters, int maxIter,
+        double zr, double zi, double dr, double di,
+        out float smooth, out float dist,
+        out float nx, out float ny,
+        out float fzr, out float fzi, out float fdr, out float fdi)
+    {
+        if (iters < maxIter)
+        {
+            double mag = Math.Sqrt(zr * zr + zi * zi);
+            smooth = (float)(iters + 1.0 - Math.Log2(Math.Log2(mag)));
+            SmoothBuffer[idx] = smooth;
+
+            double dMag = Math.Sqrt(dr * dr + di * di);
+            dist = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+            DistanceBuffer[idx] = dist;
+
+            FillNormal(idx, zr, zi, dr, di);
+            nx = NormalXBuffer[idx];
+            ny = NormalYBuffer[idx];
+
+            fzr = (float)zr; fzi = (float)zi;
+            fdr = (float)dr; fdi = (float)di;
+            FinalZrBuffer[idx] = fzr;
+            FinalZiBuffer[idx] = fzi;
+            FinalDrBuffer[idx] = fdr;
+            FinalDiBuffer[idx] = fdi;
+        }
+        else
+        {
+            smooth = 0f; dist = 0f;
+            nx = 0f; ny = 0f;
+            fzr = 0f; fzi = 0f; fdr = 0f; fdi = 0f;
+            SmoothBuffer[idx] = 0f;
+            DistanceBuffer[idx] = 0f;
+            NormalXBuffer[idx] = 0f;
+            NormalYBuffer[idx] = 0f;
+            FinalZrBuffer[idx] = 0f;
+            FinalZiBuffer[idx] = 0f;
+            FinalDrBuffer[idx] = 0f;
+            FinalDiBuffer[idx] = 0f;
         }
     }
 
@@ -673,8 +818,10 @@ public sealed class MandelbrotCalculator
         if (iters < maxIter)
         {
             double mag = Math.Sqrt(zr * zr + zi * zi);
-            float smooth = (float)(iters + 1.0
-                - Math.Log(Math.Log(mag) / Math.Log(2.0)) / Math.Log(2.0));
+            // Smooth iteration: iters + 1 - log2(log2(mag)). Math.Log2 is a
+            // single hardware-backed call vs 3× Math.Log + 2 divides in the
+            // log-ratio formulation. Identical algebraic result.
+            float smooth = (float)(iters + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
             double dMag = Math.Sqrt(dr * dr + di * di);
@@ -793,8 +940,7 @@ public sealed class MandelbrotCalculator
         if (iter < maxIter)
         {
             double mag = Math.Sqrt(zr * zr + zi * zi);
-            float smooth = (float)(iter + 1.0
-                - Math.Log(Math.Log(mag) / Math.Log(2.0)) / Math.Log(2.0));
+            float smooth = (float)(iter + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
             double dMag = Math.Sqrt(dr * dr + di * di);
@@ -862,17 +1008,92 @@ public sealed class MandelbrotCalculator
             ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
         }
 
+        // Build / refresh the BLA table now that the reference orbit is current.
+        // dcMaxAbs is the worst-case pixel offset from view centre (corner distance).
+        double halfWS = Width * 0.5 * scale;
+        double halfHS = Height * 0.5 * scale;
+        double dcMaxAbs = Math.Sqrt(halfWS * halfWS + halfHS * halfHS);
+        EnsureBlaTable(dcMaxAbs);
+        EnsureSeriesApproximation();
+
+        _blaSkipsTotal = 0;
+        _blaIterSkippedTotal = 0;
+        _saAppliedTotal = 0;
+        _saIterSkippedTotal = 0;
+
+        bool useSimd512 = Avx512F.IsSupported && Vector512.IsHardwareAccelerated;
         bool useSimd = DD4.IsSupported;
+        if (!_loggedSimdPath)
+        {
+            Debug.WriteLine(useSimd512 ? "PT path: AVX-512 (8 lanes)"
+                                       : useSimd ? "PT path: AVX2 (4 lanes)"
+                                                 : "PT path: scalar");
+            _loggedSimdPath = true;
+        }
         var po = new ParallelOptions { CancellationToken = ct };
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             int rowBase = y * Width;
-            if (useSimd)
+            if (useSimd512)
+                ComputeRowPT8(y, scale, maxIt, rowBase, colorMap);
+            else if (useSimd)
                 ComputeRowPT4(y, scale, maxIt, rowBase, colorMap);
             else
                 ComputeRowPTScalar(y, scale, maxIt, rowBase, colorMap);
         });
+
+        if (_blaTable != null)
+            Debug.WriteLine(
+                $"BLA: {_blaSkipsTotal:N0} skips, {_blaIterSkippedTotal:N0} iter saved " +
+                $"(avg {(_blaSkipsTotal == 0 ? 0 : _blaIterSkippedTotal / (double)_blaSkipsTotal):F1}/skip), " +
+                $"refLen={_refOrbitLen}, levels={_blaTable.Levels}, dcMax={dcMaxAbs:E2}");
+
+        if (_sa != null)
+            Debug.WriteLine(
+                $"SA : {_saAppliedTotal:N0} applied, {_saIterSkippedTotal:N0} iter saved " +
+                $"(avg {(_saAppliedTotal == 0 ? 0 : _saIterSkippedTotal / (double)_saAppliedTotal):F1}/apply), " +
+                $"safeMax={_sa.SafeMax}");
+    }
+
+    /// <summary>
+    /// Build / refresh the series approximation table for the current
+    /// reference orbit. Recomputed only when the orbit changes — coefficients
+    /// are dc-independent so no zoom-drift invalidation is needed.
+    /// </summary>
+    private void EnsureSeriesApproximation()
+    {
+        if (_sa != null
+            && _saForRefOrbitLen == _refOrbitLen
+            && _saForRefMaxIter == _refCachedMaxIter)
+            return;
+
+        if (_refOrbitLen < 4) { _sa = null; return; }
+        _sa = new SeriesApproximation(_refZr, _refZi, _refOrbitLen);
+        _saForRefOrbitLen = _refOrbitLen;
+        _saForRefMaxIter = _refCachedMaxIter;
+    }
+
+    /// <summary>
+    /// Build or refresh the BLA hierarchical table. Invalidated when the
+    /// reference orbit changes (maxIter, length) or when dcMaxAbs has drifted
+    /// far enough that previously-merged validity radii are stale.
+    /// </summary>
+    private void EnsureBlaTable(double dcMaxAbs)
+    {
+        bool refChanged = _blaForRefMaxIter != _refCachedMaxIter
+                       || _blaForRefOrbitLen != _refOrbitLen;
+        // Relative tolerance: BLA merge uses dcMaxAbs in its validity bound,
+        // so a 5% drift is safely within the linearisation margin (Epsilon=1e-6).
+        double dcDrift = _blaDcMaxAbs <= 0 ? double.PositiveInfinity
+                                           : Math.Abs(dcMaxAbs - _blaDcMaxAbs) / _blaDcMaxAbs;
+        if (!refChanged && _blaTable != null && dcDrift < 0.05) return;
+
+        if (_refOrbitLen < 4) { _blaTable = null; return; }
+        _blaTable = new BlaTable(_refZr, _refZi, _refOrbitLen, dcMaxAbs);
+        _blaDcMaxAbs = dcMaxAbs;
+        _blaForRefMaxIter = _refCachedMaxIter;
+        _blaForRefOrbitLen = _refOrbitLen;
     }
 
     // ── Blend helpers (replaces VBLENDVPD masking) ────────────────────────────
@@ -909,6 +1130,62 @@ public sealed class MandelbrotCalculator
             Avx.BlendVariable(frozen.Lo, updated.Lo, mask));
     }
 
+    /// <summary>
+    /// Horizontal max over Vector256&lt;double&gt;, restricted to lanes selected
+    /// by the 4-bit active mask. Inactive lanes are ignored. Returns 0 when
+    /// activeMask is empty.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double HMaxMasked(Vector256<double> v, int activeMask)
+    {
+        double max = 0.0;
+        if ((activeMask & 1) != 0) { double d = v.GetElement(0); if (d > max) max = d; }
+        if ((activeMask & 2) != 0) { double d = v.GetElement(1); if (d > max) max = d; }
+        if ((activeMask & 4) != 0) { double d = v.GetElement(2); if (d > max) max = d; }
+        if ((activeMask & 8) != 0) { double d = v.GetElement(3); if (d > max) max = d; }
+        return max;
+    }
+
+    // ── 8-lane helpers (AVX-512 path) ─────────────────────────────────────────
+
+    /// <summary>8-bit mask → Vector512&lt;double&gt; with all-ones in active lanes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector512<double> MaskToVector512(int mask)
+    {
+        return Vector512.Create(
+            (mask & 0x01) != 0 ? -1L : 0L,
+            (mask & 0x02) != 0 ? -1L : 0L,
+            (mask & 0x04) != 0 ? -1L : 0L,
+            (mask & 0x08) != 0 ? -1L : 0L,
+            (mask & 0x10) != 0 ? -1L : 0L,
+            (mask & 0x20) != 0 ? -1L : 0L,
+            (mask & 0x40) != 0 ? -1L : 0L,
+            (mask & 0x80) != 0 ? -1L : 0L).AsDouble();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector512<double> BlendActive512(
+        Vector512<double> frozen, Vector512<double> updated, int activeMask)
+    {
+        var mask = MaskToVector512(activeMask);
+        return Vector512.ConditionalSelect(mask, updated, frozen);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double HMaxMasked8(Vector512<double> v, int activeMask)
+    {
+        double max = 0.0;
+        if ((activeMask & 0x01) != 0) { double d = v.GetElement(0); if (d > max) max = d; }
+        if ((activeMask & 0x02) != 0) { double d = v.GetElement(1); if (d > max) max = d; }
+        if ((activeMask & 0x04) != 0) { double d = v.GetElement(2); if (d > max) max = d; }
+        if ((activeMask & 0x08) != 0) { double d = v.GetElement(3); if (d > max) max = d; }
+        if ((activeMask & 0x10) != 0) { double d = v.GetElement(4); if (d > max) max = d; }
+        if ((activeMask & 0x20) != 0) { double d = v.GetElement(5); if (d > max) max = d; }
+        if ((activeMask & 0x40) != 0) { double d = v.GetElement(6); if (d > max) max = d; }
+        if ((activeMask & 0x80) != 0) { double d = v.GetElement(7); if (d > max) max = d; }
+        return max;
+    }
+
     // ── HP per-pixel color fill (inline, no second pass) ─────────────────────
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -921,8 +1198,7 @@ public sealed class MandelbrotCalculator
         if (iters < maxIter)
         {
             double mag = Math.Sqrt(zrD * zrD + ziD * ziD);
-            float smooth = (float)(iters + 1.0
-                - Math.Log(Math.Log(mag) / Math.Log(2.0)) / Math.Log(2.0));
+            float smooth = (float)(iters + 1.0 - Math.Log2(Math.Log2(mag)));
             SmoothBuffer[idx] = smooth;
 
             // Distance estimate: mag·ln(mag)/|d|. Derivative tracked as plain
@@ -970,9 +1246,38 @@ public sealed class MandelbrotCalculator
     {
         DD zr = DD.Zero, zi = DD.Zero;
         double dr = 1.0, di = 0.0;
-        int iter;
+        int iterStart = 0;
 
-        for (iter = 0; iter < maxIter; iter++)
+        // SA prelude — skip the first k DD iterations by evaluating the
+        // polynomial in dc and seeding (zr, zi) = ref[k] + δ.
+        //
+        // dc must be computed via DD subtraction. At deep zoom the pixel
+        // offset (~3e-15 at z=1e14) is well below ULP(CenterX) (~6e-17 at
+        // |x|=0.5), so naive `cx.Hi - _refCxHi` rounds adjacent pixels to
+        // identical doubles, producing identical SA δ and visible pixelation.
+        // DD subtraction preserves the offset in the resulting Hi limb.
+        var sa = _sa;
+        if (sa != null && sa.SafeMax >= 16 && !DisableAcceleration && !DisableSeriesApproximation)
+        {
+            DD dcRdd = cx - new DD(_refCxHi, _refCxLo);
+            DD dcIdd = cy - new DD(_refCyHi, _refCyLo);
+            double dcR = dcRdd.Hi;
+            double dcI = dcIdd.Hi;
+            int k = sa.FindSkip(dcR, dcI, SaTolerance, maxIter - 1);
+            if (k >= 16 && k <= _refOrbitLen)
+            {
+                sa.EvalDelta(k, dcR, dcI, out double dR, out double dI);
+                sa.EvalDDelta(k, dcR, dcI, out double ddR, out double ddI);
+                zr = new DD(_refZr[k], 0) + new DD(dR, 0);
+                zi = new DD(_refZi[k], 0) + new DD(dI, 0);
+                dr = ddR;
+                di = ddI;
+                iterStart = k;
+            }
+        }
+
+        int iter;
+        for (iter = iterStart; iter < maxIter; iter++)
         {
             DD zr2 = zr.Square();
             DD zi2 = zi.Square();
@@ -1208,15 +1513,21 @@ public sealed class MandelbrotCalculator
         var two = Vector256.Create(2.0);
         var dcYv = Vector256.Create(dcY);
         int refLen = _refOrbitLen;
+        var bla = DisableAcceleration ? null : _blaTable;
+        var sa = (DisableAcceleration || DisableSeriesApproximation) ? null : _sa;
+        long rowBlaSkips = 0;
+        long rowBlaIterSaved = 0;
+        long rowSaApplied = 0;
+        long rowSaIterSaved = 0;
         int x = 0;
 
         for (; x + 4 <= Width; x += 4)
         {
-            var dcRv = Vector256.Create(
-                (x - halfW) * scale,
-                (x + 1 - halfW) * scale,
-                (x + 2 - halfW) * scale,
-                (x + 3 - halfW) * scale);
+            double dcR0 = (x - halfW) * scale;
+            double dcR1 = (x + 1 - halfW) * scale;
+            double dcR2 = (x + 2 - halfW) * scale;
+            double dcR3 = (x + 3 - halfW) * scale;
+            var dcRv = Vector256.Create(dcR0, dcR1, dcR2, dcR3);
 
             var dr = Vector256<double>.Zero;
             var di = Vector256<double>.Zero;
@@ -1225,10 +1536,104 @@ public sealed class MandelbrotCalculator
             var iterCount = Vector256<double>.Zero;
             int escapedMask = 0;
             bool glitched = false;
+            int iterStart = 0;
 
-            for (int iter = 0; iter < maxIter; iter++)
+            // ── SA prelude ─────────────────────────────────────────────────
+            // Skip the first iterations from z=0 by evaluating the third-order
+            // polynomial in dc. Lane-uniform k: use min skip across lanes
+            // (largest dc has smallest valid skip; conservative — every lane
+            // is safe at that k). Per-lane scalar polynomial eval to seed δ
+            // and the chain-rule derivative.
+            if (sa != null && sa.SafeMax >= 4)
+            {
+                int k0 = sa.FindSkip(dcR0, dcY, SaTolerance, maxIter - 1);
+                int k1 = sa.FindSkip(dcR1, dcY, SaTolerance, maxIter - 1);
+                int k2 = sa.FindSkip(dcR2, dcY, SaTolerance, maxIter - 1);
+                int k3 = sa.FindSkip(dcR3, dcY, SaTolerance, maxIter - 1);
+                int k = k0;
+                if (k1 < k) k = k1;
+                if (k2 < k) k = k2;
+                if (k3 < k) k = k3;
+                if (k >= 4)   // amortise polynomial cost only when skip is meaningful
+                {
+                    sa.EvalDelta(k, dcR0, dcY, out double d0r, out double d0i);
+                    sa.EvalDelta(k, dcR1, dcY, out double d1r, out double d1i);
+                    sa.EvalDelta(k, dcR2, dcY, out double d2r, out double d2i);
+                    sa.EvalDelta(k, dcR3, dcY, out double d3r, out double d3i);
+                    dr = Vector256.Create(d0r, d1r, d2r, d3r);
+                    di = Vector256.Create(d0i, d1i, d2i, d3i);
+
+                    sa.EvalDDelta(k, dcR0, dcY, out double v0r, out double v0i);
+                    sa.EvalDDelta(k, dcR1, dcY, out double v1r, out double v1i);
+                    sa.EvalDDelta(k, dcR2, dcY, out double v2r, out double v2i);
+                    sa.EvalDDelta(k, dcR3, dcY, out double v3r, out double v3i);
+                    drv = Vector256.Create(v0r, v1r, v2r, v3r);
+                    div = Vector256.Create(v0i, v1i, v2i, v3i);
+
+                    iterCount = Vector256.Create((double)k);
+                    iterStart = k;
+                    rowSaApplied += 4;
+                    rowSaIterSaved += 4L * k;
+                }
+            }
+
+            for (int iter = iterStart; iter < maxIter; iter++)
             {
                 if (iter > refLen) { glitched = true; break; }
+
+                // ── BLA skip attempt (per-lane via active-mask blending) ───
+                // Lookup uses max |δ|² over ACTIVE lanes only — escaped lanes
+                // have frozen (possibly large) δ that would block any skip.
+                // Escaped lanes are preserved via BlendActive, so the skip
+                // continues to compound even after individual lanes diverge.
+                if (bla != null)
+                {
+                    int activeBla = ~escapedMask & 0b1111;
+                    if (activeBla != 0)
+                    {
+                        var dmag2v = Avx.Add(Avx.Multiply(dr, dr), Avx.Multiply(di, di));
+                        double maxActiveDmag2 = HMaxMasked(dmag2v, activeBla);
+                        int blaIdx = bla.Lookup(iter, maxActiveDmag2, maxIter);
+                        if (blaIdx >= 0)
+                        {
+                            ref readonly var bEntry = ref bla.Data[blaIdx];
+                            if (bEntry.L >= 2)
+                            {
+                                var aRev = Vector256.Create(bEntry.ARe);
+                                var aImv = Vector256.Create(bEntry.AIm);
+                                var bRev = Vector256.Create(bEntry.BRe);
+                                var bImv = Vector256.Create(bEntry.BIm);
+
+                                // δ' = A·δ + B·dc  (active lanes only)
+                                var aDr = Avx.Subtract(Avx.Multiply(aRev, dr), Avx.Multiply(aImv, di));
+                                var aDi = Avx.Add(Avx.Multiply(aRev, di), Avx.Multiply(aImv, dr));
+                                var bDcR = Avx.Subtract(Avx.Multiply(bRev, dcRv), Avx.Multiply(bImv, dcYv));
+                                var bDcI = Avx.Add(Avx.Multiply(bRev, dcYv), Avx.Multiply(bImv, dcRv));
+                                var newDrBla = Avx.Add(aDr, bDcR);
+                                var newDiBla = Avx.Add(aDi, bDcI);
+                                dr = BlendActive(dr, newDrBla, activeBla);
+                                di = BlendActive(di, newDiBla, activeBla);
+
+                                // Derivative: linearised d_{n+L} ≈ A·d_n
+                                // (drops the +1 constants over L steps —
+                                // tiny relative error vs |A|·|d_n| at deep
+                                // zoom; affects distance estimate by < 1 px).
+                                var aDrv = Avx.Subtract(Avx.Multiply(aRev, drv), Avx.Multiply(aImv, div));
+                                var aDiv = Avx.Add(Avx.Multiply(aRev, div), Avx.Multiply(aImv, drv));
+                                drv = BlendActive(drv, aDrv, activeBla);
+                                div = BlendActive(div, aDiv, activeBla);
+
+                                // iterCount += L only for active lanes.
+                                var lVec = Vector256.Create((double)bEntry.L);
+                                iterCount = Avx.Add(iterCount, Avx.And(lVec, MaskToVector(activeBla)));
+                                iter += bEntry.L - 1;    // for-loop ++iter restores net +L
+                                rowBlaSkips++;
+                                rowBlaIterSaved += bEntry.L - 1;
+                                continue;
+                            }
+                        }
+                    }
+                }
 
                 var Zrv = Vector256.Create(_refZr[iter]);
                 var Ziv = Vector256.Create(_refZi[iter]);
@@ -1331,6 +1736,270 @@ public sealed class MandelbrotCalculator
                     ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
                 }
             }
+        }
+
+        if (rowBlaSkips != 0)
+        {
+            Interlocked.Add(ref _blaSkipsTotal, rowBlaSkips);
+            Interlocked.Add(ref _blaIterSkippedTotal, rowBlaIterSaved);
+        }
+        if (rowSaApplied != 0)
+        {
+            Interlocked.Add(ref _saAppliedTotal, rowSaApplied);
+            Interlocked.Add(ref _saIterSkippedTotal, rowSaIterSaved);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PATH B-512 — 8-wide AVX-512 perturbation, mirrors ComputeRowPT4
+    // Cross-platform Vector512 API: RyuJIT emits vaddpd/vmulpd zmm on
+    // AVX512F-capable CPUs. SA prelude + per-lane BLA carry over unchanged
+    // (per-lane scalar polynomial eval just runs 8 times instead of 4).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ComputeRowPT8<TMap>(
+        int y, double scale, int maxIter, int rowBase, TMap colorMap)
+        where TMap : IColorMap
+    {
+        double halfW = Width * 0.5;
+        double halfH = Height * 0.5;
+        double dcY = (y - halfH) * scale;
+        bool useQD = Zoom > QDZoomThreshold;
+        DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
+        QD cy_qd = useQD
+            ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
+            : QD.Zero;
+
+        var er2v = Vector512.Create(EscapeRadius2);
+        var one = Vector512.Create(1.0);
+        var two = Vector512.Create(2.0);
+        var dcYv = Vector512.Create(dcY);
+        int refLen = _refOrbitLen;
+        var bla = DisableAcceleration ? null : _blaTable;
+        var sa = (DisableAcceleration || DisableSeriesApproximation) ? null : _sa;
+        long rowBlaSkips = 0;
+        long rowBlaIterSaved = 0;
+        long rowSaApplied = 0;
+        long rowSaIterSaved = 0;
+        int x = 0;
+
+        for (; x + 8 <= Width; x += 8)
+        {
+            double dcR0 = (x - halfW) * scale;
+            double dcR1 = (x + 1 - halfW) * scale;
+            double dcR2 = (x + 2 - halfW) * scale;
+            double dcR3 = (x + 3 - halfW) * scale;
+            double dcR4 = (x + 4 - halfW) * scale;
+            double dcR5 = (x + 5 - halfW) * scale;
+            double dcR6 = (x + 6 - halfW) * scale;
+            double dcR7 = (x + 7 - halfW) * scale;
+            var dcRv = Vector512.Create(dcR0, dcR1, dcR2, dcR3, dcR4, dcR5, dcR6, dcR7);
+
+            var dr = Vector512<double>.Zero;
+            var di = Vector512<double>.Zero;
+            var drv = one;
+            var div = Vector512<double>.Zero;
+            var iterCount = Vector512<double>.Zero;
+            int escapedMask = 0;
+            bool glitched = false;
+            int iterStart = 0;
+
+            // ── SA prelude (8 lanes) ───────────────────────────────────────
+            if (sa != null && sa.SafeMax >= 4)
+            {
+                int k0 = sa.FindSkip(dcR0, dcY, SaTolerance, maxIter - 1);
+                int k1 = sa.FindSkip(dcR1, dcY, SaTolerance, maxIter - 1);
+                int k2 = sa.FindSkip(dcR2, dcY, SaTolerance, maxIter - 1);
+                int k3 = sa.FindSkip(dcR3, dcY, SaTolerance, maxIter - 1);
+                int k4 = sa.FindSkip(dcR4, dcY, SaTolerance, maxIter - 1);
+                int k5 = sa.FindSkip(dcR5, dcY, SaTolerance, maxIter - 1);
+                int k6 = sa.FindSkip(dcR6, dcY, SaTolerance, maxIter - 1);
+                int k7 = sa.FindSkip(dcR7, dcY, SaTolerance, maxIter - 1);
+                int k = k0;
+                if (k1 < k) k = k1;
+                if (k2 < k) k = k2;
+                if (k3 < k) k = k3;
+                if (k4 < k) k = k4;
+                if (k5 < k) k = k5;
+                if (k6 < k) k = k6;
+                if (k7 < k) k = k7;
+                if (k >= 4)
+                {
+                    sa.EvalDelta(k, dcR0, dcY, out double d0r, out double d0i);
+                    sa.EvalDelta(k, dcR1, dcY, out double d1r, out double d1i);
+                    sa.EvalDelta(k, dcR2, dcY, out double d2r, out double d2i);
+                    sa.EvalDelta(k, dcR3, dcY, out double d3r, out double d3i);
+                    sa.EvalDelta(k, dcR4, dcY, out double d4r, out double d4i);
+                    sa.EvalDelta(k, dcR5, dcY, out double d5r, out double d5i);
+                    sa.EvalDelta(k, dcR6, dcY, out double d6r, out double d6i);
+                    sa.EvalDelta(k, dcR7, dcY, out double d7r, out double d7i);
+                    dr = Vector512.Create(d0r, d1r, d2r, d3r, d4r, d5r, d6r, d7r);
+                    di = Vector512.Create(d0i, d1i, d2i, d3i, d4i, d5i, d6i, d7i);
+
+                    sa.EvalDDelta(k, dcR0, dcY, out double v0r, out double v0i);
+                    sa.EvalDDelta(k, dcR1, dcY, out double v1r, out double v1i);
+                    sa.EvalDDelta(k, dcR2, dcY, out double v2r, out double v2i);
+                    sa.EvalDDelta(k, dcR3, dcY, out double v3r, out double v3i);
+                    sa.EvalDDelta(k, dcR4, dcY, out double v4r, out double v4i);
+                    sa.EvalDDelta(k, dcR5, dcY, out double v5r, out double v5i);
+                    sa.EvalDDelta(k, dcR6, dcY, out double v6r, out double v6i);
+                    sa.EvalDDelta(k, dcR7, dcY, out double v7r, out double v7i);
+                    drv = Vector512.Create(v0r, v1r, v2r, v3r, v4r, v5r, v6r, v7r);
+                    div = Vector512.Create(v0i, v1i, v2i, v3i, v4i, v5i, v6i, v7i);
+
+                    iterCount = Vector512.Create((double)k);
+                    iterStart = k;
+                    rowSaApplied += 8;
+                    rowSaIterSaved += 8L * k;
+                }
+            }
+
+            for (int iter = iterStart; iter < maxIter; iter++)
+            {
+                if (iter > refLen) { glitched = true; break; }
+
+                // ── BLA skip (8-lane, per-lane via active mask) ────────────
+                if (bla != null)
+                {
+                    int activeBla = ~escapedMask & 0xFF;
+                    if (activeBla != 0)
+                    {
+                        var dmag2v = dr * dr + di * di;
+                        double maxActiveDmag2 = HMaxMasked8(dmag2v, activeBla);
+                        int blaIdx = bla.Lookup(iter, maxActiveDmag2, maxIter);
+                        if (blaIdx >= 0)
+                        {
+                            ref readonly var bEntry = ref bla.Data[blaIdx];
+                            if (bEntry.L >= 2)
+                            {
+                                var aRev = Vector512.Create(bEntry.ARe);
+                                var aImv = Vector512.Create(bEntry.AIm);
+                                var bRev = Vector512.Create(bEntry.BRe);
+                                var bImv = Vector512.Create(bEntry.BIm);
+
+                                var aDr = aRev * dr - aImv * di;
+                                var aDi = aRev * di + aImv * dr;
+                                var bDcR = bRev * dcRv - bImv * dcYv;
+                                var bDcI = bRev * dcYv + bImv * dcRv;
+                                dr = BlendActive512(dr, aDr + bDcR, activeBla);
+                                di = BlendActive512(di, aDi + bDcI, activeBla);
+
+                                var aDrv = aRev * drv - aImv * div;
+                                var aDiv = aRev * div + aImv * drv;
+                                drv = BlendActive512(drv, aDrv, activeBla);
+                                div = BlendActive512(div, aDiv, activeBla);
+
+                                var lVec = Vector512.Create((double)bEntry.L);
+                                iterCount += lVec & MaskToVector512(activeBla);
+                                iter += bEntry.L - 1;
+                                rowBlaSkips++;
+                                rowBlaIterSaved += bEntry.L - 1;
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                var Zrv = Vector512.Create(_refZr[iter]);
+                var Ziv = Vector512.Create(_refZi[iter]);
+                var zr = Zrv + dr;
+                var zi = Ziv + di;
+
+                var mag2 = zr * zr + zi * zi;
+                var escV = Vector512.GreaterThanOrEqual(mag2, er2v);
+                int newEsc = (int)escV.ExtractMostSignificantBits();
+
+                escapedMask |= newEsc;
+                int active = ~escapedMask & 0xFF;
+                if (active == 0) break;
+
+                if (useQD && !glitched)
+                {
+                    double Zr_s = _refZr[iter], Zi_s = _refZi[iter];
+                    for (int k = 0; k < 8; k++)
+                    {
+                        double drk = dr.GetElement(k), dik = di.GetElement(k);
+                        if ((drk != 0.0 || dik != 0.0) &&
+                            zr.GetElement(k) == Zr_s && zi.GetElement(k) == Zi_s)
+                        { glitched = true; break; }
+                    }
+                    if (glitched) break;
+                }
+
+                iterCount += one & MaskToVector512(active);
+
+                var newDrv = two * (zr * drv - zi * div) + one;
+                var newDiv = two * (zr * div + zi * drv);
+                drv = BlendActive512(drv, newDrv, active);
+                div = BlendActive512(div, newDiv, active);
+
+                // δ_{n+1} = (2·Z_n + δ_n)·δ_n + dc
+                var a = two * Zrv + dr;
+                var b = two * Ziv + di;
+                var newDr = a * dr - b * di + dcRv;
+                var newDi = a * di + b * dr + dcYv;
+                dr = BlendActive512(dr, newDr, active);
+                di = BlendActive512(di, newDi, active);
+            }
+
+            for (int k = 0; k < 8; k++)
+            {
+                int idx = rowBase + x + k;
+                if (glitched && ((escapedMask >> k) & 1) == 0)
+                {
+                    if (useQD)
+                    {
+                        QD cx_qd = QD.FromCenterOffset(
+                            new QD(CenterX, CenterXLo, CenterX2, CenterX3), x + k - halfW, scale);
+                        ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
+                    }
+                    else
+                    {
+                        DD cx_dd = DD.FromCenterOffset(
+                            new DD(CenterX, CenterXLo), x + k - halfW, scale);
+                        ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                    }
+                    continue;
+                }
+                int iters = (int)iterCount.GetElement(k);
+                double zrF = (iters <= refLen ? _refZr[iters] : 0.0) + dr.GetElement(k);
+                double ziF = (iters <= refLen ? _refZi[iters] : 0.0) + di.GetElement(k);
+                IterationBuffer[idx] = iters;
+                FillAuxAndColorHP(idx, iters, maxIter, zrF, ziF,
+                    drv.GetElement(k), div.GetElement(k), colorMap);
+            }
+        }
+
+        // Scalar tail (0–7 remaining pixels)
+        for (; x < Width; x++)
+        {
+            double dcX = (x - halfW) * scale;
+            int idx = rowBase + x;
+            if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
+            {
+                if (useQD)
+                {
+                    QD cx_qd = QD.FromCenterOffset(
+                        new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);
+                    ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
+                }
+                else
+                {
+                    DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), x - halfW, scale);
+                    ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
+                }
+            }
+        }
+
+        if (rowBlaSkips != 0)
+        {
+            Interlocked.Add(ref _blaSkipsTotal, rowBlaSkips);
+            Interlocked.Add(ref _blaIterSkippedTotal, rowBlaIterSaved);
+        }
+        if (rowSaApplied != 0)
+        {
+            Interlocked.Add(ref _saAppliedTotal, rowSaApplied);
+            Interlocked.Add(ref _saIterSkippedTotal, rowSaIterSaved);
         }
     }
 

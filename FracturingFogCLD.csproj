@@ -51,6 +51,7 @@
     <None Include="C:\Users\bradl\Documents\regions.json" Link="Resources\regions.json" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="Vortice.Direct3D12" Version="3.8.3" />
     <PackageReference Include="Vortice.DirectX" Version="3.8.3" />

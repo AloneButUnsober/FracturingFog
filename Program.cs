@@ -3,16 +3,22 @@
 using System;
 using System.Windows.Forms;
 
+using FracturingFog.Benchmarks;
+
 namespace FracturingFog;
 
 static class Program
 {
     [STAThread]
-    static void Main()
+    static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--bench")
+            return BenchEntry.Run(args);
+
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new MainForm());
+        return 0;
     }
 }
