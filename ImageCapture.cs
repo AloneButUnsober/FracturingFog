@@ -412,27 +412,91 @@ namespace FracturingFog
             bool poster = false)
         {
             int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            Debug.WriteLine($"Watermark font size: {fontSize}px");
-
             using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
             var sz = g.MeasureString(text, font);
             int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-            Debug.WriteLine($"Watermark position offset: {yOffset}px from bottom-right corner");
             var pos = new PointF(width - sz.Width - 20, height - sz.Height - yOffset);
-            using var brush = new SolidBrush(fontColor);
-            g.DrawString(text, font, brush, pos);
+
+            // Outline colour: opposite luminance of fill, ~75% opacity.
+            float lum = (fontColor.R * 0.299f + fontColor.G * 0.587f + fontColor.B * 0.114f) / 255f;
+            Color outlineColor = lum < 0.5f
+                ? Color.FromArgb(190, 255, 255, 255)
+                : Color.FromArgb(190, 0, 0, 0);
+
+            float mainStroke = poster ? System.Math.Max(2f, fontSize / 10f) : 2f;
+            float subStroke = poster ? System.Math.Max(1.5f, fontSize / 16f) : 1.5f;
+
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            DrawOutlinedString(g, text, font, pos, fontColor, outlineColor, mainStroke);
 
             if (!string.IsNullOrEmpty(subText))
             {
                 using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
                 var sz2 = g.MeasureString(subText, fontSmall);
                 int subTextOffset = poster ? 0 : 2;
-                Debug.WriteLine($"Subtext font size: {fontSize / 2}px, offset: {subTextOffset}px");
-                g.DrawString($"{subText}", fontSmall, brush,
-                    new PointF(width - sz2.Width - 55, height - sz2.Height - subTextOffset));
+                var subPos = new PointF(width - sz2.Width - 55, height - sz2.Height - subTextOffset);
+                DrawOutlinedString(g, subText, fontSmall, subPos, fontColor, outlineColor, subStroke);
+            }
+        }
+
+        private static void DrawOutlinedString(
+            Graphics g, string text, Font font, PointF pos,
+            Color fill, Color outline, float strokeWidth)
+        {
+            using var path = new System.Drawing.Drawing2D.GraphicsPath();
+            path.AddString(text, font.FontFamily, (int)font.Style, font.Size, pos,
+                System.Drawing.StringFormat.GenericDefault);
+            using var pen = new Pen(outline, strokeWidth)
+            {
+                LineJoin = System.Drawing.Drawing2D.LineJoin.Round,
+                MiterLimit = 2f
+            };
+            g.DrawPath(pen, path);
+            using var brush = new SolidBrush(fill);
+            g.FillPath(brush, path);
+        }
+
+        /// <summary>
+        /// Computes the on-image bounding box the watermark will occupy.
+        /// Used by the slideshow overlay to allocate only a small bitmap
+        /// instead of a full-frame one.
+        /// </summary>
+        private static Rectangle MeasureWatermarkBBox(
+            string text, string subText, int width, int height, bool poster = false)
+        {
+            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
+            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var dummy = new Bitmap(1, 1);
+            using var g = Graphics.FromImage(dummy);
+
+            var sz = g.MeasureString(text, font);
+            int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
+            float left = width - sz.Width - 20;
+            float top = height - sz.Height - yOffset;
+            float right = left + sz.Width;
+            float bottom = top + sz.Height;
+
+            if (!string.IsNullOrEmpty(subText))
+            {
+                using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
+                var sz2 = g.MeasureString(subText, fontSmall);
+                int subTextOffset = poster ? 0 : 2;
+                float sLeft = width - sz2.Width - 55;
+                float sTop = height - sz2.Height - subTextOffset;
+                left = System.Math.Min(left, sLeft);
+                top = System.Math.Min(top, sTop);
+                right = System.Math.Max(right, sLeft + sz2.Width);
+                bottom = System.Math.Max(bottom, sTop + sz2.Height);
             }
 
-            g.Save();
+            // Pad for outline stroke + AA fringe.
+            const int pad = 6;
+            int x0 = System.Math.Max(0, (int)System.Math.Floor(left) - pad);
+            int y0 = System.Math.Max(0, (int)System.Math.Floor(top) - pad);
+            int x1 = System.Math.Min(width, (int)System.Math.Ceiling(right) + pad);
+            int y1 = System.Math.Min(height, (int)System.Math.Ceiling(bottom) + pad);
+            return new Rectangle(x0, y0, x1 - x0, y1 - y0);
         }
 
         #endregion Screen Capture

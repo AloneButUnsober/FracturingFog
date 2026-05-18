@@ -2432,40 +2432,49 @@ public sealed partial class MainForm : Form
     /// </summary>
     private unsafe void BlendWatermarkOverlay(uint[] dst, int w, int h)
     {
-        using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        string wm = $"{(!string.IsNullOrEmpty(CurrentRegionName()) ? CurrentRegionName() : "")}" +
+                    $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
+        string subText = $"{_programName} v{_programVersion} {DateTime.Now.Year}";
+
+        Rectangle bbox = MeasureWatermarkBBox(wm, subText, w, h);
+        if (bbox.Width <= 0 || bbox.Height <= 0) return;
+
+        int bx = bbox.X, by = bbox.Y, bw = bbox.Width, bh = bbox.Height;
+
+        using var bmp = new Bitmap(bw, bh, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
         {
             g.Clear(Color.Transparent);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
-            // Sample the destination buffer for a contrast colour.
+            // Sample contrast colour from full destination (lower-right region).
             Color fontColor = ComputeContrastColor(
                 GetSwatchColor(), watermark: true, pixels: dst, imgW: w, imgH: h);
 
-            string wm = $"{(!string.IsNullOrEmpty(CurrentRegionName()) ? CurrentRegionName() : "")}" + // ? " - " + 
-                        $"{(!string.IsNullOrEmpty(CurrentColorMapName()) ? " - " + CurrentColorMapName() : "")}";
-            string subText = $"{_programName} v{_programVersion} {DateTime.Now.Year}";
+            // Draw at full-image coordinates, shifted into the small bitmap.
+            g.TranslateTransform(-bx, -by);
             AddWaterMark(g, wm, w, h, fontColor, subText);
         }
 
-        var data = bmp.LockBits(new Rectangle(0, 0, w, h),
+        var data = bmp.LockBits(new Rectangle(0, 0, bw, bh),
             ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try
         {
             byte* srcPtr = (byte*)data.Scan0;
             int stride = data.Stride;
-            for (int row = 0; row < h; row++)
+            for (int row = 0; row < bh; row++)
             {
                 byte* rowPtr = srcPtr + (long)row * stride;
-                for (int col = 0; col < w; col++)
+                int dstRowBase = (by + row) * w + bx;
+                for (int col = 0; col < bw; col++)
                 {
                     byte gA = rowPtr[col * 4 + 3];
                     if (gA == 0) continue;
                     byte gB = rowPtr[col * 4 + 0];
                     byte gG = rowPtr[col * 4 + 1];
                     byte gR = rowPtr[col * 4 + 2];
-                    int idx = row * w + col;
+                    int idx = dstRowBase + col;
                     uint p = dst[idx];
                     byte dR = (byte)((p >> 16) & 0xFF);
                     byte dG = (byte)((p >> 8) & 0xFF);
