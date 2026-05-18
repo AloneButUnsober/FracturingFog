@@ -1317,7 +1317,7 @@ public sealed partial class MainForm : Form
         //                     out double sCY2, out double sCY3))
         //{ _centerY = sCY; _centerYLo = sCYLo; _centerY2 = sCY2; _centerY3 = sCY3; }
 
-        _centerX = _calculator.CenterX; _centerXLo = _calculator.CenterXLo; _centerX2 = _calculator.CenterX2; _centerX3 = _calculator.CenterY3;
+        _centerX = _calculator.CenterX; _centerXLo = _calculator.CenterXLo; _centerX2 = _calculator.CenterX2; _centerX3 = _calculator.CenterX3;
         _centerY = _calculator.CenterY; _centerYLo = _calculator.CenterYLo; _centerY2 = _calculator.CenterY2; _centerY3 = _calculator.CenterY3;
         //var _ic = System.Globalization.CultureInfo.InvariantCulture;
         //var _ns = System.Globalization.NumberStyles.Float;
