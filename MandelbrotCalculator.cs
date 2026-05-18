@@ -1308,9 +1308,37 @@ public sealed class MandelbrotCalculator
     {
         QD zr = QD.Zero, zi = QD.Zero;
         double dr = 1.0, di = 0.0;
-        int iter;
+        int iterStart = 0;
 
-        for (iter = 0; iter < maxIter; iter++)
+        // SA prelude — mirror of ComputePixelHP, with QD-precision dc.
+        // QD subtraction preserves the pixel offset even at zoom > 1e25 where
+        // the offset lives in the X2/X3 limbs; collapsing to X0 after the
+        // subtraction yields the small offset at double precision, suitable
+        // for SA polynomial input.
+        var sa = _sa;
+        if (sa != null && sa.SafeMax >= 16 && !DisableAcceleration && !DisableSeriesApproximation)
+        {
+            QD refCx = new QD(_refCxHi, _refCxLo, _refCx2, _refCx3);
+            QD refCy = new QD(_refCyHi, _refCyLo, _refCy2, _refCy3);
+            QD dcRqd = cx - refCx;
+            QD dcIqd = cy - refCy;
+            double dcR = dcRqd.X0;
+            double dcI = dcIqd.X0;
+            int k = sa.FindSkip(dcR, dcI, SaTolerance, maxIter - 1);
+            if (k >= 16 && k <= _refOrbitLen)
+            {
+                sa.EvalDelta(k, dcR, dcI, out double dR, out double dI);
+                sa.EvalDDelta(k, dcR, dcI, out double ddR, out double ddI);
+                zr = new QD(_refZr[k] + dR);
+                zi = new QD(_refZi[k] + dI);
+                dr = ddR;
+                di = ddI;
+                iterStart = k;
+            }
+        }
+
+        int iter;
+        for (iter = iterStart; iter < maxIter; iter++)
         {
             double zrH = zr.X0, ziH = zi.X0;
             if (zrH * zrH + ziH * ziH >= EscapeRadius2) break;
@@ -1685,6 +1713,20 @@ public sealed class MandelbrotCalculator
                 di = BlendActive(di, newDi, active);
             }
 
+            // Bulk-extract lanes via Vector256.CopyTo (one vmovupd per vector)
+            // instead of five GetElement(k) calls per k (each costs a lane-
+            // extract). ~5× fewer cross-domain transitions for the tail.
+            Span<double> icSpan = stackalloc double[4];
+            Span<double> drSpan = stackalloc double[4];
+            Span<double> diSpan = stackalloc double[4];
+            Span<double> drvSpan = stackalloc double[4];
+            Span<double> divSpan = stackalloc double[4];
+            iterCount.CopyTo(icSpan);
+            dr.CopyTo(drSpan);
+            di.CopyTo(diSpan);
+            drv.CopyTo(drvSpan);
+            div.CopyTo(divSpan);
+
             for (int k = 0; k < 4; k++)
             {
                 int idx = rowBase + x + k;
@@ -1707,13 +1749,13 @@ public sealed class MandelbrotCalculator
                     }
                     continue;
                 }
-                int iters = (int)iterCount.GetElement(k);
+                int iters = (int)icSpan[k];
                 // Reconstruct z at escape: Z_iters + δ_iters (δ frozen when lane escaped)
-                double zrF = (iters <= refLen ? _refZr[iters] : 0.0) + dr.GetElement(k);
-                double ziF = (iters <= refLen ? _refZi[iters] : 0.0) + di.GetElement(k);
+                double zrF = (iters <= refLen ? _refZr[iters] : 0.0) + drSpan[k];
+                double ziF = (iters <= refLen ? _refZi[iters] : 0.0) + diSpan[k];
                 IterationBuffer[idx] = iters;
                 FillAuxAndColorHP(idx, iters, maxIter, zrF, ziF,
-                    drv.GetElement(k), div.GetElement(k), colorMap);
+                    drvSpan[k], divSpan[k], colorMap);
             }
         }
 
@@ -1942,6 +1984,17 @@ public sealed class MandelbrotCalculator
                 di = BlendActive512(di, newDi, active);
             }
 
+            Span<double> icSpan = stackalloc double[8];
+            Span<double> drSpan = stackalloc double[8];
+            Span<double> diSpan = stackalloc double[8];
+            Span<double> drvSpan = stackalloc double[8];
+            Span<double> divSpan = stackalloc double[8];
+            iterCount.CopyTo(icSpan);
+            dr.CopyTo(drSpan);
+            di.CopyTo(diSpan);
+            drv.CopyTo(drvSpan);
+            div.CopyTo(divSpan);
+
             for (int k = 0; k < 8; k++)
             {
                 int idx = rowBase + x + k;
@@ -1961,12 +2014,12 @@ public sealed class MandelbrotCalculator
                     }
                     continue;
                 }
-                int iters = (int)iterCount.GetElement(k);
-                double zrF = (iters <= refLen ? _refZr[iters] : 0.0) + dr.GetElement(k);
-                double ziF = (iters <= refLen ? _refZi[iters] : 0.0) + di.GetElement(k);
+                int iters = (int)icSpan[k];
+                double zrF = (iters <= refLen ? _refZr[iters] : 0.0) + drSpan[k];
+                double ziF = (iters <= refLen ? _refZi[iters] : 0.0) + diSpan[k];
                 IterationBuffer[idx] = iters;
                 FillAuxAndColorHP(idx, iters, maxIter, zrF, ziF,
-                    drv.GetElement(k), div.GetElement(k), colorMap);
+                    drvSpan[k], divSpan[k], colorMap);
             }
         }
 
