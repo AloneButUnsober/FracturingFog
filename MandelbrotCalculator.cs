@@ -151,6 +151,40 @@ public sealed class MandelbrotCalculator
     private const double EscapeRadius2 = EscapeRadius * EscapeRadius;
     private static readonly int VecLen = Vector<double>.Count;  // SIMD width (SP path)
 
+    // ── In-set early-out helpers ──────────────────────────────────────────────
+    // Two cheap closed-form tests + a per-pixel periodicity check that together
+    // collapse the cost of "large black region" pixels from O(MaxIter) to
+    // O(detection delay). Fidelity is preserved bit-exact: in-set pixels still
+    // end with iter == MaxIter and route through FillAuxAndColor's in-set
+    // branch, producing the same InSetColor. The exterior path is untouched.
+    //
+    // Main cardioid:  q(q + (x − 1/4)) ≤ y²/4    where q = (x − 1/4)² + y²
+    // Period-2 bulb:  (x + 1)² + y² ≤ 1/16
+    //
+    // Both regions are mathematically guaranteed in-set; loop would always run
+    // to MaxIter for these points. Test cost ≈ 5 mul + 4 add per pixel — net
+    // win whenever a non-trivial number of pixels would otherwise iterate past
+    // ~10. Only fires for shallow zooms still showing the parent set, so the
+    // overhead at deep zoom is negligible (returns false on the first compare).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsInMainCardioidOrBulb(double cx, double cy)
+    {
+        double bx = cx + 1.0;
+        if (bx * bx + cy * cy <= 0.0625) return true;
+        double xm = cx - 0.25;
+        double q = xm * xm + cy * cy;
+        return q * (q + xm) <= 0.25 * cy * cy;
+    }
+
+    // Snapshot interval for the scalar periodicity check. Once a pixel reaches
+    // its attracting cycle, z snaps to bit-exact-equal values within a few
+    // hundred iterations (doubles round onto the attractor). A 16-iter snapshot
+    // gives detection latency ≤ 32 iterations for any cycle of period ≤ 16,
+    // and the snapshot interval doubles up to 1024 to cover longer cycles —
+    // standard Brent-style schedule.
+    private const int PeriodicitySnapshotStart = 16;
+    private const int PeriodicitySnapshotMax = 1024;
+
     // ── Perturbation theory reference orbit ───────────────────────────────────
 
     private double[] _refZr = Array.Empty<double>();
@@ -634,6 +668,7 @@ public sealed class MandelbrotCalculator
         var cyV = new Vector<double>(cy);
 
         Span<double> cxBuf = stackalloc double[VecLen];
+        Span<double> iterCntBuf = stackalloc double[VecLen];
 
         int x = 0;
 
@@ -644,9 +679,39 @@ public sealed class MandelbrotCalculator
                 cxBuf[k] = centerX + ((x + k) - Width * 0.5) * scale;
             var cx = new Vector<double>(cxBuf);
 
+            // Whole-block cardioid/bulb skip — fires often on shallow-zoom
+            // video frames sweeping past the parent set. Per-lane test on the
+            // four/eight x values; if every lane is in-set, we can write the
+            // result directly without entering the iteration loop.
+            int bulbBits = 0;
+            for (int k = 0; k < VecLen; k++)
+                if (IsInMainCardioidOrBulb(cxBuf[k], cy)) bulbBits |= 1 << k;
+            int allLanesMask = (1 << VecLen) - 1;
+            if (bulbBits == allLanesMask)
+            {
+                for (int k = 0; k < VecLen; k++)
+                {
+                    int idx = rowBase + x + k;
+                    IterationBuffer[idx] = maxIter;
+                    FillAuxAndColorSP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+                }
+                continue;
+            }
+
             var zr = zeroV; var zi = zeroV;
             var dr = oneV; var di = zeroV;
             var iterCountV = zeroV;
+
+            // Block-level periodicity. Snapshot z every snapInterval iters;
+            // when every lane equals its snapshot, no lane is escaping and no
+            // lane is still on a transient orbit — escaped lanes are frozen
+            // by ConditionalSelect (so they always self-match after one
+            // interval), and in-set lanes have reached their attracting
+            // cycle. Promote the unescaped lanes to maxIter and exit early.
+            var zrSnap = zeroV;
+            var ziSnap = zeroV;
+            int snapInterval = PeriodicitySnapshotStart;
+            int snapCounter = 0;
 
             for (int iter = 0; iter < maxIter; iter++)
             {
@@ -672,6 +737,28 @@ public sealed class MandelbrotCalculator
                 // handles the steady "still iterating" path, and we save up to
                 // 7 iterations per block when all lanes diverge quickly.
                 if (!Vector.LessThanAny(mag2, escRad2V)) break;
+
+                if (++snapCounter >= snapInterval)
+                {
+                    if (Vector.EqualsAll(zr, zrSnap) && Vector.EqualsAll(zi, ziSnap))
+                    {
+                        // All lanes either frozen-escaped or on cycle. Promote
+                        // any lane whose mag² is still below escape radius
+                        // (i.e., never escaped) to maxIter so the post-loop
+                        // FillAux routes it through the in-set branch.
+                        iterCountV.CopyTo(iterCntBuf);
+                        for (int k = 0; k < VecLen; k++)
+                        {
+                            double m2 = zr[k] * zr[k] + zi[k] * zi[k];
+                            if (m2 < EscapeRadius2) iterCntBuf[k] = maxIter;
+                        }
+                        iterCountV = new Vector<double>(iterCntBuf);
+                        break;
+                    }
+                    zrSnap = zr; ziSnap = zi;
+                    snapCounter = 0;
+                    if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+                }
             }
 
             // SIMD-batched color path: when the active theme implements
@@ -803,7 +890,18 @@ public sealed class MandelbrotCalculator
         double cx, double cy, int maxIter, int idx, TMap colorMap)
         where TMap : IColorMap
     {
+        if (IsInMainCardioidOrBulb(cx, cy))
+        {
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorSP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+
         double zr = 0, zi = 0, dr = 1, di = 0;
+        double zrSnap = 0, ziSnap = 0;
+        int snapInterval = PeriodicitySnapshotStart;
+        int snapCounter = 0;
+
         int iter;
         for (iter = 0; iter < maxIter; iter++)
         {
@@ -815,6 +913,14 @@ public sealed class MandelbrotCalculator
             double newZr = zr2 - zi2 + cx;
             zi = 2.0 * zr * zi + cy;
             zr = newZr;
+
+            if (zr == zrSnap && zi == ziSnap) { iter = maxIter; break; }
+            if (++snapCounter >= snapInterval)
+            {
+                zrSnap = zr; ziSnap = zi;
+                snapCounter = 0;
+                if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+            }
         }
         IterationBuffer[idx] = iter;
         FillAuxAndColorSP(idx, iter, maxIter, zr, zi, dr, di, colorMap);
@@ -928,8 +1034,32 @@ public sealed class MandelbrotCalculator
         double cx, double cy, int maxIter, int idx, TMap colorMap)
         where TMap : IOrbitAwareColorMap
     {
-        double zr = 0, zi = 0, dr = 1, di = 0;
         colorMap.InitOrbit(out var acc);
+
+        // Bulb early-out: pixel guaranteed in-set, so the orbit accumulator
+        // would be unused (in-set branch below ignores acc). Skip the loop.
+        if (IsInMainCardioidOrBulb(cx, cy))
+        {
+            IterationBuffer[idx] = maxIter;
+            SmoothBuffer[idx] = 0f;
+            DistanceBuffer[idx] = 0f;
+            NormalXBuffer[idx] = 0f;
+            NormalYBuffer[idx] = 0f;
+            TrapBuffer[idx] = 0f;
+            StripeBuffer[idx] = 0f;
+            TiaBuffer[idx] = 0f;
+            FinalZrBuffer[idx] = 0f;
+            FinalZiBuffer[idx] = 0f;
+            FinalDrBuffer[idx] = 0f;
+            FinalDiBuffer[idx] = 0f;
+            ColorBuffer[idx] = colorMap.InSetColor;
+            return;
+        }
+
+        double zr = 0, zi = 0, dr = 1, di = 0;
+        double zrSnap = 0, ziSnap = 0;
+        int snapInterval = PeriodicitySnapshotStart;
+        int snapCounter = 0;
         int iter;
         for (iter = 0; iter < maxIter; iter++)
         {
@@ -946,6 +1076,17 @@ public sealed class MandelbrotCalculator
             double newZr = zr2 - zi2 + cx;
             zi = 2.0 * zr * zi + cy;
             zr = newZr;
+
+            // Periodicity early-out — orbit accumulators are unused for in-set
+            // pixels (see in-set branch below), so terminating the iteration
+            // here doesn't affect the final color, only the runtime.
+            if (zr == zrSnap && zi == ziSnap) { iter = maxIter; break; }
+            if (++snapCounter >= snapInterval)
+            {
+                zrSnap = zr; ziSnap = zi;
+                snapCounter = 0;
+                if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+            }
         }
         IterationBuffer[idx] = iter;
 
@@ -1256,6 +1397,16 @@ public sealed class MandelbrotCalculator
     private void ComputePixelHP<TMap>(DD cx, DD cy, int maxIter, int idx, TMap colorMap)
         where TMap : IColorMap
     {
+        // Bulb early-out — practically only fires for shallow-zoom HP frames
+        // (the parent set's main bulb/cardioid lives at zoom ~1). At deep
+        // zoom the test returns false in O(1), so the overhead is trivial.
+        if (IsInMainCardioidOrBulb(cx.Hi, cy.Hi))
+        {
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorHP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+
         DD zr = DD.Zero, zi = DD.Zero;
         double dr = 1.0, di = 0.0;
         int iterStart = 0;
@@ -1292,6 +1443,10 @@ public sealed class MandelbrotCalculator
             }
         }
 
+        double zrSnapHi = 0, zrSnapLo = 0, ziSnapHi = 0, ziSnapLo = 0;
+        int snapInterval = PeriodicitySnapshotStart;
+        int snapCounter = 0;
+
         int iter;
         for (iter = iterStart; iter < maxIter; iter++)
         {
@@ -1307,6 +1462,21 @@ public sealed class MandelbrotCalculator
             DD newZi = (zr * zi) * 2.0 + cy;
             DD newZr = zr2 - zi2 + cx;
             zr = newZr; zi = newZi;
+
+            // Periodicity check on full DD limbs — at deep zoom the Lo limbs
+            // carry significant cycle-distinguishing bits, so comparing only
+            // Hi could yield false positives in tightly packed mini-set
+            // interiors.
+            if (zr.Hi == zrSnapHi && zr.Lo == zrSnapLo
+                && zi.Hi == ziSnapHi && zi.Lo == ziSnapLo)
+            { iter = maxIter; break; }
+            if (++snapCounter >= snapInterval)
+            {
+                zrSnapHi = zr.Hi; zrSnapLo = zr.Lo;
+                ziSnapHi = zi.Hi; ziSnapLo = zi.Lo;
+                snapCounter = 0;
+                if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+            }
         }
 
         IterationBuffer[idx] = iter;
@@ -1322,6 +1492,15 @@ public sealed class MandelbrotCalculator
     private void ComputePixelQD<TMap>(QD cx, QD cy, int maxIter, int idx, TMap colorMap)
         where TMap : IColorMap
     {
+        // Bulb test — at QD zoom (>1e25) this never fires but the cost is
+        // a single compare-and-branch, negligible compared to QD math.
+        if (IsInMainCardioidOrBulb(cx.X0, cy.X0))
+        {
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorHP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+
         QD zr = QD.Zero, zi = QD.Zero;
         double dr = 1.0, di = 0.0;
         int iterStart = 0;
@@ -1360,6 +1539,10 @@ public sealed class MandelbrotCalculator
             }
         }
 
+        double zrSnap0 = 0, zrSnap1 = 0, ziSnap0 = 0, ziSnap1 = 0;
+        int snapInterval = PeriodicitySnapshotStart;
+        int snapCounter = 0;
+
         int iter;
         for (iter = iterStart; iter < maxIter; iter++)
         {
@@ -1373,6 +1556,20 @@ public sealed class MandelbrotCalculator
             QD newZi = (zr * zi) * 2.0 + cy;
             QD newZr = zr.Square() - zi.Square() + cx;
             zr = newZr; zi = newZi;
+
+            // Periodicity — comparing X0/X1 limbs is sufficient even at QD
+            // zoom because attracting cycles snap to bit-equal X0 bits well
+            // before they could diverge on X2/X3.
+            if (zr.X0 == zrSnap0 && zr.X1 == zrSnap1
+                && zi.X0 == ziSnap0 && zi.X1 == ziSnap1)
+            { iter = maxIter; break; }
+            if (++snapCounter >= snapInterval)
+            {
+                zrSnap0 = zr.X0; zrSnap1 = zr.X1;
+                ziSnap0 = zi.X0; ziSnap1 = zi.X1;
+                snapCounter = 0;
+                if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+            }
         }
 
         IterationBuffer[idx] = iter;
