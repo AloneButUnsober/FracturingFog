@@ -275,7 +275,7 @@ public sealed partial class MainForm : Form
     {
         Icon = new Icon(@".\Resources\FracturingFog.ico");
         Text = $"{_programName} v{_programVersion} - {RendererFactory.ProbeDescription()}";
-        ClientSize = new Size(1165, 728);
+        ClientSize = new Size(1120, 728);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
