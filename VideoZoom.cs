@@ -77,7 +77,120 @@ namespace FracturingFog
         // produces fewer iterations than the region was authored for.
         private int _videoTargetIterations;
 
+        // ── Per-leg histogram-equalization CDF lock ───────────────────────────
+        // Built once at the first frame of a video leg and reused for the rest
+        // of the leg so the palette mapping stops flickering as per-frame image
+        // statistics drift. Rebuilt when MaxIterations shifts by more than 5%
+        // (tier auto-promote) so the lookup domain stays correct.
+        private double[]? _videoLegCdf;
+        private int _videoLegCdfBins;
+        private int _videoLegCdfMaxIter;
+        // Set after a frame's apply observed too many escaped pixels routed
+        // into the last CDF bin — signal that the locked sourceMaxIter is no
+        // longer a valid upper bound for the live smooth-iter distribution
+        // (typical after a deep-zoom tier promote). Forces a rebuild next
+        // frame so banding from saturation can't compound.
+        private bool _videoLegCdfStale;
+        private const double VideoCdfSaturationRebuildFraction = 0.02;
+
+        // ── Per-leg temporal reprojection (TAA-lite) state ────────────────────
+        // _videoPrevColorBuffer is the post-processed color buffer for the
+        // previously rendered frame; reprojection samples this into the new
+        // frame via the complex-plane → pixel transform of the prev frame.
+        // _videoPrevHasFrame guards the first frame of each leg (no prev → no
+        // blend). All fields are reset in BeginVideoLeg / EndVideoLeg.
+        private uint[]? _videoPrevColorBuffer;
+        // Scratch copy of the current frame held during blend so the
+        // neighborhood-clamp read source is the pre-blend buffer even though
+        // we write back into ColorBuffer in place. Reused across frames to
+        // avoid per-frame allocations.
+        private uint[]? _videoBlendScratch;
+        private int _videoPrevWidth;
+        private int _videoPrevHeight;
+        private bool _videoPrevHasFrame;
+        private double _videoPrevCenterX, _videoPrevCenterXLo, _videoPrevCenterX2, _videoPrevCenterX3;
+        private double _videoPrevCenterY, _videoPrevCenterYLo, _videoPrevCenterY2, _videoPrevCenterY3;
+        private double _videoPrevZoom;
+
+        // Blend weight for prev-frame reprojection. 0 = no temporal blend
+        // (current-frame only), ~0.6 = strong smoothing with mild ghosting on
+        // band edges. Set from the Video dialog's "Temporal blend" slider at
+        // launch; the underlying weight is the slider percentage scaled by the
+        // ceiling below.
+        private double _videoTaaAlpha = 0.55 * VideoTaaAlphaCeiling;
+
+        // Maximum alpha the slider can reach at 100 %. Holding below 1.0 keeps
+        // the current-frame contribution non-zero so newly revealed detail
+        // (radial edge of zoom) cannot be entirely overwritten by the prev
+        // frame's blank/extrapolated pixels.
+        private const double VideoTaaAlphaCeiling = 0.85;
+
+        // Zoom-based attenuation envelope for the TAA blend. The bilinear
+        // history sample is an inherent low-pass filter; cascaded across
+        // frames it produces visible blur once the local palette neighborhood
+        // is wide enough that the clamp interval no longer constrains the
+        // result tightly. That regime begins around the perturbation-tier
+        // transitions in the deep zoom range, so the effective alpha is
+        // smoothly ramped to zero between the two thresholds below. The
+        // calc-time anti-shimmer benefit is small at this depth (band edges
+        // dominate single-pixel content), so disabling TAA there trades the
+        // shimmer reduction we no longer need for the blur reduction we do.
+        //
+        // Stored as instance fields (not const) so the FloatingMenu can tune
+        // them live during a video. Defaults match the original const values.
+        private double _videoTaaDeepZoomFadeStart = 1e15;
+        private double _videoTaaDeepZoomFadeEnd   = 1e18;
+
+        // Public setters used by the FloatingMenu test sliders. The video
+        // loop reads these every frame so writes take effect on the next
+        // RenderVideoFrame. Pass log10(zoom) values from the UI side and
+        // convert here so the sliders can be linearly mapped to the human-
+        // readable exponent range.
+        public void SetVideoTaaAlphaPercent(int pct)
+        {
+            if (pct < 0) pct = 0; else if (pct > 100) pct = 100;
+            _videoTaaAlpha = (pct / 100.0) * VideoTaaAlphaCeiling;
+        }
+        public void SetVideoTaaFadeStartLog10(double log10Zoom)
+        {
+            if (log10Zoom < 0.0) log10Zoom = 0.0;
+            else if (log10Zoom > 30.0) log10Zoom = 30.0;
+            _videoTaaDeepZoomFadeStart = Math.Pow(10.0, log10Zoom);
+        }
+        public void SetVideoTaaFadeEndLog10(double log10Zoom)
+        {
+            if (log10Zoom < 0.0) log10Zoom = 0.0;
+            else if (log10Zoom > 30.0) log10Zoom = 30.0;
+            _videoTaaDeepZoomFadeEnd = Math.Pow(10.0, log10Zoom);
+        }
+
+        // Band-edge dither — stable spatial noise added to the smooth-iter
+        // value before palette lookup. Off by default; toggled on per-launch
+        // from the Video dialog. Strength is in iter units (≤ ~1 iter blurs
+        // exactly one band boundary).
+        private bool _videoBandDitherEnabled;
+        private double _videoBandDitherStrength;
+
         private readonly record struct QDCoord(double Hi, double Lo, double X2, double X3);
+
+        // Snapshots the smoothing controls from the Video dialog into the
+        // per-leg knobs read by RenderVideoFrame. Called for both single-shot
+        // and slideshow modes so the user's choices apply uniformly.
+        private void ApplySmoothingSettingsFromDialog(VideoDialog dlg)
+        {
+            int taaPct = dlg.TaaSmoothing;
+            if (taaPct < 0) taaPct = 0;
+            else if (taaPct > 100) taaPct = 100;
+            _videoTaaAlpha = (taaPct / 100.0) * VideoTaaAlphaCeiling;
+
+            _videoBandDitherEnabled = dlg.BandDither;
+            int ditherPct = dlg.BandDitherStrength;
+            if (ditherPct < 0) ditherPct = 0;
+            else if (ditherPct > 100) ditherPct = 100;
+            // Map 0..100 % → 0..1 iteration units. 100 % blurs roughly a
+            // single iteration band; higher values would start to mush detail.
+            _videoBandDitherStrength = ditherPct / 100.0;
+        }
 
         private void OnVideoClick(object? sender, EventArgs e)
         {
@@ -96,6 +209,8 @@ namespace FracturingFog
 
             using var dlg = new VideoDialog(_centerX, _centerY, _zoom);
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            ApplySmoothingSettingsFromDialog(dlg);
 
             if (dlg.IsSlideshow)
             {
@@ -669,6 +784,10 @@ namespace FracturingFog
             // with our per-frame calculations.
             lock (_calcLock) { _calcCts?.Cancel(); }
 
+            // Reset per-leg smoothing state so neither the histogram CDF nor
+            // the TAA prev-frame buffer leaks across legs.
+            BeginVideoLeg();
+
             double logZ0 = Math.Log(Math.Max(z0, 1e-12));
             double logZ1 = Math.Log(Math.Max(z1, 1e-12));
 
@@ -793,14 +912,368 @@ namespace FracturingFog
             await InvokeAsync(() =>
             {
                 if (_disposed || _calculator == null || _renderer == null) return;
-                // Adaptive contrast (histogram equalization) — re-colors the
-                // buffer in place before brightness/contrast/grid overlay and
-                // before MP4/PNG capture, matching the interactive Calculate path.
+                // Adaptive contrast — uses the leg-locked CDF so the histogram
+                // mapping is identical across all frames of the leg. Without
+                // this, per-frame image stats drift as the view zooms and the
+                // palette assignment for the same complex point flickers.
+                // Band-edge dither (when on) folds into the same pass so we
+                // make exactly one recolor sweep across the buffer.
+                double ditherIter = _videoBandDitherEnabled ? _videoBandDitherStrength : 0.0;
                 if (_histogramEq > 0)
-                    _calculator.ApplyHistogramEqualization(_histogramEq / 100.0);
+                {
+                    double strength = _histogramEq / 100.0;
+                    EnsureVideoLegCdf();
+                    if (_videoLegCdf != null)
+                    {
+                        _calculator.ApplyHistogramEqualizationWithCdf(
+                            _videoLegCdf, _videoLegCdfBins, _videoLegCdfMaxIter,
+                            strength, ditherIter,
+                            out long escapedCount, out long saturatedCount);
+                        // If too many escaped pixels are getting clamped to
+                        // the last CDF bin, the lock has gone stale (smooth-
+                        // iter distribution has shifted past sourceMaxIter
+                        // — typical after a deep-zoom tier promote). Mark
+                        // for rebuild on the next frame to stop the
+                        // horizontal banding that saturation produces.
+                        if (escapedCount > 0
+                            && saturatedCount > escapedCount * VideoCdfSaturationRebuildFraction)
+                        {
+                            _videoLegCdfStale = true;
+                        }
+                    }
+                    else
+                    {
+                        // No escaped pixels at first sample — fall back to
+                        // standard apply (also no-ops to RecolorFromBuffers).
+                        _calculator.ApplyHistogramEqualization(strength);
+                        if (ditherIter > 0.0)
+                            _calculator.ApplyBandDitherRecolor(ditherIter);
+                    }
+                }
+                else if (ditherIter > 0.0)
+                {
+                    _calculator.ApplyBandDitherRecolor(ditherIter);
+                }
+
+                // Temporal reprojection blend (TAA-lite). Samples the previous
+                // frame's color buffer at the complex-plane coordinate of each
+                // new-frame pixel and blends in. Hides the per-pixel
+                // recalculation crawl in densely banded regions without
+                // touching the fractal math. Skipped on frame 0 of a leg.
+                BlendWithPrevFrameInPlace();
+
                 UploadProcessedBuffer(_calculator, _renderer);
                 CaptureMp4Frame();
+
+                // Capture this frame for the next iteration's reprojection.
+                StashCurrentFrameAsPrev();
             });
+        }
+
+        // Builds the per-leg histogram-equalization CDF on the first frame and
+        // refreshes it after a >5% MaxIterations shift (tier auto-promote).
+        // No-op when histogram strength is zero — caller guards the call.
+        private void EnsureVideoLegCdf()
+        {
+            if (_calculator == null) return;
+            int curMax = _calculator.MaxIterations;
+            bool needRebuild = _videoLegCdf == null
+                || _videoLegCdfMaxIter <= 0
+                || _videoLegCdfStale
+                || Math.Abs(curMax - _videoLegCdfMaxIter) > _videoLegCdfMaxIter * 0.05;
+            if (!needRebuild) return;
+
+            if (_calculator.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMax))
+            {
+                _videoLegCdf = cdf;
+                _videoLegCdfBins = bins;
+                _videoLegCdfMaxIter = srcMax;
+                _videoLegCdfStale = false;
+            }
+            else
+            {
+                _videoLegCdf = null;
+                _videoLegCdfBins = 0;
+                _videoLegCdfMaxIter = 0;
+                _videoLegCdfStale = false;
+            }
+        }
+
+        // Clears all per-leg smoothing state. Call at the start of each leg so
+        // a fresh CDF gets built on the next first frame and no stale prev-frame
+        // buffer leaks across legs (which would produce a hard ghost between
+        // unrelated views).
+        // Smoothstep falloff from 1.0 at zoom ≤ _videoTaaDeepZoomFadeStart to
+        // 0.0 at zoom ≥ _videoTaaDeepZoomFadeEnd, interpolated in log10(zoom)
+        // space. Used to attenuate the user's TAA alpha so deep-zoom frames
+        // don't accumulate bilinear-LP blur. The smoothstep curve avoids a
+        // hard cutoff that would otherwise be visible as a sudden sharpness
+        // change as the leg crosses the fade band. Instance method so the
+        // thresholds can be tuned live from the FloatingMenu.
+        private double ComputeTaaZoomFalloff(double zoom)
+        {
+            double fadeStart = _videoTaaDeepZoomFadeStart;
+            double fadeEnd   = _videoTaaDeepZoomFadeEnd;
+            if (fadeEnd <= fadeStart) return zoom < fadeStart ? 1.0 : 0.0;
+            if (zoom <= fadeStart) return 1.0;
+            if (zoom >= fadeEnd)   return 0.0;
+            double logStart = Math.Log10(fadeStart);
+            double logEnd   = Math.Log10(fadeEnd);
+            double t = (Math.Log10(zoom) - logStart) / (logEnd - logStart);
+            if (t < 0.0) t = 0.0; else if (t > 1.0) t = 1.0;
+            // smoothstep(1-t) — peaks at t=0, zero at t=1.
+            double s = 1.0 - t;
+            return s * s * (3.0 - 2.0 * s);
+        }
+
+        private void BeginVideoLeg()
+        {
+            _videoLegCdf = null;
+            _videoLegCdfBins = 0;
+            _videoLegCdfMaxIter = 0;
+            _videoLegCdfStale = false;
+            _videoPrevColorBuffer = null;
+            _videoPrevHasFrame = false;
+            _videoPrevWidth = 0;
+            _videoPrevHeight = 0;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Temporal reprojection (TAA-lite)
+        // ─────────────────────────────────────────────────────────────────────
+        //
+        // For each pixel of the current ColorBuffer, derive its complex-plane
+        // coordinate from the *current* view, transform that coordinate back
+        // into pixel space using the *previous* frame's center/zoom, sample
+        // the previous frame bilinearly, and alpha-blend the result back into
+        // ColorBuffer. The per-pixel cost is one transform + one 4-tap fetch.
+        //
+        // Because the calculator already produced a fresh ColorBuffer for the
+        // current view, the blend just *attenuates* per-frame noise (band-edge
+        // crawl) — it doesn't fabricate detail. The first frame of each leg
+        // has no prev → no blend → uses the fresh calculation directly.
+        private void BlendWithPrevFrameInPlace()
+        {
+            if (_calculator == null) return;
+            if (!_videoPrevHasFrame) return;
+            uint[]? prev = _videoPrevColorBuffer;
+            if (prev == null) return;
+
+            int w = _calculator.Width;
+            int h = _calculator.Height;
+            if (w <= 0 || h <= 0) return;
+            // Resolution change between frames invalidates the prev buffer.
+            if (w != _videoPrevWidth || h != _videoPrevHeight) return;
+            var cur = _calculator.ColorBuffer;
+            int total = w * h;
+            if (cur.Length != total || prev.Length != total) return;
+
+            // Snapshot the pre-blend current frame so the neighborhood-clamp
+            // reads see fresh per-pixel samples regardless of raster order
+            // (parallel rows write into cur concurrently with reads from
+            // neighbors). The clamp prevents accumulated bilinear LP from the
+            // prev-frame chain from drifting outside the fresh content — the
+            // standard TAA stability fix.
+            if (_videoBlendScratch == null || _videoBlendScratch.Length != total)
+                _videoBlendScratch = new uint[total];
+            Array.Copy(cur, _videoBlendScratch, total);
+            var src = _videoBlendScratch;
+
+            // Current-view → complex-plane transform. Matches the calculator's
+            // own pixel-grid layout (see MandelbrotCalculator.LastPixelScale).
+            double curScale = (3.5 / Math.Max(w, h)) / _calculator.Zoom;
+            double curCx = _calculator.CenterX + _calculator.CenterXLo
+                         + _calculator.CenterX2 + _calculator.CenterX3;
+            double curCy = _calculator.CenterY + _calculator.CenterYLo
+                         + _calculator.CenterY2 + _calculator.CenterY3;
+            double halfW = (w - 1) * 0.5;
+            double halfH = (h - 1) * 0.5;
+
+            // Previous-view inverse transform: complex point → prev pixel.
+            double prevScale = (3.5 / Math.Max(_videoPrevWidth, _videoPrevHeight)) / _videoPrevZoom;
+            if (prevScale <= 0.0) return;
+            double invPrevScale = 1.0 / prevScale;
+            double prevCx = _videoPrevCenterX + _videoPrevCenterXLo
+                          + _videoPrevCenterX2 + _videoPrevCenterX3;
+            double prevCy = _videoPrevCenterY + _videoPrevCenterYLo
+                          + _videoPrevCenterY2 + _videoPrevCenterY3;
+            double prevHalfW = (_videoPrevWidth - 1) * 0.5;
+            double prevHalfH = (_videoPrevHeight - 1) * 0.5;
+
+            double alpha = _videoTaaAlpha * ComputeTaaZoomFalloff(_calculator.Zoom);
+            if (alpha <= 0.0) return;
+            double oneMinus = 1.0 - alpha;
+            int prevW = _videoPrevWidth;
+            int prevH = _videoPrevHeight;
+            int prevLastX = prevW - 1;
+            int prevLastY = prevH - 1;
+
+            var po = new ParallelOptions();
+            Parallel.For(0, h, po, y =>
+            {
+                double cIm = curCy + (y - halfH) * curScale;
+                int rowBase = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    double cRe = curCx + (x - halfW) * curScale;
+                    // Map complex point to prev-frame pixel coords.
+                    double px = (cRe - prevCx) * invPrevScale + prevHalfW;
+                    double py = (cIm - prevCy) * invPrevScale + prevHalfH;
+                    // Drop pixels that fall outside the prev frame — no signal
+                    // to blend with, keep the fresh sample as-is.
+                    if (px < 0.0 || py < 0.0 || px > prevLastX || py > prevLastY) continue;
+
+                    int x0 = (int)px;
+                    int y0 = (int)py;
+                    int x1 = x0 + 1; if (x1 > prevLastX) x1 = prevLastX;
+                    int y1 = y0 + 1; if (y1 > prevLastY) y1 = prevLastY;
+                    double fx = px - x0;
+                    double fy = py - y0;
+
+                    uint c00 = prev[y0 * prevW + x0];
+                    uint c10 = prev[y0 * prevW + x1];
+                    uint c01 = prev[y1 * prevW + x0];
+                    uint c11 = prev[y1 * prevW + x1];
+
+                    // Bilinear sample of prev frame (BGRA, 8-bit per channel).
+                    double w00 = (1.0 - fx) * (1.0 - fy);
+                    double w10 = fx * (1.0 - fy);
+                    double w01 = (1.0 - fx) * fy;
+                    double w11 = fx * fy;
+
+                    double pb = (c00 & 0xFFu) * w00 + (c10 & 0xFFu) * w10
+                              + (c01 & 0xFFu) * w01 + (c11 & 0xFFu) * w11;
+                    double pg = ((c00 >> 8) & 0xFFu) * w00 + ((c10 >> 8) & 0xFFu) * w10
+                              + ((c01 >> 8) & 0xFFu) * w01 + ((c11 >> 8) & 0xFFu) * w11;
+                    double pr = ((c00 >> 16) & 0xFFu) * w00 + ((c10 >> 16) & 0xFFu) * w10
+                              + ((c01 >> 16) & 0xFFu) * w01 + ((c11 >> 16) & 0xFFu) * w11;
+                    double pa = ((c00 >> 24) & 0xFFu) * w00 + ((c10 >> 24) & 0xFFu) * w10
+                              + ((c01 >> 24) & 0xFFu) * w01 + ((c11 >> 24) & 0xFFu) * w11;
+
+                    int idx = rowBase + x;
+                    uint c = src[idx];
+                    double cb = c & 0xFFu;
+                    double cg = (c >> 8) & 0xFFu;
+                    double cr = (c >> 16) & 0xFFu;
+                    double ca = (c >> 24) & 0xFFu;
+
+                    // Neighborhood clamp: 3×3 channel-wise min/max of the
+                    // current frame around (x, y). Constrains the prev sample
+                    // to the local fresh color range so bilinear LP from the
+                    // reprojection chain cannot drift outside it. This is the
+                    // textbook fix for TAA history ghosting / drift.
+                    int xm = x > 0 ? x - 1 : 0;
+                    int xp = x < w - 1 ? x + 1 : w - 1;
+                    int ym = y > 0 ? y - 1 : 0;
+                    int yp = y < h - 1 ? y + 1 : h - 1;
+                    int rowM = ym * w;
+                    int rowP = yp * w;
+                    uint s00 = src[rowM + xm], s10 = src[rowM + x], s20 = src[rowM + xp];
+                    uint s01 = src[rowBase + xm],                    s21 = src[rowBase + xp];
+                    uint s02 = src[rowP + xm], s12 = src[rowP + x], s22 = src[rowP + xp];
+
+                    uint nbMinB = c & 0xFFu, nbMaxB = nbMinB;
+                    uint nbMinG = (c >> 8) & 0xFFu, nbMaxG = nbMinG;
+                    uint nbMinR = (c >> 16) & 0xFFu, nbMaxR = nbMinR;
+                    uint nbMinA = (c >> 24) & 0xFFu, nbMaxA = nbMinA;
+
+                    // Inlined per-channel min/max accumulation over the
+                    // 8 neighbors. Inlined (no local function) to keep the
+                    // Parallel.For body closure-free and stack-allocated.
+                    uint nbV; uint nbB; uint nbG; uint nbR; uint nbA;
+                    nbV = s00;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+                    nbV = s10;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+                    nbV = s20;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+                    nbV = s01;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+                    nbV = s21;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+                    nbV = s02;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+                    nbV = s12;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+                    nbV = s22;
+                    nbB = nbV & 0xFFu; nbG = (nbV >> 8) & 0xFFu; nbR = (nbV >> 16) & 0xFFu; nbA = (nbV >> 24) & 0xFFu;
+                    if (nbB < nbMinB) nbMinB = nbB; else if (nbB > nbMaxB) nbMaxB = nbB;
+                    if (nbG < nbMinG) nbMinG = nbG; else if (nbG > nbMaxG) nbMaxG = nbG;
+                    if (nbR < nbMinR) nbMinR = nbR; else if (nbR > nbMaxR) nbMaxR = nbR;
+                    if (nbA < nbMinA) nbMinA = nbA; else if (nbA > nbMaxA) nbMaxA = nbA;
+
+                    if (pb < nbMinB) pb = nbMinB; else if (pb > nbMaxB) pb = nbMaxB;
+                    if (pg < nbMinG) pg = nbMinG; else if (pg > nbMaxG) pg = nbMaxG;
+                    if (pr < nbMinR) pr = nbMinR; else if (pr > nbMaxR) pr = nbMaxR;
+                    if (pa < nbMinA) pa = nbMinA; else if (pa > nbMaxA) pa = nbMaxA;
+
+                    uint ob = (uint)(cb * oneMinus + pb * alpha + 0.5);
+                    uint og = (uint)(cg * oneMinus + pg * alpha + 0.5);
+                    uint or = (uint)(cr * oneMinus + pr * alpha + 0.5);
+                    uint oa = (uint)(ca * oneMinus + pa * alpha + 0.5);
+                    if (ob > 255) ob = 255;
+                    if (og > 255) og = 255;
+                    if (or > 255) or = 255;
+                    if (oa > 255) oa = 255;
+                    cur[idx] = (oa << 24) | (or << 16) | (og << 8) | ob;
+                }
+            });
+        }
+
+        // Copies the just-blended ColorBuffer plus its view parameters into
+        // the prev-frame slot for the next iteration's reprojection.
+        private void StashCurrentFrameAsPrev()
+        {
+            if (_calculator == null) return;
+            int w = _calculator.Width;
+            int h = _calculator.Height;
+            int n = w * h;
+            if (n <= 0) return;
+
+            if (_videoPrevColorBuffer == null || _videoPrevColorBuffer.Length != n)
+                _videoPrevColorBuffer = new uint[n];
+            Array.Copy(_calculator.ColorBuffer, _videoPrevColorBuffer, n);
+
+            _videoPrevWidth = w;
+            _videoPrevHeight = h;
+            _videoPrevCenterX   = _calculator.CenterX;
+            _videoPrevCenterXLo = _calculator.CenterXLo;
+            _videoPrevCenterX2  = _calculator.CenterX2;
+            _videoPrevCenterX3  = _calculator.CenterX3;
+            _videoPrevCenterY   = _calculator.CenterY;
+            _videoPrevCenterYLo = _calculator.CenterYLo;
+            _videoPrevCenterY2  = _calculator.CenterY2;
+            _videoPrevCenterY3  = _calculator.CenterY3;
+            _videoPrevZoom      = _calculator.Zoom;
+            _videoPrevHasFrame  = true;
         }
 
         // Feeds the post-processed buffer (what was just sent to the GPU) to
@@ -1165,12 +1638,16 @@ namespace FracturingFog
                 // Snapshot eq strength once so a slider change mid-render does
                 // not split the result across two values.
                 int eqStrengthSnapshot = _histogramEq;
+                bool ditherOn = _videoBandDitherEnabled;
+                double ditherStr = _videoBandDitherStrength;
                 uint[] newLegBuf = await Task.Run(() =>
                 {
                     if (_calculator == null) return Array.Empty<uint>();
                     _calculator.Calculate(ct);
                     if (eqStrengthSnapshot > 0)
                         _calculator.ApplyHistogramEqualization(eqStrengthSnapshot / 100.0);
+                    if (ditherOn && ditherStr > 0.0)
+                        _calculator.ApplyBandDitherRecolor(ditherStr);
                     var copy = new uint[_calculator.ColorBuffer.Length];
                     _calculator.ColorBuffer.CopyTo(copy, 0);
                     return copy;

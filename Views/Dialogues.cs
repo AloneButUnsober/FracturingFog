@@ -373,6 +373,11 @@ namespace FracturingFog.Views
         private readonly CheckBox _chkSaveVideo;
         private readonly CheckBox _chkSaveLossless;
         private readonly ComboBox _losslessEncodeCombo;
+        private readonly TrackBar _tbTaaSmoothing;
+        private readonly Label _lblTaaSmoothingValue;
+        private readonly CheckBox _chkBandDither;
+        private readonly TrackBar _tbBandDitherStrength;
+        private readonly Label _lblBandDitherValue;
 
         // Custom duration bounds (seconds).
         private const double CustomSecsMin = 0.5;
@@ -436,6 +441,29 @@ namespace FracturingFog.Views
         /// </summary>
         public int TargetIterations { get; private set; }
 
+        /// <summary>
+        /// Temporal smoothing strength as a 0..100 percentage. Maps inside the
+        /// video renderer to the prev-frame blend weight; 0 disables the blend
+        /// entirely. Higher values hide per-pixel crawl in densely banded
+        /// regions at the cost of mild motion ghosting.
+        /// </summary>
+        public int TaaSmoothing { get; private set; } = 55;
+
+        /// <summary>
+        /// True when the user enabled band-edge dither for the video. Adds a
+        /// stable spatial noise pattern to the smooth-iteration value before
+        /// palette lookup so band boundaries blur slightly and the per-frame
+        /// shift across them becomes less visible.
+        /// </summary>
+        public bool BandDither { get; private set; }
+
+        /// <summary>
+        /// Band-dither magnitude as a 0..100 percentage. Maps inside the video
+        /// renderer to a smooth-iteration jitter of up to ~1 iteration. Ignored
+        /// when <see cref="BandDither"/> is false.
+        /// </summary>
+        public int BandDitherStrength { get; private set; } = 25;
+
         // Full QD precision limbs for the chosen target. Hi mirrors the textbox
         // contents; Lo/X2/X3 carry the extended-precision tail stored on regions
         // and are needed to land on the correct pixel at deep zoom (~1e15+).
@@ -446,7 +474,7 @@ namespace FracturingFog.Views
         {
             Text = "Video Zoom";
             FormBorderStyle = FormBorderStyle.FixedDialog;
-            ClientSize = new Size(420, 472);
+            ClientSize = new Size(420, 562);
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -703,12 +731,129 @@ namespace FracturingFog.Views
                 "video run. Applies to single-shot Start and to Slideshow.");
             Controls.Add(_chkReverse);
 
+            // ── Video Smoothing (TAA blend + band-edge dither) ────────────────
+            var smoothBox = new GroupBox
+            {
+                Text = "Smoothing (Video Only)",
+                Left = 8,
+                Top = 400,
+                Width = 392,
+                Height = 84,
+                ForeColor = Color.LightGray,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            Controls.Add(smoothBox);
+
+            var lblTaa = new Label
+            {
+                Text = "Temporal blend:",
+                Left = 10,
+                Top = 24,
+                Width = 100,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            smoothBox.Controls.Add(lblTaa);
+
+            _tbTaaSmoothing = new TrackBar
+            {
+                Left = 112,
+                Top = 18,
+                Width = 232,
+                Minimum = 0,
+                Maximum = 100,
+                Value = TaaSmoothing,
+                TickFrequency = 10,
+                TickStyle = TickStyle.None,
+                BackColor = Color.FromArgb(35, 35, 35)
+            };
+            smoothBox.Controls.Add(_tbTaaSmoothing);
+
+            _lblTaaSmoothingValue = new Label
+            {
+                Text = $"{TaaSmoothing}%",
+                Left = 348,
+                Top = 24,
+                Width = 36,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            smoothBox.Controls.Add(_lblTaaSmoothingValue);
+            _tbTaaSmoothing.ValueChanged += (_, _) =>
+                _lblTaaSmoothingValue.Text = $"{_tbTaaSmoothing.Value}%";
+
+            ToolTip ttTaa = new ToolTip();
+            ttTaa.SetToolTip(_tbTaaSmoothing,
+                "Blends each new frame with the previous frame (reprojected to\n" +
+                "match the new view). 0% disables the blend. Higher values mask\n" +
+                "the per-pixel crawl in densely banded regions; very high values\n" +
+                "can produce mild motion ghosting on band edges.");
+
+            _chkBandDither = new CheckBox
+            {
+                Text = "Band dither:",
+                Left = 10,
+                Top = 52,
+                Width = 100,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                Checked = BandDither
+            };
+            smoothBox.Controls.Add(_chkBandDither);
+
+            _tbBandDitherStrength = new TrackBar
+            {
+                Left = 112,
+                Top = 46,
+                Width = 232,
+                Minimum = 0,
+                Maximum = 100,
+                Value = BandDitherStrength,
+                TickFrequency = 10,
+                TickStyle = TickStyle.None,
+                BackColor = Color.FromArgb(35, 35, 35),
+                Enabled = false
+            };
+            smoothBox.Controls.Add(_tbBandDitherStrength);
+
+            _lblBandDitherValue = new Label
+            {
+                Text = $"{BandDitherStrength}%",
+                Left = 348,
+                Top = 52,
+                Width = 36,
+                ForeColor = lblColor,
+                Font = lblFont,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            smoothBox.Controls.Add(_lblBandDitherValue);
+
+            _chkBandDither.CheckedChanged += (_, _) =>
+                _tbBandDitherStrength.Enabled = _chkBandDither.Checked;
+            _tbBandDitherStrength.ValueChanged += (_, _) =>
+                _lblBandDitherValue.Text = $"{_tbBandDitherStrength.Value}%";
+
+            ToolTip ttDither = new ToolTip();
+            ttDither.SetToolTip(_chkBandDither,
+                "Adds a fixed spatial noise pattern to the smooth-iteration\n" +
+                "value before palette lookup. Blurs band boundaries slightly so\n" +
+                "the per-frame shift across them becomes less visible. Pattern\n" +
+                "is stable per pixel, so it does not introduce new temporal\n" +
+                "noise.");
+
             // ── Slideshow / OK / Cancel ───────────────────────────────────────
             var slideshow = new Button
             {
                 Text = "Slideshow",
                 Left = 12,
-                Top = 428,
+                Top = 504,
                 Width = 96,
                 Height = 28,
                 BackColor = Color.FromArgb(55, 40, 70),
@@ -740,6 +885,9 @@ namespace FracturingFog.Views
                 }
                 IsConstantRate = _chkConstantRate.Checked;
                 IsReverse = _chkReverse.Checked;
+                TaaSmoothing = _tbTaaSmoothing.Value;
+                BandDither = _chkBandDither.Checked;
+                BandDitherStrength = _tbBandDitherStrength.Value;
                 IsSlideshow = true;
                 DialogResult = DialogResult.OK;
                 Close();
@@ -754,7 +902,7 @@ namespace FracturingFog.Views
                 Text = "Start",
                 DialogResult = DialogResult.OK,
                 Left = 244,
-                Top = 428,
+                Top = 504,
                 Width = 76,
                 Height = 28,
                 BackColor = Color.FromArgb(60, 80, 60),
@@ -766,7 +914,7 @@ namespace FracturingFog.Views
                 Text = "Cancel",
                 DialogResult = DialogResult.Cancel,
                 Left = 328,
-                Top = 428,
+                Top = 504,
                 Width = 76,
                 Height = 28,
                 BackColor = Color.FromArgb(60, 60, 60),
@@ -778,6 +926,9 @@ namespace FracturingFog.Views
                 IsSaveVideo = _chkSaveVideo.Checked;
                 IsSaveLossless = _chkSaveLossless.Checked;
                 IsReverse = _chkReverse.Checked;
+                TaaSmoothing = _tbTaaSmoothing.Value;
+                BandDither = _chkBandDither.Checked;
+                BandDitherStrength = _tbBandDitherStrength.Value;
                 if (IsSaveLossless && _losslessEncodeCombo.Enabled)
                 {
                     LosslessEncode = _losslessEncodeCombo.SelectedIndex switch
