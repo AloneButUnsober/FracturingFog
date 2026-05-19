@@ -28,7 +28,7 @@ using System.Windows.Forms;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 
-namespace FracturingFog;
+namespace FracturingFog.Views;
 
 /// <summary>
 /// Miniature Mandelbrot overview panel.  Configure() must be called once
