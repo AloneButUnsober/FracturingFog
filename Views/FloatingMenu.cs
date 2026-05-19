@@ -55,6 +55,7 @@ namespace FracturingFog.Views
         private readonly Button _saveViewButton;
         private readonly Button _delRegionButton;
         private readonly Button _menuButton;
+        private readonly Button _closeProgramButton;
         private readonly CheckBox _checkBoxShowCoordPanel;
         private readonly CheckBox _checkBoxShowFooterPanel;
         private readonly CheckBox _checkBoxShowGrid;
@@ -199,7 +200,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(370, 644);
+            ClientSize = new System.Drawing.Size(370, 690);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -694,6 +695,24 @@ namespace FracturingFog.Views
             _themeBox.Controls.Add(_loadColorThemesButton);
 
             #endregion Color Theme Import/Export buttons
+
+            #region Close Program button
+            int closeProgBtnWidth = 130;
+            int closeProgBtnTop = _themeBox.Top + _themeBox.Height + 12;
+            _closeProgramButton = MakeBtn(
+                "Close Program",
+                closeProgBtnWidth,
+                (ClientSize.Width - closeProgBtnWidth) / 2,
+                closeProgBtnTop,
+                "Exit the program");
+            _closeProgramButton.Height = 28;
+            _closeProgramButton.BackColor = Color.FromArgb(80, 35, 35);
+            _closeProgramButton.FlatAppearance.BorderColor = Color.FromArgb(140, 60, 60);
+            _closeProgramButton.ForeColor = Color.FromArgb(240, 220, 220);
+            _closeProgramButton.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            _closeProgramButton.Click += (s, e) => OnCloseProgramButtonClick(s, e);
+            _coordPanel.Controls.Add(_closeProgramButton);
+            #endregion Close Program button
             #endregion Coordinate / Navigate panel
 
             Controls.Add(_coordPanel);
@@ -757,6 +776,9 @@ namespace FracturingFog.Views
 
         private void OnSlideshowButtonClick(object? s, EventArgs e) =>
              OnSlideshowClick?.Invoke(s, e);
+
+        private void OnCloseProgramButtonClick(object? s, EventArgs e) =>
+            Application.Exit();
 
         #endregion Buttons
 
