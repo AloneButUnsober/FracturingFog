@@ -920,6 +920,8 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnTaaAlphaSlide     += (s, e, l) => SetVideoTaaAlphaPercent(_floatingMenu.TaaAlphaValue);
         _floatingMenu.OnTaaFadeStartSlide += (s, e, l) => SetVideoTaaFadeStartLog10(_floatingMenu.TaaFadeStartLog10);
         _floatingMenu.OnTaaFadeEndSlide   += (s, e, l) => SetVideoTaaFadeEndLog10(_floatingMenu.TaaFadeEndLog10);
+        _floatingMenu.OnChangeDimensions += (s,e) => OnChangeDimensions(s,e);
+
 
         UpdateCoordBoxes();
         if (!_regionCombo.IsDisposed) _floatingMenu.RegionName = _currentRegionName;
@@ -1602,6 +1604,17 @@ public sealed partial class MainForm : Form
         string summary = added == 1 ? "1 region imported" : $"{added} regions imported";
         if (renamed > 0) summary += $" ({renamed} renamed with '-imp')";
         SetStatus(summary + $"  ←  {Path.GetFileName(dlg.FileName)}");
+    }
+
+    private void OnChangeDimensions(object? sender, EventArgs e)
+    {
+        if (sender != null)
+        {
+            Resolution? res = ResolutionDimensions.Resolutions.Where(r => r.Name == ((ComboBox)sender).Text).FirstOrDefault<Resolution>();
+            if (res == null) return;
+            Size = new Size(res.Width, res.Height);
+            CenterToParent();
+        }
     }
 
     protected override void Dispose(bool disposing)
