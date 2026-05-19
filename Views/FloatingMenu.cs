@@ -71,6 +71,13 @@ namespace FracturingFog.Views
         private Label? _contrastLabel;
         private Label? _histogramEqLabel;
 
+        // Per-slider "lock" checkboxes — when checked, theme-driven defaults
+        // (Brightness/Contrast/Adaptive from ColorThemeData) are ignored on
+        // theme switch and the current slider position is preserved.
+        private CheckBox? _chkLockBrightness;
+        private CheckBox? _chkLockContrast;
+        private CheckBox? _chkLockAdaptive;
+
         // Video TAA test sliders — live tuning of temporal blend strength
         // and the deep-zoom fade thresholds while a video zoom is running.
         private SplitContainer _taaContainer;
@@ -656,6 +663,10 @@ namespace FracturingFog.Views
 
             _coordPanel.Controls.Add(_brightnessSlider);
 
+            _chkLockBrightness = MakeLockBox(_brightnessSlider.Right + 4, sliderTop + 2,
+                "Lock brightness — ignore theme defaults on theme switch");
+            _coordPanel.Controls.Add(_chkLockBrightness);
+
             sliderLeft = 8;
             sliderTop += 44;
             _contrastLabel = new Label
@@ -692,6 +703,10 @@ namespace FracturingFog.Views
                 "Adjust contrast of the rendered fractal  (−100 to +100, default 0)");
             _contrastSlider.ValueChanged += (s, e) => OnContrastSlider(s, e, _contrastLabel);
             _coordPanel.Controls.Add(_contrastSlider);
+
+            _chkLockContrast = MakeLockBox(_contrastSlider.Right + 4, sliderTop + 2,
+                "Lock contrast — ignore theme defaults on theme switch");
+            _coordPanel.Controls.Add(_chkLockContrast);
 
             sliderLeft = 8;
             sliderTop += 44;
@@ -731,6 +746,10 @@ namespace FracturingFog.Views
             _histogramEqSlider.ValueChanged += (s, e) => OnHistogramEqSlider(s, e, _histogramEqLabel);
             _coordPanel.Controls.Add(_histogramEqSlider);
 
+            _chkLockAdaptive = MakeLockBox(_histogramEqSlider.Right + 4, sliderTop + 2,
+                "Lock adaptive contrast — ignore theme defaults on theme switch");
+            _coordPanel.Controls.Add(_chkLockAdaptive);
+
             //sliderLeft = 8;
             //sliderTop += _histogramEqSlider.Height + 2;
             //Button taaContainerButton = new Button
@@ -742,7 +761,7 @@ namespace FracturingFog.Views
             //    Height = 20
             //};
 
-            
+
             //_taaContainer = new SplitContainer
             //{
             //    Top = sliderTop,
@@ -1233,9 +1252,106 @@ namespace FracturingFog.Views
             OnTaaFadeEndSlide?.DynamicInvoke(s, e, l);
         }
 
+        /// <summary>
+        /// Silently selects the named theme in the floating menu's combo
+        /// without firing OnColorThemeChanged. Used by MainForm to mirror
+        /// selections made elsewhere (toolbar combo or editor) into the
+        /// floating menu without re-entering the change handler.
+        /// </summary>
+        public void SetThemeSilent(string name)
+        {
+            if (_colorThemeCombo == null || _colorThemeCombo.IsDisposed) return;
+            _colorThemeCombo.SelectedIndexChanged -= OnColorThemeSelectionClick;
+            try
+            {
+                int idx = _colorThemeCombo.FindStringExact(name ?? string.Empty);
+                if (idx >= 0 && _colorThemeCombo.SelectedIndex != idx)
+                    _colorThemeCombo.SelectedIndex = idx;
+            }
+            finally
+            {
+                _colorThemeCombo.SelectedIndexChanged += OnColorThemeSelectionClick;
+            }
+        }
+
+        /// <summary>
+        /// Silently selects the named region without firing
+        /// OnRegionComboChanged. Mirrors selections from the toolbar combo or
+        /// the Color Theme Editor.
+        /// </summary>
+        public void SetRegionSilent(string name)
+        {
+            if (_regionCombo == null || _regionCombo.IsDisposed) return;
+            _regionCombo.SelectedIndexChanged -= OnRegionComboSelectionChanged;
+            try
+            {
+                int idx = _regionCombo.FindStringExact(name ?? string.Empty);
+                if (idx >= 0 && _regionCombo.SelectedIndex != idx)
+                    _regionCombo.SelectedIndex = idx;
+            }
+            finally
+            {
+                _regionCombo.SelectedIndexChanged += OnRegionComboSelectionChanged;
+            }
+        }
+
         public int TaaAlphaValue => _taaAlphaSlider?.Value ?? 55;
         public int TaaFadeStartLog10 => _taaFadeStartSlider?.Value ?? 15;
         public int TaaFadeEndLog10 => _taaFadeEndSlider?.Value ?? 18;
+
+        // ── Post-FX lock state + setters (used by theme-switch snap) ──────
+        public bool BrightnessLocked => _chkLockBrightness?.Checked ?? false;
+        public bool ContrastLocked => _chkLockContrast?.Checked ?? false;
+        public bool AdaptiveLocked => _chkLockAdaptive?.Checked ?? false;
+
+        public int BrightnessValue => _brightnessSlider?.Value ?? 0;
+        public int ContrastValue => _contrastSlider?.Value ?? 0;
+        public int AdaptiveValue => _histogramEqSlider?.Value ?? 0;
+
+        /// <summary>
+        /// Sets the brightness slider position; fires its ValueChanged so the
+        /// existing OnAdjustBrightness pipeline runs (label update + renderer).
+        /// Clamps to slider range.
+        /// </summary>
+        public void SetBrightness(int value)
+        {
+            if (_brightnessSlider == null) return;
+            int v = Math.Clamp(value, _brightnessSlider.Minimum, _brightnessSlider.Maximum);
+            if (_brightnessSlider.Value != v) _brightnessSlider.Value = v;
+        }
+
+        public void SetContrast(int value)
+        {
+            if (_contrastSlider == null) return;
+            int v = Math.Clamp(value, _contrastSlider.Minimum, _contrastSlider.Maximum);
+            if (_contrastSlider.Value != v) _contrastSlider.Value = v;
+        }
+
+        public void SetAdaptive(int value)
+        {
+            if (_histogramEqSlider == null) return;
+            int v = Math.Clamp(value, _histogramEqSlider.Minimum, _histogramEqSlider.Maximum);
+            if (_histogramEqSlider.Value != v) _histogramEqSlider.Value = v;
+        }
+
+        private CheckBox MakeLockBox(int left, int top, string tooltip)
+        {
+            var cb = new CheckBox
+            {
+                Left = left,
+                Top = top,
+                Width = 22,
+                Height = 18,
+                Text = "",
+                AutoSize = false,
+                ForeColor = Color.FromArgb(200, 200, 120),
+                BackColor = Color.Transparent,
+                Appearance = Appearance.Normal,
+                Checked = false,
+            };
+            _toolTip.SetToolTip(cb, tooltip);
+            return cb;
+        }
 
         #endregion Private Methods
 

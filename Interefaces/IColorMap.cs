@@ -201,6 +201,25 @@ namespace FracturingFog.Interefaces
         double DisplayMaxRecommendedZoom => double.PositiveInfinity;
     }
 
+    /// <summary>
+    /// Optional metadata carried by a runtime IColorMap instance: default
+    /// post-FX values the theme would like applied on selection. A null field
+    /// means "no opinion" (host slider untouched / reset to neutral). The
+    /// scale matches the FloatingMenu sliders verbatim (no rescale needed).
+    /// Implemented by data-driven user themes; built-in themes return null.
+    /// </summary>
+    public interface IThemePostFx
+    {
+        /// <summary>Default brightness in [-100, 100]; null = no opinion.</summary>
+        int? ThemeBrightness { get; }
+
+        /// <summary>Default contrast in [-100, 100]; null = no opinion.</summary>
+        int? ThemeContrast { get; }
+
+        /// <summary>Default adaptive contrast (histogram eq) in [0, 100]; null = no opinion.</summary>
+        int? ThemeAdaptive { get; }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Post-process extension
     //

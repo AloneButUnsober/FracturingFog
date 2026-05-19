@@ -45,13 +45,28 @@ namespace FracturingFog.Views
         [DllImport("User32.dll")] private static extern bool ReleaseCapture();
         [DllImport("User32.dll")] private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
 
-        public event Action<IColorMap>? OnPreviewMapChanged;
+        public event Action<ColorThemeData>? OnPreviewThemeChanged;
         public event Action<string>? OnThemeSavedToLibrary;
         public event Action<string>? OnRegionSelected;
+
+        /// <summary>
+        /// Fires when the user picks a theme from the editor's own theme
+        /// combo. MainForm uses this to mirror the selection into its toolbar
+        /// and FloatingMenu combos, making the editor the authoritative
+        /// source of theme-name changes while it is open.
+        /// </summary>
+        public event Action<string>? OnEditorThemeSelected;
+
+        /// <summary>
+        /// Fires when the user clicks the "Help" button. MainForm shows the
+        /// FloatingHelp window and selects its Color Theme Editor tab.
+        /// </summary>
+        public event EventHandler? OnHelpClick;
 
         private readonly Panel _root;
         private readonly Label _titleLabel;
         private readonly Button _closeButton;
+        private readonly Button _helpButton;
 
         // Target
         private readonly ComboBox _regionCombo;
@@ -98,6 +113,11 @@ namespace FracturingFog.Views
         private readonly CheckBox _chkInSetOverride;
         private readonly NumericUpDown _txInSetR, _txInSetG, _txInSetB;
         private readonly Panel _inSetSwatch;
+
+        // Post-FX (Brightness / Contrast / Adaptive)
+        private readonly GroupBox _postFxBox;
+        private readonly CheckBox _chkUseBrightness, _chkUseContrast, _chkUseAdaptive;
+        private readonly NumericUpDown _txBrightness, _txContrast, _txAdaptive;
 
         // Bottom actions
         private readonly CheckBox _chkLivePreview;
@@ -154,6 +174,22 @@ namespace FracturingFog.Views
             _closeButton.FlatAppearance.BorderSize = 0;
             _closeButton.Click += (s, e) => Close();
             _root.Controls.Add(_closeButton);
+
+            _helpButton = new Button
+            {
+                Text = "?",
+                Width = 26,
+                Height = 24,
+                Top = 4,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 60, 100),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+            };
+            _helpButton.FlatAppearance.BorderColor = Color.FromArgb(80, 120, 180);
+            _helpButton.Click += (s, e) => OnHelpClick?.Invoke(this, EventArgs.Empty);
+            _root.Controls.Add(_helpButton);
 
             int leftY = 34;
             int rightY = 34;
@@ -337,7 +373,45 @@ namespace FracturingFog.Views
             _inSetBox.Controls.Add(_txInSetG);
             _inSetBox.Controls.Add(_txInSetB);
 
-            leftY = _inSetBox.Bottom + 8;
+            leftY = _inSetBox.Bottom + 6;
+
+            // ── Post-FX defaults ────────────────────────────────────────────
+            // Theme can record default Brightness/Contrast/Adaptive values.
+            // The "Set by theme" checkbox toggles whether the corresponding
+            // field is persisted; when unchecked, the field is null and the
+            // host slider stays at whatever the user left it on theme switch.
+            _postFxBox = MakeGroup("Post-FX Defaults", LeftX, leftY, ColWidth, 112);
+            _root.Controls.Add(_postFxBox);
+
+            const int postFxNumericLeft = 240;
+
+            _chkUseBrightness = MakePostFxCheck("Brightness", 22);
+            _postFxBox.Controls.Add(_chkUseBrightness);
+            _txBrightness = MakeNumeric(postFxNumericLeft, 20, -100M, 100M, 0M, 0);
+            _txBrightness.Increment = 1;
+            _txBrightness.ValueChanged += (s, e) => OnFieldChanged();
+            _postFxBox.Controls.Add(_txBrightness);
+
+            _chkUseContrast = MakePostFxCheck("Contrast", 50);
+            _postFxBox.Controls.Add(_chkUseContrast);
+            _txContrast = MakeNumeric(postFxNumericLeft, 48, -100M, 100M, 0M, 0);
+            _txContrast.Increment = 1;
+            _txContrast.ValueChanged += (s, e) => OnFieldChanged();
+            _postFxBox.Controls.Add(_txContrast);
+
+            _chkUseAdaptive = MakePostFxCheck("Adaptive", 78);
+            _postFxBox.Controls.Add(_chkUseAdaptive);
+            _txAdaptive = MakeNumeric(postFxNumericLeft, 76, 0M, 100M, 0M, 0);
+            _txAdaptive.Increment = 1;
+            _txAdaptive.ValueChanged += (s, e) => OnFieldChanged();
+            _postFxBox.Controls.Add(_txAdaptive);
+
+            _chkUseBrightness.CheckedChanged += (s, e) => { _txBrightness.Enabled = _chkUseBrightness.Checked; OnFieldChanged(); };
+            _chkUseContrast.CheckedChanged += (s, e) => { _txContrast.Enabled = _chkUseContrast.Checked; OnFieldChanged(); };
+            _chkUseAdaptive.CheckedChanged += (s, e) => { _txAdaptive.Enabled = _chkUseAdaptive.Checked; OnFieldChanged(); };
+            _txBrightness.Enabled = _txContrast.Enabled = _txAdaptive.Enabled = false;
+
+            leftY = _postFxBox.Bottom + 8;
 
             // ── Actions row (left column) ───────────────────────────────────
             _chkLivePreview = new CheckBox
@@ -472,6 +546,7 @@ namespace FracturingFog.Views
             int finalHeight = Math.Max(leftEnd, rightY) + 12;
             ClientSize = new Size(FormWidth, finalHeight);
             _closeButton.Left = ClientSize.Width - _closeButton.Width - 4;
+            _helpButton.Left = _closeButton.Left - _helpButton.Width - 4;
 
             if (parent != null)
             {
@@ -620,6 +695,20 @@ namespace FracturingFog.Views
             };
         }
 
+        private static CheckBox MakePostFxCheck(string text, int top)
+        {
+            return new CheckBox
+            {
+                Text = text + " — set by theme",
+                Left = 12,
+                Top = top + 2,
+                AutoSize = true,
+                ForeColor = Color.FromArgb(180, 180, 180),
+                BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 8.5f),
+            };
+        }
+
         private static RadioButton MakeRadio(string text, int left, int top)
         {
             return new RadioButton
@@ -675,6 +764,10 @@ namespace FracturingFog.Views
             // and regardless of the live-preview checkbox state, so that the
             // user sees the chosen theme without having to hit Apply.
             PushPreviewToMain();
+            // Tell the host so MainForm + FloatingMenu combos mirror this
+            // pick. Editor combos are *not* updated from the other direction
+            // — once the editor is open it owns the selection until close.
+            OnEditorThemeSelected?.Invoke(name);
         }
 
         // ── Load / Save ─────────────────────────────────────────────────────
@@ -794,6 +887,18 @@ namespace FracturingFog.Views
                     _inSetSwatch.BackColor = Color.Black;
                 }
 
+                _chkUseBrightness.Checked = data.Brightness.HasValue;
+                _txBrightness.Enabled = _chkUseBrightness.Checked;
+                _txBrightness.Value = ClampDec(data.Brightness ?? 0, _txBrightness.Minimum, _txBrightness.Maximum);
+
+                _chkUseContrast.Checked = data.Contrast.HasValue;
+                _txContrast.Enabled = _chkUseContrast.Checked;
+                _txContrast.Value = ClampDec(data.Contrast ?? 0, _txContrast.Minimum, _txContrast.Maximum);
+
+                _chkUseAdaptive.Checked = data.Adaptive.HasValue;
+                _txAdaptive.Enabled = _chkUseAdaptive.Checked;
+                _txAdaptive.Value = ClampDec(data.Adaptive ?? 0, _txAdaptive.Minimum, _txAdaptive.Maximum);
+
                 UpdateVisibleKindSections();
             }
             finally
@@ -827,6 +932,9 @@ namespace FracturingFog.Views
                 InSetColor = _chkInSetOverride.Checked
                     ? new InSetColorData((byte)_txInSetR.Value, (byte)_txInSetG.Value, (byte)_txInSetB.Value)
                     : null,
+                Brightness = _chkUseBrightness.Checked ? (int?)(int)_txBrightness.Value : null,
+                Contrast = _chkUseContrast.Checked ? (int?)(int)_txContrast.Value : null,
+                Adaptive = _chkUseAdaptive.Checked ? (int?)(int)_txAdaptive.Value : null,
             };
             return data;
         }
@@ -862,9 +970,11 @@ namespace FracturingFog.Views
         {
             var data = BuildData();
             if (data.Stops == null || data.Stops.Count < 2) return;
+            // Validate the map can be built before notifying the host so we
+            // don't push a half-formed theme.
             var map = DataDrivenColorThemes.Create(data);
             if (map == null) return;
-            OnPreviewMapChanged?.Invoke(map);
+            OnPreviewThemeChanged?.Invoke(data);
         }
 
         private void SaveToLibrary()

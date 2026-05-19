@@ -196,5 +196,21 @@ namespace FracturingFog.Models
         /// Optional alternative colour for in-set pixels.  Null = default black.
         /// </summary>
         public InSetColorData? InSetColor { get; set; }
+
+        // ── Post-FX defaults (optional) ───────────────────────────────────────
+        // Nullable on purpose: null = "theme has no opinion, leave slider alone".
+        // A non-null value tells the host to snap its post-FX slider to this
+        // value when the theme is selected (unless the user has locked that
+        // slider). Stored as the same integer scale as the FloatingMenu
+        // sliders so JSON stays human-readable.
+
+        /// <summary>Brightness offset in [-100, 100]; null = no default.</summary>
+        public int? Brightness { get; set; }
+
+        /// <summary>Contrast offset in [-100, 100]; null = no default.</summary>
+        public int? Contrast { get; set; }
+
+        /// <summary>Adaptive contrast (histogram eq) strength in [0, 100]; null = no default.</summary>
+        public int? Adaptive { get; set; }
     }
 }
