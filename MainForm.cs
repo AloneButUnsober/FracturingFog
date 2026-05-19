@@ -2447,7 +2447,13 @@ public sealed partial class MainForm : Form
                 _floatingMenu.RegionName = _currentRegionName;
                 _floatingMenu.ColorTheme = _currentColorThemeName; ;
                 _floatingMenu.Quality = _currentQualityName;
+                _floatingMenu.SetCurrentZoom(_zoom);
             }
+
+            // Push current zoom into the toolbar's color theme combo so themes
+            // exceeding their MaxRecommendedZoom render dimmed + strikethrough.
+            if (_colorThemeCombo is Views.ColorComboBox toolbarCombo)
+                toolbarCombo.CurrentZoom = _zoom;
         }
         finally { _suppressCoordUpdate = false; }
     }

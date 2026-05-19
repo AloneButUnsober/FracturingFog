@@ -910,6 +910,17 @@ namespace FracturingFog.Views
                 _txIter.Text = Iter;
         }
 
+        /// <summary>
+        /// Pushes the current view zoom into the color theme combo so themes
+        /// whose <see cref="Models.ColorPalette.GetStaticMaxZoom"/> is below
+        /// it are rendered dimmed + strikethrough. Items remain selectable.
+        /// </summary>
+        public void SetCurrentZoom(double zoom)
+        {
+            if (_colorThemeCombo is ColorComboBox ccb)
+                ccb.CurrentZoom = zoom;
+        }
+
         #endregion Public Methods
     }
 }

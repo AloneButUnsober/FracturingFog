@@ -44,6 +44,29 @@ namespace FracturingFog.Views
 
     public class ColorComboBox : ComboBox
     {
+        private double _currentZoom;
+
+        /// <summary>
+        /// Current view zoom. Items whose theme's
+        /// <see cref="Models.ColorPalette.GetStaticMaxZoom"/> is below this
+        /// value are rendered dimmed with a strikethrough line to indicate
+        /// they are not recommended for the current depth. Items remain
+        /// selectable — this is purely an advisory visual cue.
+        /// </summary>
+        [System.ComponentModel.Browsable(false)]
+        [System.ComponentModel.DesignerSerializationVisibility(
+            System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public double CurrentZoom
+        {
+            get => _currentZoom;
+            set
+            {
+                if (_currentZoom == value) return;
+                _currentZoom = value;
+                Invalidate();
+            }
+        }
+
         public ColorComboBox()
         {
             DrawMode = DrawMode.OwnerDrawFixed;
@@ -66,8 +89,32 @@ namespace FracturingFog.Views
             e.Graphics.FillRectangle(sb, swatchRect);
             e.Graphics.DrawRectangle(Pens.DimGray, swatchRect);
 
-            var textBrush = (e.State & DrawItemState.Selected) != 0 ? Brushes.White : Brushes.LightGray;
-            e.Graphics.DrawString(text, Font, textBrush, swatchRect.Right + 4, e.Bounds.Y + 2);
+            bool selected = (e.State & DrawItemState.Selected) != 0;
+            bool incompatible = _currentZoom > 0
+                             && _currentZoom > Models.ColorPalette.GetStaticMaxZoom(map);
+
+            Color textColor;
+            if (incompatible)
+                textColor = selected ? Color.FromArgb(180, 180, 180) : Color.FromArgb(110, 110, 110);
+            else
+                textColor = selected ? Color.White : Color.LightGray;
+
+            using var textBrush = new SolidBrush(textColor);
+            int textX = swatchRect.Right + 4;
+            int textY = e.Bounds.Y + 2;
+            e.Graphics.DrawString(text, Font, textBrush, textX, textY);
+
+            if (incompatible)
+            {
+                // Strikethrough line through the text — same colour as the
+                // dimmed text so the cue reads as "deprecated for this zoom"
+                // without looking like a selection or error indicator.
+                SizeF sz = e.Graphics.MeasureString(text, Font);
+                int lineY = textY + (int)(sz.Height / 2);
+                using var strikePen = new Pen(textColor, 1f);
+                e.Graphics.DrawLine(strikePen, textX, lineY, textX + (int)sz.Width, lineY);
+            }
+
             e.DrawFocusRectangle();
         }
         protected override void OnPaintBackground(PaintEventArgs pevent)
