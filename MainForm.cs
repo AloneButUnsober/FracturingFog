@@ -55,6 +55,9 @@ public sealed partial class MainForm : Form
     // Floating Menu form
     FloatingMenu _floatingMenu;
 
+    // Floating Help form (lazy)
+    FloatingHelp? _floatingHelp;
+
     // UI: top toolbar
     private readonly Panel _toolbar;
     private readonly Button _resetButton;
@@ -619,6 +622,7 @@ public sealed partial class MainForm : Form
         var miniMapItem = new ToolStripMenuItem("Mini Map", null, (s, e) => ToggleMiniMap());
         var miniDepthItem = new ToolStripMenuItem("Mini Depth", null, (s, e) => ToggleMiniDepth());
         var systemInfoItem = new ToolStripMenuItem("System Info…", null, (s, e) => ShowSystemInfoDialog());
+        var helpItem = new ToolStripMenuItem("Help…", null, (s, e) => OnShowHelpClick());
         var saveRegionItem = new ToolStripMenuItem("Save Current Region", null, (s, e) => OnSaveViewClick(s, e));
         var resetViewItem = new ToolStripMenuItem("Reset View", null, (s, e) => OnResetClick(s, e));
         var saveImageItem = new ToolStripMenuItem("Save Image…", null, (s, e) => OnScreenshotClick(s, e));
@@ -689,6 +693,8 @@ public sealed partial class MainForm : Form
         contextMenu.Items.Add(miniMapItem);
         contextMenu.Items.Add(miniDepthItem);
         contextMenu.Items.Add(systemInfoItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add(helpItem);
         _renderPanel.ContextMenuStrip = contextMenu;
         #endregion Context menu for render panel
 
@@ -795,6 +801,7 @@ public sealed partial class MainForm : Form
         Application.Idle -= OnApplicationIdle;
 
         _floatingMenu?.Close();
+        _floatingHelp?.Close();
         _panStopTimer.Stop();
         _panStopTimer.Dispose();
         StopSlideshow();
@@ -914,6 +921,25 @@ public sealed partial class MainForm : Form
             _showFloatingMenu = false;
             _toolbar.Visible = !_showFloatingMenu;
         }
+    }
+
+    private void OnShowHelpClick()
+    {
+        if (_floatingHelp == null || _floatingHelp.IsDisposed)
+        {
+            _floatingHelp = new FloatingHelp(
+                this,
+                _programName,
+                _programVersion,
+                rendererDescriptionProvider: () => _renderer?.RendererDescription ?? "none",
+                calculatorInfoProvider: () => _calculator == null
+                    ? null
+                    : (_calculator.Width, _calculator.Height,
+                       _calculator.MaxIterations, _calculator.IsHighPrecisionActive));
+            _floatingHelp.OnCloseHelpClick += (s, e) => _floatingHelp?.Hide();
+        }
+        _floatingHelp.Show();
+        _floatingHelp.BringToFront();
     }
 
     private void OnLoadColorThemesClick(object? sender, EventArgs e)
@@ -2029,10 +2055,7 @@ public sealed partial class MainForm : Form
     /// </summary>
     private bool AdaptQualityForZoom(double targetZoom)
     {
-        QualityPreset? fit = null;
-        foreach (var p in QualityPreset.All)
-            if (p.ZoomMax >= targetZoom) { fit = p; break; }
-        fit ??= QualityPreset.Extreme;
+        QualityPreset fit = NaturalQualityForZoom(targetZoom);
         if (fit.Tier == _quality.Tier) return false;
 
         _quality = fit;
@@ -2044,6 +2067,43 @@ public sealed partial class MainForm : Form
         if (_floatingMenu != null && !_floatingMenu.IsDisposed)
             _floatingMenu.Quality = _quality.Name;
         return true;
+    }
+
+    /// <summary>
+    /// Returns the smallest tier whose <c>ZoomMax</c> accommodates
+    /// <paramref name="z"/>.  Falls back to <see cref="QualityPreset.Extreme"/>.
+    /// </summary>
+    private static QualityPreset NaturalQualityForZoom(double z)
+    {
+        foreach (var p in QualityPreset.All)
+            if (p.ZoomMax >= z) return p;
+        return QualityPreset.Extreme;
+    }
+
+    /// <summary>
+    /// Wheel-zoom variant of <see cref="AdaptQualityForZoom"/> that respects
+    /// a manually-chosen tier.  Adjusts ONLY when the wheel actually crosses
+    /// a tier boundary — i.e. the natural tier for the post-wheel zoom
+    /// differs from the natural tier for the pre-wheel zoom AND the current
+    /// _quality tier matches the pre-wheel natural (meaning auto-tracking was
+    /// already in effect).  If the user has manually picked a different tier,
+    /// the choice persists across wheel scrolls within the same tier band.
+    /// Forces a promote when targetZoom exceeds the current tier's ZoomMax
+    /// (otherwise the view would silently clamp).
+    /// </summary>
+    private bool AdaptQualityForWheel(double oldZoom, double newZoom)
+    {
+        // Hard cap: if the new zoom literally cannot be rendered at the current
+        // tier, we must promote regardless of manual choice.
+        if (newZoom > _quality.ZoomMax)
+            return AdaptQualityForZoom(newZoom);
+
+        QualityPreset natOld = NaturalQualityForZoom(oldZoom);
+        QualityPreset natNew = NaturalQualityForZoom(newZoom);
+        if (natOld.Tier == natNew.Tier) return false;          // no boundary crossed
+        if (_quality.Tier != natOld.Tier) return false;        // user override — respect it
+
+        return AdaptQualityForZoom(newZoom);
     }
 
     private void OnMouseWheel(object? sender, MouseEventArgs e)
@@ -2059,11 +2119,12 @@ public sealed partial class MainForm : Form
         // Adapt quality preset to the post-wheel zoom BEFORE the per-precision
         // anchor math runs, so the Clamp() inside each branch uses the right
         // ZoomMax. Wheel factor may cross tier boundaries either direction.
+        // Manual user picks persist until the wheel crosses a tier threshold.
         double targetZoom = System.Math.Clamp(
             _zoom * factor,
             QualityPreset.Draft.ZoomMin,
             QualityPreset.Extreme.ZoomMax);
-        if (AdaptQualityForZoom(targetZoom))
+        if (AdaptQualityForWheel(_zoom, targetZoom))
             SetStatus($"Quality → {_quality.Name} (zoom {targetZoom:G3}).");
         //double compX = _centerX + ox * scale;
         //double compY = _centerY + oy * scale;
