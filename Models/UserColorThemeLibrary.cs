@@ -154,7 +154,7 @@ namespace FracturingFog.Models
 
         // ── JSON options ──────────────────────────────────────────────────────
 
-        private static JsonSerializerOptions BuildJsonOptions()
+        internal static JsonSerializerOptions BuildJsonOptions()
         {
             var opts = new JsonSerializerOptions
             {
@@ -221,6 +221,32 @@ namespace FracturingFog.Models
             foreach (var t in Themes)
                 if (t.Name.Equals(data.Name, StringComparison.OrdinalIgnoreCase))
                     return false;
+
+            Themes.Add(data);
+            Save();
+            ColorPalette.RebuildUserPalettes();
+            return true;
+        }
+
+        /// <summary>
+        /// Inserts a new theme, or replaces an existing entry with the same
+        /// Name (case-insensitive). Always persists and rebuilds the palette.
+        /// Returns false only if <paramref name="data"/> is null or has no Name.
+        /// </summary>
+        public bool ReplaceOrAdd(ColorThemeData? data)
+        {
+            if (data == null || string.IsNullOrWhiteSpace(data.Name)) return false;
+
+            for (int i = 0; i < Themes.Count; i++)
+            {
+                if (Themes[i].Name.Equals(data.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    Themes[i] = data;
+                    Save();
+                    ColorPalette.RebuildUserPalettes();
+                    return true;
+                }
+            }
 
             Themes.Add(data);
             Save();

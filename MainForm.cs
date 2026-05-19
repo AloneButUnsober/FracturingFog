@@ -58,6 +58,11 @@ public sealed partial class MainForm : Form
     // Floating Help form (lazy)
     FloatingHelp? _floatingHelp;
 
+    // Color Theme Editor form (lazy, singleton). Created on first click of
+    // FloatingMenu's "Edit Theme…" button; closed automatically restores the
+    // committed color map via ClearPreview().
+    ColorThemeEditor? _colorThemeEditor;
+
     // UI: top toolbar
     private readonly Panel _toolbar;
     private readonly Button _resetButton;
@@ -84,6 +89,12 @@ public sealed partial class MainForm : Form
     private int _currentRegionSelection;
     private string _currentColorThemeName;
     private int _currentColorThemeSelection;
+
+    // Color Theme Editor preview state. When true, _calculator.ColorMap is a
+    // transient runtime map built from in-editor parameters; the theme combo
+    // selection is not authoritative and must not be re-applied until preview
+    // ends (ClearPreview restores the committed _currentColorThemeName map).
+    private bool _previewingTransientMap;
     private string _currentQualityName;
     private int _currentQualitySelection;
 
@@ -886,6 +897,7 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnImportColorThemeClick += (s, e) => OnImportColorThemeClick(s, e);
         _floatingMenu.OnDeleteColorThemeClick += (s, e) => OnDeleteColorThemeClick(s, e);
         _floatingMenu.OnLoadColorThemesClick += (s, e) => OnLoadColorThemesClick(s, e);
+        _floatingMenu.OnEditColorThemeClick += (s, e) => OnEditColorThemeClick(s, e);
         _floatingMenu.OnColorThemeChanged += (s, e) => OnColorThemeChanged(s, e);
         _floatingMenu.OnCheckBoxShowGridClick += (s, e) => OnCheckBoxShowGridClick(s, e);
         _floatingMenu.OnCheckBoxShowFooterClick += (s, e) => OnCheckBoxShowFooterPanelClicked(s, e);
@@ -943,6 +955,40 @@ public sealed partial class MainForm : Form
         }
         _floatingHelp.Show();
         _floatingHelp.BringToFront();
+    }
+
+    private void OnEditColorThemeClick(object? sender, EventArgs e)
+    {
+        if (_colorThemeEditor == null || _colorThemeEditor.IsDisposed)
+        {
+            _colorThemeEditor = new ColorThemeEditor(
+                this,
+                initialThemeName: _currentColorThemeName,
+                initialRegionName: _currentRegionName);
+
+            _colorThemeEditor.OnPreviewMapChanged += map => ApplyPreviewMap(map);
+            _colorThemeEditor.OnRegionSelected += name => JumpToRegion(name);
+            _colorThemeEditor.OnThemeSavedToLibrary += name =>
+            {
+                // Rebuild combo (Reload path) and select the newly-saved theme,
+                // which commits it as the active map and clears the preview flag.
+                BuildColorThemesSelection();
+                int idx = _colorThemeCombo.FindStringExact(name);
+                if (idx >= 0)
+                {
+                    _colorThemeCombo.SelectedIndex = idx;
+                }
+                _previewingTransientMap = false;
+                _currentColorThemeName = name;
+            };
+            _colorThemeEditor.FormClosed += (s, ev) =>
+            {
+                ClearPreview();
+                _colorThemeEditor = null;
+            };
+        }
+        _colorThemeEditor.Show();
+        _colorThemeEditor.BringToFront();
     }
 
     private void OnLoadColorThemesClick(object? sender, EventArgs e)
@@ -1315,18 +1361,60 @@ public sealed partial class MainForm : Form
             UpdateDelRegionButton(_cb, _delRegionButton);
 
             _currentRegionName = _cb.SelectedItem?.ToString();
-            //_currentRegionLabel?.Text = _currentRegionName;
             if (string.IsNullOrEmpty(_currentRegionName) ||
                 _currentRegionName == "— select region —") return;
 
-            var region = FractalRegionLibrary.Instance.FindByName(_currentRegionName);
-            if (region == null) return;
-
-            ApplyRegion(region);
-            TriggerCalculation();
-
-            _toolTip.SetToolTip(_cb, region.Description);
+            var region = JumpToRegion(_currentRegionName);
+            if (region != null)
+                _toolTip.SetToolTip(_cb, region.Description);
         }
+    }
+
+    /// <summary>
+    /// Applies the named region to the view and triggers a re-render. Returns
+    /// the resolved region (or null if not found / sentinel item). Shared by
+    /// the FloatingMenu region combo and the Color Theme Editor region combo.
+    /// </summary>
+    public FractalRegion? JumpToRegion(string name)
+    {
+        if (string.IsNullOrEmpty(name) || name == "— select region —") return null;
+
+        var region = FractalRegionLibrary.Instance.FindByName(name);
+        if (region == null) return null;
+
+        ApplyRegion(region);
+        TriggerCalculation();
+        return region;
+    }
+
+    /// <summary>
+    /// Injects a transient color map (built live by the Color Theme Editor)
+    /// into the calculator and re-renders. Does not change combo selection.
+    /// </summary>
+    public void ApplyPreviewMap(Interefaces.IColorMap map)
+    {
+        if (map == null || _calculator == null) return;
+        _previewingTransientMap = true;
+        _calculator.ColorMap = map;
+        TriggerCalculation();
+        _miniMapPanel?.RequestRedraw();
+        _miniDepthPanel?.RequestRedraw();
+    }
+
+    /// <summary>
+    /// Restores the calculator color map to the committed selection (the
+    /// one named in <c>_currentColorThemeName</c>) and clears the preview flag.
+    /// Called by the editor on close/Revert.
+    /// </summary>
+    public void ClearPreview()
+    {
+        if (!_previewingTransientMap || _calculator == null) { _previewingTransientMap = false; return; }
+        _previewingTransientMap = false;
+        var map = Models.ColorPalette.GetPaletteByName(_currentColorThemeName ?? "");
+        _calculator.ColorMap = map;
+        TriggerCalculation();
+        _miniMapPanel?.RequestRedraw();
+        _miniDepthPanel?.RequestRedraw();
     }
 
     private void OnSaveViewClick(object? sender, EventArgs e)
