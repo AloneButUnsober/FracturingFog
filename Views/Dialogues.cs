@@ -738,7 +738,7 @@ namespace FracturingFog.Views
                 Left = 8,
                 Top = 400,
                 Width = 392,
-                Height = 84,
+                Height = 120,
                 ForeColor = Color.LightGray,
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 BackColor = Color.Transparent
@@ -761,13 +761,14 @@ namespace FracturingFog.Views
             _tbTaaSmoothing = new TrackBar
             {
                 Left = 112,
-                Top = 18,
+                Top = 23,
                 Width = 232,
+                Height = 22,
                 Minimum = 0,
                 Maximum = 100,
                 Value = TaaSmoothing,
                 TickFrequency = 10,
-                TickStyle = TickStyle.None,
+                TickStyle = TickStyle.BottomRight,
                 BackColor = Color.FromArgb(35, 35, 35)
             };
             smoothBox.Controls.Add(_tbTaaSmoothing);
@@ -798,7 +799,7 @@ namespace FracturingFog.Views
             {
                 Text = "Band dither:",
                 Left = 10,
-                Top = 52,
+                Top = 69,
                 Width = 100,
                 ForeColor = lblColor,
                 Font = lblFont,
@@ -810,13 +811,14 @@ namespace FracturingFog.Views
             _tbBandDitherStrength = new TrackBar
             {
                 Left = 112,
-                Top = 46,
+                Top = 71,
                 Width = 232,
+                Height = 22,
                 Minimum = 0,
                 Maximum = 100,
                 Value = BandDitherStrength,
                 TickFrequency = 10,
-                TickStyle = TickStyle.None,
+                TickStyle = TickStyle.BottomRight,
                 BackColor = Color.FromArgb(35, 35, 35),
                 Enabled = false
             };
@@ -826,7 +828,7 @@ namespace FracturingFog.Views
             {
                 Text = $"{BandDitherStrength}%",
                 Left = 348,
-                Top = 52,
+                Top = 69,
                 Width = 36,
                 ForeColor = lblColor,
                 Font = lblFont,
@@ -853,7 +855,7 @@ namespace FracturingFog.Views
             {
                 Text = "Slideshow",
                 Left = 12,
-                Top = 504,
+                Top = 525,
                 Width = 96,
                 Height = 28,
                 BackColor = Color.FromArgb(55, 40, 70),
@@ -901,8 +903,8 @@ namespace FracturingFog.Views
             {
                 Text = "Start",
                 DialogResult = DialogResult.OK,
-                Left = 244,
-                Top = 504,
+                Left = 239,
+                Top = 525,
                 Width = 76,
                 Height = 28,
                 BackColor = Color.FromArgb(60, 80, 60),
@@ -913,8 +915,8 @@ namespace FracturingFog.Views
             {
                 Text = "Cancel",
                 DialogResult = DialogResult.Cancel,
-                Left = 328,
-                Top = 504,
+                Left = 321,
+                Top = 525,
                 Width = 76,
                 Height = 28,
                 BackColor = Color.FromArgb(60, 60, 60),

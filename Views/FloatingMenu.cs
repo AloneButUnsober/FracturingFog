@@ -71,6 +71,7 @@ namespace FracturingFog.Views
 
         // Video TAA test sliders — live tuning of temporal blend strength
         // and the deep-zoom fade thresholds while a video zoom is running.
+        private SplitContainer _taaContainer;
         private TrackBar? _taaAlphaSlider;
         private TrackBar? _taaFadeStartSlider;
         private TrackBar? _taaFadeEndSlider;
@@ -212,7 +213,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(370, 822);
+            ClientSize = new System.Drawing.Size(330, 675);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -223,6 +224,7 @@ namespace FracturingFog.Views
 
             int buttonLeft = 6;
             int buttonTop = 6;
+            int buttonWidth = 0;
             int labelTop = 9;
             int txTop = 7;
 
@@ -244,7 +246,7 @@ namespace FracturingFog.Views
                 }
             };
 
-            buttonLeft = 6;
+            buttonLeft = Left + 5; // Width / 4 - 8 + 2;
             txTop = 35;
             #region Buttons
 
@@ -260,48 +262,56 @@ namespace FracturingFog.Views
             }
             catch { _resetButton.Text = "R"; }
             _coordPanel.Controls.Add(_resetButton);
-            buttonLeft += 33;
 
-            _spanButton = MakeBtn("Span", 55, buttonLeft, buttonTop, "Span across all monitors");
+            _menuButton = MakeBtn("X", 20, Width - 25, buttonTop, "Close floating menu");
+            _menuButton.FlatStyle = FlatStyle.Flat;
+            _menuButton.BackColor = Color.Transparent;
+            _menuButton.MouseHover += (s, e) => { _menuButton.ForeColor = Color.YellowGreen; _menuButton.BackColor = Color.Black; };
+            _menuButton.MouseLeave += (s, e) => { _menuButton.ForeColor = Color.White; _menuButton.BackColor = Color.Transparent; };
+            _menuButton.Padding = new Padding(0, 0, 1, 1);
+            _menuButton.Margin = new Padding(0);
+            _menuButton.Click += (s, e) => OnCoordPanelCBClick(s, e);
+
+            buttonLeft = _resetButton.Left + _resetButton.Width + 2;
+
+            buttonWidth = (Width - (_resetButton.Width + _menuButton.Width + 10)) / 3 - 5;
+            _spanButton = MakeBtn("Span", buttonWidth, buttonLeft, buttonTop, "Span across all monitors");
             _spanButton.Click += (s, e) => OnSpanButtonClick(s, e);
             _coordPanel.Controls.Add(_spanButton);
-            buttonLeft += 58;
+            buttonLeft = _spanButton.Left + _spanButton.Width + 2;
 
-            _screenshotButton = MakeBtn("Image", 55, buttonLeft, buttonTop);
+            _screenshotButton = MakeBtn("Image", buttonWidth, buttonLeft, buttonTop);
             _screenshotButton.Click += (s, e) => OnScreenshotButtonClick(s, e);
             _coordPanel.Controls.Add(_screenshotButton);
-            buttonLeft += 58;
+            buttonLeft = _screenshotButton.Left + _screenshotButton.Width + 2;
 
-            _posterButton = MakeBtn("Poster", 55, buttonLeft, buttonTop);
+            _posterButton = MakeBtn("Poster", buttonWidth, buttonLeft, buttonTop);
             _posterButton.Click += (s, e) => OnPosterButtonClick(s, e);
             _coordPanel.Controls.Add(_posterButton);
-            buttonLeft += 58;
+            buttonLeft = _posterButton.Left + _posterButton.Width + 2;
 
-            _slideshowButton = MakeBtn("Slideshow", 74, buttonLeft, buttonTop, "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
+            buttonLeft = Left + 5;
+            buttonTop += _posterButton.Height + 2;
+            buttonWidth = (_resetButton.Width + _spanButton.Width + _screenshotButton.Width + _posterButton.Width) / 2 + 2;
+            _slideshowButton = MakeBtn("Slideshow", buttonWidth, buttonLeft, buttonTop, "Start/stop slideshow");
             _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
             _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
             _slideshowButton.Click += (s, e) => OnSlideshowButtonClick(s, e);
             _coordPanel.Controls.Add(_slideshowButton);
-            buttonLeft += 76;
 
-            _videoButton = MakeBtn("Video", 55, buttonLeft, buttonTop, "Smooth animated zoom from current view to a target region/coordinate");
+            buttonLeft = _slideshowButton.Left + _slideshowButton.Width + 3;
+            _videoButton = MakeBtn("Video", buttonWidth, buttonLeft, buttonTop, "Smooth animated zoom from current view to a target region/coordinate");
             _videoButton.BackColor = Color.FromArgb(55, 40, 70);
             _videoButton.FlatAppearance.BorderColor = Color.FromArgb(100, 70, 130);
             _videoButton.Click += (s, e) => OnVideoButtonClick(s, e);
             _coordPanel.Controls.Add(_videoButton);
 
-            buttonLeft += 58;
-            _menuButton = MakeBtn("X", 20, buttonLeft, buttonTop, "Close floating menu");
-            _menuButton.Padding = new Padding(0, 0, 1, 1);
-            _menuButton.Margin = new Padding(0);
-            _menuButton.Click += (s, e) => OnCoordPanelCBClick(s, e);
-
             #endregion Buttons
 
             buttonLeft = 98;
-            buttonTop += _resetButton.Height + 6;
-            labelTop += _resetButton.Height + 10;
-            txTop += _resetButton.Height + 4;
+            buttonTop = _slideshowButton.Top + _slideshowButton.Height + 5;
+            labelTop = _slideshowButton.Top + _slideshowButton.Height + 10;
+            txTop = _slideshowButton.Top + _slideshowButton.Height + 4;
 
             //buttonLeft += _menuButton.PreferredSize.Width + 6;
 
@@ -340,7 +350,9 @@ namespace FracturingFog.Views
             _toolTip.SetToolTip(_checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
 
             buttonLeft = 8;
-            labelTop += _checkBoxShowGrid.Height + 4;
+            labelTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
+            buttonTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 5;
+            txTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
 
             //_formResolutionCombo = new ComboBox
             //{
@@ -365,41 +377,105 @@ namespace FracturingFog.Views
             //labelTop += 28;
             //txTop += 28;
 
-            _lblCX = MakeLbl("CX:", buttonLeft, labelTop, _coordPanel, true);
-            _lblCX.Height = 12;
-            _lblCX.Width = 78;
-            _lblCX.Padding = new Padding(0);
-            buttonLeft += 88;
-            _txCX = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Real part of the view center");
-            _txCX.TextAlign = HorizontalAlignment.Right;
+            #region Navigation Group Box
 
-            labelTop += 28;
-            txTop += 28;
-            buttonLeft = 8;
-            buttonTop += 28;
-            _lblCY = MakeLbl("CY:", buttonLeft, labelTop, _coordPanel, true);
-            _lblCY.Height = 12;
-            _lblCY.Width = 78;
-            _lblCY.Padding = new Padding(0);
-            buttonLeft += 88;
-            _txCY = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Imaginary part of the view center");
-            _txCY.TextAlign = HorizontalAlignment.Right;
+            GroupBox navigationGrpBox = new GroupBox
+            {
+                Left = buttonLeft + 5,
+                Top = buttonTop,
+                Width = 300,
+                Height = 220,
+                Text = "Navigation",
+                ForeColor = Color.FromArgb(155, 155, 155),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.FromArgb(22, 22, 22),
+            };
 
+            _coordPanel.Controls.Add(navigationGrpBox);
 
-            labelTop += 28;
-            txTop += 28;
-            buttonLeft = 8;
-            buttonTop += 28;
-            _qualityLabel = MakeLbl("Quality:", buttonLeft, labelTop, _coordPanel, true);
-            _qualityLabel.Height = 13;
-            _qualityLabel.Width = 78;
-            _qualityLabel.Padding = new Padding(0);
-            buttonLeft = _qualityLabel.Left + _qualityLabel.Width + 10;
+            labelTop = 18;
+            _lblCX = new Label
+            {
+                Text = "CX:",
+                Left = buttonLeft,
+                Top = labelTop,
+                Height = 12,
+                Width = 78,
+                Padding = new Padding(0),
+                AutoSize = false, 
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(155, 155, 155),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            navigationGrpBox.Controls.Add(_lblCX);
+
+            _txCX = new TextBox
+            {
+                Left = _lblCX.Left + _lblCX.Width + 8,
+                Top = labelTop - 3,
+                Width = 182,
+                Height = 22,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.FromArgb(220, 220, 220),
+                Font = new Font("Consolas", 9f),
+                BorderStyle = BorderStyle.FixedSingle,
+                TextAlign = HorizontalAlignment.Right
+            };
+            navigationGrpBox.Controls.Add(_txCX);
+
+            labelTop = _lblCX.Top + _lblCX.Height + 16;
+            _lblCY = new Label
+            {
+                Text = "CY:",
+                Left = buttonLeft,
+                Top = labelTop,
+                Height = 12,
+                Width = 78,
+                Padding = new Padding(0),
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(155, 155, 155),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            navigationGrpBox.Controls.Add(_lblCY);
+
+            _txCY = new TextBox
+            {
+                Left = _lblCY.Left + _lblCY.Width + 8,
+                Top = labelTop - 3,
+                Width = 182,
+                Height = 22,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.FromArgb(220, 220, 220),
+                Font = new Font("Consolas", 9f),
+                BorderStyle = BorderStyle.FixedSingle,
+                TextAlign = HorizontalAlignment.Right
+            };
+            navigationGrpBox.Controls.Add(_txCY);
+
+            labelTop = _lblCY.Top + _lblCY.Height + 16;
+            _qualityLabel = new Label
+            {
+                Text = "Quality:",
+                Left = buttonLeft,
+                Top = labelTop,
+                Height = 13,
+                Width = 78,
+                Padding = new Padding(0),
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(155, 155, 155),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            navigationGrpBox.Controls.Add(_qualityLabel);
 
             _qualityCombo = new ComboBox
             {
-                Left = buttonLeft,
-                Top = txTop,
+                Left = _qualityLabel.Left + _qualityLabel.Width + 8,
+                Top = labelTop - 3,
                 Width = 182,
                 Height = 22,
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -411,41 +487,79 @@ namespace FracturingFog.Views
             };
             foreach (var p in QualityPreset.All) _qualityCombo.Items.Add(p.Name);
             _qualityCombo.SelectedIndexChanged += (s, e) => OnQualityComboSelectionChanged(s, e);
-            _coordPanel.Controls.Add(_qualityCombo);
+            navigationGrpBox.Controls.Add(_qualityCombo);
 
-            labelTop += 28;
-            buttonLeft = 8;
-            buttonTop += 28;
-            txTop += 28;
 
-            _lblZoom = MakeLbl("Zoom:", buttonLeft, labelTop, _coordPanel, true);
-            _lblZoom.Height = 12;
-            _lblZoom.Width = 78;
-            _lblZoom.Padding = new Padding(0);
-            buttonLeft += 88;
-            _txZoom = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)");
-            _txZoom.TextAlign = HorizontalAlignment.Right;
+            labelTop = _qualityLabel.Top + _qualityLabel.Height + 16;
+            _lblZoom = new Label
+            {
+                Text = "Zoom:",
+                Left = buttonLeft,
+                Top = labelTop,
+                Height = 12,
+                Width = 78,
+                Padding = new Padding(0),
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(155, 155, 155),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            navigationGrpBox.Controls.Add(_lblZoom);
 
-            labelTop += 28;
-            buttonLeft = 8;
-            buttonTop += 28;
-            txTop += 28;
-            _lblIter = MakeLbl("Iterations:", buttonLeft, labelTop, _coordPanel, true);
-            _lblIter.Height = 12;
-            _lblIter.Width = 78;
-            _lblIter.Padding = new Padding(0);
+            //_txZoom = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Zoom factor (1 = full view; larger = zoomed in)");
+            _txZoom = new TextBox
+            {
+                Left = _lblZoom.Left + _lblZoom.Width + 8,
+                Top = labelTop - 3,
+                Width = 182,
+                Height = 22,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.FromArgb(220, 220, 220),
+                Font = new Font("Consolas", 9f),
+                BorderStyle = BorderStyle.FixedSingle,
+                TextAlign = HorizontalAlignment.Right
+            };
+            navigationGrpBox.Controls.Add(_txZoom);
 
-            buttonLeft += 88;
-            _txIter = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Maximum iteration count");
-            _txIter.TextAlign = HorizontalAlignment.Right;
+            labelTop = _lblZoom.Top + _lblZoom.Height + 16;
+            _lblIter = new Label
+            {
+                Text = "Iterations:",
+                Left = buttonLeft,
+                Top = labelTop,
+                Height = 12,
+                Width = 78,
+                Padding = new Padding(0),
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(155, 155, 155),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            navigationGrpBox.Controls.Add(_lblIter);
 
-            buttonTop += 54;
-            buttonLeft = 98;
+            //_txIter = MakeTx(buttonLeft, txTop, 182, _coordPanel, "Maximum iteration count");
+            _txIter = new TextBox
+            {
+                Left = _lblIter.Left + _lblIter.Width + 8,
+                Top = labelTop - 3,
+                Width = 182,
+                Height = 22,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.FromArgb(220, 220, 220),
+                Font = new Font("Consolas", 9f),
+                BorderStyle = BorderStyle.FixedSingle,
+                TextAlign = HorizontalAlignment.Right
+            };
+            navigationGrpBox.Controls.Add(_txIter);
+
+            buttonTop = _txIter.Top + _txIter.Height + 4;
             _chkLockIter = new CheckBox
             {
                 Text = "Lock Iterations",
-                Left = buttonLeft,
-                Top = buttonTop + 2,
+                Left = _txIter.Left,
+                Top = buttonTop,
                 AutoSize = true,
                 AutoCheck = true,
                 ForeColor = Color.FromArgb(200, 200, 120),
@@ -455,29 +569,51 @@ namespace FracturingFog.Views
             };
             _toolTip.SetToolTip(_chkLockIter, "Lock the iteration count — pan/zoom will not recalculate it");
             _chkLockIter.CheckedChanged += (s, e) => OnIterLockCBChanged(s, e);
-            _coordPanel.Controls.Add(_chkLockIter);
+            navigationGrpBox.Controls.Add(_chkLockIter);
 
-            buttonLeft = 98;
-            buttonTop += 38;
-            labelTop += 28;
-            txTop += 28;
-
-            _goButton = MakeBtn("Go", 54, buttonLeft, buttonTop, "Go to the specified coordinates");
-            _goButton.BackColor = Color.FromArgb(40, 80, 40);
+            buttonTop = _chkLockIter.Top + _chkLockIter.Height + 5;
+            //_goButton = MakeBtn("Go", 54, buttonLeft, buttonTop, "Go to the specified coordinates");
+            _goButton = new Button
+            {
+                Text = "Go",
+                Width = 54,
+                Height = 26,
+                Left = _chkLockIter.Left,
+                Top = buttonTop,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 80, 40),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+            };
             _goButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
             _goButton.Click += (s, e) => OnGoButtonClick(s, e);
-            _coordPanel.Controls.Add(_goButton);
+            navigationGrpBox.Controls.Add(_goButton);
 
-            buttonLeft += 62;
-            _flipButton = MakeBtn("Flip Y", 54, buttonLeft, buttonTop, "Flip the view vertically (negate CY)");
-            _flipButton.BackColor = Color.FromArgb(40, 80, 40);
+            //_flipButton = MakeBtn("Flip Y", 54, buttonLeft, buttonTop, "Flip the view vertically (negate CY)");
+            _flipButton = new Button
+            {
+                Text = "Flip Y",
+                Width = 54,
+                Height = 26,
+                Left = _goButton.Left + _goButton.Width + 4,
+                Top = buttonTop,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 80, 40),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+            };
             _flipButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
             _flipButton.Click += (s, e) => OnFlipButtonClick(s, e);
-            _coordPanel.Controls.Add(_flipButton);
+            navigationGrpBox.Controls.Add(_flipButton);
+
+            #endregion Navigation Group Box
 
             #region Brightness & Contrast sliders 
 
-            int sliderTop = buttonTop + 48;
+            buttonTop = navigationGrpBox.Top + navigationGrpBox.Height + 6;
+            int sliderTop = buttonTop; // + 48;
             int sliderLeft = 8;
 
             _brightnessLabel = new Label
@@ -592,122 +728,154 @@ namespace FracturingFog.Views
             _histogramEqSlider.ValueChanged += (s, e) => OnHistogramEqSlider(s, e, _histogramEqLabel);
             _coordPanel.Controls.Add(_histogramEqSlider);
 
+            //sliderLeft = 8;
+            //sliderTop += _histogramEqSlider.Height + 2;
+            //Button taaContainerButton = new Button
+            //{
+            //    Text = "TAA",
+            //    Left = sliderLeft,
+            //    Top = sliderTop,
+            //    Width = 30,
+            //    Height = 20
+            //};
+
+            
+            //_taaContainer = new SplitContainer
+            //{
+            //    Top = sliderTop,
+            //    Left = sliderLeft,
+            //    Width = 260,
+            //    Panel1MinSize = 0,
+            //    Panel2MinSize = 0,
+            //    Panel1Collapsed = true,
+            //    Panel2Collapsed = true,
+            //    BorderStyle = BorderStyle.FixedSingle,
+            //    Orientation = Orientation.Horizontal
+            //};
+
+            //taaContainerButton.Click += (s,e) =>
+            //{
+            //    _taaContainer.Panel1Collapsed = !_taaContainer.Panel1Collapsed;
+            //};
+
+            //_coordPanel.Controls.Add(taaContainerButton);
+            //_coordPanel.Controls.Add(_taaContainer);
             // ── Video TAA test sliders ────────────────────────────────────
             // Live tuning of temporal-blend alpha and the deep-zoom fade
             // window. Defaults match the VideoZoom code defaults (55 % alpha,
             // fade from 1e15 → 1e18). Values are passed straight through to
             // MainForm which forwards them to VideoZoom every change.
-            sliderLeft = 8;
-            sliderTop += 44;
-            _taaAlphaLabel = new Label
-            {
-                Text = "TAA α: 55",
-                Left = sliderLeft,
-                Top = sliderTop + 3,
-                Width = 78,
-                Height = 12,
-                Padding = new Padding(0),
-                TextAlign = ContentAlignment.MiddleRight,
-                ForeColor = Color.FromArgb(180, 180, 180),
-                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                BackColor = Color.Transparent
-            };
-            _coordPanel.Controls.Add(_taaAlphaLabel);
-            sliderLeft += 86;
+            //sliderLeft = 8;
+            //sliderTop += 44;
+            //_taaAlphaLabel = new Label
+            //{
+            //    Text = "TAA α: 55",
+            //    Left = sliderLeft,
+            //    Top = sliderTop + 3,
+            //    Width = 78,
+            //    Height = 12,
+            //    Padding = new Padding(0),
+            //    TextAlign = ContentAlignment.MiddleRight,
+            //    ForeColor = Color.FromArgb(180, 180, 180),
+            //    Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+            //    BackColor = Color.Transparent
+            //};
+            //_coordPanel.Controls.Add(_taaAlphaLabel);
+            //sliderLeft += 86;
 
-            _taaAlphaSlider = new TrackBar
-            {
-                Left = sliderLeft,
-                Top = sliderTop,
-                Width = 200,
-                Height = 22,
-                Minimum = 0,
-                Maximum = 100,
-                Value = 55,
-                TickFrequency = 10,
-                SmallChange = 1,
-                LargeChange = 10,
-                BackColor = Color.FromArgb(22, 22, 22),
-            };
-            _toolTip.SetToolTip(_taaAlphaSlider,
-                "Video TAA temporal blend strength (live test)  "
-                + "(0 = current frame only, 100 = max prev-frame contribution)");
-            _taaAlphaSlider.ValueChanged += (s, e) => OnTaaAlphaSlider(s, e, _taaAlphaLabel);
-            _coordPanel.Controls.Add(_taaAlphaSlider);
+            //_taaAlphaSlider = new TrackBar
+            //{
+            //    Left = sliderLeft,
+            //    Top = sliderTop,
+            //    Width = 200,
+            //    Height = 22,
+            //    Minimum = 0,
+            //    Maximum = 100,
+            //    Value = 55,
+            //    TickFrequency = 10,
+            //    SmallChange = 1,
+            //    LargeChange = 10,
+            //    BackColor = Color.FromArgb(22, 22, 22),
+            //};
+            //_toolTip.SetToolTip(_taaAlphaSlider,
+            //    "Video TAA temporal blend strength (live test)  "
+            //    + "(0 = current frame only, 100 = max prev-frame contribution)");
+            //_taaAlphaSlider.ValueChanged += (s, e) => OnTaaAlphaSlider(s, e, _taaAlphaLabel);
+            //_coordPanel.Controls.Add(_taaAlphaSlider);
 
-            sliderLeft = 8;
-            sliderTop += 44;
-            _taaFadeStartLabel = new Label
-            {
-                Text = "Fade @ 1e15",
-                Left = sliderLeft,
-                Top = sliderTop + 3,
-                Width = 78,
-                Height = 12,
-                Padding = new Padding(0),
-                TextAlign = ContentAlignment.MiddleRight,
-                ForeColor = Color.FromArgb(180, 180, 180),
-                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                BackColor = Color.Transparent
-            };
-            _coordPanel.Controls.Add(_taaFadeStartLabel);
-            sliderLeft += 86;
+            //sliderLeft = 8;
+            //sliderTop += 44;
+            //_taaFadeStartLabel = new Label
+            //{
+            //    Text = "Fade @ 1e15",
+            //    Left = sliderLeft,
+            //    Top = sliderTop + 3,
+            //    Width = 78,
+            //    Height = 12,
+            //    Padding = new Padding(0),
+            //    TextAlign = ContentAlignment.MiddleRight,
+            //    ForeColor = Color.FromArgb(180, 180, 180),
+            //    Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+            //    BackColor = Color.Transparent
+            //};
+            //_coordPanel.Controls.Add(_taaFadeStartLabel);
+            //sliderLeft += 86;
 
-            _taaFadeStartSlider = new TrackBar
-            {
-                Left = sliderLeft,
-                Top = sliderTop,
-                Width = 200,
-                Height = 22,
-                Minimum = 0,
-                Maximum = 25,
-                Value = 15,
-                TickFrequency = 1,
-                SmallChange = 1,
-                LargeChange = 2,
-                BackColor = Color.FromArgb(22, 22, 22),
-            };
-            _toolTip.SetToolTip(_taaFadeStartSlider,
-                "TAA fade-start zoom (log10) — TAA full-strength below this zoom level");
-            _taaFadeStartSlider.ValueChanged += (s, e) => OnTaaFadeStartSlider(s, e, _taaFadeStartLabel);
-            _coordPanel.Controls.Add(_taaFadeStartSlider);
+            //_taaFadeStartSlider = new TrackBar
+            //{
+            //    Left = sliderLeft,
+            //    Top = sliderTop,
+            //    Width = 200,
+            //    Height = 22,
+            //    Minimum = 0,
+            //    Maximum = 25,
+            //    Value = 15,
+            //    TickFrequency = 1,
+            //    SmallChange = 1,
+            //    LargeChange = 2,
+            //    BackColor = Color.FromArgb(22, 22, 22),
+            //};
+            //_toolTip.SetToolTip(_taaFadeStartSlider,
+            //    "TAA fade-start zoom (log10) — TAA full-strength below this zoom level");
+            //_taaFadeStartSlider.ValueChanged += (s, e) => OnTaaFadeStartSlider(s, e, _taaFadeStartLabel);
+            //_coordPanel.Controls.Add(_taaFadeStartSlider);
 
-            sliderLeft = 8;
-            sliderTop += 44;
-            _taaFadeEndLabel = new Label
-            {
-                Text = "Off @ 1e18",
-                Left = sliderLeft,
-                Top = sliderTop + 3,
-                Width = 78,
-                Height = 12,
-                Padding = new Padding(0),
-                TextAlign = ContentAlignment.MiddleRight,
-                ForeColor = Color.FromArgb(180, 180, 180),
-                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                BackColor = Color.Transparent
-            };
-            _coordPanel.Controls.Add(_taaFadeEndLabel);
-            sliderLeft += 86;
+            //sliderLeft = 8;
+            //sliderTop += 44;
+            //_taaFadeEndLabel = new Label
+            //{
+            //    Text = "Off @ 1e18",
+            //    Left = sliderLeft,
+            //    Top = sliderTop + 3,
+            //    Width = 78,
+            //    Height = 12,
+            //    Padding = new Padding(0),
+            //    TextAlign = ContentAlignment.MiddleRight,
+            //    ForeColor = Color.FromArgb(180, 180, 180),
+            //    Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+            //    BackColor = Color.Transparent
+            //};
+            //_coordPanel.Controls.Add(_taaFadeEndLabel);
+            //sliderLeft += 86;
 
-            _taaFadeEndSlider = new TrackBar
-            {
-                Left = sliderLeft,
-                Top = sliderTop,
-                Width = 200,
-                Height = 22,
-                Minimum = 0,
-                Maximum = 25,
-                Value = 18,
-                TickFrequency = 1,
-                SmallChange = 1,
-                LargeChange = 2,
-                BackColor = Color.FromArgb(22, 22, 22),
-            };
-            _toolTip.SetToolTip(_taaFadeEndSlider,
-                "TAA fade-end zoom (log10) — TAA fully off above this zoom level");
-            _taaFadeEndSlider.ValueChanged += (s, e) => OnTaaFadeEndSlider(s, e, _taaFadeEndLabel);
-            _coordPanel.Controls.Add(_taaFadeEndSlider);
+            //_taaFadeEndSlider = new TrackBar
+            //{
+            //    Left = sliderLeft,
+            //    Top = sliderTop,
+            //    Width = 200,
+            //    Height = 22,
+            //    Minimum = 0,
+            //    Maximum = 25,
+            //    Value = 18,
+            //    TickFrequency = 1,
+            //    SmallChange = 1,
+            //    LargeChange = 2,
+            //    BackColor = Color.FromArgb(22, 22, 22),
+            //};
+            //_toolTip.SetToolTip(_taaFadeEndSlider,
+            //    "TAA fade-end zoom (log10) — TAA fully off above this zoom level");
+            //_taaFadeEndSlider.ValueChanged += (s, e) => OnTaaFadeEndSlider(s, e, _taaFadeEndLabel);
+            //_coordPanel.Controls.Add(_taaFadeEndSlider);
             #endregion Brightness & Contrast sliders
 
             _chkSlideshowUseExtremeRegions = new CheckBox
@@ -732,9 +900,9 @@ namespace FracturingFog.Views
             GroupBox regionBox = new GroupBox
             {
                 Text = "Regions",
-                Left = 28,
+                Left = 13,
                 Top = sliderTop + 68,
-                Width = 260,
+                Width = 300,
                 Height = 78,
                 ForeColor = Color.FromArgb(155, 155, 155),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
@@ -744,7 +912,7 @@ namespace FracturingFog.Views
 
             _regionCombo = new ComboBox
             {
-                Left = 16,
+                Left = 51,
                 Top = 20,
                 Width = 230,
                 Height = 26,
@@ -757,7 +925,7 @@ namespace FracturingFog.Views
             RebuildRegionCombo(_regionCombo, OnRegionComboSelectionChanged);
             regionBox.Controls.Add(_regionCombo);
 
-            _saveViewButton = MakeBtn("Save", 55, 16, 45, "Save the current view as a region");
+            _saveViewButton = MakeBtn("Save", 55, 51, 45, "Save the current view as a region");
             _saveViewButton.Click += (s, e) => OnSaveViewButtonClick(s, e);
             regionBox.Controls.Add(_saveViewButton);
             buttonLeft += 58;
@@ -783,9 +951,9 @@ namespace FracturingFog.Views
             _themeBox = new GroupBox
             {
                 Text = "Color Themes",
-                Left = 28,
+                Left = 13,
                 Top = regionBox.Top + regionBox.Height + 10,
-                Width = 260,
+                Width = 300,
                 Height = 81,
                 ForeColor = Color.FromArgb(155, 155, 155),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
@@ -795,7 +963,7 @@ namespace FracturingFog.Views
 
             _colorThemeCombo = new ColorComboBox
             {
-                Left = 16,
+                Left = 51,
                 Top = 20,
                 Width = 230,
                 Height = 26,
@@ -809,7 +977,7 @@ namespace FracturingFog.Views
             _themeBox.Controls.Add(_colorThemeCombo);
             _colorThemeCombo.SelectedIndex = 0;
 
-            _exportColorThemeButton = MakeBtn("Exp...", 55, 16, 48, "Export the current color theme to a JSON file");
+            _exportColorThemeButton = MakeBtn("Exp...", 55, 51, 48, "Export the current color theme to a JSON file");
             _exportColorThemeButton.Click += (s, e) => OnExportColorThemeButtonClick(s, e);
             _themeBox.Controls.Add(_exportColorThemeButton);
             _importColorThemeButton = MakeBtn("Imp...", 55, _exportColorThemeButton.Left + _exportColorThemeButton.Width + 3, 48, "Import color themes from a JSON file");
@@ -827,7 +995,7 @@ namespace FracturingFog.Views
 
             #region Close Program button
             int closeProgBtnWidth = 130;
-            int closeProgBtnTop = _themeBox.Top + _themeBox.Height + 12;
+            int closeProgBtnTop = _themeBox.Top + _themeBox.Height + 5;
             _closeProgramButton = MakeBtn(
                 "Close Program",
                 closeProgBtnWidth,
