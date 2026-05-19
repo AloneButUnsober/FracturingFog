@@ -149,6 +149,18 @@ namespace FracturingFog.FFMath
         /// <summary>
         /// Find the longest BLA at iteration n applicable to current |δ|².
         /// Returns -1 if none usable (caller does a single perturbation step).
+        ///
+        /// Validity check is strict (dMag2 &lt; R2) and requires R2 &gt; 0. A merged
+        /// BLA whose validity radius collapsed to zero — happens at iter=0
+        /// (Z_0 = 0 makes level-0 R² = 0, cascading through merges) and at
+        /// reference-orbit zero-crossings where |Z| momentarily approaches the
+        /// precision floor — must NOT be applied. The previous <c>dMag2 &lt;= R2</c>
+        /// allowed δ=0 to trivially satisfy R²=0, producing wildly wrong
+        /// skips: at iter=0 with no SA prelude, the largest-level merged BLA
+        /// (whose R cascaded to 0 through the n=0 chain) would be applied,
+        /// producing an unphysical δ = B·dc at iter L. Result was an almost
+        /// uniformly-coloured image since every pixel jumped to roughly the
+        /// same wrong iteration count.
         /// </summary>
         public int Lookup(int n, double dMag2, int maxIter)
         {
@@ -162,7 +174,7 @@ namespace FracturingFog.FFMath
                 if (n + l > RefLen) continue;
                 if (n + l > maxIter) continue;
                 ref readonly var b = ref Data[LevelStart[k] + idx];
-                if (dMag2 <= b.R2) return LevelStart[k] + idx;
+                if (b.R2 > 0.0 && dMag2 < b.R2) return LevelStart[k] + idx;
             }
             return -1;
         }

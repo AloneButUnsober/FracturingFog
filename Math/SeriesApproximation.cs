@@ -38,6 +38,11 @@ namespace FracturingFog.FFMath
         public readonly double[] AR, AI;   // A_n  (complex linear coeff)
         public readonly double[] BR, BI;   // B_n  (complex quadratic coeff)
         public readonly double[] CR, CI;   // C_n  (complex cubic coeff)
+        // D_n — 4th-order coefficient. Not used to extend the polynomial
+        // (still truncated at 3rd order to keep EvalDelta cheap), but used in
+        // FindSkip to bound the truncation error of dropping the 4th and
+        // higher terms. Recurrence: D_{n+1} = 2·Z·D + 2·A·C + B².
+        public readonly double[] DR, DI;
 
         /// <summary>Largest n where all coefficients stay finite (no overflow).</summary>
         public readonly int SafeMax;
@@ -54,9 +59,10 @@ namespace FracturingFog.FFMath
             AR = new double[n1]; AI = new double[n1];
             BR = new double[n1]; BI = new double[n1];
             CR = new double[n1]; CI = new double[n1];
+            DR = new double[n1]; DI = new double[n1];
 
             AR[0] = 1.0;       // A_0 = 1+0i
-            // B_0 = C_0 = 0 (default-initialised)
+            // B_0 = C_0 = D_0 = 0 (default-initialised)
 
             int safe = 0;
             const double ovT2 = OverflowThreshold * OverflowThreshold;
@@ -67,6 +73,7 @@ namespace FracturingFog.FFMath
                 double Ar = AR[n], Ai = AI[n];
                 double Br = BR[n], Bi = BI[n];
                 double Cr = CR[n], Ci = CI[n];
+                double Dr = DR[n], Di = DI[n];
 
                 // A_{n+1} = 2·Z·A + 1
                 double twoZAr = 2.0 * (Zr * Ar - Zi * Ai);
@@ -91,16 +98,36 @@ namespace FracturingFog.FFMath
                 double twoZCi = 2.0 * (Zr * Ci + Zi * Cr);
                 double twoABr = 2.0 * (Ar * Br - Ai * Bi);
                 double twoABi = 2.0 * (Ar * Bi + Ai * Br);
-                CR[n + 1] = twoZCr + twoABr;
-                CI[n + 1] = twoZCi + twoABi;
+                double nCr = twoZCr + twoABr;
+                double nCi = twoZCi + twoABi;
+                CR[n + 1] = nCr;
+                CI[n + 1] = nCi;
+
+                // D_{n+1} = 2·Z·D + 2·A·C + B²
+                // Truncation error of the cubic polynomial is dominated by
+                // the omitted D·dc⁴ term; tracking D lets FindSkip bound it
+                // explicitly.
+                double twoZDr = 2.0 * (Zr * Dr - Zi * Di);
+                double twoZDi = 2.0 * (Zr * Di + Zi * Dr);
+                double twoACr = 2.0 * (Ar * Cr - Ai * Ci);
+                double twoACi = 2.0 * (Ar * Ci + Ai * Cr);
+                double B2r = Br * Br - Bi * Bi;
+                double B2i = 2.0 * Br * Bi;
+                double nDr = twoZDr + twoACr + B2r;
+                double nDi = twoZDi + twoACi + B2i;
+                DR[n + 1] = nDr;
+                DI[n + 1] = nDi;
 
                 // Overflow guard — compare squared magnitudes against ovT2.
-                // Compute inline to avoid sqrt cost.
+                // Compute inline to avoid sqrt cost. D included so SafeMax
+                // tracks the most volatile coefficient.
                 double maxMag2 = nAr * nAr + nAi * nAi;
                 double bm2 = nBr * nBr + nBi * nBi;
                 if (bm2 > maxMag2) maxMag2 = bm2;
-                double cm2 = CR[n + 1] * CR[n + 1] + CI[n + 1] * CI[n + 1];
+                double cm2 = nCr * nCr + nCi * nCi;
                 if (cm2 > maxMag2) maxMag2 = cm2;
+                double dm2 = nDr * nDr + nDi * nDi;
+                if (dm2 > maxMag2) maxMag2 = dm2;
                 if (maxMag2 < ovT2) safe = n + 1;
                 else break;
             }
@@ -108,9 +135,24 @@ namespace FracturingFog.FFMath
         }
 
         /// <summary>
-        /// Largest skip iter k ∈ [0, min(SafeMax, maxAttempt)] satisfying
-        /// |C_k|·|dc| ≤ tolerance·|B_k|. Returns 0 when no skip safe.
-        /// Cost: O(log SafeMax) via binary search over precomputed coefficients.
+        /// Largest skip iter k ∈ [0, min(SafeMax, maxAttempt)] where the
+        /// truncation error of the 3rd-order series stays bounded.
+        ///
+        /// The polynomial keeps A·dc + B·dc² + C·dc³ and drops D·dc⁴ and
+        /// higher. The dropped tail's magnitude is bounded by the geometric
+        /// continuation of D·dc⁴ when the coefficients grow no faster than
+        /// the previous level; we enforce that by requiring BOTH
+        ///   |C·dc³| ≤ tolerance · |B·dc²|   (3rd term controlled vs 2nd)
+        ///   |D·dc⁴| ≤ tolerance · |C·dc³|   (4th term controlled vs 3rd)
+        /// which simplifies to |C|·|dc| ≤ tol·|B| AND |D|·|dc| ≤ tol·|C|.
+        /// The second test catches the "deep-k overskip" failure mode that
+        /// the original single bound missed: at deep iterations D grows
+        /// faster than C, the truncation tail dominates the kept terms, and
+        /// the SA seed diverges from the true δ even when |C·dc| ≤ tol·|B|
+        /// is satisfied.
+        ///
+        /// Cost: O(log SafeMax) via binary search over precomputed
+        /// coefficients.
         /// </summary>
         public int FindSkip(double dcR, double dcI, double tolerance, int maxAttempt)
         {
@@ -125,8 +167,10 @@ namespace FracturingFog.FFMath
                 int mid = (lo + hi) >> 1;
                 double Bm = System.Math.Sqrt(BR[mid] * BR[mid] + BI[mid] * BI[mid]);
                 double Cm = System.Math.Sqrt(CR[mid] * CR[mid] + CI[mid] * CI[mid]);
-                // |C·dc³| ≤ tolerance · |B·dc²|  →  |C|·|dc| ≤ tolerance·|B|
-                if (Cm * dcMag <= tolerance * Bm)
+                double Dm = System.Math.Sqrt(DR[mid] * DR[mid] + DI[mid] * DI[mid]);
+                bool cubicOk = Cm * dcMag <= tolerance * Bm;
+                bool quarticOk = Dm * dcMag <= tolerance * Cm;
+                if (cubicOk && quarticOk)
                 {
                     best = mid;
                     lo = mid + 1;

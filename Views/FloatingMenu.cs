@@ -69,6 +69,15 @@ namespace FracturingFog.Views
         private Label? _contrastLabel;
         private Label? _histogramEqLabel;
 
+        // Video TAA test sliders — live tuning of temporal blend strength
+        // and the deep-zoom fade thresholds while a video zoom is running.
+        private TrackBar? _taaAlphaSlider;
+        private TrackBar? _taaFadeStartSlider;
+        private TrackBar? _taaFadeEndSlider;
+        private Label? _taaAlphaLabel;
+        private Label? _taaFadeStartLabel;
+        private Label? _taaFadeEndLabel;
+
         /// <summary>Brightness offset in [-100, 100]; 0 = neutral.</summary>
         private int _brightness = 0;
 
@@ -114,6 +123,9 @@ namespace FracturingFog.Views
         public event Action<object?, EventArgs, object?> OnBrightnessSlide;
         public event Action<object?, EventArgs, object?> OnContrastSlide;
         public event Action<object?, EventArgs, object?> OnHistogramEqSlide;
+        public event Action<object?, EventArgs, object?> OnTaaAlphaSlide;
+        public event Action<object?, EventArgs, object?> OnTaaFadeStartSlide;
+        public event Action<object?, EventArgs, object?> OnTaaFadeEndSlide;
 
         #endregion Events
 
@@ -200,7 +212,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(370, 690);
+            ClientSize = new System.Drawing.Size(370, 822);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -579,6 +591,123 @@ namespace FracturingFog.Views
                 + "reveal hidden detail in flat-looking regions  (0 = off, 100 = full)");
             _histogramEqSlider.ValueChanged += (s, e) => OnHistogramEqSlider(s, e, _histogramEqLabel);
             _coordPanel.Controls.Add(_histogramEqSlider);
+
+            // ── Video TAA test sliders ────────────────────────────────────
+            // Live tuning of temporal-blend alpha and the deep-zoom fade
+            // window. Defaults match the VideoZoom code defaults (55 % alpha,
+            // fade from 1e15 → 1e18). Values are passed straight through to
+            // MainForm which forwards them to VideoZoom every change.
+            sliderLeft = 8;
+            sliderTop += 44;
+            _taaAlphaLabel = new Label
+            {
+                Text = "TAA α: 55",
+                Left = sliderLeft,
+                Top = sliderTop + 3,
+                Width = 78,
+                Height = 12,
+                Padding = new Padding(0),
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(180, 180, 180),
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            _coordPanel.Controls.Add(_taaAlphaLabel);
+            sliderLeft += 86;
+
+            _taaAlphaSlider = new TrackBar
+            {
+                Left = sliderLeft,
+                Top = sliderTop,
+                Width = 200,
+                Height = 22,
+                Minimum = 0,
+                Maximum = 100,
+                Value = 55,
+                TickFrequency = 10,
+                SmallChange = 1,
+                LargeChange = 10,
+                BackColor = Color.FromArgb(22, 22, 22),
+            };
+            _toolTip.SetToolTip(_taaAlphaSlider,
+                "Video TAA temporal blend strength (live test)  "
+                + "(0 = current frame only, 100 = max prev-frame contribution)");
+            _taaAlphaSlider.ValueChanged += (s, e) => OnTaaAlphaSlider(s, e, _taaAlphaLabel);
+            _coordPanel.Controls.Add(_taaAlphaSlider);
+
+            sliderLeft = 8;
+            sliderTop += 44;
+            _taaFadeStartLabel = new Label
+            {
+                Text = "Fade @ 1e15",
+                Left = sliderLeft,
+                Top = sliderTop + 3,
+                Width = 78,
+                Height = 12,
+                Padding = new Padding(0),
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(180, 180, 180),
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            _coordPanel.Controls.Add(_taaFadeStartLabel);
+            sliderLeft += 86;
+
+            _taaFadeStartSlider = new TrackBar
+            {
+                Left = sliderLeft,
+                Top = sliderTop,
+                Width = 200,
+                Height = 22,
+                Minimum = 0,
+                Maximum = 25,
+                Value = 15,
+                TickFrequency = 1,
+                SmallChange = 1,
+                LargeChange = 2,
+                BackColor = Color.FromArgb(22, 22, 22),
+            };
+            _toolTip.SetToolTip(_taaFadeStartSlider,
+                "TAA fade-start zoom (log10) — TAA full-strength below this zoom level");
+            _taaFadeStartSlider.ValueChanged += (s, e) => OnTaaFadeStartSlider(s, e, _taaFadeStartLabel);
+            _coordPanel.Controls.Add(_taaFadeStartSlider);
+
+            sliderLeft = 8;
+            sliderTop += 44;
+            _taaFadeEndLabel = new Label
+            {
+                Text = "Off @ 1e18",
+                Left = sliderLeft,
+                Top = sliderTop + 3,
+                Width = 78,
+                Height = 12,
+                Padding = new Padding(0),
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(180, 180, 180),
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                BackColor = Color.Transparent
+            };
+            _coordPanel.Controls.Add(_taaFadeEndLabel);
+            sliderLeft += 86;
+
+            _taaFadeEndSlider = new TrackBar
+            {
+                Left = sliderLeft,
+                Top = sliderTop,
+                Width = 200,
+                Height = 22,
+                Minimum = 0,
+                Maximum = 25,
+                Value = 18,
+                TickFrequency = 1,
+                SmallChange = 1,
+                LargeChange = 2,
+                BackColor = Color.FromArgb(22, 22, 22),
+            };
+            _toolTip.SetToolTip(_taaFadeEndSlider,
+                "TAA fade-end zoom (log10) — TAA fully off above this zoom level");
+            _taaFadeEndSlider.ValueChanged += (s, e) => OnTaaFadeEndSlider(s, e, _taaFadeEndLabel);
+            _coordPanel.Controls.Add(_taaFadeEndSlider);
             #endregion Brightness & Contrast sliders
 
             _chkSlideshowUseExtremeRegions = new CheckBox
@@ -874,6 +1003,31 @@ namespace FracturingFog.Views
 
         private void OnHistogramEqSlider(object? s, EventArgs e, object? l) =>
             OnHistogramEqSlide?.DynamicInvoke(s, e, l);
+
+        private void OnTaaAlphaSlider(object? s, EventArgs e, object? l)
+        {
+            if (_taaAlphaSlider != null && _taaAlphaLabel != null)
+                _taaAlphaLabel.Text = $"TAA α: {_taaAlphaSlider.Value}";
+            OnTaaAlphaSlide?.DynamicInvoke(s, e, l);
+        }
+
+        private void OnTaaFadeStartSlider(object? s, EventArgs e, object? l)
+        {
+            if (_taaFadeStartSlider != null && _taaFadeStartLabel != null)
+                _taaFadeStartLabel.Text = $"Fade @ 1e{_taaFadeStartSlider.Value}";
+            OnTaaFadeStartSlide?.DynamicInvoke(s, e, l);
+        }
+
+        private void OnTaaFadeEndSlider(object? s, EventArgs e, object? l)
+        {
+            if (_taaFadeEndSlider != null && _taaFadeEndLabel != null)
+                _taaFadeEndLabel.Text = $"Off @ 1e{_taaFadeEndSlider.Value}";
+            OnTaaFadeEndSlide?.DynamicInvoke(s, e, l);
+        }
+
+        public int TaaAlphaValue => _taaAlphaSlider?.Value ?? 55;
+        public int TaaFadeStartLog10 => _taaFadeStartSlider?.Value ?? 15;
+        public int TaaFadeEndLog10 => _taaFadeEndSlider?.Value ?? 18;
 
         #endregion Private Methods
 

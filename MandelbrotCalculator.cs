@@ -2114,20 +2114,34 @@ public sealed class MandelbrotCalculator
     // ColorMap, so successive calls with different strengths compose correctly.
     public void ApplyHistogramEqualization(double strength)
     {
-        if (strength < 0.0) strength = 0.0;
-        if (strength > 1.0) strength = 1.0;
+        if (!BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter))
+        {
+            // No escaped pixels — fall back to plain recolor.
+            RecolorFromBuffers();
+            return;
+        }
+        ApplyHistogramEqualizationWithCdf(cdf!, bins, sourceMaxIter, strength);
+    }
+
+    /// <summary>
+    /// Builds the equalization CDF for the current SmoothBuffer/IterationBuffer
+    /// without applying it. Returns false (and zeroed outputs) when the view
+    /// has no escaped pixels — caller should treat that as the identity case.
+    /// Used by the video path to lock the CDF for the duration of a leg so
+    /// per-frame palette mapping does not flicker as image statistics drift.
+    /// </summary>
+    public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
+    {
+        cdf = null;
+        bins = 0;
+        sourceMaxIter = MaxIterations;
 
         int w = Width, h = Height;
         int n = w * h;
         int maxIter = MaxIterations;
-        if (n == 0 || maxIter <= 0) return;
+        if (n == 0 || maxIter <= 0) return false;
 
-        ColorMap.MaxIterations = maxIter;
-
-        // ── Build histogram over escaped pixels ──────────────────────────────
-        // Bin count: enough resolution for smooth gradients, capped to avoid
-        // sparse bins on small images.
-        int bins = Math.Min(2048, Math.Max(256, maxIter));
+        bins = Math.Min(2048, Math.Max(256, maxIter));
         int[] hist = new int[bins];
         int totalEscaped = 0;
         float invMax = 1.0f / maxIter;
@@ -2143,15 +2157,9 @@ public sealed class MandelbrotCalculator
             totalEscaped++;
         }
 
-        // No escaped pixels (entire view interior) — nothing to equalize.
-        if (totalEscaped == 0)
-        {
-            RecolorFromBuffers();
-            return;
-        }
+        if (totalEscaped == 0) return false;
 
-        // CDF normalized to [0, 1].
-        double[] cdf = new double[bins];
+        cdf = new double[bins];
         long cum = 0;
         double invTotal = 1.0 / totalEscaped;
         for (int i = 0; i < bins; i++)
@@ -2159,8 +2167,129 @@ public sealed class MandelbrotCalculator
             cum += hist[i];
             cdf[i] = cum * invTotal;
         }
+        return true;
+    }
 
-        // ── Re-color every pixel using lerp(linear t, cdf t, strength) ───────
+    /// <summary>
+    /// Applies a previously-built equalization CDF to the current buffers.
+    /// The smooth-iter → bin lookup is normalized against <paramref name="sourceMaxIter"/>
+    /// (MaxIterations at build time) so a locked CDF stays valid across frames
+    /// whose MaxIterations differs by tier auto-promote — pixels above the
+    /// build-time iter ceiling fall into the last bin (saturating, no flicker).
+    /// </summary>
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength)
+        => ApplyHistogramEqualizationWithCdf(cdf, bins, sourceMaxIter, strength, 0.0, out _, out _);
+
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength)
+        => ApplyHistogramEqualizationWithCdf(cdf, bins, sourceMaxIter, strength, ditherIterStrength, out _, out _);
+
+    /// <summary>
+    /// As above, but additionally applies a stable per-pixel spatial dither
+    /// (in iteration units) to the smooth-iter value before palette lookup.
+    /// Used by the video path to blur band boundaries so the per-frame shift
+    /// across them becomes less visible. The dither is a function of (x, y)
+    /// only, so it introduces no new temporal noise.
+    ///
+    /// Returns the count of escaped pixels and the count that saturated to the
+    /// last CDF bin so the caller can detect when the locked CDF has drifted
+    /// out of range (e.g. after tier auto-promote produced smooth-iter values
+    /// above the build-time sourceMaxIter) and trigger a rebuild.
+    /// </summary>
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength, out long escapedCount, out long saturatedCount)
+    {
+        escapedCount = 0;
+        saturatedCount = 0;
+        if (cdf == null || bins <= 0 || sourceMaxIter <= 0) return;
+        if (strength < 0.0) strength = 0.0;
+        if (strength > 1.0) strength = 1.0;
+        if (ditherIterStrength < 0.0) ditherIterStrength = 0.0;
+
+        int w = Width, h = Height;
+        int maxIter = MaxIterations;
+        if (w == 0 || h == 0 || maxIter <= 0) return;
+
+        ColorMap.MaxIterations = maxIter;
+
+        float invMax = 1.0f / maxIter;             // for current-frame coloring
+        float invMaxSrc = 1.0f / sourceMaxIter;    // for CDF bin lookup
+        int lastBin = bins - 1;
+        float ditherIter = (float)ditherIterStrength;
+
+        // Per-row counters then summed at the end to avoid contended atomics
+        // in the hot loop.
+        long[] rowEscaped = new long[h];
+        long[] rowSaturated = new long[h];
+
+        var po = new ParallelOptions();
+        Parallel.For(0, h, po, y =>
+        {
+            int rowBase = y * w;
+            long esc = 0;
+            long sat = 0;
+            for (int x = 0; x < w; x++)
+            {
+                int idx = rowBase + x;
+                int iters = IterationBuffer[idx];
+                if (iters >= maxIter)
+                {
+                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    continue;
+                }
+                esc++;
+                float s = SmoothBuffer[idx];
+                float tLin = s * invMax;
+                float tLinC = tLin < 0f ? 0f : (tLin > 0.9999999f ? 0.9999999f : tLin);
+
+                float tLookupRaw = s * invMaxSrc;
+                float tLookup = tLookupRaw;
+                if (tLookup < 0f) tLookup = 0f;
+                else if (tLookup > 0.9999999f) tLookup = 0.9999999f;
+                int b = (int)(tLookup * bins);
+                if (b > lastBin) b = lastBin;
+                // A raw lookup at or above 1.0 means s exceeded the locked
+                // sourceMaxIter — the pixel is being forced into the last bin
+                // rather than mapped by its real distribution position.
+                if (tLookupRaw >= 0.9999999f) sat++;
+
+                double tEq = cdf[b];
+                double tBlend = tLinC + (tEq - tLinC) * strength;
+                float smoothEq = (float)(tBlend * maxIter);
+                if (ditherIter > 0f)
+                    smoothEq += SpatialDither(x, y) * ditherIter;
+                ColorBuffer[idx] = (uint)ColorMap.Map(
+                    smoothEq, DistanceBuffer[idx], maxIter,
+                    NormalXBuffer[idx], NormalYBuffer[idx],
+                    FinalZrBuffer[idx], FinalZiBuffer[idx],
+                    FinalDrBuffer[idx], FinalDiBuffer[idx]);
+            }
+            rowEscaped[y] = esc;
+            rowSaturated[y] = sat;
+        });
+
+        long totalEsc = 0;
+        long totalSat = 0;
+        for (int i = 0; i < h; i++) { totalEsc += rowEscaped[i]; totalSat += rowSaturated[i]; }
+        escapedCount = totalEsc;
+        saturatedCount = totalSat;
+    }
+
+    /// <summary>
+    /// Recolors the ColorBuffer using the current SmoothBuffer + a stable
+    /// spatial dither added to the smooth-iter value in iteration units.
+    /// Used by the video path when band-edge dither is enabled but histogram
+    /// equalization is not.
+    /// </summary>
+    public void ApplyBandDitherRecolor(double ditherIterStrength)
+    {
+        if (ditherIterStrength <= 0.0) { RecolorFromBuffers(); return; }
+
+        int w = Width, h = Height;
+        int maxIter = MaxIterations;
+        if (w == 0 || h == 0 || maxIter <= 0) return;
+
+        ColorMap.MaxIterations = maxIter;
+        float ditherIter = (float)ditherIterStrength;
+
         var po = new ParallelOptions();
         Parallel.For(0, h, po, y =>
         {
@@ -2174,20 +2303,26 @@ public sealed class MandelbrotCalculator
                     ColorBuffer[idx] = ColorMap.InSetColor;
                     continue;
                 }
-                float s = SmoothBuffer[idx];
-                float tLin = s * invMax;
-                float tLinC = tLin < 0f ? 0f : (tLin > 0.9999999f ? 0.9999999f : tLin);
-                int b = (int)(tLinC * bins);
-                double tEq = cdf[b];
-                double tBlend = tLin + (tEq - tLin) * strength;
-                float smoothEq = (float)(tBlend * maxIter);
+                float s = SmoothBuffer[idx] + SpatialDither(x, y) * ditherIter;
                 ColorBuffer[idx] = (uint)ColorMap.Map(
-                    smoothEq, DistanceBuffer[idx], maxIter,
+                    s, DistanceBuffer[idx], maxIter,
                     NormalXBuffer[idx], NormalYBuffer[idx],
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
                     FinalDrBuffer[idx], FinalDiBuffer[idx]);
             }
         });
+    }
+
+    // Stable spatial hash → [-0.5, 0.5). Pure function of (x, y), so the
+    // dither pattern locks to image space and adds no temporal noise across
+    // frames at a given pixel.
+    private static float SpatialDither(int x, int y)
+    {
+        uint h = unchecked((uint)(x * 73856093) ^ (uint)(y * 19349663));
+        h ^= h >> 13;
+        h *= 0x5bd1e995u;
+        h ^= h >> 15;
+        return ((h & 0xFFFFu) * (1.0f / 65535.0f)) - 0.5f;
     }
 
     // Recompute ColorBuffer from filled aux buffers without changing iteration
