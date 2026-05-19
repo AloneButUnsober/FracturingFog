@@ -905,6 +905,9 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnBrightnessSlide += (s, e, l) => OnAdjustBrightness(s, e, l);
         _floatingMenu.OnContrastSlide += (s, e, l) => OnAdjustContrast(s, e, l);
         _floatingMenu.OnHistogramEqSlide += (s, e, l) => OnAdjustHistogramEq(s, e, l);
+        _floatingMenu.OnTaaAlphaSlide     += (s, e, l) => SetVideoTaaAlphaPercent(_floatingMenu.TaaAlphaValue);
+        _floatingMenu.OnTaaFadeStartSlide += (s, e, l) => SetVideoTaaFadeStartLog10(_floatingMenu.TaaFadeStartLog10);
+        _floatingMenu.OnTaaFadeEndSlide   += (s, e, l) => SetVideoTaaFadeEndLog10(_floatingMenu.TaaFadeEndLog10);
 
         UpdateCoordBoxes();
         if (!_regionCombo.IsDisposed) _floatingMenu.RegionName = _currentRegionName;
