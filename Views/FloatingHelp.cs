@@ -179,7 +179,7 @@ namespace FracturingFog.Views
                 Appearance = TabAppearance.Normal,
                 DrawMode = TabDrawMode.OwnerDrawFixed,
                 SizeMode = TabSizeMode.Fixed,
-                ItemSize = new Size(108, 26),
+                ItemSize = new Size(92, 26),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 BackColor = Color.FromArgb(22, 22, 22),
             };
@@ -188,6 +188,7 @@ namespace FracturingFog.Views
             _tabs.TabPages.Add(BuildAboutTab());
             _tabs.TabPages.Add(BuildSystemInfoTab());
             _tabs.TabPages.Add(BuildFeaturesTab());
+            _tabs.TabPages.Add(BuildEditorTab());
             _tabs.TabPages.Add(BuildMathTab());
             _tabs.TabPages.Add(BuildBioTab());
 
@@ -462,6 +463,311 @@ namespace FracturingFog.Views
   Perturbation theory (Series Approx. + BLA) accelerates deep zooms.
 ";
             rtb.Text = rtb.Text.Replace("{THEME_COUNT}", themeCount.ToString());
+            return page;
+        }
+
+        /// <summary>
+        /// Selects the Color Theme Editor tab. Called by MainForm when the
+        /// editor's "Help" button is clicked so the user lands directly on
+        /// the editor documentation instead of having to find the tab.
+        /// </summary>
+        public void ShowEditorTab()
+        {
+            foreach (TabPage page in _tabs.TabPages)
+            {
+                if ((page.Tag as string) == "editor-help")
+                {
+                    _tabs.SelectedTab = page;
+                    return;
+                }
+            }
+        }
+
+        private TabPage BuildEditorTab()
+        {
+            var page = MakePage("Theme Editor");
+            page.Tag = "editor-help";
+            var rtb = MakeRichText(page);
+
+            rtb.Text =
+@"=== Color Theme Editor ===
+
+A floating window that lets you create new color themes from scratch
+or edit existing ones, with live preview into the main render window.
+
+Open from the Floating Menu: Color Themes → ""Edit Theme…"" button.
+The editor uses the currently-selected theme as its starting point.
+
+=== Layout ===
+
+  Left column   Target, Identity, Kind, Color Stops, Cycle,
+                In-Set, Post-FX Defaults, action buttons
+  Right column  3D Lighting (Phong/PBR), Phong3D Extras,
+                Pbr3D Extras  (visible only when relevant Kind chosen)
+
+=== Target ===
+
+  Region   Picks a saved region. Jumping a region inside the editor
+           also moves the main view and snaps both the toolbar and
+           floating-menu region combos.
+
+  Theme    Picks the starting theme. Selecting a theme:
+            • Populates every field in the editor.
+            • Pushes the theme as the live preview map.
+            • Snaps the toolbar + floating-menu theme combos.
+            • Editor combos do NOT track changes made outside the
+              editor — once it is open, the editor owns the selection.
+
+  Algorithmic themes (HSV, Bernstein, Painted, etc.) have no exported
+  parameter surface. The editor disables Apply / Save / Export and
+  prompts you to click ""New Blank"" to start from a blank Gradient.
+
+=== Identity ===
+
+  Name         Display name in combos. Required; must be unique among
+               user themes. Saving with an existing name prompts to
+               replace.
+  Category     Free-form group label. ""User"" is the default; built-ins
+               use ""3D Relief"", ""Cycling"", ""Domain Coloring"", etc.
+  Desc         One-line description shown as tooltip in the combo.
+  Max zoom     Optional cap on zoom where this theme stays useful for
+               automated viewing (slideshow / video). Tick ""Limited""
+               to enable; leave unticked for no cap. Themes whose
+               signal degrades at deep zoom (orbit-aware, distance-
+               estimation) should carry a finite value so slideshow
+               and video skip them past that depth.
+
+=== Kind (theme type) ===
+
+Four radio buttons select the underlying rendering model. Switching
+Kind reveals or hides the type-specific sections on the right column.
+
+  Gradient   Linear gradient stretched once across the iteration range.
+             Simple, predictable, no time-varying parameters.
+  Cycling    Gradient that wraps multiple times based on CycleSpeed.
+             Better for deep zoom because color signal never goes
+             flat-black.
+  Phong3D    Cycling gradient with Blinn-Phong directional lighting.
+             Uses the fractal's normal map for relief shading.
+  Pbr3D      Cycling gradient with Cook-Torrance PBR lighting.
+             Adds metalness, roughness, energy-conserving highlights.
+
+=== Color Stops (all kinds) ===
+
+  Position   Normalized [0, 1]. 0 = start of gradient (low iterations),
+             1 = end (high / escape). Stops are sorted by Position on
+             save and on render.
+  Swatch     Click to open a color picker (wheel + RGB entry).
+  R / G / B  Numeric channel entry, 0–255. Swatch updates as you type.
+  X          Removes that stop.
+  + Add Stop Appends a new stop at Position 1, white.
+
+  Minimum 2 stops required to render. The renderer linearly
+  interpolates between consecutive stops.
+
+=== Cycle (Cycling / Phong3D / Pbr3D) ===
+
+  Speed   How fast the gradient repeats across the iteration range.
+          Default 0.02 = roughly one full cycle every 50 smooth-units.
+          Higher → more rapid color cycling (good for deep zoom).
+          Lower → broader bands.
+  Hidden for the Gradient kind, which does not cycle.
+
+=== 3D Lighting — Shared (Phong3D + Pbr3D) ===
+
+  Steepness   Z-scale factor applied to the surface normal.
+              Smaller = deeper carving (dramatic relief); larger =
+              flatter surface. Typical range 0.8 – 2.5. Default 1.6.
+  Ambient     Base illumination added to every pixel before lighting.
+              Prevents shadow areas from going pure black. Typical
+              0.05 – 0.20. Default 0.12.
+
+  Key Light and Fill Light  Two independent directional lights:
+    Dir X / Y / Z   Light direction vector. Normalised on use; you
+                    can enter rough values like (-0.5, 0.7, 0.6).
+                    +X = right, +Y = up (complex plane), +Z = toward
+                    viewer.
+    Diffuse RGB     Lambertian color contribution (matte). Swatch
+                    + numeric entry. Multiplied by max(0, N·L).
+    Specular RGB    Highlight color (mirror-like). Multiplied by
+                    max(0, N·H)^Shininess.
+    Shininess       Specular exponent. Higher = tighter, sharper
+                    highlight (mirror). Lower = broader, softer
+                    (matte). Typical 16 (soft) – 128 (sharp).
+
+  Typical setup: Key light is bright/white and aimed front-upper-left;
+  Fill light is dimmer/cool and aimed from opposite side to lift the
+  shadows.
+
+=== Phong3D Extras ===
+
+  Key spec    Multiplier on the Key light's specular contribution.
+              0 = no highlights from key. Default 0.85.
+  Fill spec   Multiplier on the Fill light's specular. Usually small
+              (0.10 – 0.30) so fill stays matte. Default 0.25.
+  Fill diff   Multiplier on the Fill light's diffuse. Controls how
+              much color the fill light adds. Default 0.35.
+
+  Use these to balance the two lights without changing the per-light
+  color values. Cranking fill-diff lifts shadow color; cranking
+  key-spec pushes sharper hotspots.
+
+=== Pbr3D Extras ===
+
+  Lighting    Choice of PBR lighting profile:
+              • PBRRealistic — physically accurate, subtle. Closer to
+                offline renderer output.
+              • PBRBright    — HDR-boosted, glow-friendly. Better for
+                deep-zoom interior shots where realism matters less
+                than visible color.
+  Glow exp    Exponent in the glow-boost function:
+                glow(t) = GlowScale * pow(t, GlowExp)
+              Default 8. Higher = glow concentrates near escape (t=1)
+              and dies off quickly at low t.
+  Glow scl    Linear scale on the same function. Set to 0 to disable
+              the glow boost entirely. Useful for highlighting the
+              very edge of escape without lifting interior detail.
+
+  Material bands  Piecewise metal / roughness function. Each row:
+    UpperT      The band applies when t < UpperT. Bands are evaluated
+                in list order; the first band whose threshold exceeds
+                t wins. The final band's UpperT acts as a catch-all
+                (set it to 1.0 or higher).
+    Metal       0 = dielectric (plastic, stone). 1 = full metal.
+                Values in between blend the two BRDFs.
+    Roughness   0 = mirror-smooth. 1 = fully diffuse. 0.7 is a
+                useful default for stone / rough metal.
+  + Add Band  Appends a band; remember to update its UpperT so it
+              actually catches a range of t.
+
+  A common pattern is one matte interior band followed by one
+  glossy band near escape, e.g.:
+    UpperT=0.85, Metal=0.0, Roughness=0.80   ← bulk of the gradient
+    UpperT=1.00, Metal=0.6, Roughness=0.20   ← shiny escape rim
+
+=== In-Set (Interior) ===
+
+  Override   When ticked, paints in-set (unescaped) pixels with the
+             chosen color instead of opaque black. Useful for themes
+             where black hides too much against a dark gradient.
+  Swatch     Click to color-pick the in-set color.
+  R / G / B  Numeric entry; swatch tracks live.
+  Unticked   Default opaque black (0xFF000000) — historical behavior.
+
+=== Post-FX Defaults ===
+
+The editor can record default values for the three post-processing
+sliders on the Floating Menu (Brightness / Contrast / Adaptive). On
+theme selection elsewhere, those sliders snap to the theme's defaults
+unless the slider is locked.
+
+  Brightness — set by theme   −100 … +100. Tick to persist.
+  Contrast   — set by theme   −100 … +100. Tick to persist.
+  Adaptive   — set by theme   0 … 100. Tick to persist.
+
+  When the checkbox is unticked, the JSON field is omitted (null) and
+  the host slider keeps whatever the user left it on. When ticked,
+  the value is stored in the theme JSON and applied on theme select.
+
+  The Floating Menu sliders also carry per-slider Lock checkboxes —
+  ticking a lock pins the slider position across theme switches so
+  a theme's default cannot override it.
+
+=== Live Preview & Actions ===
+
+  Live preview   When ticked (default), changes push to the main
+                 render window via a 150 ms debounce. Drag a slider
+                 freely; the calculator re-runs once you settle.
+  Apply          Force a push to the main render immediately,
+                 regardless of the live-preview state.
+  New Blank      Discard current edits and start from a fresh
+                 Gradient (two stops: black → white). Useful when
+                 the source theme is algorithmic and not editable.
+  Revert         Reload from the last source theme name. Discards
+                 unsaved edits.
+  Save to Library
+                 Validates Name / ≥ 2 stops, then adds or replaces a
+                 user theme in %APPDATA%\FracturingFog\colorthemes.json.
+                 Triggers a combo rebuild on the toolbar and floating
+                 menu so the new name is immediately selectable.
+  Export JSON…   Writes a single-theme JSON array to a location of
+                 your choice. The output round-trips through the
+                 existing Import flow in the Floating Menu.
+
+=== Region Sync ===
+
+  Selecting a Region in the editor jumps the main view AND updates
+  the toolbar and floating-menu region combos. The reverse is NOT
+  true: while the editor is open, its own combos are not modified
+  by selections made elsewhere — this keeps the editor predictable
+  while you are editing.
+
+=== File Format ===
+
+  Library file:  %APPDATA%\FracturingFog\colorthemes.json
+                 (auto-saved on every Save to Library / library edit)
+  Source seed:   <install>\Resources\ColorThemes\colorthemes.json
+                 (merged into the user file on first launch only)
+
+  Each entry is a single ColorThemeData object. Fields are emitted
+  with WhenWritingNull semantics — anything left null in the editor
+  is omitted from the JSON entirely. Hand-edits to the JSON are
+  picked up on the next launch, or via the Reload button.
+
+=== Quick Workflows ===
+
+  ""Tweak an existing 3D theme""
+    1. Open editor (Color Themes → Edit Theme…)
+    2. Theme combo → pick the source theme
+    3. Adjust Steepness / Ambient / Light directions
+    4. Save to Library (uses the same name = replace)
+
+  ""Build a fresh gradient by hand""
+    1. New Blank
+    2. Color Stops → set positions + colors
+    3. Pick Cycling if you want repetition at deep zoom
+    4. Adjust CycleSpeed
+    5. Name + Save to Library
+
+  ""Share a theme""
+    1. Save to Library (or simply edit the running theme)
+    2. Export JSON… to a file
+    3. Send the file. Recipient uses Floating Menu Import to ingest.
+
+=== Per-Kind Parameter Index ===
+
+  Every kind uses:  Name, Category, Description, Max Zoom,
+                    Color Stops, In-Set Override, Post-FX Defaults.
+
+  Gradient
+    • Color Stops only (no Cycle, no 3D Lighting).
+    • Renders as one linear gradient across the iteration range.
+
+  Cycling
+    • Color Stops
+    • Cycle Speed  — repetition rate of the gradient.
+
+  Phong3D    (Cycling + Blinn-Phong directional lighting)
+    • Color Stops
+    • Cycle Speed
+    • Steepness, Ambient
+    • Key Light    (Dir, Diffuse, Specular, Shininess)
+    • Fill Light   (Dir, Diffuse, Specular, Shininess)
+    • Key spec, Fill spec, Fill diff  — per-light multipliers.
+
+  Pbr3D      (Cycling + Cook-Torrance PBR lighting)
+    • Color Stops
+    • Cycle Speed
+    • Steepness, Ambient
+    • Key Light, Fill Light  (Shininess unused by PBR brdf —
+                              roughness drives highlight sharpness)
+    • Lighting mode  (PBRRealistic | PBRBright)
+    • Glow exp, Glow scl     — additive emission near escape.
+    • Material bands         — piecewise (metal, roughness) over t.
+
+  Fields not in the active kind are hidden in the editor and stored
+  as null in the saved JSON (no waste, no confusion on round-trip).
+";
             return page;
         }
 

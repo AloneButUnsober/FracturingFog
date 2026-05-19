@@ -966,10 +966,30 @@ public sealed partial class MainForm : Form
             _colorThemeEditor = new ColorThemeEditor(
                 this,
                 initialThemeName: _currentColorThemeName,
-                initialRegionName: _currentRegionName);
+                 initialRegionName: _currentRegionName);
 
-            _colorThemeEditor.OnPreviewMapChanged += map => ApplyPreviewMap(map);
-            _colorThemeEditor.OnRegionSelected += name => JumpToRegion(name);
+            _colorThemeEditor.OnPreviewThemeChanged += data => ApplyPreviewTheme(data);
+            _colorThemeEditor.OnRegionSelected += name =>
+            {
+                JumpToRegion(name);
+                _currentRegionName = name;
+                SyncRegionCombos(name);
+            };
+            _colorThemeEditor.OnEditorThemeSelected += name =>
+            {
+                // Editor is authoritative while open — update committed name
+                // and mirror into both toolbar + floating menu combos. The
+                // calculator's color map is driven by the editor's preview
+                // pipeline (OnPreviewThemeChanged), not by combo selection.
+                _currentColorThemeName = name;
+                SyncThemeCombos(name);
+            };
+            _colorThemeEditor.OnHelpClick += (s, e) =>
+            {
+                OnShowHelpClick();
+                _floatingHelp?.ShowEditorTab();
+                _floatingHelp?.BringToFront();
+            };
             _colorThemeEditor.OnThemeSavedToLibrary += name =>
             {
                 // Rebuild combo (Reload path) and select the newly-saved theme,
@@ -1260,11 +1280,72 @@ public sealed partial class MainForm : Form
             if (_calculator != null)
             {
                 _calculator.ColorMap = map;
+                // Snap post-FX sliders (Brightness/Contrast/Adaptive) if this
+                // theme carries defaults. Built-in themes return null fields
+                // via Export, so the sliders stay where the user left them.
+                var data = DataDrivenColorThemes.Export(map);
+                ApplyThemePostFx(data);
                 TriggerCalculation();
             }
             _miniMapPanel?.RequestRedraw();
         _miniDepthPanel?.RequestRedraw();
+
+            // Sync the other combo (toolbar vs floating menu) so both
+            // surfaces always show the same active theme, regardless of which
+            // one the user clicked.
+            SyncThemeCombos(_currentColorThemeName, exclude: _cb);
         }
+    }
+
+    /// <summary>
+    /// Mirrors the named theme into both the toolbar combo and the
+    /// FloatingMenu combo, suppressing each combo's change handler so the
+    /// sync does not re-enter OnColorThemeChanged. Pass the originating
+    /// combo as <paramref name="exclude"/> to skip touching it (it already
+    /// has the right value).
+    /// </summary>
+    private void SyncThemeCombos(string name, ComboBox? exclude = null)
+    {
+        if (_colorThemeCombo != null && !_colorThemeCombo.IsDisposed && _colorThemeCombo != exclude)
+        {
+            _colorThemeCombo.SelectedIndexChanged -= OnColorThemeChanged;
+            try
+            {
+                int idx = _colorThemeCombo.FindStringExact(name ?? string.Empty);
+                if (idx >= 0 && _colorThemeCombo.SelectedIndex != idx)
+                    _colorThemeCombo.SelectedIndex = idx;
+            }
+            finally
+            {
+                _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
+            }
+        }
+        if (_floatingMenu != null && !_floatingMenu.IsDisposed)
+            _floatingMenu.SetThemeSilent(name ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Mirrors the named region into both region combos without re-firing
+    /// OnRegionComboChanged. See <see cref="SyncThemeCombos"/>.
+    /// </summary>
+    private void SyncRegionCombos(string name, ComboBox? exclude = null)
+    {
+        if (_regionCombo != null && !_regionCombo.IsDisposed && _regionCombo != exclude)
+        {
+            _regionCombo.SelectedIndexChanged -= OnRegionComboChanged;
+            try
+            {
+                int idx = _regionCombo.FindStringExact(name ?? string.Empty);
+                if (idx >= 0 && _regionCombo.SelectedIndex != idx)
+                    _regionCombo.SelectedIndex = idx;
+            }
+            finally
+            {
+                _regionCombo.SelectedIndexChanged += OnRegionComboChanged;
+            }
+        }
+        if (_floatingMenu != null && !_floatingMenu.IsDisposed)
+            _floatingMenu.SetRegionSilent(name ?? string.Empty);
     }
 
     private void OnResetClick(object? sender, EventArgs e)
@@ -1369,6 +1450,8 @@ public sealed partial class MainForm : Form
             var region = JumpToRegion(_currentRegionName);
             if (region != null)
                 _toolTip.SetToolTip(_cb, region.Description);
+
+            SyncRegionCombos(_currentRegionName, exclude: _cb);
         }
     }
 
@@ -1390,8 +1473,48 @@ public sealed partial class MainForm : Form
     }
 
     /// <summary>
-    /// Injects a transient color map (built live by the Color Theme Editor)
+    /// Injects a transient color theme (built live by the Color Theme Editor)
     /// into the calculator and re-renders. Does not change combo selection.
+    /// Applies the theme's post-FX (Brightness / Contrast / Adaptive) when
+    /// those fields are non-null and the corresponding slider is not locked.
+    /// </summary>
+    public void ApplyPreviewTheme(ColorThemeData? data)
+    {
+        if (data == null || _calculator == null) return;
+        var map = DataDrivenColorThemes.Create(data);
+        if (map == null) return;
+        _previewingTransientMap = true;
+        _calculator.ColorMap = map;
+        ApplyThemePostFx(data);
+        TriggerCalculation();
+        _miniMapPanel?.RequestRedraw();
+        _miniDepthPanel?.RequestRedraw();
+    }
+
+    /// <summary>
+    /// Snaps the post-FX sliders (Brightness/Contrast/Adaptive) on the
+    /// FloatingMenu to the values carried by <paramref name="data"/>. A null
+    /// field on the data means "theme has no opinion" → slider resets to the
+    /// neutral default (0). Locked sliders are left alone in either case so
+    /// the user can pin a preferred value across theme switches.
+    /// </summary>
+    private void ApplyThemePostFx(ColorThemeData? data)
+    {
+        if (_floatingMenu == null || _floatingMenu.IsDisposed) return;
+
+        if (!_floatingMenu.BrightnessLocked)
+            _floatingMenu.SetBrightness(data?.Brightness ?? 0);
+
+        if (!_floatingMenu.ContrastLocked)
+            _floatingMenu.SetContrast(data?.Contrast ?? 0);
+
+        if (!_floatingMenu.AdaptiveLocked)
+            _floatingMenu.SetAdaptive(data?.Adaptive ?? 0);
+    }
+
+    /// <summary>
+    /// Injects a transient color map (no theme metadata) into the calculator.
+    /// Retained for callers that don't have a ColorThemeData on hand.
     /// </summary>
     public void ApplyPreviewMap(Interefaces.IColorMap map)
     {

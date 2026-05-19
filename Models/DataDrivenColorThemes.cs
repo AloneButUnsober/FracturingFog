@@ -59,6 +59,17 @@ namespace FracturingFog.Models
             double maxZoom = ColorPalette.GetStaticMaxZoom(map);
             double? maxZoomField = double.IsPositiveInfinity(maxZoom) ? null : maxZoom;
 
+            // Post-FX defaults are per-instance metadata carried only by
+            // data-driven user themes. Built-in C# themes don't implement
+            // IThemePostFx so all three fields stay null (no opinion).
+            int? bright = null, contrast = null, adaptive = null;
+            if (map is IThemePostFx pfx)
+            {
+                bright = pfx.ThemeBrightness;
+                contrast = pfx.ThemeContrast;
+                adaptive = pfx.ThemeAdaptive;
+            }
+
             switch (map)
             {
                 case PbrGradient3DBase pbr:
@@ -78,6 +89,9 @@ namespace FracturingFog.Models
                             FillLight = new LightSourceData(pbr.ExportFillLight),
                             PbrLightingMode = pbr.ExportLightingMode,
                             MaterialBands = SampleMaterialBands(pbr),
+                            Brightness = bright,
+                            Contrast = contrast,
+                            Adaptive = adaptive,
                         };
 
                         // Approximate GlowBoost as scale * t^exponent.  For piecewise
@@ -108,6 +122,9 @@ namespace FracturingFog.Models
                         KeySpecScale = phong.ExportKeySpecScale,
                         FillSpecScale = phong.ExportFillSpecScale,
                         FillDiffScale = phong.ExportFillDiffScale,
+                        Brightness = bright,
+                        Contrast = contrast,
+                        Adaptive = adaptive,
                     };
 
                 case CyclingGradientColorMap cyc:
@@ -120,6 +137,9 @@ namespace FracturingFog.Models
                         Kind = ColorThemeKind.Cycling,
                         Stops = StopsToData(cyc.ExportStops),
                         CycleSpeed = cyc.ExportCycleSpeed,
+                        Brightness = bright,
+                        Contrast = contrast,
+                        Adaptive = adaptive,
                     };
 
                 case GradientColorMap grad:
@@ -131,6 +151,9 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Gradient,
                         Stops = StopsToData(grad.ExportStops),
+                        Brightness = bright,
+                        Contrast = contrast,
+                        Adaptive = adaptive,
                     };
 
                 default:
@@ -198,12 +221,16 @@ namespace FracturingFog.Models
     // 1. Linear gradient
     // =========================================================================
 
-    public sealed class DataDrivenGradient : GradientColorMap, IColorMap, INamedColorMap
+    public sealed class DataDrivenGradient : GradientColorMap, IColorMap, INamedColorMap, IThemePostFx
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
         public double DisplayMaxRecommendedZoom { get; }
+
+        public int? ThemeBrightness { get; }
+        public int? ThemeContrast { get; }
+        public int? ThemeAdaptive { get; }
 
         private readonly uint _inSetColor;
         uint IColorMap.InSetColor => _inSetColor;
@@ -214,6 +241,9 @@ namespace FracturingFog.Models
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
             DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
+            ThemeBrightness = data.Brightness;
+            ThemeContrast = data.Contrast;
+            ThemeAdaptive = data.Adaptive;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
@@ -224,12 +254,16 @@ namespace FracturingFog.Models
     // 2. Cycling gradient
     // =========================================================================
 
-    public sealed class DataDrivenCyclingGradient : CyclingGradientColorMap, IColorMap, INamedColorMap
+    public sealed class DataDrivenCyclingGradient : CyclingGradientColorMap, IColorMap, INamedColorMap, IThemePostFx
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
         public double DisplayMaxRecommendedZoom { get; }
+
+        public int? ThemeBrightness { get; }
+        public int? ThemeContrast { get; }
+        public int? ThemeAdaptive { get; }
 
         private readonly float _cycleSpeed;
         protected override float CycleSpeed => _cycleSpeed;
@@ -243,6 +277,9 @@ namespace FracturingFog.Models
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
             DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
+            ThemeBrightness = data.Brightness;
+            ThemeContrast = data.Contrast;
+            ThemeAdaptive = data.Adaptive;
             _cycleSpeed = data.CycleSpeed;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             foreach (var s in data.Stops)
@@ -254,12 +291,16 @@ namespace FracturingFog.Models
     // 3. Phong 3D
     // =========================================================================
 
-    public sealed class DataDrivenPhong3D : GradientPhong3DBase, IColorMap, INamedColorMap
+    public sealed class DataDrivenPhong3D : GradientPhong3DBase, IColorMap, INamedColorMap, IThemePostFx
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
         public double DisplayMaxRecommendedZoom { get; }
+
+        public int? ThemeBrightness { get; }
+        public int? ThemeContrast { get; }
+        public int? ThemeAdaptive { get; }
 
         private readonly float _cycleSpeed, _steepness, _ambient;
         private readonly float _keySpecScale, _fillSpecScale, _fillDiffScale;
@@ -280,6 +321,9 @@ namespace FracturingFog.Models
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
             DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
+            ThemeBrightness = data.Brightness;
+            ThemeContrast = data.Contrast;
+            ThemeAdaptive = data.Adaptive;
 
             _cycleSpeed = data.CycleSpeed;
             _steepness = data.Steepness;
@@ -329,12 +373,16 @@ namespace FracturingFog.Models
     // 4. PBR 3D
     // =========================================================================
 
-    public sealed class DataDrivenPbr3D : PbrGradient3DBase, IColorMap, INamedColorMap
+    public sealed class DataDrivenPbr3D : PbrGradient3DBase, IColorMap, INamedColorMap, IThemePostFx
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
         public double DisplayMaxRecommendedZoom { get; }
+
+        public int? ThemeBrightness { get; }
+        public int? ThemeContrast { get; }
+        public int? ThemeAdaptive { get; }
 
         private readonly float _cycleSpeed, _steepness, _ambient;
         private readonly PbrLightingMode _lightingMode;
@@ -355,6 +403,9 @@ namespace FracturingFog.Models
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
             DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
+            ThemeBrightness = data.Brightness;
+            ThemeContrast = data.Contrast;
+            ThemeAdaptive = data.Adaptive;
 
             _cycleSpeed = data.CycleSpeed;
             _steepness = data.Steepness;
