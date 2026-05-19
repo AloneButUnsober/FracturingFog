@@ -51,6 +51,7 @@ namespace FracturingFog.Views
         private readonly Button _importColorThemeButton;
         private readonly Button _deleteColorThemeButton;
         private readonly Button _loadColorThemesButton;
+        private readonly Button _editColorThemeButton;
         private readonly CheckBox _chkSlideshowUseExtremeRegions;
         private readonly Button _saveViewButton;
         private readonly Button _delRegionButton;
@@ -104,6 +105,7 @@ namespace FracturingFog.Views
         public event EventHandler OnImportColorThemeClick;
         public event EventHandler OnDeleteColorThemeClick;
         public event EventHandler OnLoadColorThemesClick;
+        public event EventHandler OnEditColorThemeClick;
         public event EventHandler OnColorThemeChanged;
         public event EventHandler OnSlideshowClick;
         public event EventHandler OnCheckBoxShowGridClick;
@@ -213,7 +215,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(330, 675);
+            ClientSize = new System.Drawing.Size(330, 702);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -954,7 +956,7 @@ namespace FracturingFog.Views
                 Left = 13,
                 Top = regionBox.Top + regionBox.Height + 10,
                 Width = 300,
-                Height = 81,
+                Height = 108,
                 ForeColor = Color.FromArgb(155, 155, 155),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 BackColor = Color.FromArgb(22, 22, 22),
@@ -990,6 +992,14 @@ namespace FracturingFog.Views
             _loadColorThemesButton = MakeBtn("Reload", 55, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 3, 48, "Reload color themes from disk (useful if you edit the JSON files externally)");
             _loadColorThemesButton.Click += (s, e) => OnLoadColorThemesButtonClick(s, e);
             _themeBox.Controls.Add(_loadColorThemesButton);
+
+            _editColorThemeButton = MakeBtn("Edit Theme…", 232, 51, 78,
+                "Open the Color Theme Editor to create or edit a theme. Live-preview updates the main view; Save adds it to your library.");
+            _editColorThemeButton.BackColor = Color.FromArgb(40, 60, 100);
+            _editColorThemeButton.FlatAppearance.BorderColor = Color.FromArgb(70, 110, 160);
+            _editColorThemeButton.ForeColor = Color.White;
+            _editColorThemeButton.Click += (s, e) => OnEditColorThemeClick?.Invoke(s, e);
+            _themeBox.Controls.Add(_editColorThemeButton);
 
             #endregion Color Theme Import/Export buttons
 
