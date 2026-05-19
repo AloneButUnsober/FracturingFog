@@ -23,7 +23,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using FracturingFog.Interefaces;
 
-namespace FracturingFog;
+namespace FracturingFog.Views;
 
 /// <summary>
 /// Miniature zoom-depth indicator.  Configure() must be called once after
