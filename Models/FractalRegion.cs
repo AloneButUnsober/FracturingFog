@@ -379,7 +379,7 @@ namespace FracturingFog.Models
             {
                 foreach (var r in _builtIns) yield return r;
                 foreach (var r in UserRegions) yield return r; 
-                foreach (var r in _randomPool) yield return r;
+                //foreach (var r in _randomPool) yield return r;
             }
         }
 
