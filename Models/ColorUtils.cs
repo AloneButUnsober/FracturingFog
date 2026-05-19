@@ -8,6 +8,7 @@
 using FracturingFog.Interefaces;
 using System;
 using System.Collections.Generic;
+using System.Runtime.Intrinsics;
 
 namespace FracturingFog.Models
 {
@@ -91,6 +92,90 @@ namespace FracturingFog.Models
 
         public int MaxIterations { get; set; } = 1000;
 
+        // ── Precomputed RGB LUT ──────────────────────────────────────────────
+        // Lazily built on first MapNormalized call. 256 entries sampled across
+        // the gradient. Each entry packs the base RGB (lower 4 lanes: R, G, B, 0)
+        // and the delta to the next entry (upper 4 lanes: dR, dG, dB, 0) into a
+        // single Vector256<float>, so the per-pixel lerp is one aligned load +
+        // one Vector128 FMA.
+        //
+        // Theme switch ⇒ new IColorMap instance ⇒ fresh LUT (no invalidation
+        // path needed by callers). If a subclass mutates Stops after Map() has
+        // run, it must call InvalidateGradientLut() to force a rebuild.
+        private const int LutSize = 256;
+        private Vector256<float>[]? _lut;
+        private int _lutStopsCount = -1;
+
+        /// <summary>
+        /// Marks the precomputed gradient LUT as stale. Call after mutating
+        /// <see cref="Stops"/> in a way that doesn't change Count (e.g. swapping
+        /// a stop's colour in place). Adding or removing stops is auto-detected.
+        /// </summary>
+        protected void InvalidateGradientLut()
+        {
+            _lut = null;
+            _lutStopsCount = -1;
+        }
+
+        private Vector256<float>[] EnsureLut()
+        {
+            var lut = _lut;
+            if (lut != null && _lutStopsCount == Stops.Count) return lut;
+            return BuildLut();
+        }
+
+        private Vector256<float>[] BuildLut()
+        {
+            int count = Stops.Count;
+            var lut = new Vector256<float>[LutSize];
+
+            if (count == 0)
+            {
+                _lutStopsCount = 0;
+                _lut = lut;
+                return lut;
+            }
+
+            Span<Vector128<float>> samples = stackalloc Vector128<float>[LutSize + 1];
+            for (int i = 0; i <= LutSize; i++)
+            {
+                float t = (i >= LutSize) ? 1f : i / (float)LutSize;
+                SampleStops(t, out float r, out float g, out float b);
+                samples[i] = Vector128.Create(r, g, b, 0f);
+            }
+            for (int i = 0; i < LutSize; i++)
+            {
+                Vector128<float> a = samples[i];
+                Vector128<float> delta = samples[i + 1] - a;
+                lut[i] = Vector256.Create(a, delta);
+            }
+
+            _lutStopsCount = count;
+            _lut = lut;
+            return lut;
+        }
+
+        private void SampleStops(float t, out float r, out float g, out float b)
+        {
+            ColorStop a = Stops[0];
+            ColorStop bStop = Stops[^1];
+            int n = Stops.Count - 1;
+            for (int i = 0; i < n; i++)
+            {
+                if (t >= Stops[i].Position && t <= Stops[i + 1].Position)
+                {
+                    a = Stops[i];
+                    bStop = Stops[i + 1];
+                    break;
+                }
+            }
+            float range = bStop.Position - a.Position;
+            float localT = (range <= 0f) ? 0f : (t - a.Position) / range;
+            r = a.Color.R + (bStop.Color.R - a.Color.R) * localT;
+            g = a.Color.G + (bStop.Color.G - a.Color.G) * localT;
+            b = a.Color.B + (bStop.Color.B - a.Color.B) * localT;
+        }
+
         /// <inheritdoc/>
         public virtual int Map(float smooth, float distance, int maxIterations)
         {
@@ -123,29 +208,23 @@ namespace FracturingFog.Models
         {
             if (Stops.Count == 0)
                 return unchecked((int)0xFF000000);
+
+            var lut = EnsureLut();
+
             t = System.Math.Clamp(t, 0f, 1f);
+            float scaled = t * LutSize;
+            int idx = (int)scaled;
+            if (idx >= LutSize) idx = LutSize - 1;
+            float frac = scaled - idx;
 
-            // Find two stops
-            ColorStop a = Stops[0];
-            ColorStop b = Stops[^1];
+            Vector256<float> packed = lut[idx];
+            Vector128<float> baseRgb = packed.GetLower();
+            Vector128<float> delta = packed.GetUpper();
+            Vector128<float> rgb = baseRgb + delta * Vector128.Create(frac);
 
-            for (int i = 0; i < Stops.Count - 1; i++)
-            {
-                if (t >= Stops[i].Position && t <= Stops[i + 1].Position)
-                {
-                    a = Stops[i];
-                    b = Stops[i + 1];
-                    break;
-                }
-            }
-
-            float range = b.Position - a.Position;
-            float localT = (range <= 0f) ? 0f : (t - a.Position) / range;
-
-            byte r = (byte)(a.Color.R + (b.Color.R - a.Color.R) * localT);
-            byte g = (byte)(a.Color.G + (b.Color.G - a.Color.G) * localT);
-            byte bC = (byte)(a.Color.B + (b.Color.B - a.Color.B) * localT);
-
+            int r = (int)rgb.GetElement(0);
+            int g = (int)rgb.GetElement(1);
+            int bC = (int)rgb.GetElement(2);
             return unchecked((int)0xFF000000 | (r << 16) | (g << 8) | bC);
         }
     }
