@@ -92,6 +92,16 @@ namespace FracturingFog.Interefaces
 
         public static ColorMapFeatures Features { get; } = ColorMapFeatures.UsesSmooth;
 
+        /// <summary>
+        /// Maximum zoom factor at which this theme renders correctly. Themes that
+        /// rely on data that degrades at deep zoom (orbit traps, distance
+        /// estimation, derivative bailout, interior cycle detection, etc.) should
+        /// override this with a finite cap. Used by the slideshow and video-zoom
+        /// automated viewers to exclude themes whose chosen zoom exceeds the cap.
+        /// Default is <see cref="double.PositiveInfinity"/> (no restriction).
+        /// </summary>
+        public static double MaxRecommendedZoom { get; } = double.PositiveInfinity;
+
 
         // ── Per-instance state ────────────────────────────────────────────────
 
@@ -182,6 +192,13 @@ namespace FracturingFog.Interefaces
         string DisplayName { get; }
         string DisplayCategory { get; }
         string DisplayDescription { get; }
+
+        /// <summary>
+        /// Per-instance equivalent of <see cref="IColorMap.MaxRecommendedZoom"/>.
+        /// Default implementation returns <see cref="double.PositiveInfinity"/>
+        /// (no restriction); JSON-loaded themes carrying a cap override this.
+        /// </summary>
+        double DisplayMaxRecommendedZoom => double.PositiveInfinity;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

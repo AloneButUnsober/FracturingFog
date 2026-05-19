@@ -983,6 +983,8 @@ namespace FracturingFog
                     && r.Zoom > SlideshowMinRegionZoom)
                     regions.Add(r);
 
+            // palettes is rebuilt per leg so themes whose MaxRecommendedZoom
+            // is below the leg's deepest endpoint are excluded.
             var palettes = GetAllPaletteNames();
             if (regions.Count == 0 || palettes.Count == 0) return;
 
@@ -1022,17 +1024,29 @@ namespace FracturingFog
                 lastRegion = ri;
                 var region = regions[ri];
 
-                // Pick a theme different from the previous one.
-                int ti;
-                do { ti = _slideshowRng.Next(palettes.Count); }
-                while (palettes.Count > 1 && ti == lastTheme);
-                lastTheme = ti;
-                string theme = palettes[ti];
-
                 // Clamp target zoom to Ultra cap.
                 double tz = region.Zoom;
                 if (tz > ultraMax) tz = ultraMax;
                 if (tz < draftMin) tz = draftMin;
+
+                // Refresh the palette pool for this leg's deepest endpoint.
+                // Reverse legs start deep and zoom out, forward legs zoom in to
+                // a deep target — either way the cap to enforce is the leg's
+                // deep end. Pick a theme from the filtered pool, then fall back
+                // to the unfiltered list only if the filter empties everything.
+                var legPalettes = Models.ColorPalette.GetPaletteNamesForZoom(tz);
+                if (legPalettes.Count == 0) legPalettes = palettes;
+
+                // Pick a theme different from the previous one. lastTheme
+                // is reset whenever the per-leg pool differs in size from the
+                // full pool, since the previous index may no longer point at
+                // the same name.
+                if (legPalettes.Count != palettes.Count) lastTheme = -1;
+                int ti;
+                do { ti = _slideshowRng.Next(legPalettes.Count); }
+                while (legPalettes.Count > 1 && ti == lastTheme);
+                lastTheme = ti;
+                string theme = legPalettes[ti];
 
                 // Per-leg duration: fixed in variable-rate mode; scales with
                 // log-zoom depth in constant-rate mode (user-supplied seconds

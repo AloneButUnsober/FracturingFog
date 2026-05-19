@@ -141,6 +141,15 @@ namespace FracturingFog.Models
         public string Category { get; set; } = "User";
         public string Description { get; set; } = "";
 
+        /// <summary>
+        /// Optional cap on the zoom factor at which this theme is recommended
+        /// for automated viewing (slideshow / video zoom). Null = no cap.
+        /// Themes whose colour signal degrades at deep zoom (e.g. orbit-aware
+        /// or distance-estimation themes) carry a finite value so the automated
+        /// viewers exclude them when navigating past the cap.
+        /// </summary>
+        public double? MaxRecommendedZoom { get; set; }
+
         public ColorThemeKind Kind { get; set; } = ColorThemeKind.Gradient;
 
         // ── Gradient (all kinds) ──────────────────────────────────────────────
