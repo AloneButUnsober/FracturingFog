@@ -141,8 +141,13 @@ namespace FracturingFog
             Func<bool> focusChangedFunc)
         {
             var builtIns = new List<FractalRegion>(FractalRegionLibrary.Instance.AllSlideshowRegions);
-            var paletteNames = GetAllPaletteNames();
-            if (builtIns.Count == 0 || paletteNames.Count == 0) return;
+            if (builtIns.Count == 0) return;
+            // paletteNames is rebuilt per region so themes whose
+            // MaxRecommendedZoom is below the region's zoom are excluded.
+            // Initialised here so loop fields referencing it bind cleanly; the
+            // first region iteration always overwrites it.
+            var paletteNames = Models.ColorPalette.GetPaletteNamesForZoom(0.0);
+            if (paletteNames.Count == 0) return;
 
             // Timing design:
             // Region foucs:
@@ -195,6 +200,12 @@ namespace FracturingFog
                 }
 
                 lockedRegion = region;
+
+                // Refresh the palette pool for this region's zoom so themes
+                // whose MaxRecommendedZoom is below region.Zoom are excluded.
+                paletteNames = Models.ColorPalette.GetPaletteNamesForZoom(region.Zoom);
+                if (paletteNames.Count == 0) return;
+                lastThemeIdx = -1;   // pool changed — clear "different from last" anchor
 
                 string lockStatus = regionLockFunc() ? "(L)" : "";
                 // Mark the just-used region to avoid immediate repeats until all have been shown.

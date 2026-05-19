@@ -56,6 +56,8 @@ namespace FracturingFog.Models
             string name = ColorPalette.GetStaticName(map);
             string category = ColorPalette.GetStaticCategory(map);
             string description = ColorPalette.GetStaticDescription(map);
+            double maxZoom = ColorPalette.GetStaticMaxZoom(map);
+            double? maxZoomField = double.IsPositiveInfinity(maxZoom) ? null : maxZoom;
 
             switch (map)
             {
@@ -66,6 +68,7 @@ namespace FracturingFog.Models
                             Name = name,
                             Category = category,
                             Description = description,
+                            MaxRecommendedZoom = maxZoomField,
                             Kind = ColorThemeKind.Pbr3D,
                             Stops = StopsToData(pbr.ExportStops),
                             CycleSpeed = pbr.ExportCycleSpeed,
@@ -94,6 +97,7 @@ namespace FracturingFog.Models
                         Name = name,
                         Category = category,
                         Description = description,
+                        MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Phong3D,
                         Stops = StopsToData(phong.ExportStops),
                         CycleSpeed = phong.ExportCycleSpeed,
@@ -112,6 +116,7 @@ namespace FracturingFog.Models
                         Name = name,
                         Category = category,
                         Description = description,
+                        MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Cycling,
                         Stops = StopsToData(cyc.ExportStops),
                         CycleSpeed = cyc.ExportCycleSpeed,
@@ -123,6 +128,7 @@ namespace FracturingFog.Models
                         Name = name,
                         Category = category,
                         Description = description,
+                        MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Gradient,
                         Stops = StopsToData(grad.ExportStops),
                     };
@@ -197,6 +203,7 @@ namespace FracturingFog.Models
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
+        public double DisplayMaxRecommendedZoom { get; }
 
         private readonly uint _inSetColor;
         uint IColorMap.InSetColor => _inSetColor;
@@ -206,6 +213,7 @@ namespace FracturingFog.Models
             DisplayName = data.Name;
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
+            DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
@@ -221,6 +229,7 @@ namespace FracturingFog.Models
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
+        public double DisplayMaxRecommendedZoom { get; }
 
         private readonly float _cycleSpeed;
         protected override float CycleSpeed => _cycleSpeed;
@@ -233,6 +242,7 @@ namespace FracturingFog.Models
             DisplayName = data.Name;
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
+            DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
             _cycleSpeed = data.CycleSpeed;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             foreach (var s in data.Stops)
@@ -249,6 +259,7 @@ namespace FracturingFog.Models
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
+        public double DisplayMaxRecommendedZoom { get; }
 
         private readonly float _cycleSpeed, _steepness, _ambient;
         private readonly float _keySpecScale, _fillSpecScale, _fillDiffScale;
@@ -268,6 +279,7 @@ namespace FracturingFog.Models
             DisplayName = data.Name;
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
+            DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
 
             _cycleSpeed = data.CycleSpeed;
             _steepness = data.Steepness;
@@ -322,6 +334,7 @@ namespace FracturingFog.Models
         public string DisplayName { get; }
         public string DisplayCategory { get; }
         public string DisplayDescription { get; }
+        public double DisplayMaxRecommendedZoom { get; }
 
         private readonly float _cycleSpeed, _steepness, _ambient;
         private readonly PbrLightingMode _lightingMode;
@@ -341,6 +354,7 @@ namespace FracturingFog.Models
             DisplayName = data.Name;
             DisplayCategory = data.Category;
             DisplayDescription = data.Description;
+            DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
 
             _cycleSpeed = data.CycleSpeed;
             _steepness = data.Steepness;

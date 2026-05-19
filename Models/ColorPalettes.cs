@@ -477,5 +477,74 @@ namespace FracturingFog.Models
             var raw = map.GetType().GetProperty("Features")?.GetValue(null);
             return raw is ColorMapFeatures f ? f : ColorMapFeatures.UsesSmooth;
         }
+
+        /// <summary>
+        /// Returns the maximum zoom at which the supplied colour map is
+        /// recommended for automated viewing (slideshow, video zoom).
+        /// Resolution order:
+        ///   1. Per-class static <c>MaxRecommendedZoom</c> override (read via reflection).
+        ///   2. Per-instance <see cref="INamedColorMap.DisplayMaxRecommendedZoom"/>
+        ///      for data-driven themes that carry the cap in their DTO.
+        ///   3. Interface-based defaults — orbit-aware themes have no HP/PT path
+        ///      so they are capped at <c>1e10</c>; interior-aware themes rely on
+        ///      cycle detection budgets and are capped at <c>1e13</c>.
+        ///   4. Feature-flag defaults — themes that read distance estimation,
+        ///      escape-time derivative, or final z values are capped because
+        ///      those quantities lose precision in the perturbation regime.
+        ///      Relief3D themes are exempt from the feature-flag rule because
+        ///      they consume distance only for ambient occlusion / shadow
+        ///      effects, not as the primary colour signal.
+        ///   5. Fallback: <see cref="double.PositiveInfinity"/>.
+        /// </summary>
+        public static double GetStaticMaxZoom(IColorMap map)
+        {
+            var raw = map.GetType().GetProperty("MaxRecommendedZoom")?.GetValue(null);
+            if (raw is double d && d > 0 && !double.IsNaN(d))
+                return d;
+
+            if (map is INamedColorMap n)
+            {
+                double named = n.DisplayMaxRecommendedZoom;
+                if (named > 0 && !double.IsNaN(named) && !double.IsPositiveInfinity(named))
+                    return named;
+            }
+
+            if (map is IOrbitAwareColorMap) return 1e10;
+            if (map is IInteriorAwareColorMap) return 1e13;
+
+            // 3D relief themes use distance for AO/shadow, not as a primary
+            // colour signal, so they don't fall under the distance-estimation
+            // cap below.
+            if (map.Type == ColorPaletteType.Relief3D) return double.PositiveInfinity;
+
+            var features = GetStaticFeatures(map);
+            if (features.HasFlag(ColorMapFeatures.UsesDistance)) return 1e15;
+            if (features.HasFlag(ColorMapFeatures.UsesDerivative)) return 1e15;
+            if (features.HasFlag(ColorMapFeatures.UsesFinalZ)) return 1e20;
+
+            return double.PositiveInfinity;
+        }
+
+        /// <summary>
+        /// Returns the names of all registered palettes whose
+        /// <see cref="GetStaticMaxZoom"/> is at least <paramref name="zoom"/>.
+        /// Header entries (names starting with "—") are excluded. If the filter
+        /// would produce an empty list (every registered theme is capped below
+        /// <paramref name="zoom"/>), the unfiltered full list is returned so
+        /// callers never get a zero-length pool.
+        /// </summary>
+        public static List<string> GetPaletteNamesForZoom(double zoom)
+        {
+            var filtered = new List<string>();
+            var fallback = new List<string>();
+            foreach (var p in Palettes)
+            {
+                string name = GetStaticName(p);
+                if (string.IsNullOrEmpty(name) || name.StartsWith("—")) continue;
+                fallback.Add(name);
+                if (zoom <= GetStaticMaxZoom(p)) filtered.Add(name);
+            }
+            return filtered.Count > 0 ? filtered : fallback;
+        }
     }
 }
