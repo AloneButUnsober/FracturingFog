@@ -300,6 +300,21 @@ public sealed class MandelbrotCalculator
             case OrbitTrapPickoverStalksMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapBiomorphMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapImageRainbowMap m: CalculateOrbitAware(m, ct); return;
+            // Additional orbit-trap shapes (OrbitTrapExtraThemes.cs)
+            case OrbitTrapSquareMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapRingMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHyperbolaMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapLemniscateMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCardioidMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapDiagonalCrossMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapTriangleMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHexagonMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHeartMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapSineWaveMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapConcentricMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapGridMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapPinwheelMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapPolarRoseMap m: CalculateOrbitAware(m, ct); return;
             case StripeAverageClassicMap m: CalculateOrbitAware(m, ct); return;
             case TriangleInequalityMap m: CalculateOrbitAware(m, ct); return;
             case StripeTiaBlendMap m: CalculateOrbitAware(m, ct); return;

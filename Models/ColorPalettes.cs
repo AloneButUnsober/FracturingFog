@@ -170,6 +170,21 @@ namespace FracturingFog.Models
             new OrbitTrapStarMap(),
             new OrbitTrapPickoverStalksMap(),
             new OrbitTrapBiomorphMap(),
+            // ── Additional orbit-trap shapes ─────────────────────────────────
+            new OrbitTrapSquareMap(),
+            new OrbitTrapRingMap(),
+            new OrbitTrapHyperbolaMap(),
+            new OrbitTrapLemniscateMap(),
+            new OrbitTrapCardioidMap(),
+            new OrbitTrapDiagonalCrossMap(),
+            new OrbitTrapTriangleMap(),
+            new OrbitTrapHexagonMap(),
+            new OrbitTrapHeartMap(),
+            new OrbitTrapSineWaveMap(),
+            new OrbitTrapConcentricMap(),
+            new OrbitTrapGridMap(),
+            new OrbitTrapPinwheelMap(),
+            new OrbitTrapPolarRoseMap(),
             new OrbitTrapImageRainbowMap(),
 
             // ── Stripe Average + TIA (Ultra Fractal look) ─────────────────────
@@ -275,6 +290,9 @@ namespace FracturingFog.Models
             new ChromostereopsisInfraredMap(),
             new ChromostereopsisPastelWhisperMap(),
             new ChromostereopsisAlarmStripesMap(),
+
+            // Atomic
+            new ChernobylReactorCoreMap(),
             new OilslickIridescenceMap(),
             new SaturdayMorningCartoonMap(),
             new VermillionStabMap(),
