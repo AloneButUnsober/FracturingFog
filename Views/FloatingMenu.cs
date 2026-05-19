@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
@@ -123,6 +124,7 @@ namespace FracturingFog.Views
         public event EventHandler OnVideoClick;
         public event EventHandler OnGridClick;
         public event EventHandler OnStatusClick;
+        public event EventHandler OnChangeDimensions;
         public event Action<object?, EventArgs, object?> OnBrightnessSlide;
         public event Action<object?, EventArgs, object?> OnContrastSlide;
         public event Action<object?, EventArgs, object?> OnHistogramEqSlide;
@@ -215,7 +217,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(330, 702);
+            ClientSize = new System.Drawing.Size(330, 722);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -225,10 +227,10 @@ namespace FracturingFog.Views
             #region Coordinate / Navigate panel
 
             int buttonLeft = 6;
-            int buttonTop = 6;
+            int buttonTop = 14;
             int buttonWidth = 0;
-            int labelTop = 9;
-            int txTop = 7;
+            int labelTop = 17;
+            int txTop = 15;
 
             _coordPanel = new Panel
             {
@@ -310,7 +312,7 @@ namespace FracturingFog.Views
 
             #endregion Buttons
 
-            buttonLeft = 98;
+            buttonLeft = 8;
             buttonTop = _slideshowButton.Top + _slideshowButton.Height + 5;
             labelTop = _slideshowButton.Top + _slideshowButton.Height + 10;
             txTop = _slideshowButton.Top + _slideshowButton.Height + 4;
@@ -351,33 +353,32 @@ namespace FracturingFog.Views
             _checkBoxShowGrid.CheckedChanged += (s, e) => OnCheckBoxShowGridCBClick(s, e);
             _toolTip.SetToolTip(_checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
 
-            buttonLeft = 8;
+            buttonLeft = _checkBoxShowGrid.Left + _checkBoxShowGrid.Width + 38;
             labelTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
-            buttonTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 5;
+            //buttonTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 5;
             txTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
 
-            //_formResolutionCombo = new ComboBox
-            //{
-            //    Left = buttonLeft + 88,
-            //    Top = 28,
-            //    Width = 130,
-            //    Height = 26,
-            //    BackColor = Color.FromArgb(55, 55, 55),
-            //    ForeColor = Color.White,
-            //    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-            //    Cursor = Cursors.Hand,
-            //    DropDownWidth = Math.Max(180, ResolutionDimensions.GetLongestResolutionName() + 40)   // ensure descriptions fit in the dropdown
-            //};
-            //_formResolutionCombo.SelectedIndexChanged += (s,e) =>
-            //{
-            //    Resolution? res = ResolutionDimensions.Resolutions.Where( r => r.Name == _formResolutionCombo.Text ).FirstOrDefault<Resolution>();
-            //    if (res == null) return;
-            //    Size = new Size(res.Width, res.Height);
-            //    CenterToParent();
-            //};
-            //_coordPanel.Controls.Add(_formResolutionCombo);
-            //labelTop += 28;
-            //txTop += 28;
+            _formResolutionCombo = new ComboBox
+            {
+                Left = buttonLeft,
+                Top = buttonTop,
+                Width = 130,
+                Height = 26,
+                BackColor = Color.FromArgb(55, 55, 55),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                DropDownWidth = Math.Max(180, ResolutionDimensions.GetLongestResolutionName() + 40)   // ensure descriptions fit in the dropdown
+            };
+            BuildResolutionSelection();
+            _formResolutionCombo.SelectedIndex = 0;
+            _formResolutionCombo.SelectedIndexChanged += (s, e) => OnChangeDimensionsSelection(s,e);
+            _coordPanel.Controls.Add(_formResolutionCombo);
+
+            buttonLeft = 8;
+            buttonTop = _formResolutionCombo.Top + _formResolutionCombo.Height + 2;
+            labelTop = _formResolutionCombo.Top + _formResolutionCombo.Height + 6;
+            txTop = _formResolutionCombo.Top + _formResolutionCombo.Height + 6;
 
             #region Navigation Group Box
 
@@ -1160,6 +1161,35 @@ namespace FracturingFog.Views
         #region Navigation
 
         #endregion Navigation
+
+        private void BuildResolutionSelection()
+        {
+            //return;
+            int totalW = 0;
+            int totalH = 0;
+            foreach (var s in Screen.AllScreens)
+            {
+                totalH += s.Bounds.Height;
+                totalW += s.Bounds.Width;
+            }
+
+            _formResolutionCombo.Items.Clear();
+            foreach (var rt in ResolutionDimensions.ResolutionTypeName)
+            {
+                string restypeName = rt.Value;
+                _formResolutionCombo.Items.Add($" -- {rt.Value} -- ");
+                foreach (Resolution res in ResolutionDimensions.Resolutions.Where(r => r.ResolutionType == rt.Key))
+                {
+                    if (res == null) continue;
+                    if (res.Width == 0 || res.Width > totalW) return;
+                    if (res.Height == 0 || res.Height > totalH) return;
+                    _formResolutionCombo.Items.Add(res.Name);
+                }
+            }
+        }
+
+        private void OnChangeDimensionsSelection(object? s, EventArgs e) =>
+            OnChangeDimensions?.Invoke(s,e);
 
         private void OnQualityComboSelectionChanged(object? s, EventArgs e) =>
             OnQualityComboChanged?.Invoke(s, e);
