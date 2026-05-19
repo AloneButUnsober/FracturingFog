@@ -496,10 +496,7 @@ namespace FracturingFog.Views
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand
             };
-            _regionCombo.Items.Add("— manual entry —");
-            FormHelpers.RebuildRegionComboNoExtreme(_regionCombo, OnRegionPicked);
-            foreach (var r in FractalRegionLibrary.Instance.All)
-                _regionCombo.Items.Add(r.Name);
+            FormHelpers.RebuildRegionCombo(_regionCombo, OnRegionPicked);
             Controls.Add(_regionCombo);
 
             // ── Target coordinates ────────────────────────────────────────────
@@ -852,6 +849,31 @@ namespace FracturingFog.Views
             if (string.IsNullOrEmpty(name)) return;
             var region = FractalRegionLibrary.Instance.FindByName(name);
             if (region == null) return;
+
+            // Extreme regions are allowed in Video Zoom only with explicit user
+            // confirmation. Video output still caps quality/zoom at Ultra, so
+            // warn the user that the target zoom will be clamped.
+            if (region.QualityPreset == QualityPreset.Extreme)
+            {
+                double ultraCap = QualityPreset.Ultra.ZoomMax;
+                var result = MessageBox.Show(
+                    $"\"{region.Name}\" is an Extreme-quality region.\n\n" +
+                    "Video Zoom does not support the Extreme regime — target\n" +
+                    $"zoom will be clamped to the Ultra cap ({ultraCap:G3}) and\n" +
+                    "the resulting video will not reach this region's full depth.\n\n" +
+                    "Continue with this selection?",
+                    "Video Zoom — Extreme region",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2);
+                if (result != DialogResult.OK)
+                {
+                    _regionCombo.SelectedIndexChanged -= OnRegionPicked;
+                    _regionCombo.SelectedIndex = 0;
+                    _regionCombo.SelectedIndexChanged += OnRegionPicked;
+                    return;
+                }
+            }
 
             var ic = CultureInfo.InvariantCulture;
             // Capture extended-precision limbs first, then set Hi via the
