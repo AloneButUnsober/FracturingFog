@@ -564,6 +564,8 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 9f),
             FlatStyle = FlatStyle.Flat
         };
+        AttachRegionComboSortMenu(_regionCombo, OnRegionComboChanged,
+            onAfterRebuild: () => UpdateDelRegionButton(_regionCombo, _delRegionButton));
         _toolbar.Controls.Add(_regionCombo);
         buttonLeft += _regionCombo.PreferredSize.Width + 3;
 
@@ -1421,6 +1423,47 @@ public sealed partial class MainForm : Form
         TriggerCalculation();
     }
 
+    /// <summary>
+    /// Reverse map of the FractalType → combo-index switch in <see cref="OnFractalTypeChanged"/>.
+    /// Nova has no dedicated combo entry; it falls back to Newton (same calculator path).
+    /// </summary>
+    private static int ComboIndexForFractalType(FractalType t) => t switch
+    {
+        FractalType.Mandelbrot       => 0,
+        FractalType.Julia            => 1,
+        FractalType.BurningShip      => 2,
+        FractalType.Tricorn          => 3,
+        FractalType.Multibrot        => 4,
+        FractalType.Phoenix          => 5,
+        FractalType.Newton           => 6,
+        FractalType.Nova             => 6,
+        FractalType.BuddhaBrot       => 7,
+        FractalType.IFS              => 8,
+        FractalType.LSystem          => 9,
+        FractalType.StrangeAttractor => 10,
+        FractalType.UserEquation     => 11,
+        FractalType.Mandelbulb       => 12,
+        _                            => 0
+    };
+
+    /// <summary>
+    /// Programmatic fractal-type switch used when applying a region. Updates the toolbar combo
+    /// without firing <see cref="OnFractalTypeChanged"/> (which would clobber the region's coords
+    /// with the fractal-default view) and invalidates the cached upload buffer.
+    /// </summary>
+    private void SwitchFractalTypeForRegion(FractalType t)
+    {
+        _currentFractalType = t;
+        if (_fractalTypeCombo != null && !_fractalTypeCombo.IsDisposed)
+        {
+            int idx = ComboIndexForFractalType(t);
+            _fractalTypeCombo.SelectedIndexChanged -= OnFractalTypeChanged;
+            try { if (idx >= 0 && idx < _fractalTypeCombo.Items.Count) _fractalTypeCombo.SelectedIndex = idx; }
+            finally { _fractalTypeCombo.SelectedIndexChanged += OnFractalTypeChanged; }
+        }
+        _lastUploadedBuffer = null;
+    }
+
     private Views.FractalParamsDialog? _paramsDialog;
 
     private void OnFractalParamsClick(object? sender, EventArgs e)
@@ -1816,6 +1859,7 @@ public sealed partial class MainForm : Form
             Zoom = _zoom,
             Iterations = _calculator?.MaxIterations ?? 512,
             QualityPresetName = _quality.Name,
+            FractalType = _currentFractalType,
             Description = $"Saved {DateTime.Now:yyyy-MM-dd HH:mm}"
         };
 
@@ -2356,6 +2400,11 @@ public sealed partial class MainForm : Form
     /// <summary>Applies a FractalRegion to the view state, respecting the iteration lock.</summary>
     private void ApplyRegion(FractalRegion region)
     {
+        // Auto-switch active fractal type if the region targets a different one.
+        // Done before applying coords so the calculator (set in ApplyViewState) sees the new type.
+        if (region.FractalType != _currentFractalType)
+            SwitchFractalTypeForRegion(region.FractalType);
+
         // Round-trip all four QD limbs. Legacy regions (DD or shallower) default
         // X2/X3 to 0, matching prior behaviour.
         _centerX = region.CenterX; _centerXLo = region.CenterXLo;
