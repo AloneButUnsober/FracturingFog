@@ -376,6 +376,11 @@ namespace FracturingFog.Models
             new NewtonBandedMonoMap(),
             new NewtonBandedTricolorMap(),
             new NewtonBandedSpectrumMap(),
+
+            // Entropy based
+            new EntropyContrastMap(),
+            new EntropyEdgeMap(),
+            new EntropyHeatmap(),
         };
 
         /// <summary>
