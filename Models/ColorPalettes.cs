@@ -341,7 +341,41 @@ namespace FracturingFog.Models
             new Plasma9Tst2Map(),
             new Plasma9Tst4Map(),
             new Plasma9TstMap(),
-            
+
+            // ── Newton — basin categorical ───────────────────────────────────
+            new NewtonBasinClassicMap(),
+            new NewtonBasinPastelMap(),
+            new NewtonBasinBoldMap(),
+
+            // ── Newton — basin + iteration shading ───────────────────────────
+            new NewtonBasinShadedMap(),
+            new NewtonBasinDeepShadeMap(),
+            new NewtonBasinBrightEdgeMap(),
+
+            // ── Newton — iteration gradient (linear) ─────────────────────────
+            new NewtonSunsetGradientMap(),
+            new NewtonForestGradientMap(),
+            new NewtonIceGradientMap(),
+
+            // ── Newton — iteration cyclic ────────────────────────────────────
+            new NewtonCyclicAuroraMap(),
+            new NewtonCyclicPlasmaMap(),
+            new NewtonCyclicTwilightMap(),
+
+            // ── Newton — argument (phase of final z) ─────────────────────────
+            new NewtonArgumentHsvMap(),
+            new NewtonArgumentPastelMap(),
+            new NewtonArgumentSpectrumMap(),
+
+            // ── Newton — distance-to-root glow ───────────────────────────────
+            new NewtonDistanceGlowMap(),
+            new NewtonDistanceHaloMap(),
+            new NewtonDistanceInfernoMap(),
+
+            // ── Newton — banded / striped ────────────────────────────────────
+            new NewtonBandedMonoMap(),
+            new NewtonBandedTricolorMap(),
+            new NewtonBandedSpectrumMap(),
         };
 
         /// <summary>
