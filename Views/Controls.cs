@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Security.Cryptography;
 
+using FracturingFog;
 using FracturingFog.Models;
 using System.Linq;
 using System.IO;
@@ -351,42 +352,136 @@ namespace FracturingFog.Views
             public override Color ImageMarginGradientEnd => Color.FromArgb(45, 45, 45);
         }
 
-        public static void RebuildRegionCombo(ComboBox comboBox, EventHandler func)
+        public enum RegionComboSortMode
         {
-            if (comboBox != null)
-            {
-                comboBox.SelectedIndexChanged -= func;
-                comboBox.Items.Clear();
-                comboBox.Items.Add("— select region —");
-                var regions = FractalRegionLibrary.Instance.All.OrderBy(r => r.IsBuiltIn).ThenBy(r => r.Name);
-                foreach (var r in regions)
-                {
-                    comboBox.Items.Add(r.Name);
-                }
-
-                comboBox.SelectedIndex = 0;
-                comboBox.SelectedIndexChanged += func;
-            }
+            /// <summary>Built-ins first (alpha), then user regions (alpha). All fractal types.</summary>
+            Default,
+            /// <summary>Filter to a single FractalType, alphabetical.</summary>
+            ByFractalType,
         }
 
-        public static void RebuildRegionComboNoExtreme(ComboBox comboBox, EventHandler func)
+        /// <summary>
+        /// Sort/filter state for a region combo. Stored on <see cref="ComboBox.Tag"/> so the combo
+        /// can rebuild itself after the user picks a different sort mode from the right-click menu.
+        /// </summary>
+        public sealed class RegionComboSortState
         {
-            if (comboBox != null)
-            {
-                comboBox.SelectedIndexChanged -= func;
-                comboBox.Items.Clear();
-                comboBox.Items.Add("— select region —");
-                var regions = FractalRegionLibrary.Instance.All
-                    .Where(r => r.QualityPreset != QualityPreset.Extreme)
-                    .OrderBy(r => r.IsBuiltIn).ThenBy(r => r.Name);
-                foreach (var r in regions)
-                {
-                    comboBox.Items.Add(r.Name);
-                }
+            public RegionComboSortMode Mode { get; set; } = RegionComboSortMode.Default;
+            public FractalType TypeFilter { get; set; } = FractalType.Mandelbrot;
+        }
 
-                comboBox.SelectedIndex = 0;
-                comboBox.SelectedIndexChanged += func;
+        private static RegionComboSortState GetOrCreateRegionSortState(ComboBox comboBox)
+        {
+            if (comboBox.Tag is RegionComboSortState s) return s;
+            var ns = new RegionComboSortState();
+            comboBox.Tag = ns;
+            return ns;
+        }
+
+        public static void RebuildRegionCombo(ComboBox comboBox, EventHandler func)
+            => RebuildRegionCombo(comboBox, func, preserveName: null, excludeExtreme: false);
+
+        public static void RebuildRegionComboNoExtreme(ComboBox comboBox, EventHandler func)
+            => RebuildRegionCombo(comboBox, func, preserveName: null, excludeExtreme: true);
+
+        /// <summary>
+        /// Rebuilds the region combo per its <see cref="RegionComboSortState"/> on the Tag.
+        /// Default mode: built-ins first, then user regions, alphabetical within each group.
+        /// ByFractalType mode: only regions matching the state's <see cref="RegionComboSortState.TypeFilter"/>.
+        /// </summary>
+        public static void RebuildRegionCombo(ComboBox comboBox, EventHandler func, string? preserveName, bool excludeExtreme)
+        {
+            if (comboBox == null) return;
+            var state = GetOrCreateRegionSortState(comboBox);
+
+            comboBox.SelectedIndexChanged -= func;
+            comboBox.Items.Clear();
+            comboBox.Items.Add("— select region —");
+
+            IEnumerable<FractalRegion> source = FractalRegionLibrary.Instance.All;
+            if (excludeExtreme)
+                source = source.Where(r => r.QualityPreset != QualityPreset.Extreme);
+
+            IEnumerable<FractalRegion> regions = state.Mode switch
+            {
+                RegionComboSortMode.ByFractalType =>
+                    source.Where(r => r.FractalType == state.TypeFilter)
+                          .OrderBy(r => r.IsBuiltIn ? 0 : 1).ThenBy(r => r.Name),
+                _ => source.OrderBy(r => r.IsBuiltIn ? 0 : 1).ThenBy(r => r.Name),
+            };
+
+            foreach (var r in regions)
+                comboBox.Items.Add(r.Name);
+
+            int idx = 0;
+            if (!string.IsNullOrEmpty(preserveName))
+            {
+                int found = comboBox.FindStringExact(preserveName);
+                if (found >= 0) idx = found;
             }
+            comboBox.SelectedIndex = idx;
+            comboBox.SelectedIndexChanged += func;
+        }
+
+        /// <summary>
+        /// Attaches a right-click context menu to a region combo. Menu offers Default (all types,
+        /// built-ins first) and one entry per <see cref="FractalType"/>. Current sort is checked.
+        /// </summary>
+        public static void AttachRegionComboSortMenu(
+            ComboBox comboBox,
+            EventHandler selectionHandler,
+            bool excludeExtreme = false,
+            Action? onAfterRebuild = null)
+        {
+            if (comboBox == null) return;
+            GetOrCreateRegionSortState(comboBox);
+
+            comboBox.MouseUp += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Right) return;
+                if (comboBox.DroppedDown) comboBox.DroppedDown = false;
+                ShowRegionComboSortMenu(comboBox, selectionHandler, excludeExtreme, onAfterRebuild, e.Location);
+            };
+        }
+
+        private static void ShowRegionComboSortMenu(
+            ComboBox comboBox,
+            EventHandler selectionHandler,
+            bool excludeExtreme,
+            Action? onAfterRebuild,
+            Point screenLocal)
+        {
+            var state = GetOrCreateRegionSortState(comboBox);
+            var menu = new ContextMenuStrip
+            {
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                ShowImageMargin = false,
+                Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors()),
+            };
+
+            void Add(string text, RegionComboSortMode mode, FractalType? kind, bool isChecked)
+            {
+                var item = new ToolStripMenuItem(text) { Checked = isChecked };
+                item.Click += (s, e) =>
+                {
+                    string? prev = comboBox.SelectedItem?.ToString();
+                    state.Mode = mode;
+                    if (kind.HasValue) state.TypeFilter = kind.Value;
+                    RebuildRegionCombo(comboBox, selectionHandler, prev, excludeExtreme);
+                    onAfterRebuild?.Invoke();
+                };
+                menu.Items.Add(item);
+            }
+
+            Add("Default", RegionComboSortMode.Default, null, state.Mode == RegionComboSortMode.Default);
+            menu.Items.Add(new ToolStripSeparator());
+            foreach (var kind in Enum.GetValues<FractalType>())
+            {
+                bool isChecked = state.Mode == RegionComboSortMode.ByFractalType && state.TypeFilter == kind;
+                Add(kind.ToString(), RegionComboSortMode.ByFractalType, kind, isChecked);
+            }
+            menu.Show(comboBox, screenLocal);
         }
 
         public static void UpdateDeleteColorThemeButton(ComboBox comboBox, Button delButton)

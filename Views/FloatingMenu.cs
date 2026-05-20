@@ -945,6 +945,8 @@ namespace FracturingFog.Views
                 DropDownWidth = Math.Max(180, Models.FractalRegionLibrary.Instance.MaxRegionNameLength + 40)   // ensure descriptions fit in the dropdown
             };
             RebuildRegionCombo(_regionCombo, OnRegionComboSelectionChanged);
+            AttachRegionComboSortMenu(_regionCombo, OnRegionComboSelectionChanged,
+                onAfterRebuild: () => UpdateDelRegionButton(_regionCombo, _delRegionButton));
             regionBox.Controls.Add(_regionCombo);
 
             _saveViewButton = MakeBtn("Save", 55, 51, 45, "Save the current view as a region");

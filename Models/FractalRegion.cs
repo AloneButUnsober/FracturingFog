@@ -119,6 +119,15 @@ namespace FracturingFog.Models
         public string Description { get; set; } = string.Empty;
 
         /// <summary>
+        /// Fractal type this region targets. Serialized as the enum name (e.g. "Mandelbrot") so
+        /// the JSON stays human-readable and survives enum value reordering. Defaults to
+        /// <see cref="FractalType.Mandelbrot"/> for backwards compatibility with regions saved
+        /// before fractal-type-aware bookmarks existed.
+        /// </summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
+
+        /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
         /// assumed to be user-defined unless explicitly marked as built-in.
         /// </summary>
@@ -176,6 +185,7 @@ namespace FracturingFog.Models
                 Iterations  =  256,
                 Description = "The default overview showing the complete Mandelbrot set.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -187,6 +197,7 @@ namespace FracturingFog.Models
                 Iterations  =  800,
                 Description = "Classic seahorse-shaped spirals near the main cardioid neck.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -198,6 +209,7 @@ namespace FracturingFog.Models
                 Iterations  =  700,
                 Description = "Elephant-trunk filaments branching from the period-2 bulb.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -209,6 +221,7 @@ namespace FracturingFog.Models
                 Iterations  = 1200,
                 Description = "Interleaved double spiral arms deep in Seahorse Valley.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -220,6 +233,7 @@ namespace FracturingFog.Models
                 Iterations  = 1400,
                 Description = "Jagged lightning-bolt filaments near the top of the main bulb.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -231,6 +245,7 @@ namespace FracturingFog.Models
                 Iterations  = 1500,
                 Description = "Spiral arms resembling a barred galaxy in the upper limb.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -242,6 +257,7 @@ namespace FracturingFog.Models
                 Iterations  = 2000,
                 Description = "A miniature copy of the whole set — self-similarity at depth.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -253,6 +269,7 @@ namespace FracturingFog.Models
                 Iterations  = 1800,
                 Description = "The Feigenbaum accumulation point where period doublings converge.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -264,6 +281,7 @@ namespace FracturingFog.Models
                 Iterations  = 1200,
                 Description = "Dense star-like radiating filaments above the main cardioid.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -275,6 +293,7 @@ namespace FracturingFog.Models
                 Iterations  = 2500,
                 Description = "Extreme zoom at the tip of the real-axis needle.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Ultra
             },
             new()
@@ -286,6 +305,7 @@ namespace FracturingFog.Models
                 Iterations  = 1100,
                 Description = "Parabolic bifurcation site — two buds splitting from one.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -297,6 +317,7 @@ namespace FracturingFog.Models
                 Iterations  = 2000,
                 Description = "Three interlocked spiral arms deep in the upper filament zone.",
                 RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.High
             },
         ];
@@ -308,56 +329,56 @@ namespace FracturingFog.Models
         private static readonly FractalRegion[] _randomPool =
         [
             // ── Deep seahorse spirals ──────────────────────────────────────────────
-            new() { Name="R:SeahorseA",  CenterX=-0.74878, CenterY=0.06508, Zoom=12000.0, Iterations=2000, QualityPreset=QualityPreset.High },
-            new() { Name="R:SeahorseB",  CenterX=-0.74529, CenterY=0.11307, Zoom=8000.0,  Iterations=1800, QualityPreset=QualityPreset.High },
-            new() { Name="R:SeahorseC",  CenterX=-0.74542, CenterY=0.13161, Zoom=290.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:SeahorseD",  CenterX=-0.77568, CenterY=0.13646, Zoom=15000.0, Iterations=2500, QualityPreset=QualityPreset.High },
+            new() { Name="R:SeahorseA",  CenterX=-0.74878, CenterY=0.06508, Zoom=12000.0, Iterations=2000, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:SeahorseB",  CenterX=-0.74529, CenterY=0.11307, Zoom=8000.0,  Iterations=1800, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:SeahorseC",  CenterX=-0.74542, CenterY=0.13161, Zoom=290.0,  Iterations=1500, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:SeahorseD",  CenterX=-0.77568, CenterY=0.13646, Zoom=15000.0, Iterations=2500, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
             // ── Elephant valley variations ─────────────────────────────────────────
-            new() { Name="R:ElephantA",  CenterX=0.32530,  CenterY=0.04868, Zoom=4000.0,  Iterations=1600, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:ElephantB",  CenterX=0.375534459723856,  CenterY=-0.221346110647405,Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.High },
-            new() { Name="R:ElephantC",  CenterX=0.35516,  CenterY=0.09486, Zoom=200.0,  Iterations=2000, QualityPreset=QualityPreset.High },
+            new() { Name="R:ElephantA",  CenterX=0.32530,  CenterY=0.04868, Zoom=4000.0,  Iterations=1600, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:ElephantB",  CenterX=0.375534459723856,  CenterY=-0.221346110647405,Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:ElephantC",  CenterX=0.35516,  CenterY=0.09486, Zoom=200.0,  Iterations=2000, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
             // ── Mini Mandelbrots (self-similar copies) ─────────────────────────────
-            new() { Name="R:MiniA",      CenterX=-1.6271862274936, CenterY=0.00000, Zoom=55.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:MiniB",      CenterX=-0.160229506084313, CenterY=1.03460261104092, Zoom=60.0,  Iterations=500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:MiniC",      CenterX=-1.25067386008417, CenterY=0.0201413514898332, Zoom=54602629.0,  Iterations=2500, QualityPreset=QualityPreset.High },
-            new() { Name="R:MiniD",      CenterX=0.366432439759528,  CenterY=-0.676487494685914,Zoom=3065.0,  Iterations=1400, QualityPreset=QualityPreset.High },
-            new() { Name="R:MiniE",      CenterX=-1.94157, CenterY=0.00000, Zoom=502.0, Iterations=1200, QualityPreset=QualityPreset.High },
+            new() { Name="R:MiniA",      CenterX=-1.6271862274936, CenterY=0.00000, Zoom=55.0,  Iterations=2000, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:MiniB",      CenterX=-0.160229506084313, CenterY=1.03460261104092, Zoom=60.0,  Iterations=500, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:MiniC",      CenterX=-1.25067386008417, CenterY=0.0201413514898332, Zoom=54602629.0,  Iterations=2500, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:MiniD",      CenterX=0.366432439759528,  CenterY=-0.676487494685914,Zoom=3065.0,  Iterations=1400, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:MiniE",      CenterX=-1.94157, CenterY=0.00000, Zoom=502.0, Iterations=1200, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
             // ── Spiral galaxies / triple spirals ───────────────────────────────────
-            new() { Name="R:SpiralA",    CenterX=-0.562474314086615, CenterY=0.64138011514593, Zoom=91,  Iterations=1200, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:SpiralB",    CenterX=-0.0976515101078047, CenterY=0.654455924064267, Zoom=227,  Iterations=1114, QualityPreset=QualityPreset.High },
-            new() { Name="R:SpiralC",    CenterX=-0.52768, CenterY=0.52768, Zoom=3000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:SpiralA",    CenterX=-0.562474314086615, CenterY=0.64138011514593, Zoom=91,  Iterations=1200, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:SpiralB",    CenterX=-0.0976515101078047, CenterY=0.654455924064267, Zoom=227,  Iterations=1114, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:SpiralC",    CenterX=-0.52768, CenterY=0.52768, Zoom=3000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
             new() { Name="R:SpiralD",    CenterX=-0.053974358974359, CenterY=0.663897435897436, Zoom=50.0, Iterations=500, QualityPreset=QualityPreset.Standard},
             // ── Period-3 bulb and neighbourhood ───────────────────────────────────
-            new() { Name="R:Period3A",   CenterX=-0.0958466539313279, CenterY=0.653567154869739, Zoom=93.0,  Iterations=500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:Period3B",   CenterX=-0.13500, CenterY=0.65000, Zoom=1500.0,  Iterations=1200, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:Period3C",   CenterX=-0.16667, CenterY=1.04000, Zoom=1736.0,  Iterations=670, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:Period3A",   CenterX=-0.0958466539313279, CenterY=0.653567154869739, Zoom=93.0,  Iterations=500, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:Period3B",   CenterX=-0.13500, CenterY=0.65000, Zoom=1500.0,  Iterations=1200, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:Period3C",   CenterX=-0.16667, CenterY=1.04000, Zoom=1736.0,  Iterations=670, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
             // ── Lightning / filament zones ─────────────────────────────────────────
-            new() { Name="R:LightA",     CenterX=-0.626614850667933, CenterY=0.384657235048688, Zoom=744.0,  Iterations=650, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:LightB",     CenterX=-0.507263617832552, CenterY=0.526971432700647, Zoom=175.0,  Iterations=550, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:LightC",     CenterX=-0.740972025145092, CenterY=0.104494920892684, Zoom=800.0,   Iterations=650, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:LightA",     CenterX=-0.626614850667933, CenterY=0.384657235048688, Zoom=744.0,  Iterations=650, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:LightB",     CenterX=-0.507263617832552, CenterY=0.526971432700647, Zoom=175.0,  Iterations=550, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:LightC",     CenterX=-0.740972025145092, CenterY=0.104494920892684, Zoom=800.0,   Iterations=650, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
             // ── Parabolic / satellite bulbs ────────────────────────────────────────
-            new() { Name="R:ParabA",     CenterX=-1.40115, CenterY=0.00000, Zoom=4000.0,  Iterations=2500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:ParabB",     CenterX=-1.31079592300444, CenterY=0.0731247515540183, Zoom=64694.7,  Iterations=1750, QualityPreset=QualityPreset.High },
+            new() { Name="R:ParabA",     CenterX=-1.40115, CenterY=0.00000, Zoom=4000.0,  Iterations=2500, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:ParabB",     CenterX=-1.31079592300444, CenterY=0.0731247515540183, Zoom=64694.7,  Iterations=1750, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
             // Stopped here.
-            new() { Name="R:ParabC",     CenterX=0.25033364354215, CenterY=0.25033364354215, Zoom=20003.0, Iterations=2500, QualityPreset=QualityPreset.High },
+            new() { Name="R:ParabC",     CenterX=0.25033364354215, CenterY=0.25033364354215, Zoom=20003.0, Iterations=2500, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
             // ── Deep double spirals ────────────────────────────────────────────────
-            new() { Name="R:DblSpiralA", CenterX=-0.72700, CenterY=0.18900, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.High },
-            new() { Name="R:DblSpiralB", CenterX=-0.74108, CenterY=0.16858, Zoom=30000.0, Iterations=3500, QualityPreset=QualityPreset.High },
-            new() { Name="R:DblSpiralC", CenterX=-0.73657, CenterY=0.18781, Zoom=18000.0, Iterations=3000, QualityPreset=QualityPreset.High },
+            new() { Name="R:DblSpiralA", CenterX=-0.72700, CenterY=0.18900, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:DblSpiralB", CenterX=-0.74108, CenterY=0.16858, Zoom=30000.0, Iterations=3500, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:DblSpiralC", CenterX=-0.73657, CenterY=0.18781, Zoom=18000.0, Iterations=3000, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
             // ── Upper filament / star clusters ────────────────────────────────────
-            new() { Name="R:StarA",      CenterX=-0.159158498023715, CenterY=1.02331660079051, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:StarB",      CenterX=1.02331660079051, CenterY=1.02525867534908, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:StarC",      CenterX=-0.22700, CenterY=1.11600, Zoom=3500.0,  Iterations=2000, QualityPreset=QualityPreset.Standard },
+            new() { Name="R:StarA",      CenterX=-0.159158498023715, CenterY=1.02331660079051, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:StarB",      CenterX=1.02331660079051, CenterY=1.02525867534908, Zoom=5000.0,  Iterations=2000, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:StarC",      CenterX=-0.22700, CenterY=1.11600, Zoom=3500.0,  Iterations=2000, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
             // ── Needle tip zone ───────────────────────────────────────────────────
-            new() { Name="R:NeedleA",    CenterX=-1.99991, CenterY=0.00000, Zoom=15000.0, Iterations=3000, QualityPreset=QualityPreset.Ultra },
-            new() { Name="R:NeedleB",    CenterX=-1.99999, CenterY=0.00000, Zoom=50000.0, Iterations=5000, QualityPreset=QualityPreset.Ultra },
+            new() { Name="R:NeedleA",    CenterX=-1.99991, CenterY=0.00000, Zoom=15000.0, Iterations=3000, QualityPreset=QualityPreset.Ultra, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:NeedleB",    CenterX=-1.99999, CenterY=0.00000, Zoom=50000.0, Iterations=5000, QualityPreset=QualityPreset.Ultra, FractalType=FractalType.Mandelbrot },
             // ── Cauliflower / cardioid edge ────────────────────────────────────────
-            new() { Name="R:CauliA",     CenterX=0.25010,  CenterY=0.00000, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard },
-            new() { Name="R:CauliB",     CenterX=0.25033364354215,  CenterY=3.9525691699605E-06, Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High },
+            new() { Name="R:CauliA",     CenterX=0.25010,  CenterY=0.00000, Zoom=2000.0,  Iterations=1500, QualityPreset=QualityPreset.Standard, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:CauliB",     CenterX=0.25033364354215,  CenterY=3.9525691699605E-06, Zoom=8000.0,  Iterations=2500, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
             // ── Deep zoom demo points (DD precision) ──────────────────────────────
-            new() { Name="R:DeepA",      CenterX=-0.743643887037151, CenterY=0.131825904205330, Zoom=1e14, Iterations=8000, QualityPreset=QualityPreset.High },
-            new() { Name="R:DeepB",      CenterX=-0.73364389241974, CenterY=0.245521140671023, Zoom=5e13, Iterations=6000, QualityPreset=QualityPreset.High },
-            new() { Name="R:DeepC",      CenterX=0.001643721971153, CenterY=0.822467633298876,  Zoom=3e9, Iterations=10000,QualityPreset=QualityPreset.Ultra },
+            new() { Name="R:DeepA",      CenterX=-0.743643887037151, CenterY=0.131825904205330, Zoom=1e14, Iterations=8000, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:DeepB",      CenterX=-0.73364389241974, CenterY=0.245521140671023, Zoom=5e13, Iterations=6000, QualityPreset=QualityPreset.High, FractalType=FractalType.Mandelbrot },
+            new() { Name="R:DeepC",      CenterX=0.001643721971153, CenterY=0.822467633298876,  Zoom=3e9, Iterations=10000,QualityPreset=QualityPreset.Ultra, FractalType=FractalType.Mandelbrot },
         ];
 
         // ── Public collections ────────────────────────────────────────────────
@@ -385,6 +406,9 @@ namespace FracturingFog.Models
 
         /// <summary>
         /// All slideshow-eligible regions: built-ins, user-defined, and interesting random pool.
+        /// User regions are filtered to <see cref="FractalType.Mandelbrot"/> only — the slideshow
+        /// pipeline assumes Mandelbrot semantics (escape-time render, log-zoom interpolation), so
+        /// mixing in Julia/Newton/etc. regions without switching the active calculator would break it.
         /// </summary>
         public IEnumerable<FractalRegion> AllSlideshowRegions
         {
@@ -394,12 +418,13 @@ namespace FracturingFog.Models
                 foreach (var r in _builtIns) yield return r;
                 if (IncludeExtremeInAll)
                 {
-                    foreach (var r in UserRegions) yield return r;
+                    foreach (var r in UserRegions)
+                        if (r.FractalType == FractalType.Mandelbrot) yield return r;
                 }
                 else
                 {
-                    foreach (var r in UserRegions.FindAll(r => !r.QualityPreset.Equals(QualityPreset.Extreme))) yield return r;
-                    //List<FractalRegion> userNoExtreme = UserRegions.FindAll(r => !r.RegionType.Equals(RegionType.Extreme));
+                    foreach (var r in UserRegions.FindAll(r => !r.QualityPreset.Equals(QualityPreset.Extreme)
+                                                            && r.FractalType == FractalType.Mandelbrot)) yield return r;
                 }
 
                 foreach (var r in _randomPool) yield return r;
