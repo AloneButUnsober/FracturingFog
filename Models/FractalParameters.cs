@@ -1,0 +1,77 @@
+using System.Collections.Generic;
+using System.Numerics;
+
+namespace FracturingFog.Models
+{
+    /// <summary>
+    /// Per-fractal parameters carried by MainForm and passed to the appropriate
+    /// calculator. Only the fields relevant to the active FractalType are read.
+    /// </summary>
+    public sealed class FractalParameters
+    {
+        public Complex JuliaC { get; set; } = new Complex(-0.7, 0.27015);
+
+        public int MultibrotExponent { get; set; } = 3;
+
+        public Complex PhoenixP { get; set; } = new Complex(0.56667, 0.0);
+
+        public Complex[]? NewtonPolyCoeffs { get; set; }
+
+        public List<AffineMap>? IFSMaps { get; set; }
+
+        public string? UserEquationSource { get; set; }
+
+        public string IFSPresetName { get; set; } = "Sierpinski Triangle";
+        public int IFSIterations { get; set; } = 2_000_000;
+
+        public string LSystemPresetName { get; set; } = "Hilbert";
+        public int LSystemDepth { get; set; } = 5;
+
+        public string AttractorPresetName { get; set; } = "Clifford";
+        public int AttractorIterations { get; set; } = 2_000_000;
+        public double AttractorA { get; set; } = -1.4;
+        public double AttractorB { get; set; } = 1.6;
+        public double AttractorC { get; set; } = 1.0;
+        public double AttractorD { get; set; } = 0.7;
+
+        public int NewtonExponent { get; set; } = 3;
+        public double NewtonRelaxation { get; set; } = 1.0;
+
+        public int BuddhaSamples { get; set; } = 500_000;
+        public int BuddhaIterLow { get; set; } = 500;
+        public int BuddhaIterMid { get; set; } = 5_000;
+        public int BuddhaIterHigh { get; set; } = 50_000;
+
+        public FractalParameters Clone()
+        {
+            return new FractalParameters
+            {
+                JuliaC = JuliaC,
+                MultibrotExponent = MultibrotExponent,
+                PhoenixP = PhoenixP,
+                NewtonPolyCoeffs = NewtonPolyCoeffs is null ? null : (Complex[])NewtonPolyCoeffs.Clone(),
+                IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
+                UserEquationSource = UserEquationSource,
+                IFSPresetName = IFSPresetName,
+                IFSIterations = IFSIterations,
+                LSystemPresetName = LSystemPresetName,
+                LSystemDepth = LSystemDepth,
+                AttractorPresetName = AttractorPresetName,
+                AttractorIterations = AttractorIterations,
+                AttractorA = AttractorA, AttractorB = AttractorB,
+                AttractorC = AttractorC, AttractorD = AttractorD,
+                NewtonExponent = NewtonExponent,
+                NewtonRelaxation = NewtonRelaxation,
+                BuddhaSamples = BuddhaSamples,
+                BuddhaIterLow = BuddhaIterLow,
+                BuddhaIterMid = BuddhaIterMid,
+                BuddhaIterHigh = BuddhaIterHigh
+            };
+        }
+    }
+
+    /// <summary>
+    /// Affine map for IFS chaos game. x' = a·x + b·y + e, y' = c·x + d·y + f. Picked with weight.
+    /// </summary>
+    public readonly record struct AffineMap(double A, double B, double C, double D, double E, double F, double Weight);
+}
