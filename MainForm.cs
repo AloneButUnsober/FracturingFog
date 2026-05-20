@@ -219,6 +219,9 @@ public sealed partial class MainForm : Form
     private AttractorCalculator? _attractorCalculator;
     private BuddhabrotCalculator? _buddhabrotCalculator;
     private NewtonCalculator? _newtonCalculator;
+    private UserEquationCalculator? _userEquationCalculator;
+    private MandelbulbCalculator? _mandelbulbCalculator;
+    private Views.UserEquationDialog? _userEqDialog;
     private FractalType _currentFractalType = FractalType.Mandelbrot;
     private FractalParameters _fractalParams = new();
     private CancellationTokenSource? _calcCts;
@@ -517,6 +520,8 @@ public sealed partial class MainForm : Form
             "IFS",
             "L-System",
             "Strange Attractor",
+            "User Equation",
+            "Mandelbulb (3D)",
         });
         _fractalTypeCombo.SelectedIndex = 0;
         _fractalTypeCombo.SelectedIndexChanged += OnFractalTypeChanged;
@@ -830,6 +835,8 @@ public sealed partial class MainForm : Form
             _attractorCalculator = new AttractorCalculator(w, h);
             _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
             _newtonCalculator = new NewtonCalculator(w, h);
+            _userEquationCalculator = new UserEquationCalculator(w, h);
+            _mandelbulbCalculator = new MandelbulbCalculator(w, h);
 
             if (_defaultColorMap != null)
             {
@@ -840,6 +847,8 @@ public sealed partial class MainForm : Form
                 _attractorCalculator.ColorMap = _defaultColorMap;
                 _buddhabrotCalculator.ColorMap = _defaultColorMap;
                 _newtonCalculator.ColorMap = _defaultColorMap;
+                _userEquationCalculator.ColorMap = _defaultColorMap;
+                _mandelbulbCalculator.ColorMap = _defaultColorMap;
             }
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
@@ -887,6 +896,8 @@ public sealed partial class MainForm : Form
         _attractorCalculator?.Resize(w, h);
         _buddhabrotCalculator?.Resize(w, h);
         _newtonCalculator?.Resize(w, h);
+        _userEquationCalculator?.Resize(w, h);
+        _mandelbulbCalculator?.Resize(w, h);
         ApplyViewState();
         TriggerCalculation();
         PositionGridPanel();
@@ -1375,6 +1386,8 @@ public sealed partial class MainForm : Form
             8 => FractalType.IFS,
             9 => FractalType.LSystem,
             10 => FractalType.StrangeAttractor,
+            11 => FractalType.UserEquation,
+            12 => FractalType.Mandelbulb,
             _ => FractalType.Mandelbrot
         };
         if (sel == _currentFractalType) return;
@@ -1395,6 +1408,8 @@ public sealed partial class MainForm : Form
             FractalType.IFS              => (0.0, 0.0, 1.0),
             FractalType.LSystem          => (0.0, 0.0, 1.0),
             FractalType.StrangeAttractor => (0.0, 0.0, 1.0),
+            FractalType.UserEquation     => (0.0, 0.0, 1.0),
+            FractalType.Mandelbulb       => (0.0, 0.0, 1.0),
             _                            => (-0.5, 0.0, 1.0)
         };
         _centerXLo = _centerX2 = _centerX3 = 0.0;
@@ -1409,6 +1424,13 @@ public sealed partial class MainForm : Form
 
     private void OnFractalParamsClick(object? sender, EventArgs e)
     {
+        // UserEquation has its own editor with a multiline source textbox.
+        if (_currentFractalType == FractalType.UserEquation)
+        {
+            ShowUserEquationDialog();
+            return;
+        }
+
         // Modeless dialog with live updates — re-render fires on every
         // control change so the user sees parameter sweeps in real time.
         if (_paramsDialog != null && !_paramsDialog.IsDisposed)
@@ -1439,6 +1461,36 @@ public sealed partial class MainForm : Form
         dlg.FormClosed += (_, _) => { _paramsDialog = null; };
         _paramsDialog = dlg;
         dlg.Show(this);
+    }
+
+    private void ShowUserEquationDialog()
+    {
+        if (_userEqDialog != null && !_userEqDialog.IsDisposed)
+        {
+            _userEqDialog.BringToFront();
+            _userEqDialog.Activate();
+            return;
+        }
+
+        var dlg = new Views.UserEquationDialog(_fractalParams);
+        var loc = PointToScreen(new Point(_toolbar.Right - dlg.Width - 10, _toolbar.Bottom + 10));
+        dlg.Location = loc;
+        dlg.CompileRequested += () =>
+        {
+            if (_userEquationCalculator == null) return;
+            _userEquationCalculator.Compile(_fractalParams.UserEquationSource ?? "return z*z + c;");
+            dlg.ShowError(_userEquationCalculator.LastError);
+            if (_userEquationCalculator.IsCompiled)
+            {
+                _lastUploadedBuffer = null;
+                TriggerCalculation();
+            }
+        };
+        dlg.FormClosed += (_, _) => { _userEqDialog = null; };
+        _userEqDialog = dlg;
+        dlg.Show(this);
+        // Trigger initial compile.
+        dlg.TriggerCompile();
     }
 
     private void OnColorThemeChanged(object? sender, EventArgs e)
@@ -2754,11 +2806,13 @@ public sealed partial class MainForm : Form
                     e.FractalType = _currentFractalType;
                     e.FractalParameters = _fractalParams;
                     break;
-                case IFSCalculator ifs:        ifs.FractalParameters = _fractalParams; break;
-                case LSystemCalculator ls:     ls.FractalParameters = _fractalParams; break;
-                case AttractorCalculator a:    a.FractalParameters = _fractalParams; break;
-                case BuddhabrotCalculator b:   b.FractalParameters = _fractalParams; break;
-                case NewtonCalculator n:       n.FractalParameters = _fractalParams; break;
+                case IFSCalculator ifs:           ifs.FractalParameters = _fractalParams; break;
+                case LSystemCalculator ls:        ls.FractalParameters = _fractalParams; break;
+                case AttractorCalculator a:       a.FractalParameters = _fractalParams; break;
+                case BuddhabrotCalculator b:      b.FractalParameters = _fractalParams; break;
+                case NewtonCalculator n:          n.FractalParameters = _fractalParams; break;
+                case UserEquationCalculator u:    u.FractalParameters = _fractalParams; break;
+                case MandelbulbCalculator m:      m.FractalParameters = _fractalParams; break;
             }
         }
 
@@ -2831,6 +2885,8 @@ public sealed partial class MainForm : Form
         FractalType.BuddhaBrot       => _buddhabrotCalculator,
         FractalType.Newton           => _newtonCalculator,
         FractalType.Nova             => _newtonCalculator, // share path for now
+        FractalType.UserEquation     => _userEquationCalculator,
+        FractalType.Mandelbulb       => _mandelbulbCalculator,
         _                            => null
     };
 

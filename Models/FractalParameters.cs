@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -42,6 +43,17 @@ namespace FracturingFog.Models
         public int BuddhaIterMid { get; set; } = 5_000;
         public int BuddhaIterHigh { get; set; } = 50_000;
 
+        // Mandelbulb camera + DE settings.
+        public double BulbPower { get; set; } = 8.0;
+        public int BulbIterations { get; set; } = 8;
+        public double BulbCameraDistance { get; set; } = 3.0;
+        public double BulbCameraTheta { get; set; } = Math.PI * 0.25;  // azimuth (around Y)
+        public double BulbCameraPhi { get; set; } = Math.PI * 0.35;    // elevation
+        public double BulbLightTheta { get; set; } = Math.PI * 0.25;
+        public double BulbLightPhi { get; set; } = Math.PI * 0.45;
+        public int BulbMaxSteps { get; set; } = 96;
+        public double BulbEpsilon { get; set; } = 0.0015;
+
         public FractalParameters Clone()
         {
             return new FractalParameters
@@ -65,7 +77,16 @@ namespace FracturingFog.Models
                 BuddhaSamples = BuddhaSamples,
                 BuddhaIterLow = BuddhaIterLow,
                 BuddhaIterMid = BuddhaIterMid,
-                BuddhaIterHigh = BuddhaIterHigh
+                BuddhaIterHigh = BuddhaIterHigh,
+                BulbPower = BulbPower,
+                BulbIterations = BulbIterations,
+                BulbCameraDistance = BulbCameraDistance,
+                BulbCameraTheta = BulbCameraTheta,
+                BulbCameraPhi = BulbCameraPhi,
+                BulbLightTheta = BulbLightTheta,
+                BulbLightPhi = BulbLightPhi,
+                BulbMaxSteps = BulbMaxSteps,
+                BulbEpsilon = BulbEpsilon
             };
         }
     }

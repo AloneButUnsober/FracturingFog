@@ -18,7 +18,8 @@ namespace FracturingFog
         IFS,
         LSystem,
         StrangeAttractor,
-        UserEquation
+        UserEquation,
+        Mandelbulb
     }
 
     public enum RenderProfile { Preview, Final }
