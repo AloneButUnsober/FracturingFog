@@ -283,15 +283,19 @@ namespace FracturingFog.Views
             leftY = _kindBox.Bottom + 6;
 
             // ── Stops ───────────────────────────────────────────────────────
-            _stopsBox = MakeGroup("Color Stops", LeftX, leftY, ColWidth, 220);
+            _stopsBox = MakeGroup("Color Stops", LeftX, leftY, ColWidth, 246);
             _root.Controls.Add(_stopsBox);
+
+            var btnFromImage = MakeAction("From Image…", 6, 20, 130, Color.FromArgb(60, 50, 90));
+            btnFromImage.Click += (s, e) => OpenImagePaletteDialog();
+            _stopsBox.Controls.Add(btnFromImage);
 
             _stopsList = new ColorStopListControl
             {
                 Left = 6,
-                Top = 22,
+                Top = 52,
                 Width = ColWidth - 14,
-                Height = _stopsBox.Height - 30,
+                Height = _stopsBox.Height - 60,
             };
             _stopsList.OnStopsChanged += (s, e) => OnFieldChanged();
             _stopsBox.Controls.Add(_stopsList);
@@ -429,8 +433,20 @@ namespace FracturingFog.Views
             };
             _root.Controls.Add(_chkLivePreview);
 
-            _btnNewBlank = MakeAction("New Blank", LeftX + 110, leftY, 90, Color.FromArgb(55, 55, 75));
-            _btnNewBlank.Click += (s, e) => NewBlankTheme();
+            _btnNewBlank = MakeAction("New ▾", LeftX + 110, leftY, 90, Color.FromArgb(55, 55, 75));
+            var newMenu = new ContextMenuStrip
+            {
+                BackColor = Color.FromArgb(45, 45, 55),
+                ForeColor = Color.White,
+                ShowImageMargin = false,
+            };
+            var miNew = new ToolStripMenuItem("New");
+            miNew.Click += (s, e) => NewBlankTheme();
+            newMenu.Items.Add(miNew);
+            var miCopy = new ToolStripMenuItem("Copy");
+            miCopy.Click += (s, e) => CopyCurrentTheme();
+            newMenu.Items.Add(miCopy);
+            _btnNewBlank.Click += (s, e) => newMenu.Show(_btnNewBlank, new Point(0, _btnNewBlank.Height));
             _root.Controls.Add(_btnNewBlank);
 
             _btnRevert = MakeAction("Revert", LeftX + 210, leftY, 80, Color.FromArgb(80, 60, 30));
@@ -806,6 +822,27 @@ namespace FracturingFog.Views
             LoadData(data);
         }
 
+        private void OpenImagePaletteDialog()
+        {
+            using var dlg = new ImagePaletteDialog(this);
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            var stops = dlg.Result;
+            if (stops == null || stops.Count < 2) return;
+
+            _suppressChange = true;
+            try { _stopsList.LoadStops(stops); }
+            finally { _suppressChange = false; }
+
+            // Heuristic: image-derived palettes work best as a Gradient.
+            // Leave the user's existing Kind alone if it's already set to
+            // something compatible; otherwise nudge to Gradient.
+            if (!_rdGradient.Checked && !_rdCycling.Checked && !_rdPhong.Checked && !_rdPbr.Checked)
+                _rdGradient.Checked = true;
+
+            OnFieldChanged();
+            PushPreviewToMain();
+        }
+
         private void NewBlankTheme()
         {
             _loadedSourceName = null;
@@ -825,6 +862,20 @@ namespace FracturingFog.Views
             _btnSave.Enabled = true;
             _btnExport.Enabled = true;
             _titleLabel.Text = "Color Theme Editor — new theme";
+            LoadData(data);
+            PushPreviewToMain();
+        }
+
+        private void CopyCurrentTheme()
+        {
+            var data = BuildData();
+            string baseName = string.IsNullOrWhiteSpace(data.Name) ? "Theme" : data.Name;
+            data.Name = "Copy of " + baseName;
+            _loadedSourceName = null;
+            _btnApply.Enabled = true;
+            _btnSave.Enabled = true;
+            _btnExport.Enabled = true;
+            _titleLabel.Text = "Color Theme Editor — new theme (copy)";
             LoadData(data);
             PushPreviewToMain();
         }
