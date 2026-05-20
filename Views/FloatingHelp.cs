@@ -774,9 +774,108 @@ unless the slider is locked.
         private TabPage BuildMathTab()
         {
             var page = MakePage("Mathematics");
-            var rtb = MakeRichText(page);
 
-            rtb.Text =
+            var sub = new TabControl
+            {
+                Dock = DockStyle.Fill,
+                Appearance = TabAppearance.Normal,
+                DrawMode = TabDrawMode.OwnerDrawFixed,
+                SizeMode = TabSizeMode.Fixed,
+                ItemSize = new Size(78, 24),
+                Multiline = true,
+                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                BackColor = Color.FromArgb(22, 22, 22),
+            };
+            sub.DrawItem += OnDrawTabItem;
+
+            sub.TabPages.Add(BuildMathSubTab("Overview",       MathOverviewText()));
+            sub.TabPages.Add(BuildMathSubTab("Mandelbrot",     MathMandelbrotText()));
+            sub.TabPages.Add(BuildMathSubTab("Julia",          MathJuliaText()));
+            sub.TabPages.Add(BuildMathSubTab("Burning Ship",   MathBurningShipText()));
+            sub.TabPages.Add(BuildMathSubTab("Tricorn",        MathTricornText()));
+            sub.TabPages.Add(BuildMathSubTab("Multibrot",      MathMultibrotText()));
+            sub.TabPages.Add(BuildMathSubTab("Phoenix",        MathPhoenixText()));
+            sub.TabPages.Add(BuildMathSubTab("Newton",         MathNewtonText()));
+            sub.TabPages.Add(BuildMathSubTab("Nova",           MathNovaText()));
+            sub.TabPages.Add(BuildMathSubTab("Buddhabrot",     MathBuddhabrotText()));
+            sub.TabPages.Add(BuildMathSubTab("IFS",            MathIFSText()));
+            sub.TabPages.Add(BuildMathSubTab("L-System",       MathLSystemText()));
+            sub.TabPages.Add(BuildMathSubTab("Attractor",      MathAttractorText()));
+            sub.TabPages.Add(BuildMathSubTab("Mandelbulb",     MathMandelbulbText()));
+            sub.TabPages.Add(BuildMathSubTab("User Equation",  MathUserEquationText()));
+
+            page.Controls.Add(sub);
+            return page;
+        }
+
+        private TabPage BuildMathSubTab(string label, string body)
+        {
+            var page = MakePage(label);
+            var rtb = MakeRichText(page);
+            rtb.Text = body;
+            return page;
+        }
+
+        #region Math sub-tab content
+
+        private static string MathOverviewText() =>
+@"=== Fractals in Fracturing Fog ===
+
+The Mathematics tab groups every fractal family the renderer can
+produce.  Each subtab covers one family:
+
+  • Mandelbrot    Escape-time z² + c on the parameter plane
+  • Julia         Escape-time z² + c with c fixed (dynamical plane)
+  • Burning Ship  z → (|Re z| + i|Im z|)² + c
+  • Tricorn       z → conj(z)² + c
+  • Multibrot     z → z^d + c, integer d ≥ 2
+  • Phoenix       z → z² + c + p·z_(n−1)  (two-step memory)
+  • Newton        Root-finding basins of f(z) = z^d − 1
+  • Nova          Newton-style with c offset (relaxation map)
+  • Buddhabrot    Density plot of escaping Mandelbrot orbits
+  • IFS           Affine contractions via chaos game
+  • L-System      String-rewriting + turtle graphics
+  • Attractor     Strange attractors (Clifford, De Jong, Lorenz)
+  • Mandelbulb    3D triplex-power distance-estimation render
+  • User Equation Roslyn-compiled per-pixel C# step function
+
+=== Categories ===
+
+Escape-time          Mandelbrot, Julia, Burning Ship, Tricorn,
+                     Multibrot, Phoenix, User Equation
+Root-finding         Newton, Nova
+Density / point      Buddhabrot, IFS, Attractor
+Geometric rewrite    L-System
+3D distance estimate Mandelbulb
+
+=== Common Render Pipeline ===
+
+For escape-time families the renderer:
+
+  1. Maps each pixel to a complex c via
+       cx = CenterX + (x − W/2)·scale
+       cy = CenterY + (y − H/2)·scale
+       scale = (3.5 / max(W,H)) / Zoom
+  2. Iterates the family's recurrence with z₀ = 0 (or z₀ = c).
+  3. Stops at |z|² ≥ bailout² or iter ≥ MaxIterations.
+  4. Smooths the iteration count:
+       smooth = n + 1 − log₂(log₂(|z|))
+  5. Feeds smooth (and derivative-derived distance / normal data)
+     into the active IColorMap to produce the pixel ARGB.
+
+For non-escape families the rendering pipeline differs — see the
+individual subtabs.
+
+=== Why Each Family Looks Different ===
+
+Tiny algebraic tweaks to a single recurrence produce wildly
+different geometry.  Changing z² → conj(z)² gives Tricorn;
+absolute-value the components and you get Burning Ship; raise the
+power d to get Multibrot.  All share the same skeleton; the
+difference is one or two lines of arithmetic inside Step().
+";
+
+        private static string MathMandelbrotText() =>
 @"=== The Mandelbrot Set ===
 
 The Mandelbrot set M is the set of complex numbers c for which the
@@ -794,23 +893,18 @@ produces the familiar fractal imagery.
   1905   Pierre Fatou & Gaston Julia study iteration of rational
          maps on the complex plane.  Julia describes connected /
          disconnected behaviour but cannot visualize it.
-
   1978   Robert W. Brooks and Peter Matelski publish the first
          crude computer-generated picture of the set in their
          paper on Kleinian groups.
-
   1980   Benoit B. Mandelbrot, working at IBM's Yorktown Heights
          lab, produces high-resolution renders that reveal the
          set's astonishing self-similar structure.  He coins the
          name in 1982.
-
   1985   Adrien Douady & John H. Hubbard prove M is connected and
          introduce the parameter ray theory.  They name the set
          in honor of Mandelbrot.
-
   1991   Mitsuhiro Shishikura proves the boundary of M has
          Hausdorff dimension 2.
-
   2000s  Perturbation methods (K. I. Martin) make zooms past 1e50
          tractable on consumer hardware.
 
@@ -845,7 +939,7 @@ distance estimation, orbit traps) extract sub-pixel detail.
 
 === Why Deep Zoom is Hard ===
 
-At zoom 10ⁿ the pixel spacing is ~4 · 10⁻ⁿ.  IEEE-754 double has
+At zoom 10ⁿ the pixel spacing is ~4·10⁻ⁿ.  IEEE-754 double has
 ~15 decimal digits, so beyond zoom 10¹³ the pixel grid stops
 resolving distinct complex numbers — banding and ""solid-color""
 artifacts appear.  Solutions:
@@ -858,9 +952,840 @@ artifacts appear.  Solutions:
 
 Fracturing Fog uses double / DD / QD auto-promotion combined with
 perturbation + SA + BLA for zooms past 1e45.
+
+=== C# Equation (User Equation tab) ===
+
+  // Classic Mandelbrot — z₀ = 0, zₙ₊₁ = zₙ² + c
+  return z*z + c;
 ";
-            return page;
-        }
+
+        private static string MathJuliaText() =>
+@"=== The Julia Set ===
+
+Fix c ∈ ℂ.  The filled Julia set K(c) is the set of z₀ ∈ ℂ whose
+orbits under
+
+        zₙ₊₁ = zₙ² + c
+
+remain bounded.  Unlike the Mandelbrot set (parameter plane), the
+Julia set lives in the dynamical plane: every point on screen is
+treated as a candidate z₀ with the SAME c.
+
+=== Connection to the Mandelbrot Set ===
+
+Fatou: K(c) is connected ⇔ 0 ∈ K(c) ⇔ c ∈ M.  Pick c inside the
+Mandelbrot set: you get a connected, often dendritic, Julia set.
+Pick c outside: you get a totally disconnected Cantor dust
+(""Fatou dust"").  Mandelbrot's set is therefore a topological
+catalogue of all quadratic Julia sets.
+
+=== Notable c Values ===
+
+  c =  0           Unit disk (the trivial Julia set)
+  c = −1           San Marco fractal (period-2 fixed cycle)
+  c = −0.7 + 0.27i Dragon-like dendrite (Fracturing Fog default)
+  c = −0.835−0.232i Spiraling dendrite
+  c =  0.285+0.01i Cauliflower / mini-Mandelbrot lookalike
+  c = −0.4+0.6i    Douady's rabbit
+  c = i            Dendrite of Misiurewicz type
+
+=== Escape-Time Algorithm ===
+
+  function julia(z, c, maxIter):
+      for n in 0 … maxIter:
+          if |z| > 2: return n
+          z = z * z + c
+      return maxIter
+
+Only the initial condition changes: z₀ = pixel coordinate, c =
+the dialog-supplied constant.
+
+=== Parameters (FractalParameters) ===
+
+  JuliaC : Complex   Constant c.  Default (−0.7, 0.27015).
+
+=== Symmetry ===
+
+J(c) is symmetric under z → −z (rotation by π).  Many Julia sets
+exhibit additional discrete rotational symmetries when c lies on
+the boundary of a bulb.
+
+=== C# Equation ===
+
+  // Julia: c fixed, z varies, z₀ = pixel.  Engine seeds z = 0, so
+  // on iteration 0 we copy the pixel coordinate into z, then run
+  // the standard z² + jc recurrence.
+  if (n == 0) z = c;
+  return z*z + new Complex(-0.7, 0.27015);
+";
+
+        private static string MathBurningShipText() =>
+@"=== The Burning Ship ===
+
+Discovered by Michael Michelitsch & Otto E. Rössler (1992).  Same
+escape-time framework as Mandelbrot, but each iteration takes the
+ABSOLUTE VALUE of both components before squaring:
+
+        zₙ₊₁ = ( |Re(zₙ)| + i·|Im(zₙ)| )² + c
+
+Expanding:
+
+        zr' = zr² − zi² + cx          (after |zr|, |zi|)
+        zi' = 2·|zr|·|zi| + cy
+
+The map is NOT analytic — the derivative is discontinuous along
+the real and imaginary axes.  This sharp cusp behaviour creates
+the characteristic ""flames"" and ""mast"" structures.
+
+=== Why ""Burning Ship""? ===
+
+Rendered conventionally with the imaginary axis inverted, the main
+body resembles a three-masted galleon engulfed in flames.
+
+=== Set Location ===
+
+Re ∈ [−2.5, 1.5],  Im ∈ [−2, 1.5] (with axis convention above).
+Notable features:
+
+  • Main hull around c ≈ (−1.75, 0)
+  • Antenna spike along the negative real axis past −1.94
+  • Mini-ship at c ≈ (−1.7568, −0.0381)
+
+=== C# Equation ===
+
+  // Burning Ship: |Re z| + i|Im z|, then square, then + c
+  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
+  return w*w + c;
+";
+
+        private static string MathTricornText() =>
+@"=== The Tricorn / Mandelbar ===
+
+Studied by Crowe, Hasson, Rippon & Strain-Clark (1989).  Replace
+z² with its complex CONJUGATE squared:
+
+        zₙ₊₁ = conj(zₙ)² + c
+
+In component form (zr + i·zi):
+
+        zr' =  zr² − zi² + cx
+        zi' = −2·zr·zi + cy        ← sign flip vs Mandelbrot
+
+The conjugation makes the map ANTI-holomorphic; its even-order
+iterate conj(conj(z)²)² = (z̄²)̄² = (z²)² is holomorphic, so
+period-2 dynamics behave like a Multibrot of degree 4.
+
+=== Geometry ===
+
+Threefold symmetric: the set looks like a three-cornered
+""Mandelbar"" with three large lobes meeting at the origin.  Mini
+Mandelbrot-like islands appear in the antenna.  Boundary has
+fractal dimension 2 (Inou 2000).
+
+=== Connection to Bicomplex Dynamics ===
+
+The Tricorn is the connectedness locus of the family
+fc(z) = conj(z)² + c, and is the parameter plane of the
+""anti-quadratic"" maps.  Period-2 bulbs are PARABOLIC (semi-stable),
+giving sharp cusp boundaries instead of smooth bulbs.
+
+=== C# Equation ===
+
+  // Tricorn: conjugate before squaring
+  var zb = Complex.Conjugate(z);
+  return zb*zb + c;
+";
+
+        private static string MathMultibrotText() =>
+@"=== Multibrot Sets ===
+
+Generalize Mandelbrot by raising z to an integer power d ≥ 2:
+
+        zₙ₊₁ = zₙ^d + c                d ∈ ℤ, d ≥ 2
+
+  d = 2   Standard Mandelbrot
+  d = 3   ""Tribrot"" — twofold symmetric, two cardioids
+  d = 4   Threefold symmetric, three cardioids
+  d = n   (n−1)-fold rotational symmetry
+
+The bulb structure rotates by 2π/(d−1) around the origin.  Each
+multibrot has the same self-similarity properties as Mandelbrot
+but with more arms.
+
+=== Implementation Note ===
+
+Repeated complex multiplication for d > 4 accumulates floating-
+point error.  The kernel uses polar form:
+
+        r     = |z|,  θ = arg(z)
+        z^d   = r^d · (cos(d·θ) + i·sin(d·θ))
+
+Derivative tracking (for distance estimation / normals) uses
+d·z^(d−1) similarly converted through polar form.
+
+=== Parameters ===
+
+  MultibrotExponent : int   Power d.  Default 3.  Clamped to ≥ 2.
+
+=== Fractional d ===
+
+Real (non-integer) exponents are mathematically defined via
+z^d = exp(d·log z), but produce branch-cut artifacts.  Fracturing
+Fog uses integer d to avoid this.
+
+=== C# Equation ===
+
+  // Multibrot of integer power d.  d = 3 below.
+  int d = 3;
+  return Complex.Pow(z, d) + c;
+";
+
+        private static string MathPhoenixText() =>
+@"=== The Phoenix Fractal ===
+
+Introduced by Shigehiro Ushiki (1988).  Second-order recurrence:
+
+        zₙ₊₁ = zₙ² + c + p · zₙ₋₁
+
+Carries TWO-STEP memory.  The extra p·z_(n−1) term couples the
+current iterate to its predecessor, allowing dynamics that pure
+first-order maps cannot produce.
+
+=== Properties ===
+
+  • For p = 0 it collapses to the standard Mandelbrot (or Julia)
+    family.
+  • For p real and small (|p| < 0.1) the resulting set looks like
+    a deformed Julia set with phoenix-feather plumes.
+  • The set lies in the dynamical plane (z₀ = pixel) — c is the
+    parameter, but in Fracturing Fog the pixel coordinate plays
+    the role of c and the iterate z starts at 0, mirroring the
+    Mandelbrot convention.
+  • A famous orientation (p ≈ 0.5667, c ≈ 0) produces an iconic
+    flame-bird outline — the namesake ""phoenix"".
+
+=== Implementation ===
+
+  zr', zi'   = zr² − zi² + cx + Re(p·prev),  2·zr·zi + cy + Im(p·prev)
+  prev       ← (zr, zi)                     before the new value lands
+
+State carried per pixel: (zr, zi, prevZr, prevZi).
+
+=== Parameters ===
+
+  PhoenixP : Complex   Coupling constant p.  Default (0.56667, 0).
+
+=== C# Equation ===
+
+  // User Equation can't carry prev-z between steps via the signature
+  // (z, c, n) → z.  A simplified single-step approximation drops the
+  // memory term; for true Phoenix select FractalType = Phoenix instead.
+  // Approximation:
+  var p = new Complex(0.56667, 0.0);
+  return z*z + c + p * z;     // closes the loop in one step
+";
+
+        private static string MathNewtonText() =>
+@"=== Newton Fractal ===
+
+Newton's root-finding iteration applied as a dynamical system on ℂ.
+For polynomial f(z) the iteration
+
+        zₙ₊₁ = zₙ − R · f(zₙ) / f'(zₙ)
+
+converges quadratically (for R = 1) to a root once near enough.
+The Newton fractal colors each pixel by WHICH root the iteration
+converged to, optionally shaded by speed of convergence.
+
+Default polynomial:  f(z) = z^d − 1     (roots = d-th roots of 1)
+
+        f'(z) = d · z^(d−1)
+        z   ← z − R · (z^d − 1) / (d · z^(d−1))
+
+=== Geometry ===
+
+  • d basins, one per root of unity, each meeting EVERY OTHER
+    basin at every boundary point.  This is Wada's lakes property:
+    no boundary pixel borders fewer than d basins.
+  • Boundary has fractal dimension > 1.
+  • Hausdorff dimension increases with d.
+  • Relaxation parameter R ≠ 1 (""generalized Newton"") slows or
+    accelerates convergence; R = 2 produces the ""Halley method""-
+    flavoured shape.
+
+=== Historical Notes ===
+
+  • Cayley (1879) studied the d = 2 case.  Cayley conjectured —
+    incorrectly — that the d = 3 case would behave just as
+    cleanly, but boundary basins are dense.
+  • The intricate boundary was first drawn by Peitgen, Saupe &
+    Jürgens (1980s).
+
+=== Parameters ===
+
+  NewtonExponent   : int      Polynomial degree d.  Default 3.
+                              Clamped to [2, 8].
+  NewtonRelaxation : double   Relaxation factor R.  Default 1.0.
+  NewtonPolyCoeffs : Complex[]?  Optional custom polynomial
+                                 coefficients (currently unused
+                                 by the default kernel; reserved
+                                 for future custom-polynomial
+                                 path).
+
+=== C# Equation (approximation) ===
+
+  // Newton step for f(z) = z^3 − 1.  Treats ""c"" as starting z
+  // since User Equation seeds z = 0 — uses iteration count n to
+  // pick the initial point.
+  if (n == 0) z = c;
+  var z2 = z*z;
+  var f  = z*z2 - Complex.One;
+  var fp = 3 * z2;
+  return z - f / fp;
+";
+
+        private static string MathNovaText() =>
+@"=== Nova Fractal ===
+
+Variant of the Newton fractal — Paul Derbyshire (1990s).  Adds a
+constant offset c to the Newton iteration so the parameter c can
+be varied per pixel (parameter-plane Newton):
+
+        zₙ₊₁ = zₙ − R · f(zₙ) / f'(zₙ) + c
+
+For f(z) = z^d − 1 this gives a Mandelbrot-flavoured Newton:
+roots, basins, and a Mandelbrot-style boundary all in one image.
+Setting c = 0 collapses Nova back to the pure Newton fractal.
+
+=== Properties ===
+
+  • Combines basin colouring (root convergence) with escape-time
+    colouring (when iteration fails to converge).
+  • Tends to produce intricate ""embedded Mandelbrot"" copies on
+    the basin boundaries.
+  • Heavily dependent on the start point convention.  Two common
+    choices: z₀ = 1 (yields the canonical Nova) and z₀ = c
+    (parameter-plane variant).
+
+=== Implementation Note ===
+
+Fracturing Fog currently routes Nova through the same calculator
+as Newton.  Selecting Nova in the UI uses the Newton kernel with
+the user's exponent and relaxation; full Nova c-offset support is
+on the roadmap.
+
+=== C# Equation ===
+
+  // Nova for f(z) = z^3 − 1, with c parameter offset.
+  if (n == 0) z = Complex.One;
+  var z2 = z*z;
+  var f  = z*z2 - Complex.One;
+  var fp = 3 * z2;
+  return z - f / fp + c;
+";
+
+        private static string MathBuddhabrotText() =>
+@"=== The Buddhabrot ===
+
+Melinda Green (1993).  A density plot of the MANDELBROT orbits —
+not the set itself.  For each randomly sampled c whose orbit
+escapes within a chosen iteration band, the entire orbit
+(z₀, z₁, z₂, …) is replayed and each visited pixel gets a +1
+increment.  The accumulated density buffer is then tone-mapped
+through the active color map.
+
+Mathematical definition:
+
+        ρ(z) = Σ_{c escaping}  Σ_{n ≥ 0}  𝟙[ zₙ(c) ≈ z ]
+
+=== Nebulabrot ===
+
+Three iteration bands feed R, G, B channels separately:
+short orbits → red, mid orbits → green, long orbits → blue.
+The result has a luminous, nebula-like appearance — hence
+""Nebulabrot"".
+
+=== Rotation ===
+
+Conventionally displayed rotated 90° so the cardioid is vertical
+and the structure resembles a seated Buddha figure (Daniel Green
+2003, the namesake).
+
+=== Parameters ===
+
+  BuddhaSamples   : int   Number of c samples.  Default 500 000.
+  BuddhaIterLow   : int   Low band cutoff iters.  Default 500.
+  BuddhaIterMid   : int   Mid band cutoff iters.  Default 5 000.
+  BuddhaIterHigh  : int   High band cutoff iters.  Default 50 000.
+
+More samples → smoother density and brighter output.  Render time
+scales linearly with samples and roughly linearly with band size.
+
+=== Stochastic — Not Deterministic ===
+
+Two runs at the same view produce slightly different images
+because samples are random.  Higher sample counts converge toward
+the underlying density distribution.
+
+=== C# Equation ===
+
+Buddhabrot is a HISTOGRAM render, not an escape-time recurrence —
+it can't be expressed in the User Equation kernel.  Choose
+FractalType = BuddhaBrot for the real thing.
+";
+
+        private static string MathIFSText() =>
+@"=== Iterated Function Systems (IFS) ===
+
+Hutchinson (1981), popularized by Michael Barnsley.  A finite set
+of CONTRACTIVE affine maps
+
+        T_i(x, y) = ( a_i·x + b_i·y + e_i ,
+                      c_i·x + d_i·y + f_i )
+
+has a unique compact attractor A satisfying
+
+        A = ⋃ T_i(A)
+
+The attractor is rendered via the CHAOS GAME (Barnsley): pick a
+random point, apply a randomly chosen map (weighted by w_i), and
+plot the result.  After N iterations the plotted points fill the
+attractor with arbitrary precision.
+
+=== Classic Examples ===
+
+  Sierpinski Triangle   3 half-scale maps to triangle corners
+  Sierpinski Carpet     8 third-scale maps (excludes center)
+  Barnsley Fern         4 maps with a single tiny stem map
+  Koch Snowflake        4 third-scale maps, one rotated
+  Dragon Curve          2 half-scale rotated maps
+  Tree                  2 + branch maps
+
+=== Self-Similarity Dimension ===
+
+For N maps each of contraction ratio r the similarity dimension
+is
+
+        d = log N / log (1/r)
+
+Sierpinski triangle (N=3, r=1/2):  log 3 / log 2 ≈ 1.585
+Koch curve         (N=4, r=1/3):  log 4 / log 3 ≈ 1.262
+
+=== Parameters ===
+
+  IFSPresetName : string   ""Sierpinski Triangle"", ""Barnsley Fern"",
+                           ""Koch"", ""Dragon"", ""Tree"", etc.
+  IFSIterations : int      Total chaos-game iterations.  Default
+                           2 000 000.  More iterations → smoother
+                           coverage of fine attractor branches.
+  IFSMaps       : List<AffineMap>?
+                           Optional override.  Each AffineMap is
+                           (A, B, C, D, E, F, Weight).  Picks are
+                           weighted by Weight; the first 50
+                           settle iterations are discarded.
+
+=== C# Equation ===
+
+IFS uses the chaos game, not per-pixel iteration — it cannot be
+expressed through the User Equation kernel.
+";
+
+        private static string MathLSystemText() =>
+@"=== L-Systems ===
+
+Aristid Lindenmayer (1968) — formal grammar for modelling plant
+growth.  An L-system is
+
+  axiom    A finite starting string.
+  rules    Productions ""X → string""; rewrite every occurrence
+           of X simultaneously each generation.
+  alphabet Symbols.  Standard turtle interpretation:
+              F   forward, draw line
+              f   forward, no draw
+              +   turn left by Δθ
+              −   turn right by Δθ
+              [   push state (position + heading)
+              ]   pop state
+
+After N generations the resulting string is walked as TURTLE
+GRAPHICS, drawing the fractal curve.
+
+=== Classic Curves ===
+
+  Hilbert            Space-filling curve.  Axiom: A.
+                     A → −BF+AFA+FB−, B → +AF−BFB−FA+
+  Koch Snowflake     Axiom: F++F++F.   F → F−F++F−F
+  Dragon Curve       Axiom: FX.        X → X+YF+,   Y → −FX−Y
+  Sierpinski Curve   Many variants — F + rotation rules
+  Plant              Axiom: X.   X → F[+X][−X]FX,   F → FF
+  Penrose            Sub-tiling rules over multiple symbols
+
+=== Dimension ===
+
+For self-similar curves the dimension matches the IFS formula:
+log N / log (1/r).  The Hilbert curve has dimension 2 — it FILLS
+the plane in the limit.
+
+=== Parameters ===
+
+  LSystemPresetName : string   Preset name (""Hilbert"", ""Koch"",
+                               ""Dragon"", ""Plant"", …).
+  LSystemDepth      : int      Generation count N.  Default 5.
+                               Clamped to [0, 12]; strings grow
+                               exponentially with depth.
+
+=== C# Equation ===
+
+L-Systems use string-rewriting + turtle graphics — they cannot be
+expressed through the User Equation per-pixel kernel.
+";
+
+        private static string MathAttractorText() =>
+@"=== Strange Attractors ===
+
+A 2D / 3D non-linear discrete dynamical system
+
+        (xₙ₊₁, yₙ₊₁) = F(xₙ, yₙ; a, b, c, d)
+
+whose orbits, after a brief transient, settle onto a set of
+fractional (non-integer) Hausdorff dimension — a STRANGE
+ATTRACTOR.  Rendered by iterating millions of points and
+accumulating a per-pixel hit density.
+
+=== Built-in Attractors ===
+
+  Clifford    xₙ₊₁ = sin(a·yₙ) + c·cos(a·xₙ)
+              yₙ₊₁ = sin(b·xₙ) + d·cos(b·yₙ)
+              Defaults: (a, b, c, d) = (−1.4, 1.6, 1.0, 0.7)
+              Smooth, butterfly-shaped.
+
+  De Jong     xₙ₊₁ = sin(a·yₙ) − cos(b·xₙ)
+              yₙ₊₁ = sin(c·xₙ) − cos(d·yₙ)
+              Defaults: (1.4, −2.3, 2.4, −2.1).
+              Wispy filaments with delicate symmetry.
+
+  Hopalong    Barry Martin (1986).  Iterates an absolute-value
+              and sign-of-x formula; produces concentric arcs.
+              Defaults: (2.0, 1.0, 0.0, 0.0).
+
+  Lorenz      3D continuous system (a = σ, b = ρ, c = β):
+                ẋ = σ(y − x)
+                ẏ = x(ρ − z) − y
+                ż = xy − βz
+              Projected to 2D via (x, z) for display.
+              Defaults: σ=10, ρ=28, β=8/3.  The canonical
+              ""butterfly"" attractor.
+
+=== Mathematical Properties ===
+
+  • Sensitive dependence on initial conditions: nearby orbits
+    diverge exponentially (positive Lyapunov exponent).
+  • Bounded yet unstable — orbits stay within a finite region.
+  • Hausdorff dimension fractional and typically irrational.
+
+=== Parameters ===
+
+  AttractorPresetName  : string  ""Clifford"", ""De Jong"", ""Hopalong"",
+                                 ""Lorenz"".
+  AttractorIterations  : int     Points to plot.  Default 2 000 000.
+  AttractorA/B/C/D     : double  Per-attractor parameters.
+
+=== C# Equation ===
+
+Strange attractors are point-density renders, not per-pixel
+escape time — they cannot be expressed through User Equation.
+";
+
+        private static string MathMandelbulbText() =>
+@"=== The Mandelbulb ===
+
+Daniel White & Paul Nylander (2007–2009).  A 3D analogue of the
+Mandelbrot set using the ""triplex"" power formula:
+
+        for v = (x, y, z) in ℝ³:
+          r     = |v|
+          θ     = arctan2(√(x² + y²), z)        (polar angle)
+          φ     = arctan2(y, x)                 (azimuth)
+
+          v^p   = r^p · ( sin(p·θ)·cos(p·φ),
+                          sin(p·θ)·sin(p·φ),
+                          cos(p·θ) )
+
+          vₙ₊₁ = vₙ^p + c                       (c = pixel ray)
+
+Power p = 8 is the classic Mandelbulb; other powers give
+different bulb shapes.
+
+=== Rendering ===
+
+Mandelbulb is rendered via DISTANCE ESTIMATION + RAYMARCHING:
+
+  1. For each pixel cast a ray from the camera.
+  2. At each ray position v, iterate the triplex formula and
+     track an analytic running derivative dr.
+  3. Distance estimate:
+       DE(v) ≈ 0.5 · log(r) · r / dr
+  4. Step the ray forward by DE(v) until DE < ε (hit) or
+     ray exits bounding sphere (miss).
+  5. Estimate the surface normal by central differences of DE
+     and shade with a directional light.
+
+=== Parameters ===
+
+  BulbPower           : double  Triplex power p.  Default 8.
+  BulbIterations      : int     DE inner iters.  Default 8.
+  BulbMaxSteps        : int     Raymarch step cap.  Default 96.
+  BulbEpsilon         : double  Hit threshold.  Default 0.0015.
+  BulbCameraDistance  : double  Camera-origin distance.  Default 3.
+  BulbCameraTheta/Phi : double  Camera spherical angles.
+  BulbLightTheta/Phi  : double  Light spherical angles.
+
+=== C# Equation ===
+
+3D distance-estimation raymarchers can't be expressed as a 2D
+per-pixel complex iteration.  Select FractalType = Mandelbulb to
+render the true 3D set.
+";
+
+        private static string MathUserEquationText() =>
+@"=== User Equations — Overview ===
+
+The User Equation engine compiles a C# expression / statement
+block at runtime (via Roslyn scripting) into a per-pixel step
+function
+
+        Complex Step(Complex z, Complex c, int n)
+
+The renderer then iterates the standard escape-time loop:
+
+        z = 0
+        for n in 0 … MaxIterations:
+            if |z|² ≥ 1024: break
+            z = Step(z, c, n)
+
+The smoothing function, bailout, and color pipeline mirror the
+Mandelbrot path.
+
+Open via:  Floating Menu → ""Equation…"" button
+           Fractal Type → ""UserEquation""
+
+The dialog is modeless and auto-compiles 500 ms after the last
+keystroke.  Errors render in red below the editor.  Saved
+equations live in:
+
+    %APPDATA%\FracturingFog\userequations.json
+
+=== Available Variables ===
+
+  z   : System.Numerics.Complex
+        The CURRENT iterate.  Starts at 0 on iteration 0.
+        Access components:  z.Real, z.Imaginary, z.Magnitude,
+                            z.Phase, Complex.Conjugate(z), …
+
+  c   : System.Numerics.Complex
+        The PIXEL coordinate in complex plane.  Constant per
+        pixel.  c.Real = world X, c.Imaginary = world Y.
+
+  n   : int
+        Iteration index (0-based).  Useful for time-varying
+        recurrences, e.g. mixing two maps.
+
+=== Available APIs ===
+
+  System.Numerics.Complex (full surface):
+      operators       +  −  *  /
+      static methods  Complex.Abs, Complex.Pow, Complex.Sin,
+                      Complex.Cos, Complex.Tan, Complex.Exp,
+                      Complex.Log, Complex.Sqrt, Complex.Conjugate,
+                      Complex.Reciprocal, Complex.FromPolarCoordinates,
+                      Complex.One, Complex.ImaginaryOne, Complex.Zero
+      properties      .Real, .Imaginary, .Magnitude, .Phase
+
+  System.Math (full surface, scalar):
+      Abs, Sin, Cos, Tan, Atan2, Sinh, Cosh, Tanh, Exp, Log, Log2,
+      Log10, Pow, Sqrt, Cbrt, Floor, Ceiling, Round, Min, Max,
+      Math.PI, Math.E, Math.Tau
+
+  Imports already in scope:
+      using System;
+      using System.Numerics;
+      using static System.Math;     // (Sin/Cos etc. unqualified)
+
+  References:
+      System.Runtime, System.Numerics — no extra usings needed.
+
+=== Syntax Rules ===
+
+  • The body must RETURN a Complex.  Either:
+        return z*z + c;          // single expression, no semicolon
+                                  // before ""return"" needed
+    or
+        var w = z*z + c;
+        return w + Complex.ImaginaryOne;
+  • If you omit ""return"", the dialog wraps the body with one for
+    a single expression — i.e. ""z*z + c"" is shorthand for
+    ""return z*z + c;"".
+  • Standard C# 12 syntax: ternary, switch expressions, pattern
+    matching, local functions all work.
+  • new Complex(re, im) and Complex.ImaginaryOne both available.
+
+=== Seeding z₀ ===
+
+The engine ALWAYS starts the orbit at z = 0.  Maps that have 0 as
+a fixed point (z·sin(z), z·cos(z) − z, z² + 0·z, …) or that need a
+pixel-dependent starting point (Julia, Heron, lambda) will produce
+an all-in-set image with z₀ = 0.
+
+The fix is to overwrite z on iteration 0 using the int parameter n:
+
+        if (n == 0) z = c;                    // pixel as z₀ (Julia)
+        if (n == 0) z = new Complex(0.5, 0);  // critical-point start
+
+Because z is passed by VALUE the reassignment is local to the step
+and does not interfere with the calculator's accumulator — the
+returned value becomes the next iterate as normal.
+
+=== Bailout and Smoothing ===
+
+The runtime uses |z|² ≥ 1024 as the bailout (radius 32) — chosen
+to give smooth coloring room across most maps.  Smoothed escape:
+
+        smooth = n + 1 − log₂(log₂(max(|z|, 1+ε)))
+
+If |z| stays bounded for MaxIterations, the pixel is treated as
+in-set (theme's InSetColor).
+
+=== Performance Notes ===
+
+  • Scalar only — no SIMD.  Per-pixel delegate call overhead.
+  • Interactive at 800 × 600 with ~256 iterations on a modern CPU.
+  • Use Math.Abs over Complex.Abs when only the magnitude is
+    needed (Complex.Abs allocates).
+  • Avoid allocating new Complex instances inside the hot path —
+    let the compiler fold them into temporaries.
+
+=== Examples — Drop-in Snippets ===
+
+Each block below is a complete equation body — paste it into the
+editor and the renderer compiles + previews.
+
+  --- Mandelbrot ---
+  return z*z + c;
+
+  --- Julia (constant baked) ---
+  // Julia uses pixel as z₀.  Engine seeds z = 0, so on n = 0 we
+  // load z from c, then iterate z² + jc normally.
+  if (n == 0) z = c;
+  return z*z + new Complex(-0.7, 0.27015);
+
+  --- Burning Ship ---
+  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
+  return w*w + c;
+
+  --- Tricorn / Mandelbar ---
+  var zb = Complex.Conjugate(z);
+  return zb*zb + c;
+
+  --- Multibrot (cubic) ---
+  return Complex.Pow(z, 3) + c;
+
+  --- Multibrot (degree d, runtime constant) ---
+  int d = 5;
+  return Complex.Pow(z, d) + c;
+
+  --- Phoenix-flavoured single-step ---
+  var p = new Complex(0.56667, 0.0);
+  return z*z + c + p*z;
+
+  --- Newton (z^3 − 1) ---
+  if (n == 0) z = c;
+  var z2 = z*z;
+  var f  = z*z2 - Complex.One;
+  var fp = 3 * z2;
+  return z - f / fp;
+
+  --- Nova (z^3 − 1, with c offset) ---
+  if (n == 0) z = Complex.One;
+  var z2 = z*z;
+  var f  = z*z2 - Complex.One;
+  var fp = 3 * z2;
+  return z - f / fp + c;
+
+  --- z² + c with sine perturbation ---
+  return z*z + c + 0.1 * Complex.Sin(z);
+
+  --- ""Magnet-1"" map (Lord Kelvin's magnet fractal) ---
+  var num = z*z + c - Complex.One;
+  var den = 2*z + c - 2;
+  return (num / den) * (num / den);
+
+  --- Exponential map ---
+  return Complex.Exp(z) + c;
+
+  --- Sine map (Devaney) ---
+  // Sin(0) = 0, so z must start non-zero — seed z = c on n = 0.
+  if (n == 0) z = c;
+  return c * Complex.Sin(z);
+
+  --- Cosine map ---
+  // Cos(0) = 1 → fine to start at z = 0, but seeding from c gives
+  // a more interesting first iterate.
+  if (n == 0) z = c;
+  return c * Complex.Cos(z);
+
+  --- Lambda map (λ·z·(1 − z)) ---
+  // Critical point z = 1/2 is the canonical start for the logistic
+  // family.  Without seeding, z = 0 is a fixed point.
+  if (n == 0) z = new Complex(0.5, 0.0);
+  return c * z * (Complex.One - z);
+
+  --- Bird-of-prey (perturbed Burning Ship) ---
+  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
+  return w*w*w + c;
+
+  --- Celtic Mandelbrot ---
+  var zr2 = z.Real * z.Real - z.Imaginary * z.Imaginary;
+  var zi2 = 2 * z.Real * z.Imaginary;
+  return new Complex(Math.Abs(zr2) + c.Real, zi2 + c.Imaginary);
+
+  --- Buffalo fractal ---
+  var w = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary));
+  return w*w - w + c;
+
+  --- z² + c with time-varying twist ---
+  double k = 0.005 * n;
+  var rot = new Complex(Math.Cos(k), Math.Sin(k));
+  return rot * (z*z) + c;
+
+  --- Heron-step iteration ---
+  // c / z at z = 0 is NaN — seed z = c (skip the singularity).
+  if (n == 0) z = c;
+  return 0.5 * (z + c / z);
+
+=== Save / Load ===
+
+  Save…    Prompts for a name; persists Source under that key.
+           Re-saving an existing name replaces.
+  Delete   Removes the currently-selected saved equation.
+  Combo    Picking a saved entry loads it into the editor and
+           recompiles immediately.
+
+Saved entries round-trip through the JSON file by hand-edit; the
+dialog reloads from disk on next launch.
+
+=== Limitations ===
+
+  • No high-precision (DD/QD) path — User Equation is double only.
+    Zoom usefully cap ≈ 1e13.
+  • No perturbation theory acceleration.
+  • The signature does NOT expose the previous iterate, so true
+    multi-step memory recurrences (Phoenix, recurrence relations
+    with z_(n−1), z_(n−2)) can only be approximated.
+  • Per-pixel delegate call overhead — slower than the typed
+    kernels by ~3-5×.
+";
+
+        #endregion Math sub-tab content
 
         private TabPage BuildBioTab()
         {
