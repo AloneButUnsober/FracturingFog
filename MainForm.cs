@@ -75,6 +75,8 @@ public sealed partial class MainForm : Form
     private readonly ComboBox _qualityCombo;
     private readonly Label _colorThemeLabel;
     private readonly ComboBox _colorThemeCombo;
+    private Label? _fractalTypeLabel;
+    private ComboBox? _fractalTypeCombo;
     private readonly Label _regionLabel;
     private readonly ComboBox _regionCombo;
     private readonly Button _editThemeButton;
@@ -211,6 +213,14 @@ public sealed partial class MainForm : Form
     // Core Objects
     private IFractalRenderer? _renderer;          // D3D12 or D3D11
     private MandelbrotCalculator? _calculator;
+    private EscapeTimeCalculator? _escapeCalculator;  // Julia / BurningShip / Tricorn / Multibrot / Phoenix
+    private IFSCalculator? _ifsCalculator;
+    private LSystemCalculator? _lsystemCalculator;
+    private AttractorCalculator? _attractorCalculator;
+    private BuddhabrotCalculator? _buddhabrotCalculator;
+    private NewtonCalculator? _newtonCalculator;
+    private FractalType _currentFractalType = FractalType.Mandelbrot;
+    private FractalParameters _fractalParams = new();
     private CancellationTokenSource? _calcCts;
     private readonly object _calcLock = new();
 
@@ -463,6 +473,60 @@ public sealed partial class MainForm : Form
         _editThemeButton.Click += OnEditColorThemeClick;
         _toolbar.Controls.Add(_editThemeButton);
         buttonLeft += _editThemeButton.PreferredSize.Width + 2;
+        #endregion
+
+        #region Fractal type
+        _toolbar.Controls.Add(new Label { Left = buttonLeft, Top = 2, Width = 1, Height = 30, BackColor = Color.FromArgb(60, 60, 60) });
+        buttonLeft += 10;
+
+        _fractalTypeLabel = new Label
+        {
+            Text = "Fractal:",
+            Left = buttonLeft,
+            Top = 10,
+            AutoSize = true,
+            ForeColor = Color.FromArgb(155, 155, 155),
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            BackColor = Color.Transparent
+        };
+        _toolbar.Controls.Add(_fractalTypeLabel);
+        buttonLeft += _fractalTypeLabel.PreferredWidth + 3;
+
+        _fractalTypeCombo = new ComboBox
+        {
+            Left = buttonLeft,
+            Top = 7,
+            Width = 130,
+            Height = 26,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = Color.FromArgb(45, 45, 45),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9f),
+            FlatStyle = FlatStyle.Flat
+        };
+        _fractalTypeCombo.Items.AddRange(new object[]
+        {
+            "Mandelbrot",
+            "Julia",
+            "Burning Ship",
+            "Tricorn",
+            "Multibrot",
+            "Phoenix",
+            "Newton",
+            "Buddhabrot",
+            "IFS",
+            "L-System",
+            "Strange Attractor",
+        });
+        _fractalTypeCombo.SelectedIndex = 0;
+        _fractalTypeCombo.SelectedIndexChanged += OnFractalTypeChanged;
+        _toolbar.Controls.Add(_fractalTypeCombo);
+        buttonLeft += _fractalTypeCombo.PreferredSize.Width + 3;
+
+        var fractalParamsBtn = MakeBtn("Params", 55, buttonLeft, 6, "Edit fractal-specific parameters");
+        fractalParamsBtn.Click += OnFractalParamsClick;
+        _toolbar.Controls.Add(fractalParamsBtn);
+        buttonLeft += fractalParamsBtn.PreferredSize.Width + 2;
         #endregion
 
         #region Regions
@@ -760,8 +824,23 @@ public sealed partial class MainForm : Form
 
             _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
+            _escapeCalculator = new EscapeTimeCalculator(w, h);
+            _ifsCalculator = new IFSCalculator(w, h);
+            _lsystemCalculator = new LSystemCalculator(w, h);
+            _attractorCalculator = new AttractorCalculator(w, h);
+            _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
+            _newtonCalculator = new NewtonCalculator(w, h);
 
-            if (_defaultColorMap != null) _calculator.ColorMap = _defaultColorMap;
+            if (_defaultColorMap != null)
+            {
+                _calculator.ColorMap = _defaultColorMap;
+                _escapeCalculator.ColorMap = _defaultColorMap;
+                _ifsCalculator.ColorMap = _defaultColorMap;
+                _lsystemCalculator.ColorMap = _defaultColorMap;
+                _attractorCalculator.ColorMap = _defaultColorMap;
+                _buddhabrotCalculator.ColorMap = _defaultColorMap;
+                _newtonCalculator.ColorMap = _defaultColorMap;
+            }
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
             ApplyViewState();
@@ -802,6 +881,12 @@ public sealed partial class MainForm : Form
 
         _renderer.Resize(w, h);
         _calculator.Resize(w, h);
+        _escapeCalculator?.Resize(w, h);
+        _ifsCalculator?.Resize(w, h);
+        _lsystemCalculator?.Resize(w, h);
+        _attractorCalculator?.Resize(w, h);
+        _buddhabrotCalculator?.Resize(w, h);
+        _newtonCalculator?.Resize(w, h);
         ApplyViewState();
         TriggerCalculation();
         PositionGridPanel();
@@ -1272,6 +1357,88 @@ public sealed partial class MainForm : Form
 
         if (prevZoom > _quality.ZoomMax)
             SetStatus($"Quality → {_quality.Name}.  Zoom clamped to {_quality.ZoomMax:G3}.");
+    }
+
+    private void OnFractalTypeChanged(object? sender, EventArgs e)
+    {
+        if (_fractalTypeCombo == null) return;
+        var sel = _fractalTypeCombo.SelectedIndex switch
+        {
+            0 => FractalType.Mandelbrot,
+            1 => FractalType.Julia,
+            2 => FractalType.BurningShip,
+            3 => FractalType.Tricorn,
+            4 => FractalType.Multibrot,
+            5 => FractalType.Phoenix,
+            6 => FractalType.Newton,
+            7 => FractalType.BuddhaBrot,
+            8 => FractalType.IFS,
+            9 => FractalType.LSystem,
+            10 => FractalType.StrangeAttractor,
+            _ => FractalType.Mandelbrot
+        };
+        if (sel == _currentFractalType) return;
+        _currentFractalType = sel;
+
+        // Reset view to a fractal-appropriate default so the new render
+        // shows something meaningful rather than the inherited Mandelbrot view.
+        (_centerX, _centerY, _zoom) = sel switch
+        {
+            FractalType.Mandelbrot       => (-0.5, 0.0, 1.0),
+            FractalType.Julia            => (0.0, 0.0, 1.0),
+            FractalType.BurningShip      => (-0.5, -0.5, 1.0),
+            FractalType.Tricorn          => (0.0, 0.0, 1.0),
+            FractalType.Multibrot        => (0.0, 0.0, 1.0),
+            FractalType.Phoenix          => (0.0, 0.0, 1.5),
+            FractalType.Newton           => (0.0, 0.0, 1.0),
+            FractalType.BuddhaBrot       => (-0.5, 0.0, 1.0),
+            FractalType.IFS              => (0.0, 0.0, 1.0),
+            FractalType.LSystem          => (0.0, 0.0, 1.0),
+            FractalType.StrangeAttractor => (0.0, 0.0, 1.0),
+            _                            => (-0.5, 0.0, 1.0)
+        };
+        _centerXLo = _centerX2 = _centerX3 = 0.0;
+        _centerYLo = _centerY2 = _centerY3 = 0.0;
+        _lastUploadedBuffer = null;
+
+        ApplyViewState();
+        TriggerCalculation();
+    }
+
+    private Views.FractalParamsDialog? _paramsDialog;
+
+    private void OnFractalParamsClick(object? sender, EventArgs e)
+    {
+        // Modeless dialog with live updates — re-render fires on every
+        // control change so the user sees parameter sweeps in real time.
+        if (_paramsDialog != null && !_paramsDialog.IsDisposed)
+        {
+            // Close + reopen for the new type if the user switched fractals.
+            if (_paramsDialog.Tag is FractalType t && t == _currentFractalType)
+            {
+                _paramsDialog.BringToFront();
+                _paramsDialog.Activate();
+                return;
+            }
+            _paramsDialog.Close();
+            _paramsDialog = null;
+        }
+
+        var dlg = new Views.FractalParamsDialog(_currentFractalType, _fractalParams) { Tag = _currentFractalType };
+        // Position next to the toolbar.
+        var loc = PointToScreen(new Point(_toolbar.Right - dlg.Width - 10, _toolbar.Bottom + 10));
+        dlg.Location = loc;
+        dlg.ParamChanged += () =>
+        {
+            if (_currentFractalType != FractalType.Mandelbrot)
+            {
+                _lastUploadedBuffer = null;
+                TriggerCalculation();
+            }
+        };
+        dlg.FormClosed += (_, _) => { _paramsDialog = null; };
+        _paramsDialog = dlg;
+        dlg.Show(this);
     }
 
     private void OnColorThemeChanged(object? sender, EventArgs e)
@@ -2566,12 +2733,45 @@ public sealed partial class MainForm : Form
         var token = cts.Token;
         var calc = _calculator;
         var renderer = _renderer;
+        IFractalCalculator? altCalc = SelectAltCalculator(_currentFractalType);
+        bool useAlt = altCalc != null;
+
+        // Mirror the most recent Mandelbrot calculator state onto whichever
+        // alt calculator is active so theme / iter / view changes routed only
+        // through the primary calculator still take effect on this render.
+        if (useAlt)
+        {
+            altCalc!.CenterX = calc.CenterX;
+            altCalc.CenterY = calc.CenterY;
+            altCalc.Zoom = calc.Zoom;
+            altCalc.MaxIterations = calc.MaxIterations;
+            altCalc.Quality = calc.Quality;
+            altCalc.ColorMap = calc.ColorMap;
+            // Per-engine parameter assignment.
+            switch (altCalc)
+            {
+                case EscapeTimeCalculator e:
+                    e.FractalType = _currentFractalType;
+                    e.FractalParameters = _fractalParams;
+                    break;
+                case IFSCalculator ifs:        ifs.FractalParameters = _fractalParams; break;
+                case LSystemCalculator ls:     ls.FractalParameters = _fractalParams; break;
+                case AttractorCalculator a:    a.FractalParameters = _fractalParams; break;
+                case BuddhabrotCalculator b:   b.FractalParameters = _fractalParams; break;
+                case NewtonCalculator n:       n.FractalParameters = _fractalParams; break;
+            }
+        }
 
         SetStatus("Calculating…");
         var sw = Stopwatch.StartNew();
 
         // ── Full-resolution render ────────────────────────────────────────────
-        Task.Run(() => { calc.Calculate(token); return sw.ElapsedMilliseconds; }, token)
+        Task.Run(() =>
+        {
+            if (useAlt) altCalc!.Calculate(token);
+            else calc.Calculate(token);
+            return sw.ElapsedMilliseconds;
+        }, token)
         .ContinueWith(t =>
         {
             if (t.IsCanceled || token.IsCancellationRequested) return;
@@ -2584,26 +2784,55 @@ public sealed partial class MainForm : Form
                 Invoke(() =>
                 {
                     if (_disposed) return;
-                    // Adaptive contrast (histogram equalization) — re-colors
-                    // the buffer in place using the current strength.  Runs
-                    // before brightness/contrast so those operate on the
-                    // equalized colors.
-                    if (_histogramEq > 0)
+                    // Adaptive contrast — Mandelbrot only.
+                    if (!useAlt && _histogramEq > 0)
                         calc.ApplyHistogramEqualization(_histogramEq / 100.0);
-                    // Apply brightness/contrast and grid overlay, then upload to GPU.
-                    UploadProcessedBuffer(calc, renderer);
+                    // Apply brightness/contrast and grid overlay, then upload.
+                    if (useAlt)
+                        UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height, renderer);
+                    else
+                        UploadProcessedBuffer(calc, renderer);
                     _miniMapPanel?.RefreshIndicator();
                     _miniDepthPanel?.RefreshIndicator();
-                    string precTag = calc.IsHighPrecisionActive ? "[DD]" : "[SP]";
+                    bool hp = !useAlt && calc.IsHighPrecisionActive;
+                    int curW = useAlt ? altCalc!.Width : calc.Width;
+                    int curH = useAlt ? altCalc!.Height : calc.Height;
+                    int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
+                    double curCx = useAlt ? altCalc!.CenterX : calc.CenterX;
+                    double curCy = useAlt ? altCalc!.CenterY : calc.CenterY;
+                    double curZoom = useAlt ? altCalc!.Zoom : calc.Zoom;
+                    string precTag = hp ? "[DD]" : "[SP]";
+                    string typeTag = $"[{_currentFractalType}]";
                     SetStatus(
-                        $"cx={calc.CenterX:G12}  cy={calc.CenterY:G12}  " +
-                        $"zoom={calc.Zoom:G6}  iter={calc.MaxIterations}  " +
-                        $"{precTag}  [{ms} ms  {calc.Width}×{calc.Height}]" +
+                        $"{typeTag}  cx={curCx:G12}  cy={curCy:G12}  " +
+                        $"zoom={curZoom:G6}  iter={curIter}  " +
+                        $"{precTag}  [{ms} ms  {curW}×{curH}]" +
                         (_iterLocked ? "  [ITER LOCKED]" : ""));
                 });
             }
         }, TaskScheduler.Default);
     }
+
+    /// <summary>
+    /// Picks the alternate calculator (if any) for the given fractal type.
+    /// Returns null for Mandelbrot (uses MandelbrotCalculator directly).
+    /// </summary>
+    private IFractalCalculator? SelectAltCalculator(FractalType type) => type switch
+    {
+        FractalType.Mandelbrot       => null,
+        FractalType.Julia            => _escapeCalculator,
+        FractalType.BurningShip      => _escapeCalculator,
+        FractalType.Tricorn          => _escapeCalculator,
+        FractalType.Multibrot        => _escapeCalculator,
+        FractalType.Phoenix          => _escapeCalculator,
+        FractalType.IFS              => _ifsCalculator,
+        FractalType.LSystem          => _lsystemCalculator,
+        FractalType.StrangeAttractor => _attractorCalculator,
+        FractalType.BuddhaBrot       => _buddhabrotCalculator,
+        FractalType.Newton           => _newtonCalculator,
+        FractalType.Nova             => _newtonCalculator, // share path for now
+        _                            => null
+    };
 
     #endregion Rendering/Calculating
 
@@ -2641,6 +2870,18 @@ public sealed partial class MainForm : Form
             _calculator.MaxIterations = maxIters;
         else
             _calculator.MaxIterations = _quality.ComputeIterations(_zoom);
+
+        if (_escapeCalculator != null)
+        {
+            _escapeCalculator.CenterX = _centerX;
+            _escapeCalculator.CenterY = _centerY;
+            _escapeCalculator.Zoom = _zoom;
+            _escapeCalculator.Quality = _quality;
+            _escapeCalculator.MaxIterations = _calculator.MaxIterations;
+            _escapeCalculator.FractalType = _currentFractalType;
+            _escapeCalculator.FractalParameters = _fractalParams;
+            _escapeCalculator.ColorMap = _calculator.ColorMap;
+        }
 
         UpdateCoordBoxes();
     }
@@ -2712,10 +2953,13 @@ public sealed partial class MainForm : Form
     /// The original ColorBuffer is never modified — a temporary buffer is used.
     /// </summary>
     private void UploadProcessedBuffer(MandelbrotCalculator calc, IFractalRenderer renderer)
+        => UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height, renderer);
+
+    private void UploadProcessedBuffer(EscapeTimeCalculator calc, IFractalRenderer renderer)
+        => UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height, renderer);
+
+    private void UploadProcessedBuffer(uint[] src, int w, int h, IFractalRenderer renderer)
     {
-        int w = calc.Width;
-        int h = calc.Height;
-        uint[] src = calc.ColorBuffer;
         int n = w * h;
 
         bool needsProcess = _brightness != 0 || _contrast != 0
