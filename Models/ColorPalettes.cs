@@ -80,6 +80,7 @@ namespace FracturingFog.Models
             new VintageSepiaPhong3D(),
             new WarpedHsvPhong3D(),
             new GoldenRatioPhi3DPhong(),
+            new AlienBandedTheme(),
 
             // ── Algorithmic 3D — PBR ──────────────────────────────────────────
             new BernsteinPbr3D(),
