@@ -469,6 +469,7 @@ public sealed partial class MainForm : Form
         };
 
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
+        AttachColorComboSortMenu(_colorThemeCombo, OnColorThemeChanged);
         _toolbar.Controls.Add(_colorThemeCombo);
         buttonLeft += _colorThemeCombo.PreferredSize.Width + 2;
 
@@ -2041,17 +2042,7 @@ public sealed partial class MainForm : Form
 
     private void BuildColorThemesSelection()
     {
-        _colorThemeCombo.Items.Clear();
-        foreach (var type in Enum.GetValues<ColorPaletteType>())
-        {
-            var palettes = Models.ColorPalette.GetPalettesByType(type);
-            if (palettes.Count == 0) continue;
-            _colorThemeCombo.Items.Add($"— {type} —");
-            foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
-            {
-                _colorThemeCombo.Items.Add(name);
-            }
-        }
+        BuildColorCombo(_colorThemeCombo, OnColorThemeChanged);
     }
 
     private Color GetSwatchColor()

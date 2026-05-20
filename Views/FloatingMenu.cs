@@ -996,6 +996,10 @@ namespace FracturingFog.Views
                 DropDownWidth = Math.Max(300, Models.ColorPalette.GetMaxDescriptionLength() + 40)   // ensure descriptions fit in the dropdown
             };
             BuildColorCombo(_colorThemeCombo, OnColorThemeSelectionClick);
+            AttachColorComboSortMenu(
+                _colorThemeCombo,
+                OnColorThemeSelectionClick,
+                () => UpdateDeleteColorThemeButton(_colorThemeCombo, _deleteColorThemeButton));
             _themeBox.Controls.Add(_colorThemeCombo);
             _colorThemeCombo.SelectedIndex = 0;
 
