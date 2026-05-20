@@ -361,15 +361,19 @@ public sealed partial class MainForm : Form
         _toolbar.Controls.Add(_spanButton);
         buttonLeft += _spanButton.PreferredSize.Width + 2;
 
-        _screenshotButton = MakeBtn("Image", 55, buttonLeft, buttonTop);
-        _screenshotButton.Click += OnScreenshotClick;
-        _toolbar.Controls.Add(_screenshotButton);
-        buttonLeft += _spanButton.PreferredSize.Width + 2;
-
-        _posterButton = MakeBtn("Poster", 55, buttonLeft, buttonTop);
+        _screenshotButton = MakeBtn("Image ▾", 65, buttonLeft, buttonTop, "Capture Image, Poster, or Video");
+        _posterButton = MakeBtn("Poster", 55, 0, 0);
         _posterButton.Click += OnPosterClick;
-        _toolbar.Controls.Add(_posterButton);
-        buttonLeft += _posterButton.PreferredSize.Width + 2;
+        _videoButton = MakeBtn("Video", 55, 0, 0, "Smooth animated zoom from current view to a target region/coordinate");
+        _videoButton.Click += OnVideoClick;
+
+        var imageMenu = new ContextMenuStrip();
+        imageMenu.Items.Add(new ToolStripMenuItem("Image", null, (s, e) => OnScreenshotClick(s, e)));
+        imageMenu.Items.Add(new ToolStripMenuItem("Poster", null, (s, e) => OnPosterClick(s, e)));
+        imageMenu.Items.Add(new ToolStripMenuItem("Video", null, (s, e) => OnVideoClick(s, e)));
+        _screenshotButton.Click += (s, e) => imageMenu.Show(_screenshotButton, new Point(0, _screenshotButton.Height));
+        _toolbar.Controls.Add(_screenshotButton);
+        buttonLeft += _screenshotButton.PreferredSize.Width - 1;
 
         _slideshowButton = MakeBtn("Slideshow", 74, buttonLeft, buttonTop, "Start/stop slideshow — auto-cycles regions every 30 s, themes every 10 s");
         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
@@ -377,13 +381,6 @@ public sealed partial class MainForm : Form
         _slideshowButton.Click += OnSlideshowClick;
         _toolbar.Controls.Add(_slideshowButton);
         buttonLeft += _slideshowButton.PreferredSize.Width + 1;
-
-        _videoButton = MakeBtn("Video", 55, buttonLeft, buttonTop, "Smooth animated zoom from current view to a target region/coordinate");
-        _videoButton.BackColor = Color.FromArgb(55, 40, 70);
-        _videoButton.FlatAppearance.BorderColor = Color.FromArgb(100, 70, 130);
-        _videoButton.Click += OnVideoClick;
-        _toolbar.Controls.Add(_videoButton);
-        buttonLeft += _videoButton.PreferredSize.Width + 2;
 
         _menuButton = MakeBtn("Menu", 55, buttonLeft, buttonTop, "Diplay floating menu...");
         _menuButton.Click += (s, e) => OnShowCoordPanelClick();
@@ -405,8 +402,8 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
-        _toolbar.Controls.Add(_qualityLabel);
-        buttonLeft += _qualityLabel.PreferredWidth + 3;
+        //_toolbar.Controls.Add(_qualityLabel);
+        //buttonLeft += _qualityLabel.PreferredWidth + 3;
 
         _qualityCombo = new ComboBox
         {
@@ -452,8 +449,8 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
-        _toolbar.Controls.Add(_colorThemeLabel);
-        buttonLeft += _colorThemeLabel.PreferredWidth + 3;
+        //_toolbar.Controls.Add(_colorThemeLabel);
+        //buttonLeft += _colorThemeLabel.PreferredWidth + 3;
         Models.ColorPalette.LoadUserThemes();
         _colorThemeCombo = new ColorComboBox
         {
@@ -493,8 +490,8 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
-        _toolbar.Controls.Add(_fractalTypeLabel);
-        buttonLeft += _fractalTypeLabel.PreferredWidth + 3;
+        //_toolbar.Controls.Add(_fractalTypeLabel);
+        //buttonLeft += _fractalTypeLabel.PreferredWidth + 3;
 
         _fractalTypeCombo = new ComboBox
         {
@@ -549,8 +546,8 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
             BackColor = Color.Transparent
         };
-        _toolbar.Controls.Add(_regionLabel);
-        buttonLeft += _regionLabel.PreferredWidth + 3;
+        //_toolbar.Controls.Add(_regionLabel);
+        //buttonLeft += _regionLabel.PreferredWidth + 3;
 
         _regionCombo = new ComboBox
         {
@@ -576,7 +573,7 @@ public sealed partial class MainForm : Form
 
         _delRegionButton = MakeBtn("Delete", 55, buttonLeft, 6, "Delete the selected region");
         _delRegionButton.Click += OnDelRegionClick;
-        _toolbar.Controls.Add(_delRegionButton);
+        //_toolbar.Controls.Add(_delRegionButton);
         buttonLeft += _delRegionButton.PreferredSize.Width + 2;
         #endregion
 
