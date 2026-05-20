@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+// INewtonColorMap lives in FracturingFog.Interefaces
 
 namespace FracturingFog;
 
@@ -63,6 +64,9 @@ public sealed class NewtonCalculator : IFractalCalculator
         double centerY = CenterY;
         const double eps2 = 1e-12;
 
+        var newtonMap = ColorMap as INewtonColorMap;
+        if (ColorMap != null) ColorMap.MaxIterations = maxIter;
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -115,7 +119,12 @@ public sealed class NewtonCalculator : IFractalCalculator
                 }
             converged:
                 int idx = rowBase + x;
-                if (basin < 0)
+                if (newtonMap != null)
+                {
+                    int rgb = newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi);
+                    ColorBuffer[idx] = unchecked((uint)rgb);
+                }
+                else if (basin < 0)
                 {
                     ColorBuffer[idx] = ColorMap.InSetColor;
                 }
