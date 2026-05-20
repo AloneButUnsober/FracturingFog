@@ -148,6 +148,21 @@ namespace FracturingFog.Views
                     AddLabel("Iter high:", 15, y); _floatC = AddNumeric(150, y, _params.BuddhaIterHigh, 500, 500_000, 500); _floatC.DecimalPlaces = 0; y += 28;
                     break;
 
+                case FractalType.Mandelbulb:
+                    AddLabel("Power N:", 15, y);
+                    _intParam1 = AddNumeric(150, y, (decimal)_params.BulbPower, 2m, 16m, 0.1m);
+                    _intParam1.DecimalPlaces = 1;
+                    y += 28;
+                    AddLabel("DE iter:", 15, y);
+                    _floatA = AddNumeric(150, y, _params.BulbIterations, 2, 16, 1); _floatA.DecimalPlaces = 0; y += 28;
+                    AddLabel("Cam θ (azim):", 15, y);
+                    _floatB = AddNumeric(150, y, (decimal)_params.BulbCameraTheta, -10m, 10m, 0.05m); y += 28;
+                    AddLabel("Cam φ (elev):", 15, y);
+                    _floatC = AddNumeric(150, y, (decimal)_params.BulbCameraPhi, 0.01m, 3.13m, 0.05m); y += 28;
+                    AddLabel("Cam dist:", 15, y);
+                    _floatD = AddNumeric(150, y, (decimal)_params.BulbCameraDistance, 1.5m, 10m, 0.1m); y += 28;
+                    break;
+
                 default:
                     var info = new Label
                     {
@@ -267,6 +282,13 @@ namespace FracturingFog.Views
                     if (_floatA != null) _params.BuddhaIterLow = (int)_floatA.Value;
                     if (_floatB != null) _params.BuddhaIterMid = (int)_floatB.Value;
                     if (_floatC != null) _params.BuddhaIterHigh = (int)_floatC.Value;
+                    break;
+                case FractalType.Mandelbulb:
+                    if (_intParam1 != null) _params.BulbPower = (double)_intParam1.Value;
+                    if (_floatA != null) _params.BulbIterations = (int)_floatA.Value;
+                    if (_floatB != null) _params.BulbCameraTheta = (double)_floatB.Value;
+                    if (_floatC != null) _params.BulbCameraPhi = (double)_floatC.Value;
+                    if (_floatD != null) _params.BulbCameraDistance = (double)_floatD.Value;
                     break;
             }
         }
