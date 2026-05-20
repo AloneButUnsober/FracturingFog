@@ -185,25 +185,170 @@ namespace FracturingFog.Views
         }.AlsoAdd(p, tip);
         #endregion Form Helpers
 
+        public enum ColorComboSortMode
+        {
+            Default,
+            All,
+            ByKind,
+        }
+
+        /// <summary>
+        /// Sort/filter state for a colour theme combo. Stored on
+        /// <see cref="ComboBox.Tag"/> so the combo can rebuild itself after the
+        /// user picks a different sort mode from the right-click context menu.
+        /// </summary>
+        public sealed class ColorComboSortState
+        {
+            public ColorComboSortMode Mode { get; set; } = ColorComboSortMode.Default;
+            public ColorPaletteType KindFilter { get; set; } = ColorPaletteType.GradientLinear;
+        }
+
+        private static ColorComboSortState GetOrCreateSortState(ComboBox comboBox)
+        {
+            if (comboBox.Tag is ColorComboSortState s) return s;
+            var ns = new ColorComboSortState();
+            comboBox.Tag = ns;
+            return ns;
+        }
+
         public static void BuildColorCombo(ComboBox comboBox, EventHandler func)
         {
-            if (comboBox != null)
+            if (comboBox == null) return;
+            var state = GetOrCreateSortState(comboBox);
+            comboBox.SelectedIndexChanged -= func;
+            comboBox.Items.Clear();
+            switch (state.Mode)
             {
-                comboBox.SelectedIndexChanged -= func;
-                comboBox.Items.Clear();
-                foreach (var type in Enum.GetValues<ColorPaletteType>())
-                {
-                    var palettes = Models.ColorPalette.GetPalettesByType(type);
-                    if (palettes.Count == 0) continue;
-                    comboBox.Items.Add($"— {type} —");
-                    foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
+                case ColorComboSortMode.Default:
+                    foreach (var type in Enum.GetValues<ColorPaletteType>())
                     {
-                        comboBox.Items.Add(name);
+                        var palettes = Models.ColorPalette.GetPalettesByType(type);
+                        if (palettes.Count == 0) continue;
+                        comboBox.Items.Add($"— {type} —");
+                        foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
+                            comboBox.Items.Add(name);
                     }
-                }
-                comboBox.SelectedIndex = 0;
-                comboBox.SelectedIndexChanged += func;
+                    break;
+
+                case ColorComboSortMode.All:
+                    foreach (var name in CollectAllThemeNames())
+                        comboBox.Items.Add(name);
+                    break;
+
+                case ColorComboSortMode.ByKind:
+                    var byKind = Models.ColorPalette.GetPalettesByType(state.KindFilter);
+                    foreach (var name in byKind.ToImmutableSortedDictionary().Keys)
+                        comboBox.Items.Add(name);
+                    break;
             }
+            if (comboBox.Items.Count > 0) comboBox.SelectedIndex = 0;
+            comboBox.SelectedIndexChanged += func;
+        }
+
+        private static IEnumerable<string> CollectAllThemeNames()
+        {
+            var names = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var type in Enum.GetValues<ColorPaletteType>())
+            {
+                var palettes = Models.ColorPalette.GetPalettesByType(type);
+                foreach (var name in palettes.Keys) names.Add(name);
+            }
+            return names;
+        }
+
+        /// <summary>
+        /// Rebuilds the combo with the current sort state and restores
+        /// <paramref name="preserveName"/> as the selection when present.
+        /// Falls back to index 0 (or no selection) when the name is gone.
+        /// </summary>
+        public static void RebuildColorCombo(ComboBox comboBox, EventHandler func, string? preserveName)
+        {
+            BuildColorCombo(comboBox, func);
+            if (!string.IsNullOrEmpty(preserveName))
+            {
+                int idx = comboBox.FindStringExact(preserveName);
+                if (idx >= 0)
+                {
+                    comboBox.SelectedIndexChanged -= func;
+                    comboBox.SelectedIndex = idx;
+                    comboBox.SelectedIndexChanged += func;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Attaches a right-click context menu to a colour-theme combo. The
+        /// menu offers Default (grouped with dividers), All (flat
+        /// alphabetical), and one entry per <see cref="ColorPaletteType"/>
+        /// that filters the list to that kind. The current sort mode is
+        /// shown as checked.
+        /// </summary>
+        public static void AttachColorComboSortMenu(
+            ComboBox comboBox,
+            EventHandler selectionHandler,
+            Action? onAfterRebuild = null)
+        {
+            if (comboBox == null) return;
+            GetOrCreateSortState(comboBox);
+
+            comboBox.MouseUp += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Right) return;
+                if (comboBox.DroppedDown) comboBox.DroppedDown = false;
+                ShowColorComboSortMenu(comboBox, selectionHandler, onAfterRebuild, e.Location);
+            };
+        }
+
+        private static void ShowColorComboSortMenu(
+            ComboBox comboBox,
+            EventHandler selectionHandler,
+            Action? onAfterRebuild,
+            Point screenLocal)
+        {
+            var state = GetOrCreateSortState(comboBox);
+            var menu = new ContextMenuStrip
+            {
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                ShowImageMargin = false,
+                Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors()),
+            };
+
+            void Add(string text, ColorComboSortMode mode, ColorPaletteType? kind, bool isChecked)
+            {
+                var item = new ToolStripMenuItem(text) { Checked = isChecked };
+                item.Click += (s, e) =>
+                {
+                    string? prev = comboBox.SelectedItem?.ToString();
+                    state.Mode = mode;
+                    if (kind.HasValue) state.KindFilter = kind.Value;
+                    RebuildColorCombo(comboBox, selectionHandler, prev);
+                    onAfterRebuild?.Invoke();
+                };
+                menu.Items.Add(item);
+            }
+
+            Add("Default", ColorComboSortMode.Default, null, state.Mode == ColorComboSortMode.Default);
+            Add("All (A–Z)", ColorComboSortMode.All, null, state.Mode == ColorComboSortMode.All);
+            menu.Items.Add(new ToolStripSeparator());
+            foreach (var kind in Enum.GetValues<ColorPaletteType>())
+            {
+                bool isChecked = state.Mode == ColorComboSortMode.ByKind && state.KindFilter == kind;
+                Add(kind.ToString(), ColorComboSortMode.ByKind, kind, isChecked);
+            }
+            menu.Show(comboBox, screenLocal);
+        }
+
+        private sealed class DarkMenuColors : ProfessionalColorTable
+        {
+            public override Color MenuItemSelected => Color.FromArgb(70, 70, 70);
+            public override Color MenuItemSelectedGradientBegin => Color.FromArgb(70, 70, 70);
+            public override Color MenuItemSelectedGradientEnd => Color.FromArgb(70, 70, 70);
+            public override Color MenuItemBorder => Color.FromArgb(90, 90, 90);
+            public override Color ToolStripDropDownBackground => Color.FromArgb(45, 45, 45);
+            public override Color ImageMarginGradientBegin => Color.FromArgb(45, 45, 45);
+            public override Color ImageMarginGradientMiddle => Color.FromArgb(45, 45, 45);
+            public override Color ImageMarginGradientEnd => Color.FromArgb(45, 45, 45);
         }
 
         public static void RebuildRegionCombo(ComboBox comboBox, EventHandler func)
