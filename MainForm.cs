@@ -77,6 +77,7 @@ public sealed partial class MainForm : Form
     private readonly ComboBox _colorThemeCombo;
     private readonly Label _regionLabel;
     private readonly ComboBox _regionCombo;
+    private readonly Button _editThemeButton;
     private readonly Button _saveViewButton;
     private readonly Button _delRegionButton;
     private readonly Button _menuButton;
@@ -286,7 +287,7 @@ public sealed partial class MainForm : Form
     {
         Icon = new Icon(@".\Resources\FracturingFog.ico");
         Text = $"{_programName} v{_programVersion} - {RendererFactory.ProbeDescription()}";
-        ClientSize = new Size(1120, 728);
+        ClientSize = new Size(1169, 728);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
         StartPosition = FormStartPosition.CenterScreen;
@@ -457,6 +458,11 @@ public sealed partial class MainForm : Form
         _colorThemeCombo.SelectedIndexChanged += OnColorThemeChanged;
         _toolbar.Controls.Add(_colorThemeCombo);
         buttonLeft += _colorThemeCombo.PreferredSize.Width + 2;
+
+        _editThemeButton = MakeBtn("Edit", 45, buttonLeft, 6, "Edit current colour theme");
+        _editThemeButton.Click += OnEditColorThemeClick;
+        _toolbar.Controls.Add(_editThemeButton);
+        buttonLeft += _editThemeButton.PreferredSize.Width + 2;
         #endregion
 
         #region Regions
