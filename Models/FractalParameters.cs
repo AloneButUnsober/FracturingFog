@@ -22,6 +22,14 @@ namespace FracturingFog.Models
 
         public string? UserEquationSource { get; set; }
 
+        /// <summary>
+        /// Name of the saved <see cref="UserEquationEntry"/> the current source
+        /// came from. Null when the user has typed a custom equation that doesn't
+        /// match any saved entry. Region save/recall uses this to round-trip
+        /// the equation by reference (name) rather than copying source into JSON.
+        /// </summary>
+        public string? UserEquationName { get; set; }
+
         public string IFSPresetName { get; set; } = "Sierpinski Triangle";
         public int IFSIterations { get; set; } = 2_000_000;
 
@@ -64,6 +72,7 @@ namespace FracturingFog.Models
                 NewtonPolyCoeffs = NewtonPolyCoeffs is null ? null : (Complex[])NewtonPolyCoeffs.Clone(),
                 IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
                 UserEquationSource = UserEquationSource,
+                UserEquationName = UserEquationName,
                 IFSPresetName = IFSPresetName,
                 IFSIterations = IFSIterations,
                 LSystemPresetName = LSystemPresetName,

@@ -28,6 +28,7 @@ namespace FracturingFog.Views
         private readonly Button _saveBtn;
         private readonly Button _deleteBtn;
         private bool _suppressComboEvent;
+        private bool _loadingNamedEquation;
 
         public event Action? CompileRequested;
 
@@ -127,6 +128,9 @@ namespace FracturingFog.Views
             };
             _editor.TextChanged += (_, _) =>
             {
+                // Manual edits dissociate the source from any named saved entry;
+                // selection-driven loads suppress this via _loadingNamedEquation.
+                if (!_loadingNamedEquation) _params.UserEquationName = null;
                 _debounce.Stop();
                 _debounce.Start();
             };
@@ -138,7 +142,7 @@ namespace FracturingFog.Views
 
             // Load saved equations from disk and populate combo.
             UserEquationStore.Instance.Load();
-            RefreshSavedCombo(selectFirst: false);
+            RefreshSavedCombo(selectFirst: false, selectName: _params.UserEquationName);
         }
 
         private void RefreshSavedCombo(bool selectFirst, string? selectName = null)
@@ -174,8 +178,11 @@ namespace FracturingFog.Views
             var entry = UserEquationStore.Instance.GetByName(name);
             if (entry == null) return;
 
-            _editor.Text = entry.Source;
+            _loadingNamedEquation = true;
+            try { _editor.Text = entry.Source; }
+            finally { _loadingNamedEquation = false; }
             _params.UserEquationSource = entry.Source;
+            _params.UserEquationName = entry.Name;
             // Compile immediately rather than waiting for the debounce.
             _debounce.Stop();
             CompileRequested?.Invoke();
@@ -190,6 +197,7 @@ namespace FracturingFog.Views
             var entry = UserEquationStore.Instance.SaveEquation(name.Trim(), _editor.Text);
             if (entry == null) return;
 
+            _params.UserEquationName = entry.Name;
             RefreshSavedCombo(selectFirst: false, selectName: entry.Name);
         }
 
@@ -258,6 +266,26 @@ namespace FracturingFog.Views
 
         /// <summary>Fires CompileRequested so the host can compile the current source.</summary>
         public void TriggerCompile() => CompileRequested?.Invoke();
+
+        /// <summary>
+        /// Selects the named saved equation in the combo and loads its source into
+        /// the editor. Used by MainForm when recalling a region that references a
+        /// saved equation by name. No-op if the name is not in the store.
+        /// </summary>
+        public void LoadEquationByName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var entry = UserEquationStore.Instance.GetByName(name);
+            if (entry == null) return;
+
+            _loadingNamedEquation = true;
+            try { _editor.Text = entry.Source; }
+            finally { _loadingNamedEquation = false; }
+            _params.UserEquationSource = entry.Source;
+            _params.UserEquationName = entry.Name;
+            RefreshSavedCombo(selectFirst: false, selectName: entry.Name);
+            _debounce.Stop();
+        }
 
         public void ShowError(string error)
         {

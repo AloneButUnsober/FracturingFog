@@ -128,6 +128,16 @@ namespace FracturingFog.Models
         public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
 
         /// <summary>
+        /// Name of the saved <see cref="UserEquationEntry"/> this region depends on
+        /// when <see cref="FractalType"/> is <see cref="FractalType.UserEquation"/>.
+        /// On recall the source is looked up by name in <see cref="UserEquationStore"/>,
+        /// so editing the saved equation later updates every region that references it.
+        /// Null/empty for non-UserEquation regions, or for ad-hoc equations the user
+        /// never saved.
+        /// </summary>
+        public string? UserEquationName { get; set; }
+
+        /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
         /// assumed to be user-defined unless explicitly marked as built-in.
         /// </summary>

@@ -817,6 +817,7 @@ public sealed partial class MainForm : Form
     private void OnLoad(object? sender, EventArgs e)
     {
         FractalRegionLibrary.Instance.Load();
+        UserEquationStore.Instance.Load();
         RebuildRegionCombo();
         UserColorThemeLibrary.Instance.UpdateCheck();
         int w = _renderPanel.ClientSize.Width;
@@ -1857,6 +1858,9 @@ public sealed partial class MainForm : Form
             Iterations = _calculator?.MaxIterations ?? 512,
             QualityPresetName = _quality.Name,
             FractalType = _currentFractalType,
+            UserEquationName = _currentFractalType == FractalType.UserEquation
+                ? _fractalParams.UserEquationName
+                : null,
             Description = $"Saved {DateTime.Now:yyyy-MM-dd HH:mm}"
         };
 
@@ -2401,6 +2405,23 @@ public sealed partial class MainForm : Form
         // Done before applying coords so the calculator (set in ApplyViewState) sees the new type.
         if (region.FractalType != _currentFractalType)
             SwitchFractalTypeForRegion(region.FractalType);
+
+        // UserEquation regions reference a saved entry by name — pull the live
+        // source from the store so edits to the named equation propagate to every
+        // region that uses it.
+        if (region.FractalType == FractalType.UserEquation
+            && !string.IsNullOrWhiteSpace(region.UserEquationName))
+        {
+            var entry = UserEquationStore.Instance.GetByName(region.UserEquationName);
+            if (entry != null)
+            {
+                _fractalParams.UserEquationSource = entry.Source;
+                _fractalParams.UserEquationName = entry.Name;
+                _userEquationCalculator?.Compile(entry.Source);
+                if (_userEqDialog != null && !_userEqDialog.IsDisposed)
+                    _userEqDialog.LoadEquationByName(entry.Name);
+            }
+        }
 
         // Round-trip all four QD limbs. Legacy regions (DD or shallower) default
         // X2/X3 to 0, matching prior behaviour.
