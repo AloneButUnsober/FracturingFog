@@ -16,6 +16,13 @@ namespace FracturingFog.Models
     {
         public string Name { get; set; } = string.Empty;
         public string Source { get; set; } = string.Empty;
+
+        /// <summary>
+        /// When true, this entry is surfaced as a first-class fractal type in
+        /// the main fractal dropdown via <see cref="RegisteredFractalCatalog"/>.
+        /// Defaults false; missing field in legacy JSON deserialises to false.
+        /// </summary>
+        public bool Promoted { get; set; }
     }
 
     public sealed class SandboxEquationStore
@@ -92,6 +99,25 @@ namespace FracturingFog.Models
             Equations.Add(entry);
             Save();
             return entry;
+        }
+
+        /// <summary>
+        /// Sets the <see cref="SandboxEquationEntry.Promoted"/> flag on the
+        /// named entry and persists. Returns true when the entry exists and
+        /// state changed; false when no such entry or already in target state.
+        /// </summary>
+        public bool SetPromoted(string name, bool promoted)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            foreach (var e in Equations)
+            {
+                if (!e.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (e.Promoted == promoted) return false;
+                e.Promoted = promoted;
+                Save();
+                return true;
+            }
+            return false;
         }
 
         public bool Remove(string name)

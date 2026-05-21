@@ -22,10 +22,18 @@ namespace FracturingFog.Views
         private readonly ComboBox _savedCombo;
         private readonly Button _saveBtn;
         private readonly Button _deleteBtn;
+        private readonly CheckBox _promoteCheck;
         private bool _suppressComboEvent;
+        private bool _suppressPromoteEvent;
         private bool _loadingNamedEquation;
 
         public event Action? CompileRequested;
+
+        /// <summary>
+        /// Raised when the user toggles the "Promote to fractal list" checkbox.
+        /// MainForm listens to refresh the top fractal-type dropdown.
+        /// </summary>
+        public event Action? PromotionChanged;
 
         public SandboxDialog(FractalParameters parameters)
         {
@@ -36,7 +44,7 @@ namespace FracturingFog.Views
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             TopMost = true;
-            ClientSize = new Size(520, 430);
+            ClientSize = new Size(520, 460);
             BackColor = Color.FromArgb(40, 40, 40);
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 9f);
@@ -87,11 +95,22 @@ namespace FracturingFog.Views
             _deleteBtn.Click += OnDeleteClick;
             Controls.Add(_deleteBtn);
 
+            _promoteCheck = new CheckBox
+            {
+                Text = "Promote to fractal list",
+                Left = 60, Top = 82, AutoSize = true,
+                ForeColor = Color.White,
+                BackColor = Color.Transparent,
+                Enabled = false,
+            };
+            _promoteCheck.CheckedChanged += OnPromoteChanged;
+            Controls.Add(_promoteCheck);
+
             _editor = new TextBox
             {
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
-                Left = 10, Top = 90, Width = 500, Height = 240,
+                Left = 10, Top = 110, Width = 500, Height = 240,
                 BackColor = Color.FromArgb(28, 28, 28),
                 ForeColor = Color.White,
                 Font = new Font("Consolas", 10f),
@@ -105,7 +124,7 @@ namespace FracturingFog.Views
 
             _errorLabel = new Label
             {
-                Left = 10, Top = 340, Width = 500, Height = 80,
+                Left = 10, Top = 360, Width = 500, Height = 80,
                 ForeColor = Color.FromArgb(255, 100, 100),
                 BackColor = Color.Transparent,
                 Font = new Font("Consolas", 8f),
@@ -159,6 +178,36 @@ namespace FracturingFog.Views
                 }
             }
             finally { _suppressComboEvent = false; }
+            SyncPromoteCheckbox();
+        }
+
+        private void SyncPromoteCheckbox()
+        {
+            _suppressPromoteEvent = true;
+            try
+            {
+                string? name = _savedCombo.SelectedItem as string;
+                if (string.IsNullOrEmpty(name))
+                {
+                    _promoteCheck.Enabled = false;
+                    _promoteCheck.Checked = false;
+                }
+                else
+                {
+                    var entry = SandboxEquationStore.Instance.GetByName(name);
+                    _promoteCheck.Enabled = entry != null;
+                    _promoteCheck.Checked = entry?.Promoted ?? false;
+                }
+            }
+            finally { _suppressPromoteEvent = false; }
+        }
+
+        private void OnPromoteChanged(object? sender, EventArgs e)
+        {
+            if (_suppressPromoteEvent) return;
+            if (_savedCombo.SelectedItem is not string name) return;
+            if (SandboxEquationStore.Instance.SetPromoted(name, _promoteCheck.Checked))
+                PromotionChanged?.Invoke();
         }
 
         private void OnSavedSelectionChanged(object? sender, EventArgs e)
@@ -174,6 +223,7 @@ namespace FracturingFog.Views
             finally { _loadingNamedEquation = false; }
             _params.SandboxSource = entry.Source;
             _params.SandboxName = entry.Name;
+            SyncPromoteCheckbox();
             _debounce.Stop();
             CompileRequested?.Invoke();
         }

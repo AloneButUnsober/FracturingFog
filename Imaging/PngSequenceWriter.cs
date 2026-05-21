@@ -19,7 +19,8 @@ namespace FracturingFog
     public sealed class PngSequenceWriter : IDisposable
     {
         private readonly string _folder;
-        private readonly int _w, _h;
+        private readonly int _srcW, _srcH;          // source frame dimensions
+        private readonly int _encW, _encH;          // PNG dimensions (always even)
         private readonly SemaphoreSlim _writeGate;
         private readonly object _pendingLock = new();
         private int _pending;
@@ -29,28 +30,39 @@ namespace FracturingFog
 
         public string Folder => _folder;
         public int FrameCount => _frameIdx;
+        public int Width => _encW;
+        public int Height => _encH;
 
-        public PngSequenceWriter(string folder, int width, int height, int maxConcurrent = 4)
+        // PNG dimensions are forced even (width & ~1, height & ~1) so the
+        // sequence can be fed directly to libx264 with yuv420p, which rejects
+        // odd dimensions. An odd source has its right/bottom edge cropped by
+        // one pixel — same strategy Mp4Writer uses.
+        public PngSequenceWriter(string folder, int sourceWidth, int sourceHeight, int maxConcurrent = 4)
         {
-            if (width < 2 || height < 2)
+            if (sourceWidth < 2 || sourceHeight < 2)
                 throw new ArgumentException("Frame dimensions too small.");
             Directory.CreateDirectory(folder);
             _folder = folder;
-            _w = width;
-            _h = height;
+            _srcW = sourceWidth;
+            _srcH = sourceHeight;
+            _encW = sourceWidth & ~1;
+            _encH = sourceHeight & ~1;
             _writeGate = new SemaphoreSlim(maxConcurrent, maxConcurrent);
         }
 
         public void WriteFrame(uint[] bgra)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(PngSequenceWriter));
-            if (bgra.Length < _w * _h)
+            if (bgra.Length < _srcW * _srcH)
                 throw new ArgumentException("Frame buffer too small.");
 
             int idx = Interlocked.Increment(ref _frameIdx);
             // Snapshot the buffer — caller may overwrite it for the next frame.
-            var copy = new uint[_w * _h];
-            Array.Copy(bgra, copy, _w * _h);
+            // Copy only the encoded subregion (left _encW columns of top _encH rows),
+            // contiguously, so SavePng can treat it as a tightly packed _encW × _encH image.
+            var copy = new uint[_encW * _encH];
+            for (int row = 0; row < _encH; row++)
+                Array.Copy(bgra, row * _srcW, copy, row * _encW, _encW);
 
             lock (_pendingLock)
             {
@@ -64,7 +76,7 @@ namespace FracturingFog
                 try
                 {
                     string path = Path.Combine(_folder, $"frame_{idx:D6}.png");
-                    SavePng(copy, _w, _h, path);
+                    SavePng(copy, _encW, _encH, path);
                 }
                 finally
                 {
