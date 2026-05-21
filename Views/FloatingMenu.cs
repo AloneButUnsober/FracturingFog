@@ -1281,6 +1281,18 @@ namespace FracturingFog.Views
         }
 
         /// <summary>
+        /// Installs (or clears) an equation profile on the floating menu's
+        /// colour-theme combo. When set, a "— Suggested for equation —" section
+        /// is prepended to the dropdown with the top-ranked themes for that
+        /// equation. Mirrors the toolbar combo so suggestions stay in sync.
+        /// </summary>
+        public void ApplyEquationProfile(Models.EquationProfile? profile)
+        {
+            if (_colorThemeCombo == null || _colorThemeCombo.IsDisposed) return;
+            FormHelpers.ApplyEquationProfile(_colorThemeCombo, profile, OnColorThemeSelectionClick);
+        }
+
+        /// <summary>
         /// Silently selects the named region without firing
         /// OnRegionComboChanged. Mirrors selections from the toolbar combo or
         /// the Color Theme Editor.

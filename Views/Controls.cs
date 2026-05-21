@@ -202,6 +202,18 @@ namespace FracturingFog.Views
         {
             public ColorComboSortMode Mode { get; set; } = ColorComboSortMode.Default;
             public ColorPaletteType KindFilter { get; set; } = ColorPaletteType.GradientLinear;
+
+            /// <summary>
+            /// When set, BuildColorCombo prepends a "— Suggested —" section with
+            /// the top theme picks ranked against this equation's structural
+            /// profile (see <see cref="EquationAnalyzer"/> and
+            /// <see cref="ThemeRecommender"/>). Cleared when the active fractal
+            /// type does not consume a user-supplied equation.
+            /// </summary>
+            public EquationProfile? SuggestedFor { get; set; }
+
+            /// <summary>Max suggestions to surface when <see cref="SuggestedFor"/> is set.</summary>
+            public int SuggestionCount { get; set; } = 8;
         }
 
         private static ColorComboSortState GetOrCreateSortState(ComboBox comboBox)
@@ -218,6 +230,20 @@ namespace FracturingFog.Views
             var state = GetOrCreateSortState(comboBox);
             comboBox.SelectedIndexChanged -= func;
             comboBox.Items.Clear();
+
+            // Suggestion section comes first, regardless of sort mode, so the
+            // top picks are always one click away when an equation is active.
+            if (state.SuggestedFor != null)
+            {
+                var picks = Models.ThemeRecommender.RecommendNames(
+                    state.SuggestedFor, Models.ColorPalette.Palettes, state.SuggestionCount);
+                if (picks.Count > 0)
+                {
+                    comboBox.Items.Add("— Suggested for equation —");
+                    foreach (var name in picks) comboBox.Items.Add(name);
+                }
+            }
+
             switch (state.Mode)
             {
                 case ColorComboSortMode.Default:
@@ -255,6 +281,22 @@ namespace FracturingFog.Views
                 foreach (var name in palettes.Keys) names.Add(name);
             }
             return names;
+        }
+
+        /// <summary>
+        /// Applies (or clears) an equation profile on the combo's sort state
+        /// and rebuilds. Pass null to remove the suggested section. The current
+        /// selection is preserved when possible.
+        /// </summary>
+        public static void ApplyEquationProfile(
+            ComboBox comboBox, EquationProfile? profile, EventHandler func)
+        {
+            if (comboBox == null) return;
+            var state = GetOrCreateSortState(comboBox);
+            if (ReferenceEquals(state.SuggestedFor, profile)) return;
+            state.SuggestedFor = profile;
+            string? prev = comboBox.SelectedItem?.ToString();
+            RebuildColorCombo(comboBox, func, prev);
         }
 
         /// <summary>

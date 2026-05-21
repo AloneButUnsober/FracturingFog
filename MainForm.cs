@@ -454,6 +454,10 @@ public sealed partial class MainForm : Form
         //_toolbar.Controls.Add(_colorThemeLabel);
         //buttonLeft += _colorThemeLabel.PreferredWidth + 3;
         Models.ColorPalette.LoadUserThemes();
+        // Load saved equations so promoted entries appear in the fractal-type
+        // combo from launch, not only after a dialog opens them.
+        SandboxEquationStore.Instance.Load();
+        UserEquationStore.Instance.Load();
         _colorThemeCombo = new ColorComboBox
         {
             Left = buttonLeft,
@@ -507,23 +511,7 @@ public sealed partial class MainForm : Form
             Font = new Font("Segoe UI", 9f),
             FlatStyle = FlatStyle.Flat
         };
-        _fractalTypeCombo.Items.AddRange(new object[]
-        {
-            "Mandelbrot",
-            "Julia",
-            "Burning Ship",
-            "Tricorn",
-            "Multibrot",
-            "Phoenix",
-            "Newton",
-            "Buddhabrot",
-            "IFS",
-            "L-System",
-            "Strange Attractor",
-            "User Equation",
-            "Mandelbulb (3D)",
-            "Sandbox",
-        });
+        PopulateFractalTypeCombo();
         _fractalTypeCombo.SelectedIndex = 0;
         _fractalTypeCombo.SelectedIndexChanged += OnFractalTypeChanged;
         _toolbar.Controls.Add(_fractalTypeCombo);
@@ -1378,28 +1366,134 @@ public sealed partial class MainForm : Form
             SetStatus($"Quality → {_quality.Name}.  Zoom clamped to {_quality.ZoomMax:G3}.");
     }
 
+    /// <summary>
+    /// Number of hard-coded FractalType entries in the dropdown (indices 0..N-1).
+    /// Indices beyond this point are registered user equations from
+    /// <see cref="RegisteredFractalCatalog"/>, separated by a non-selectable
+    /// divider header.
+    /// </summary>
+    private const int BuiltInFractalCount = 14;
+
+    /// <summary>
+    /// Repopulates the fractal-type combo with built-in entries followed by a
+    /// "— Registered —" divider and all promoted user equations. Suppresses
+    /// the SelectedIndexChanged event during rebuild so the active fractal
+    /// type is preserved when possible.
+    /// </summary>
+    private void PopulateFractalTypeCombo()
+    {
+        if (_fractalTypeCombo == null) return;
+
+        _fractalTypeCombo.SelectedIndexChanged -= OnFractalTypeChanged;
+        try
+        {
+            string? prevName = _fractalTypeCombo.SelectedItem?.ToString();
+            _fractalTypeCombo.Items.Clear();
+            _fractalTypeCombo.Items.AddRange(new object[]
+            {
+                "Mandelbrot",
+                "Julia",
+                "Burning Ship",
+                "Tricorn",
+                "Multibrot",
+                "Phoenix",
+                "Newton",
+                "Buddhabrot",
+                "IFS",
+                "L-System",
+                "Strange Attractor",
+                "User Equation",
+                "Mandelbulb (3D)",
+                "Sandbox",
+            });
+
+            var registered = RegisteredFractalCatalog.Snapshot();
+            if (registered.Count > 0)
+            {
+                _fractalTypeCombo.Items.Add("— Registered —");
+                foreach (var r in registered) _fractalTypeCombo.Items.Add(r.Name);
+            }
+
+            if (!string.IsNullOrEmpty(prevName))
+            {
+                int idx = _fractalTypeCombo.FindStringExact(prevName);
+                if (idx >= 0) _fractalTypeCombo.SelectedIndex = idx;
+            }
+        }
+        finally { _fractalTypeCombo.SelectedIndexChanged += OnFractalTypeChanged; }
+    }
+
     private void OnFractalTypeChanged(object? sender, EventArgs e)
     {
         if (_fractalTypeCombo == null) return;
-        var sel = _fractalTypeCombo.SelectedIndex switch
+
+        int idx = _fractalTypeCombo.SelectedIndex;
+        if (idx < 0) return;
+
+        // Index BuiltInFractalCount is the "— Registered —" divider header.
+        // Selecting it is a no-op; bounce back to the prior selection.
+        if (idx == BuiltInFractalCount)
         {
-            0 => FractalType.Mandelbrot,
-            1 => FractalType.Julia,
-            2 => FractalType.BurningShip,
-            3 => FractalType.Tricorn,
-            4 => FractalType.Multibrot,
-            5 => FractalType.Phoenix,
-            6 => FractalType.Newton,
-            7 => FractalType.BuddhaBrot,
-            8 => FractalType.IFS,
-            9 => FractalType.LSystem,
-            10 => FractalType.StrangeAttractor,
-            11 => FractalType.UserEquation,
-            12 => FractalType.Mandelbulb,
-            13 => FractalType.Sandbox,
-            _ => FractalType.Mandelbrot
-        };
-        if (sel == _currentFractalType) return;
+            _fractalTypeCombo.SelectedIndexChanged -= OnFractalTypeChanged;
+            try { _fractalTypeCombo.SelectedIndex = ComboIndexForFractalType(_currentFractalType); }
+            finally { _fractalTypeCombo.SelectedIndexChanged += OnFractalTypeChanged; }
+            return;
+        }
+
+        FractalType sel;
+        RegisteredFractal? promoted = null;
+
+        if (idx > BuiltInFractalCount)
+        {
+            // Registered entry — resolve by display name, load its source
+            // into the appropriate FractalParameters slot, then dispatch.
+            string name = _fractalTypeCombo.Items[idx]?.ToString() ?? string.Empty;
+            promoted = RegisteredFractalCatalog.GetByName(name);
+            if (promoted == null) return;
+            sel = promoted.Type;
+        }
+        else
+        {
+            sel = idx switch
+            {
+                0 => FractalType.Mandelbrot,
+                1 => FractalType.Julia,
+                2 => FractalType.BurningShip,
+                3 => FractalType.Tricorn,
+                4 => FractalType.Multibrot,
+                5 => FractalType.Phoenix,
+                6 => FractalType.Newton,
+                7 => FractalType.BuddhaBrot,
+                8 => FractalType.IFS,
+                9 => FractalType.LSystem,
+                10 => FractalType.StrangeAttractor,
+                11 => FractalType.UserEquation,
+                12 => FractalType.Mandelbulb,
+                13 => FractalType.Sandbox,
+                _ => FractalType.Mandelbrot
+            };
+        }
+
+        // Apply the promoted entry's source/name and force a recompile.
+        // Calculators do not poll FractalParameters once they have a compiled
+        // delegate, so the source change must be pushed explicitly.
+        if (promoted != null)
+        {
+            if (promoted.Engine == EquationEngine.Sandbox)
+            {
+                _fractalParams.SandboxSource = promoted.Source;
+                _fractalParams.SandboxName = promoted.Name;
+                _sandboxCalculator?.Compile(promoted.Source);
+            }
+            else
+            {
+                _fractalParams.UserEquationSource = promoted.Source;
+                _fractalParams.UserEquationName = promoted.Name;
+                _userEquationCalculator?.Compile(promoted.Source);
+            }
+        }
+
+        if (sel == _currentFractalType && promoted == null) return;
         _currentFractalType = sel;
 
         // Reset view to a fractal-appropriate default so the new render
@@ -1425,6 +1519,19 @@ public sealed partial class MainForm : Form
         _centerXLo = _centerX2 = _centerX3 = 0.0;
         _centerYLo = _centerY2 = _centerY3 = 0.0;
         _lastUploadedBuffer = null;
+
+        // Refresh the suggested-themes section for the new fractal type.
+        // Only Sandbox carries an analysable AST today; everything else clears.
+        if (sel == FractalType.Sandbox)
+        {
+            ApplySandboxEquationSuggestions();
+        }
+        else
+        {
+            FormHelpers.ApplyEquationProfile(_colorThemeCombo, null, OnColorThemeChanged);
+            if (_floatingMenu != null && !_floatingMenu.IsDisposed)
+                _floatingMenu.ApplyEquationProfile(null);
+        }
 
         ApplyViewState();
         TriggerCalculation();
@@ -1544,6 +1651,7 @@ public sealed partial class MainForm : Form
                 TriggerCalculation();
             }
         };
+        dlg.PromotionChanged += () => PopulateFractalTypeCombo();
         dlg.FormClosed += (_, _) => { _userEqDialog = null; };
         _userEqDialog = dlg;
         dlg.Show(this);
@@ -1571,9 +1679,11 @@ public sealed partial class MainForm : Form
             if (_sandboxCalculator.IsCompiled)
             {
                 _lastUploadedBuffer = null;
+                ApplySandboxEquationSuggestions();
                 TriggerCalculation();
             }
         };
+        dlg.PromotionChanged += () => PopulateFractalTypeCombo();
         dlg.FormClosed += (_, _) => { _sandboxDialog = null; };
         _sandboxDialog = dlg;
         dlg.Show(this);
@@ -2136,6 +2246,21 @@ public sealed partial class MainForm : Form
     private void BuildColorThemesSelection()
     {
         BuildColorCombo(_colorThemeCombo, OnColorThemeChanged);
+    }
+
+    /// <summary>
+    /// After a Sandbox equation compiles cleanly, analyse its AST and feed the
+    /// resulting <see cref="EquationProfile"/> to the colour-theme combo so a
+    /// "— Suggested for equation —" section appears at the top of the list.
+    /// Safe to call repeatedly; identical profiles are no-ops.
+    /// </summary>
+    private void ApplySandboxEquationSuggestions()
+    {
+        var src = _fractalParams.SandboxSource;
+        var profile = EquationAnalyzer.TryAnalyze(src ?? string.Empty);
+        FormHelpers.ApplyEquationProfile(_colorThemeCombo, profile, OnColorThemeChanged);
+        if (_floatingMenu != null && !_floatingMenu.IsDisposed)
+            _floatingMenu.ApplyEquationProfile(profile);
     }
 
     private Color GetSwatchColor()
