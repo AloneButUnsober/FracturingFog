@@ -2434,9 +2434,7 @@ public sealed partial class MainForm : Form
     private string CurrentColorMapName()
     {
         if (_calculator?.ColorMap == null) return "";
-        var prop = _calculator.ColorMap.GetType()
-            .GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-        return prop?.GetValue(null)?.ToString() ?? "Theme";
+        return Models.ColorPalette.GetStaticName(_calculator.ColorMap);
     }
 
     private string CurrentFractalTypeName()
