@@ -1521,17 +1521,9 @@ public sealed partial class MainForm : Form
         _lastUploadedBuffer = null;
 
         // Refresh the suggested-themes section for the new fractal type.
-        // Only Sandbox carries an analysable AST today; everything else clears.
-        if (sel == FractalType.Sandbox)
-        {
-            ApplySandboxEquationSuggestions();
-        }
-        else
-        {
-            FormHelpers.ApplyEquationProfile(_colorThemeCombo, null, OnColorThemeChanged);
-            if (_floatingMenu != null && !_floatingMenu.IsDisposed)
-                _floatingMenu.ApplyEquationProfile(null);
-        }
+        if (sel == FractalType.Sandbox)       ApplySandboxEquationSuggestions();
+        else if (sel == FractalType.UserEquation) ApplyUserEquationSuggestions();
+        else                                  ApplyEquationProfileToCombos(null);
 
         ApplyViewState();
         TriggerCalculation();
@@ -1648,6 +1640,7 @@ public sealed partial class MainForm : Form
             if (_userEquationCalculator.IsCompiled)
             {
                 _lastUploadedBuffer = null;
+                ApplyUserEquationSuggestions();
                 TriggerCalculation();
             }
         };
@@ -2258,6 +2251,24 @@ public sealed partial class MainForm : Form
     {
         var src = _fractalParams.SandboxSource;
         var profile = EquationAnalyzer.TryAnalyze(src ?? string.Empty);
+        ApplyEquationProfileToCombos(profile);
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="ApplySandboxEquationSuggestions"/> but for the Roslyn-
+    /// backed UserEquation source. Uses <see cref="UserEquationAnalyzer"/> to
+    /// extract the same <see cref="EquationProfile"/> shape from the C# syntax
+    /// tree, then feeds it to the theme-combo suggestion sections.
+    /// </summary>
+    private void ApplyUserEquationSuggestions()
+    {
+        var src = _fractalParams.UserEquationSource;
+        var profile = UserEquationAnalyzer.TryAnalyze(src ?? string.Empty);
+        ApplyEquationProfileToCombos(profile);
+    }
+
+    private void ApplyEquationProfileToCombos(EquationProfile? profile)
+    {
         FormHelpers.ApplyEquationProfile(_colorThemeCombo, profile, OnColorThemeChanged);
         if (_floatingMenu != null && !_floatingMenu.IsDisposed)
             _floatingMenu.ApplyEquationProfile(profile);
