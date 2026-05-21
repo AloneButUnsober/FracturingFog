@@ -44,7 +44,7 @@ public sealed partial class MainForm : Form
 
     #region Program
 
-    private readonly string _programVersion = "0.5.8";
+    private readonly string _programVersion = "0.6.0";
     private readonly string _programName = "Fracturing Fog";
     private bool _disposed;
 
