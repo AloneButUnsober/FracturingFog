@@ -7,7 +7,7 @@
   2. Compiles the WiX source into FracturingFog-<version>-x64.msi.
 
 .PARAMETER Version
-  Product version (must be x.y.z form). Default: 0.4.0.
+  Product version (must be x.y.z form). Default: 0.6.0.
 
 .PARAMETER Configuration
   Build configuration. Default: Release.
@@ -21,7 +21,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '0.4.0',
+    [string]$Version = '0.6.0',
     [string]$Configuration = 'Release',
     [switch]$SkipPublish
 )
