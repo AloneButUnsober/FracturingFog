@@ -221,7 +221,9 @@ public sealed partial class MainForm : Form
     private NewtonCalculator? _newtonCalculator;
     private UserEquationCalculator? _userEquationCalculator;
     private MandelbulbCalculator? _mandelbulbCalculator;
+    private SandboxCalculator? _sandboxCalculator;
     private Views.UserEquationDialog? _userEqDialog;
+    private Views.SandboxDialog? _sandboxDialog;
     private FractalType _currentFractalType = FractalType.Mandelbrot;
     private FractalParameters _fractalParams = new();
     private CancellationTokenSource? _calcCts;
@@ -520,6 +522,7 @@ public sealed partial class MainForm : Form
             "Strange Attractor",
             "User Equation",
             "Mandelbulb (3D)",
+            "Sandbox",
         });
         _fractalTypeCombo.SelectedIndex = 0;
         _fractalTypeCombo.SelectedIndexChanged += OnFractalTypeChanged;
@@ -818,6 +821,7 @@ public sealed partial class MainForm : Form
     {
         FractalRegionLibrary.Instance.Load();
         UserEquationStore.Instance.Load();
+        SandboxEquationStore.Instance.Load();
         RebuildRegionCombo();
         UserColorThemeLibrary.Instance.UpdateCheck();
         int w = _renderPanel.ClientSize.Width;
@@ -838,6 +842,7 @@ public sealed partial class MainForm : Form
             _newtonCalculator = new NewtonCalculator(w, h);
             _userEquationCalculator = new UserEquationCalculator(w, h);
             _mandelbulbCalculator = new MandelbulbCalculator(w, h);
+            _sandboxCalculator = new SandboxCalculator(w, h);
 
             if (_defaultColorMap != null)
             {
@@ -850,6 +855,7 @@ public sealed partial class MainForm : Form
                 _newtonCalculator.ColorMap = _defaultColorMap;
                 _userEquationCalculator.ColorMap = _defaultColorMap;
                 _mandelbulbCalculator.ColorMap = _defaultColorMap;
+                _sandboxCalculator.ColorMap = _defaultColorMap;
             }
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
@@ -899,6 +905,7 @@ public sealed partial class MainForm : Form
         _newtonCalculator?.Resize(w, h);
         _userEquationCalculator?.Resize(w, h);
         _mandelbulbCalculator?.Resize(w, h);
+        _sandboxCalculator?.Resize(w, h);
         ApplyViewState();
         TriggerCalculation();
         PositionGridPanel();
@@ -1389,6 +1396,7 @@ public sealed partial class MainForm : Form
             10 => FractalType.StrangeAttractor,
             11 => FractalType.UserEquation,
             12 => FractalType.Mandelbulb,
+            13 => FractalType.Sandbox,
             _ => FractalType.Mandelbrot
         };
         if (sel == _currentFractalType) return;
@@ -1411,6 +1419,7 @@ public sealed partial class MainForm : Form
             FractalType.StrangeAttractor => (0.0, 0.0, 1.0),
             FractalType.UserEquation     => (0.0, 0.0, 1.0),
             FractalType.Mandelbulb       => (0.0, 0.0, 1.0),
+            FractalType.Sandbox          => (0.0, 0.0, 1.0),
             _                            => (-0.5, 0.0, 1.0)
         };
         _centerXLo = _centerX2 = _centerX3 = 0.0;
@@ -1441,6 +1450,7 @@ public sealed partial class MainForm : Form
         FractalType.StrangeAttractor => 10,
         FractalType.UserEquation     => 11,
         FractalType.Mandelbulb       => 12,
+        FractalType.Sandbox          => 13,
         _                            => 0
     };
 
@@ -1470,6 +1480,12 @@ public sealed partial class MainForm : Form
         if (_currentFractalType == FractalType.UserEquation)
         {
             ShowUserEquationDialog();
+            return;
+        }
+
+        if (_currentFractalType == FractalType.Sandbox)
+        {
+            ShowSandboxDialog();
             return;
         }
 
@@ -1532,6 +1548,35 @@ public sealed partial class MainForm : Form
         _userEqDialog = dlg;
         dlg.Show(this);
         // Trigger initial compile.
+        dlg.TriggerCompile();
+    }
+
+    private void ShowSandboxDialog()
+    {
+        if (_sandboxDialog != null && !_sandboxDialog.IsDisposed)
+        {
+            _sandboxDialog.BringToFront();
+            _sandboxDialog.Activate();
+            return;
+        }
+
+        var dlg = new Views.SandboxDialog(_fractalParams);
+        var loc = PointToScreen(new Point(_toolbar.Right - dlg.Width - 10, _toolbar.Bottom + 10));
+        dlg.Location = loc;
+        dlg.CompileRequested += () =>
+        {
+            if (_sandboxCalculator == null) return;
+            _sandboxCalculator.Compile(_fractalParams.SandboxSource ?? "z*z + c");
+            dlg.ShowError(_sandboxCalculator.LastError);
+            if (_sandboxCalculator.IsCompiled)
+            {
+                _lastUploadedBuffer = null;
+                TriggerCalculation();
+            }
+        };
+        dlg.FormClosed += (_, _) => { _sandboxDialog = null; };
+        _sandboxDialog = dlg;
+        dlg.Show(this);
         dlg.TriggerCompile();
     }
 
@@ -1860,6 +1905,9 @@ public sealed partial class MainForm : Form
             FractalType = _currentFractalType,
             UserEquationName = _currentFractalType == FractalType.UserEquation
                 ? _fractalParams.UserEquationName
+                : null,
+            SandboxName = _currentFractalType == FractalType.Sandbox
+                ? _fractalParams.SandboxName
                 : null,
             Description = $"Saved {DateTime.Now:yyyy-MM-dd HH:mm}"
         };
@@ -2423,6 +2471,22 @@ public sealed partial class MainForm : Form
             }
         }
 
+        // Sandbox regions: same by-name round-trip as UserEquation, against
+        // SandboxEquationStore.
+        if (region.FractalType == FractalType.Sandbox
+            && !string.IsNullOrWhiteSpace(region.SandboxName))
+        {
+            var entry = SandboxEquationStore.Instance.GetByName(region.SandboxName);
+            if (entry != null)
+            {
+                _fractalParams.SandboxSource = entry.Source;
+                _fractalParams.SandboxName = entry.Name;
+                _sandboxCalculator?.Compile(entry.Source);
+                if (_sandboxDialog != null && !_sandboxDialog.IsDisposed)
+                    _sandboxDialog.LoadEquationByName(entry.Name);
+            }
+        }
+
         // Round-trip all four QD limbs. Legacy regions (DD or shallower) default
         // X2/X3 to 0, matching prior behaviour.
         _centerX = region.CenterX; _centerXLo = region.CenterXLo;
@@ -2871,6 +2935,7 @@ public sealed partial class MainForm : Form
                 case NewtonCalculator n:          n.FractalParameters = _fractalParams; break;
                 case UserEquationCalculator u:    u.FractalParameters = _fractalParams; break;
                 case MandelbulbCalculator m:      m.FractalParameters = _fractalParams; break;
+                case SandboxCalculator sb:        sb.FractalParameters = _fractalParams; break;
             }
         }
 
@@ -2945,6 +3010,7 @@ public sealed partial class MainForm : Form
         FractalType.Nova             => _newtonCalculator, // share path for now
         FractalType.UserEquation     => _userEquationCalculator,
         FractalType.Mandelbulb       => _mandelbulbCalculator,
+        FractalType.Sandbox          => _sandboxCalculator,
         _                            => null
     };
 

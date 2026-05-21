@@ -138,6 +138,14 @@ namespace FracturingFog.Models
         public string? UserEquationName { get; set; }
 
         /// <summary>
+        /// Name of the saved <see cref="SandboxEquationEntry"/> this region depends on
+        /// when <see cref="FractalType"/> is <see cref="FractalType.Sandbox"/>.
+        /// On recall the source is looked up by name in <see cref="SandboxEquationStore"/>.
+        /// Null/empty for non-Sandbox regions, or for ad-hoc sources the user never saved.
+        /// </summary>
+        public string? SandboxName { get; set; }
+
+        /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
         /// assumed to be user-defined unless explicitly marked as built-in.
         /// </summary>

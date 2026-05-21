@@ -803,6 +803,7 @@ unless the slider is locked.
             sub.TabPages.Add(BuildMathSubTab("Attractor",      MathAttractorText()));
             sub.TabPages.Add(BuildMathSubTab("Mandelbulb",     MathMandelbulbText()));
             sub.TabPages.Add(BuildMathSubTab("User Equation",  MathUserEquationText()));
+            sub.TabPages.Add(BuildMathSubTab("Sandbox",        MathSandboxText()));
 
             page.Controls.Add(sub);
             return page;
@@ -1783,6 +1784,282 @@ dialog reloads from disk on next launch.
     with z_(n−1), z_(n−2)) can only be approximated.
   • Per-pixel delegate call overhead — slower than the typed
     kernels by ~3-5×.
+";
+
+        private static string MathSandboxText() =>
+@"=== Sandbox — Overview ===
+
+The Sandbox fractal type runs a USER-SUPPLIED EXPRESSION through
+a restricted, in-process parser.  Unlike the User Equation
+engine — which compiles arbitrary C# via Roslyn and therefore has
+access to the full .NET BCL (File.IO, reflection, Process.Start) —
+the Sandbox evaluator is built from a hand-written grammar with
+NO access to the runtime or filesystem.
+
+That makes Sandbox safe to share, import from JSON, paste from a
+web page, or run on equations from untrusted sources.  The trade
+is expressiveness: there are no statements, no loops, no method
+calls outside the built-in function list below.
+
+Open via:  Fractal Type → ""Sandbox""  →  Params button
+The dialog auto-compiles 500 ms after each keystroke.  Errors
+appear in red below the editor.
+
+Saved equations are persisted to:
+
+    %APPDATA%\FracturingFog\sandboxequations.json
+
+When a Region is saved while Fractal Type = Sandbox, the name of
+the active saved equation is recorded with the Region.  Recalling
+the Region looks the source back up by name, so editing a saved
+equation propagates to every Region that references it.
+
+=== Iteration Model ===
+
+The runtime drives the standard escape-time loop:
+
+        z = 0
+        for n in 0 … MaxIterations:
+            if |z|² ≥ 1024: break
+            z = Step(z, c, n)        // <-- your expression
+
+The expression you write IS the body of Step.  It must evaluate
+to a Complex value.  Bailout (radius 32), smoothing, and color
+mapping mirror the Mandelbrot path.
+
+=== Available Variables ===
+
+  z   Complex — the CURRENT iterate.  Starts at 0 on iteration 0.
+  c   Complex — the PIXEL coordinate (constant per pixel).
+  n   Real    — iteration index (0-based).
+
+=== Constants ===
+
+  pi   3.14159265358979…
+  e    2.71828182845904…
+  i    Imaginary unit (Complex 0 + 1i)
+
+=== Operators ===
+
+  Arithmetic   +  −  *  /          Both real and complex operands
+  Power        ^                   z^2, z^n; right-associative
+  Unary minus  −                   −z, −(re(z) + im(z))
+  Comparison   <  >  <=  >=  ==  != Real operands only.  Use abs(),
+                                   re(), im(), arg() to project a
+                                   Complex value to a scalar first.
+  Logical      &&  ||  !           Short-circuit.  0 = false, any
+                                   non-zero magnitude = true.
+  Ternary      cond ? a : b        Branches may differ in type;
+                                   real promotes to complex if
+                                   the other branch is complex.
+  Let          let x = expr in body  Introduces a local binding;
+                                   bindings nest and may be chained.
+  Grouping     ( … )
+
+=== Built-in Functions ===
+
+  Complex-returning (operate on real or complex):
+      sin(z)   cos(z)   tan(z)
+      exp(z)   log(z)   sqrt(z)
+      conj(z)                // complex conjugate
+      pow(a, b)              // a raised to b — same as a ^ b
+
+  Real-returning (project Complex → scalar):
+      abs(z)                 // magnitude |z|
+      re(z)                  // real part
+      im(z)                  // imaginary part
+      arg(z)                 // argument (atan2(im, re))
+
+=== Type Rules ===
+
+The parser tracks two value kinds — Real and Complex — and
+promotes Real → Complex automatically whenever a binary op mixes
+them.  A few consequences:
+
+  • Comparisons (< > <= >= == !=) require Real operands.  Wrap
+    a complex value with abs(), re(), im(), or arg() to compare.
+  • Logical operators read any value's magnitude — 0 is false,
+    everything else is true.
+  • The expression's final value is implicitly converted to
+    Complex before being returned to the iterator.
+
+=== Reserved Names ===
+
+You may not rebind:  z, c, n, pi, e, i, let, in.
+
+User let-bindings get their own slot — shadow-rebinding an outer
+let with the same name in an inner let is allowed and follows
+lexical scope.
+
+=== Save / Load ===
+
+  Save…    Prompts for a name; persists current source under it.
+           Re-saving an existing name replaces.
+  Delete   Removes the currently-selected saved equation.
+  Combo    Picking a saved entry loads it into the editor and
+           recompiles immediately.
+
+Region recall:  the Region store records the SandboxName field
+on save.  On Region select, MainForm asks the SandboxEquationStore
+for the entry by name and loads its source.  If the saved entry
+has been deleted, the Region falls back to whatever source was
+last typed.
+
+=== Examples — Drop-in Snippets ===
+
+Each block below is a complete expression — paste it into the
+editor and the renderer compiles + previews.  No trailing
+semicolons; the expression IS the body.
+
+  --- Mandelbrot ---
+  z*z + c
+
+  --- Mandelbrot using pow ---
+  pow(z, 2) + c
+
+  --- Multibrot (cubic) ---
+  z^3 + c
+
+  --- Multibrot (degree d, baked in) ---
+  z^5 + c
+
+  --- Tricorn / Mandelbar ---
+  conj(z)^2 + c
+
+  --- Burning Ship ---
+  // Build w with absolute-valued real + imaginary parts.
+  let w = abs(re(z)) + abs(im(z)) * i in w*w + c
+
+  --- Phoenix-flavoured single-step ---
+  z*z + c + 0.56667 * z
+
+  --- z² + c with sine perturbation ---
+  z*z + c + 0.1 * sin(z)
+
+  --- Exponential map ---
+  exp(z) + c
+
+  --- Sine map ---
+  // sin(0) = 0, so we need a non-zero seed on iteration 0.
+  // Ternary swaps in c whenever n == 0.
+  c * sin(n == 0 ? c : z)
+
+  --- Cosine map ---
+  c * cos(n == 0 ? c : z)
+
+  --- Lambda / logistic map ---
+  // Critical point z = 0.5 is the canonical start.
+  let z0 = (n == 0 ? 0.5 : z) in c * z0 * (1 - z0)
+
+  --- Heron iteration (Newton for √c) ---
+  // Skip the c/0 singularity by seeding z = c on n == 0.
+  let z0 = (n == 0 ? c : z) in 0.5 * (z0 + c / z0)
+
+  --- Newton (z³ − 1) ---
+  let z0 = (n == 0 ? c : z) in
+    let z2 = z0*z0 in
+      z0 - (z0*z2 - 1) / (3 * z2)
+
+  --- Nova (z³ − 1 with c offset) ---
+  let z0 = (n == 0 ? 1 : z) in
+    let z2 = z0*z0 in
+      z0 - (z0*z2 - 1) / (3 * z2) + c
+
+  --- Magnet-1 (Lord Kelvin) ---
+  let num = z*z + c - 1 in
+    let den = 2*z + c - 2 in
+      (num / den) ^ 2
+
+  --- Time-varying twist on z² + c ---
+  let k = 0.005 * n in
+    (cos(k) + sin(k) * i) * z*z + c
+
+  --- Celtic Mandelbrot ---
+  // |Re(z²)| + i * Im(z²), then + c.
+  let zr2 = re(z)*re(z) - im(z)*im(z) in
+    let zi2 = 2 * re(z) * im(z) in
+      abs(zr2) + zi2 * i + c
+
+  --- Buffalo fractal ---
+  let w = abs(re(z)) + abs(im(z)) * i in w*w - w + c
+
+  --- Bird-of-prey (cubic Burning Ship) ---
+  let w = abs(re(z)) + abs(im(z)) * i in w^3 + c
+
+  --- Conditional kernel switch by n ---
+  // Run z² + c for the first 8 iterations, then z³ + c.
+  n < 8 ? z*z + c : z^3 + c
+
+  --- Polar transform on c ---
+  // Treat c in polar form, square the radius, rotate by phase.
+  let r = abs(c) in
+    let a = arg(c) in
+      (r*r) * (cos(2*a) + sin(2*a) * i) + z*z
+
+  --- Spiral perturbation ---
+  z*z + c + 0.05 * (cos(n * 0.1) + sin(n * 0.1) * i)
+
+  --- Mix two maps by n ---
+  // Linear blend between z² + c and exp(z) + c over n.
+  let t = n / 64 in
+    (1 - t) * (z*z + c) + t * (exp(z) + c)
+
+  --- Smooth ""abs"" via sqrt(z*conj(z)) ---
+  // Just a demonstration of conj/sqrt; equivalent to abs(z).
+  sqrt(z * conj(z)) + c
+
+  --- Compare-driven branch ---
+  // Diverge faster for pixels far from origin.
+  abs(c) > 0.5 ? z*z + 2*c : z*z + c
+
+=== Performance Notes ===
+
+  • Pure-managed interpreter — no SIMD, no JIT-emitted IL.
+    Roughly the same order of magnitude as User Equation but
+    without the per-pixel delegate dispatch.
+  • Each render thread allocates one environment array once
+    (slots for z, c, n + every let-binding) and reuses it for
+    every pixel.  No per-pixel allocation in the hot loop.
+  • Deep let-binding chains pay a small recursive-eval cost —
+    flatten where you can.
+  • Real-only arithmetic stays in scalar mode internally and is
+    cheaper than Complex arithmetic.  Use re()/im() projections
+    when only a scalar is needed.
+
+=== Safety Model ===
+
+The DSL parser only emits AST nodes for the operators, functions,
+and identifiers documented here.  It cannot:
+
+  • Open, read, write, or enumerate files.
+  • Invoke methods on the .NET BCL or any user assembly.
+  • Allocate native memory, call P/Invoke, or use reflection.
+  • Spawn processes, open sockets, or talk to the GPU directly.
+  • Reach the file system or environment at all.
+
+The only side effects an expression can have are:
+
+  • Returning a Complex value the iterator consumes.
+  • Throwing a runtime arithmetic exception (e.g. divide by 0,
+    log of 0, sqrt of negative real), which the calculator
+    catches per pixel and treats as ""escaped"".
+
+Compared to User Equation:  Sandbox is roughly 2-3× more
+restrictive but is safe to share, import, or run from untrusted
+JSON.
+
+=== Limitations ===
+
+  • No high-precision (DD/QD) path — Sandbox is double only.
+    Zoom usefully caps around ≈ 1e13.
+  • No perturbation theory acceleration.
+  • No statements:  every expression is a single value.  Use
+    let-bindings for intermediate names.
+  • No user-defined functions yet.  Repeat sub-expressions stay
+    expanded.
+  • No multi-step memory:  the signature exposes z, c, n only —
+    not z_(n−1).  True Phoenix-style recurrences cannot be
+    expressed directly.
 ";
 
         #endregion Math sub-tab content

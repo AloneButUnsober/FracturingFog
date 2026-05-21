@@ -30,6 +30,20 @@ namespace FracturingFog.Models
         /// </summary>
         public string? UserEquationName { get; set; }
 
+        /// <summary>
+        /// Source for the Sandbox fractal — a restricted expression DSL parsed by
+        /// <see cref="SandboxExpression"/>. Safe to evaluate in untrusted contexts:
+        /// no BCL access, no IO, no reflection.
+        /// </summary>
+        public string? SandboxSource { get; set; }
+
+        /// <summary>
+        /// Name of the saved <see cref="SandboxEquationEntry"/> the current source
+        /// came from. Round-tripped by region save/recall the same way
+        /// <see cref="UserEquationName"/> is.
+        /// </summary>
+        public string? SandboxName { get; set; }
+
         public string IFSPresetName { get; set; } = "Sierpinski Triangle";
         public int IFSIterations { get; set; } = 2_000_000;
 
@@ -73,6 +87,8 @@ namespace FracturingFog.Models
                 IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
                 UserEquationSource = UserEquationSource,
                 UserEquationName = UserEquationName,
+                SandboxSource = SandboxSource,
+                SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,
                 IFSIterations = IFSIterations,
                 LSystemPresetName = LSystemPresetName,
