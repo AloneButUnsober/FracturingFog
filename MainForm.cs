@@ -148,7 +148,7 @@ public sealed partial class MainForm : Form
 
     private const double DefaultCenterX = -0.5;
     private const double DefaultCenterY = 0.0;
-    private const double DefaultZoom = 0.3;
+    private const double DefaultZoom = 0.13;
 
     private double _centerX = DefaultCenterX;
     private double _centerXLo = 0.0;
@@ -1310,7 +1310,7 @@ public sealed partial class MainForm : Form
             Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
             FilterIndex = 1,
             DefaultExt = "png",
-            FileName = $"{_programName}_{colorName}_{regionName}" +
+            FileName = $"{_programName.Replace(" ","")}_{CurrentFractalTypeName()}_{colorName.Replace(" ", "")}_{regionName.Replace(" ", "")}" +
                          $"x{_centerX.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
                          $"y{_centerY.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
                          $"z{_zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
@@ -2437,6 +2437,12 @@ public sealed partial class MainForm : Form
         var prop = _calculator.ColorMap.GetType()
             .GetProperty("Name", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
         return prop?.GetValue(null)?.ToString() ?? "Theme";
+    }
+
+    private string CurrentFractalTypeName()
+    {
+        
+        return Fractals.FractalNameByNameType[_currentFractalType];
     }
 
     private void CheckForNewColorThemes()

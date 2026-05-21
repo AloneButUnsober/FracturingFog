@@ -65,8 +65,8 @@ namespace FracturingFog.Models
 
         // ── Zoom control ──────────────────────────────────────────────────────
 
-        /// <summary>Minimum allowed zoom (0.5 = slightly zoomed out from the full set).</summary>
-        public double ZoomMin { get; init; } = 0.5;
+        /// <summary>Minimum allowed zoom (0.13 = fully zoomed out with the set visible as a small recognizable shape).</summary>
+        public double ZoomMin { get; init; } = 0.13;
 
         /// <summary>Maximum allowed zoom for this tier.</summary>
         public double ZoomMax { get; init; }
@@ -135,7 +135,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Draft,
             Name = "Draft",
             Description = "Fast preview — shallow zoom (max 10⁵), low iteration cap (256).",
-            ZoomMin = 0.5,
+            ZoomMin = 0.13,
             ZoomMax = 1e5,
             WheelZoomFactor = 1.40,     // large steps: 40% per detent
             IterBase = 64,
@@ -153,7 +153,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Standard,
             Name = "Standard",
             Description = "Balanced quality — zoom to 10¹³ (DD above 10¹²), up to 2048 iterations.",
-            ZoomMin = 0.5,
+            ZoomMin = 0.13,
             ZoomMax = 1e13,
             WheelZoomFactor = 1.20,     // 20% per detent
             IterBase = 256,
@@ -173,7 +173,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.High,
             Name = "High",
             Description = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. Slower at depth.",
-            ZoomMin = 0.5,
+            ZoomMin = 0.13,
             ZoomMax = 1e22,
             WheelZoomFactor = 1.12,     // 12% per detent — finer control at depth
             IterBase = 512,
@@ -192,7 +192,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Ultra,
             Name = "Ultra",
             Description = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. Slow at extreme depth.",
-            ZoomMin = 0.5,
+            ZoomMin = 0.13,
             ZoomMax = 5e27,
             WheelZoomFactor = 1.08,     // 8% per detent — very fine control
             IterBase = 1024,
@@ -212,7 +212,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Extreme,
             Name = "Extreme",
             Description = "Quad-double precision — zoom to 5×10⁵⁸, up to 131072 iterations. Slow.",
-            ZoomMin = 0.5,
+            ZoomMin = 0.13,
             ZoomMax = 5e58,
             WheelZoomFactor = 1.06,     // very fine
             IterBase = 2048,

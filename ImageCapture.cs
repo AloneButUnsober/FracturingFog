@@ -42,7 +42,7 @@ namespace FracturingFog
                 Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
                 FilterIndex = 1,
                 DefaultExt = "png",
-                FileName = $"{_programName}_{colorName}_{regionName}" +
+                FileName = $"{_programName.Replace(" ", "")}_{CurrentFractalTypeName()}_{colorName.Replace(" ", "")}_{regionName.Replace(" ", "")}" +
                              $"x{_calculator.CenterX.ToString().Replace(".", "")}_" +
                              $"y{_calculator.CenterY.ToString().Replace(".", "")}_" +
                              $"z{_calculator.Zoom.ToString().Replace(".", "")}_" +
@@ -64,10 +64,21 @@ namespace FracturingFog
 
         private void TakeNormalScreenshot(string path, ImageFormat format, string waterMark, string subText)
         {
-            int w = _calculator!.Width;
-            int h = _calculator!.Height;
-            // Apply the same brightness/contrast post-processing as the live view.
-            uint[] pixels = BuildProcessedBuffer(_calculator);
+            int w, h;
+            uint[] pixels;
+            IFractalCalculator? alt = SelectAltCalculator(_currentFractalType);
+            if (alt != null)
+            {
+                w = alt.Width;
+                h = alt.Height;
+                pixels = BuildProcessedBuffer(alt.ColorBuffer, w, h);
+            }
+            else
+            {
+                w = _calculator!.Width;
+                h = _calculator!.Height;
+                pixels = BuildProcessedBuffer(_calculator);
+            }
             try
             {
                 // Pixel-sampled contrast colour for the watermark.
@@ -91,15 +102,17 @@ namespace FracturingFog
         /// are active (avoids unnecessary allocation).
         /// </summary>
         private uint[] BuildProcessedBuffer(MandelbrotCalculator calc)
+            => BuildProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+
+        private uint[] BuildProcessedBuffer(uint[] src, int width, int height)
         {
             bool needsProcess = _brightness != 0 || _contrast != 0 || _gridVisible;
-            if (!needsProcess) return calc.ColorBuffer;
+            if (!needsProcess) return src;
 
-            int n = calc.Width * calc.Height;
+            int n = width * height;
             var dst = new uint[n];
             float cf = 1.0f + _contrast / 100.0f;
             float bo = _brightness / 100.0f;
-            uint[] src = calc.ColorBuffer;
 
             if (_brightness != 0 || _contrast != 0)
             {
@@ -122,8 +135,59 @@ namespace FracturingFog
             {
                 Array.Copy(src, dst, n);
             }
-            if (_gridVisible) BlendGridOverlay(dst, calc.Width, calc.Height);
+            if (_gridVisible) BlendGridOverlay(dst, width, height);
             return dst;
+        }
+
+        /// <summary>
+        /// Builds a fresh calculator at the requested size matching the current
+        /// fractal type and parameters. Returns null for Mandelbrot (caller
+        /// must use the MandelbrotCalculator branch to preserve QD-limb state).
+        /// </summary>
+        private IFractalCalculator? BuildAltCalculatorForCapture(FractalType type, int w, int h)
+        {
+            IFractalCalculator? c = type switch
+            {
+                FractalType.Mandelbrot       => null,
+                FractalType.Julia            => new EscapeTimeCalculator(w, h),
+                FractalType.BurningShip      => new EscapeTimeCalculator(w, h),
+                FractalType.Tricorn          => new EscapeTimeCalculator(w, h),
+                FractalType.Multibrot        => new EscapeTimeCalculator(w, h),
+                FractalType.Phoenix          => new EscapeTimeCalculator(w, h),
+                FractalType.IFS              => new IFSCalculator(w, h),
+                FractalType.LSystem          => new LSystemCalculator(w, h),
+                FractalType.StrangeAttractor => new AttractorCalculator(w, h),
+                FractalType.BuddhaBrot       => new BuddhabrotCalculator(w, h),
+                FractalType.Newton           => new NewtonCalculator(w, h),
+                FractalType.Nova             => new NewtonCalculator(w, h),
+                FractalType.UserEquation     => new UserEquationCalculator(w, h),
+                FractalType.Mandelbulb       => new MandelbulbCalculator(w, h),
+                FractalType.Sandbox          => new SandboxCalculator(w, h),
+                _                            => null
+            };
+            if (c == null) return null;
+            c.CenterX = _calculator!.CenterX;
+            c.CenterY = _calculator!.CenterY;
+            c.Zoom = _calculator!.Zoom;
+            c.MaxIterations = _calculator!.MaxIterations;
+            c.Quality = _quality;
+            c.ColorMap = _calculator!.ColorMap;
+            switch (c)
+            {
+                case EscapeTimeCalculator e:
+                    e.FractalType = type;
+                    e.FractalParameters = _fractalParams;
+                    break;
+                case IFSCalculator ifs:        ifs.FractalParameters = _fractalParams; break;
+                case LSystemCalculator ls:     ls.FractalParameters = _fractalParams; break;
+                case AttractorCalculator a:    a.FractalParameters = _fractalParams; break;
+                case BuddhabrotCalculator b:   b.FractalParameters = _fractalParams; break;
+                case NewtonCalculator n:       n.FractalParameters = _fractalParams; break;
+                case UserEquationCalculator u: u.FractalParameters = _fractalParams; break;
+                case MandelbulbCalculator m:   m.FractalParameters = _fractalParams; break;
+                case SandboxCalculator sb:     sb.FractalParameters = _fractalParams; break;
+            }
+            return c;
         }
 
         private void TakeWallpaperScreenshot(string path, ImageFormat format, string waterMark, string subText)
@@ -135,6 +199,9 @@ namespace FracturingFog
             int toolbarH = 0;
             foreach (System.Windows.Forms.Control c in Controls)
                 if (c.Dock == System.Windows.Forms.DockStyle.Top) toolbarH += c.Height;
+
+            FractalType type = _currentFractalType;
+            IFractalCalculator? altCalc = BuildAltCalculatorForCapture(type, fullW, fullH);
 
             double cx = _calculator!.CenterX, cxLo = _calculator!.CenterXLo;
             double cx2 = _calculator!.CenterX2, cx3 = _calculator!.CenterX3;
@@ -160,8 +227,14 @@ namespace FracturingFog
 
             var sw = Stopwatch.StartNew();
 
-            Task.Run(() =>
+            Task.Run<(uint[] Buffer, int Width, int Height)>(() =>
             {
+                if (altCalc != null)
+                {
+                    altCalc.Calculate(token);
+                    token.ThrowIfCancellationRequested();
+                    return (altCalc.ColorBuffer, altCalc.Width, altCalc.Height);
+                }
                 var tempCalc = new MandelbrotCalculator(fullW, fullH)
                 {
                     CenterX = cx,
@@ -179,7 +252,7 @@ namespace FracturingFog
                 };
                 tempCalc.Calculate(token);
                 token.ThrowIfCancellationRequested();
-                return tempCalc;
+                return (tempCalc.ColorBuffer, tempCalc.Width, tempCalc.Height);
             }, token)
             .ContinueWith(t =>
             {
@@ -201,16 +274,16 @@ namespace FracturingFog
                     }
 
                     sw.Stop();
-                    MandelbrotCalculator result = t.Result;
+                    var result = t.Result;
                     try
                     {
                         var fontColor = ComputeContrastColor(GetSwatchColor(),
-                            watermark: true, pixels: result.ColorBuffer,
+                            watermark: true, pixels: result.Buffer,
                             imgW: result.Width, imgH: result.Height);
-                        SavePixelsToFile(result.ColorBuffer, result.Width, result.Height, path, format, waterMark, fontColor, subText);
+                        SavePixelsToFile(result.Buffer, result.Width, result.Height, path, format, waterMark, fontColor, subText);
                         SetStatus($"Wallpaper saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
                     }
-                    catch (Exception ex) 
+                    catch (Exception ex)
                     {
                         System.Windows.Forms.MessageBox.Show(
                             $"Failed to save wallpaper:\n\n{ex.Message}",
@@ -229,6 +302,9 @@ namespace FracturingFog
             int toolbarH = 0;
             foreach (System.Windows.Forms.Control c in Controls)
                 if (c.Dock == System.Windows.Forms.DockStyle.Top) toolbarH += c.Height;
+
+            FractalType type = _currentFractalType;
+            IFractalCalculator? altCalc = BuildAltCalculatorForCapture(type, fullW, fullH);
 
             double cx = _calculator!.CenterX, cxLo = _calculator!.CenterXLo;
             double cx2 = _calculator!.CenterX2, cx3 = _calculator!.CenterX3;
@@ -255,8 +331,14 @@ namespace FracturingFog
 
             var sw = Stopwatch.StartNew();
 
-            Task.Run(() =>
+            Task.Run<(uint[] Buffer, int Width, int Height)>(() =>
             {
+                if (altCalc != null)
+                {
+                    altCalc.Calculate(token);
+                    token.ThrowIfCancellationRequested();
+                    return (altCalc.ColorBuffer, altCalc.Width, altCalc.Height);
+                }
                 var tempCalc = new MandelbrotCalculator(fullW, fullH)
                 {
                     CenterX = cx,
@@ -274,7 +356,7 @@ namespace FracturingFog
                 };
                 tempCalc.Calculate(token);
                 token.ThrowIfCancellationRequested();
-                return tempCalc;
+                return (tempCalc.ColorBuffer, tempCalc.Width, tempCalc.Height);
             }, token)
             .ContinueWith(t =>
             {
@@ -298,17 +380,17 @@ namespace FracturingFog
                     }
 
                     sw.Stop();
-                    MandelbrotCalculator result = t.Result;
+                    var result = t.Result;
                     try
                     {
                         // Rotate 90° clockwise when portrait or rotateImage is requested.
                         // The landscape render (width × height) becomes portrait (height × width).
                         if (isPortrait || rotateImage)
                         {
-                            var rotated = new uint[result.ColorBuffer.Length];
+                            var rotated = new uint[result.Buffer.Length];
                             for (int y = 0; y < result.Height; y++)
                                 for (int x = 0; x < result.Width; x++)
-                                    rotated[x * result.Height + (result.Height - 1 - y)] = result.ColorBuffer[y * result.Width + x];
+                                    rotated[x * result.Height + (result.Height - 1 - y)] = result.Buffer[y * result.Width + x];
                             // After 90° CW rotation the saved dimensions are result.Height × result.Width.
                             var fontColor = ComputeContrastColor(GetSwatchColor(),
                                 watermark: true, pixels: rotated, imgW: result.Height, imgH: result.Width);
@@ -327,10 +409,10 @@ namespace FracturingFog
                         else
                         {
                             var fontColor = ComputeContrastColor(GetSwatchColor(),
-                                watermark: true, pixels: result.ColorBuffer,
+                                watermark: true, pixels: result.Buffer,
                                 imgW: result.Width, imgH: result.Height);
                             SavePixelsToFile(
-                                result.ColorBuffer,
+                                result.Buffer,
                                 result.Width,
                                 result.Height,
                                 path,
@@ -342,12 +424,12 @@ namespace FracturingFog
                             SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
                         }
                     }
-                    catch (Exception ex) 
-                    { 
+                    catch (Exception ex)
+                    {
                         System.Windows.Forms.MessageBox.Show(
                             $"Failed to save poster:\n\n{ex.Message}",
-                            "Screenshot Error", 
-                            System.Windows.Forms.MessageBoxButtons.OK, 
+                            "Screenshot Error",
+                            System.Windows.Forms.MessageBoxButtons.OK,
                             System.Windows.Forms.MessageBoxIcon.Error); }
                 });
             }, TaskScheduler.Default);

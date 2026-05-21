@@ -102,6 +102,25 @@ namespace FracturingFog.Models
         public static readonly bool AVX = System.Runtime.Intrinsics.X86.Avx.IsSupported;
 
         public static readonly bool SSE2 = System.Runtime.Intrinsics.X86.Sse2.IsSupported;
+
+        public static Dictionary<FractalType, string> FractalNameByNameType => new()
+        {
+            {FractalType.BuddhaBrot, "BuddhaBrot" },
+            {FractalType.BurningShip, "BurningShip" },
+            {FractalType.IFS, "IFS" },
+            {FractalType.Julia, "Julia" },
+            {FractalType.LSystem, "LSystem" },
+            {FractalType.Mandelbrot, "Mandelbrot" },
+            {FractalType.Mandelbulb, "Mandelbulb" },
+            {FractalType.Multibrot, "Multibrot" },
+            {FractalType.Newton, "Newton" },
+            {FractalType.Nova, "Nova" },
+            {FractalType.Phoenix, "Phoenix" },
+            {FractalType.Sandbox, "Sandbox" },
+            {FractalType.StrangeAttractor, "StrangeAttractor" },
+            {FractalType.Tricorn, "Tricorn" },
+            {FractalType.UserEquation, "UserEquation" }
+        };
     }
 
     public record FractalView(string Name, float CenterX, float CenterY, float Scale);
