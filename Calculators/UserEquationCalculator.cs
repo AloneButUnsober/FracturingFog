@@ -148,14 +148,22 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
         int height = Height;
         const double bailout2 = 1024.0; // generous bailout for arbitrary maps
 
+        double rot = FractalParameters.UserEquationRotationDegrees * Math.PI / 180.0;
+        double cosA = Math.Cos(rot);
+        double sinA = Math.Sin(rot);
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
-            double cy = centerY + (y - height * 0.5) * scale;
+            double dy = (y - height * 0.5) * scale;
+            double dyCos = dy * cosA;
+            double dySin = dy * sinA;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
-                double cx = centerX + (x - width * 0.5) * scale;
+                double dx = (x - width * 0.5) * scale;
+                double cx = centerX + dx * cosA - dySin;
+                double cy = centerY + dx * sinA + dyCos;
                 var c = new Complex(cx, cy);
                 var z = Complex.Zero;
                 int iter;

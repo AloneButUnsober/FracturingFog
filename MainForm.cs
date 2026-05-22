@@ -68,6 +68,7 @@ public sealed partial class MainForm : Form
     private readonly Button _resetButton;
     private readonly Button _spanButton;
     private readonly Button _posterButton;
+    private readonly Button _helpButton;
     private readonly Button _screenshotButton;
     private readonly Button _slideshowButton;
     private readonly Button _videoButton;
@@ -343,6 +344,29 @@ public sealed partial class MainForm : Form
         int buttonTop = 6;
         //int labelTop = 9;
         //int txTop = 7;
+
+        _helpButton = new Button
+        {
+            Text = "?",
+            Width = 26,
+            Height = 24,
+            Top = buttonTop,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(40, 60, 100),
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+        };
+        _helpButton.Left = Width - 46;
+        _helpButton.FlatAppearance.BorderColor = Color.FromArgb(80, 120, 180);
+        _helpButton.Click += (s, e) =>
+        {
+            OnShowHelpClick();
+            _floatingHelp?.ShowEditorTab();
+            _floatingHelp?.BringToFront();
+        };
+        _toolbar.Controls.Add(_helpButton);
+
 
         _resetButton = MakeBtn("", 30, buttonLeft, buttonTop, "Reset view to default center and zoom");
         _resetButton.Padding = new Padding(0, 0, 1, 1);
@@ -946,13 +970,24 @@ public sealed partial class MainForm : Form
         _histogramEq = ((TrackBar)s).Value;
         if (l != null) ((Label)l).Text = $"Adaptive: {_histogramEq}";
         if (_calculator == null || _renderer == null || _disposed) return;
-        // Re-color from cached aux buffers using the new strength, then re-apply
-        // brightness/contrast/grid post-processing.
-        if (_histogramEq > 0)
-            _calculator.ApplyHistogramEqualization(_histogramEq / 100.0);
+        // Adaptive (histogram equalization) is only implemented for the
+        // Mandelbrot engine — other calculators have no equivalent aux buffers
+        // to redistribute. The slider is disabled outside Mandelbrot, but if
+        // we still receive an event (programmatic theme snap, etc.) just
+        // re-upload the active buffer so brightness/contrast/grid remain in sync.
+        IFractalCalculator? alt = SelectAltCalculator(_currentFractalType);
+        if (alt == null)
+        {
+            if (_histogramEq > 0)
+                _calculator.ApplyHistogramEqualization(_histogramEq / 100.0);
+            else
+                _calculator.ApplyHistogramEqualization(0.0); // restores identity coloring
+            UploadProcessedBuffer(_calculator, _renderer);
+        }
         else
-            _calculator.ApplyHistogramEqualization(0.0); // restores identity coloring
-        UploadProcessedBuffer(_calculator, _renderer);
+        {
+            UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height, _renderer);
+        }
     }
 
     private void OnCheckBoxShowGridClick(object? s, EventArgs e)
@@ -1019,13 +1054,31 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnTaaFadeStartSlide += (s, e, l) => SetVideoTaaFadeStartLog10(_floatingMenu.TaaFadeStartLog10);
         _floatingMenu.OnTaaFadeEndSlide   += (s, e, l) => SetVideoTaaFadeEndLog10(_floatingMenu.TaaFadeEndLog10);
         _floatingMenu.OnChangeDimensions += (s,e) => OnChangeDimensions(s,e);
+        _floatingMenu.OnHelpClick += (s, e) =>
+            {
+                OnShowHelpClick();
+                _floatingHelp?.ShowEditorTab();
+                _floatingHelp?.BringToFront();
+            };
 
 
         UpdateCoordBoxes();
         if (!_regionCombo.IsDisposed) _floatingMenu.RegionName = _currentRegionName;
         if (!_colorThemeCombo.IsDisposed) _floatingMenu.ColorTheme = _currentColorThemeName;
         if (!_qualityCombo.IsDisposed) _floatingMenu.Quality = _currentQualityName;
+        UpdateAdaptiveAvailability();
         _floatingMenu.Show();
+    }
+
+    /// <summary>
+    /// Enables the Adaptive (histogram-eq) slider only for Mandelbrot — other
+    /// engines do not implement histogram equalization, so the control is
+    /// disabled to make its inapplicability obvious.
+    /// </summary>
+    private void UpdateAdaptiveAvailability()
+    {
+        if (_floatingMenu == null || _floatingMenu.IsDisposed) return;
+        _floatingMenu.SetAdaptiveEnabled(_currentFractalType == FractalType.Mandelbrot);
     }
 
     public void OnCloseCoordPanelClick(object? s, EventArgs e)
@@ -1064,7 +1117,7 @@ public sealed partial class MainForm : Form
             _colorThemeEditor = new ColorThemeEditor(
                 this,
                 initialThemeName: _currentColorThemeName,
-                 initialRegionName: _currentRegionName);
+                initialRegionName: _currentRegionName);
 
             _colorThemeEditor.OnPreviewThemeChanged += data => ApplyPreviewTheme(data);
             _colorThemeEditor.OnRegionSelected += name =>
@@ -1495,6 +1548,7 @@ public sealed partial class MainForm : Form
 
         if (sel == _currentFractalType && promoted == null) return;
         _currentFractalType = sel;
+        UpdateAdaptiveAvailability();
 
         // Reset view to a fractal-appropriate default so the new render
         // shows something meaningful rather than the inherited Mandelbrot view.
@@ -1561,6 +1615,7 @@ public sealed partial class MainForm : Form
     private void SwitchFractalTypeForRegion(FractalType t)
     {
         _currentFractalType = t;
+        UpdateAdaptiveAvailability();
         if (_fractalTypeCombo != null && !_fractalTypeCombo.IsDisposed)
         {
             int idx = ComboIndexForFractalType(t);
@@ -1645,6 +1700,12 @@ public sealed partial class MainForm : Form
             }
         };
         dlg.PromotionChanged += () => PopulateFractalTypeCombo();
+        dlg.RenderRequested += () =>
+        {
+            if (_userEquationCalculator == null) return;
+            _lastUploadedBuffer = null;
+            TriggerCalculation();
+        };
         dlg.FormClosed += (_, _) => { _userEqDialog = null; };
         _userEqDialog = dlg;
         dlg.Show(this);
@@ -3264,7 +3325,14 @@ public sealed partial class MainForm : Form
     private void RepaintWithBrightnessContrast()
     {
         if (_calculator == null || _renderer == null || _disposed) return;
-        UploadProcessedBuffer(_calculator, _renderer);
+        // Route to the currently active calculator's buffer so brightness /
+        // contrast / grid post-processing affects whatever fractal is on
+        // screen, not just the (possibly stale) Mandelbrot buffer.
+        IFractalCalculator? alt = SelectAltCalculator(_currentFractalType);
+        if (alt != null)
+            UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height, _renderer);
+        else
+            UploadProcessedBuffer(_calculator, _renderer);
     }
 
     /// <summary>
