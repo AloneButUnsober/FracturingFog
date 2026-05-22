@@ -28,8 +28,10 @@ namespace FracturingFog.Views
         private readonly Button _saveBtn;
         private readonly Button _deleteBtn;
         private readonly CheckBox _promoteCheck;
+        private readonly NumericUpDown _rotationBox;
         private bool _suppressComboEvent;
         private bool _suppressPromoteEvent;
+        private bool _suppressRotationEvent;
         private bool _loadingNamedEquation;
 
         public event Action? CompileRequested;
@@ -40,6 +42,12 @@ namespace FracturingFog.Views
         /// </summary>
         public event Action? PromotionChanged;
 
+        /// <summary>
+        /// Raised when a render-only parameter (rotation) changes — caller
+        /// should re-render without recompiling the user source.
+        /// </summary>
+        public event Action? RenderRequested;
+
         public UserEquationDialog(FractalParameters parameters)
         {
             _params = parameters;
@@ -49,7 +57,7 @@ namespace FracturingFog.Views
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             TopMost = true;
-            ClientSize = new Size(520, 440);
+            ClientSize = new Size(520, 475);
             BackColor = Color.FromArgb(40, 40, 40);
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 9f);
@@ -110,12 +118,58 @@ namespace FracturingFog.Views
             _promoteCheck.CheckedChanged += OnPromoteChanged;
             Controls.Add(_promoteCheck);
 
+            // ── Rotation row ──────────────────────────────────────────────────
+            var rotLabel = new Label
+            {
+                Text = "Rotation°:",
+                Left = 10, Top = 88, AutoSize = true,
+                ForeColor = Color.White
+            };
+            Controls.Add(rotLabel);
+
+            _rotationBox = new NumericUpDown
+            {
+                Left = 75, Top = 85, Width = 70,
+                Minimum = -360m, Maximum = 360m, DecimalPlaces = 1, Increment = 1m,
+                Value = (decimal)Math.Clamp(parameters.UserEquationRotationDegrees, -360.0, 360.0),
+                BackColor = Color.FromArgb(60, 60, 60), ForeColor = Color.White
+            };
+            _rotationBox.ValueChanged += OnRotationChanged;
+            Controls.Add(_rotationBox);
+
+            var rotPlus90 = new Button
+            {
+                Text = "+90°", Left = 152, Top = 84, Width = 50, Height = 24,
+                BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            rotPlus90.Click += (_, _) => BumpRotation(90.0);
+            Controls.Add(rotPlus90);
+
+            var rotMinus90 = new Button
+            {
+                Text = "-90°", Left = 206, Top = 84, Width = 50, Height = 24,
+                BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            rotMinus90.Click += (_, _) => BumpRotation(-90.0);
+            Controls.Add(rotMinus90);
+
+            var rotReset = new Button
+            {
+                Text = "Reset", Left = 260, Top = 84, Width = 60, Height = 24,
+                BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            rotReset.Click += (_, _) => SetRotation(0.0);
+            Controls.Add(rotReset);
+
             // ── Editor ────────────────────────────────────────────────────────
             _editor = new TextBox
             {
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
-                Left = 10, Top = 90, Width = 500, Height = 240,
+                Left = 10, Top = 115, Width = 500, Height = 240,
                 BackColor = Color.FromArgb(28, 28, 28),
                 ForeColor = Color.White,
                 Font = new Font("Consolas", 10f),
@@ -129,7 +183,7 @@ namespace FracturingFog.Views
 
             _errorLabel = new Label
             {
-                Left = 10, Top = 340, Width = 500, Height = 80,
+                Left = 10, Top = 365, Width = 500, Height = 80,
                 ForeColor = Color.FromArgb(255, 100, 100),
                 BackColor = Color.Transparent,
                 Font = new Font("Consolas", 8f),
@@ -217,6 +271,32 @@ namespace FracturingFog.Views
             if (_savedCombo.SelectedItem is not string name) return;
             if (UserEquationStore.Instance.SetPromoted(name, _promoteCheck.Checked))
                 PromotionChanged?.Invoke();
+        }
+
+        private void OnRotationChanged(object? sender, EventArgs e)
+        {
+            if (_suppressRotationEvent) return;
+            _params.UserEquationRotationDegrees = (double)_rotationBox.Value;
+            RenderRequested?.Invoke();
+        }
+
+        private void SetRotation(double degrees)
+        {
+            decimal clamped = (decimal)Math.Clamp(degrees, -360.0, 360.0);
+            _suppressRotationEvent = true;
+            try { _rotationBox.Value = clamped; }
+            finally { _suppressRotationEvent = false; }
+            _params.UserEquationRotationDegrees = (double)clamped;
+            RenderRequested?.Invoke();
+        }
+
+        private void BumpRotation(double delta)
+        {
+            double next = _params.UserEquationRotationDegrees + delta;
+            // Wrap into [-360, 360]; preserve sign so the spinner doesn't snap.
+            while (next > 360.0) next -= 360.0;
+            while (next < -360.0) next += 360.0;
+            SetRotation(next);
         }
 
         private void OnSavedSelectionChanged(object? sender, EventArgs e)

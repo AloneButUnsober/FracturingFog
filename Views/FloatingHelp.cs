@@ -104,11 +104,11 @@ namespace FracturingFog.Views
 
             _titleLabel = new Label
             {
-                Text = $"  {_programName} v{_programVersion}  —  Help",
+                Text = $"{_programName} v{_programVersion}  —  Help",
                 Left = 6,
-                Top = 10,
+                Top = 6,
                 AutoSize = true,
-                ForeColor = Color.FromArgb(200, 200, 200),
+                ForeColor = Color.FromArgb(200, 200, 100),
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 BackColor = Color.Transparent,
             };

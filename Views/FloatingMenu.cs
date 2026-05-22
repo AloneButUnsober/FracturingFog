@@ -19,8 +19,9 @@ namespace FracturingFog.Views
         #region UI Components
 
         // UI: coordinate / region bar
+        private readonly Label _titleLabel;
         private readonly Form _parentForm;
-        private readonly Panel _coordPanel;
+        private readonly Panel _menuPanel;
         private readonly Button _resetButton;
         private readonly Button _spanButton;
         private readonly Button _posterButton;
@@ -56,7 +57,8 @@ namespace FracturingFog.Views
         private readonly CheckBox _chkSlideshowUseExtremeRegions;
         private readonly Button _saveViewButton;
         private readonly Button _delRegionButton;
-        private readonly Button _menuButton;
+        private readonly Button _closeButton;
+        private readonly Button _helpButton;
         private readonly Button _closeProgramButton;
         private readonly CheckBox _checkBoxShowCoordPanel;
         private readonly CheckBox _checkBoxShowFooterPanel;
@@ -132,6 +134,7 @@ namespace FracturingFog.Views
         public event EventHandler OnGridClick;
         public event EventHandler OnStatusClick;
         public event EventHandler OnChangeDimensions;
+        public event EventHandler? OnHelpClick;
         public event Action<object?, EventArgs, object?> OnBrightnessSlide;
         public event Action<object?, EventArgs, object?> OnContrastSlide;
         public event Action<object?, EventArgs, object?> OnHistogramEqSlide;
@@ -233,21 +236,26 @@ namespace FracturingFog.Views
 
             #region Coordinate / Navigate panel
 
-            int buttonLeft = 6;
+            int buttonLeft = 8;
             int buttonTop = 14;
             int buttonWidth = 0;
             int labelTop = 17;
             int txTop = 15;
 
-            _coordPanel = new Panel
+            // Tooltip settings
+            _toolTip.AutoPopDelay = 5000;
+            _toolTip.InitialDelay = 1000;
+            _toolTip.ReshowDelay = 500;
+            _toolTip.ShowAlways = true;
+
+            _menuPanel = new Panel
             {
-                AutoSize = true,
+                //AutoSize = true,
                 AutoScroll = false,
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(22, 22, 22)
             };
-
-            _coordPanel.MouseMove += (s, e) =>
+            _menuPanel.MouseMove += (s, e) =>
             {
                 if (e.Button == MouseButtons.Left)
                 {
@@ -257,8 +265,62 @@ namespace FracturingFog.Views
                 }
             };
 
+            // ── Title bar ───────────────────────────────────────────────────
+            _titleLabel = new Label
+            {
+                Text = "Main Menu",
+                Left = buttonLeft,
+                Top = 4,
+                AutoSize = true,
+                ForeColor = Color.FromArgb(200, 200, 100),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                BackColor = Color.Transparent,
+            };
+            _titleLabel.MouseDown += DragWindow;
+            _menuPanel.Controls.Add(_titleLabel);
+
+            _closeButton = new Button
+            {
+                Text = "X",
+                Width = 24,
+                Height = 24,
+                Top = 2,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.Transparent,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            };
+            _closeButton.Left = Width - 27;
+            _closeButton.FlatAppearance.BorderSize = 0;
+            _closeButton.MouseHover += (s, e) => { _closeButton.ForeColor = Color.YellowGreen; _closeButton.BackColor = Color.Black; };
+            _closeButton.MouseLeave += (s, e) => { _closeButton.ForeColor = Color.White; _closeButton.BackColor = Color.Transparent; };
+            _closeButton.Padding = new Padding(0, 0, 1, 1);
+            _closeButton.Margin = new Padding(0);
+            _closeButton.Click += (s, e) => OnCoordPanelCBClick(s, e);
+            _toolTip.SetToolTip(_closeButton, "Close Main Menu...");
+
+            _helpButton = new Button
+            {
+                Text = "?",
+                Width = 26,
+                Height = 24,
+                Top = 2,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 60, 100),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+            };
+            _helpButton.Left = Width - 56;
+            _helpButton.FlatAppearance.BorderColor = Color.FromArgb(80, 120, 180);
+            _helpButton.Click += (s, e) => OnHelpClick?.Invoke(this, EventArgs.Empty);
+            _menuPanel.Controls.Add(_helpButton);
+            _toolTip.SetToolTip(_helpButton, "Open the help menu...");
+
             buttonLeft = Left + 5; // Width / 4 - 8 + 2;
-            txTop = 35;
+            buttonTop = _titleLabel.Top + _titleLabel.Height + 6;
+            txTop = buttonTop;
+
             #region Buttons
 
             _resetButton = MakeBtn("", 30, buttonLeft, buttonTop, "Reset view to default center and zoom");
@@ -272,50 +334,64 @@ namespace FracturingFog.Views
                 _resetButton.Image = resetImg;
             }
             catch { _resetButton.Text = "R"; }
-            _coordPanel.Controls.Add(_resetButton);
-
-            _menuButton = MakeBtn("X", 20, Width - 25, buttonTop, "Close floating menu");
-            _menuButton.FlatStyle = FlatStyle.Flat;
-            _menuButton.BackColor = Color.Transparent;
-            _menuButton.MouseHover += (s, e) => { _menuButton.ForeColor = Color.YellowGreen; _menuButton.BackColor = Color.Black; };
-            _menuButton.MouseLeave += (s, e) => { _menuButton.ForeColor = Color.White; _menuButton.BackColor = Color.Transparent; };
-            _menuButton.Padding = new Padding(0, 0, 1, 1);
-            _menuButton.Margin = new Padding(0);
-            _menuButton.Click += (s, e) => OnCoordPanelCBClick(s, e);
+            _toolTip.SetToolTip(_resetButton, "Reset view to the default for selected fractal type.");
+            _menuPanel.Controls.Add(_resetButton);
 
             buttonLeft = _resetButton.Left + _resetButton.Width + 2;
 
-            buttonWidth = (Width - (_resetButton.Width + _menuButton.Width + 10)) / 3 - 5;
+            buttonWidth = ((Width - (buttonLeft + _resetButton.Width)) / 3 + _resetButton.Width / 3) - 2;
             _spanButton = MakeBtn("Span", buttonWidth, buttonLeft, buttonTop, "Span across all monitors");
             _spanButton.Click += (s, e) => OnSpanButtonClick(s, e);
-            _coordPanel.Controls.Add(_spanButton);
+            _menuPanel.Controls.Add(_spanButton);
+            _toolTip.SetToolTip(_spanButton, "Span the view across all monitors.");
             buttonLeft = _spanButton.Left + _spanButton.Width + 2;
 
             _screenshotButton = MakeBtn("Image", buttonWidth, buttonLeft, buttonTop);
             _screenshotButton.Click += (s, e) => OnScreenshotButtonClick(s, e);
-            _coordPanel.Controls.Add(_screenshotButton);
+            _menuPanel.Controls.Add(_screenshotButton);
+            _toolTip.SetToolTip(_screenshotButton, "Take a high-resolution screenshot of the current view...");
             buttonLeft = _screenshotButton.Left + _screenshotButton.Width + 2;
 
             _posterButton = MakeBtn("Poster", buttonWidth, buttonLeft, buttonTop);
             _posterButton.Click += (s, e) => OnPosterButtonClick(s, e);
-            _coordPanel.Controls.Add(_posterButton);
+            _menuPanel.Controls.Add(_posterButton);
+            _toolTip.SetToolTip(_posterButton, "Save the current view as a print-ready image...");
             buttonLeft = _posterButton.Left + _posterButton.Width + 2;
 
             buttonLeft = Left + 5;
             buttonTop += _posterButton.Height + 2;
-            buttonWidth = (_resetButton.Width + _spanButton.Width + _screenshotButton.Width + _posterButton.Width) / 2 + 2;
+            buttonWidth = (_resetButton.Width + _spanButton.Width + _screenshotButton.Width + _posterButton.Width) / 3;
             _slideshowButton = MakeBtn("Slideshow", buttonWidth, buttonLeft, buttonTop, "Start/stop slideshow");
             _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
             _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
             _slideshowButton.Click += (s, e) => OnSlideshowButtonClick(s, e);
-            _coordPanel.Controls.Add(_slideshowButton);
+            _menuPanel.Controls.Add(_slideshowButton);
+            _toolTip.SetToolTip(_slideshowButton, "Start a slideshow...");
 
             buttonLeft = _slideshowButton.Left + _slideshowButton.Width + 3;
             _videoButton = MakeBtn("Video", buttonWidth, buttonLeft, buttonTop, "Smooth animated zoom from current view to a target region/coordinate");
             _videoButton.BackColor = Color.FromArgb(55, 40, 70);
             _videoButton.FlatAppearance.BorderColor = Color.FromArgb(100, 70, 130);
             _videoButton.Click += (s, e) => OnVideoButtonClick(s, e);
-            _coordPanel.Controls.Add(_videoButton);
+            _menuPanel.Controls.Add(_videoButton);
+            _toolTip.SetToolTip(_videoButton, "Video menu...");
+
+            #region Close Program button
+            buttonLeft = _videoButton.Left + _videoButton.Width + 3;
+            _closeProgramButton = MakeBtn(
+                "Close Program",
+                buttonWidth,
+                buttonLeft,
+                buttonTop,
+                "Exit the program");
+            _closeProgramButton.BackColor = Color.FromArgb(80, 35, 35);
+            _closeProgramButton.FlatAppearance.BorderColor = Color.FromArgb(140, 60, 60);
+            _closeProgramButton.ForeColor = Color.FromArgb(240, 220, 220);
+            _closeProgramButton.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            _closeProgramButton.Click += (s, e) => OnCloseProgramButtonClick(s, e);
+            _menuPanel.Controls.Add(_closeProgramButton);
+            _toolTip.SetToolTip(_closeProgramButton, "Close Fracturing Fog");
+            #endregion Close Program button
 
             #endregion Buttons
 
@@ -339,8 +415,8 @@ namespace FracturingFog.Views
                 Checked = true,
             };
             _checkBoxShowFooterPanel.CheckedChanged += (s, e) => OnStatusCBClick(s, e);
-            _coordPanel.Controls.Add(_menuButton);
-            _coordPanel.Controls.Add(_checkBoxShowFooterPanel);
+            _menuPanel.Controls.Add(_closeButton);
+            _menuPanel.Controls.Add(_checkBoxShowFooterPanel);
             buttonLeft += _checkBoxShowFooterPanel.PreferredSize.Width + 12;
 
             // Grid overlay toggle.
@@ -356,11 +432,11 @@ namespace FracturingFog.Views
                 BackColor = Color.Transparent,
                 Checked = false,
             };
-            _coordPanel.Controls.Add(_checkBoxShowGrid);
+            _menuPanel.Controls.Add(_checkBoxShowGrid);
             _checkBoxShowGrid.CheckedChanged += (s, e) => OnCheckBoxShowGridCBClick(s, e);
             _toolTip.SetToolTip(_checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
 
-            buttonLeft = _checkBoxShowGrid.Left + _checkBoxShowGrid.Width + 38;
+            buttonLeft = _checkBoxShowGrid.Left + _checkBoxShowGrid.Width + 42;
             labelTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
             //buttonTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 5;
             txTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
@@ -380,7 +456,7 @@ namespace FracturingFog.Views
             BuildResolutionSelection();
             _formResolutionCombo.SelectedIndex = 0;
             _formResolutionCombo.SelectedIndexChanged += (s, e) => OnChangeDimensionsSelection(s,e);
-            _coordPanel.Controls.Add(_formResolutionCombo);
+            _menuPanel.Controls.Add(_formResolutionCombo);
 
             buttonLeft = 8;
             buttonTop = _formResolutionCombo.Top + _formResolutionCombo.Height + 2;
@@ -395,14 +471,67 @@ namespace FracturingFog.Views
                 Top = buttonTop,
                 Width = 300,
                 Height = 220,
-                Text = "Navigation",
+                Text = "Region Navigation",
                 ForeColor = Color.FromArgb(155, 155, 155),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 BackColor = Color.FromArgb(22, 22, 22),
             };
 
-            _coordPanel.Controls.Add(navigationGrpBox);
+            _menuPanel.Controls.Add(navigationGrpBox);
 
+            #region Region Import/Export buttons
+            //GroupBox regionBox = new GroupBox
+            //{
+            //    Text = "Regions",
+            //    Left = 13,
+            //    Top = sliderTop + 68,
+            //    Width = 300,
+            //    Height = 78,
+            //    ForeColor = Color.FromArgb(155, 155, 155),
+            //    Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            //    BackColor = Color.FromArgb(22, 22, 22),
+            //};
+            //_menuPanel.Controls.Add(regionBox);
+
+            _regionCombo = new ComboBox
+            {
+                Left = 51,
+                Top = 20,
+                Width = 230,
+                Height = 26,
+                BackColor = Color.FromArgb(55, 55, 55),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                DropDownWidth = Math.Max(180, Models.FractalRegionLibrary.Instance.MaxRegionNameLength + 40)   // ensure descriptions fit in the dropdown
+            };
+            RebuildRegionCombo(_regionCombo, OnRegionComboSelectionChanged);
+            AttachRegionComboSortMenu(_regionCombo, OnRegionComboSelectionChanged,
+                onAfterRebuild: () => UpdateDelRegionButton(_regionCombo, _delRegionButton));
+            navigationGrpBox.Controls.Add(_regionCombo);
+
+            _saveViewButton = MakeBtn("Save", 55, buttonLeft, buttonTop, "Save the current view as a region");
+            _saveViewButton.Click += (s, e) => OnSaveViewButtonClick(s, e);
+            navigationGrpBox.Controls.Add(_saveViewButton);
+            buttonLeft = _saveViewButton.Left + _saveViewButton.Width + 2;
+
+            _delRegionButton = MakeBtn("Delete", 55, buttonLeft, 45, "Delete the selected region");
+            _delRegionButton.Click += OnDelRegionButtonClick;
+            navigationGrpBox.Controls.Add(_delRegionButton);
+            buttonLeft = _delRegionButton.Left +_delRegionButton.Width + 2;
+
+            _exportRegionsButton = MakeBtn("Exp...", 55, buttonLeft, 45, "Export all custom regions to a JSON file");
+            _exportRegionsButton.Click += OnExportRegionsButtonClick;
+            navigationGrpBox.Controls.Add(_exportRegionsButton);
+            buttonLeft = _exportRegionsButton.Left + _exportRegionsButton.Width + 2;
+
+            _importRegionsButton = MakeBtn("Imp...", 55, buttonLeft, 45, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+            _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
+            _importRegionsButton.Click += OnImportRegionsButtonClick;
+            navigationGrpBox.Controls.Add(_importRegionsButton);
+            #endregion Region Import/Export buttons
+
+            buttonLeft = 8;
             labelTop = 18;
             _lblCX = new Label
             {
@@ -639,7 +768,7 @@ namespace FracturingFog.Views
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 BackColor = Color.Transparent
             };
-            _coordPanel.Controls.Add(_brightnessLabel);
+            _menuPanel.Controls.Add(_brightnessLabel);
             sliderLeft += 86;
 
             //sliderTop += 28;
@@ -661,11 +790,11 @@ namespace FracturingFog.Views
                 "Adjust brightness of the rendered fractal  (−100 to +100, default 0)");
             _brightnessSlider.ValueChanged += (s, e) => OnBrightnessSlider(s, e, _brightnessLabel);
 
-            _coordPanel.Controls.Add(_brightnessSlider);
+            _menuPanel.Controls.Add(_brightnessSlider);
 
             _chkLockBrightness = MakeLockBox(_brightnessSlider.Right + 4, sliderTop + 2,
                 "Lock brightness — ignore theme defaults on theme switch");
-            _coordPanel.Controls.Add(_chkLockBrightness);
+            _menuPanel.Controls.Add(_chkLockBrightness);
 
             sliderLeft = 8;
             sliderTop += 44;
@@ -682,7 +811,7 @@ namespace FracturingFog.Views
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 BackColor = Color.Transparent
             };
-            _coordPanel.Controls.Add(_contrastLabel);
+            _menuPanel.Controls.Add(_contrastLabel);
             sliderLeft += 86;
 
             _contrastSlider = new TrackBar
@@ -702,11 +831,11 @@ namespace FracturingFog.Views
             _toolTip.SetToolTip(_contrastSlider,
                 "Adjust contrast of the rendered fractal  (−100 to +100, default 0)");
             _contrastSlider.ValueChanged += (s, e) => OnContrastSlider(s, e, _contrastLabel);
-            _coordPanel.Controls.Add(_contrastSlider);
+            _menuPanel.Controls.Add(_contrastSlider);
 
             _chkLockContrast = MakeLockBox(_contrastSlider.Right + 4, sliderTop + 2,
                 "Lock contrast — ignore theme defaults on theme switch");
-            _coordPanel.Controls.Add(_chkLockContrast);
+            _menuPanel.Controls.Add(_chkLockContrast);
 
             sliderLeft = 8;
             sliderTop += 44;
@@ -723,7 +852,7 @@ namespace FracturingFog.Views
                 Font = new Font("Segoe UI", 8f, FontStyle.Bold),
                 BackColor = Color.Transparent
             };
-            _coordPanel.Controls.Add(_histogramEqLabel);
+            _menuPanel.Controls.Add(_histogramEqLabel);
             sliderLeft += 86;
 
             _histogramEqSlider = new TrackBar
@@ -744,11 +873,11 @@ namespace FracturingFog.Views
                 "Adaptive contrast (histogram equalization) — redistributes iteration density to "
                 + "reveal hidden detail in flat-looking regions  (0 = off, 100 = full)");
             _histogramEqSlider.ValueChanged += (s, e) => OnHistogramEqSlider(s, e, _histogramEqLabel);
-            _coordPanel.Controls.Add(_histogramEqSlider);
+            _menuPanel.Controls.Add(_histogramEqSlider);
 
             _chkLockAdaptive = MakeLockBox(_histogramEqSlider.Right + 4, sliderTop + 2,
                 "Lock adaptive contrast — ignore theme defaults on theme switch");
-            _coordPanel.Controls.Add(_chkLockAdaptive);
+            _menuPanel.Controls.Add(_chkLockAdaptive);
 
             //sliderLeft = 8;
             //sliderTop += _histogramEqSlider.Height + 2;
@@ -912,78 +1041,25 @@ namespace FracturingFog.Views
                 BackColor = Color.Transparent,
                 Checked = false,
             };
-            _coordPanel.Controls.Add(_chkSlideshowUseExtremeRegions);
+            _menuPanel.Controls.Add(_chkSlideshowUseExtremeRegions);
             _chkSlideshowUseExtremeRegions.CheckedChanged += (s, e) =>
             {
                 FractalRegionLibrary.Instance.IncludeExtremeInAll = _chkSlideshowUseExtremeRegions.Checked;
             };
-
-            #region Region Import/Export buttons
-            GroupBox regionBox = new GroupBox
-            {
-                Text = "Regions",
-                Left = 13,
-                Top = sliderTop + 68,
-                Width = 300,
-                Height = 78,
-                ForeColor = Color.FromArgb(155, 155, 155),
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                BackColor = Color.FromArgb(22, 22, 22),
-            };
-            _coordPanel.Controls.Add(regionBox);
-
-            _regionCombo = new ComboBox
-            {
-                Left = 51,
-                Top = 20,
-                Width = 230,
-                Height = 26,
-                BackColor = Color.FromArgb(55, 55, 55),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                DropDownWidth = Math.Max(180, Models.FractalRegionLibrary.Instance.MaxRegionNameLength + 40)   // ensure descriptions fit in the dropdown
-            };
-            RebuildRegionCombo(_regionCombo, OnRegionComboSelectionChanged);
-            AttachRegionComboSortMenu(_regionCombo, OnRegionComboSelectionChanged,
-                onAfterRebuild: () => UpdateDelRegionButton(_regionCombo, _delRegionButton));
-            regionBox.Controls.Add(_regionCombo);
-
-            _saveViewButton = MakeBtn("Save", 55, 51, 45, "Save the current view as a region");
-            _saveViewButton.Click += (s, e) => OnSaveViewButtonClick(s, e);
-            regionBox.Controls.Add(_saveViewButton);
-            buttonLeft += 58;
-
-            _delRegionButton = MakeBtn("Delete", 55, _saveViewButton.Left + _saveViewButton.Width + 3, 45, "Delete the selected region");
-            _delRegionButton.Click += OnDelRegionButtonClick;
-            regionBox.Controls.Add(_delRegionButton);
-            buttonLeft = 98;
-
-            _exportRegionsButton = MakeBtn("Exp...", 55, _delRegionButton.Left + _delRegionButton.Width + 3, 45, "Export all custom regions to a JSON file");
-            _exportRegionsButton.Click += OnExportRegionsButtonClick;
-            regionBox.Controls.Add(_exportRegionsButton);
-            buttonLeft += 58;
-
-            _importRegionsButton = MakeBtn("Imp...", 55, _exportRegionsButton.Left + _exportRegionsButton.Width + 3, 45, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
-            _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
-            _importRegionsButton.Click += OnImportRegionsButtonClick;
-            regionBox.Controls.Add(_importRegionsButton);
-            buttonLeft += 58;
-            #endregion Region Import/Export buttons
 
             #region Color Theme Import/Export buttons
             _themeBox = new GroupBox
             {
                 Text = "Color Themes",
                 Left = 13,
-                Top = regionBox.Top + regionBox.Height + 10,
+                Top = 20, //regionBox.Top + regionBox.Height + 10,
                 Width = 300,
                 Height = 108,
                 ForeColor = Color.FromArgb(155, 155, 155),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 BackColor = Color.FromArgb(22, 22, 22),
-            };
-            _coordPanel.Controls.Add(_themeBox);
+            }; 
+            _menuPanel.Controls.Add(_themeBox);
 
             _colorThemeCombo = new ColorComboBox
             {
@@ -1029,26 +1105,9 @@ namespace FracturingFog.Views
 
             #endregion Color Theme Import/Export buttons
 
-            #region Close Program button
-            int closeProgBtnWidth = 130;
-            int closeProgBtnTop = _themeBox.Top + _themeBox.Height + 5;
-            _closeProgramButton = MakeBtn(
-                "Close Program",
-                closeProgBtnWidth,
-                (ClientSize.Width - closeProgBtnWidth) / 2,
-                closeProgBtnTop,
-                "Exit the program");
-            _closeProgramButton.Height = 28;
-            _closeProgramButton.BackColor = Color.FromArgb(80, 35, 35);
-            _closeProgramButton.FlatAppearance.BorderColor = Color.FromArgb(140, 60, 60);
-            _closeProgramButton.ForeColor = Color.FromArgb(240, 220, 220);
-            _closeProgramButton.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            _closeProgramButton.Click += (s, e) => OnCloseProgramButtonClick(s, e);
-            _coordPanel.Controls.Add(_closeProgramButton);
-            #endregion Close Program button
             #endregion Coordinate / Navigate panel
 
-            Controls.Add(_coordPanel);
+            Controls.Add(_menuPanel);
 
             // ── Events ───────────────────────────────────────────────────────────
             //Load += OnLoad;
@@ -1258,6 +1317,18 @@ namespace FracturingFog.Views
             OnTaaFadeEndSlide?.DynamicInvoke(s, e, l);
         }
 
+        // ── Drag ────────────────────────────────────────────────────────────
+        private void DragWindow(object? sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        }
+
+        #endregion Private Methods
+
+        #region Public Methods
+
         /// <summary>
         /// Silently selects the named theme in the floating menu's combo
         /// without firing OnColorThemeChanged. Used by MainForm to mirror
@@ -1352,6 +1423,19 @@ namespace FracturingFog.Views
             if (_histogramEqSlider.Value != v) _histogramEqSlider.Value = v;
         }
 
+        /// <summary>
+        /// Enables or disables the Adaptive (histogram equalization) slider and
+        /// its lock checkbox. Adaptive is only meaningful for the Mandelbrot
+        /// engine; on other fractal types the control is greyed out so the UI
+        /// honestly reflects that it has no effect.
+        /// </summary>
+        public void SetAdaptiveEnabled(bool enabled)
+        {
+            if (_histogramEqSlider != null) _histogramEqSlider.Enabled = enabled;
+            if (_histogramEqLabel != null) _histogramEqLabel.Enabled = enabled;
+            if (_chkLockAdaptive != null) _chkLockAdaptive.Enabled = enabled;
+        }
+
         private CheckBox MakeLockBox(int left, int top, string tooltip)
         {
             var cb = new CheckBox
@@ -1370,10 +1454,6 @@ namespace FracturingFog.Views
             _toolTip.SetToolTip(cb, tooltip);
             return cb;
         }
-
-        #endregion Private Methods
-
-        #region Public Methods
 
         public void ResetView(double centerX, double centerY, double zoom)
         {

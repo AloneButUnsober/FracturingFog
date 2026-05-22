@@ -31,6 +31,13 @@ namespace FracturingFog.Models
         public string? UserEquationName { get; set; }
 
         /// <summary>
+        /// View rotation applied to the UserEquation parameter plane, in degrees
+        /// (CCW). Rotates the (dx, dy) pixel offset before adding to center so the
+        /// rendered fractal appears tilted. 0 = unrotated.
+        /// </summary>
+        public double UserEquationRotationDegrees { get; set; } = 0.0;
+
+        /// <summary>
         /// Source for the Sandbox fractal — a restricted expression DSL parsed by
         /// <see cref="SandboxExpression"/>. Safe to evaluate in untrusted contexts:
         /// no BCL access, no IO, no reflection.
@@ -87,6 +94,7 @@ namespace FracturingFog.Models
                 IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
                 UserEquationSource = UserEquationSource,
                 UserEquationName = UserEquationName,
+                UserEquationRotationDegrees = UserEquationRotationDegrees,
                 SandboxSource = SandboxSource,
                 SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,
