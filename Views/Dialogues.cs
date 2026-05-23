@@ -20,7 +20,7 @@ namespace FracturingFog.Views
         public string Input => _tx.Text;
         private readonly TextBox _tx;
 
-        public InputDialog(string title, string prompt)
+        public InputDialog(string title, string prompt, string? initialValue = null)
         {
             Text = title;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -51,6 +51,16 @@ namespace FracturingFog.Views
                 Font = new Font("Consolas", 10f),
                 BorderStyle = BorderStyle.FixedSingle
             };
+            if (!string.IsNullOrEmpty(initialValue))
+            {
+                _tx.Text = initialValue;
+                Shown += (_, _) =>
+                {
+                    _tx.Focus();
+                    _tx.SelectionStart = _tx.Text.Length;
+                    _tx.SelectionLength = 0;
+                };
+            }
             Controls.Add(_tx);
 
             var ok = new Button
