@@ -173,7 +173,7 @@ namespace FracturingFog.Views
 
             var resetCam = new Button
             {
-                Text = "Reset cam", Left = 360, Top = gy - 3, Width = 90, Height = 24,
+                Text = "Reset cam", Left = 430, Top = gy - 1, Width = 90, Height = 24,
                 BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat
             };
@@ -186,8 +186,8 @@ namespace FracturingFog.Views
             gy += 22;
 
             _iterBox  = AddLabeledNumeric("Iterations:", 10, gy, 2m, 64m, 1m, _params.UserBulbIterations, 0);
-            _stepsBox = AddLabeledNumeric("Max steps:",  180, gy, 16m, 512m, 8m, _params.UserBulbMaxSteps, 0);
-            _bailoutBox = AddLabeledNumeric("Bailout:",  360, gy, 1m, 100m, 0.5m, (decimal)_params.UserBulbBailout, 1);
+            _bailoutBox = AddLabeledNumeric("Bailout:",  180, gy, 1m, 100m, 0.5m, (decimal)_params.UserBulbBailout, 1);
+            _stepsBox = AddLabeledNumeric("Max steps:", 360, gy, 16m, 512m, 8m, _params.UserBulbMaxSteps, 0);
             gy += 30;
 
             _epsBox = AddLabeledNumeric("Epsilon:", 10, gy, 0.00001m, 0.1m, 0.0005m, (decimal)_params.UserBulbEpsilon, 5);
