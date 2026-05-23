@@ -1,0 +1,12 @@
+// Bug: Pan Zoom controls broken at deep zoom approx. +-5E+49
+
+// Replace "\" and "/" in filenames
+
+// Context menus for floating menu comboboxes
+
+// If a color theme cannot be edited, allow its parameters to be copied if user selects New->Copy
+
+// Bug: In Mandelbulb or Userbulb3D mode when mouse-right-click longer than 1 second do not pop context menu
+// Bug: Mouse Pan Double-click to point focus Wheel scroll zoom imprecise in non-Mandelbrot fractal types
+
+Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.
