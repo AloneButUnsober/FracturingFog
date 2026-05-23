@@ -83,6 +83,22 @@ namespace FracturingFog.Models
         public int BulbMaxSteps { get; set; } = 96;
         public double BulbEpsilon { get; set; } = 0.0015;
 
+        // ── UserBulb: user-supplied 3D iteration step rendered Mandelbulb-style.
+        // Source is C# expression body of: Vec3 Step(Vec3 z, Vec3 c, int n).
+        public string? UserBulbSource { get; set; }
+        public string? UserBulbName { get; set; }
+        public int UserBulbIterations { get; set; } = 8;
+        public double UserBulbBailout { get; set; } = 4.0;       // |z| escape threshold
+        public double UserBulbCameraDistance { get; set; } = 3.0;
+        public double UserBulbCameraTheta { get; set; } = Math.PI * 0.25;
+        public double UserBulbCameraPhi { get; set; } = Math.PI * 0.35;
+        public double UserBulbLightTheta { get; set; } = Math.PI * 0.25;
+        public double UserBulbLightPhi { get; set; } = Math.PI * 0.45;
+        public int UserBulbMaxSteps { get; set; } = 96;
+        public double UserBulbEpsilon { get; set; } = 0.0015;
+        /// <summary>Finite-diff perturbation magnitude for numerical Jacobian DE.</summary>
+        public double UserBulbJacobianH { get; set; } = 1e-4;
+
         public FractalParameters Clone()
         {
             return new FractalParameters
@@ -119,7 +135,19 @@ namespace FracturingFog.Models
                 BulbLightTheta = BulbLightTheta,
                 BulbLightPhi = BulbLightPhi,
                 BulbMaxSteps = BulbMaxSteps,
-                BulbEpsilon = BulbEpsilon
+                BulbEpsilon = BulbEpsilon,
+                UserBulbSource = UserBulbSource,
+                UserBulbName = UserBulbName,
+                UserBulbIterations = UserBulbIterations,
+                UserBulbBailout = UserBulbBailout,
+                UserBulbCameraDistance = UserBulbCameraDistance,
+                UserBulbCameraTheta = UserBulbCameraTheta,
+                UserBulbCameraPhi = UserBulbCameraPhi,
+                UserBulbLightTheta = UserBulbLightTheta,
+                UserBulbLightPhi = UserBulbLightPhi,
+                UserBulbMaxSteps = UserBulbMaxSteps,
+                UserBulbEpsilon = UserBulbEpsilon,
+                UserBulbJacobianH = UserBulbJacobianH
             };
         }
     }

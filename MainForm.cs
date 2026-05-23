@@ -224,8 +224,10 @@ public sealed partial class MainForm : Form
     private UserEquationCalculator? _userEquationCalculator;
     private MandelbulbCalculator? _mandelbulbCalculator;
     private SandboxCalculator? _sandboxCalculator;
+    private UserBulbCalculator? _userBulbCalculator;
     private Views.UserEquationDialog? _userEqDialog;
     private Views.SandboxDialog? _sandboxDialog;
+    private Views.UserBulbDialog? _userBulbDialog;
     private FractalType _currentFractalType = FractalType.Mandelbrot;
     private FractalParameters _fractalParams = new();
     private CancellationTokenSource? _calcCts;
@@ -856,6 +858,7 @@ public sealed partial class MainForm : Form
             _userEquationCalculator = new UserEquationCalculator(w, h);
             _mandelbulbCalculator = new MandelbulbCalculator(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
+            _userBulbCalculator = new UserBulbCalculator(w, h);
 
             if (_defaultColorMap != null)
             {
@@ -869,6 +872,7 @@ public sealed partial class MainForm : Form
                 _userEquationCalculator.ColorMap = _defaultColorMap;
                 _mandelbulbCalculator.ColorMap = _defaultColorMap;
                 _sandboxCalculator.ColorMap = _defaultColorMap;
+                _userBulbCalculator.ColorMap = _defaultColorMap;
             }
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
@@ -919,6 +923,7 @@ public sealed partial class MainForm : Form
         _userEquationCalculator?.Resize(w, h);
         _mandelbulbCalculator?.Resize(w, h);
         _sandboxCalculator?.Resize(w, h);
+        _userBulbCalculator?.Resize(w, h);
         ApplyViewState();
         TriggerCalculation();
         PositionGridPanel();
@@ -1426,7 +1431,7 @@ public sealed partial class MainForm : Form
     /// <see cref="RegisteredFractalCatalog"/>, separated by a non-selectable
     /// divider header.
     /// </summary>
-    private const int BuiltInFractalCount = 14;
+    private const int BuiltInFractalCount = 15;
 
     /// <summary>
     /// Repopulates the fractal-type combo with built-in entries followed by a
@@ -1459,6 +1464,7 @@ public sealed partial class MainForm : Form
                 "User Equation",
                 "Mandelbulb (3D)",
                 "Sandbox",
+                "User Bulb (3D)",
             });
 
             var registered = RegisteredFractalCatalog.Snapshot();
@@ -1524,6 +1530,7 @@ public sealed partial class MainForm : Form
                 11 => FractalType.UserEquation,
                 12 => FractalType.Mandelbulb,
                 13 => FractalType.Sandbox,
+                14 => FractalType.UserBulb,
                 _ => FractalType.Mandelbrot
             };
         }
@@ -1569,6 +1576,7 @@ public sealed partial class MainForm : Form
             FractalType.UserEquation     => (0.0, 0.0, 1.0),
             FractalType.Mandelbulb       => (0.0, 0.0, 1.0),
             FractalType.Sandbox          => (0.0, 0.0, 1.0),
+            FractalType.UserBulb         => (0.0, 0.0, 1.0),
             _                            => (-0.5, 0.0, 1.0)
         };
         _centerXLo = _centerX2 = _centerX3 = 0.0;
@@ -1605,6 +1613,7 @@ public sealed partial class MainForm : Form
         FractalType.UserEquation     => 11,
         FractalType.Mandelbulb       => 12,
         FractalType.Sandbox          => 13,
+        FractalType.UserBulb         => 14,
         _                            => 0
     };
 
@@ -1641,6 +1650,12 @@ public sealed partial class MainForm : Form
         if (_currentFractalType == FractalType.Sandbox)
         {
             ShowSandboxDialog();
+            return;
+        }
+
+        if (_currentFractalType == FractalType.UserBulb)
+        {
+            ShowUserBulbDialog();
             return;
         }
 
@@ -1711,6 +1726,41 @@ public sealed partial class MainForm : Form
         _userEqDialog = dlg;
         dlg.Show(this);
         // Trigger initial compile.
+        dlg.TriggerCompile();
+    }
+
+    private void ShowUserBulbDialog()
+    {
+        if (_userBulbDialog != null && !_userBulbDialog.IsDisposed)
+        {
+            _userBulbDialog.BringToFront();
+            _userBulbDialog.Activate();
+            return;
+        }
+
+        var dlg = new Views.UserBulbDialog(_fractalParams);
+        var loc = PointToScreen(new Point(_toolbar.Right - dlg.Width - 10, _toolbar.Bottom + 10));
+        dlg.Location = loc;
+        dlg.CompileRequested += () =>
+        {
+            if (_userBulbCalculator == null) return;
+            _userBulbCalculator.Compile(_fractalParams.UserBulbSource ?? string.Empty);
+            dlg.ShowError(_userBulbCalculator.LastError);
+            if (_userBulbCalculator.IsCompiled)
+            {
+                _lastUploadedBuffer = null;
+                TriggerCalculation();
+            }
+        };
+        dlg.RenderRequested += () =>
+        {
+            if (_userBulbCalculator == null) return;
+            _lastUploadedBuffer = null;
+            TriggerCalculation();
+        };
+        dlg.FormClosed += (_, _) => { _userBulbDialog = null; };
+        _userBulbDialog = dlg;
+        dlg.Show(this);
         dlg.TriggerCompile();
     }
 
@@ -3138,6 +3188,7 @@ public sealed partial class MainForm : Form
                 case UserEquationCalculator u:    u.FractalParameters = _fractalParams; break;
                 case MandelbulbCalculator m:      m.FractalParameters = _fractalParams; break;
                 case SandboxCalculator sb:        sb.FractalParameters = _fractalParams; break;
+                case UserBulbCalculator ub:       ub.FractalParameters = _fractalParams; break;
             }
         }
 
@@ -3213,6 +3264,7 @@ public sealed partial class MainForm : Form
         FractalType.UserEquation     => _userEquationCalculator,
         FractalType.Mandelbulb       => _mandelbulbCalculator,
         FractalType.Sandbox          => _sandboxCalculator,
+        FractalType.UserBulb         => _userBulbCalculator,
         _                            => null
     };
 

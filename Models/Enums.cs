@@ -20,7 +20,8 @@ namespace FracturingFog
         StrangeAttractor,
         UserEquation,
         Mandelbulb,
-        Sandbox
+        Sandbox,
+        UserBulb
     }
 
     public enum RenderProfile { Preview, Final }

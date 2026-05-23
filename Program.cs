@@ -15,6 +15,9 @@ static class Program
         if (args.Length > 0 && args[0] == "--bench")
             return BenchEntry.Run(args);
 
+        if (args.Length > 0 && args[0] == "--ubtest")
+            return UserBulbSelfTest.Run();
+
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
