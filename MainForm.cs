@@ -2167,7 +2167,8 @@ public sealed partial class MainForm : Form
         //    _calculator.MaxIterations = ti;
 
 
-        using var dlg = new InputDialog("Save Current View", "Region name:");
+        string suggestedName = BuildSuggestedRegionName();
+        using var dlg = new InputDialog("Save Current View", "Region name:", suggestedName);
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
         string name = dlg.Input.Trim();
@@ -2869,6 +2870,24 @@ public sealed partial class MainForm : Form
     {
 
         return Fractals.FractalNameByNameType[_currentFractalType];
+    }
+
+    private string BuildSuggestedRegionName()
+    {
+        if (_currentFractalType == FractalType.Mandelbrot) return "";
+
+        string typeName = _currentFractalType.ToString();
+        string? equationName = _currentFractalType switch
+        {
+            FractalType.UserEquation => _fractalParams.UserEquationName,
+            FractalType.Sandbox => _fractalParams.SandboxName,
+            FractalType.UserBulb => _fractalParams.UserBulbName,
+            _ => null
+        };
+
+        return string.IsNullOrEmpty(equationName)
+            ? $"{typeName} - "
+            : $"{typeName} - {equationName}";
     }
 
     private void CheckForNewColorThemes()
