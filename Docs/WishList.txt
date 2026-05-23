@@ -1,74 +1,66 @@
-// Missing — Alternate render modes
-- Anti-Buddhabrot / Nebulabrot**
+1. Missing — Alternate render modes
+	Anti-Buddhabrot / Nebulabrot**
 
-// Regions color theme capable-aware
+2. Regions color theme capable-aware
 
-// Color Themes fractal type aware
-Consider: Color Themes fractal type aware
-Consider: Slideshow, Video Slideshow
-Implement Color Themes aware fractals types they work best with
-FloatingMenu.cs add checkboxes restrict Slideshow Video Slideshow select color themes appropriate selected region Unchecked same as current operation Checked restrict
+3. Color Themes fractal type aware
+	Consider: Color Themes fractal type aware
+	Consider: Slideshow, Video Slideshow
+	Implement Color Themes aware fractals types they work best with
+	FloatingMenu.cs add checkboxes restrict Slideshow Video Slideshow select color themes appropriate selected region Unchecked same as current operation Checked restrict
 
-// Quality Lock
-FloatingMenu.cs implement checkbox Lock Quality Unchecked zoom auto promotion/demotion Checked lock Quality to user selection do not auto promote/demote
+4. Quality Lock
+	FloatingMenu.cs implement checkbox Lock Quality Unchecked zoom auto promotion/demotion Checked lock Quality to user selection do not auto promote/demote
 
-// Theme Editor fractal specific types
-Consider: Fractal-specific color themes
-Consider: Theme editor support fractal-specific
-If feasible/possible implement fractal-specific theme editing in Theme Editor
-Modify Theme Editor UI as needed to supply fields and parameters
+5. Theme Editor fractal specific types
+	Consider: Fractal-specific color themes
+	Consider: Theme editor support fractal-specific
+	If feasible/possible implement fractal-specific theme editing in Theme Editor
+	Modify Theme Editor UI as needed to supply fields and parameters
 
-// Grid only for Mandelbrot
-Implement Grid overlay for all fractal types where logical to do so
+6.	Grid overlay only for Mandelbrot
+	Implement Grid overlay for all fractal types where logical to do so
 
-// Slideshow user configurable:
-//	total display time per region
-//	time between color themes
-//	time between regions
-//	fade duration
-//	Move "use extreme in slideshow" checkbox to new dialogue
+7. Slideshow user configurable:
+	Total display time per region
+	Time between color themes
+	Time between regions
+	Fade duration
+	Move "use extreme in slideshow" checkbox to new dialogue
 
-// Adaptive sweep feature// Adaptive for all fractal types
+8.	Adaptive sweep feature// Adaptive for all fractal types
 
-When exporting regions omit User Equations Userbulb3D
-Implement Sandbox Equation import/export
-When export regions with Sandbox equations export Sandbox equation as well
+9.	Audio stream support
+	Generate fractal audio?
 
-// Audio stream support
-// Generate fractal audio?
+10. Linux version
 
-// Linux version
+11. sinh,cosh,tanh functions in sandbox
 
-// sinh,cosh,tanh functions in sandbox
+12. Implement Octo Double for deeper zoom
 
-// Implement Octo Double for deeper zoom
+13. Update UI option to display X/Y cords as single value rather than pipe-delimited
 
-// Update UI option to display X/Y cords as single value rather than pipe-delimited
+14. Slideshow/Video Slideshow Skip region quicker/immediate response Skip color theme option
+	Slideshow/Video Slideshow "vcr" controls floating UI - Play Pause Skip-Region Skip-ColorTheme 
+	Video Slideshow work with fractaltypes other than Mandelbrot
 
-// Slideshow/Video Slideshow -> Skip region (quicker response) Skip color theme
-// Slideshow "vcr" controls UI - floating
-// Video Slideshow work with fractaltypes other than Mandelbrot
+15.	Right-click drag to outline then zoom to region
 
-// Right-click drag to outline then zoom to region
+16.	Create a concrete calculator for the Tear Drop fractal type. Full implementation of the fractal type with full DD,QD precision
 
-// Create a concrete calculator for the Tear Drop fractal type. Full implementation of the fractal type with full DD,QD precision
+17.	Context menus for floating menu comboboxes
 
-// Context menus for floating menu comboboxes
+18.	If a color theme cannot be edited, allow its parameters to be copied if user selects New->Copy
+19.	Feaible/Possible: Userbulb3D Sandbox similar Sandbox
 
-// If a color theme cannot be edited, allow its parameters to be copied if user selects New->Copy
-// Feaible/Possible: Userbulb3D Sandbox similar Sandbox
+20.	Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.
 
-// Keyboard:
-Q: Pan up
-E: Pan down
+21.	Region save non-mandelbrot type: sugest save name as "FractalType Name - " 
+	Region save UserEuquations Sandbox Userbulb3D types: sugest save name as "FractalType Name - Equation Name"
 
-Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.
+22.	LSystem Parameters: Depth Sweep function
 
-// Region save non-mandelbrot type: sugest save name as "FractalType Name - " 
-// Region save UserEuquations Sandbox Userbulb3D types: sugest save name as "FractalType Name - Equation Name"
+23.	Color theme change during video slideshow fade one to the other
 
-// LSystem Parameters: Depth Sweep function
-
-// Color theme change during video slideshow fade one to the other
-
-// Simplify Video dialogue
+24.	Simplify Video dialogue

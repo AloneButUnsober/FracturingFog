@@ -10,12 +10,16 @@ W: Zoom In
 A: Pan Left
 S: Zoom Out
 D: Pan Right
+Q: Pan Up
+E: Pan Down
 
 3D Fractal Types (Userbulb 3D, Mandelbulb):
 W: Distance-
 A: Pan Left
 S: Distance+
 D: Pan Right
+Q: Pan Up
+E: Pan Down
 Arrow Up: Camera Phi+
 Arrow Down: Camera Phi-
 Arrow Left: Camera Theta-

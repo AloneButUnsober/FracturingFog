@@ -3130,6 +3130,8 @@ public sealed partial class MainForm : Form
                 case Keys.S: CenterZoomBy(1.0 / zoomFactor); e.Handled = true; return;
                 case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
                 case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
+                case Keys.Q: PanByPixels(0, (int)(_renderPanel.ClientSize.Height * panFrac)); e.Handled = true; return;
+                case Keys.E: PanByPixels(0, -(int)(_renderPanel.ClientSize.Height * panFrac)); e.Handled = true; return;
             }
             return;
         }
@@ -3144,6 +3146,8 @@ public sealed partial class MainForm : Form
             case Keys.S: Adjust3DDistance(distStep); e.Handled = true; return;
             case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
             case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
+            case Keys.Q: PanByPixels(0, (int)(_renderPanel.ClientSize.Height * pan3DFrac)); e.Handled = true; return;
+            case Keys.E: PanByPixels(0, -(int)(_renderPanel.ClientSize.Height * pan3DFrac)); e.Handled = true; return;
 
             case Keys.Up: Adjust3DCameraPhi(rotStep); e.Handled = true; return;
             case Keys.Down: Adjust3DCameraPhi(-rotStep); e.Handled = true; return;
