@@ -1,4 +1,5 @@
-﻿using FracturingFog.Models;
+﻿using FracturingFog.Interefaces;
+using FracturingFog.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -282,10 +283,7 @@ namespace FracturingFog
                         Debug.WriteLine($"SldShwLp: Starting calculation for new region/theme. " +
                             $"Calculator state: {_calculator.Width}×{_calculator.Height}, MaxIterations: {_calculator.MaxIterations}, " +
                             $"Precision: {(_calculator.IsHighPrecisionActive ? "DD" : "SP")}");
-                        _calculator.Calculate(ct);
-                        var copy = new uint[_calculator.ColorBuffer.Length];
-                        _calculator.ColorBuffer.CopyTo(copy, 0);
-                        return copy;
+                        return SlideshowCalcFrame(ct);
                     }, ct);
 
                     if (ct.IsCancellationRequested) return;
@@ -347,10 +345,7 @@ namespace FracturingFog
                     {
                         if (_calculator == null) return Array.Empty<uint>();
                         Debug.WriteLine($"SldShwLp: Calculating new theme \"{newThemeName}\" for region \"{region.Name}\"");
-                        _calculator.Calculate(ct);
-                        var copy = new uint[_calculator.ColorBuffer.Length];
-                        _calculator.ColorBuffer.CopyTo(copy, 0);
-                        return copy;
+                        return SlideshowCalcFrame(ct);
                     }, ct);
 
                     if (ct.IsCancellationRequested) return;
@@ -424,6 +419,52 @@ namespace FracturingFog
             }
             UpdateCoordBoxes();
             _qualityCombo.SelectedIndexChanged += OnQualityComboChanged;
+        }
+
+        /// <summary>
+        /// Runs the calculator(s) for the current fractal type and returns a fresh
+        /// copy of the resulting BGRA buffer. Mirrors the alt-calculator pattern in
+        /// TriggerCalculation so non-Mandelbrot fractals render their own pixels
+        /// during the slideshow (regions remain Mandelbrot-coordinate by design).
+        /// </summary>
+        private uint[] SlideshowCalcFrame(CancellationToken ct)
+        {
+            if (_calculator == null) return Array.Empty<uint>();
+            IFractalCalculator? alt = SelectAltCalculator(_currentFractalType);
+            if (alt == null)
+            {
+                _calculator.Calculate(ct);
+                var copy = new uint[_calculator.ColorBuffer.Length];
+                _calculator.ColorBuffer.CopyTo(copy, 0);
+                return copy;
+            }
+
+            alt.CenterX = _calculator.CenterX;
+            alt.CenterY = _calculator.CenterY;
+            alt.Zoom = _calculator.Zoom;
+            alt.MaxIterations = _calculator.MaxIterations;
+            alt.Quality = _calculator.Quality;
+            alt.ColorMap = _calculator.ColorMap;
+            switch (alt)
+            {
+                case EscapeTimeCalculator e:
+                    e.FractalType = _currentFractalType;
+                    e.FractalParameters = _fractalParams;
+                    break;
+                case IFSCalculator ifs:        ifs.FractalParameters = _fractalParams; break;
+                case LSystemCalculator ls:     ls.FractalParameters = _fractalParams; break;
+                case AttractorCalculator a:    a.FractalParameters = _fractalParams; break;
+                case BuddhabrotCalculator b:   b.FractalParameters = _fractalParams; break;
+                case NewtonCalculator n:       n.FractalParameters = _fractalParams; break;
+                case UserEquationCalculator u: u.FractalParameters = _fractalParams; break;
+                case MandelbulbCalculator m:   m.FractalParameters = _fractalParams; break;
+                case SandboxCalculator sb:     sb.FractalParameters = _fractalParams; break;
+                case UserBulbCalculator ub:    ub.FractalParameters = _fractalParams; break;
+            }
+            alt.Calculate(ct);
+            var altCopy = new uint[alt.ColorBuffer.Length];
+            alt.ColorBuffer.CopyTo(altCopy, 0);
+            return altCopy;
         }
 
         private void ApplyColorThemeSilent(string themeName)
