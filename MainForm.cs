@@ -270,8 +270,11 @@ public sealed partial class MainForm : Form
     private bool _showSlideshowWatermark;
     private string _slideshowRegionName = "";
     private bool _slideshowSkipRegion;   // set to true to skip the current region and move to the next one immediately
+    private bool _slideshowSkipTheme;    // set to true to skip the current color theme and move to the next one immediately
+    private bool _slideshowPaused;       // set to true to hold the slideshow at its current state (no theme/region advance)
     private bool _slideShowLockRegion;     // When true, the slideshow will not change regions; only themes.  Set by Shift+clicking the Slideshow button.
     private bool _slideshowFocusRegion = true;   // When true, the slideshow will focus on the current region.  Set by clicking the Slideshow Focus button.
+    private Views.SlideshowVcrPanel? _vcrPanel;  // Floating VCR controls visible during Slideshow / Video Slideshow.
 
     #endregion Slideshow state
 
@@ -730,6 +733,10 @@ public sealed partial class MainForm : Form
         { Enabled = false };
         var skipItem = new ToolStripMenuItem("Slideshow: Skip to Next Region", null, (s, e) => SkipSlideshowRegion())
         { Enabled = false };
+        var skipThemeItem = new ToolStripMenuItem("Slideshow: Skip to Next Color Theme", null, (s, e) => SkipSlideshowTheme())
+        { Enabled = false };
+        var pauseItem = new ToolStripMenuItem("Slideshow: Pause", null, (s, e) => ToggleSlideshowPause())
+        { Enabled = false };
         var slideshowLockRegionItem = new ToolStripMenuItem("Slideshow: Lock Region", null, (s, e) =>
         {
             ToggleSlideshowRegionLock();
@@ -782,6 +789,10 @@ public sealed partial class MainForm : Form
             miniDepthItem.Visible = !_miniMode;
 
             skipItem.Enabled = _slideshowRunning;
+            skipThemeItem.Enabled = _slideshowRunning;
+            pauseItem.Enabled = _slideshowRunning;
+            pauseItem.Checked = _slideshowRunning && IsSlideshowPaused();
+            pauseItem.Text = (_slideshowRunning && IsSlideshowPaused()) ? "Slideshow: Resume" : "Slideshow: Pause";
             slideshowItem.Enabled = !_videoRunning && !_videoSlideshowRunning;
             slideshowItem.Checked = _slideshowRunning;
             slideshowLockRegionItem.Enabled = _slideshowRunning && !_videoRunning && !_videoSlideshowRunning;
@@ -815,6 +826,8 @@ public sealed partial class MainForm : Form
         contextMenu.Items.Add(watermarkItem);
         contextMenu.Items.Add(slideshowLockRegionItem);
         contextMenu.Items.Add(skipItem);
+        contextMenu.Items.Add(skipThemeItem);
+        contextMenu.Items.Add(pauseItem);
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(videoActivateItem);
         contextMenu.Items.Add(videoSlideshowItem);
@@ -2904,14 +2917,16 @@ public sealed partial class MainForm : Form
 
     #region Region management
 
-    /// <summary>Applies a FractalRegion to the view state, respecting the iteration lock.</summary>
-    private void ApplyRegion(FractalRegion region)
+    /// <summary>
+    /// Loads region-specific fractal parameters (UserEquation source, Sandbox
+    /// source, UserBulb source/camera/light) into _fractalParams and compiles
+    /// the affected calculators. Does NOT touch center/zoom/quality — callers
+    /// own the view-state apply. Pulled out of ApplyRegion so Video Slideshow
+    /// can switch fractal type + load params without triggering the full
+    /// ApplyViewState path.
+    /// </summary>
+    private void LoadRegionFractalParams(FractalRegion region)
     {
-        // Auto-switch active fractal type if the region targets a different one.
-        // Done before applying coords so the calculator (set in ApplyViewState) sees the new type.
-        if (region.FractalType != _currentFractalType)
-            SwitchFractalTypeForRegion(region.FractalType);
-
         // UserEquation regions reference a saved entry by name — pull the live
         // source from the store so edits to the named equation propagate to every
         // region that uses it.
@@ -2929,8 +2944,6 @@ public sealed partial class MainForm : Form
             }
         }
 
-        // Sandbox regions: same by-name round-trip as UserEquation, against
-        // SandboxEquationStore.
         if (region.FractalType == FractalType.Sandbox
             && !string.IsNullOrWhiteSpace(region.SandboxName))
         {
@@ -2945,10 +2958,6 @@ public sealed partial class MainForm : Form
             }
         }
 
-        // UserBulb regions: prefer a by-name lookup in UserBulbStore so edits to
-        // the saved bulb propagate to every region that references it. Fall back
-        // to the source embedded in the region for ad-hoc bulbs the user never
-        // saved (or older regions saved before the store existed).
         if (region.FractalType == FractalType.UserBulb)
         {
             string? source = null;
@@ -2982,6 +2991,17 @@ public sealed partial class MainForm : Form
             if (entry != null && _userBulbDialog != null && !_userBulbDialog.IsDisposed)
                 _userBulbDialog.LoadEquationByName(entry.Name);
         }
+    }
+
+    /// <summary>Applies a FractalRegion to the view state, respecting the iteration lock.</summary>
+    private void ApplyRegion(FractalRegion region)
+    {
+        // Auto-switch active fractal type if the region targets a different one.
+        // Done before applying coords so the calculator (set in ApplyViewState) sees the new type.
+        if (region.FractalType != _currentFractalType)
+            SwitchFractalTypeForRegion(region.FractalType);
+
+        LoadRegionFractalParams(region);
 
         // Round-trip all four QD limbs. Legacy regions (DD or shallower) default
         // X2/X3 to 0, matching prior behaviour.

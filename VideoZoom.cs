@@ -1,4 +1,5 @@
-﻿using FracturingFog.Models;
+﻿using FracturingFog.Interefaces;
+using FracturingFog.Models;
 using FracturingFog.Views;
 using System;
 using System.Diagnostics;
@@ -38,6 +39,9 @@ namespace FracturingFog
         // each feature stoppable on its own.
         private bool _videoSlideshowRunning;
         private CancellationTokenSource? _videoSlideshowCts;
+        // Per-leg linked CTS; cancelled by SkipVideoSlideshowLeg to abort the
+        // current zoom without stopping the whole slideshow.
+        private CancellationTokenSource? _videoSlideshowLegCts;
         private readonly object _videoSlideshowLock = new();
 
         // Per-leg duration of the video slideshow zoom (seconds).
@@ -902,6 +906,31 @@ namespace FracturingFog
             });
 
             if (ct.IsCancellationRequested) return;
+
+            // Non-Mandelbrot fractals: dispatch to the alt calculator and
+            // upload its buffer directly. Histogram-eq / TAA blend / band
+            // dither all read from _calculator.ColorBuffer and have no
+            // equivalent on alt calculators, so they're skipped on this path.
+            IFractalCalculator? alt = SelectAltCalculator(_currentFractalType);
+            if (alt != null)
+            {
+                await Task.Run(() =>
+                {
+                    if (_calculator == null) return;
+                    SyncAltCalculatorForFrame(alt);
+                    alt.Calculate(ct);
+                }, ct);
+
+                if (ct.IsCancellationRequested) return;
+                await InvokeAsync(() =>
+                {
+                    if (_disposed || _renderer == null) return;
+                    UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height, _renderer);
+                    CaptureMp4Frame();
+                });
+                return;
+            }
+
             await Task.Run(() =>
             {
                 if (_calculator == null) return;
@@ -1387,6 +1416,53 @@ namespace FracturingFog
             }
         }
 
+        // Fractal types whose render model is a 2D escape-time zoom — the
+        // only kinds that produce a meaningful video zoom. 3D bulbs (camera
+        // orbit, not zoom), Buddhabrot (sample accumulator), IFS / LSystem /
+        // strange attractors (geometry-driven) are excluded so the slideshow
+        // doesn't pick a region it can't sensibly animate.
+        private static bool IsVideoSlideshowSupported(FractalType t) => t switch
+        {
+            FractalType.Mandelbrot   => true,
+            FractalType.Julia        => true,
+            FractalType.BurningShip  => true,
+            FractalType.Tricorn      => true,
+            FractalType.Multibrot    => true,
+            FractalType.Phoenix      => true,
+            FractalType.Newton       => true,
+            FractalType.Nova         => true,
+            FractalType.UserEquation => true,
+            FractalType.Sandbox      => true,
+            _ => false,
+        };
+
+        // Pushes the alt calculator's view state from the current _calculator
+        // and applies any fractal-type-specific parameters. Caller runs
+        // alt.Calculate next. Mirrors the pattern in SlideshowCalcFrame.
+        private void SyncAltCalculatorForFrame(IFractalCalculator alt)
+        {
+            if (_calculator == null) return;
+            alt.CenterX = _calculator.CenterX;
+            alt.CenterY = _calculator.CenterY;
+            alt.Zoom = _calculator.Zoom;
+            alt.MaxIterations = _calculator.MaxIterations;
+            alt.Quality = _calculator.Quality;
+            alt.ColorMap = _calculator.ColorMap;
+            switch (alt)
+            {
+                case EscapeTimeCalculator e:   e.FractalType = _currentFractalType; e.FractalParameters = _fractalParams; break;
+                case IFSCalculator ifs:        ifs.FractalParameters = _fractalParams; break;
+                case LSystemCalculator ls:     ls.FractalParameters = _fractalParams; break;
+                case AttractorCalculator a:    a.FractalParameters = _fractalParams; break;
+                case BuddhabrotCalculator b:   b.FractalParameters = _fractalParams; break;
+                case NewtonCalculator n:       n.FractalParameters = _fractalParams; break;
+                case UserEquationCalculator u: u.FractalParameters = _fractalParams; break;
+                case MandelbulbCalculator m:   m.FractalParameters = _fractalParams; break;
+                case SandboxCalculator sb:     sb.FractalParameters = _fractalParams; break;
+                case UserBulbCalculator ub:    ub.FractalParameters = _fractalParams; break;
+            }
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         // Video Slideshow: loop forever — pick random non-Extreme region + random
         // theme, reset to classic view, run a video zoom, pause 7 s, repeat.
@@ -1407,6 +1483,7 @@ namespace FracturingFog
             SetStatus(constantRate
                 ? $"Video {mode}slideshow running (constant rate, min {seconds:F1}s)…"
                 : $"Video {mode}slideshow running ({seconds:F1}s per leg)…");
+            ShowVcrForVideoSlideshow();
 
             CancellationTokenSource cts;
             lock (_videoSlideshowLock)
@@ -1427,6 +1504,7 @@ namespace FracturingFog
                         _videoButton.BackColor = Color.FromArgb(55, 40, 70);
                         _videoButton.FlatAppearance.BorderColor = Color.FromArgb(100, 70, 130);
                         _videoTargetIterations = 0;
+                        HideVcrPanel();
                         if (t.IsFaulted)
                             SetStatus($"Video slideshow error: {t.Exception?.InnerException?.Message}");
                         else
@@ -1437,7 +1515,20 @@ namespace FracturingFog
 
         public void StopVideoSlideshow()
         {
-            lock (_videoSlideshowLock) _videoSlideshowCts?.Cancel();
+            lock (_videoSlideshowLock)
+            {
+                _videoSlideshowCts?.Cancel();
+                _videoSlideshowLegCts?.Cancel();
+            }
+        }
+
+        public void SkipVideoSlideshowLeg()
+        {
+            lock (_videoSlideshowLock)
+            {
+                _videoSlideshowLegCts?.Cancel();
+                SetStatus("Video slideshow: skipping to next leg…");
+            }
         }
 
         public bool IsVideoSlideshowRunning => _videoSlideshowRunning;
@@ -1449,11 +1540,14 @@ namespace FracturingFog
             // near-zero log-range against DefaultZoom (0.3) and would either
             // be visually pointless or, in constant-rate mode, blow up the
             // duration of every other leg by becoming the minLogRange anchor.
+            // Also exclude fractal types whose render model is not zoom-based
+            // (3D bulbs, IFS, LSystem, attractors, Buddhabrot).
             const double SlideshowMinRegionZoom = 5.0;
             var regions = new System.Collections.Generic.List<FractalRegion>();
             foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
                 if (r.QualityPreset.Tier != QualityTier.Extreme
-                    && r.Zoom > SlideshowMinRegionZoom)
+                    && r.Zoom > SlideshowMinRegionZoom
+                    && IsVideoSlideshowSupported(r.FractalType))
                     regions.Add(r);
 
             // palettes is rebuilt per leg so themes whose MaxRecommendedZoom
@@ -1490,6 +1584,18 @@ namespace FracturingFog
 
             while (!ct.IsCancellationRequested)
             {
+                // Per-leg cancellation: linked to the outer ct so a full stop
+                // still kills everything, but the VCR Skip-Region button can
+                // cancel just this leg without ending the slideshow.
+                CancellationTokenSource legCts;
+                lock (_videoSlideshowLock)
+                {
+                    _videoSlideshowLegCts?.Dispose();
+                    _videoSlideshowLegCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    legCts = _videoSlideshowLegCts;
+                }
+                var legCt = legCts.Token;
+
                 // Pick a region different from the previous one.
                 int ri;
                 do { ri = _slideshowRng.Next(regions.Count); }
@@ -1568,6 +1674,12 @@ namespace FracturingFog
                 {
                     if (_disposed) return;
 
+                    // Switch fractal type to match this region and load its
+                    // type-specific params (UserEquation/Sandbox source).
+                    if (region.FractalType != _currentFractalType)
+                        SwitchFractalTypeForRegion(region.FractalType);
+                    LoadRegionFractalParams(region);
+
                     if (reverse)
                     {
                         // Start each leg at the deep region view; animate back
@@ -1633,27 +1745,49 @@ namespace FracturingFog
                 });
 
                 if (ct.IsCancellationRequested) break;
+                if (legCt.IsCancellationRequested) continue;
 
                 // Pre-render the classic starting frame on a background thread.
                 // Snapshot eq strength once so a slider change mid-render does
-                // not split the result across two values.
+                // not split the result across two values. Non-Mandelbrot legs
+                // skip eq/dither (alt calculators lack the aux buffers those
+                // operate on).
                 int eqStrengthSnapshot = _histogramEq;
                 bool ditherOn = _videoBandDitherEnabled;
                 double ditherStr = _videoBandDitherStrength;
-                uint[] newLegBuf = await Task.Run(() =>
+                IFractalCalculator? legAlt = SelectAltCalculator(_currentFractalType);
+                uint[] newLegBuf;
+                try
                 {
-                    if (_calculator == null) return Array.Empty<uint>();
-                    _calculator.Calculate(ct);
-                    if (eqStrengthSnapshot > 0)
-                        _calculator.ApplyHistogramEqualization(eqStrengthSnapshot / 100.0);
-                    if (ditherOn && ditherStr > 0.0)
-                        _calculator.ApplyBandDitherRecolor(ditherStr);
-                    var copy = new uint[_calculator.ColorBuffer.Length];
-                    _calculator.ColorBuffer.CopyTo(copy, 0);
-                    return copy;
-                }, ct);
+                    newLegBuf = await Task.Run(() =>
+                    {
+                        if (_calculator == null) return Array.Empty<uint>();
+                        if (legAlt != null)
+                        {
+                            SyncAltCalculatorForFrame(legAlt);
+                            legAlt.Calculate(legCt);
+                            var copy = new uint[legAlt.ColorBuffer.Length];
+                            legAlt.ColorBuffer.CopyTo(copy, 0);
+                            return copy;
+                        }
+                        _calculator.Calculate(legCt);
+                        if (eqStrengthSnapshot > 0)
+                            _calculator.ApplyHistogramEqualization(eqStrengthSnapshot / 100.0);
+                        if (ditherOn && ditherStr > 0.0)
+                            _calculator.ApplyBandDitherRecolor(ditherStr);
+                        var bufCopy = new uint[_calculator.ColorBuffer.Length];
+                        _calculator.ColorBuffer.CopyTo(bufCopy, 0);
+                        return bufCopy;
+                    }, legCt);
+                }
+                catch (OperationCanceledException)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    continue;   // leg skip — try next leg
+                }
 
                 if (ct.IsCancellationRequested) break;
+                if (legCt.IsCancellationRequested) continue;
 
                 // Cross-fade prev-leg final frame → new-leg classic starting frame.
                 // Same per-pixel CPU dissolve the Slideshow uses for theme/region
@@ -1663,7 +1797,7 @@ namespace FracturingFog
                 {
                     const int legFadeSteps = 24;
                     const int legFadeStepMs = 80;   // ~1.9 s total
-                    await CrossFade(oldLegBuf, newLegBuf, legFadeSteps, legFadeStepMs, ct);
+                    await CrossFade(oldLegBuf, newLegBuf, legFadeSteps, legFadeStepMs, legCt);
                 }
                 else
                 {
@@ -1675,6 +1809,7 @@ namespace FracturingFog
                 }
 
                 if (ct.IsCancellationRequested) break;
+                if (legCt.IsCancellationRequested) continue;
 
                 QDCoord legStartCX, legStartCY, legTargetCX, legTargetCY;
                 double legStartZoom, legTargetZoom;
@@ -1699,13 +1834,17 @@ namespace FracturingFog
 
                 await VideoLoop(legStartCX, legStartCY, legStartZoom,
                                 legTargetCX, legTargetCY, legTargetZoom,
-                                legSeconds, ct, reverse: reverse);
+                                legSeconds, legCt, reverse: reverse);
 
                 if (ct.IsCancellationRequested) break;
 
-                // Pause 7 s before next leg.
-                try { await Task.Delay(VideoSlideshowPauseMs, ct); }
-                catch (OperationCanceledException) { break; }
+                // Pause between legs — interruptible by leg skip or stop.
+                try { await Task.Delay(VideoSlideshowPauseMs, legCt); }
+                catch (OperationCanceledException)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    // leg cancel — fall through to next iteration
+                }
             }
         }
     }

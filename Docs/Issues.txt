@@ -1,7 +1,0 @@
-// Bug: Pan Zoom controls broken at deep zoom approx. +-5E+49
-
-// Context menus for floating menu comboboxes
-
-// If a color theme cannot be edited, allow its parameters to be copied if user selects New->Copy
-
-Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.

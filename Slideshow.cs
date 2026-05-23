@@ -48,6 +48,7 @@ namespace FracturingFog
             _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
             _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(120, 50, 50);
             SetStatus("Slideshow running…");
+            ShowVcrForSlideshow();
 
             CancellationTokenSource cts;
             lock (_slideshowLock)
@@ -68,11 +69,14 @@ namespace FracturingFog
                     {
                         _slideshowRunning = false;
                         _showSlideshowWatermark = false;
+                        _slideshowPaused = false;
+                        _slideshowRegionName = "";
                         //_chkSlideshowUseExtremeRegions.Enabled = true;
                         RepaintWithBrightnessContrast();
                         _slideshowButton.Text = "Slideshow";
                         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
                         _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
+                        HideVcrPanel();
                         if (!t.IsCanceled && t.IsFaulted)
                             SetStatus($"Slideshow error: {t.Exception?.InnerException?.Message}");
                         else
@@ -98,9 +102,34 @@ namespace FracturingFog
 
         private void SkipSlideshowRegion()
         {
-            _slideshowSkipRegion = true;
             lock (_slideshowLock)
+            {
+                _slideshowSkipRegion = true;
                 SetStatus("Slideshow: skipping to next region…");
+            }
+        }
+
+        private void SkipSlideshowTheme()
+        {
+            lock (_slideshowLock)
+            {
+                _slideshowSkipTheme = true;
+                SetStatus("Slideshow: skipping to next color theme…");
+            }
+        }
+
+        private void ToggleSlideshowPause()
+        {
+            lock (_slideshowLock)
+            {
+                _slideshowPaused = !_slideshowPaused;
+                SetStatus(_slideshowPaused ? "Slideshow: paused" : "Slideshow: resumed");
+            }
+        }
+
+        public bool IsSlideshowPaused()
+        {
+            lock (_slideshowLock) return _slideshowPaused;
         }
 
         private bool SlideshowFocusChanged()
@@ -122,6 +151,29 @@ namespace FracturingFog
                 }
                 return false;
             }
+        }
+
+        public bool IsSkipSlideshowTheme()
+        {
+            lock (_slideshowLock)
+            {
+                if (_slideshowSkipTheme)
+                {
+                    _slideshowSkipTheme = false;
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private bool PeekSkipSlideshowRegion()
+        {
+            lock (_slideshowLock) return _slideshowSkipRegion;
+        }
+
+        private bool PeekSkipSlideshowTheme()
+        {
+            lock (_slideshowLock) return _slideshowSkipTheme;
         }
 
         // Returns all palettes whose Name does not start with "— " (i.e. header items excluded).
@@ -314,8 +366,17 @@ namespace FracturingFog
                 {
                     Debug.WriteLine($"SldShwLp: Theme {themeNum + 1} of {themesPerRegion} for region \"{region.Name}\" starting in {themeDurationMs} ms");
                     // Wait for the full theme display duration before starting the next fade.
-                    await DelayWithCancel(focusRegion ? themeDurationMs : themeDurationMsCF, ct);
+                    // Polls skip-region / skip-theme flags so the VCR controls
+                    // get an immediate response instead of waiting for the timer.
+                    await SkippableDelay(focusRegion ? themeDurationMs : themeDurationMsCF, ct,
+                        PeekSkipSlideshowRegion, PeekSkipSlideshowTheme);
                     if (ct.IsCancellationRequested) return;
+                    // Skip-region wins over skip-theme: consume it now and bail
+                    // out of the inner loop so the outer loop picks a new region.
+                    if (PeekSkipSlideshowRegion()) { IsSkipSlideshowRegion(); break; }
+                    // Consume any pending skip-theme so it doesn't fire again
+                    // on the next iteration's delay.
+                    IsSkipSlideshowTheme();
                     lockStatus = regionLockFunc() ? "(L)" : "";
                     // Pick next theme.
 
@@ -374,9 +435,15 @@ namespace FracturingFog
                 }
 
                 // Wait for the final theme to display its full duration before
-                // transitioning to the next region.
+                // transitioning to the next region. Skip-region/skip-theme on
+                // the VCR break out early.
                 Debug.WriteLine($"SldShwLp: Final theme for region \"{region.Name}\" displayed, waiting {themeDurationMs} ms before next region");
-                await DelayWithCancel(themeDurationMs, ct);
+                await SkippableDelay(themeDurationMs, ct,
+                    PeekSkipSlideshowRegion, PeekSkipSlideshowTheme);
+                // Consume any pending skip flags — we are advancing to the
+                // next region either way.
+                IsSkipSlideshowRegion();
+                IsSkipSlideshowTheme();
                 Debug.WriteLine($"SldShwLp: Theme duration complete for region \"{region.Name}\"");
                 _lastUploadedBuffer = previousBuffer;
                 Debug.WriteLine($"Region lock: {regionLockFunc()}, completed region \"{region.Name}\" with final theme displayed for full duration");
@@ -391,6 +458,15 @@ namespace FracturingFog
         /// </summary>
         private void ApplyRegionSilent(FractalRegion region)
         {
+            // Switch fractal type + load type-specific params (UserEquation /
+            // Sandbox / UserBulb source). Without this, _currentFractalType
+            // stays on Mandelbrot and SlideshowCalcFrame never picks an alt
+            // calculator — region UI/watermark show e.g. Julia but the
+            // rendered pixels remain Mandelbrot.
+            if (region.FractalType != _currentFractalType)
+                SwitchFractalTypeForRegion(region.FractalType);
+            LoadRegionFractalParams(region);
+
             _centerX = region.CenterX; _centerXLo = region.CenterXLo;
             _centerX2 = region.CenterX2; _centerX3 = region.CenterX3;
             _centerY = region.CenterY; _centerYLo = region.CenterYLo;
@@ -564,11 +640,135 @@ namespace FracturingFog
             }
         }
 
+        // ─────────────────────────────────────────────────────────────────
+        // Floating VCR control panel — shown while a Slideshow or Video
+        // Slideshow is running. Buttons forward to the corresponding skip /
+        // pause / stop methods. Panel is parented under _renderPanel so it
+        // floats over the fractal.
+        // ─────────────────────────────────────────────────────────────────
+
+        private bool _vcrSizeHandlerAttached;
+
+        private void EnsureVcrPanel()
+        {
+            if (_vcrPanel != null && !_vcrPanel.IsDisposed) return;
+            _vcrPanel = new Views.SlideshowVcrPanel();
+            _vcrPanel.PlayPauseClicked   += OnVcrPlayPause;
+            _vcrPanel.StopClicked        += OnVcrStop;
+            _vcrPanel.SkipRegionClicked  += OnVcrSkipRegion;
+            _vcrPanel.SkipThemeClicked   += OnVcrSkipTheme;
+            _vcrPanel.CollapsedChanged   += (s, e) => LayoutVcrPanel();
+            LayoutVcrPanel();
+            _renderPanel.Controls.Add(_vcrPanel);
+            _vcrPanel.BringToFront();
+
+            // Re-center horizontally on render panel resize. Anchor=Bottom
+            // keeps the vertical position correct but not the horizontal.
+            if (!_vcrSizeHandlerAttached)
+            {
+                _renderPanel.SizeChanged += (s, e) => LayoutVcrPanel();
+                _vcrSizeHandlerAttached = true;
+            }
+        }
+
+        private void LayoutVcrPanel()
+        {
+            if (_vcrPanel == null) return;
+            _vcrPanel.Left = System.Math.Max(0, (_renderPanel.ClientSize.Width - _vcrPanel.Width) / 2);
+            _vcrPanel.Top  = System.Math.Max(0, _renderPanel.ClientSize.Height - _vcrPanel.Height - 12);
+            _vcrPanel.Anchor = AnchorStyles.Bottom;
+        }
+
+        private void ShowVcrForSlideshow()
+        {
+            EnsureVcrPanel();
+            if (_vcrPanel == null) return;
+            _vcrPanel.SetPauseEnabled(true);
+            _vcrPanel.SetSkipThemeEnabled(true);
+            _vcrPanel.SetSkipRegionEnabled(true);
+            _vcrPanel.SetPaused(false);
+            _vcrPanel.Visible = true;
+            _vcrPanel.BringToFront();
+        }
+
+        private void ShowVcrForVideoSlideshow()
+        {
+            EnsureVcrPanel();
+            if (_vcrPanel == null) return;
+            // Pausing mid-zoom is not supported — buttons disabled. Skip-Theme
+            // is meaningless during a leg (one theme per leg) so disabled too.
+            _vcrPanel.SetPauseEnabled(false);
+            _vcrPanel.SetSkipThemeEnabled(false);
+            _vcrPanel.SetSkipRegionEnabled(true);
+            _vcrPanel.SetPaused(false);
+            _vcrPanel.Visible = true;
+            _vcrPanel.BringToFront();
+        }
+
+        private void HideVcrPanel()
+        {
+            if (_vcrPanel == null) return;
+            _vcrPanel.Visible = false;
+        }
+
+        private void OnVcrPlayPause(object? sender, EventArgs e)
+        {
+            if (!_slideshowRunning) return;
+            ToggleSlideshowPause();
+            _vcrPanel?.SetPaused(IsSlideshowPaused());
+        }
+
+        private void OnVcrStop(object? sender, EventArgs e)
+        {
+            if (_slideshowRunning) StopSlideshow();
+            else if (_videoSlideshowRunning) StopVideoSlideshow();
+        }
+
+        private void OnVcrSkipRegion(object? sender, EventArgs e)
+        {
+            if (_slideshowRunning) SkipSlideshowRegion();
+            else if (_videoSlideshowRunning) SkipVideoSlideshowLeg();
+        }
+
+        private void OnVcrSkipTheme(object? sender, EventArgs e)
+        {
+            if (_slideshowRunning) SkipSlideshowTheme();
+        }
+
         /// <summary>Awaitable Task.Delay that tolerates cancellation silently.</summary>
         private static async Task DelayWithCancel(int ms, CancellationToken ct)
         {
             try { await Task.Delay(ms, ct); }
             catch (OperationCanceledException) { /* expected */ }
+        }
+
+        /// <summary>
+        /// Awaitable delay that polls the supplied skip predicates every ~50 ms
+        /// and returns early when any of them is true. Also holds (does not
+        /// accumulate elapsed time) while the slideshow is paused so the VCR
+        /// Pause button can suspend region/theme progress.
+        /// </summary>
+        private async Task SkippableDelay(int ms, CancellationToken ct, params Func<bool>[] skipChecks)
+        {
+            int elapsed = 0;
+            while (elapsed < ms && !ct.IsCancellationRequested)
+            {
+                if (IsSlideshowPaused())
+                {
+                    try { await Task.Delay(80, ct); }
+                    catch (OperationCanceledException) { return; }
+                    continue;
+                }
+                if (skipChecks != null)
+                {
+                    for (int i = 0; i < skipChecks.Length; i++)
+                        if (skipChecks[i]()) return;
+                }
+                int chunk = System.Math.Min(50, ms - elapsed);
+                try { await Task.Delay(chunk, ct); }
+                catch (OperationCanceledException) { return; }
+                elapsed += chunk;
+            }
         }
     }
 }
