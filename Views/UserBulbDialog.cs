@@ -22,6 +22,13 @@ namespace FracturingFog.Views
         private readonly Label _errorLabel;
         private readonly Timer _debounce;
 
+        // Saved equations row.
+        private readonly ComboBox _savedCombo;
+        private readonly Button _saveBtn;
+        private readonly Button _deleteBtn;
+        private bool _suppressComboEvent;
+        private bool _loadingNamedEquation;
+
         // Camera / render knobs.
         private readonly NumericUpDown _camDistBox;
         private readonly NumericUpDown _camThetaBox;
@@ -49,7 +56,7 @@ namespace FracturingFog.Views
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             TopMost = true;
-            ClientSize = new Size(540, 640);
+            ClientSize = new Size(540, 670);
             BackColor = Color.FromArgb(40, 40, 40);
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 9f);
@@ -62,12 +69,49 @@ namespace FracturingFog.Views
             };
             Controls.Add(hint);
 
+            // ── Saved equations row ───────────────────────────────────────────
+            var savedLabel = new Label
+            {
+                Text = "Saved:",
+                Left = 10, Top = 38, AutoSize = true,
+                ForeColor = Color.White
+            };
+            Controls.Add(savedLabel);
+
+            _savedCombo = new ComboBox
+            {
+                Left = 60, Top = 35, Width = 260,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(60, 60, 60),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            Controls.Add(_savedCombo);
+
+            _saveBtn = new Button
+            {
+                Text = "Save…", Left = 330, Top = 34, Width = 80, Height = 24,
+                BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            _saveBtn.Click += OnSaveClick;
+            Controls.Add(_saveBtn);
+
+            _deleteBtn = new Button
+            {
+                Text = "Delete", Left = 420, Top = 34, Width = 80, Height = 24,
+                BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            _deleteBtn.Click += OnDeleteClick;
+            Controls.Add(_deleteBtn);
+
             // ── Editor ────────────────────────────────────────────────────────
             _editor = new TextBox
             {
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
-                Left = 10, Top = 35, Width = 520, Height = 200,
+                Left = 10, Top = 65, Width = 520, Height = 200,
                 BackColor = Color.FromArgb(28, 28, 28),
                 ForeColor = Color.White,
                 Font = new Font("Consolas", 10f),
@@ -81,7 +125,7 @@ namespace FracturingFog.Views
 
             _errorLabel = new Label
             {
-                Left = 10, Top = 240, Width = 520, Height = 50,
+                Left = 10, Top = 270, Width = 520, Height = 50,
                 ForeColor = Color.FromArgb(255, 100, 100),
                 BackColor = Color.Transparent,
                 Font = new Font("Consolas", 8f),
@@ -99,15 +143,23 @@ namespace FracturingFog.Views
             };
             _editor.TextChanged += (_, _) =>
             {
-                _params.UserBulbName = null;
+                // Manual edits dissociate the source from any named saved entry;
+                // selection-driven loads suppress this via _loadingNamedEquation.
+                if (!_loadingNamedEquation) _params.UserBulbName = null;
                 _debounce.Stop();
                 _debounce.Start();
             };
 
+            _savedCombo.SelectedIndexChanged += OnSavedSelectionChanged;
+
             _params.UserBulbSource = _editor.Text;
 
+            // Load saved bulbs from disk and populate combo.
+            UserBulbStore.Instance.Load();
+            RefreshSavedCombo(selectFirst: false, selectName: _params.UserBulbName);
+
             // ── Camera group ──────────────────────────────────────────────────
-            int gy = 295;
+            int gy = 325;
             AddGroupHeader("Camera", 10, gy);
             gy += 22;
 
@@ -238,6 +290,138 @@ namespace FracturingFog.Views
             }
             finally { _suppressRender = false; }
             OnCameraChanged(null, EventArgs.Empty);
+        }
+
+        private void RefreshSavedCombo(bool selectFirst, string? selectName = null)
+        {
+            _suppressComboEvent = true;
+            try
+            {
+                _savedCombo.Items.Clear();
+                foreach (var e in UserBulbStore.Instance.Equations)
+                    _savedCombo.Items.Add(e.Name);
+
+                if (!string.IsNullOrEmpty(selectName) && _savedCombo.Items.Contains(selectName))
+                    _savedCombo.SelectedItem = selectName;
+                else if (selectFirst && _savedCombo.Items.Count > 0)
+                    _savedCombo.SelectedIndex = 0;
+                else
+                    _savedCombo.SelectedIndex = -1;
+            }
+            finally { _suppressComboEvent = false; }
+        }
+
+        private void OnSavedSelectionChanged(object? sender, EventArgs e)
+        {
+            if (_suppressComboEvent) return;
+            if (_savedCombo.SelectedItem is not string name) return;
+
+            var entry = UserBulbStore.Instance.GetByName(name);
+            if (entry == null) return;
+
+            _loadingNamedEquation = true;
+            try { _editor.Text = entry.Source; }
+            finally { _loadingNamedEquation = false; }
+            _params.UserBulbSource = entry.Source;
+            _params.UserBulbName = entry.Name;
+            _debounce.Stop();
+            CompileRequested?.Invoke();
+        }
+
+        private void OnSaveClick(object? sender, EventArgs e)
+        {
+            string defaultName = _savedCombo.SelectedItem as string ?? string.Empty;
+            string? name = PromptForName("Save bulb equation as:", defaultName);
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            var entry = UserBulbStore.Instance.SaveEquation(name.Trim(), _editor.Text);
+            if (entry == null) return;
+
+            _params.UserBulbName = entry.Name;
+            RefreshSavedCombo(selectFirst: false, selectName: entry.Name);
+        }
+
+        private void OnDeleteClick(object? sender, EventArgs e)
+        {
+            if (_savedCombo.SelectedItem is not string name) return;
+
+            var confirm = MessageBox.Show(
+                this,
+                $"Delete saved bulb equation '{name}'?",
+                "Confirm delete",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (confirm != DialogResult.Yes) return;
+
+            UserBulbStore.Instance.Remove(name);
+            RefreshSavedCombo(selectFirst: false);
+        }
+
+        private string? PromptForName(string caption, string defaultValue)
+        {
+            using var dlg = new Form
+            {
+                Text = caption,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                ClientSize = new Size(320, 110),
+                MaximizeBox = false,
+                MinimizeBox = false,
+                ShowInTaskbar = false,
+                TopMost = true,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.White,
+                Font = Font
+            };
+
+            var tb = new TextBox
+            {
+                Left = 12, Top = 15, Width = 296,
+                Text = defaultValue,
+                BackColor = Color.FromArgb(60, 60, 60),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+            var ok = new Button
+            {
+                Text = "OK", Left = 142, Top = 60, Width = 80,
+                DialogResult = DialogResult.OK,
+                BackColor = Color.FromArgb(70, 70, 70), FlatStyle = FlatStyle.Flat
+            };
+            var cancel = new Button
+            {
+                Text = "Cancel", Left = 228, Top = 60, Width = 80,
+                DialogResult = DialogResult.Cancel,
+                BackColor = Color.FromArgb(70, 70, 70), FlatStyle = FlatStyle.Flat
+            };
+
+            dlg.Controls.Add(tb);
+            dlg.Controls.Add(ok);
+            dlg.Controls.Add(cancel);
+            dlg.AcceptButton = ok;
+            dlg.CancelButton = cancel;
+
+            return dlg.ShowDialog(this) == DialogResult.OK ? tb.Text : null;
+        }
+
+        /// <summary>
+        /// Selects the named saved equation in the combo and loads its source into
+        /// the editor.  Used by MainForm when recalling a region that references a
+        /// saved bulb equation by name.  No-op if the name is not in the store.
+        /// </summary>
+        public void LoadEquationByName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var entry = UserBulbStore.Instance.GetByName(name);
+            if (entry == null) return;
+
+            _loadingNamedEquation = true;
+            try { _editor.Text = entry.Source; }
+            finally { _loadingNamedEquation = false; }
+            _params.UserBulbSource = entry.Source;
+            _params.UserBulbName = entry.Name;
+            RefreshSavedCombo(selectFirst: false, selectName: entry.Name);
+            _debounce.Stop();
         }
 
         /// <summary>Fires CompileRequested so the host can compile the current source.</summary>

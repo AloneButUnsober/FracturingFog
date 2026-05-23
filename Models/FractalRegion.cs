@@ -146,6 +146,32 @@ namespace FracturingFog.Models
         public string? SandboxName { get; set; }
 
         /// <summary>
+        /// Optional friendly name for the UserBulb (3D) source captured by this region.
+        /// UserBulb has no shared library yet, so the source itself is embedded in
+        /// <see cref="UserBulbSource"/>. The name is informational.
+        /// </summary>
+        public string? UserBulbName { get; set; }
+
+        /// <summary>
+        /// Full UserBulb (3D) Step-function source recorded when the region was saved.
+        /// Restored verbatim and recompiled on recall so the saved view renders the
+        /// same fractal even if the user has edited the live source since. Null/empty
+        /// for non-UserBulb regions.
+        /// </summary>
+        public string? UserBulbSource { get; set; }
+
+        /// <summary>UserBulb camera distance (radial). 0 = use parameter default on recall.</summary>
+        public double UserBulbCameraDistance { get; set; }
+        /// <summary>UserBulb camera theta (azimuth, radians).</summary>
+        public double UserBulbCameraTheta { get; set; }
+        /// <summary>UserBulb camera phi (polar, radians).</summary>
+        public double UserBulbCameraPhi { get; set; }
+        /// <summary>UserBulb light theta (radians).</summary>
+        public double UserBulbLightTheta { get; set; }
+        /// <summary>UserBulb light phi (radians).</summary>
+        public double UserBulbLightPhi { get; set; }
+
+        /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
         /// assumed to be user-defined unless explicitly marked as built-in.
         /// </summary>

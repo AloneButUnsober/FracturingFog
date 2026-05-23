@@ -190,6 +190,11 @@ public sealed partial class MainForm : Form
     private FracturingFog.FFMath.QD _panStartQDCX;
     private FracturingFog.FFMath.QD _panStartQDCY;
 
+    // Right-click camera-drag state for 3D fractal modes.
+    private bool _rightDragging;
+    private Point _rightDragStart;
+    private double _rightDragStartTheta;
+    private double _rightDragStartPhi;
 
     // Pan-stop debounce timer — fires full-quality render after drag ends.
     private readonly System.Windows.Forms.Timer _panStopTimer;
@@ -485,6 +490,7 @@ public sealed partial class MainForm : Form
         // combo from launch, not only after a dialog opens them.
         SandboxEquationStore.Instance.Load();
         UserEquationStore.Instance.Load();
+        UserBulbStore.Instance.Load();
         _colorThemeCombo = new ColorComboBox
         {
             Left = buttonLeft,
@@ -837,6 +843,7 @@ public sealed partial class MainForm : Form
         FractalRegionLibrary.Instance.Load();
         UserEquationStore.Instance.Load();
         SandboxEquationStore.Instance.Load();
+        UserBulbStore.Instance.Load();
         RebuildRegionCombo();
         UserColorThemeLibrary.Instance.UpdateCheck();
         int w = _renderPanel.ClientSize.Width;
@@ -1878,15 +1885,52 @@ public sealed partial class MainForm : Form
     private void OnResetClick(object? sender, EventArgs e)
     {
         StopSlideshow();
-        _centerX = DefaultCenterX; _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
-        _centerY = DefaultCenterY; _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
-        _zoom = DefaultZoom;
+
+        // 3D modes need a different default centre/zoom than the Mandelbrot
+        // (-0.5, 0, 0.13) — the bulb is at origin and camDist = baseDist / zoom
+        // so a 0.13 zoom pushes the camera way past the bulb and the offset
+        // centre shifts the fractal off-screen, producing a black frame.
+        bool is3D = _currentFractalType is FractalType.Mandelbulb or FractalType.UserBulb;
+        if (is3D)
+        {
+            _centerX = 0.0; _centerY = 0.0; _zoom = 1.0;
+        }
+        else
+        {
+            _centerX = DefaultCenterX;
+            _centerY = DefaultCenterY;
+            _zoom = DefaultZoom;
+        }
+        _centerXLo = 0.0; _centerX2 = 0.0; _centerX3 = 0.0;
+        _centerYLo = 0.0; _centerY2 = 0.0; _centerY3 = 0.0;
         _regionCombo.SelectedIndex = 0;
 
         // Reset brightness and contrast to defaults.
         _brightness = 0;
         _contrast = 0;
         if (_floatingMenu != null) _floatingMenu.ResetView(_centerX, _centerY, _zoom);
+
+        // 3D modes: restore camera + light to FractalParameters defaults so the
+        // bulb is framed in view. Without this, an off-axis camera left over from
+        // previous interaction can hide the fractal even after a reset.
+        if (_currentFractalType == FractalType.Mandelbulb)
+        {
+            _fractalParams.BulbCameraDistance = 3.0;
+            _fractalParams.BulbCameraTheta = Math.PI * 0.25;
+            _fractalParams.BulbCameraPhi   = Math.PI * 0.35;
+            _fractalParams.BulbLightTheta  = Math.PI * 0.25;
+            _fractalParams.BulbLightPhi    = Math.PI * 0.45;
+            _lastUploadedBuffer = null;
+        }
+        else if (_currentFractalType == FractalType.UserBulb)
+        {
+            _fractalParams.UserBulbCameraDistance = 3.0;
+            _fractalParams.UserBulbCameraTheta = Math.PI * 0.25;
+            _fractalParams.UserBulbCameraPhi   = Math.PI * 0.35;
+            _fractalParams.UserBulbLightTheta  = Math.PI * 0.25;
+            _fractalParams.UserBulbLightPhi    = Math.PI * 0.45;
+            _lastUploadedBuffer = null;
+        }
 
         ApplyViewState();
         TriggerCalculation();
@@ -2124,6 +2168,22 @@ public sealed partial class MainForm : Form
             SandboxName = _currentFractalType == FractalType.Sandbox
                 ? _fractalParams.SandboxName
                 : null,
+            UserBulbName = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbName
+                : null,
+            UserBulbSource = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbSource
+                : null,
+            UserBulbCameraDistance = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbCameraDistance : 0,
+            UserBulbCameraTheta = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbCameraTheta : 0,
+            UserBulbCameraPhi = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbCameraPhi : 0,
+            UserBulbLightTheta = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbLightTheta : 0,
+            UserBulbLightPhi = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbLightPhi : 0,
             Description = $"Saved {DateTime.Now:yyyy-MM-dd HH:mm}"
         };
 
@@ -2739,6 +2799,44 @@ public sealed partial class MainForm : Form
             }
         }
 
+        // UserBulb regions: prefer a by-name lookup in UserBulbStore so edits to
+        // the saved bulb propagate to every region that references it. Fall back
+        // to the source embedded in the region for ad-hoc bulbs the user never
+        // saved (or older regions saved before the store existed).
+        if (region.FractalType == FractalType.UserBulb)
+        {
+            string? source = null;
+            UserBulbEntry? entry = !string.IsNullOrWhiteSpace(region.UserBulbName)
+                ? UserBulbStore.Instance.GetByName(region.UserBulbName)
+                : null;
+            if (entry != null)
+            {
+                source = entry.Source;
+                _fractalParams.UserBulbSource = entry.Source;
+                _fractalParams.UserBulbName = entry.Name;
+            }
+            else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
+            {
+                source = region.UserBulbSource;
+                _fractalParams.UserBulbSource = region.UserBulbSource;
+                _fractalParams.UserBulbName = region.UserBulbName;
+            }
+
+            if (region.UserBulbCameraDistance > 0)
+            {
+                _fractalParams.UserBulbCameraDistance = region.UserBulbCameraDistance;
+                _fractalParams.UserBulbCameraTheta = region.UserBulbCameraTheta;
+                _fractalParams.UserBulbCameraPhi = region.UserBulbCameraPhi;
+                _fractalParams.UserBulbLightTheta = region.UserBulbLightTheta;
+                _fractalParams.UserBulbLightPhi = region.UserBulbLightPhi;
+            }
+
+            if (!string.IsNullOrWhiteSpace(source))
+                _userBulbCalculator?.Compile(source);
+            if (entry != null && _userBulbDialog != null && !_userBulbDialog.IsDisposed)
+                _userBulbDialog.LoadEquationByName(entry.Name);
+        }
+
         // Round-trip all four QD limbs. Legacy regions (DD or shallower) default
         // X2/X3 to 0, matching prior behaviour.
         _centerX = region.CenterX; _centerXLo = region.CenterXLo;
@@ -2872,6 +2970,225 @@ public sealed partial class MainForm : Form
                 return;
             }
         }
+
+        // Don't steal letter keys from a focused text input.
+        if (ActiveControl is TextBox || ActiveControl is NumericUpDown || ActiveControl is ComboBox)
+            return;
+        if (_slideshowRunning || _spanning) return;
+        if (e.Control || e.Alt || e.Shift) return;
+
+        bool is3D = Is3DFractalType(_currentFractalType);
+
+        switch (e.KeyCode)
+        {
+            // ── Universal commands ────────────────────────────────────────────
+            case Keys.M:
+                ToggleFloatingMenu();
+                e.Handled = true; return;
+
+            case Keys.T:
+                OnEditColorThemeClick(this, EventArgs.Empty);
+                e.Handled = true; return;
+
+            case Keys.R:
+                OnResetClick(this, EventArgs.Empty);
+                e.Handled = true; return;
+
+            case Keys.V:
+                OnSaveViewClick(this, EventArgs.Empty);
+                e.Handled = true; return;
+        }
+
+        if (!is3D)
+        {
+            // ── 2D: W/S = zoom, A/D = pan ────────────────────────────────────
+            const double zoomFactor = 1.25;
+            const double panFrac = 0.125;   // pan ~1/8 of viewport per key
+            switch (e.KeyCode)
+            {
+                case Keys.W: CenterZoomBy(zoomFactor);       e.Handled = true; return;
+                case Keys.S: CenterZoomBy(1.0 / zoomFactor); e.Handled = true; return;
+                case Keys.A: PanByPixels( (int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
+                case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
+            }
+            return;
+        }
+
+        // ── 3D: W/S = distance, A/D = pan, arrows = camera, Pg/Home/End = light ─
+        const double distStep   = 0.25;
+        const double rotStep    = Math.PI / 36.0; // 5°
+        const double pan3DFrac  = 0.125;
+        switch (e.KeyCode)
+        {
+            case Keys.W: Adjust3DDistance(-distStep);   e.Handled = true; return;
+            case Keys.S: Adjust3DDistance( distStep);   e.Handled = true; return;
+            case Keys.A: PanByPixels( (int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
+            case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
+
+            case Keys.Up:    Adjust3DCameraPhi(  rotStep); e.Handled = true; return;
+            case Keys.Down:  Adjust3DCameraPhi( -rotStep); e.Handled = true; return;
+            case Keys.Left:  Adjust3DCameraTheta(-rotStep); e.Handled = true; return;
+            case Keys.Right: Adjust3DCameraTheta( rotStep); e.Handled = true; return;
+
+            case Keys.PageUp:   Adjust3DLightTheta(-rotStep); e.Handled = true; return;
+            case Keys.PageDown: Adjust3DLightTheta( rotStep); e.Handled = true; return;
+            case Keys.Home:     Adjust3DLightPhi(  -rotStep); e.Handled = true; return;
+            case Keys.End:      Adjust3DLightPhi(   rotStep); e.Handled = true; return;
+        }
+    }
+
+    /// <summary>Arrow / PgUp / PgDn / Home / End are usually consumed by Forms as
+    /// dialog keys before they reach KeyDown.  Route them into OnKeyDown when
+    /// no editable control has focus so 3D camera/light bindings work.</summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (ActiveControl is TextBox || ActiveControl is NumericUpDown || ActiveControl is ComboBox)
+            return base.ProcessCmdKey(ref msg, keyData);
+
+        Keys key = keyData & Keys.KeyCode;
+        if (key is Keys.Up or Keys.Down or Keys.Left or Keys.Right
+                or Keys.PageUp or Keys.PageDown or Keys.Home or Keys.End)
+        {
+            var args = new KeyEventArgs(keyData);
+            OnKeyDown(this, args);
+            if (args.Handled) return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    private static bool Is3DFractalType(FractalType t)
+        => t == FractalType.Mandelbulb || t == FractalType.UserBulb;
+
+    private void ToggleFloatingMenu()
+    {
+        if (_floatingMenu == null || _floatingMenu.IsDisposed) return;
+        if (_showFloatingMenu && _floatingMenu.Visible)
+            OnCloseCoordPanelClick(this, EventArgs.Empty);
+        else
+            OnShowCoordPanelClick();
+    }
+
+    /// <summary>Zoom by <paramref name="factor"/> around the view centre, mirroring
+    /// the precision-aware path used by <see cref="OnMouseWheel"/>.  Used by W/S
+    /// key bindings in non-3D fractal modes.</summary>
+    private void CenterZoomBy(double factor)
+    {
+        if (_calculator == null) return;
+
+        double targetZoom = System.Math.Clamp(
+            _zoom * factor,
+            QualityPreset.Draft.ZoomMin,
+            QualityPreset.Extreme.ZoomMax);
+        if (AdaptQualityForWheel(_zoom, targetZoom))
+            SetStatus($"Quality → {_quality.Name} (zoom {targetZoom:G3}).");
+
+        _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
+        ApplyViewState();
+        TriggerCalculation(progressive: false);
+    }
+
+    /// <summary>Shift the view centre by (dx,dy) screen pixels, respecting the
+    /// active precision tier.  Negative dx pans the view left (centre moves
+    /// right in complex-plane terms).</summary>
+    private void PanByPixels(int dx, int dy)
+    {
+        if (_calculator == null) return;
+        double scale = CurrentScale();
+        if (_zoom > QDZoomThreshold)
+        {
+            var qdCX = new FracturingFog.FFMath.QD(_centerX, _centerXLo, _centerX2, _centerX3) + dx * scale;
+            var qdCY = new FracturingFog.FFMath.QD(_centerY, _centerYLo, _centerY2, _centerY3) + dy * scale;
+            _centerX = qdCX.X0; _centerXLo = qdCX.X1; _centerX2 = qdCX.X2; _centerX3 = qdCX.X3;
+            _centerY = qdCY.X0; _centerYLo = qdCY.X1; _centerY2 = qdCY.X2; _centerY3 = qdCY.X3;
+        }
+        else if (_quality.NeedsHighPrecision(_zoom))
+        {
+            var newCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo) + dx * scale;
+            var newCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo) + dy * scale;
+            _centerX = newCX.Hi; _centerXLo = newCX.Lo; _centerX2 = 0; _centerX3 = 0;
+            _centerY = newCY.Hi; _centerYLo = newCY.Lo; _centerY2 = 0; _centerY3 = 0;
+        }
+        else
+        {
+            _centerX += dx * scale; _centerXLo = 0; _centerX2 = 0; _centerX3 = 0;
+            _centerY += dy * scale; _centerYLo = 0; _centerY2 = 0; _centerY3 = 0;
+        }
+        ApplyViewState();
+        TriggerCalculation(progressive: false);
+    }
+
+    private void Adjust3DDistance(double delta)
+    {
+        if (_currentFractalType == FractalType.UserBulb)
+            _fractalParams.UserBulbCameraDistance = System.Math.Clamp(
+                _fractalParams.UserBulbCameraDistance + delta, 0.1, 50.0);
+        else if (_currentFractalType == FractalType.Mandelbulb)
+            _fractalParams.BulbCameraDistance = System.Math.Clamp(
+                _fractalParams.BulbCameraDistance + delta, 0.1, 50.0);
+        else return;
+        _lastUploadedBuffer = null;
+        TriggerCalculation();
+    }
+
+    private void Adjust3DCameraTheta(double delta)
+    {
+        if (_currentFractalType == FractalType.UserBulb)
+            _fractalParams.UserBulbCameraTheta = NormalizeAngle(_fractalParams.UserBulbCameraTheta + delta);
+        else if (_currentFractalType == FractalType.Mandelbulb)
+            _fractalParams.BulbCameraTheta = NormalizeAngle(_fractalParams.BulbCameraTheta + delta);
+        else return;
+        _lastUploadedBuffer = null;
+        TriggerCalculation();
+    }
+
+    private void Adjust3DCameraPhi(double delta)
+    {
+        // Phi is polar: clamp away from poles to avoid gimbal singularity.
+        const double phiMin = 0.01;
+        const double phiMax = Math.PI - 0.01;
+        if (_currentFractalType == FractalType.UserBulb)
+            _fractalParams.UserBulbCameraPhi = System.Math.Clamp(
+                _fractalParams.UserBulbCameraPhi + delta, phiMin, phiMax);
+        else if (_currentFractalType == FractalType.Mandelbulb)
+            _fractalParams.BulbCameraPhi = System.Math.Clamp(
+                _fractalParams.BulbCameraPhi + delta, phiMin, phiMax);
+        else return;
+        _lastUploadedBuffer = null;
+        TriggerCalculation();
+    }
+
+    private void Adjust3DLightTheta(double delta)
+    {
+        if (_currentFractalType == FractalType.UserBulb)
+            _fractalParams.UserBulbLightTheta = NormalizeAngle(_fractalParams.UserBulbLightTheta + delta);
+        else if (_currentFractalType == FractalType.Mandelbulb)
+            _fractalParams.BulbLightTheta = NormalizeAngle(_fractalParams.BulbLightTheta + delta);
+        else return;
+        _lastUploadedBuffer = null;
+        TriggerCalculation();
+    }
+
+    private void Adjust3DLightPhi(double delta)
+    {
+        const double phiMin = 0.01;
+        const double phiMax = Math.PI - 0.01;
+        if (_currentFractalType == FractalType.UserBulb)
+            _fractalParams.UserBulbLightPhi = System.Math.Clamp(
+                _fractalParams.UserBulbLightPhi + delta, phiMin, phiMax);
+        else if (_currentFractalType == FractalType.Mandelbulb)
+            _fractalParams.BulbLightPhi = System.Math.Clamp(
+                _fractalParams.BulbLightPhi + delta, phiMin, phiMax);
+        else return;
+        _lastUploadedBuffer = null;
+        TriggerCalculation();
+    }
+
+    private static double NormalizeAngle(double a)
+    {
+        const double twoPi = Math.PI * 2.0;
+        a %= twoPi;
+        if (a < 0) a += twoPi;
+        return a;
     }
 
     /// <summary>
@@ -3007,7 +3324,22 @@ public sealed partial class MainForm : Form
 
     private void OnMouseDown(object? sender, MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left || _slideshowRunning) return;
+        if (_slideshowRunning) return;
+
+        // Right-click drag in 3D modes rotates the camera (theta = X, phi = Y).
+        if (e.Button == MouseButtons.Right && Is3DFractalType(_currentFractalType))
+        {
+            _rightDragging = true;
+            _rightDragStart = e.Location;
+            _rightDragStartTheta = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbCameraTheta : _fractalParams.BulbCameraTheta;
+            _rightDragStartPhi = _currentFractalType == FractalType.UserBulb
+                ? _fractalParams.UserBulbCameraPhi : _fractalParams.BulbCameraPhi;
+            _renderPanel.Cursor = Cursors.NoMove2D;
+            return;
+        }
+
+        if (e.Button != MouseButtons.Left) return;
         _lastMouseDownPos = e.Location;
         _panning = true;
         _panStartScreen = e.Location;
@@ -3061,6 +3393,34 @@ public sealed partial class MainForm : Form
 
     private void OnMouseMove(object? sender, MouseEventArgs e)
     {
+        if (_rightDragging && _calculator != null && Is3DFractalType(_currentFractalType))
+        {
+            // Pixel → radians: ~180° across the panel width / height.
+            double w = Math.Max(1, _renderPanel.ClientSize.Width);
+            double h = Math.Max(1, _renderPanel.ClientSize.Height);
+            double dTheta = (e.X - _rightDragStart.X) / w * Math.PI;
+            double dPhi   = (e.Y - _rightDragStart.Y) / h * Math.PI;
+
+            const double phiMin = 0.01;
+            const double phiMax = Math.PI - 0.01;
+            double newTheta = NormalizeAngle(_rightDragStartTheta + dTheta);
+            double newPhi   = System.Math.Clamp(_rightDragStartPhi + dPhi, phiMin, phiMax);
+
+            if (_currentFractalType == FractalType.UserBulb)
+            {
+                _fractalParams.UserBulbCameraTheta = newTheta;
+                _fractalParams.UserBulbCameraPhi   = newPhi;
+            }
+            else
+            {
+                _fractalParams.BulbCameraTheta = newTheta;
+                _fractalParams.BulbCameraPhi   = newPhi;
+            }
+            _lastUploadedBuffer = null;
+            TriggerCalculation();
+            return;
+        }
+
         if (!_panning || _calculator == null) return;
         double scale = CurrentScale();
         //_centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
@@ -3100,6 +3460,12 @@ public sealed partial class MainForm : Form
 
     private void OnMouseUp(object? sender, MouseEventArgs e)
     {
+        if (e.Button == MouseButtons.Right && _rightDragging)
+        {
+            _rightDragging = false;
+            _renderPanel.Cursor = Cursors.Cross;
+            return;
+        }
         if (e.Button != MouseButtons.Left) return;
         _panning = false; _renderPanel.Cursor = Cursors.Cross;
         // If the timer is still running let it fire the full render naturally.
