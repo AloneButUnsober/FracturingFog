@@ -15,6 +15,7 @@ using System.Linq;
 using System.Windows.Forms;
 
 using FracturingFog.Models;
+using System.ComponentModel;
 
 namespace FracturingFog.Views.Editors
 {
@@ -25,9 +26,11 @@ namespace FracturingFog.Views.Editors
 
         private readonly Panel _scroll;
         private readonly Button _addButton;
+        private readonly Button _fromFileButton;
         private bool _suppressChange;
 
         public event EventHandler? OnStopsChanged;
+        public event EventHandler? OnFromFile;
 
         public ColorStopListControl()
         {
@@ -37,20 +40,21 @@ namespace FracturingFog.Views.Editors
             _scroll = new Panel
             {
                 Left = 0,
-                Top = 0,
+                Top = ButtonHeight + 4,
                 Width = Width,
-                Height = Height - ButtonHeight - 4,
+                Height = Height, // - ButtonHeight - 4,
                 BackColor = Color.FromArgb(22, 22, 22),
                 AutoScroll = true,
             };
             Controls.Add(_scroll);
 
+            int buttonWidth = _scroll.Width / 2;
             _addButton = new Button
             {
                 Text = "+ Add Stop",
                 Left = 0,
-                Top = _scroll.Bottom + 2,
-                Width = 110,
+                Top = 0,
+                Width = buttonWidth,
                 Height = ButtonHeight,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 60, 40),
@@ -65,11 +69,28 @@ namespace FracturingFog.Views.Editors
             };
             Controls.Add(_addButton);
 
+            _fromFileButton = new Button
+            {
+                Text = "From Image...",
+                Left = _addButton.Left + _addButton.Width + 2,
+                Top = 0,
+                Width = buttonWidth,
+                Height = ButtonHeight,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(60, 50, 90),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            };
+            _fromFileButton.FlatAppearance.BorderColor = Color.FromArgb(70, 110, 70);
+            _fromFileButton.Click += (s,e) => OnFromFile(s,e);
+            Controls.Add(_fromFileButton);
+
             Resize += (s, e) =>
             {
                 _scroll.Width = Width;
                 _scroll.Height = Math.Max(20, Height - ButtonHeight - 4);
-                _addButton.Top = _scroll.Bottom + 2;
+                _addButton.Top = 0;
+                _fromFileButton.Top = 0;
             };
         }
 
@@ -106,7 +127,7 @@ namespace FracturingFog.Views.Editors
             {
                 Left = 0,
                 Top = y,
-                Width = _scroll.ClientSize.Width - 4,
+                Width = _scroll.ClientSize.Width - 20,
             };
             row.OnRowChanged += (s, e) => RaiseChanged();
             row.OnDeleteClicked += (s, e) =>
@@ -176,7 +197,7 @@ namespace FracturingFog.Views.Editors
                 {
                     Left = _pos.Right + 6,
                     Top = 2,
-                    Width = 28,
+                    Width = 40,
                     Height = 22,
                     BackColor = Color.FromArgb(data.R, data.G, data.B),
                     BorderStyle = BorderStyle.FixedSingle,
@@ -202,9 +223,9 @@ namespace FracturingFog.Views.Editors
                 };
                 Controls.Add(_swatch);
 
-                _r = MakeByte(data.R, _swatch.Right + 4);
-                _g = MakeByte(data.G, _r.Right + 2);
-                _b = MakeByte(data.B, _g.Right + 2);
+                _r = MakeByte(data.R, _swatch.Right + 8);
+                _g = MakeByte(data.G, _r.Right + 4);
+                _b = MakeByte(data.B, _g.Right + 4);
                 Controls.Add(_r); Controls.Add(_g); Controls.Add(_b);
 
                 EventHandler sync = (s, e) =>
@@ -241,7 +262,7 @@ namespace FracturingFog.Views.Editors
                 {
                     Left = left,
                     Top = 2,
-                    Width = 50,
+                    Width = 60,
                     Height = 22,
                     Minimum = 0,
                     Maximum = 255,

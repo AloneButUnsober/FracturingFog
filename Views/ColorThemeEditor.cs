@@ -194,14 +194,79 @@ namespace FracturingFog.Views
             _root.Controls.Add(_helpButton);
 
             int leftY = 34;
-            int rightY = 34;
+            int rightY = 66;
 
+            // ── Actions row (left column) ───────────────────────────────────
+            _chkLivePreview = new CheckBox
+            {
+                Text = "Live preview",
+                Left = LeftX,
+                Top = leftY + 4,
+                AutoSize = true,
+                ForeColor = Color.FromArgb(200, 200, 120),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent,
+                Checked = true,
+            };
+            _root.Controls.Add(_chkLivePreview);
+
+            int buttonWidth = (this.Width / 3) + 18;
+            _btnNewBlank = MakeAction("New ▾", LeftX + 110, leftY, buttonWidth, Color.FromArgb(55, 55, 75));
+            var newMenu = new ContextMenuStrip
+            {
+                BackColor = Color.FromArgb(45, 45, 55),
+                ForeColor = Color.White,
+                ShowImageMargin = false,
+            };
+            var miNew = new ToolStripMenuItem("New");
+            miNew.Click += (s, e) => NewBlankTheme();
+            newMenu.Items.Add(miNew);
+            var miCopy = new ToolStripMenuItem("Copy");
+            miCopy.Click += (s, e) => CopyCurrentTheme();
+            newMenu.Items.Add(miCopy);
+            _btnNewBlank.Click += (s, e) => newMenu.Show(_btnNewBlank, new Point(0, _btnNewBlank.Height));
+            _root.Controls.Add(_btnNewBlank);
+
+            int buttonLeft = _btnNewBlank.Left + _btnNewBlank.Width + 2;
+            _btnRevert = MakeAction("Revert", buttonLeft, leftY, buttonWidth, Color.FromArgb(80, 60, 30));
+            _btnRevert.Click += (s, e) => RevertToSource();
+            _root.Controls.Add(_btnRevert);
+
+            buttonLeft = _btnRevert.Left + _btnRevert.Width + 2;
+            int actionRow2 = leftY; // + 32;
+            _btnApply = MakeAction("Apply", buttonLeft, actionRow2, buttonWidth, Color.FromArgb(40, 80, 40));
+            _btnApply.Click += (s, e) => PushPreviewToMain();
+            _root.Controls.Add(_btnApply);
+
+            buttonLeft = _btnApply.Left + _btnApply.Width + 2;
+            _btnSave = MakeAction("Save", buttonLeft, actionRow2, buttonWidth, Color.FromArgb(40, 60, 100));
+            _btnSave.Click += (s, e) => SaveToLibrary();
+            _root.Controls.Add(_btnSave);
+
+            buttonLeft = _btnSave.Left + _btnSave.Width + 2;
+            _btnExport = MakeAction("Export ▾", buttonLeft, actionRow2, buttonWidth + 30, Color.FromArgb(60, 50, 90));
+            var exportMenu = new ContextMenuStrip
+            {
+                BackColor = Color.FromArgb(45, 45, 55),
+                ForeColor = Color.White,
+                ShowImageMargin = false,
+            };
+            var miExportJson = new ToolStripMenuItem("JSON…");
+            miExportJson.Click += (s, e) => ExportJson();
+            exportMenu.Items.Add(miExportJson);
+            var miExportCs = new ToolStripMenuItem("C# Class…");
+            miExportCs.Click += (s, e) => ExportCSharp();
+            exportMenu.Items.Add(miExportCs);
+            _btnExport.Click += (s, e) => exportMenu.Show(_btnExport, new Point(0, _btnExport.Height));
+            _root.Controls.Add(_btnExport);
+
+            leftY += 32;
             // ── Target ──────────────────────────────────────────────────────
             _targetBox = MakeGroup("Target", LeftX, leftY, ColWidth, 84);
             _root.Controls.Add(_targetBox);
 
             AddLabel(_targetBox, "Region:", 8, 22);
-            _regionCombo = MakeCombo(70, 20, ColWidth - 84);
+            _regionCombo = MakeCombo(82, 20, ColWidth - 96);
             RebuildRegionCombo(_regionCombo, OnRegionComboSelectionChanged);
             if (!string.IsNullOrEmpty(initialRegionName))
             {
@@ -211,7 +276,7 @@ namespace FracturingFog.Views
             _targetBox.Controls.Add(_regionCombo);
 
             AddLabel(_targetBox, "Theme:", 8, 52);
-            _themeCombo = MakeCombo(70, 50, ColWidth - 84);
+            _themeCombo = MakeCombo(82, 50, ColWidth - 96);
             BuildColorCombo(_themeCombo, OnThemeComboSelectionChanged);
             _targetBox.Controls.Add(_themeCombo);
 
@@ -264,7 +329,7 @@ namespace FracturingFog.Views
             leftY = _identBox.Bottom + 6;
 
             // ── Kind radio ──────────────────────────────────────────────────
-            _kindBox = MakeGroup("Kind", LeftX, leftY, ColWidth, 50);
+            _kindBox = MakeGroup("Kind", LeftX, leftY, ColWidth, 55);
             _root.Controls.Add(_kindBox);
 
             _rdGradient = MakeRadio("Gradient", 12, 22);
@@ -283,21 +348,23 @@ namespace FracturingFog.Views
             leftY = _kindBox.Bottom + 6;
 
             // ── Stops ───────────────────────────────────────────────────────
-            _stopsBox = MakeGroup("Color Stops", LeftX, leftY, ColWidth, 246);
+            _stopsBox = MakeGroup("Color Stops", LeftX, leftY, ColWidth, 267);
             _root.Controls.Add(_stopsBox);
 
-            var btnFromImage = MakeAction("From Image…", 6, 20, 130, Color.FromArgb(60, 50, 90));
-            btnFromImage.Click += (s, e) => OpenImagePaletteDialog();
-            _stopsBox.Controls.Add(btnFromImage);
+            buttonWidth = (_stopsBox.Width - 16) / 2;
+            //var btnFromImage = MakeAction("From Image…", buttonWidth + 2, 12, buttonWidth, Color.FromArgb(60, 50, 90));
+            //btnFromImage.Click += (s, e) => OpenImagePaletteDialog();
+            //_stopsBox.Controls.Add(btnFromImage);
 
             _stopsList = new ColorStopListControl
             {
                 Left = 6,
-                Top = 52,
+                Top = 24,
                 Width = ColWidth - 14,
-                Height = _stopsBox.Height - 60,
+                Height = _stopsBox.Height - 30,
             };
             _stopsList.OnStopsChanged += (s, e) => OnFieldChanged();
+            _stopsList.OnFromFile += (s,e) => OpenImagePaletteDialog();
             _stopsBox.Controls.Add(_stopsList);
 
             leftY = _stopsBox.Bottom + 6;
@@ -340,9 +407,9 @@ namespace FracturingFog.Views
 
             _inSetSwatch = new Panel
             {
-                Left = 100,
+                Left = 85,
                 Top = 24,
-                Width = 30,
+                Width = 45,
                 Height = 24,
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = Color.Black,
@@ -389,7 +456,7 @@ namespace FracturingFog.Views
             _postFxBox = MakeGroup("Post-FX Defaults", LeftX, leftY, ColWidth, 112);
             _root.Controls.Add(_postFxBox);
 
-            const int postFxNumericLeft = 240;
+            const int postFxNumericLeft = 140;
 
             _chkUseBrightness = MakePostFxCheck("Brightness", 22);
             _postFxBox.Controls.Add(_chkUseBrightness);
@@ -419,64 +486,7 @@ namespace FracturingFog.Views
 
             leftY = _postFxBox.Bottom + 8;
 
-            // ── Actions row (left column) ───────────────────────────────────
-            _chkLivePreview = new CheckBox
-            {
-                Text = "Live preview",
-                Left = LeftX,
-                Top = leftY + 4,
-                AutoSize = true,
-                ForeColor = Color.FromArgb(200, 200, 120),
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                BackColor = Color.Transparent,
-                Checked = true,
-            };
-            _root.Controls.Add(_chkLivePreview);
-
-            _btnNewBlank = MakeAction("New ▾", LeftX + 110, leftY, 90, Color.FromArgb(55, 55, 75));
-            var newMenu = new ContextMenuStrip
-            {
-                BackColor = Color.FromArgb(45, 45, 55),
-                ForeColor = Color.White,
-                ShowImageMargin = false,
-            };
-            var miNew = new ToolStripMenuItem("New");
-            miNew.Click += (s, e) => NewBlankTheme();
-            newMenu.Items.Add(miNew);
-            var miCopy = new ToolStripMenuItem("Copy");
-            miCopy.Click += (s, e) => CopyCurrentTheme();
-            newMenu.Items.Add(miCopy);
-            _btnNewBlank.Click += (s, e) => newMenu.Show(_btnNewBlank, new Point(0, _btnNewBlank.Height));
-            _root.Controls.Add(_btnNewBlank);
-
-            _btnRevert = MakeAction("Revert", LeftX + 210, leftY, 80, Color.FromArgb(80, 60, 30));
-            _btnRevert.Click += (s, e) => RevertToSource();
-            _root.Controls.Add(_btnRevert);
-
-            int actionRow2 = leftY + 32;
-            _btnApply = MakeAction("Apply", LeftX, actionRow2, 80, Color.FromArgb(40, 80, 40));
-            _btnApply.Click += (s, e) => PushPreviewToMain();
-            _root.Controls.Add(_btnApply);
-
-            _btnSave = MakeAction("Save to Library", LeftX + 90, actionRow2, 130, Color.FromArgb(40, 60, 100));
-            _btnSave.Click += (s, e) => SaveToLibrary();
-            _root.Controls.Add(_btnSave);
-
-            _btnExport = MakeAction("Export ▾", LeftX + 230, actionRow2, 120, Color.FromArgb(60, 50, 90));
-            var exportMenu = new ContextMenuStrip
-            {
-                BackColor = Color.FromArgb(45, 45, 55),
-                ForeColor = Color.White,
-                ShowImageMargin = false,
-            };
-            var miExportJson = new ToolStripMenuItem("JSON…");
-            miExportJson.Click += (s, e) => ExportJson();
-            exportMenu.Items.Add(miExportJson);
-            var miExportCs = new ToolStripMenuItem("C# Class…");
-            miExportCs.Click += (s, e) => ExportCSharp();
-            exportMenu.Items.Add(miExportCs);
-            _btnExport.Click += (s, e) => exportMenu.Show(_btnExport, new Point(0, _btnExport.Height));
-            _root.Controls.Add(_btnExport);
+            
 
             int leftEnd = actionRow2 + 32;
 
@@ -486,11 +496,13 @@ namespace FracturingFog.Views
 
             AddLabel(_threeDBox, "Steepness:", 8, 22);
             _txSteepness = MakeNumeric(90, 20, 0.1M, 10M, 1.6M, 2);
+            _txSteepness.Width = 80;
             _txSteepness.ValueChanged += (s, e) => OnFieldChanged();
             _threeDBox.Controls.Add(_txSteepness);
 
             AddLabel(_threeDBox, "Ambient:", 200, 22);
             _txAmbient = MakeNumeric(270, 20, 0M, 1M, 0.12M, 3);
+            _txAmbient.Width = 80;
             _txAmbient.ValueChanged += (s, e) => OnFieldChanged();
             _threeDBox.Controls.Add(_txAmbient);
 
@@ -729,8 +741,8 @@ namespace FracturingFog.Views
         {
             return new CheckBox
             {
-                Text = text + " — set by theme",
-                Left = 12,
+                Text = text, // + " — set by theme",
+                Left = 8,
                 Top = top + 2,
                 AutoSize = true,
                 ForeColor = Color.FromArgb(180, 180, 180),

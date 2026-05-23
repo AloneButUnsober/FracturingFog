@@ -227,7 +227,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(330, 722);
+            ClientSize = new System.Drawing.Size(330, 671);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -436,9 +436,8 @@ namespace FracturingFog.Views
             _checkBoxShowGrid.CheckedChanged += (s, e) => OnCheckBoxShowGridCBClick(s, e);
             _toolTip.SetToolTip(_checkBoxShowGrid, "Overlay a Cartesian complex-plane grid on the fractal view");
 
-            buttonLeft = _checkBoxShowGrid.Left + _checkBoxShowGrid.Width + 42;
+            buttonLeft = _checkBoxShowGrid.Left + _checkBoxShowGrid.Width + 67;
             labelTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
-            //buttonTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 5;
             txTop = _checkBoxShowGrid.Top + _checkBoxShowGrid.Height + 6;
 
             _formResolutionCombo = new ComboBox
@@ -457,6 +456,7 @@ namespace FracturingFog.Views
             _formResolutionCombo.SelectedIndex = 0;
             _formResolutionCombo.SelectedIndexChanged += (s, e) => OnChangeDimensionsSelection(s,e);
             _menuPanel.Controls.Add(_formResolutionCombo);
+            _toolTip.SetToolTip(_formResolutionCombo, "Set window dimensions.");
 
             buttonLeft = 8;
             buttonTop = _formResolutionCombo.Top + _formResolutionCombo.Height + 2;
@@ -470,7 +470,7 @@ namespace FracturingFog.Views
                 Left = buttonLeft + 5,
                 Top = buttonTop,
                 Width = 300,
-                Height = 220,
+                Height = 282,
                 Text = "Region Navigation",
                 ForeColor = Color.FromArgb(155, 155, 155),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
@@ -480,23 +480,12 @@ namespace FracturingFog.Views
             _menuPanel.Controls.Add(navigationGrpBox);
 
             #region Region Import/Export buttons
-            //GroupBox regionBox = new GroupBox
-            //{
-            //    Text = "Regions",
-            //    Left = 13,
-            //    Top = sliderTop + 68,
-            //    Width = 300,
-            //    Height = 78,
-            //    ForeColor = Color.FromArgb(155, 155, 155),
-            //    Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-            //    BackColor = Color.FromArgb(22, 22, 22),
-            //};
-            //_menuPanel.Controls.Add(regionBox);
 
+            buttonTop = 18;
             _regionCombo = new ComboBox
             {
                 Left = 51,
-                Top = 20,
+                Top = buttonTop,
                 Width = 230,
                 Height = 26,
                 BackColor = Color.FromArgb(55, 55, 55),
@@ -509,30 +498,32 @@ namespace FracturingFog.Views
             AttachRegionComboSortMenu(_regionCombo, OnRegionComboSelectionChanged,
                 onAfterRebuild: () => UpdateDelRegionButton(_regionCombo, _delRegionButton));
             navigationGrpBox.Controls.Add(_regionCombo);
+            buttonLeft = 53;
+            buttonTop = 45;
 
             _saveViewButton = MakeBtn("Save", 55, buttonLeft, buttonTop, "Save the current view as a region");
             _saveViewButton.Click += (s, e) => OnSaveViewButtonClick(s, e);
             navigationGrpBox.Controls.Add(_saveViewButton);
             buttonLeft = _saveViewButton.Left + _saveViewButton.Width + 2;
 
-            _delRegionButton = MakeBtn("Delete", 55, buttonLeft, 45, "Delete the selected region");
+            _delRegionButton = MakeBtn("Delete", 55, buttonLeft, buttonTop, "Delete the selected region");
             _delRegionButton.Click += OnDelRegionButtonClick;
             navigationGrpBox.Controls.Add(_delRegionButton);
             buttonLeft = _delRegionButton.Left +_delRegionButton.Width + 2;
 
-            _exportRegionsButton = MakeBtn("Exp...", 55, buttonLeft, 45, "Export all custom regions to a JSON file");
+            _exportRegionsButton = MakeBtn("Exp...", 55, buttonLeft, buttonTop, "Export all custom regions to a JSON file");
             _exportRegionsButton.Click += OnExportRegionsButtonClick;
             navigationGrpBox.Controls.Add(_exportRegionsButton);
             buttonLeft = _exportRegionsButton.Left + _exportRegionsButton.Width + 2;
 
-            _importRegionsButton = MakeBtn("Imp...", 55, buttonLeft, 45, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
+            _importRegionsButton = MakeBtn("Imp...", 55, buttonLeft, buttonTop, "Import custom regions from a JSON file (duplicates get '-imp' suffix)");
             _importRegionsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 120);
             _importRegionsButton.Click += OnImportRegionsButtonClick;
             navigationGrpBox.Controls.Add(_importRegionsButton);
             #endregion Region Import/Export buttons
 
             buttonLeft = 8;
-            labelTop = 18;
+            labelTop = _saveViewButton.Top + _saveViewButton.Height + 18;
             _lblCX = new Label
             {
                 Text = "CX:",
@@ -749,9 +740,68 @@ namespace FracturingFog.Views
 
             #endregion Navigation Group Box
 
+            #region Color Theme Import/Export buttons
+            buttonTop = navigationGrpBox.Top + navigationGrpBox.Height + 2;
+            _themeBox = new GroupBox
+            {
+                Text = "Color Themes",
+                Left = 13,
+                Top = buttonTop, //regionBox.Top + regionBox.Height + 10,
+                Width = 300,
+                Height = 111,
+                ForeColor = Color.FromArgb(155, 155, 155),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.FromArgb(22, 22, 22),
+            };
+            _menuPanel.Controls.Add(_themeBox);
+
+            _colorThemeCombo = new ColorComboBox
+            {
+                Left = 51,
+                Top = 20,
+                Width = 230,
+                Height = 26,
+                BackColor = Color.FromArgb(55, 55, 55),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                DropDownWidth = Math.Max(300, Models.ColorPalette.GetMaxDescriptionLength() + 40)   // ensure descriptions fit in the dropdown
+            };
+            BuildColorCombo(_colorThemeCombo, OnColorThemeSelectionClick);
+            AttachColorComboSortMenu(
+                _colorThemeCombo,
+                OnColorThemeSelectionClick,
+                () => UpdateDeleteColorThemeButton(_colorThemeCombo, _deleteColorThemeButton));
+            _themeBox.Controls.Add(_colorThemeCombo);
+            _colorThemeCombo.SelectedIndex = 0;
+
+            _exportColorThemeButton = MakeBtn("Exp...", 55, 51, 48, "Export the current color theme to a JSON file");
+            _exportColorThemeButton.Click += (s, e) => OnExportColorThemeButtonClick(s, e);
+            _themeBox.Controls.Add(_exportColorThemeButton);
+            _importColorThemeButton = MakeBtn("Imp...", 55, _exportColorThemeButton.Left + _exportColorThemeButton.Width + 3, 48, "Import color themes from a JSON file");
+            _importColorThemeButton.Click += (s, e) => OnImportColorThemeButtonClick(s, e);
+            _themeBox.Controls.Add(_importColorThemeButton);
+
+            _deleteColorThemeButton = MakeBtn("Delete", 55, _importColorThemeButton.Left + _importColorThemeButton.Width + 3, 48, "Delete selected user-defined color theme");
+            _deleteColorThemeButton.Click += (s, e) => OnDeleteColorThemeButtonClick(s, e);
+            _themeBox.Controls.Add(_deleteColorThemeButton);
+            _loadColorThemesButton = MakeBtn("Reload", 55, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 3, 48, "Reload color themes from disk (useful if you edit the JSON files externally)");
+            _loadColorThemesButton.Click += (s, e) => OnLoadColorThemesButtonClick(s, e);
+            _themeBox.Controls.Add(_loadColorThemesButton);
+
+            _editColorThemeButton = MakeBtn("Edit Theme…", 232, 51, 78,
+                "Open the Color Theme Editor to create or edit a theme. Live-preview updates the main view; Save adds it to your library.");
+            _editColorThemeButton.BackColor = Color.FromArgb(40, 60, 100);
+            _editColorThemeButton.FlatAppearance.BorderColor = Color.FromArgb(70, 110, 160);
+            _editColorThemeButton.ForeColor = Color.White;
+            _editColorThemeButton.Click += (s, e) => OnEditColorThemeClick?.Invoke(s, e);
+            _themeBox.Controls.Add(_editColorThemeButton);
+
+            #endregion Color Theme Import/Export buttons
+
             #region Brightness & Contrast sliders 
 
-            buttonTop = navigationGrpBox.Top + navigationGrpBox.Height + 6;
+            buttonTop = _themeBox.Top + _themeBox.Height + 6;
             int sliderTop = buttonTop; // + 48;
             int sliderLeft = 8;
 
@@ -1046,64 +1096,6 @@ namespace FracturingFog.Views
             {
                 FractalRegionLibrary.Instance.IncludeExtremeInAll = _chkSlideshowUseExtremeRegions.Checked;
             };
-
-            #region Color Theme Import/Export buttons
-            _themeBox = new GroupBox
-            {
-                Text = "Color Themes",
-                Left = 13,
-                Top = 20, //regionBox.Top + regionBox.Height + 10,
-                Width = 300,
-                Height = 108,
-                ForeColor = Color.FromArgb(155, 155, 155),
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                BackColor = Color.FromArgb(22, 22, 22),
-            }; 
-            _menuPanel.Controls.Add(_themeBox);
-
-            _colorThemeCombo = new ColorComboBox
-            {
-                Left = 51,
-                Top = 20,
-                Width = 230,
-                Height = 26,
-                BackColor = Color.FromArgb(55, 55, 55),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                DropDownWidth = Math.Max(300, Models.ColorPalette.GetMaxDescriptionLength() + 40)   // ensure descriptions fit in the dropdown
-            };
-            BuildColorCombo(_colorThemeCombo, OnColorThemeSelectionClick);
-            AttachColorComboSortMenu(
-                _colorThemeCombo,
-                OnColorThemeSelectionClick,
-                () => UpdateDeleteColorThemeButton(_colorThemeCombo, _deleteColorThemeButton));
-            _themeBox.Controls.Add(_colorThemeCombo);
-            _colorThemeCombo.SelectedIndex = 0;
-
-            _exportColorThemeButton = MakeBtn("Exp...", 55, 51, 48, "Export the current color theme to a JSON file");
-            _exportColorThemeButton.Click += (s, e) => OnExportColorThemeButtonClick(s, e);
-            _themeBox.Controls.Add(_exportColorThemeButton);
-            _importColorThemeButton = MakeBtn("Imp...", 55, _exportColorThemeButton.Left + _exportColorThemeButton.Width + 3, 48, "Import color themes from a JSON file");
-            _importColorThemeButton.Click += (s, e) => OnImportColorThemeButtonClick(s, e);
-            _themeBox.Controls.Add(_importColorThemeButton);
-
-            _deleteColorThemeButton = MakeBtn("Delete", 55, _importColorThemeButton.Left + _importColorThemeButton.Width + 3, 48, "Delete selected user-defined color theme");
-            _deleteColorThemeButton.Click += (s, e) => OnDeleteColorThemeButtonClick(s, e);
-            _themeBox.Controls.Add(_deleteColorThemeButton);
-            _loadColorThemesButton = MakeBtn("Reload", 55, _deleteColorThemeButton.Left + _deleteColorThemeButton.Width + 3, 48, "Reload color themes from disk (useful if you edit the JSON files externally)");
-            _loadColorThemesButton.Click += (s, e) => OnLoadColorThemesButtonClick(s, e);
-            _themeBox.Controls.Add(_loadColorThemesButton);
-
-            _editColorThemeButton = MakeBtn("Edit Theme…", 232, 51, 78,
-                "Open the Color Theme Editor to create or edit a theme. Live-preview updates the main view; Save adds it to your library.");
-            _editColorThemeButton.BackColor = Color.FromArgb(40, 60, 100);
-            _editColorThemeButton.FlatAppearance.BorderColor = Color.FromArgb(70, 110, 160);
-            _editColorThemeButton.ForeColor = Color.White;
-            _editColorThemeButton.Click += (s, e) => OnEditColorThemeClick?.Invoke(s, e);
-            _themeBox.Controls.Add(_editColorThemeButton);
-
-            #endregion Color Theme Import/Export buttons
 
             #endregion Coordinate / Navigate panel
 

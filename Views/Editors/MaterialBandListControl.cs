@@ -117,7 +117,7 @@ namespace FracturingFog.Views.Editors
             {
                 Left = 0,
                 Top = y,
-                Width = _scroll.ClientSize.Width - 4,
+                Width = _scroll.ClientSize.Width - 20,
             };
             row.OnRowChanged += (s, e) => Raise();
             row.OnDeleteClicked += (s, e) =>

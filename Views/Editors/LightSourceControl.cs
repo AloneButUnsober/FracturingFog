@@ -37,8 +37,8 @@ namespace FracturingFog.Views.Editors
             int top = 22;
             AddLabel("Dir:", 8, top + 3);
 
-            AddLabel("X", 50, top + 3);
-            _lx = MakeFloat(70, top);
+            AddLabel("X", 65, top + 3);
+            _lx = MakeFloat(85, top);
             AddLabel("Y", _lx.Right + 8, top + 3);
             _ly = MakeFloat(_lx.Right + 24, top);
             AddLabel("Z", _ly.Right + 8, top + 3);
@@ -48,20 +48,20 @@ namespace FracturingFog.Views.Editors
             // ── Row 2: Diffuse swatch + RGB ────────────────────────────────
             top += 30;
             AddLabel("Diffuse:", 8, top + 3);
-            _diffSwatch = MakeSwatch(70, top);
-            _dr = MakeColor(_diffSwatch.Right + 6, top);
-            _dg = MakeColor(_dr.Right + 4, top);
-            _db = MakeColor(_dg.Right + 4, top);
+            _diffSwatch = MakeSwatch(_lx.Left, top);
+            _dr = MakeColor(_diffSwatch.Right + 8, top);
+            _dg = MakeColor(_dr.Right + 8, top);
+            _db = MakeColor(_dg.Right + 8, top);
             Controls.Add(_diffSwatch); Controls.Add(_dr); Controls.Add(_dg); Controls.Add(_db);
             WireSwatch(_diffSwatch, _dr, _dg, _db);
 
             // ── Row 3: Specular swatch + RGB ───────────────────────────────
             top += 30;
             AddLabel("Specular:", 8, top + 3);
-            _specSwatch = MakeSwatch(70, top);
-            _sr = MakeColor(_specSwatch.Right + 6, top);
-            _sg = MakeColor(_sr.Right + 4, top);
-            _sb = MakeColor(_sg.Right + 4, top);
+            _specSwatch = MakeSwatch(_lx.Left, top);
+            _sr = MakeColor(_specSwatch.Right + 8, top);
+            _sg = MakeColor(_sr.Right + 8, top);
+            _sb = MakeColor(_sg.Right + 8, top);
             Controls.Add(_specSwatch); Controls.Add(_sr); Controls.Add(_sg); Controls.Add(_sb);
             WireSwatch(_specSwatch, _sr, _sg, _sb);
 
@@ -70,7 +70,7 @@ namespace FracturingFog.Views.Editors
             AddLabel("Shininess:", 8, top + 3);
             _shininess = new NumericUpDown
             {
-                Left = 90,
+                Left = _lx.Left,
                 Top = top,
                 Width = 80,
                 Height = 24,
@@ -173,7 +173,7 @@ namespace FracturingFog.Views.Editors
             {
                 Left = left,
                 Top = top,
-                Width = 30,
+                Width = 45,
                 Height = 24,
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = Color.White,
