@@ -63,3 +63,12 @@ Q: Pan up
 E: Pan down
 
 Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.
+
+// Region save non-mandelbrot type: sugest save name as "FractalType Name - " 
+// Region UserEuquations Sandbox Userbulb3D types: sugest save name as "FractalType Name - Equation Name"
+
+// LSystem Parameters: Depth Sweep function
+
+// Color theme change during video slideshow fade one to the other
+
+// Simplify Video dialogue

@@ -5,7 +5,10 @@
 // parser — no Roslyn, no BCL access.
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
+using System.Text.Json;
 using System.Windows.Forms;
 
 using FracturingFog.Models;
@@ -22,6 +25,8 @@ namespace FracturingFog.Views
         private readonly ComboBox _savedCombo;
         private readonly Button _saveBtn;
         private readonly Button _deleteBtn;
+        private readonly Button _exportBtn;
+        private readonly Button _importBtn;
         private readonly CheckBox _promoteCheck;
         private bool _suppressComboEvent;
         private bool _suppressPromoteEvent;
@@ -44,7 +49,7 @@ namespace FracturingFog.Views
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             TopMost = true;
-            ClientSize = new Size(520, 460);
+            ClientSize = new Size(680, 460);
             BackColor = Color.FromArgb(40, 40, 40);
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 9f);
@@ -95,6 +100,24 @@ namespace FracturingFog.Views
             _deleteBtn.Click += OnDeleteClick;
             Controls.Add(_deleteBtn);
 
+            _exportBtn = new Button
+            {
+                Text = "Export…", Left = 510, Top = 56, Width = 78, Height = 24,
+                BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            _exportBtn.Click += OnExportClick;
+            Controls.Add(_exportBtn);
+
+            _importBtn = new Button
+            {
+                Text = "Import…", Left = 592, Top = 56, Width = 78, Height = 24,
+                BackColor = Color.FromArgb(70, 70, 70), ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            _importBtn.Click += OnImportClick;
+            Controls.Add(_importBtn);
+
             _promoteCheck = new CheckBox
             {
                 Text = "Promote to fractal list",
@@ -110,7 +133,7 @@ namespace FracturingFog.Views
             {
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
-                Left = 10, Top = 110, Width = 500, Height = 240,
+                Left = 10, Top = 110, Width = 660, Height = 240,
                 BackColor = Color.FromArgb(28, 28, 28),
                 ForeColor = Color.White,
                 Font = new Font("Consolas", 10f),
@@ -124,7 +147,7 @@ namespace FracturingFog.Views
 
             _errorLabel = new Label
             {
-                Left = 10, Top = 360, Width = 500, Height = 80,
+                Left = 10, Top = 360, Width = 660, Height = 80,
                 ForeColor = Color.FromArgb(255, 100, 100),
                 BackColor = Color.Transparent,
                 Font = new Font("Consolas", 8f),
@@ -239,6 +262,127 @@ namespace FracturingFog.Views
 
             _params.SandboxName = entry.Name;
             RefreshSavedCombo(selectFirst: false, selectName: entry.Name);
+        }
+
+        private void OnExportClick(object? sender, EventArgs e)
+        {
+            var equations = SandboxEquationStore.Instance.Equations;
+            if (equations.Count == 0)
+            {
+                MessageBox.Show(this,
+                    "There are no saved sandbox equations to export.",
+                    "Export Sandbox Equations",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string defaultName = (_savedCombo.SelectedItem as string) ?? "sandbox-equations";
+
+            using var dlg = new SaveFileDialog
+            {
+                Title = "Export Sandbox Equations",
+                Filter = "JSON File (*.json)|*.json",
+                DefaultExt = "json",
+                FileName = defaultName + ".json"
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                // Snapshot to a fresh list so we control serialization shape
+                // (and don't accidentally share Promoted state by reference).
+                var snapshot = new List<SandboxEquationEntry>(equations.Count);
+                foreach (var eq in equations)
+                    snapshot.Add(new SandboxEquationEntry
+                    {
+                        Name = eq.Name,
+                        Source = eq.Source,
+                        Promoted = eq.Promoted
+                    });
+                var opts = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(dlg.FileName, JsonSerializer.Serialize(snapshot, opts));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Export failed:\n\n{ex.Message}",
+                    "Export Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void OnImportClick(object? sender, EventArgs e)
+        {
+            using var dlg = new OpenFileDialog
+            {
+                Title = "Import Sandbox Equations",
+                Filter = "JSON File (*.json)|*.json|All Files (*.*)|*.*"
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            List<SandboxEquationEntry>? imported;
+            try
+            {
+                string text = File.ReadAllText(dlg.FileName);
+                string trimmed = text.TrimStart();
+                if (trimmed.StartsWith("["))
+                {
+                    // Plain list export (from this dialog).
+                    imported = JsonSerializer.Deserialize<List<SandboxEquationEntry>>(text);
+                }
+                else
+                {
+                    // Region bundle — pull just the SandboxEquations array out.
+                    using var doc = JsonDocument.Parse(text);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                        doc.RootElement.TryGetProperty("SandboxEquations", out var arr) &&
+                        arr.ValueKind == JsonValueKind.Array)
+                    {
+                        imported = JsonSerializer.Deserialize<List<SandboxEquationEntry>>(arr.GetRawText());
+                    }
+                    else
+                    {
+                        imported = null;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Could not read or parse the file:\n\n{ex.Message}",
+                    "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (imported == null || imported.Count == 0)
+            {
+                MessageBox.Show(this, "The file contains no sandbox equations.",
+                    "Import Sandbox Equations",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            int added = 0, skipped = 0;
+            foreach (var eq in imported)
+            {
+                if (eq == null || string.IsNullOrWhiteSpace(eq.Name)) continue;
+                if (SandboxEquationStore.Instance.GetByName(eq.Name) != null) { skipped++; continue; }
+                SandboxEquationStore.Instance.Equations.Add(new SandboxEquationEntry
+                {
+                    Name = eq.Name,
+                    Source = eq.Source ?? string.Empty,
+                    Promoted = eq.Promoted
+                });
+                added++;
+            }
+
+            if (added > 0) SandboxEquationStore.Instance.Save();
+
+            RefreshSavedCombo(selectFirst: false, selectName: _params.SandboxName);
+            // Refresh promoted-fractal catalog in case any newly imported entry was marked promoted.
+            if (added > 0) PromotionChanged?.Invoke();
+
+            string summary = added == 1 ? "1 equation imported" : $"{added} equations imported";
+            if (skipped > 0) summary += $" ({skipped} skipped — name exists)";
+            MessageBox.Show(this, summary, "Import Sandbox Equations",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void OnDeleteClick(object? sender, EventArgs e)

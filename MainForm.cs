@@ -1063,10 +1063,10 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnBrightnessSlide += (s, e, l) => OnAdjustBrightness(s, e, l);
         _floatingMenu.OnContrastSlide += (s, e, l) => OnAdjustContrast(s, e, l);
         _floatingMenu.OnHistogramEqSlide += (s, e, l) => OnAdjustHistogramEq(s, e, l);
-        _floatingMenu.OnTaaAlphaSlide     += (s, e, l) => SetVideoTaaAlphaPercent(_floatingMenu.TaaAlphaValue);
+        _floatingMenu.OnTaaAlphaSlide += (s, e, l) => SetVideoTaaAlphaPercent(_floatingMenu.TaaAlphaValue);
         _floatingMenu.OnTaaFadeStartSlide += (s, e, l) => SetVideoTaaFadeStartLog10(_floatingMenu.TaaFadeStartLog10);
-        _floatingMenu.OnTaaFadeEndSlide   += (s, e, l) => SetVideoTaaFadeEndLog10(_floatingMenu.TaaFadeEndLog10);
-        _floatingMenu.OnChangeDimensions += (s,e) => OnChangeDimensions(s,e);
+        _floatingMenu.OnTaaFadeEndSlide += (s, e, l) => SetVideoTaaFadeEndLog10(_floatingMenu.TaaFadeEndLog10);
+        _floatingMenu.OnChangeDimensions += (s, e) => OnChangeDimensions(s, e);
         _floatingMenu.OnHelpClick += (s, e) =>
             {
                 OnShowHelpClick();
@@ -1370,13 +1370,16 @@ public sealed partial class MainForm : Form
             Filter = "PNG Image (*.png)|*.png|TIFF Image (*.tiff;*.tif)|*.tiff;*.tif|BMP Image (*.bmp)|*.bmp",
             FilterIndex = 1,
             DefaultExt = "png",
-            FileName = $"{_programName.Replace(" ","")}_{CurrentFractalTypeName()}_{colorName.Replace(" ", "")}_{regionName.Replace(" ", "")}" +
-                         $"x{fnCx.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
-                         $"y{fnCy.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
-                         $"z{fnZoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
-                         $"i{fnIter.ToString(System.Globalization.CultureInfo.InvariantCulture)}_" +
-                         sizeTag +
-                         rotatedTag
+            FileName = $"{_programName.Replace(" ", "")}" +
+                        $"_{CurrentFractalTypeName().Replace("/", "").Replace("\\", "")}" +
+                        $"_{colorName.Replace(" ", "").Replace("/", "").Replace("\\", "")}" +
+                        $"_{regionName.Replace(" ", "").Replace("/", "").Replace("\\", "")}" +
+                        $"x{fnCx.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                        $"y{fnCy.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                        $"z{fnZoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                        $"i{fnIter.ToString(System.Globalization.CultureInfo.InvariantCulture)}_" +
+                        sizeTag +
+                        rotatedTag
         };
         if (saveDlg.ShowDialog(this) != DialogResult.OK) return;
 
@@ -1575,31 +1578,31 @@ public sealed partial class MainForm : Form
         // shows something meaningful rather than the inherited Mandelbrot view.
         (_centerX, _centerY, _zoom) = sel switch
         {
-            FractalType.Mandelbrot       => (-0.5, 0.0, 1.0),
-            FractalType.Julia            => (0.0, 0.0, 1.0),
-            FractalType.BurningShip      => (-0.5, -0.5, 1.0),
-            FractalType.Tricorn          => (0.0, 0.0, 1.0),
-            FractalType.Multibrot        => (0.0, 0.0, 1.0),
-            FractalType.Phoenix          => (0.0, 0.0, 1.5),
-            FractalType.Newton           => (0.0, 0.0, 1.0),
-            FractalType.BuddhaBrot       => (-0.5, 0.0, 1.0),
-            FractalType.IFS              => (0.0, 0.0, 1.0),
-            FractalType.LSystem          => (0.0, 0.0, 1.0),
+            FractalType.Mandelbrot => (-0.5, 0.0, 1.0),
+            FractalType.Julia => (0.0, 0.0, 1.0),
+            FractalType.BurningShip => (-0.5, -0.5, 1.0),
+            FractalType.Tricorn => (0.0, 0.0, 1.0),
+            FractalType.Multibrot => (0.0, 0.0, 1.0),
+            FractalType.Phoenix => (0.0, 0.0, 1.5),
+            FractalType.Newton => (0.0, 0.0, 1.0),
+            FractalType.BuddhaBrot => (-0.5, 0.0, 1.0),
+            FractalType.IFS => (0.0, 0.0, 1.0),
+            FractalType.LSystem => (0.0, 0.0, 1.0),
             FractalType.StrangeAttractor => (0.0, 0.0, 1.0),
-            FractalType.UserEquation     => (0.0, 0.0, 1.0),
-            FractalType.Mandelbulb       => (0.0, 0.0, 1.0),
-            FractalType.Sandbox          => (0.0, 0.0, 1.0),
-            FractalType.UserBulb         => (0.0, 0.0, 1.0),
-            _                            => (-0.5, 0.0, 1.0)
+            FractalType.UserEquation => (0.0, 0.0, 1.0),
+            FractalType.Mandelbulb => (0.0, 0.0, 1.0),
+            FractalType.Sandbox => (0.0, 0.0, 1.0),
+            FractalType.UserBulb => (0.0, 0.0, 1.0),
+            _ => (-0.5, 0.0, 1.0)
         };
         _centerXLo = _centerX2 = _centerX3 = 0.0;
         _centerYLo = _centerY2 = _centerY3 = 0.0;
         _lastUploadedBuffer = null;
 
         // Refresh the suggested-themes section for the new fractal type.
-        if (sel == FractalType.Sandbox)       ApplySandboxEquationSuggestions();
+        if (sel == FractalType.Sandbox) ApplySandboxEquationSuggestions();
         else if (sel == FractalType.UserEquation) ApplyUserEquationSuggestions();
-        else                                  ApplyEquationProfileToCombos(null);
+        else ApplyEquationProfileToCombos(null);
 
         ApplyViewState();
         TriggerCalculation();
@@ -1611,23 +1614,23 @@ public sealed partial class MainForm : Form
     /// </summary>
     private static int ComboIndexForFractalType(FractalType t) => t switch
     {
-        FractalType.Mandelbrot       => 0,
-        FractalType.Julia            => 1,
-        FractalType.BurningShip      => 2,
-        FractalType.Tricorn          => 3,
-        FractalType.Multibrot        => 4,
-        FractalType.Phoenix          => 5,
-        FractalType.Newton           => 6,
-        FractalType.Nova             => 6,
-        FractalType.BuddhaBrot       => 7,
-        FractalType.IFS              => 8,
-        FractalType.LSystem          => 9,
+        FractalType.Mandelbrot => 0,
+        FractalType.Julia => 1,
+        FractalType.BurningShip => 2,
+        FractalType.Tricorn => 3,
+        FractalType.Multibrot => 4,
+        FractalType.Phoenix => 5,
+        FractalType.Newton => 6,
+        FractalType.Nova => 6,
+        FractalType.BuddhaBrot => 7,
+        FractalType.IFS => 8,
+        FractalType.LSystem => 9,
         FractalType.StrangeAttractor => 10,
-        FractalType.UserEquation     => 11,
-        FractalType.Mandelbulb       => 12,
-        FractalType.Sandbox          => 13,
-        FractalType.UserBulb         => 14,
-        _                            => 0
+        FractalType.UserEquation => 11,
+        FractalType.Mandelbulb => 12,
+        FractalType.Sandbox => 13,
+        FractalType.UserBulb => 14,
+        _ => 0
     };
 
     /// <summary>
@@ -1828,7 +1831,7 @@ public sealed partial class MainForm : Form
                 TriggerCalculation();
             }
             _miniMapPanel?.RequestRedraw();
-        _miniDepthPanel?.RequestRedraw();
+            _miniDepthPanel?.RequestRedraw();
 
             // Sync the other combo (toolbar vs floating menu) so both
             // surfaces always show the same active theme, regardless of which
@@ -1923,18 +1926,18 @@ public sealed partial class MainForm : Form
         {
             _fractalParams.BulbCameraDistance = 3.0;
             _fractalParams.BulbCameraTheta = Math.PI * 0.25;
-            _fractalParams.BulbCameraPhi   = Math.PI * 0.35;
-            _fractalParams.BulbLightTheta  = Math.PI * 0.25;
-            _fractalParams.BulbLightPhi    = Math.PI * 0.45;
+            _fractalParams.BulbCameraPhi = Math.PI * 0.35;
+            _fractalParams.BulbLightTheta = Math.PI * 0.25;
+            _fractalParams.BulbLightPhi = Math.PI * 0.45;
             _lastUploadedBuffer = null;
         }
         else if (_currentFractalType == FractalType.UserBulb)
         {
             _fractalParams.UserBulbCameraDistance = 3.0;
             _fractalParams.UserBulbCameraTheta = Math.PI * 0.25;
-            _fractalParams.UserBulbCameraPhi   = Math.PI * 0.35;
-            _fractalParams.UserBulbLightTheta  = Math.PI * 0.25;
-            _fractalParams.UserBulbLightPhi    = Math.PI * 0.45;
+            _fractalParams.UserBulbCameraPhi = Math.PI * 0.35;
+            _fractalParams.UserBulbLightTheta = Math.PI * 0.25;
+            _fractalParams.UserBulbLightPhi = Math.PI * 0.45;
             _lastUploadedBuffer = null;
         }
 
@@ -2225,10 +2228,17 @@ public sealed partial class MainForm : Form
 
     private void OnExportRegionsClick(object? sender, EventArgs e)
     {
-        var userRegions = FractalRegionLibrary.Instance.UserRegions;
+        // Omit UserEquation and UserBulb (3D) regions — their source isn't
+        // portable via a plain regions JSON: UserEquation references by name
+        // only, and UserBulb embeds source that isn't useful without the
+        // surrounding compile pipeline.
+        var userRegions = FractalRegionLibrary.Instance.UserRegions
+            .Where(r => r.FractalType != FractalType.UserEquation
+                     && r.FractalType != FractalType.UserBulb)
+            .ToList();
         if (userRegions.Count == 0)
         {
-            MessageBox.Show("There are no custom regions to export.\n\nUse \"Save View\" to create one first.",
+            MessageBox.Show("There are no exportable custom regions.\n\nUse \"Save View\" to create one first. (User Equation and UserBulb 3D regions are excluded.)",
                 "Export Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
@@ -2250,11 +2260,43 @@ public sealed partial class MainForm : Form
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
+        // Bundle any Sandbox equations referenced by the exported regions so
+        // the recipient can recall the saved view without manually copying
+        // the equation source.
+        var sandboxNames = userRegions
+            .Where(r => r.FractalType == FractalType.Sandbox && !string.IsNullOrWhiteSpace(r.SandboxName))
+            .Select(r => r.SandboxName!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var sandboxEquations = new List<SandboxEquationEntry>();
+        foreach (var name in sandboxNames)
+        {
+            var entry = SandboxEquationStore.Instance.GetByName(name);
+            if (entry != null)
+                sandboxEquations.Add(new SandboxEquationEntry
+                {
+                    Name = entry.Name,
+                    Source = entry.Source,
+                    Promoted = entry.Promoted
+                });
+        }
+
+        var bundle = new RegionExportBundle
+        {
+            Version = 2,
+            Regions = userRegions,
+            SandboxEquations = sandboxEquations
+        };
+
         try
         {
             var opts = new JsonSerializerOptions { WriteIndented = true };
-            File.WriteAllText(dlg.FileName, JsonSerializer.Serialize(userRegions, opts));
-            SetStatus($"Exported {userRegions.Count} region(s)  →  {Path.GetFileName(dlg.FileName)}");
+            File.WriteAllText(dlg.FileName, JsonSerializer.Serialize(bundle, opts));
+            string suffix = sandboxEquations.Count > 0
+                ? $" + {sandboxEquations.Count} sandbox equation(s)"
+                : string.Empty;
+            SetStatus($"Exported {userRegions.Count} region(s){suffix}  →  {Path.GetFileName(dlg.FileName)}");
         }
         catch (Exception ex)
         {
@@ -2272,10 +2314,24 @@ public sealed partial class MainForm : Form
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
-        List<FractalRegion>? imported;
+        List<FractalRegion>? imported = null;
+        List<SandboxEquationEntry>? importedSandbox = null;
         try
         {
-            imported = JsonSerializer.Deserialize<List<FractalRegion>>(File.ReadAllText(dlg.FileName));
+            string text = File.ReadAllText(dlg.FileName);
+            // Try new bundle format first (object with Version/Regions/SandboxEquations).
+            // Fall back to legacy List<FractalRegion> for backwards compatibility.
+            string trimmed = text.TrimStart();
+            if (trimmed.StartsWith("{"))
+            {
+                var bundle = JsonSerializer.Deserialize<RegionExportBundle>(text);
+                imported = bundle?.Regions;
+                importedSandbox = bundle?.SandboxEquations;
+            }
+            else
+            {
+                imported = JsonSerializer.Deserialize<List<FractalRegion>>(text);
+            }
         }
         catch (Exception ex)
         {
@@ -2289,6 +2345,28 @@ public sealed partial class MainForm : Form
             MessageBox.Show("The file contains no region entries.",
                 "Import Regions", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
+        }
+
+        // Merge bundled Sandbox equations into the store BEFORE adding regions,
+        // so SandboxName references resolve on first recall. Skip duplicates
+        // (existing names are left untouched to protect local edits).
+        int sandboxAdded = 0;
+        if (importedSandbox != null && importedSandbox.Count > 0)
+        {
+            SandboxEquationStore.Instance.Load();
+            foreach (var eq in importedSandbox)
+            {
+                if (eq == null || string.IsNullOrWhiteSpace(eq.Name)) continue;
+                if (SandboxEquationStore.Instance.GetByName(eq.Name) != null) continue;
+                SandboxEquationStore.Instance.Equations.Add(new SandboxEquationEntry
+                {
+                    Name = eq.Name,
+                    Source = eq.Source ?? string.Empty,
+                    Promoted = eq.Promoted
+                });
+                sandboxAdded++;
+            }
+            if (sandboxAdded > 0) SandboxEquationStore.Instance.Save();
         }
 
         int added = 0, renamed = 0;
@@ -2314,7 +2392,7 @@ public sealed partial class MainForm : Form
             added++;
         }
 
-        if (added == 0)
+        if (added == 0 && sandboxAdded == 0)
         {
             MessageBox.Show("No valid regions found.", "Import Regions",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -2326,7 +2404,21 @@ public sealed partial class MainForm : Form
 
         string summary = added == 1 ? "1 region imported" : $"{added} regions imported";
         if (renamed > 0) summary += $" ({renamed} renamed with '-imp')";
+        if (sandboxAdded > 0) summary += $" + {sandboxAdded} sandbox equation(s)";
         SetStatus(summary + $"  ←  {Path.GetFileName(dlg.FileName)}");
+    }
+
+    /// <summary>
+    /// On-disk format for region export bundles (Version >= 2). Carries the
+    /// region list plus any referenced Sandbox equations so a recipient can
+    /// open a Sandbox region without manually copying the equation source.
+    /// Legacy exports (a bare JSON array) are still accepted on import.
+    /// </summary>
+    private sealed class RegionExportBundle
+    {
+        public int Version { get; set; } = 2;
+        public List<FractalRegion> Regions { get; set; } = new();
+        public List<SandboxEquationEntry> SandboxEquations { get; set; } = new();
     }
 
     private void OnChangeDimensions(object? sender, EventArgs e)
@@ -2573,7 +2665,7 @@ public sealed partial class MainForm : Form
                 getSwatchColor: GetSwatchColor);
 
             _miniDepthPanel.Left = 4;
-            _miniDepthPanel.Top  = _renderPanel.ClientSize.Height - _miniDepthPanel.Height - 4;
+            _miniDepthPanel.Top = _renderPanel.ClientSize.Height - _miniDepthPanel.Height - 4;
             _miniDepthPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             _renderPanel.Controls.Add(_miniDepthPanel);
             _miniDepthPanel.BringToFront();
@@ -2753,7 +2845,7 @@ public sealed partial class MainForm : Form
 
     private string CurrentFractalTypeName()
     {
-        
+
         return Fractals.FractalNameByNameType[_currentFractalType];
     }
 
@@ -3012,34 +3104,34 @@ public sealed partial class MainForm : Form
             const double panFrac = 0.125;   // pan ~1/8 of viewport per key
             switch (e.KeyCode)
             {
-                case Keys.W: CenterZoomBy(zoomFactor);       e.Handled = true; return;
+                case Keys.W: CenterZoomBy(zoomFactor); e.Handled = true; return;
                 case Keys.S: CenterZoomBy(1.0 / zoomFactor); e.Handled = true; return;
-                case Keys.A: PanByPixels( (int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
+                case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
                 case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
             }
             return;
         }
 
         // ── 3D: W/S = distance, A/D = pan, arrows = camera, Pg/Home/End = light ─
-        const double distStep   = 0.25;
-        const double rotStep    = Math.PI / 36.0; // 5°
-        const double pan3DFrac  = 0.125;
+        const double distStep = 0.25;
+        const double rotStep = Math.PI / 36.0; // 5°
+        const double pan3DFrac = 0.125;
         switch (e.KeyCode)
         {
-            case Keys.W: Adjust3DDistance(-distStep);   e.Handled = true; return;
-            case Keys.S: Adjust3DDistance( distStep);   e.Handled = true; return;
-            case Keys.A: PanByPixels( (int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
+            case Keys.W: Adjust3DDistance(-distStep); e.Handled = true; return;
+            case Keys.S: Adjust3DDistance(distStep); e.Handled = true; return;
+            case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
             case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
 
-            case Keys.Up:    Adjust3DCameraPhi(  rotStep); e.Handled = true; return;
-            case Keys.Down:  Adjust3DCameraPhi( -rotStep); e.Handled = true; return;
-            case Keys.Left:  Adjust3DCameraTheta(-rotStep); e.Handled = true; return;
-            case Keys.Right: Adjust3DCameraTheta( rotStep); e.Handled = true; return;
+            case Keys.Up: Adjust3DCameraPhi(rotStep); e.Handled = true; return;
+            case Keys.Down: Adjust3DCameraPhi(-rotStep); e.Handled = true; return;
+            case Keys.Left: Adjust3DCameraTheta(-rotStep); e.Handled = true; return;
+            case Keys.Right: Adjust3DCameraTheta(rotStep); e.Handled = true; return;
 
-            case Keys.PageUp:   Adjust3DLightTheta(-rotStep); e.Handled = true; return;
-            case Keys.PageDown: Adjust3DLightTheta( rotStep); e.Handled = true; return;
-            case Keys.Home:     Adjust3DLightPhi(  -rotStep); e.Handled = true; return;
-            case Keys.End:      Adjust3DLightPhi(   rotStep); e.Handled = true; return;
+            case Keys.PageUp: Adjust3DLightTheta(-rotStep); e.Handled = true; return;
+            case Keys.PageDown: Adjust3DLightTheta(rotStep); e.Handled = true; return;
+            case Keys.Home: Adjust3DLightPhi(-rotStep); e.Handled = true; return;
+            case Keys.End: Adjust3DLightPhi(rotStep); e.Handled = true; return;
         }
     }
 
@@ -3405,22 +3497,22 @@ public sealed partial class MainForm : Form
             double w = Math.Max(1, _renderPanel.ClientSize.Width);
             double h = Math.Max(1, _renderPanel.ClientSize.Height);
             double dTheta = (e.X - _rightDragStart.X) / w * Math.PI;
-            double dPhi   = (e.Y - _rightDragStart.Y) / h * Math.PI;
+            double dPhi = (e.Y - _rightDragStart.Y) / h * Math.PI;
 
             const double phiMin = 0.01;
             const double phiMax = Math.PI - 0.01;
             double newTheta = NormalizeAngle(_rightDragStartTheta + dTheta);
-            double newPhi   = System.Math.Clamp(_rightDragStartPhi + dPhi, phiMin, phiMax);
+            double newPhi = System.Math.Clamp(_rightDragStartPhi + dPhi, phiMin, phiMax);
 
             if (_currentFractalType == FractalType.UserBulb)
             {
                 _fractalParams.UserBulbCameraTheta = newTheta;
-                _fractalParams.UserBulbCameraPhi   = newPhi;
+                _fractalParams.UserBulbCameraPhi = newPhi;
             }
             else
             {
                 _fractalParams.BulbCameraTheta = newTheta;
-                _fractalParams.BulbCameraPhi   = newPhi;
+                _fractalParams.BulbCameraPhi = newPhi;
             }
             _lastUploadedBuffer = null;
             TriggerCalculation();
@@ -3552,15 +3644,15 @@ public sealed partial class MainForm : Form
                     e.FractalType = _currentFractalType;
                     e.FractalParameters = _fractalParams;
                     break;
-                case IFSCalculator ifs:           ifs.FractalParameters = _fractalParams; break;
-                case LSystemCalculator ls:        ls.FractalParameters = _fractalParams; break;
-                case AttractorCalculator a:       a.FractalParameters = _fractalParams; break;
-                case BuddhabrotCalculator b:      b.FractalParameters = _fractalParams; break;
-                case NewtonCalculator n:          n.FractalParameters = _fractalParams; break;
-                case UserEquationCalculator u:    u.FractalParameters = _fractalParams; break;
-                case MandelbulbCalculator m:      m.FractalParameters = _fractalParams; break;
-                case SandboxCalculator sb:        sb.FractalParameters = _fractalParams; break;
-                case UserBulbCalculator ub:       ub.FractalParameters = _fractalParams; break;
+                case IFSCalculator ifs: ifs.FractalParameters = _fractalParams; break;
+                case LSystemCalculator ls: ls.FractalParameters = _fractalParams; break;
+                case AttractorCalculator a: a.FractalParameters = _fractalParams; break;
+                case BuddhabrotCalculator b: b.FractalParameters = _fractalParams; break;
+                case NewtonCalculator n: n.FractalParameters = _fractalParams; break;
+                case UserEquationCalculator u: u.FractalParameters = _fractalParams; break;
+                case MandelbulbCalculator m: m.FractalParameters = _fractalParams; break;
+                case SandboxCalculator sb: sb.FractalParameters = _fractalParams; break;
+                case UserBulbCalculator ub: ub.FractalParameters = _fractalParams; break;
             }
         }
 
@@ -3621,23 +3713,23 @@ public sealed partial class MainForm : Form
     /// </summary>
     private IFractalCalculator? SelectAltCalculator(FractalType type) => type switch
     {
-        FractalType.Mandelbrot       => null,
-        FractalType.Julia            => _escapeCalculator,
-        FractalType.BurningShip      => _escapeCalculator,
-        FractalType.Tricorn          => _escapeCalculator,
-        FractalType.Multibrot        => _escapeCalculator,
-        FractalType.Phoenix          => _escapeCalculator,
-        FractalType.IFS              => _ifsCalculator,
-        FractalType.LSystem          => _lsystemCalculator,
+        FractalType.Mandelbrot => null,
+        FractalType.Julia => _escapeCalculator,
+        FractalType.BurningShip => _escapeCalculator,
+        FractalType.Tricorn => _escapeCalculator,
+        FractalType.Multibrot => _escapeCalculator,
+        FractalType.Phoenix => _escapeCalculator,
+        FractalType.IFS => _ifsCalculator,
+        FractalType.LSystem => _lsystemCalculator,
         FractalType.StrangeAttractor => _attractorCalculator,
-        FractalType.BuddhaBrot       => _buddhabrotCalculator,
-        FractalType.Newton           => _newtonCalculator,
-        FractalType.Nova             => _newtonCalculator, // share path for now
-        FractalType.UserEquation     => _userEquationCalculator,
-        FractalType.Mandelbulb       => _mandelbulbCalculator,
-        FractalType.Sandbox          => _sandboxCalculator,
-        FractalType.UserBulb         => _userBulbCalculator,
-        _                            => null
+        FractalType.BuddhaBrot => _buddhabrotCalculator,
+        FractalType.Newton => _newtonCalculator,
+        FractalType.Nova => _newtonCalculator, // share path for now
+        FractalType.UserEquation => _userEquationCalculator,
+        FractalType.Mandelbulb => _mandelbulbCalculator,
+        FractalType.Sandbox => _sandboxCalculator,
+        FractalType.UserBulb => _userBulbCalculator,
+        _ => null
     };
 
     #endregion Rendering/Calculating
