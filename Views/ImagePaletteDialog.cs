@@ -78,7 +78,7 @@ namespace FracturingFog.Views
             ForeColor = Color.FromArgb(220, 220, 220);
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
-            ClientSize = new Size(820, 660);
+            ClientSize = new Size(820, 850);
             KeyPreview = true;
             AllowDrop = true;
             // Float above the (already TopMost) Theme Editor so the user

@@ -213,6 +213,7 @@ public sealed partial class MainForm : Form
 
     // Core Objects
     private IFractalRenderer? _renderer;          // D3D12 or D3D11
+    private IFractalCalculator _fractalCalculator;
     private MandelbrotCalculator? _calculator;
     private EscapeTimeCalculator? _escapeCalculator;  // Julia / BurningShip / Tricorn / Multibrot / Phoenix
     private IFSCalculator? _ifsCalculator;
