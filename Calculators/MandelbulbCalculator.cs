@@ -107,14 +107,15 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 double px = camX, py = camY, pz = camZ;
                 double tTotal = 0;
                 bool hit = false;
-                double iterEscape = 0;
+                int hitStep = 0;
 
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = MandelbulbDE(px, py, pz, power, deIter, out iterEscape);
+                    double dist = MandelbulbDE(px, py, pz, power, deIter, out _);
                     if (dist < eps)
                     {
                         hit = true;
+                        hitStep = step;
                         break;
                     }
                     if (tTotal > 12.0) break; // escaped scene
@@ -140,8 +141,11 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 double ambient = 0.15;
                 double shade = ambient + diffuse * (1.0 - ambient);
 
-                // Color: blend via IColorMap on (iterEscape, distance proxy 0).
-                float smooth = (float)(iterEscape / Math.Max(1, deIter)) * 200f;
+                // Color driver: raymarch step count + depth. Spans well across
+                // surface even when DE iter-escape is constant, so non-3D
+                // gradient themes show variation. 3D themes still get nrm.
+                float smooth = (float)hitStep * (256f / Math.Max(1, maxSteps))
+                             + (float)(tTotal * 4.0);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
                 // Apply shading multiplicatively.
                 byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);

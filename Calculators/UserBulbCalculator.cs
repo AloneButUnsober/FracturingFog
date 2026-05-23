@@ -222,15 +222,16 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
                 double px = camX, py = camY, pz = camZ;
                 double tTotal = 0;
                 bool hit = false;
-                double iterEscape = 0;
+                int hitStep = 0;
 
                 for (int step = 0; step < maxSteps; step++)
                 {
                     if (ct.IsCancellationRequested) return;
-                    double dist = UserBulbDE(fn, px, py, pz, deIter, bailout, jacH, out iterEscape);
+                    double dist = UserBulbDE(fn, px, py, pz, deIter, bailout, jacH, out _);
                     if (dist < eps)
                     {
                         hit = true;
+                        hitStep = step;
                         break;
                     }
                     if (tTotal > 12.0) break;
@@ -256,7 +257,11 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
                 double ambient = 0.15;
                 double shade = ambient + diffuse * (1.0 - ambient);
 
-                float smooth = (float)(iterEscape / Math.Max(1, deIter)) * 200f;
+                // Color driver: raymarch step count + depth. See
+                // MandelbulbCalculator for rationale (non-3D gradient themes
+                // need a varying scalar across surface).
+                float smooth = (float)hitStep * (256f / Math.Max(1, maxSteps))
+                             + (float)(tTotal * 4.0);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
                 byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);
                 byte G = (byte)Math.Clamp(((baseColor >> 8) & 0xFF) * shade, 0, 255);

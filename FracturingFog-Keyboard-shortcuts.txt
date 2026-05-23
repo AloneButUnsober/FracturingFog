@@ -1,0 +1,30 @@
+Fracturing Fog Keyboard shortcuts (as of v0.6.2)
+All Modes:
+M: Menu
+T: Theme Editor
+R: Reset
+V: Save Region
+
+Non-3D fractal Types:
+W: Zoom In
+A: Pan Left
+S: Zoom Out
+D: Pan Right
+
+3D Fractal Types (Userbulb 3D, Mandelbulb):
+W: Distance-
+A: Pan Left
+S: Distance+
+D: Pan Right
+Arrow Up: Camera Phi+
+Arrow Down: Camera Phi-
+Arrow Left: Camera Theta-
+Arrow Right: Camera Theta+
+Mouse Right-click move up: Camera Phi+
+Mouse Right-click move Down: Camera Phi-
+Mouse Right-click move Left: Camera Theta-
+Mouse Right-click move Right: Camera Theta+
+Pg Up: Light Theta-
+Pg Down: Light Theta+
+Home: Light Phi-
+End: Light Phi+ 
