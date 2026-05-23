@@ -803,6 +803,7 @@ unless the slider is locked.
             sub.TabPages.Add(BuildMathSubTab("Attractor",      MathAttractorText()));
             sub.TabPages.Add(BuildMathSubTab("Mandelbulb",     MathMandelbulbText()));
             sub.TabPages.Add(BuildMathSubTab("User Equation",  MathUserEquationText()));
+            sub.TabPages.Add(BuildMathSubTab("User Bulb 3D",   MathUserBulbText()));
             sub.TabPages.Add(BuildMathSubTab("Sandbox",        MathSandboxText()));
 
             page.Controls.Add(sub);
@@ -1784,6 +1785,563 @@ dialog reloads from disk on next launch.
     with z_(n−1), z_(n−2)) can only be approximated.
   • Per-pixel delegate call overhead — slower than the typed
     kernels by ~3-5×.
+";
+
+        private static string MathUserBulbText() =>
+@"=== User Bulb (3D) — Overview ===
+
+The User Bulb engine is the 3D analogue of User Equation.  It
+compiles a C# expression / statement block at runtime (via
+Roslyn) into a per-iteration step function
+
+        Vec3 Step(Vec3 z, Vec3 c, int n)
+
+and renders the resulting escape-time set as a real 3D surface
+using Mandelbulb-style raymarching with a numerical distance
+estimator.
+
+Where User Equation produces flat 2D images of complex maps, User
+Bulb produces shaded 3D bulbs, foam, sponges, and shells in
+genuine three-space — lit by a directional light, shaded by
+surface normals, drawn from any camera angle.
+
+Open via:  Fractal Type → ""User Bulb (3D)""
+           Floating Menu → gear icon (when User Bulb is active)
+
+The dialog is modeless and auto-compiles 500 ms after the last
+keystroke.  Errors render in red below the editor.  Camera,
+lighting, iteration count, epsilon, bailout, and Jacobian h all
+update without recompiling — only the source body triggers a
+fresh compile.
+
+=== How 3D Escape-Time Works ===
+
+The 2D Mandelbrot maps each pixel to a complex c, runs
+zₙ₊₁ = zₙ² + c starting from z₀ = 0, and asks ""does |z| stay
+bounded?""  Plot escape time → fractal.
+
+3D escape-time generalises by replacing the complex value with a
+3D vector v ∈ ℝ³.  Each point p in 3-space becomes c.  We iterate
+some user-defined map vₙ₊₁ = f(vₙ, c, n) and again ask ""does
+|v| stay bounded?""  The SET of c-points that stay bounded is now
+a 3D solid, not a 2D plane.
+
+Rendering this solid as an image requires raymarching:
+
+  1. The CAMERA sits on a sphere around the origin (controlled
+     by Distance, Theta, Phi).
+  2. For each pixel, cast a RAY from the camera through that
+     pixel into 3-space.
+  3. March the ray forward one ""safe step"" at a time.  The
+     length of each step = the DISTANCE ESTIMATE at the current
+     point — a lower bound on how far we can move without
+     colliding with the fractal surface.
+  4. When the distance estimate falls below ε, declare a HIT and
+     record the surface position.
+  5. SHADE the hit with diffuse + ambient lighting based on the
+     numerical SURFACE NORMAL (central differences of DE).
+  6. Color the pixel from the active IColorMap, modulated by
+     escape count and surface normal.
+
+The user only writes f.  Everything else — raymarching, DE,
+normals, lighting — is handled by the engine.
+
+=== The Vec3 Type ===
+
+z and c are Vec3 (FracturingFog.Models.Vec3), a double-precision
+3D vector with operator overloads:
+
+  Fields:
+    z.X, z.Y, z.Z          components (double)
+
+  Properties:
+    z.Length               √(X² + Y² + Z²)
+    z.LengthSquared        X² + Y² + Z²
+
+  Operators:
+    a + b, a - b, -a       component-wise
+    a * s, s * a, a / s    scalar multiply / divide
+
+  Static helpers:
+    Vec3.Zero, Vec3.One
+    Vec3.Dot(a, b)         dot product (scalar)
+    Vec3.Cross(a, b)       cross product (Vec3)
+    Vec3.Sin(v)            component-wise sin → Vec3
+    Vec3.Cos(v)            component-wise cos
+    Vec3.Sinh(v)           component-wise sinh
+    Vec3.Cosh(v)           component-wise cosh
+    Vec3.Exp(v)            component-wise exp
+    Vec3.Abs(v)            component-wise |x|
+
+  Instance methods:
+    v.Normalized()         unit-length copy (or Vec3.Zero if |v|≈0)
+
+To build a new vector use the constructor:
+
+    new Vec3(1.0, 2.0, 3.0)
+
+Vec3 is a readonly record struct — cheap to copy, equality is
+component-wise.
+
+=== Available APIs in the Step Body ===
+
+  Imports already in scope (no `using` needed):
+      using System;
+      using System.Numerics;
+      using FracturingFog.Models;
+      using static System.Math;          // Sin/Cos/etc. unqualified
+
+  Scalar math (per-component):
+      Math.Sin, Math.Cos, Math.Tan, Math.Atan2,
+      Math.Sinh, Math.Cosh, Math.Tanh,
+      Math.Exp, Math.Log, Math.Log2, Math.Pow, Math.Sqrt, Math.Cbrt,
+      Math.Abs, Math.Min, Math.Max, Math.Floor, Math.Ceiling,
+      Math.Sign, Math.Clamp,
+      Math.PI, Math.E, Math.Tau
+
+  Vector helpers (component-wise / geometric):
+      Vec3.Sin(v), Vec3.Cos(v), Vec3.Sinh(v), Vec3.Cosh(v),
+      Vec3.Exp(v), Vec3.Abs(v),
+      Vec3.Dot(a, b), Vec3.Cross(a, b)
+
+  All standard C# 12 syntax: locals, ternary, switch expressions,
+  pattern matching, local functions, tuples.
+
+=== Signature Rules ===
+
+The body must RETURN a Vec3.
+
+  • Single expression form (no semicolon, no `return` keyword):
+        Vec3.Sin(z) + c
+    The wrapper automatically adds `return … ;`.
+
+  • Multi-statement form (any locals, then explicit return):
+        double r = z.Length;
+        var t = new Vec3(r, r*r, r*r*r);
+        return t + c;
+
+  • Whatever you compute, return type must be Vec3.  A scalar
+    return is a compile error.
+
+=== Iteration Loop ===
+
+The engine ALWAYS starts the orbit at z = Vec3.Zero.  At each
+sample point p (a position in 3-space along the camera ray):
+
+        c = p                        // pixel-in-3D
+        z = Vec3.Zero
+        for n in 0 … BulbIterations:
+            if |z| > Bailout: break
+            z = Step(z, c, n)
+
+The iteration count at escape, the final |z|, and the bailout
+form the inputs to the distance estimator.
+
+=== Seeding z₀ (3D Julia-style) ===
+
+Like 2D User Equation, the engine seeds z = 0 unconditionally.
+For maps where 0 is a fixed point or you need a Julia-style
+parameter constant, overwrite z on n == 0:
+
+        if (n == 0) z = c;                              // 3D Julia
+        if (n == 0) z = new Vec3(0.5, 0.3, 0.2);        // seed
+        if (n == 0) { z = c; c = new Vec3(0.3, 0, 0); }  // c = const
+
+z is passed by value — the reassignment is local and only
+affects the next iterate.
+
+=== Distance Estimation ===
+
+For a known map (e.g. the standard Mandelbulb power formula) one
+tracks an analytic running derivative dr along with the
+iteration and computes
+
+        DE(p) ≈ 0.5 · log(|z|) · |z| / dr
+
+The user step is ARBITRARY, so we cannot get dr in closed form.
+Instead the engine uses a NUMERICAL JACOBIAN.  Per DE call, four
+iteration trajectories run in lockstep:
+
+        z_base   starts at Vec3.Zero, uses c
+        z_px     starts at Vec3.Zero, uses (c + h·êx)
+        z_py     starts at Vec3.Zero, uses (c + h·êy)
+        z_pz     starts at Vec3.Zero, uses (c + h·êz)
+
+At escape, the three column lengths
+
+        j0 = |z_px − z_base| / h
+        j1 = |z_py − z_base| / h
+        j2 = |z_pz − z_base| / h
+
+bound the Jacobian ∂z/∂c.  We take dr = max(j0, j1, j2) as a
+conservative spectral-radius proxy and apply the same
+Hubbard-Douady DE form
+
+        DE(p) = 0.5 · log(|z|) · |z| / dr
+
+  • COST: 4× the per-iteration step calls vs an analytic DE.
+  • h is configurable (Jac h knob).  Default 1e-4.
+    Too small → catastrophic cancellation, noisy normals.
+    Too large → smoothed Jacobian, soft surface.
+  • Works for ANY map — no derivative knowledge required.
+
+=== Camera, Lighting, Render Knobs ===
+
+  Camera (sphere around origin):
+    Distance      orbit radius.  Smaller = closer.
+    Theta°        azimuth (around Y).  Spins horizontally.
+    Phi°          elevation (1..179°).  90° = equator,
+                  20° = looking down, 160° = looking up.
+
+  Light (directional, world-space):
+    Light θ°, φ°  same spherical convention as camera.
+
+  Render:
+    Iterations    DE inner-loop count.  4–12 sane range.
+    Max steps     Raymarch step cap per pixel.  64–192 typical.
+    Bailout       |z| escape threshold.  4 = standard,
+                  bump up (10–50) for slow-escape maps.
+    Epsilon       Surface hit threshold.  0.0005–0.005 typical.
+                  Smaller = sharper edges but more steps.
+    Jac h         Finite-diff Jacobian perturbation.  1e-4
+                  default.  Drop to 1e-5 for tight detail,
+                  raise to 1e-3 if normals look speckled.
+
+  Pan / Zoom (top-level toolbar):
+    CenterX/Y     Screen-space pan in NDC units (drag canvas).
+    Zoom          Scales Distance / Zoom → cam moves in/out.
+
+The 2D pan/zoom acts AFTER the 3D camera, so dragging
+horizontally and zooming with the wheel work intuitively.
+
+=== Performance ===
+
+Per pixel, the worst case is roughly:
+
+  MaxSteps · (1 hit-test + 3 normal-probes) · 4 trajectories · DEiter
+
+At defaults (96 · 4 · 4 · 8) ≈ 12 288 delegate calls per pixel.
+At ~40 ns/delegate that is ~0.5 ms/pixel single-threaded; with
+Parallel.For over rows on a modern multi-core CPU you can expect
+800 × 600 frames in single-digit seconds.
+
+Knobs to speed up an exploration session:
+
+  • Drop Iterations to 4 — DE quality lower, render 2× faster.
+  • Drop MaxSteps to 48 — ray gives up earlier, fewer iterations.
+  • Raise Epsilon to 0.005 — fewer steps before declaring hit.
+  • Make the window smaller — work scales with width × height.
+
+Re-bump everything for the final render.
+
+=== Converting 2D Equations to 3D ===
+
+A complex map zₙ₊₁ = f(zₙ, c) does NOT have a unique 3D lift —
+you must DECIDE how to extend the formula along the new axis.
+Several common strategies:
+
+  1. TRIPLEX-POWER (White / Nylander)
+     Treat (x, y, z) as a generalised complex with polar form
+     (r, θ, φ).  Define v^p via
+
+         v^p = r^p · (sin(p·θ)·cos(p·φ),
+                      sin(p·θ)·sin(p·φ),
+                      cos(p·θ))
+
+     This is what the built-in Mandelbulb uses.  Substitute
+     ANY 2D iteration f(z, c) = g(z)·… + c by lifting g to
+     v → v^p .  Cardinal example: square triplex
+     (= squaring polar 3-vector) gives a 3D Mandelbrot
+     analogue.
+
+  2. COMPONENT-WISE LIFT
+     Apply the scalar map per axis:
+         f(z, c) = (g(z.X, c.X), g(z.Y, c.Y), g(z.Z, c.Z))
+     Produces axis-aligned ""bricks"" — fast to compute,
+     less visually interesting than triplex lifts.
+
+  3. SWIZZLE + 2D MAP IN A PLANE
+     Run a 2D map in the XY plane and let z.Z drift via a
+     simple recurrence (linear, sinusoidal).  Produces sheets
+     with depth.
+
+  4. QUATERNION LIFT
+     Treat (x, y, z, w) as a quaternion (w = 0 conventionally
+     for 3D rendering) and use quaternion squaring
+         (a+bi+cj+dk)² = a²−b²−c²−d² + 2a(bi+cj+dk).
+     Drop the w-output to project back into ℝ³.
+
+  5. CROSS-PRODUCT TERMS
+     Use Vec3.Cross to mix axes:  z → z + α · cross(z, c).
+     Often produces twisted ribbon surfaces.
+
+  6. FOLD-AND-FOLD (Mandelbox / Mandelbox-style)
+     Alternate a piecewise BOX FOLD and a SPHERE FOLD with
+     scaling and translation.  Famously creates a fractal
+     ""greebled cube"" with cavities and tunnels.
+
+For ALL strategies the same template applies:
+
+        Vec3 Step(Vec3 z, Vec3 c, int n)
+        {
+            // ... transform z based on your lift ...
+            return transformed + c;
+        }
+
+=== Examples — Drop-in Snippets ===
+
+Each block below is a complete equation body.  Paste it into the
+User Bulb editor; live-compile updates as you type.  Recommended
+starting Bailout / Iterations noted where it matters.
+
+  --- 1. SQUARE TRIPLEX (default, 3D Mandelbrot analogue) ---
+  // 'Whitebrot' — squares the triplex polar form,
+  //   v² = r² · (sin(2θ)cos(2φ), sin(2θ)sin(2φ), cos(2θ))
+  // which expands to the closed form below.
+  return new Vec3(
+      z.X*z.X - z.Y*z.Y - z.Z*z.Z,
+      2*z.X*z.Y,
+      2*z.X*z.Z) + c;
+  // Bailout 4,  Iterations 8.
+
+  --- 2. CUBIC TRIPLEX ---
+  // v³ via polar expansion.  Carve a triangular ""peeled"" bulb.
+  double r = z.Length;
+  if (r < 1e-12) return c;
+  double theta = Math.Atan2(Math.Sqrt(z.X*z.X + z.Y*z.Y), z.Z);
+  double phi   = Math.Atan2(z.Y, z.X);
+  double r3 = r * r * r;
+  double sinT = Math.Sin(3*theta);
+  return new Vec3(
+      r3 * sinT * Math.Cos(3*phi),
+      r3 * sinT * Math.Sin(3*phi),
+      r3 * Math.Cos(3*theta)) + c;
+  // Bailout 4, Iterations 8.
+
+  --- 3. GENERAL POWER-p TRIPLEX (the textbook Mandelbulb) ---
+  // Same shape as the dedicated Mandelbulb fractal type.
+  // Vary the power p to get different bulbs (8 = canonical).
+  const double p = 8.0;
+  double r = z.Length;
+  if (r < 1e-12) return c;
+  double theta = Math.Atan2(Math.Sqrt(z.X*z.X + z.Y*z.Y), z.Z);
+  double phi   = Math.Atan2(z.Y, z.X);
+  double rp = Math.Pow(r, p);
+  double sinT = Math.Sin(p*theta);
+  return new Vec3(
+      rp * sinT * Math.Cos(p*phi),
+      rp * sinT * Math.Sin(p*phi),
+      rp * Math.Cos(p*theta)) + c;
+  // Bailout 2.0, Iterations 8.
+
+  --- 4. 3D BURNING SHIP (component-wise absolute) ---
+  var a = new Vec3(Math.Abs(z.X), Math.Abs(z.Y), Math.Abs(z.Z));
+  return new Vec3(
+      a.X*a.X - a.Y*a.Y - a.Z*a.Z,
+      2*a.X*a.Y,
+      2*a.X*a.Z) + c;
+  // Bailout 4, Iterations 8.
+
+  --- 5. 3D TRICORN (negate Y component before squaring) ---
+  var t = new Vec3(z.X, -z.Y, -z.Z);
+  return new Vec3(
+      t.X*t.X - t.Y*t.Y - t.Z*t.Z,
+      2*t.X*t.Y,
+      2*t.X*t.Z) + c;
+  // Bailout 4, Iterations 8.
+
+  --- 6. 3D JULIA (Julia variant of square triplex) ---
+  // Seed z with the pixel coord on iter 0, then use a CONSTANT
+  // c for every iteration instead of the pixel.
+  if (n == 0) z = c;
+  var k = new Vec3(0.3, 0.5, -0.2);   // ""Julia parameter""
+  return new Vec3(
+      z.X*z.X - z.Y*z.Y - z.Z*z.Z,
+      2*z.X*z.Y,
+      2*z.X*z.Z) + k;
+  // Bailout 4, Iterations 12.  Vary k to morph the set.
+
+  --- 7. QUATERNION JULIA (proj to ℝ³, w = 0) ---
+  // Quaternion squaring of (a, b, c, d) with d = 0.
+  //   q² = (a² − b² − c², 2ab, 2ac)
+  // Plus a fixed quaternion ""seed""; the quat w-component is
+  // dropped (we never let it grow).
+  if (n == 0) z = c;
+  double a = z.X, b = z.Y, cc = z.Z;
+  var sq = new Vec3(a*a - b*b - cc*cc, 2*a*b, 2*a*cc);
+  return sq + new Vec3(-0.2, 0.4, -0.4);
+  // Bailout 4, Iterations 10.
+
+  --- 8. SIN-FOLD BULB (component-wise sin) ---
+  return new Vec3(
+      Math.Sin(z.X), Math.Sin(z.Y), Math.Sin(z.Z)) * 2.0 + c;
+  // Bailout 10, Iterations 12.  Produces flowing folded sheets.
+
+  --- 9. EXP-TWIST (mix of trig + linear) ---
+  double s = Math.Exp(-0.25 * z.LengthSquared);
+  return new Vec3(
+      z.X * Math.Cos(z.Y),
+      z.Y * Math.Cos(z.Z),
+      z.Z * Math.Cos(z.X)) * s + c;
+  // Bailout 4, Iterations 10.
+
+  --- 10. CROSS-PRODUCT TWIST ---
+  // Add a small cross-product perturbation — creates ribbons.
+  var cross = Vec3.Cross(z, c);
+  return new Vec3(
+      z.X*z.X - z.Y*z.Y - z.Z*z.Z,
+      2*z.X*z.Y,
+      2*z.X*z.Z) + c + cross * 0.5;
+  // Bailout 4, Iterations 8.
+
+  --- 11. MANDELBOX (box fold + sphere fold + scale) ---
+  // Box fold: clamp components, mirror outside [-1, 1].
+  // Sphere fold: amplify points inside the small sphere,
+  // shrink points inside the unit sphere.
+  // The result is a tessellated cube with carved cavities.
+  double scale = 2.0;
+  double minR = 0.5, fixedR = 1.0;
+  var v = z;
+
+  // Box fold (Tglad's formulation).
+  v = new Vec3(
+      v.X > 1 ? 2 - v.X : v.X < -1 ? -2 - v.X : v.X,
+      v.Y > 1 ? 2 - v.Y : v.Y < -1 ? -2 - v.Y : v.Y,
+      v.Z > 1 ? 2 - v.Z : v.Z < -1 ? -2 - v.Z : v.Z);
+
+  // Sphere fold.
+  double r2 = v.LengthSquared;
+  if (r2 < minR*minR)        v = v * (fixedR*fixedR / (minR*minR));
+  else if (r2 < fixedR*fixedR) v = v * (fixedR*fixedR / r2);
+
+  return v * scale + c;
+  // Bailout 16, Iterations 12.  Try Scale = -1.5 for variants.
+
+  --- 12. TIME-VARYING (mix two maps via iter index n) ---
+  // Lerp between square-triplex and sin-fold based on n.
+  double t = Math.Min(1.0, n / 6.0);
+
+  var sq = new Vec3(
+      z.X*z.X - z.Y*z.Y - z.Z*z.Z,
+      2*z.X*z.Y,
+      2*z.X*z.Z);
+
+  var sn = new Vec3(
+      Math.Sin(z.X), Math.Sin(z.Y), Math.Sin(z.Z)) * 2.0;
+
+  return sq * (1 - t) + sn * t + c;
+  // Bailout 8, Iterations 10.
+
+  --- 13. SHELL (Sin/Cos on Length) ---
+  // Maps based on |z| produce nested SHELL structures.
+  double r = z.Length;
+  double s = Math.Sin(2*r) / (r + 1e-6);
+  return z * s + c;
+  // Bailout 6, Iterations 10.
+
+  --- 14. RECIPROCAL BULB (Möbius-style) ---
+  double r2 = z.LengthSquared + 1e-6;
+  var inv = z / r2;                 // 3D ""inversion in unit sphere""
+  return new Vec3(
+      inv.X*inv.X - inv.Y*inv.Y - inv.Z*inv.Z,
+      2*inv.X*inv.Y,
+      2*inv.X*inv.Z) + c;
+  // Bailout 8, Iterations 10.
+
+  --- 15. PHOENIX-FLAVOURED 3D (uses iter n as memory proxy) ---
+  // True Phoenix needs z_(n−1); we approximate by mixing
+  // z with a damped copy of itself based on n.
+  double damp = Math.Pow(0.7, n);
+  var feedback = z * damp;
+  return new Vec3(
+      z.X*z.X - z.Y*z.Y - z.Z*z.Z,
+      2*z.X*z.Y,
+      2*z.X*z.Z) + c + feedback * 0.3;
+  // Bailout 8, Iterations 10.
+
+  --- 16. ROTATED INPUT (rotate c each iteration) ---
+  // Spin c around the Y axis by n*15° before adding —
+  // produces helical bulbs.
+  double ang = n * (Math.PI / 12.0);
+  double cs = Math.Cos(ang), sn2 = Math.Sin(ang);
+  var cRot = new Vec3(
+      c.X * cs - c.Z * sn2,
+      c.Y,
+      c.X * sn2 + c.Z * cs);
+  return new Vec3(
+      z.X*z.X - z.Y*z.Y - z.Z*z.Z,
+      2*z.X*z.Y,
+      2*z.X*z.Z) + cRot;
+  // Bailout 4, Iterations 8.
+
+=== Pitfalls ===
+
+  • NO-ESCAPE MAPS look BLANK.  If your formula keeps |z|
+    bounded for every pixel (sin-only formulas, hyperbolic
+    formulas like sin·cosh that orbit near r ≈ 3 forever),
+    pixels never escape — DE returns the same value every step,
+    the ray never converges to a surface.  Either RAISE the
+    bailout substantially or REPHRASE the map so it grows for
+    some c.
+
+  • Z₀ = 0 FIXED POINTS.  Any f where f(0, 0) = 0 produces an
+    all-in-set image when c = 0 is at the center.  Lift z on
+    n == 0 (Julia-style seed) to break the fixed point.
+
+  • EXPLODING MAPS.  Maps that grow faster than exponential
+    (z^z, double-exp) can produce |z| = ∞ within one or two
+    iterations.  Drop Iterations to 2–4, raise Bailout to 1e6.
+
+  • NaN/INF.  Math.Log, Math.Sqrt of negatives, Math.Atan2(0,0),
+    division by zero — all silently propagate as NaN through
+    Vec3 arithmetic.  The DE then misbehaves.  Guard with
+    + 1e-6 inside denominators and Math.Max(r, 1e-12) before
+    Math.Log.
+
+  • TIGHT JAC h on DISCONTINUOUS MAPS.  Mandelbox-style folds
+    have piecewise-constant derivatives that the finite-diff
+    Jacobian over-/under-estimates at fold boundaries.  Raise
+    Jac h to 1e-3 for these maps.
+
+  • PERF.  Each delegate call costs ~40 ns.  Heavy use of
+    Math.Pow / Atan2 multiplies that.  Prefer x*x*x over
+    Math.Pow(x, 3); cache invariants in locals at the top.
+
+=== Troubleshooting ===
+
+Black screen, no shape:
+  • Open the gear dialog — is the error label green ✓ Compiled?
+  • Bump Bailout to 16 — your map may not escape with bailout 4.
+  • Drop Iterations to 4 — may be over-iterating into NaN.
+  • Spin Camera Theta — initial view may face an empty side.
+
+Speckled normals, noisy shading:
+  • Raise Jac h from 1e-4 → 1e-3.
+  • Drop Epsilon to 0.0005.
+
+Bulb looks ""melted"" / soft edges:
+  • Lower Epsilon to 0.0008.
+  • Raise Max steps to 192.
+
+Render is unbearably slow:
+  • Drop Iterations to 4, Max steps to 48 for exploration.
+  • Resize window smaller.
+  • Crank everything back up for the keeper frame.
+
+=== Limitations ===
+
+  • Single CPU.  No GPU compute path.  Per-pixel cost is the
+    bottleneck.
+  • Roslyn warm-up: first compile after app start takes
+    ~500 ms.  Edits after that are instant.
+  • No save/load store for UserBulb sources yet — copy/paste
+    into a text file to keep favourites.
+  • Region save/recall does NOT round-trip UserBulb sources
+    (only UserBulbName, which currently nothing populates).
+    Coming in a later iteration.
+  • Distance estimator uses MAX column norm — a conservative
+    proxy for the true spectral radius.  Some maps render with
+    surfaces slightly inside the true set boundary.
 ";
 
         private static string MathSandboxText() =>
