@@ -54,7 +54,7 @@
 18.	If a color theme cannot be edited, allow its parameters to be copied if user selects New->Copy
 19.	Feaible/Possible: Userbulb3D Sandbox similar Sandbox
 
-20.	Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.
+20.	Skipped Promote-to-dropdown — implement fractal-list engine entry for UserBulb in RegisteredFractalCatalog, need new EquationEngine.UserBulb path
 
 21.	Region save non-mandelbrot type: sugest save name as "FractalType Name - " 
 	Region save UserEuquations Sandbox Userbulb3D types: sugest save name as "FractalType Name - Equation Name"

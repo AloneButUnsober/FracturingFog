@@ -26,7 +26,9 @@ namespace FracturingFog.Views
         private readonly ComboBox _savedCombo;
         private readonly Button _saveBtn;
         private readonly Button _deleteBtn;
+        private readonly CheckBox _promoteCheck;
         private bool _suppressComboEvent;
+        private bool _suppressPromoteEvent;
         private bool _loadingNamedEquation;
 
         // Camera / render knobs.
@@ -47,6 +49,9 @@ namespace FracturingFog.Views
         /// <summary>Fires when a render-only knob changes (no recompile needed).</summary>
         public event Action? RenderRequested;
 
+        /// <summary>Fires when an entry's Promoted flag is toggled.</summary>
+        public event Action? PromotionChanged;
+
         public UserBulbDialog(FractalParameters parameters)
         {
             _params = parameters;
@@ -56,7 +61,7 @@ namespace FracturingFog.Views
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             TopMost = true;
-            ClientSize = new Size(540, 670);
+            ClientSize = new Size(540, 695);
             BackColor = Color.FromArgb(40, 40, 40);
             ForeColor = Color.White;
             Font = new Font("Segoe UI", 9f);
@@ -106,12 +111,23 @@ namespace FracturingFog.Views
             _deleteBtn.Click += OnDeleteClick;
             Controls.Add(_deleteBtn);
 
+            _promoteCheck = new CheckBox
+            {
+                Text = "Promote to fractal list",
+                Left = 60, Top = 62, AutoSize = true,
+                ForeColor = Color.White,
+                BackColor = Color.Transparent,
+                Enabled = false,
+            };
+            _promoteCheck.CheckedChanged += OnPromoteChanged;
+            Controls.Add(_promoteCheck);
+
             // ── Editor ────────────────────────────────────────────────────────
             _editor = new TextBox
             {
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
-                Left = 10, Top = 65, Width = 520, Height = 200,
+                Left = 10, Top = 90, Width = 520, Height = 200,
                 BackColor = Color.FromArgb(28, 28, 28),
                 ForeColor = Color.White,
                 Font = new Font("Consolas", 10f),
@@ -125,7 +141,7 @@ namespace FracturingFog.Views
 
             _errorLabel = new Label
             {
-                Left = 10, Top = 270, Width = 520, Height = 50,
+                Left = 10, Top = 295, Width = 520, Height = 50,
                 ForeColor = Color.FromArgb(255, 100, 100),
                 BackColor = Color.Transparent,
                 Font = new Font("Consolas", 8f),
@@ -159,7 +175,7 @@ namespace FracturingFog.Views
             RefreshSavedCombo(selectFirst: false, selectName: _params.UserBulbName);
 
             // ── Camera group ──────────────────────────────────────────────────
-            int gy = 325;
+            int gy = 350;
             AddGroupHeader("Camera", 10, gy);
             gy += 22;
 
@@ -309,6 +325,36 @@ namespace FracturingFog.Views
                     _savedCombo.SelectedIndex = -1;
             }
             finally { _suppressComboEvent = false; }
+            SyncPromoteCheckbox();
+        }
+
+        private void SyncPromoteCheckbox()
+        {
+            _suppressPromoteEvent = true;
+            try
+            {
+                string? name = _savedCombo.SelectedItem as string;
+                if (string.IsNullOrEmpty(name))
+                {
+                    _promoteCheck.Enabled = false;
+                    _promoteCheck.Checked = false;
+                }
+                else
+                {
+                    var entry = UserBulbStore.Instance.GetByName(name);
+                    _promoteCheck.Enabled = entry != null;
+                    _promoteCheck.Checked = entry?.Promoted ?? false;
+                }
+            }
+            finally { _suppressPromoteEvent = false; }
+        }
+
+        private void OnPromoteChanged(object? sender, EventArgs e)
+        {
+            if (_suppressPromoteEvent) return;
+            if (_savedCombo.SelectedItem is not string name) return;
+            if (UserBulbStore.Instance.SetPromoted(name, _promoteCheck.Checked))
+                PromotionChanged?.Invoke();
         }
 
         private void OnSavedSelectionChanged(object? sender, EventArgs e)
@@ -326,6 +372,7 @@ namespace FracturingFog.Views
             _params.UserBulbName = entry.Name;
             _debounce.Stop();
             CompileRequested?.Invoke();
+            SyncPromoteCheckbox();
         }
 
         private void OnSaveClick(object? sender, EventArgs e)

@@ -23,6 +23,7 @@ namespace FracturingFog.Models
     {
         Sandbox,
         UserEquation,
+        UserBulb,
     }
 
     /// <summary>
@@ -40,6 +41,7 @@ namespace FracturingFog.Models
         {
             EquationEngine.Sandbox      => FractalType.Sandbox,
             EquationEngine.UserEquation => FractalType.UserEquation,
+            EquationEngine.UserBulb     => FractalType.UserBulb,
             _ => FractalType.Sandbox,
         };
     }
@@ -70,6 +72,15 @@ namespace FracturingFog.Models
                         {
                             Name = e.Name,
                             Engine = EquationEngine.UserEquation,
+                            Source = e.Source,
+                        };
+
+                foreach (var e in UserBulbStore.Instance.Equations)
+                    if (e.Promoted)
+                        yield return new RegisteredFractal
+                        {
+                            Name = e.Name,
+                            Engine = EquationEngine.UserBulb,
                             Source = e.Source,
                         };
             }
