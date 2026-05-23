@@ -1584,6 +1584,12 @@ public sealed partial class MainForm : Form
                 _fractalParams.SandboxName = promoted.Name;
                 _sandboxCalculator?.Compile(promoted.Source);
             }
+            else if (promoted.Engine == EquationEngine.UserBulb)
+            {
+                _fractalParams.UserBulbSource = promoted.Source;
+                _fractalParams.UserBulbName = promoted.Name;
+                _userBulbCalculator?.Compile(promoted.Source);
+            }
             else
             {
                 _fractalParams.UserEquationSource = promoted.Source;
@@ -1796,6 +1802,7 @@ public sealed partial class MainForm : Form
             _lastUploadedBuffer = null;
             TriggerCalculation();
         };
+        dlg.PromotionChanged += () => PopulateFractalTypeCombo();
         dlg.FormClosed += (_, _) => { _userBulbDialog = null; };
         _userBulbDialog = dlg;
         dlg.Show(this);
