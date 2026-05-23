@@ -56,7 +56,7 @@ When export regions with Sandbox equations export Sandbox equation as well
 // Context menus for floating menu comboboxes
 
 // If a color theme cannot be edited, allow its parameters to be copied if user selects New->Copy
-// Possible: Userbulb3D Sandbox similar Sandbox
+// Feaible/Possible: Userbulb3D Sandbox similar Sandbox
 
 // Keyboard:
 Q: Pan up
@@ -65,7 +65,7 @@ E: Pan down
 Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.
 
 // Region save non-mandelbrot type: sugest save name as "FractalType Name - " 
-// Region UserEuquations Sandbox Userbulb3D types: sugest save name as "FractalType Name - Equation Name"
+// Region save UserEuquations Sandbox Userbulb3D types: sugest save name as "FractalType Name - Equation Name"
 
 // LSystem Parameters: Depth Sweep function
 
