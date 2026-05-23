@@ -1353,6 +1353,12 @@ public sealed partial class MainForm : Form
         if (!string.IsNullOrEmpty(CurrentRegionName()))
             regionName = CurrentRegionName()?.Replace(" ", "") + "_" ?? "";
 
+        var altForName = SelectAltCalculator(_currentFractalType);
+        double fnCx = altForName?.CenterX ?? _centerX;
+        double fnCy = altForName?.CenterY ?? _centerY;
+        double fnZoom = altForName?.Zoom ?? _zoom;
+        int fnIter = altForName?.MaxIterations ?? (_calculator?.MaxIterations ?? 0);
+
         int savedW = isPortrait ? height : width;
         int savedH = isPortrait ? width : height;
         string sizeTag = $"{savedW}x{savedH}_poster";
@@ -1365,10 +1371,10 @@ public sealed partial class MainForm : Form
             FilterIndex = 1,
             DefaultExt = "png",
             FileName = $"{_programName.Replace(" ","")}_{CurrentFractalTypeName()}_{colorName.Replace(" ", "")}_{regionName.Replace(" ", "")}" +
-                         $"x{_centerX.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
-                         $"y{_centerY.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
-                         $"z{_zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
-                         $"i{(_calculator?.MaxIterations ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)}_" +
+                         $"x{fnCx.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                         $"y{fnCy.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                         $"z{fnZoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "")}_" +
+                         $"i{fnIter.ToString(System.Globalization.CultureInfo.InvariantCulture)}_" +
                          sizeTag +
                          rotatedTag
         };

@@ -31,10 +31,18 @@ namespace FracturingFog
             if (!string.IsNullOrEmpty(CurrentRegionName()))
                 regionName = CurrentRegionName()?.Replace(" ", "") + "_" ?? "";
 
+            IFractalCalculator? altForName = SelectAltCalculator(_currentFractalType);
+            double fnCx = altForName?.CenterX ?? _calculator.CenterX;
+            double fnCy = altForName?.CenterY ?? _calculator.CenterY;
+            double fnZoom = altForName?.Zoom ?? _calculator.Zoom;
+            int fnIter = altForName?.MaxIterations ?? _calculator.MaxIterations;
+            int fnW = altForName?.Width ?? _calculator.Width;
+            int fnH = altForName?.Height ?? _calculator.Height;
+
             Rectangle vs = System.Windows.Forms.SystemInformation.VirtualScreen;
             string sizeTag = _spanning
                 ? $"{vs.Width}x{vs.Height}_wallpaper"
-                : $"{_calculator.Width}x{_calculator.Height}";
+                : $"{fnW}x{fnH}";
 
             using var dlg = new System.Windows.Forms.SaveFileDialog
             {
@@ -43,10 +51,10 @@ namespace FracturingFog
                 FilterIndex = 1,
                 DefaultExt = "png",
                 FileName = $"{_programName.Replace(" ", "")}_{CurrentFractalTypeName()}_{colorName.Replace(" ", "")}_{regionName.Replace(" ", "")}" +
-                             $"x{_calculator.CenterX.ToString().Replace(".", "")}_" +
-                             $"y{_calculator.CenterY.ToString().Replace(".", "")}_" +
-                             $"z{_calculator.Zoom.ToString().Replace(".", "")}_" +
-                             $"i{_calculator.MaxIterations.ToString().Replace(".", "")}_" +
+                             $"x{fnCx.ToString().Replace(".", "")}_" +
+                             $"y{fnCy.ToString().Replace(".", "")}_" +
+                             $"z{fnZoom.ToString().Replace(".", "")}_" +
+                             $"i{fnIter.ToString().Replace(".", "")}_" +
                              sizeTag
             };
             if (dlg.ShowDialog(this) != System.Windows.Forms.DialogResult.OK) return;
@@ -163,6 +171,7 @@ namespace FracturingFog
                 FractalType.UserEquation     => new UserEquationCalculator(w, h),
                 FractalType.Mandelbulb       => new MandelbulbCalculator(w, h),
                 FractalType.Sandbox          => new SandboxCalculator(w, h),
+                FractalType.UserBulb         => new UserBulbCalculator(w, h),
                 _                            => null
             };
             if (c == null) return null;
@@ -186,6 +195,7 @@ namespace FracturingFog
                 case UserEquationCalculator u: u.FractalParameters = _fractalParams; break;
                 case MandelbulbCalculator m:   m.FractalParameters = _fractalParams; break;
                 case SandboxCalculator sb:     sb.FractalParameters = _fractalParams; break;
+                case UserBulbCalculator ub:    ub.FractalParameters = _fractalParams; break;
             }
             return c;
         }
