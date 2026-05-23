@@ -1,0 +1,72 @@
+// Missing — Alternate render modes
+- Anti-Buddhabrot / Nebulabrot**
+
+// Regions color theme capable-aware
+
+// Color Themes fractal type aware
+Consider: Color Themes fractal type aware
+Consider: Slideshow, Video Slideshow
+Implement Color Themes aware fractals types they work best with
+FloatingMenu.cs add checkboxes restrict Slideshow Video Slideshow select color themes appropriate selected region Unchecked same as current operation Checked restrict
+
+// Quality Lock
+FloatingMenu.cs implement checkbox Lock Quality Unchecked zoom auto promotion/demotion Checked lock Quality to user selection do not auto promote/demote
+
+// Theme Editor fractal specific types
+Consider: Fractal-specific color themes
+Consider: Theme editor support fractal-specific
+If feasible/possible implement fractal-specific theme editing in Theme Editor
+Modify Theme Editor UI as needed to supply fields and parameters
+
+// Grid only for Mandelbrot
+Implement Grid overlay for all fractal types where logical to do so
+
+// Slideshow user configurable:
+//	total display time per region
+//	time between color themes
+//	time between regions
+//	fade duration
+//	Move "use extreme in slideshow" checkbox to new dialogue
+
+// Adaptive sweep feature// Adaptive for all fractal types
+
+When exporting regions omit User Equations Userbulb3D
+Implement Sandbox Equation import/export
+When export regions with Sandbox equations export Sandbox equation as well
+
+// Audio stream support
+// Generate fractal audio?
+
+// Linux version
+
+// Hyperbolic functions in sandbox
+
+// Bug: Pan Zoom controls broken at deep zoom approx. +-5E+49
+
+// Implement Octo Double for deeper zoom
+
+// Update UI option to display X/Y cords as single value rather than pipe-delimited
+
+// Slideshow/Video Slideshow -> Skip region (quicker response) Skip color theme
+// Slideshow "vcr" controls UI - floating
+// Video Slideshow work with fractaltypes other than Mandelbrot
+
+// Right-click drag to outline then zoom to region
+
+// Replace "\" and "/" in filenames
+
+// Create a concrete calculator for the Tear Drop fractal type. Full implementation of the fractal type with full DD,QD precision
+
+// Context menus for floating menu comboboxes
+
+// If a color theme cannot be edited, allow its parameters to be copied if user selects New->Copy
+// Possible: Userbulb3D Sandbox similar Sandbox
+
+// Bug: In Mandelbulb or Userbulb3D mode when mouse-right-click longer than 1 second do not pop context menu
+// Bug: Mouse Pan Double-click to point focus Wheel scroll zoom imprecise in non-Mandelbrot fractal types
+
+// Keyboard:
+Q: Pan up
+E: Pan down
+
+Skipped Promote-to-dropdown — no fractal-list engine entry for UserBulb in RegisteredFractalCatalog, would need new EquationEngine.UserBulb path. Add separately if wanted.
