@@ -195,6 +195,11 @@ public sealed partial class MainForm : Form
     private Point _rightDragStart;
     private double _rightDragStartTheta;
     private double _rightDragStartPhi;
+    // Timestamp of last right-mouse-down (any fractal mode). Used to suppress
+    // ContextMenuStrip in 3D when click was long-press or moved (drag intent).
+    private DateTime _rightDownTimeUtc;
+    private const int RightHoldSuppressMs = 1000;
+    private const int RightMoveSuppressPx = 4;
 
     // Pan-stop debounce timer — fires full-quality render after drag ends.
     private readonly System.Windows.Forms.Timer _panStopTimer;
@@ -739,6 +744,23 @@ public sealed partial class MainForm : Form
 
         contextMenu.Opening += (s, e) =>
         {
+            // In 3D modes, right-click is overloaded for camera rotate.
+            // Suppress menu if the user held >1s or moved beyond a small
+            // dead-zone — both indicate a drag, not a click.
+            if (Is3DFractalType(_currentFractalType))
+            {
+                var heldMs = (DateTime.UtcNow - _rightDownTimeUtc).TotalMilliseconds;
+                var cur = _renderPanel.PointToClient(Cursor.Position);
+                int dx = cur.X - _rightDragStart.X;
+                int dy = cur.Y - _rightDragStart.Y;
+                bool moved = (dx * dx + dy * dy) > (RightMoveSuppressPx * RightMoveSuppressPx);
+                if (heldMs > RightHoldSuppressMs || moved)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
+
             statusItem.Checked = _footerPanel.Visible;
             statusItem.Checked = _footerPanel.Visible;
             toolbarItem.Checked = _toolbar.Visible;
@@ -3353,6 +3375,17 @@ public sealed partial class MainForm : Form
 
         double wf = _quality.WheelZoomFactor;
         double factor = e.Delta > 0 ? wf : 1.0 / wf;
+
+        // 3D: zoom dollies camera (camDist /= Zoom). No complex-plane anchor —
+        // FOV is constant, so cursor-anchor math doesn't apply. Plain dolly.
+        if (Is3DFractalType(_currentFractalType))
+        {
+            _zoom = System.Math.Clamp(_zoom * factor, _quality.ZoomMin, _quality.ZoomMax);
+            ApplyViewState();
+            TriggerCalculation(progressive: false);
+            return;
+        }
+
         double scale = CurrentScale();
         double ox = e.X - _renderPanel.ClientSize.Width * 0.5;
         double oy = e.Y - _renderPanel.ClientSize.Height * 0.5;
@@ -3424,6 +3457,12 @@ public sealed partial class MainForm : Form
     {
         if (_slideshowRunning) return;
 
+        if (e.Button == MouseButtons.Right)
+        {
+            _rightDownTimeUtc = DateTime.UtcNow;
+            _rightDragStart = e.Location;
+        }
+
         // Right-click drag in 3D modes rotates the camera (theta = X, phi = Y).
         if (e.Button == MouseButtons.Right && Is3DFractalType(_currentFractalType))
         {
@@ -3443,10 +3482,15 @@ public sealed partial class MainForm : Form
         _panStartScreen = e.Location;
         _panStartCX = _centerX;
         _panStartCY = _centerY;
-        _panStartDDCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo);
-        _panStartDDCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo);
-        _panStartQDCX = new FracturingFog.FFMath.QD(_centerX, _centerXLo, _centerX2, _centerX3);
-        _panStartQDCY = new FracturingFog.FFMath.QD(_centerY, _centerYLo, _centerY2, _centerY3);
+        // High-precision center captures are only meaningful for the 2D
+        // complex-plane pan path. 3D modes use NDC pan units, no HP needed.
+        if (!Is3DFractalType(_currentFractalType))
+        {
+            _panStartDDCX = new FracturingFog.FFMath.DD(_centerX, _centerXLo);
+            _panStartDDCY = new FracturingFog.FFMath.DD(_centerY, _centerYLo);
+            _panStartQDCX = new FracturingFog.FFMath.QD(_centerX, _centerXLo, _centerX2, _centerX3);
+            _panStartQDCY = new FracturingFog.FFMath.QD(_centerY, _centerYLo, _centerY2, _centerY3);
+        }
         _renderPanel.Cursor = Cursors.SizeAll;
     }
 
@@ -3457,6 +3501,22 @@ public sealed partial class MainForm : Form
         // Cancel any pan that started on the first click of the double-click.
         _panning = false;
         _renderPanel.Cursor = Cursors.Cross;
+
+        // 3D: pan in NDC so the clicked point becomes the new view center.
+        if (Is3DFractalType(_currentFractalType))
+        {
+            double s3 = CurrentScale3D();
+            double ox3 = e.X - _renderPanel.ClientSize.Width * 0.5;
+            double oy3 = e.Y - _renderPanel.ClientSize.Height * 0.5;
+            _centerX += ox3 * s3;
+            _centerY += oy3 * s3;
+            _centerXLo = 0; _centerX2 = 0; _centerX3 = 0;
+            _centerYLo = 0; _centerY2 = 0; _centerY3 = 0;
+            ApplyViewState();
+            TriggerCalculation();
+            SetStatus($"Centered on NDC ({_centerX:G6}, {_centerY:G6})");
+            return;
+        }
 
         // Convert the clicked screen pixel to complex-plane coordinates.
         double scale = CurrentScale();
@@ -3520,6 +3580,22 @@ public sealed partial class MainForm : Form
         }
 
         if (!_panning || _calculator == null) return;
+
+        // 3D: CenterX/Y are NDC pan units, not complex-plane coords.
+        if (Is3DFractalType(_currentFractalType))
+        {
+            double s3 = CurrentScale3D();
+            _centerX = _panStartCX - (e.X - _panStartScreen.X) * s3;
+            _centerY = _panStartCY - (e.Y - _panStartScreen.Y) * s3;
+            _centerXLo = 0; _centerX2 = 0; _centerX3 = 0;
+            _centerYLo = 0; _centerY2 = 0; _centerY3 = 0;
+            ApplyViewState();
+            _panStopTimer.Stop();
+            _panStopTimer.Start();
+            TriggerCalculationFast();
+            return;
+        }
+
         double scale = CurrentScale();
         //_centerX = _panStartCX - (e.X - _panStartScreen.X) * scale;
         //_centerY = _panStartCY - (e.Y - _panStartScreen.Y) * scale;
@@ -3740,6 +3816,21 @@ public sealed partial class MainForm : Form
     {
         if (_calculator == null) return 3.5;
         return 3.5 / (System.Math.Max(_calculator.Width, _calculator.Height) * _zoom);
+    }
+
+    // FOV-scale must match MandelbulbCalculator / UserBulbCalculator: tan(π/6).
+    private const double Bulb3DFovScale = 0.57735026918962576; // tan(30°)
+
+    /// <summary>
+    /// NDC-per-pixel for 3D camera pan. CenterX/CenterY in Mandelbulb &
+    /// UserBulb are consumed as NDC pan units, so screen-pixel deltas must
+    /// be converted to NDC, not to a complex-plane scale.
+    /// </summary>
+    private double CurrentScale3D()
+    {
+        int h = _renderPanel?.ClientSize.Height ?? 1;
+        if (h < 1) h = 1;
+        return 2.0 * Bulb3DFovScale / h;
     }
 
     /// <summary>
