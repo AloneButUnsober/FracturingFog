@@ -2418,6 +2418,7 @@ mapping mirror the Mandelbrot path.
 
   Complex-returning (operate on real or complex):
       sin(z)   cos(z)   tan(z)
+      sinh(z)  cosh(z)  tanh(z)
       exp(z)   log(z)   sqrt(z)
       conj(z)                // complex conjugate
       pow(a, b)              // a raised to b — same as a ^ b
