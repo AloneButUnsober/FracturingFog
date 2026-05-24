@@ -39,5 +39,14 @@ namespace FracturingFog.Audio
 
         /// <summary>BPM of the fractal synth arpeggio. Default 120.</summary>
         public double SynthBpm { get; set; } = 120;
+
+        /// <summary>
+        /// Per-band weights applied to the analyzer's spectral-flux contributions.
+        /// Order: Bass (20-150 Hz), LowMid (150-400), Mid (400-1500), HighMid (1500-4000),
+        /// High (4000-12000). 1.0 = neutral; 0.0 silences a band; values above 1 amplify.
+        /// Lets the user steer which instruments drive the beat detector (e.g. boost Bass
+        /// to follow the kick drum, drop High to ignore hi-hats).
+        /// </summary>
+        public float[] BandWeights { get; set; } = new[] { 1f, 1f, 1f, 1f, 1f };
     }
 }

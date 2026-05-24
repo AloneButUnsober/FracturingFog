@@ -216,17 +216,19 @@ namespace FracturingFog
             //  Each region shows 8 color themes
 
             // Region Focus mode timings: fewer themes per region, longer durations, shorter fade for a calmer, more contemplative slideshow when the region is the main changing element.
-            // When audio-reactive is active the theme duration becomes a soft upper bound;
-            // the beat handler flips _slideshowSkipTheme to advance early.
+            // When audio-reactive is active the theme duration is a soft upper bound:
+            // the beat handler flips _slideshowSkipTheme to advance early. The cap stays
+            // identical to the non-audio value so a silent / undetectable source still
+            // advances at the normal cadence instead of stalling for a minute.
             int themesPerRegion = 3;
-            int themeDurationMs = ShouldUseBeatDrivenTiming() ? 60_000 : 12_000;
+            int themeDurationMs = 12_000;
             int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
             int fadeSteps = 22;
             int fadeStepMs = fadeDurationMs / fadeSteps;
 
             // Color Focus mode timings: more themes per region, shorter durations, longer fade for more visual interest when the theme is the main changing element.
             int themesPerRegionCF = 8;
-            int themeDurationMsCF = ShouldUseBeatDrivenTiming() ? 60_000 : 3_000;
+            int themeDurationMsCF = 3_000;
             int fadeDurationMsCF = 4_000;   // 4 s cross-fade (overlaps end of theme slot)
             int fadeStepsCF = 44;
             int fadeStepMsCF = fadeDurationMsCF / fadeStepsCF;
@@ -455,11 +457,12 @@ namespace FracturingFog
                 }
 
                 // Wait for the final theme to display its full duration before
-                // transitioning to the next region. Skip-region/skip-theme on
-                // the VCR break out early.
-                Debug.WriteLine($"SldShwLp: Final theme for region \"{region.Name}\" displayed, waiting {themeDurationMs} ms before next region");
-                await SkippableDelay(themeDurationMs, ct,
-                    PeekSkipSlideshowRegion, PeekSkipSlideshowTheme);
+                // transitioning to the next region. Only a skip-region (VCR or
+                // beat-driven) breaks out — a stray theme-skip beat must not
+                // shortcut the region change.
+                int finalWaitMs = focusRegion ? themeDurationMs : themeDurationMsCF;
+                Debug.WriteLine($"SldShwLp: Final theme for region \"{region.Name}\" displayed, waiting {finalWaitMs} ms before next region");
+                await SkippableDelay(finalWaitMs, ct, PeekSkipSlideshowRegion);
                 // Consume any pending skip flags — we are advancing to the
                 // next region either way.
                 IsSkipSlideshowRegion();
