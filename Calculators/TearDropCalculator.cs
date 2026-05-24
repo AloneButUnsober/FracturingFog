@@ -29,6 +29,8 @@
 // failure modes blow up the linear PT approximation.
 
 using System;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -66,6 +68,12 @@ public sealed class TearDropCalculator : IFractalCalculator
 
     /// <summary>When true skips PT and runs full DD/QD per-pixel everywhere.</summary>
     public bool DisableAcceleration { get; set; } = false;
+
+    /// <summary>Enables 4-wide AVX2+FMA SIMD on PT paths when hardware permits.</summary>
+    public bool DisableSimd { get; set; } = false;
+
+    /// <summary>AVX2+FMA available — required by the SIMD PT inner loop.</summary>
+    public static bool SimdSupported => Avx2.IsSupported && Fma.IsSupported;
 
     public const double QDZoomThreshold = 1e25;
 
@@ -277,13 +285,32 @@ public sealed class TearDropCalculator : IFractalCalculator
         int width = Width;
         int height = Height;
         var map = ColorMap;
+        bool useSimd = SimdSupported && !DisableSimd;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
             double dcy = (y - height * 0.5) * scale;
             int rowBase = y * width;
-            for (int x = 0; x < width; x++)
+            int x = 0;
+            if (useSimd)
+            {
+                for (; x + 4 <= width; x += 4)
+                {
+                    IteratePT_SIMD4(
+                        rowBase + x,
+                        (x + 0 - width * 0.5) * scale,
+                        (x + 1 - width * 0.5) * scale,
+                        (x + 2 - width * 0.5) * scale,
+                        (x + 3 - width * 0.5) * scale,
+                        dcy,
+                        Cr, Ci, C2r, C2i, C3r, C3i, C4r, C4i,
+                        maxIt, map, scale,
+                        centerXDdHi: centerXDd, centerYDdHi: centerYDd,
+                        useQdFallback: false);
+                }
+            }
+            for (; x < width; x++)
             {
                 double dcx = (x - width * 0.5) * scale;
                 int idx = rowBase + x;
@@ -324,13 +351,33 @@ public sealed class TearDropCalculator : IFractalCalculator
 
         DD cxDd = new(centerXQd.X0, centerXQd.X1);
         DD cyDd = new(centerYQd.X0, centerYQd.X1);
+        bool useSimd = SimdSupported && !DisableSimd;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
             double dcy = (y - height * 0.5) * scale;
             int rowBase = y * width;
-            for (int x = 0; x < width; x++)
+            int x = 0;
+            if (useSimd)
+            {
+                for (; x + 4 <= width; x += 4)
+                {
+                    IteratePT_SIMD4(
+                        rowBase + x,
+                        (x + 0 - width * 0.5) * scale,
+                        (x + 1 - width * 0.5) * scale,
+                        (x + 2 - width * 0.5) * scale,
+                        (x + 3 - width * 0.5) * scale,
+                        dcy,
+                        Cr, Ci, C2r, C2i, C3r, C3i, C4r, C4i,
+                        maxIt, map, scale,
+                        centerXDdHi: cxDd, centerYDdHi: cyDd,
+                        useQdFallback: true,
+                        qdCenterX: centerXQd, qdCenterY: centerYQd);
+                }
+            }
+            for (; x < width; x++)
             {
                 double dcx = (x - width * 0.5) * scale;
                 int idx = rowBase + x;
@@ -638,6 +685,314 @@ public sealed class TearDropCalculator : IFractalCalculator
         {
             FinaliseInSet(idx, map);
         }
+    }
+
+    // ── PT pixel loop, 4-wide AVX2+FMA SIMD ──────────────────────────────────
+    //
+    // Processes 4 horizontally-adjacent pixels in one row. dcy and the
+    // reference orbit Zn are broadcast (identical across lanes); dcx and all
+    // per-pixel state (Δ, d, c³, denom, invC3, invC4, τ_c3) are lane-distinct.
+    //
+    // An active-lane mask freezes per-lane state once a lane escapes or
+    // glitches; glitched lanes are recorded for a post-loop scalar full-DD/QD
+    // rerun. Tail of the row (width % 4) is handled by the scalar IteratePT.
+
+    private void IteratePT_SIMD4(
+        int baseIdx,
+        double dcx0, double dcx1, double dcx2, double dcx3,
+        double dcyScalar,
+        double Cr, double Ci,
+        double C2r, double C2i,
+        double C3r, double C3i,
+        double C4r, double C4i,
+        int maxIt,
+        IColorMap map,
+        double scale,
+        DD centerXDdHi, DD centerYDdHi,
+        bool useQdFallback,
+        QD qdCenterX = default, QD qdCenterY = default)
+    {
+        // ─ Broadcasts ─
+        var vZero    = Vector256<double>.Zero;
+        var vOne     = Vector256.Create(1.0);
+        var vThree   = Vector256.Create(3.0);
+        var vCr      = Vector256.Create(Cr);
+        var vCi      = Vector256.Create(Ci);
+        var vC2r     = Vector256.Create(C2r);
+        var vC2i     = Vector256.Create(C2i);
+        var vC3r     = Vector256.Create(C3r);
+        var vC3i     = Vector256.Create(C3i);
+        var vBailout = Vector256.Create(BailoutRadius2);
+        var vGFsq    = Vector256.Create(GlitchFactor * GlitchFactor);
+        var vGMZsq   = Vector256.Create(GlitchMinZ * GlitchMinZ);
+        var vTiny    = Vector256.Create(1e-300);
+
+        // dcr lanes 0..3, dci broadcast across lanes (same row).
+        var vDcr = Vector256.Create(dcx0, dcx1, dcx2, dcx3);
+        var vDci = Vector256.Create(dcyScalar);
+
+        // ─ Per-pixel τ_c3 = dc · (3 C² + dc · (3 C + dc)) ─
+        // tmp = 3C + dc
+        var tmpR = Avx.Add(Avx.Multiply(vThree, vCr), vDcr);
+        var tmpI = Avx.Add(Avx.Multiply(vThree, vCi), vDci);
+        // tmp = dc · (3C + dc)
+        VMul(vDcr, vDci, tmpR, tmpI, out tmpR, out tmpI);
+        // tmp = 3 C² + tmp
+        tmpR = Fma.MultiplyAdd(vThree, vC2r, tmpR);
+        tmpI = Fma.MultiplyAdd(vThree, vC2i, tmpI);
+        // τ_c3
+        VMul(vDcr, vDci, tmpR, tmpI, out var vTauC3r, out var vTauC3i);
+
+        // c³_pix = C³ + τ_c3
+        var vC3PixR = Avx.Add(vC3r, vTauC3r);
+        var vC3PixI = Avx.Add(vC3i, vTauC3i);
+        var vC3PixMag2 = Fma.MultiplyAdd(vC3PixR, vC3PixR, Avx.Multiply(vC3PixI, vC3PixI));
+
+        // c_pix = C + dc
+        var vCrPix = Avx.Add(vCr, vDcr);
+        var vCiPix = Avx.Add(vCi, vDci);
+
+        // c⁴_pix = c³_pix · c_pix
+        VMul(vC3PixR, vC3PixI, vCrPix, vCiPix, out var vC4PixR, out var vC4PixI);
+        var vC4PixMag2 = Fma.MultiplyAdd(vC4PixR, vC4PixR, Avx.Multiply(vC4PixI, vC4PixI));
+
+        // denom = c³_pix · C³
+        VMul(vC3PixR, vC3PixI, vC3r, vC3i, out var vDenomR, out var vDenomI);
+        var vDenomMag2 = Fma.MultiplyAdd(vDenomR, vDenomR, Avx.Multiply(vDenomI, vDenomI));
+
+        // Invalid-pixel mask: any of c³_pix, c⁴_pix, denom too tiny.
+        // Mask high bit set ⇒ lane is invalid.
+        var vInvalid = Avx.Or(
+            Avx.Or(
+                Avx.CompareLessThan(vC3PixMag2, vTiny),
+                Avx.CompareLessThan(vC4PixMag2, vTiny)),
+            Avx.CompareLessThan(vDenomMag2, vTiny));
+
+        // invC3_pix = conj(c³_pix) / |c³_pix|²
+        var vInvC3PixR = Avx.Divide(vC3PixR, vC3PixMag2);
+        var vInvC3PixI = Avx.Divide(Avx.Subtract(vZero, vC3PixI), vC3PixMag2);
+        // invC4_pix = conj(c⁴_pix) / |c⁴_pix|²
+        var vInvC4PixR = Avx.Divide(vC4PixR, vC4PixMag2);
+        var vInvC4PixI = Avx.Divide(Avx.Subtract(vZero, vC4PixI), vC4PixMag2);
+
+        // Δ_0 = 0, d_0 = 0.
+        var vDr = vZero;
+        var vDi = vZero;
+        var vDeltaR = vZero;
+        var vDeltaI = vZero;
+
+        // Lane status. activeMask: -1 (all bits set) ⇒ lane still iterating.
+        // escapedIter[k] = iter index at which lane k escaped; maxIt if never.
+        // glitched[k] = true if lane k tripped glitch test.
+        var vActive = Avx.CompareEqual(vInvalid, vInvalid); // start: all -1
+        // Mask out invalid lanes immediately.
+        vActive = Avx.AndNot(vInvalid, vActive);
+
+        Span<int> escapedIter = stackalloc int[4] { maxIt, maxIt, maxIt, maxIt };
+        Span<double> finalZr = stackalloc double[4];
+        Span<double> finalZi = stackalloc double[4];
+        Span<double> finalDr = stackalloc double[4];
+        Span<double> finalDi = stackalloc double[4];
+        Span<bool> glitched = stackalloc bool[4];
+
+        // Lanes flagged invalid up-front: emit immediate escape after loop.
+        Span<bool> immediateEscape = stackalloc bool[4];
+        int invalidMask = Avx.MoveMask(vInvalid);
+        for (int k = 0; k < 4; k++) immediateEscape[k] = ((invalidMask >> k) & 1) != 0;
+
+        int activeBits = Avx.MoveMask(vActive) & 0xF;
+
+        int iter;
+        for (iter = 0; iter < maxIt && activeBits != 0; iter++)
+        {
+            if (iter >= _refLen)
+            {
+                // Reference orbit shorter than maxIt — flag remaining active
+                // lanes as glitched and rerun via full DD/QD.
+                for (int k = 0; k < 4; k++)
+                    if (((activeBits >> k) & 1) != 0) glitched[k] = true;
+                break;
+            }
+
+            double Zr = _refZr[iter];
+            double Zi = _refZi[iter];
+            var vZr = Vector256.Create(Zr);
+            var vZi = Vector256.Create(Zi);
+
+            // z = Z + Δ
+            var vzr = Avx.Add(vZr, vDeltaR);
+            var vzi = Avx.Add(vZi, vDeltaI);
+            var vMag2 = Fma.MultiplyAdd(vzr, vzr, Avx.Multiply(vzi, vzi));
+
+            // Escape mask = (mag2 ≥ bailout) AND active.
+            var vEscape = Avx.And(
+                Avx.CompareGreaterThanOrEqual(vMag2, vBailout),
+                vActive);
+
+            // Glitch mask = (|Δ|² > GF²·max(|Z|², GMZ²)) AND active AND iter>0.
+            Vector256<double> vGlitch = vZero;
+            if (iter > 0)
+            {
+                var vZrefMag2 = Vector256.Create(Zr * Zr + Zi * Zi);
+                var vDlMag2 = Fma.MultiplyAdd(vDeltaR, vDeltaR, Avx.Multiply(vDeltaI, vDeltaI));
+                var vRhs = Avx.Multiply(vGFsq, Avx.Max(vZrefMag2, vGMZsq));
+                vGlitch = Avx.And(Avx.CompareGreaterThan(vDlMag2, vRhs), vActive);
+            }
+
+            int escMask = Avx.MoveMask(vEscape) & 0xF;
+            int glMask = Avx.MoveMask(vGlitch) & 0xF;
+
+            // Snapshot newly-terminating lanes into finals.
+            int terminating = escMask | glMask;
+            if (terminating != 0)
+            {
+                for (int k = 0; k < 4; k++)
+                {
+                    if (((terminating >> k) & 1) == 0) continue;
+                    escapedIter[k] = iter;
+                    finalZr[k] = vzr.GetElement(k);
+                    finalZi[k] = vzi.GetElement(k);
+                    finalDr[k] = vDr.GetElement(k);
+                    finalDi[k] = vDi.GetElement(k);
+                    if (((glMask >> k) & 1) != 0) glitched[k] = true;
+                }
+                // Drop terminating lanes from active set.
+                vActive = Avx.AndNot(Avx.Or(vEscape, vGlitch), vActive);
+                activeBits = Avx.MoveMask(vActive) & 0xF;
+                if (activeBits == 0) { iter++; break; }
+            }
+
+            // ─ Δ update ─
+            // Z² = (Zr²−Zi², 2 Zr Zi)
+            double Z2r_s = Zr * Zr - Zi * Zi;
+            double Z2i_s = 2.0 * Zr * Zi;
+            var vZ2r = Vector256.Create(Z2r_s);
+            var vZ2i = Vector256.Create(Z2i_s);
+            // Z³ = Z² · Z
+            double Z3r_s = Z2r_s * Zr - Z2i_s * Zi;
+            double Z3i_s = Z2r_s * Zi + Z2i_s * Zr;
+            var vZ3r = Vector256.Create(Z3r_s);
+            var vZ3i = Vector256.Create(Z3i_s);
+
+            // τ_z3 = Δ · (3Z² + Δ · (3Z + Δ))
+            var tR = Avx.Add(Avx.Multiply(vThree, vZr), vDeltaR);
+            var tI = Avx.Add(Avx.Multiply(vThree, vZi), vDeltaI);
+            VMul(vDeltaR, vDeltaI, tR, tI, out tR, out tI);
+            tR = Fma.MultiplyAdd(vThree, vZ2r, tR);
+            tI = Fma.MultiplyAdd(vThree, vZ2i, tI);
+            VMul(vDeltaR, vDeltaI, tR, tI, out var vTauZ3r, out var vTauZ3i);
+
+            // num = τ_z3 · C³ − Z³ · τ_c3
+            VMul(vTauZ3r, vTauZ3i, vC3r, vC3i, out var vNumAr, out var vNumAi);
+            VMul(vZ3r, vZ3i, vTauC3r, vTauC3i, out var vNumBr, out var vNumBi);
+            var vNumR = Avx.Subtract(vNumAr, vNumBr);
+            var vNumI = Avx.Subtract(vNumAi, vNumBi);
+
+            // diff = num · conj(denom) / |denom|²
+            var vNumDotDr = Fma.MultiplyAdd(vNumR, vDenomR, Avx.Multiply(vNumI, vDenomI));
+            var vNumCrsDi = Fma.MultiplySubtract(vNumI, vDenomR, Avx.Multiply(vNumR, vDenomI));
+            var vDiffR = Avx.Divide(vNumDotDr, vDenomMag2);
+            var vDiffI = Avx.Divide(vNumCrsDi, vDenomMag2);
+
+            // Δ_{n+1} = -i · diff + dc = (diff.i + dc.r, -diff.r + dc.i)
+            var vNewDeltaR = Avx.Add(vDiffI, vDcr);
+            var vNewDeltaI = Avx.Add(Avx.Subtract(vZero, vDiffR), vDci);
+
+            // ─ d update (per-pixel z, c) ─
+            // z = Z + Δ (already computed as vzr, vzi)
+            // z² = (zr²−zi², 2 zr zi)
+            var vz2r = Fma.MultiplySubtract(vzr, vzr, Avx.Multiply(vzi, vzi));
+            var vz2i = Avx.Multiply(Avx.Multiply(Vector256.Create(2.0), vzr), vzi);
+            // z³ = z² · z
+            VMul(vz2r, vz2i, vzr, vzi, out var vz3r, out var vz3i);
+            // A = (z² · d) · invC3_pix
+            VMul(vz2r, vz2i, vDr, vDi, out var vZ2dR, out var vZ2dI);
+            VMul(vZ2dR, vZ2dI, vInvC3PixR, vInvC3PixI, out var vAr, out var vAi);
+            // B = z³ · invC4_pix
+            VMul(vz3r, vz3i, vInvC4PixR, vInvC4PixI, out var vBr, out var vBi);
+            // d_{n+1} = (3(A.i − B.i) + 1, 3(B.r − A.r))
+            var vNewDr = Fma.MultiplyAdd(vThree, Avx.Subtract(vAi, vBi), vOne);
+            var vNewDi = Avx.Multiply(vThree, Avx.Subtract(vBr, vAr));
+
+            // Blend so escaped/glitched lanes freeze their state.
+            vDeltaR = Avx.BlendVariable(vDeltaR, vNewDeltaR, vActive);
+            vDeltaI = Avx.BlendVariable(vDeltaI, vNewDeltaI, vActive);
+            vDr     = Avx.BlendVariable(vDr,     vNewDr,     vActive);
+            vDi     = Avx.BlendVariable(vDi,     vNewDi,     vActive);
+        }
+
+        // Any lane still active at maxIt is "in set".
+        // Capture remaining lanes (no escape this loop).
+        int stillActive = activeBits;
+        if (stillActive != 0)
+        {
+            for (int k = 0; k < 4; k++)
+            {
+                if (((stillActive >> k) & 1) == 0) continue;
+                // Synthesise final z = Z_{maxIt-1?} + Δ if we want, but simpler:
+                // mark as in-set by leaving escapedIter[k] = maxIt; finals untouched.
+                // Actually we may want final z for color, but FinaliseInSet
+                // doesn't use it — leave as-is.
+                escapedIter[k] = maxIt;
+            }
+        }
+
+        // ─ Per-lane finalisation ─
+        for (int k = 0; k < 4; k++)
+        {
+            int idx = baseIdx + k;
+            if (immediateEscape[k])
+            {
+                EmitImmediateEscape(idx, map, maxIt);
+                continue;
+            }
+            if (glitched[k])
+            {
+                double dcr = k == 0 ? dcx0 : k == 1 ? dcx1 : k == 2 ? dcx2 : dcx3;
+                double dci = dcyScalar;
+                if (useQdFallback)
+                {
+                    double pxOffR = dcr / scale;
+                    double pxOffI = dci / scale;
+                    QD cx = QD.FromCenterOffset(qdCenterX, pxOffR, scale);
+                    QD cy = QD.FromCenterOffset(qdCenterY, pxOffI, scale);
+                    IterateFullQD(cx, cy, maxIt, idx, map);
+                }
+                else
+                {
+                    double pxOffR = dcr / scale;
+                    double pxOffI = dci / scale;
+                    DD cx = DD.FromCenterOffset(centerXDdHi, pxOffR, scale);
+                    DD cy = DD.FromCenterOffset(centerYDdHi, pxOffI, scale);
+                    IterateFullDD(cx, cy, maxIt, idx, map);
+                }
+                continue;
+            }
+
+            int it = escapedIter[k];
+            if (it >= maxIt)
+            {
+                IterationBuffer[idx] = maxIt;
+                FinaliseInSet(idx, map);
+            }
+            else
+            {
+                FinaliseDouble(idx, it, maxIt,
+                    finalZr[k], finalZi[k], finalDr[k], finalDi[k], map);
+            }
+        }
+    }
+
+    // 4-lane complex multiply: (ar+ai i)·(br+bi i)
+    private static void VMul(
+        Vector256<double> ar, Vector256<double> ai,
+        Vector256<double> br, Vector256<double> bi,
+        out Vector256<double> rr, out Vector256<double> ri)
+    {
+        // rr = ar*br − ai*bi  =  FMA(ar, br, −ai*bi)  =  FMS(ar, br, ai*bi)
+        // ri = ar*bi + ai*br
+        rr = Fma.MultiplySubtract(ar, br, Avx.Multiply(ai, bi));
+        ri = Fma.MultiplyAdd(ar, bi, Avx.Multiply(ai, br));
     }
 
     // ── Full DD per-pixel iteration with DE/normals ──────────────────────────
