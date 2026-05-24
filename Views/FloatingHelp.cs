@@ -188,6 +188,7 @@ namespace FracturingFog.Views
             _tabs.TabPages.Add(BuildAboutTab());
             _tabs.TabPages.Add(BuildSystemInfoTab());
             _tabs.TabPages.Add(BuildFeaturesTab());
+            _tabs.TabPages.Add(BuildAudioTab());
             _tabs.TabPages.Add(BuildEditorTab());
             _tabs.TabPages.Add(BuildMathTab());
             _tabs.TabPages.Add(BuildBioTab());
@@ -463,6 +464,324 @@ namespace FracturingFog.Views
   Perturbation theory (Series Approx. + BLA) accelerates deep zooms.
 ";
             rtb.Text = rtb.Text.Replace("{THEME_COUNT}", themeCount.ToString());
+            return page;
+        }
+
+        private TabPage BuildAudioTab()
+        {
+            var page = MakePage("Audio");
+            page.Tag = "audio-help";
+            var rtb = MakeRichText(page);
+
+            rtb.Text =
+@"=== Audio-Reactive Slideshow ===
+
+The slideshow can be driven by music or any audio source so that
+color-theme and region transitions land on the beat. When enabled,
+the standard fixed-duration timer (12 s / 3 s) is replaced by a
+beat counter: every N detected beats trigger a theme change, every
+M beats trigger a region change. Cross-fade duration also scales
+with the detected BPM (default 3/4 of one beat).
+
+Open the audio settings from:
+  Floating Menu  →  Audio  →  ""Audio Settings…""
+
+The dialog is MODELESS — you can leave it open while you start the
+slideshow, browse the main view, or change regions. Settings are
+applied only when you click OK; clicking Cancel discards changes.
+
+=== Master Enable ===
+
+The Audio-Reactive checkbox in the Floating Menu (above the
+""Audio Settings…"" button) is the master switch. When OFF the
+slideshow uses fixed-duration timing. When ON the engine is
+started automatically whenever the slideshow runs (or remains
+running if you start it directly from the dialog).
+
+State persists between launches via
+  %APPDATA%\FracturingFog\audio-settings.json
+
+=== Source ===
+
+Four input sources are available, selected by the ""Source""
+combo at the top of the dialog:
+
+  System Loopback  Captures whatever is currently playing on the
+                   default audio output (Spotify, browser, video
+                   players, games). Nothing else to configure;
+                   start playing audio anywhere on the PC and the
+                   detector will pick it up.
+
+  Audio File       Plays a local file (MP3 / WAV / FLAC / OGG /
+                   AIFF / WMA) through the engine. Click ""Browse…""
+                   to pick a file. File playback drives the
+                   detector and is also rendered to speakers so
+                   you hear the same audio that's being analyzed.
+                   Playback ends silently when the file finishes
+                   — restart with a new file or switch source.
+
+  Microphone       Default capture device. Good for live shows or
+                   external speakers. Raise Sensitivity if the
+                   mic level is low.
+
+  Fractal Synth    Internally generated audio derived from the
+                   fractal itself (closed-loop showcase mode).
+                   No external source needed. Two extra options
+                   apply only to this source — see below.
+
+The File-path / Browse controls are enabled only when ""Audio File""
+is the active source. The Fractal-Synth checkboxes are enabled
+only when ""Fractal Synth"" is the active source.
+
+=== Sensitivity ===
+
+Range 0–100 %. Default 50 %.
+
+Controls the onset-detection threshold of the spectral-flux beat
+detector. Lower values report only the strongest hits (good for
+heavy drums); higher values fire on subtler transients (good for
+ambient or speech).
+
+If you are dropping beats — slideshow stays on one theme too long
+— raise this. If themes are changing on every snare hit, lower it.
+
+=== Beats per Theme ===
+
+Default 8 (≈ 2 bars at 4/4).
+
+Number of detected beats required before the slideshow advances
+to the next color theme. Each beat increments an internal counter;
+on reaching this value, the slideshow's theme-skip flag fires and
+the cross-fade begins.
+
+  4    Theme changes every bar  — frenetic.
+  8    Every two bars           — default, musical.
+ 16    Every four bars (phrase) — calm.
+
+=== Beats per Region ===
+
+Default 32 (≈ 8 bars).
+
+Number of detected beats before a full region change. Always
+≥ Beats-per-Theme; the dialog enforces this on commit. Region
+changes also reset the theme counter, so a region change won't
+fire on the same beat as a theme change.
+
+=== Synth BPM (Fractal Synth only) ===
+
+Range 30–240. Default 120.
+
+When ""Fractal Synth"" is the source, this is the synth arpeggio's
+BPM. The internal synth generates pitches by probing the fractal
+along the current viewport, sequenced at this tempo. Routed to
+the beat detector when ""Route fractal synth output through
+analyzer"" is ticked, so the slideshow can lock to this BPM.
+
+=== Route Fractal Synth through Analyzer ===
+
+When ticked, the synth's audio is fed BACK into the beat detector,
+closing the loop: the synth tempo drives the slideshow even
+without external audio. Untick to drive the slideshow from a
+separate source (microphone, file) while the synth runs silently
+on speakers.
+
+Only applies when Source = Fractal Synth.
+
+=== Play Fractal Synth Audio to Speakers ===
+
+When ticked, the synth's audio is rendered to the system's default
+output device. When unticked, the synth runs silently — useful if
+you only want its output for closed-loop analysis but don't want
+to hear it. Untick for headphone-friendly demos.
+
+Only applies when Source = Fractal Synth.
+
+=== Beat-Detector EQ (per-band flux weight) ===
+
+Five sliders, each 0–200 %, default 100 %. Order:
+
+  Bass     20  – 150  Hz   (kick drum, sub bass)
+  LowMid   150 – 400  Hz   (bass guitar, low toms)
+  Mid      400 – 1500 Hz   (vocals, snare body)
+  HighMid  1500 – 4000 Hz  (cymbals attack, vocal sibilance)
+  High     4000 – 12 000 Hz (hi-hats, brushes, air)
+
+Each band's positive spectral flux is multiplied by its weight
+before summing into the onset signal. 0 % silences the band
+entirely; 200 % doubles its contribution.
+
+Use this to steer which instruments drive the beat detector:
+
+  Following the kick drum    Bass 200 %, others 50 %
+  Ignoring hi-hat clutter    High 0 %, HighMid 50 %
+  Vocal-driven trigger       Mid 200 %, Bass 50 %, High 0 %
+  Everything-on (default)    All 100 %
+
+The Reset button restores all five sliders to 100 %.
+
+=== Fade × beat ===
+
+Range 0.10 – 2.00. Default 0.75 (three-quarters of one beat).
+
+Sets cross-fade duration as a fraction of one detected beat.
+At 120 BPM, one beat = 500 ms, so:
+
+  0.25     125 ms fade   — snappy, almost cut
+  0.50     250 ms fade   — quick
+  0.75     375 ms fade   — default, musical
+  1.00     500 ms fade   — one full beat
+  2.00    1000 ms fade   — luxurious, half-bar fade
+
+Both color-theme and region transitions use this fraction.
+Internally clamped to [0.10, 2.00] and to a minimum of 120 ms
+absolute, so very high BPMs still produce a visible fade.
+
+Performance: read once per slideshow transition. No render-loop
+overhead.
+
+=== BPM and Level Readouts ===
+
+Below the EQ block:
+
+  BPM      Estimated tempo from the analyzer. ""—"" until enough
+           beats have been collected (~5–10 s of audio). Updates
+           live; if the source's tempo changes, the estimate
+           drifts to match within a few bars.
+
+  Level    Per-band energy bars (Bass / Mid / High). Each is an
+           8-step ASCII bar that pulses with the input. Empty
+           bars across the board mean no audio is reaching the
+           analyzer — check Source and Sensitivity.
+
+Both readouts refresh every 100 ms while the dialog is open.
+
+=== Slideshow Start / Stop Button ===
+
+The bottom-left button starts or stops the slideshow without
+closing the dialog. Label and color reflect the current state:
+
+  ▶ Start Slideshow   (green) — slideshow is stopped
+  ■ Stop Slideshow    (red)   — slideshow is running
+
+Useful for quickly testing different settings: tweak EQ, press
+Stop, press Start to apply the audio engine state, watch the
+result, repeat. Settings are applied on OK, but the slideshow
+toggle works immediately.
+
+=== OK / Cancel ===
+
+  OK       Applies all changes (source, sensitivity, beat counts,
+           synth BPM, synth flags, EQ weights, fade fraction) and
+           saves them to disk. The audio engine is reconfigured
+           live if it's running.
+  Cancel   Discards changes. Engine state and on-disk settings are
+           untouched.
+
+The dialog is modeless, so closing it (or pressing Esc) does NOT
+stop the slideshow.
+
+=== Workflow Examples ===
+
+  ""Visualize Spotify""
+    1. Start Spotify and begin playback.
+    2. Floating Menu  →  Audio  →  tick ""Audio-Reactive"".
+    3. Open Audio Settings, leave Source = System Loopback.
+       Wait for the BPM readout to populate.
+    4. Click the green ""▶ Start Slideshow"" button at the bottom
+       of the dialog (or close the dialog and use the toolbar
+       Slideshow button).
+    5. Beats per Theme 8, Beats per Region 32, Fade 0.75 ×
+       beat gives a musical default.
+
+  ""Drive from an MP3 file""
+    1. Open Audio Settings.
+    2. Source = Audio File. Browse… → pick the file.
+    3. Click OK. File begins playing through speakers.
+    4. Start the slideshow.
+    5. Click Cancel does NOT stop file playback — toggle
+       Audio-Reactive off in the Floating Menu to halt the
+       engine cleanly.
+
+  ""Closed-loop demo (no external audio)""
+    1. Source = Fractal Synth, Synth BPM = 120.
+    2. Tick BOTH ""Route synth through analyzer"" and ""Play synth
+       audio"".
+    3. OK. The synth plays and drives the slideshow itself.
+
+  ""Kick-drum-only trigger""
+    1. EQ: Bass 200 %, LowMid 100 %, others 0 %.
+    2. Sensitivity 60–70 %.
+    3. Beats per Theme 4 (one bar).
+    4. Watch theme changes land on every kick.
+
+=== Troubleshooting ===
+
+  ""BPM stays at —""
+    • Source not producing audio yet (start the player).
+    • System loopback: nothing playing on the default output.
+    • Microphone: muted or missing permission.
+    • Wait ~10 seconds; the detector needs a window of beats.
+
+  ""Level bars are empty""
+    • No audio reaching the analyzer. Check the Source combo.
+    • For System Loopback, confirm Windows is routing audio to
+      the same default device the engine opened.
+    • Raise Sensitivity if the bars flicker but never fill.
+
+  ""Slideshow advances too often / too rarely""
+    • Adjust Beats per Theme / Beats per Region first.
+    • If those feel right but the detector is firing wrong,
+      tune Sensitivity and the EQ band weights.
+    • The Fade × beat slider does NOT affect when transitions
+      fire — only how long they take once started.
+
+  ""Cross-fade looks instant at high BPM""
+    • 200 BPM × 0.10 × beat = 30 ms — below the 120 ms floor.
+      Floor kicks in; raise Fade × beat for a longer fade.
+
+  ""File playback ended silently""
+    • Audio source ended is shown in the status bar.
+    • Engine remains configured. Pick a new file and press OK,
+      or switch to System Loopback.
+
+  ""I want the engine to keep running with the slideshow stopped""
+    • Default policy: stop with slideshow. Open Audio Settings,
+      then leave it open — the engine restarts automatically
+      when the slideshow runs again, and the meters keep
+      reflecting live audio for as long as it's playing through
+      a non-slideshow path.
+
+=== Persistence ===
+
+All values commit to disk via OK. Stored as JSON:
+  %APPDATA%\FracturingFog\audio-settings.json
+
+Fields stored:
+  Enabled, Source, FilePath, Sensitivity, BeatsPerTheme,
+  BeatsPerRegion, RouteSynthThroughAnalyzer, PlaySynthOutput,
+  SynthBpm, BandWeights[5], FadeBeatFraction.
+
+Missing fields (e.g. older config without FadeBeatFraction) load
+with defaults — no migration required.
+
+=== Implementation Notes ===
+
+  • Onset detector: spectral flux per band (5 bands), weighted
+    sum, adaptive threshold. Reports a beat when the smoothed
+    flux exceeds threshold + sensitivity-scaled margin.
+  • BPM estimator: autocorrelation over recent inter-onset
+    intervals; refines over time.
+  • Beat handler runs on the audio capture thread; it flips
+    volatile skip flags consumed by the slideshow loop. No UI
+    marshalling on the audio thread.
+  • Theme/region advancement happens at the slideshow's normal
+    transition points — the beat handler just shortcuts the
+    timer. This keeps the cross-fade rendering deterministic
+    even if a beat fires mid-frame.
+  • Fade × beat is read once at the start of each slideshow
+    transition; changing it mid-run takes effect on the next
+    transition, not the in-flight one.
+";
             return page;
         }
 

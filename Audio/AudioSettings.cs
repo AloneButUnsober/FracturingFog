@@ -48,5 +48,13 @@ namespace FracturingFog.Audio
         /// to follow the kick drum, drop High to ignore hi-hats).
         /// </summary>
         public float[] BandWeights { get; set; } = new[] { 1f, 1f, 1f, 1f, 1f };
+
+        /// <summary>
+        /// Fraction of one beat that the slideshow cross-fade should span
+        /// (both region transitions and color-theme transitions). 0.75 = 3/4 beat.
+        /// Clamped to [0.1, 2.0] at apply-time. Only used when audio-reactive
+        /// is active and a BPM is detected; otherwise fixed fadeDuration applies.
+        /// </summary>
+        public double FadeBeatFraction { get; set; } = 0.75;
     }
 }

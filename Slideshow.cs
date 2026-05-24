@@ -233,19 +233,22 @@ namespace FracturingFog
             int fadeStepsCF = 44;
             int fadeStepMsCF = fadeDurationMsCF / fadeStepsCF;
 
-            // Beat-derived fade override: when audio-reactive + BPM known, use
-            // half a beat for the region-focus fade and one full beat for the
-            // color-focus fade. Step count fixed at ~22/44; step ms recomputed.
+            // Beat-derived fade override: when audio-reactive + BPM known,
+            // both region-focus and color-focus fades span FadeBeatFraction
+            // of a single beat (default 0.75 = 3/4 beat). Step count fixed at
+            // ~22/44; step ms recomputed.
             if (ShouldUseBeatDrivenTiming())
             {
                 double bpm = GetReactiveBpm();
                 if (bpm > 30)
                 {
                     double beatMs = 60_000.0 / bpm;
-                    fadeDurationMs = System.Math.Max(200, (int)(beatMs * 0.5));
-                    fadeStepMs = System.Math.Max(10, fadeDurationMs / fadeSteps);
-                    fadeDurationMsCF = System.Math.Max(400, (int)beatMs);
-                    fadeStepMsCF = System.Math.Max(10, fadeDurationMsCF / fadeStepsCF);
+                    double frac = System.Math.Clamp(_audioSettings.FadeBeatFraction, 0.1, 2.0);
+                    int beatFadeMs = System.Math.Max(120, (int)(beatMs * frac));
+                    fadeDurationMs = beatFadeMs;
+                    fadeStepMs = System.Math.Max(8, fadeDurationMs / fadeSteps);
+                    fadeDurationMsCF = beatFadeMs;
+                    fadeStepMsCF = System.Math.Max(8, fadeDurationMsCF / fadeStepsCF);
                 }
             }
             int lastRegionIdx = -1;
