@@ -270,6 +270,7 @@ namespace FracturingFog.Views
             AddLabel(_targetBox, "Region:", 8, 22);
             _regionCombo = MakeCombo(82, 20, ColWidth - 96);
             RebuildRegionCombo(_regionCombo, OnRegionComboSelectionChanged);
+            AttachRegionComboSortMenu(_regionCombo, OnRegionComboSelectionChanged);
             if (!string.IsNullOrEmpty(initialRegionName))
             {
                 int idx = _regionCombo.FindStringExact(initialRegionName);
@@ -280,6 +281,7 @@ namespace FracturingFog.Views
             AddLabel(_targetBox, "Theme:", 8, 52);
             _themeCombo = MakeCombo(82, 50, ColWidth - 96);
             BuildColorCombo(_themeCombo, OnThemeComboSelectionChanged);
+            AttachColorComboSortMenu(_themeCombo, OnThemeComboSelectionChanged, includeEditableOnlyOption: true);
             _targetBox.Controls.Add(_themeCombo);
 
             leftY = _targetBox.Bottom + 6;
@@ -739,6 +741,10 @@ namespace FracturingFog.Views
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
+                // DropDownList so the combo (not a child edit control) receives
+                // right-click MouseUp — required for the sort/filter context
+                // menus attached to Region + Theme combos.
+                DropDownStyle = ComboBoxStyle.DropDownList,
             };
         }
 
