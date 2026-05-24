@@ -42,7 +42,6 @@ namespace FracturingFog
             if (_slideshowRunning) return;
             _slideshowRunning = true;
             _showSlideshowWatermark = true;
-            //_chkSlideshowUseExtremeRegions.Enabled = false;
             RepaintWithBrightnessContrast();
             _slideshowButton.Text = "■ Stop";
             _slideshowButton.BackColor = Color.FromArgb(70, 30, 30);
@@ -72,7 +71,6 @@ namespace FracturingFog
                         _showSlideshowWatermark = false;
                         _slideshowPaused = false;
                         _slideshowRegionName = "";
-                        //_chkSlideshowUseExtremeRegions.Enabled = true;
                         RepaintWithBrightnessContrast();
                         _slideshowButton.Text = "Slideshow";
                         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
@@ -220,18 +218,30 @@ namespace FracturingFog
             // the beat handler flips _slideshowSkipTheme to advance early. The cap stays
             // identical to the non-audio value so a silent / undetectable source still
             // advances at the normal cadence instead of stalling for a minute.
+            // Snapshot user config once (avoids re-reading on every cross-fade
+            // step inside the hot loop and keeps timing stable across a region).
+            var cfg = _slideshowSettings;
+            int totalRegionMs = System.Math.Max(1_000, cfg.TotalDisplayMsPerRegion);
+            int userFadeSteps = System.Math.Clamp(cfg.FadeSteps, 2, 200);
+            int userThemeFadeMs = System.Math.Max(50, cfg.ColorThemeFadeMs);
+            int userRegionFadeMs = System.Math.Max(50, cfg.RegionFadeMs);
+
             int themesPerRegion = 3;
-            int themeDurationMs = 12_000;
-            int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
-            int fadeSteps = 22;
-            int fadeStepMs = fadeDurationMs / fadeSteps;
+            int themeDurationMs = System.Math.Max(200, totalRegionMs / themesPerRegion);
+            int fadeDurationMs = userThemeFadeMs;        // theme → theme within a region
+            int fadeSteps = userFadeSteps;
+            int fadeStepMs = System.Math.Max(8, fadeDurationMs / fadeSteps);
+            int regionFadeDurationMs = userRegionFadeMs; // region → region
+            int regionFadeStepMs = System.Math.Max(8, regionFadeDurationMs / fadeSteps);
 
             // Color Focus mode timings: more themes per region, shorter durations, longer fade for more visual interest when the theme is the main changing element.
             int themesPerRegionCF = 8;
-            int themeDurationMsCF = 3_000;
-            int fadeDurationMsCF = 4_000;   // 4 s cross-fade (overlaps end of theme slot)
-            int fadeStepsCF = 44;
-            int fadeStepMsCF = fadeDurationMsCF / fadeStepsCF;
+            int themeDurationMsCF = System.Math.Max(200, totalRegionMs / themesPerRegionCF);
+            int fadeDurationMsCF = userThemeFadeMs;
+            int fadeStepsCF = userFadeSteps * 2;         // preserve original 2× step-count relationship
+            int fadeStepMsCF = System.Math.Max(8, fadeDurationMsCF / fadeStepsCF);
+            int regionFadeDurationMsCF = userRegionFadeMs;
+            int regionFadeStepMsCF = System.Math.Max(8, regionFadeDurationMsCF / fadeStepsCF);
 
             // Beat-derived fade override: when audio-reactive + BPM known,
             // both region-focus and color-focus fades span FadeBeatFraction
@@ -249,6 +259,11 @@ namespace FracturingFog
                     fadeStepMs = System.Math.Max(8, fadeDurationMs / fadeSteps);
                     fadeDurationMsCF = beatFadeMs;
                     fadeStepMsCF = System.Math.Max(8, fadeDurationMsCF / fadeStepsCF);
+                    // Audio mode: region transitions track the same beat-derived duration.
+                    regionFadeDurationMs = beatFadeMs;
+                    regionFadeStepMs = System.Math.Max(8, regionFadeDurationMs / fadeSteps);
+                    regionFadeDurationMsCF = beatFadeMs;
+                    regionFadeStepMsCF = System.Math.Max(8, regionFadeDurationMsCF / fadeStepsCF);
                 }
             }
             int lastRegionIdx = -1;
@@ -365,10 +380,13 @@ namespace FracturingFog
 
                     if (ct.IsCancellationRequested) return;
 
-                    // Cross-fade between the captured on-screen frame and the new render.
+                    // Cross-fade between the captured on-screen frame and the new render
+                    // (region → region transition: uses the user's Region-Fade duration).
                     if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0)
                     {
-                        await CrossFade(oldBuf, newBuf, focusRegion ? fadeSteps : fadeStepsCF, focusRegion ? fadeStepMs : fadeStepMsCF, ct);
+                        await CrossFade(oldBuf, newBuf,
+                            focusRegion ? fadeSteps : fadeStepsCF,
+                            focusRegion ? regionFadeStepMs : regionFadeStepMsCF, ct);
                     }
                     else
                     {

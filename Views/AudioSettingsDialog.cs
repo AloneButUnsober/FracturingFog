@@ -295,7 +295,7 @@ namespace FracturingFog.Views
                 BackColor = Color.FromArgb(40, 70, 50), ForeColor = Color.White,
                 DialogResult = DialogResult.OK,
             };
-            _okButton.Click += (s, e) => Commit();
+            _okButton.Click += (s, e) => { Commit(); DialogResult = DialogResult.OK; Close(); };
             Controls.Add(_okButton);
             AcceptButton = _okButton;
 
@@ -306,6 +306,7 @@ namespace FracturingFog.Views
                 BackColor = Color.FromArgb(70, 40, 40), ForeColor = Color.White,
                 DialogResult = DialogResult.Cancel,
             };
+            _cancelButton.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(_cancelButton);
             CancelButton = _cancelButton;
 

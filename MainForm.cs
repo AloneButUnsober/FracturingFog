@@ -104,7 +104,6 @@ public sealed partial class MainForm : Form
 
     //// UI: coordinate / region bar
     private Label? _currentColorThemeLabel;
-    private bool _slideshowUseExtremeRegions = false;
 
     // Render panel
     private readonly RenderPanel _renderPanel;
@@ -864,12 +863,6 @@ public sealed partial class MainForm : Form
         Application.Idle += OnApplicationIdle;
     }
 
-    private void OnChangeIncludeExtremeRegionsChange(object s, EventArgs e)
-    {
-        _slideshowUseExtremeRegions = !_slideshowUseExtremeRegions;
-        FractalRegionLibrary.Instance.IncludeExtremeInAll = _slideshowUseExtremeRegions;
-    }
-
     #endregion Constructors
 
     #region Events
@@ -1094,7 +1087,7 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnDelRegionClick += (s, e) => OnDelRegionClick(s, e);
         _floatingMenu.OnExportRegionsClick += (s, e) => OnExportRegionsClick(s, e);
         _floatingMenu.OnImportRegionsClick += (s, e) => OnImportRegionsClick(s, e);
-        _floatingMenu.OnChangeIncludeExtremeRegionsChange += (s, e) => OnChangeIncludeExtremeRegionsChange(s, e);
+        _floatingMenu.OnSlideshowSettingsClick += (s, e) => ShowSlideshowSettingsDialog();
         _floatingMenu.OnScreenshotClick += (s, e) => OnScreenshotClick(s, e);
         _floatingMenu.OnVideoClick += (s, e) => OnVideoClick(s, e);
         _floatingMenu.OnGridClick += (s, e) => OnCheckBoxShowGridClick(s, e);
@@ -1106,8 +1099,6 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnTaaFadeStartSlide += (s, e, l) => SetVideoTaaFadeStartLog10(_floatingMenu.TaaFadeStartLog10);
         _floatingMenu.OnTaaFadeEndSlide += (s, e, l) => SetVideoTaaFadeEndLog10(_floatingMenu.TaaFadeEndLog10);
         _floatingMenu.OnChangeDimensions += (s, e) => OnChangeDimensions(s, e);
-        _floatingMenu.OnAudioReactiveToggled += (s, enabled) => SetAudioReactiveEnabled(enabled);
-        _floatingMenu.OnAudioSettingsClick += (s, e) => ShowAudioSettingsDialog();
         _floatingMenu.OnHelpClick += (s, e) =>
             {
                 OnShowHelpClick();
@@ -1122,6 +1113,7 @@ public sealed partial class MainForm : Form
         if (!_qualityCombo.IsDisposed) _floatingMenu.Quality = _currentQualityName;
         UpdateAdaptiveAvailability();
         _floatingMenu.Show();
+        InitializeSlideshowFromDisk();
         InitializeAudioFromDisk();
     }
 
