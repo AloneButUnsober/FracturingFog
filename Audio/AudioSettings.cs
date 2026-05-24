@@ -36,5 +36,8 @@ namespace FracturingFog.Audio
 
         /// <summary>Render the generated fractal audio to the speakers.</summary>
         public bool PlaySynthOutput { get; set; } = true;
+
+        /// <summary>BPM of the fractal synth arpeggio. Default 120.</summary>
+        public double SynthBpm { get; set; } = 120;
     }
 }

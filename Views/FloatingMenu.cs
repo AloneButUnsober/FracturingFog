@@ -222,6 +222,16 @@ namespace FracturingFog.Views
             set { _colorThemeCombo.Text = value; }
         }
 
+        /// <summary>Set the Audio-React checkbox state without firing the toggle event.</summary>
+        public void SetAudioReactiveChecked(bool value)
+        {
+            if (_chkAudioReactive == null) return;
+            var handler = OnAudioReactiveToggled;
+            OnAudioReactiveToggled = null;
+            _chkAudioReactive.Checked = value;
+            OnAudioReactiveToggled = handler;
+        }
+
         #endregion Public Members
 
         #region Constructors

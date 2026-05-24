@@ -19,6 +19,7 @@ namespace FracturingFog.Views
         private readonly Label _sensitivityLabel;
         private readonly NumericUpDown _beatsPerTheme;
         private readonly NumericUpDown _beatsPerRegion;
+        private readonly NumericUpDown _synthBpm;
         private readonly CheckBox _routeSynthChk;
         private readonly CheckBox _playSynthChk;
         private readonly Label _bpmLabel;
@@ -38,7 +39,7 @@ namespace FracturingFog.Views
             Text = "Audio-Reactive Slideshow";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(440, 360);
+            ClientSize = new Size(440, 396);
             BackColor = Color.FromArgb(28, 28, 28);
             ForeColor = Color.WhiteSmoke;
             MaximizeBox = false;
@@ -117,6 +118,11 @@ namespace FracturingFog.Views
             AddLabel("Beats per region:", 12, y);
             _beatsPerRegion = MakeSpin(controlX, y - 2, 1, 512, _settings.BeatsPerRegion);
             Controls.Add(_beatsPerRegion);
+            y += 30;
+
+            AddLabel("Synth BPM:", 12, y);
+            _synthBpm = MakeSpin(controlX, y - 2, 30, 240, (int)System.Math.Round(_settings.SynthBpm));
+            Controls.Add(_synthBpm);
             y += 36;
 
             _routeSynthChk = new CheckBox
@@ -260,6 +266,7 @@ namespace FracturingFog.Views
             _settings.BeatsPerRegion = (int)_beatsPerRegion.Value;
             _settings.RouteSynthThroughAnalyzer = _routeSynthChk.Checked;
             _settings.PlaySynthOutput = _playSynthChk.Checked;
+            _settings.SynthBpm = (double)_synthBpm.Value;
             Result = _settings;
         }
 
@@ -273,6 +280,7 @@ namespace FracturingFog.Views
             BeatsPerRegion = s.BeatsPerRegion,
             RouteSynthThroughAnalyzer = s.RouteSynthThroughAnalyzer,
             PlaySynthOutput = s.PlaySynthOutput,
+            SynthBpm = s.SynthBpm,
         };
     }
 }
