@@ -119,7 +119,9 @@ namespace FracturingFog.Models
             {FractalType.Sandbox, "Sandbox" },
             {FractalType.StrangeAttractor, "StrangeAttractor" },
             {FractalType.Tricorn, "Tricorn" },
-            {FractalType.UserEquation, "UserEquation" }
+            {FractalType.UserEquation, "UserEquation" },
+            {FractalType.UserBulb, "UserBulb" },
+            {FractalType.TearDrop, "Tear Drop" }
         };
     }
 

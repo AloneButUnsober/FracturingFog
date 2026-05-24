@@ -235,6 +235,7 @@ public sealed partial class MainForm : Form
     private MandelbulbCalculator? _mandelbulbCalculator;
     private SandboxCalculator? _sandboxCalculator;
     private UserBulbCalculator? _userBulbCalculator;
+    private TearDropCalculator? _tearDropCalculator;
     private Views.UserEquationDialog? _userEqDialog;
     private Views.SandboxDialog? _sandboxDialog;
     private Views.UserBulbDialog? _userBulbDialog;
@@ -901,6 +902,7 @@ public sealed partial class MainForm : Form
             _mandelbulbCalculator = new MandelbulbCalculator(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
+            _tearDropCalculator = new TearDropCalculator(w, h);
 
             if (_defaultColorMap != null)
             {
@@ -915,6 +917,7 @@ public sealed partial class MainForm : Form
                 _mandelbulbCalculator.ColorMap = _defaultColorMap;
                 _sandboxCalculator.ColorMap = _defaultColorMap;
                 _userBulbCalculator.ColorMap = _defaultColorMap;
+                _tearDropCalculator.ColorMap = _defaultColorMap;
             }
             _colorThemeCombo.Text = Models.ColorPalette.GetStaticName(_calculator.ColorMap);
             Text = $"{_programName} v{_programVersion}  —  {_renderer.RendererDescription}";
@@ -966,6 +969,7 @@ public sealed partial class MainForm : Form
         _mandelbulbCalculator?.Resize(w, h);
         _sandboxCalculator?.Resize(w, h);
         _userBulbCalculator?.Resize(w, h);
+        _tearDropCalculator?.Resize(w, h);
         ApplyViewState();
         TriggerCalculation();
         PositionGridPanel();
@@ -1485,7 +1489,7 @@ public sealed partial class MainForm : Form
     /// <see cref="RegisteredFractalCatalog"/>, separated by a non-selectable
     /// divider header.
     /// </summary>
-    private const int BuiltInFractalCount = 15;
+    private const int BuiltInFractalCount = 16;
 
     /// <summary>
     /// Repopulates the fractal-type combo with built-in entries followed by a
@@ -1519,6 +1523,7 @@ public sealed partial class MainForm : Form
                 "Mandelbulb (3D)",
                 "Sandbox",
                 "User Bulb (3D)",
+                "Tear Drop",
             });
 
             var registered = RegisteredFractalCatalog.Snapshot();
@@ -1585,6 +1590,7 @@ public sealed partial class MainForm : Form
                 12 => FractalType.Mandelbulb,
                 13 => FractalType.Sandbox,
                 14 => FractalType.UserBulb,
+                15 => FractalType.TearDrop,
                 _ => FractalType.Mandelbrot
             };
         }
@@ -1637,6 +1643,7 @@ public sealed partial class MainForm : Form
             FractalType.Mandelbulb => (0.0, 0.0, 1.0),
             FractalType.Sandbox => (0.0, 0.0, 1.0),
             FractalType.UserBulb => (0.0, 0.0, 1.0),
+            FractalType.TearDrop => (0.0, 0.0, 1.0),
             _ => (-0.5, 0.0, 1.0)
         };
         _centerXLo = _centerX2 = _centerX3 = 0.0;
@@ -1674,6 +1681,7 @@ public sealed partial class MainForm : Form
         FractalType.Mandelbulb => 12,
         FractalType.Sandbox => 13,
         FractalType.UserBulb => 14,
+        FractalType.TearDrop => 15,
         _ => 0
     };
 
@@ -3858,6 +3866,7 @@ public sealed partial class MainForm : Form
         FractalType.Mandelbulb => _mandelbulbCalculator,
         FractalType.Sandbox => _sandboxCalculator,
         FractalType.UserBulb => _userBulbCalculator,
+        FractalType.TearDrop => _tearDropCalculator,
         _ => null
     };
 
@@ -3923,6 +3932,23 @@ public sealed partial class MainForm : Form
             _escapeCalculator.FractalType = _currentFractalType;
             _escapeCalculator.FractalParameters = _fractalParams;
             _escapeCalculator.ColorMap = _calculator.ColorMap;
+        }
+
+        if (_tearDropCalculator != null)
+        {
+            _tearDropCalculator.CenterX = _centerX;
+            _tearDropCalculator.CenterXLo = _centerXLo;
+            _tearDropCalculator.CenterX2 = _centerX2;
+            _tearDropCalculator.CenterX3 = _centerX3;
+            _tearDropCalculator.CenterY = _centerY;
+            _tearDropCalculator.CenterYLo = _centerYLo;
+            _tearDropCalculator.CenterY2 = _centerY2;
+            _tearDropCalculator.CenterY3 = _centerY3;
+            _tearDropCalculator.Zoom = _zoom;
+            _tearDropCalculator.Quality = _quality;
+            _tearDropCalculator.MaxIterations = _calculator.MaxIterations;
+            _tearDropCalculator.FractalParameters = _fractalParams;
+            _tearDropCalculator.ColorMap = _calculator.ColorMap;
         }
 
         UpdateCoordBoxes();

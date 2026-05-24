@@ -257,6 +257,40 @@ namespace FracturingFog.FFMath
             return new QD(r0, r1, r2, r3);
         }
 
+        /// <summary>QD / QD — repeated long-division: q1·b ≈ a; r = a − q1·b; refine four times.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static QD operator /(QD a, QD b)
+        {
+            double q0 = a.X0 / b.X0;
+            QD r = a - b * q0;
+
+            double q1 = r.X0 / b.X0;
+            r = r - b * q1;
+
+            double q2 = r.X0 / b.X0;
+            r = r - b * q2;
+
+            double q3 = r.X0 / b.X0;
+
+            var (s0, s1, s2, s3) = Renorm5(q0, q1, q2, q3, 0.0);
+            return new QD(s0, s1, s2, s3);
+        }
+
+        /// <summary>QD / double — single Newton refinement over the Hi limb.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static QD operator /(QD a, double b)
+        {
+            double q0 = a.X0 / b;
+            QD r = a - new QD(b) * q0;
+            double q1 = r.X0 / b;
+            r = r - new QD(b) * q1;
+            double q2 = r.X0 / b;
+            r = r - new QD(b) * q2;
+            double q3 = r.X0 / b;
+            var (s0, s1, s2, s3) = Renorm5(q0, q1, q2, q3, 0.0);
+            return new QD(s0, s1, s2, s3);
+        }
+
         // ── Comparisons (Hi-only — sufficient for escape check) ──────────────
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
