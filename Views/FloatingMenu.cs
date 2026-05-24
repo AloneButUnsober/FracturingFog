@@ -489,6 +489,7 @@ namespace FracturingFog.Views
                 Top = buttonTop,
                 Width = 230,
                 Height = 26,
+                DropDownStyle = ComboBoxStyle.DropDownList,
                 BackColor = Color.FromArgb(55, 55, 55),
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
