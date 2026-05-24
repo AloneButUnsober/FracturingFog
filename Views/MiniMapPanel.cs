@@ -1,23 +1,36 @@
 // MiniMapPanel.cs
 //
-// A small dockable overview panel that renders the complete Mandelbrot set at
-// low resolution in the current colour theme.  A crosshair and circle mark the
-// current view centre of the main window.  Double-clicking any position in the
-// mini-map centres the main view on those complex-plane coordinates while
+// A small dockable overview panel that renders the *active* fractal at low
+// resolution in the current colour theme. A crosshair + circle mark the
+// current view centre of the main window. Double-clicking a position on the
+// mini-map centres the main view on those parameter-plane coordinates while
 // keeping the current zoom and iteration count unchanged.
+//
+// Multi-fractal support
+// ─────────────────────
+//   • The mini-map asks MainForm (via the getFractalType / getFractalParams
+//     callbacks) which fractal is active, then instantiates the matching
+//     calculator at 220×180 with framing chosen by MiniMapDefaults.For().
+//   • 3D fractals (Mandelbulb, UserBulb) have no 2D parameter-plane overview;
+//     the panel renders a "3D — Overview N/A" placeholder and disables the
+//     double-click navigation for those types.
+//   • Chaos-game and density methods (IFS, L-System, Strange Attractor,
+//     Buddhabrot) render with reduced iteration budgets so the thumbnail
+//     refresh stays cheap.
 //
 // Architecture
 // ────────────
 //   • Sits as a child control of _renderPanel (Fill-docked), positioned by
 //     Anchor = Bottom | Right so it stays in the lower-right corner.
-//   • The mini-map fractal is rendered on a background thread using a
-//     dedicated MandelbrotCalculator at fixed 200×160 resolution with Draft
-//     quality and 256 iterations — fast enough to be imperceptible.
+//   • The fractal is rendered on a background thread inside a fresh
+//     calculator instance — never reuses MainForm's calculator (different
+//     dimensions + buffers).
 //   • The indicator is repainted on every TriggerCalculation completion via
 //     RefreshIndicator(), which just calls Invalidate() — no fractal
 //     recalculation required.
-//   • A new background render is triggered whenever RequestRedraw() is called
-//     (e.g. after a colour-theme change).
+//   • A new background render is triggered whenever RequestRedraw() is
+//     called (after a colour-theme change, fractal-type change, or any
+//     fractal-parameter change).
 
 using System;
 using System.Drawing;
@@ -31,18 +44,15 @@ using FracturingFog.Models;
 namespace FracturingFog.Views;
 
 /// <summary>
-/// Miniature Mandelbrot overview panel.  Configure() must be called once
+/// Miniature fractal overview panel. Configure() must be called once
 /// after construction before the panel is added to a parent control.
 /// </summary>
 public sealed class MiniMapPanel : Control
 {
     // ── Fixed overview parameters ─────────────────────────────────────────────
-    private const int MapW      = 220;    // pixel width  of the mini-map bitmap
-    private const int MapH      = 180;    // pixel height of the mini-map bitmap
-    private const int Pad       = 4;      // border padding around bitmap
-    private const double FullCX = -0.5;  // classic full-set centre (real)
-    private const double FullCY =  0.0;  // classic full-set centre (imag)
-    private const double FullZoom = 1.5; // zoom that shows the complete set
+    private const int MapW = 220;    // pixel width  of the mini-map bitmap
+    private const int MapH = 180;    // pixel height of the mini-map bitmap
+    private const int Pad  = 4;      // border padding around bitmap
 
     // ── Callbacks ─────────────────────────────────────────────────────────────
     private Func<(double cx, double cy)>? _getCenter;
@@ -50,11 +60,17 @@ public sealed class MiniMapPanel : Control
     private Func<IColorMap?>?             _getColorMap;
     private Action<double, double>?       _navigateTo;
     private Func<Color>?                  _getSwatchColor;
+    private Func<FractalType>?            _getFractalType;
+    private Func<FractalParameters>?      _getFractalParams;
 
     // ── Rendering state ───────────────────────────────────────────────────────
     private Bitmap? _mapBitmap;
     private CancellationTokenSource? _renderCts;
     private readonly object _renderLock = new();
+
+    // Type the current bitmap was rendered for — used to decide whether the
+    // crosshair / navigation mapping is meaningful for the active fractal.
+    private FractalType _bitmapType = FractalType.Mandelbrot;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Construction / configuration
@@ -69,7 +85,7 @@ public sealed class MiniMapPanel : Control
     }
 
     /// <summary>
-    /// Wires the panel to the main form's view state.  Must be called before
+    /// Wires the panel to the main form's view state. Must be called before
     /// the panel is added to a parent control.
     /// </summary>
     public void Configure(
@@ -77,13 +93,17 @@ public sealed class MiniMapPanel : Control
         Func<double>                 getZoom,
         Func<IColorMap?>             getColorMap,
         Action<double, double>       navigateTo,
-        Func<Color>                  getSwatchColor)
+        Func<Color>                  getSwatchColor,
+        Func<FractalType>            getFractalType,
+        Func<FractalParameters>      getFractalParams)
     {
-        _getCenter      = getCenter;
-        _getZoom        = getZoom;
-        _getColorMap    = getColorMap;
-        _navigateTo     = navigateTo;
-        _getSwatchColor = getSwatchColor;
+        _getCenter        = getCenter;
+        _getZoom          = getZoom;
+        _getColorMap      = getColorMap;
+        _navigateTo       = navigateTo;
+        _getSwatchColor   = getSwatchColor;
+        _getFractalType   = getFractalType;
+        _getFractalParams = getFractalParams;
 
         Width  = MapW + Pad * 2;
         Height = MapH + Pad * 2;
@@ -96,13 +116,18 @@ public sealed class MiniMapPanel : Control
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Launches a background render of the mini-map at the current colour
-    /// theme.  Safe to call from any thread.
+    /// Launches a background render of the mini-map for the active fractal
+    /// in the current colour theme. Safe to call from any thread.
     /// </summary>
     public void RequestRedraw()
     {
-        var map = _getColorMap?.Invoke();
+        var map  = _getColorMap?.Invoke();
+        var type = _getFractalType?.Invoke() ?? FractalType.Mandelbrot;
         if (map == null) return;
+
+        // Snapshot the parameters on the calling thread — the FractalParameters
+        // instance lives on the UI side and can mutate during background render.
+        var parms = _getFractalParams?.Invoke().Clone() ?? new FractalParameters();
 
         CancellationTokenSource cts;
         lock (_renderLock)
@@ -112,11 +137,20 @@ public sealed class MiniMapPanel : Control
             cts = _renderCts;
         }
 
-        // Capture a snapshot of the map reference — it may change on the
-        // UI thread while we are rendering.
-        var mapSnapshot = map;
+        if (!MiniMapDefaults.IsSupported(type))
+        {
+            // Drop any stale bitmap so OnPaint shows the placeholder.
+            BeginInvoke(() =>
+            {
+                _mapBitmap?.Dispose();
+                _mapBitmap = null;
+                _bitmapType = type;
+                Invalidate();
+            });
+            return;
+        }
 
-        Task.Run(() => RenderBackground(mapSnapshot, cts.Token), cts.Token);
+        Task.Run(() => RenderBackground(type, parms, map, cts.Token), cts.Token);
     }
 
     /// <summary>
@@ -132,63 +166,186 @@ public sealed class MiniMapPanel : Control
     // Background rendering
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void RenderBackground(IColorMap map, CancellationToken ct)
+    private void RenderBackground(
+        FractalType type, FractalParameters parms, IColorMap map, CancellationToken ct)
     {
         try
         {
-            var calc = new MandelbrotCalculator(MapW, MapH)
-            {
-                CenterX       = FullCX,
-                CenterY       = FullCY,
-                Zoom          = FullZoom,
-                MaxIterations = 256,
-                ColorMap      = map,
-                Quality       = QualityPreset.Draft,
-            };
-            calc.Calculate(ct);
-            if (ct.IsCancellationRequested) return;
+            var bounds = MiniMapDefaults.For(type);
+            int iter   = MiniMapDefaults.IterationsFor(type);
 
-            // Build bitmap from ColorBuffer (BGRA → ARGB conversion).
-            var bmp = new Bitmap(MapW, MapH,
-                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            uint[]? buffer = RenderThumbnail(type, parms, MapW, MapH, map, bounds, iter, ct);
+            if (ct.IsCancellationRequested || buffer == null) return;
 
-            unsafe
-            {
-                var data = bmp.LockBits(
-                    new Rectangle(0, 0, MapW, MapH),
-                    System.Drawing.Imaging.ImageLockMode.WriteOnly,
-                    System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                fixed (uint* src = calc.ColorBuffer)
-                {
-                    if (data.Stride == MapW * 4)
-                        Buffer.MemoryCopy(src, (void*)data.Scan0,
-                            (long)MapW * MapH * 4, (long)MapW * MapH * 4);
-                    else
-                    {
-                        byte* dst = (byte*)data.Scan0;
-                        for (int row = 0; row < MapH; row++)
-                            Buffer.MemoryCopy(
-                                (byte*)src + (long)row * MapW * 4,
-                                dst + (long)row * data.Stride,
-                                (long)MapW * 4, (long)MapW * 4);
-                    }
-                }
-                bmp.UnlockBits(data);
-            }
+            var bmp = BufferToBitmap(buffer, MapW, MapH);
 
             if (ct.IsCancellationRequested) { bmp.Dispose(); return; }
-
-            if (!IsHandleCreated) { bmp.Dispose(); return; }
+            if (!IsHandleCreated)           { bmp.Dispose(); return; }
 
             BeginInvoke(() =>
             {
                 _mapBitmap?.Dispose();
                 _mapBitmap = bmp;
+                _bitmapType = type;
                 Invalidate();
             });
         }
         catch (OperationCanceledException) { /* expected */ }
-        catch { /* swallow all errors — mini-map is non-critical */ }
+        catch { /* swallow — mini-map is non-critical */ }
+    }
+
+    private static uint[]? RenderThumbnail(
+        FractalType type, FractalParameters parms,
+        int w, int h, IColorMap map,
+        MiniMapDefaults.ViewBounds bounds, int iter,
+        CancellationToken ct)
+    {
+        switch (type)
+        {
+            case FractalType.Mandelbrot:
+            {
+                var c = new MandelbrotCalculator(w, h)
+                {
+                    CenterX = bounds.CenterX,
+                    CenterY = bounds.CenterY,
+                    Zoom    = bounds.Zoom,
+                    MaxIterations = iter,
+                    ColorMap = map,
+                    Quality  = QualityPreset.Draft,
+                };
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.Julia:
+            case FractalType.BurningShip:
+            case FractalType.Tricorn:
+            case FractalType.Multibrot:
+            case FractalType.Phoenix:
+            {
+                var c = new EscapeTimeCalculator(w, h)
+                {
+                    FractalType = type,
+                    FractalParameters = parms,
+                };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.Newton:
+            case FractalType.Nova:
+            {
+                var c = new NewtonCalculator(w, h) { FractalParameters = parms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.TearDrop:
+            {
+                var c = new TearDropCalculator(w, h) { FractalParameters = parms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.UserEquation:
+            {
+                var c = new UserEquationCalculator(w, h) { FractalParameters = parms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.Sandbox:
+            {
+                var c = new SandboxCalculator(w, h) { FractalParameters = parms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.BuddhaBrot:
+            {
+                // Lower sample count keeps the thumbnail fast.
+                var thumbParms = parms.Clone();
+                thumbParms.BuddhaSamples = Math.Min(parms.BuddhaSamples, 30_000);
+                var c = new BuddhabrotCalculator(w, h) { FractalParameters = thumbParms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.IFS:
+            {
+                var thumbParms = parms.Clone();
+                thumbParms.IFSIterations = Math.Min(parms.IFSIterations, 80_000);
+                var c = new IFSCalculator(w, h) { FractalParameters = thumbParms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.LSystem:
+            {
+                var thumbParms = parms.Clone();
+                thumbParms.LSystemDepth = Math.Min(parms.LSystemDepth, 4);
+                var c = new LSystemCalculator(w, h) { FractalParameters = thumbParms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            case FractalType.StrangeAttractor:
+            {
+                var thumbParms = parms.Clone();
+                thumbParms.AttractorIterations = Math.Min(parms.AttractorIterations, 80_000);
+                var c = new AttractorCalculator(w, h) { FractalParameters = thumbParms };
+                ApplyCommon(c, bounds, iter, map);
+                c.Calculate(ct);
+                return c.ColorBuffer;
+            }
+
+            default:
+                return null; // 3D types handled earlier via IsSupported
+        }
+    }
+
+    private static void ApplyCommon(
+        IFractalCalculator c, MiniMapDefaults.ViewBounds bounds, int iter, IColorMap map)
+    {
+        c.CenterX = bounds.CenterX;
+        c.CenterY = bounds.CenterY;
+        c.Zoom    = bounds.Zoom;
+        c.MaxIterations = iter;
+        c.ColorMap = map;
+        c.Quality  = QualityPreset.Draft;
+    }
+
+    private static unsafe Bitmap BufferToBitmap(uint[] src, int w, int h)
+    {
+        var bmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var data = bmp.LockBits(
+            new Rectangle(0, 0, w, h),
+            System.Drawing.Imaging.ImageLockMode.WriteOnly,
+            System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        fixed (uint* p = src)
+        {
+            if (data.Stride == w * 4)
+                Buffer.MemoryCopy(p, (void*)data.Scan0, (long)w * h * 4, (long)w * h * 4);
+            else
+            {
+                byte* dst = (byte*)data.Scan0;
+                for (int row = 0; row < h; row++)
+                    Buffer.MemoryCopy(
+                        (byte*)p + (long)row * w * 4,
+                        dst + (long)row * data.Stride,
+                        (long)w * 4, (long)w * 4);
+            }
+        }
+        bmp.UnlockBits(data);
+        return bmp;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -208,30 +365,27 @@ public sealed class MiniMapPanel : Control
         using var bgBrush = new SolidBrush(Color.FromArgb(18, 18, 18));
         g.FillRectangle(bgBrush, clientRect);
 
-        if (_mapBitmap != null)
+        var activeType = _getFractalType?.Invoke() ?? FractalType.Mandelbrot;
+
+        if (!MiniMapDefaults.IsSupported(activeType))
+        {
+            DrawPlaceholder(g, mapRect, "3D fractal\nOverview N/A");
+        }
+        else if (_mapBitmap != null)
         {
             g.InterpolationMode = InterpolationMode.Bilinear;
             g.DrawImage(_mapBitmap, mapRect);
 
-            // Draw indicator.
-            if (_getCenter != null)
+            // Indicator only meaningful when the bitmap matches the active type.
+            if (_getCenter != null && _bitmapType == activeType)
             {
                 var (cx, cy) = _getCenter();
-                DrawIndicator(g, mapRect, cx, cy);
+                DrawIndicator(g, mapRect, activeType, cx, cy);
             }
         }
         else
         {
-            // Show a "Loading…" placeholder while the first render runs.
-            using var placeholderBrush = new SolidBrush(Color.FromArgb(70, 70, 70));
-            using var placeholderFont  = new Font("Segoe UI", 7.5f, FontStyle.Regular,
-                GraphicsUnit.Point);
-            var sf = new StringFormat
-            {
-                Alignment     = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-            };
-            g.DrawString("Loading…", placeholderFont, placeholderBrush, mapRect, sf);
+            DrawPlaceholder(g, mapRect, "Loading…");
         }
 
         // Border.
@@ -244,16 +398,30 @@ public sealed class MiniMapPanel : Control
         g.DrawString("Overview", labelFont, labelBrush, Pad + 2, Pad + 2);
     }
 
+    private static void DrawPlaceholder(Graphics g, Rectangle rect, string text)
+    {
+        using var brush = new SolidBrush(Color.FromArgb(110, 110, 110));
+        using var font  = new Font("Segoe UI", 7.5f, FontStyle.Regular, GraphicsUnit.Point);
+        var sf = new StringFormat
+        {
+            Alignment     = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+        };
+        g.DrawString(text, font, brush, rect, sf);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Indicator drawing
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void DrawIndicator(Graphics g, Rectangle mapRect, double cx, double cy)
+    private void DrawIndicator(Graphics g, Rectangle mapRect, FractalType type, double cx, double cy)
     {
-        // Map complex coords → mini-map pixel coords.
-        double scale = 3.5 / (Math.Max(MapW, MapH) * FullZoom);
-        double xMin  = FullCX - MapW * scale * 0.5;
-        double yMin  = FullCY - MapH * scale * 0.5;
+        var bounds = MiniMapDefaults.For(type);
+
+        // Map complex coords → mini-map pixel coords using this type's framing.
+        double scale = 3.5 / (Math.Max(MapW, MapH) * bounds.Zoom);
+        double xMin  = bounds.CenterX - MapW * scale * 0.5;
+        double yMin  = bounds.CenterY - MapH * scale * 0.5;
 
         float px = (float)((cx - xMin) / scale);
         float py = (float)((cy - yMin) / scale);
@@ -272,8 +440,8 @@ public sealed class MiniMapPanel : Control
         Color swatch = _getSwatchColor?.Invoke() ?? Color.Gray;
         float lum    = (swatch.R * 0.299f + swatch.G * 0.587f + swatch.B * 0.114f) / 255f;
         Color ind    = lum > 0.45f
-            ? Color.FromArgb(210, 0,   0,   0)    // dark indicator on light themes
-            : Color.FromArgb(220, 255, 255, 255);  // light indicator on dark themes
+            ? Color.FromArgb(210, 0,   0,   0)
+            : Color.FromArgb(220, 255, 255, 255);
 
         using var pen = new Pen(ind, 1.2f);
 
@@ -298,8 +466,9 @@ public sealed class MiniMapPanel : Control
     {
         if (_navigateTo == null) return;
 
-        // WinForms fires DoubleClick with a plain EventArgs; cast to MouseEventArgs
-        // is safe because DoubleClick on a Control always provides mouse position.
+        var activeType = _getFractalType?.Invoke() ?? FractalType.Mandelbrot;
+        if (!MiniMapDefaults.IsSupported(activeType)) return;
+
         var me = e as MouseEventArgs;
         if (me == null) return;
 
@@ -309,15 +478,17 @@ public sealed class MiniMapPanel : Control
 
         if (!mapRect.Contains(me.Location)) return;
 
-        // Pixel within the map rect → complex coordinates.
+        var bounds = MiniMapDefaults.For(activeType);
+
+        // Pixel within the map rect → parameter-plane coordinates.
         float scaleX = MapW / (float)mapRect.Width;
         float scaleY = MapH / (float)mapRect.Height;
         float mapPx  = (me.X - mapRect.Left) * scaleX;
         float mapPy  = (me.Y - mapRect.Top)  * scaleY;
 
-        double scale = 3.5 / (Math.Max(MapW, MapH) * FullZoom);
-        double xMin  = FullCX - MapW * scale * 0.5;
-        double yMin  = FullCY - MapH * scale * 0.5;
+        double scale = 3.5 / (Math.Max(MapW, MapH) * bounds.Zoom);
+        double xMin  = bounds.CenterX - MapW * scale * 0.5;
+        double yMin  = bounds.CenterY - MapH * scale * 0.5;
 
         double newCX = xMin + mapPx * scale;
         double newCY = yMin + mapPy * scale;
