@@ -56,6 +56,8 @@ namespace FracturingFog.Views
         private readonly Button _loadColorThemesButton;
         private readonly Button _editColorThemeButton;
         private readonly CheckBox _chkSlideshowUseExtremeRegions;
+        private CheckBox? _chkAudioReactive;
+        private Button? _audioSettingsButton;
         private readonly Button _saveViewButton;
         private readonly Button _delRegionButton;
         private readonly Button _closeButton;
@@ -130,6 +132,8 @@ namespace FracturingFog.Views
         public event EventHandler OnExportRegionsClick;
         public event EventHandler OnImportRegionsClick;
         public event EventHandler OnChangeIncludeExtremeRegionsChange;
+        public event EventHandler<bool>? OnAudioReactiveToggled;
+        public event EventHandler? OnAudioSettingsClick;
         public event EventHandler OnScreenshotClick;
         public event EventHandler OnVideoClick;
         public event EventHandler OnGridClick;
@@ -228,7 +232,7 @@ namespace FracturingFog.Views
 
             _parentForm = parentForm;
             FractalRegionLibrary.Instance.Load();
-            ClientSize = new System.Drawing.Size(330, 671);
+            ClientSize = new System.Drawing.Size(330, 691);
             BackColor = Color.Black;
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
@@ -1119,6 +1123,43 @@ namespace FracturingFog.Views
             {
                 FractalRegionLibrary.Instance.IncludeExtremeInAll = _chkSlideshowUseExtremeRegions.Checked;
             };
+
+            _chkAudioReactive = new CheckBox
+            {
+                Text = "Audio-React Slideshow",
+                Left = 68,
+                Top = sliderTop + 72,
+                AutoSize = true,
+                AutoCheck = true,
+                ForeColor = Color.FromArgb(120, 200, 160),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent,
+                Checked = false,
+            };
+            _menuPanel.Controls.Add(_chkAudioReactive);
+            _chkAudioReactive.CheckedChanged += (s, e) =>
+                OnAudioReactiveToggled?.Invoke(this, _chkAudioReactive.Checked);
+            _toolTip.SetToolTip(_chkAudioReactive,
+                "Drive theme/region changes from a detected beat in system audio, a file, or fractal-generated audio.");
+
+            _audioSettingsButton = new Button
+            {
+                Text = "Audio…",
+                Left = _chkAudioReactive.Left + _chkAudioReactive.PreferredSize.Width + 8,
+                Top = sliderTop + 70,
+                Width = 60,
+                Height = 22,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(30, 50, 45),
+                ForeColor = Color.FromArgb(180, 220, 200),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+            };
+            _audioSettingsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 110, 90);
+            _audioSettingsButton.Click += (s, e) => OnAudioSettingsClick?.Invoke(this, EventArgs.Empty);
+            _menuPanel.Controls.Add(_audioSettingsButton);
+            _toolTip.SetToolTip(_audioSettingsButton,
+                "Configure audio source, sensitivity, and beats-per-change.");
 
             #endregion Coordinate / Navigate panel
 

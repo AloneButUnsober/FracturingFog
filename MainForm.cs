@@ -1102,6 +1102,8 @@ public sealed partial class MainForm : Form
         _floatingMenu.OnTaaFadeStartSlide += (s, e, l) => SetVideoTaaFadeStartLog10(_floatingMenu.TaaFadeStartLog10);
         _floatingMenu.OnTaaFadeEndSlide += (s, e, l) => SetVideoTaaFadeEndLog10(_floatingMenu.TaaFadeEndLog10);
         _floatingMenu.OnChangeDimensions += (s, e) => OnChangeDimensions(s, e);
+        _floatingMenu.OnAudioReactiveToggled += (s, enabled) => SetAudioReactiveEnabled(enabled);
+        _floatingMenu.OnAudioSettingsClick += (s, e) => ShowAudioSettingsDialog();
         _floatingMenu.OnHelpClick += (s, e) =>
             {
                 OnShowHelpClick();
