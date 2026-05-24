@@ -41,6 +41,8 @@ namespace FracturingFog.Audio
         private static readonly float[] BandEdges = { 20f, 150f, 400f, 1500f, 4000f, 12000f };
         private readonly float[] _bandEnergyEmaShort = new float[5];
         private readonly float[] _bandEnergyEmaLong = new float[5];
+        private readonly float[] _prevBandMag = new float[5];
+        private readonly float[] _bandWeights = { 1f, 1f, 1f, 1f, 1f };
         private float _rmsEma;
 
         private int _beatIndex;
@@ -61,6 +63,23 @@ namespace FracturingFog.Audio
         public float Sensitivity { get; set; } = 0.5f;
 
         public bool IsActive { get; private set; } = true;
+
+        /// <summary>
+        /// Set per-band flux weights (5 values: Bass, LowMid, Mid, HighMid, High).
+        /// 1.0 = neutral. Values outside [0, 8] are clamped. Missing / shorter arrays
+        /// pad with 1.0; extra entries ignored.
+        /// </summary>
+        public void SetBandWeights(ReadOnlySpan<float> weights)
+        {
+            lock (_stateLock)
+            {
+                for (int i = 0; i < _bandWeights.Length; i++)
+                {
+                    float w = i < weights.Length ? weights[i] : 1f;
+                    _bandWeights[i] = System.Math.Clamp(w, 0f, 8f);
+                }
+            }
+        }
 
         public double EstimatedBpm => _bpm;
 
@@ -203,27 +222,39 @@ namespace FracturingFog.Audio
                 mag[i] = (float)System.Math.Sqrt(re * re + im * im);
             }
 
-            // Spectral flux (positive differences only).
-            float flux = 0f;
-            for (int i = 0; i < half; i++)
+            // Per-band bin ranges.
+            float binHz = _sampleRate / (float)FftSize;
+            Span<int> bandLo = stackalloc int[5];
+            Span<int> bandHi = stackalloc int[5];
+            for (int b = 0; b < 5; b++)
             {
-                float d = mag[i] - _prevMag[i];
-                if (d > 0f) flux += d;
-                _prevMag[i] = mag[i];
+                bandLo[b] = System.Math.Clamp((int)System.Math.Floor(BandEdges[b] / binHz), 0, half - 1);
+                bandHi[b] = System.Math.Clamp((int)System.Math.Ceiling(BandEdges[b + 1] / binHz), 0, half - 1);
             }
 
-            // Per-band energies.
-            float binHz = _sampleRate / (float)FftSize;
+            // Per-band positive spectral flux + per-band magnitude sum (for energy meters).
+            Span<float> bandFlux = stackalloc float[5];
             Span<float> bands = stackalloc float[5];
             for (int b = 0; b < 5; b++)
             {
-                int lo = (int)System.Math.Floor(BandEdges[b] / binHz);
-                int hi = System.Math.Min(half - 1, (int)System.Math.Ceiling(BandEdges[b + 1] / binHz));
-                float sum = 0f;
+                float bf = 0f, bsum = 0f;
+                int lo = bandLo[b], hi = bandHi[b];
                 int n = System.Math.Max(1, hi - lo + 1);
-                for (int i = lo; i <= hi; i++) sum += mag[i];
-                bands[b] = sum / n;
+                for (int i = lo; i <= hi; i++)
+                {
+                    float d = mag[i] - _prevMag[i];
+                    if (d > 0f) bf += d;
+                    bsum += mag[i];
+                }
+                bandFlux[b] = bf;
+                bands[b] = bsum / n;
             }
+            // Always refresh _prevMag for every bin so out-of-band bins don't drift stale.
+            mag.CopyTo(_prevMag);
+
+            // Weighted total flux drives the onset detector.
+            float flux = 0f;
+            for (int b = 0; b < 5; b++) flux += bandFlux[b] * _bandWeights[b];
             // Normalize via dual-EMA (fast/slow). Long EMA = noise floor.
             for (int b = 0; b < 5; b++)
             {

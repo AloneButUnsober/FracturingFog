@@ -27,6 +27,11 @@ namespace FracturingFog.Views
         private readonly System.Windows.Forms.Timer _meterTimer;
         private readonly Button _okButton;
         private readonly Button _cancelButton;
+        private readonly TrackBar[] _eqSliders = new TrackBar[5];
+        private readonly Label[] _eqValueLabels = new Label[5];
+        private readonly Button _eqResetButton;
+        private static readonly string[] EqBandNames =
+            { "Bass", "LowMid", "Mid", "HighMid", "High" };
 
         public AudioSettings Result { get; private set; }
 
@@ -39,7 +44,7 @@ namespace FracturingFog.Views
             Text = "Audio-Reactive Slideshow";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(440, 396);
+            ClientSize = new Size(440, 580);
             BackColor = Color.FromArgb(28, 28, 28);
             ForeColor = Color.WhiteSmoke;
             MaximizeBox = false;
@@ -143,7 +148,71 @@ namespace FracturingFog.Views
                 Checked = _settings.PlaySynthOutput,
             };
             Controls.Add(_playSynthChk);
-            y += 30;
+            y += 32;
+
+            // ── Analysis EQ: per-band weighting for beat-trigger flux ─────────
+            var eqHeader = new Label
+            {
+                Text = "Beat-Detector EQ (per-band flux weight)",
+                Left = 12, Top = y, Width = 320, AutoSize = false,
+                ForeColor = Color.FromArgb(180, 220, 180), BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            };
+            Controls.Add(eqHeader);
+            _eqResetButton = new Button
+            {
+                Text = "Reset", Left = ClientSize.Width - 84, Top = y - 2,
+                Width = 70, Height = 22, FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 55, 50), ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8f, FontStyle.Regular),
+            };
+            _eqResetButton.Click += (s, e) =>
+            {
+                for (int i = 0; i < 5; i++) _eqSliders[i].Value = 100;
+            };
+            Controls.Add(_eqResetButton);
+            y += 24;
+
+            for (int b = 0; b < 5; b++)
+            {
+                int initial = 100;
+                if (_settings.BandWeights != null && b < _settings.BandWeights.Length)
+                    initial = System.Math.Clamp(
+                        (int)System.Math.Round(_settings.BandWeights[b] * 100f), 0, 200);
+
+                var lbl = new Label
+                {
+                    Text = EqBandNames[b] + ":", Left = 12, Top = y + 4, Width = 64,
+                    AutoSize = false, ForeColor = Color.WhiteSmoke,
+                    BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft,
+                };
+                Controls.Add(lbl);
+
+                var slider = new TrackBar
+                {
+                    Left = 78, Top = y - 2, Width = 290,
+                    Minimum = 0, Maximum = 200, Value = initial,
+                    TickFrequency = 50, TickStyle = TickStyle.BottomRight,
+                    BackColor = Color.FromArgb(28, 28, 28),
+                };
+                int captureB = b;
+                slider.ValueChanged += (s, e) =>
+                    _eqValueLabels[captureB].Text = $"{_eqSliders[captureB].Value}%";
+                Controls.Add(slider);
+                _eqSliders[b] = slider;
+
+                var valLbl = new Label
+                {
+                    Left = slider.Right + 2, Top = y + 4, Width = 50, AutoSize = false,
+                    Text = $"{initial}%", ForeColor = Color.WhiteSmoke,
+                    BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft,
+                };
+                Controls.Add(valLbl);
+                _eqValueLabels[b] = valLbl;
+
+                y += 26;
+            }
+            y += 6;
 
             _bpmLabel = new Label
             {
@@ -267,6 +336,9 @@ namespace FracturingFog.Views
             _settings.RouteSynthThroughAnalyzer = _routeSynthChk.Checked;
             _settings.PlaySynthOutput = _playSynthChk.Checked;
             _settings.SynthBpm = (double)_synthBpm.Value;
+            var weights = new float[5];
+            for (int i = 0; i < 5; i++) weights[i] = _eqSliders[i].Value / 100f;
+            _settings.BandWeights = weights;
             Result = _settings;
         }
 
@@ -281,6 +353,9 @@ namespace FracturingFog.Views
             RouteSynthThroughAnalyzer = s.RouteSynthThroughAnalyzer,
             PlaySynthOutput = s.PlaySynthOutput,
             SynthBpm = s.SynthBpm,
+            BandWeights = s.BandWeights != null
+                ? (float[])s.BandWeights.Clone()
+                : new[] { 1f, 1f, 1f, 1f, 1f },
         };
     }
 }

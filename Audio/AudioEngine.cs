@@ -38,6 +38,8 @@ namespace FracturingFog.Audio
             _settings = settings ?? new AudioSettings();
             _analyzer = new BeatAnalyzer(sampleRate: 44100, channels: 2);
             _analyzer.Sensitivity = _settings.Sensitivity;
+            if (_settings.BandWeights != null)
+                _analyzer.SetBandWeights(_settings.BandWeights);
         }
 
         public void Start()
@@ -70,6 +72,8 @@ namespace FracturingFog.Audio
                 if (wasRunning) StopCore();
                 _settings = newSettings;
                 _analyzer.Sensitivity = newSettings.Sensitivity;
+                if (newSettings.BandWeights != null)
+                    _analyzer.SetBandWeights(newSettings.BandWeights);
                 if (wasRunning)
                 {
                     StartCore();

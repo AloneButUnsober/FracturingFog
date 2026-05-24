@@ -62,6 +62,14 @@ namespace FracturingFog
             _audioSettings.RouteSynthThroughAnalyzer = updated.RouteSynthThroughAnalyzer;
             _audioSettings.PlaySynthOutput = updated.PlaySynthOutput;
             _audioSettings.SynthBpm = System.Math.Clamp(updated.SynthBpm, 30, 240);
+            if (updated.BandWeights != null && updated.BandWeights.Length >= 5)
+            {
+                _audioSettings.BandWeights = new[]
+                {
+                    updated.BandWeights[0], updated.BandWeights[1], updated.BandWeights[2],
+                    updated.BandWeights[3], updated.BandWeights[4],
+                };
+            }
             _fractalSynth?.SetBpm(_audioSettings.SynthBpm);
 
             if (_audioEngine != null && _audioEngine.IsRunning)
