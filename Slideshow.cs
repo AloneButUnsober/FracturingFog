@@ -49,6 +49,7 @@ namespace FracturingFog
             _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(120, 50, 50);
             SetStatus("Slideshow running…");
             ShowVcrForSlideshow();
+            NotifySlideshowStarted();
 
             CancellationTokenSource cts;
             lock (_slideshowLock)
@@ -77,6 +78,7 @@ namespace FracturingFog
                         _slideshowButton.BackColor = Color.FromArgb(40, 55, 40);
                         _slideshowButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
                         HideVcrPanel();
+                        NotifySlideshowStopped();
                         if (!t.IsCanceled && t.IsFaulted)
                             SetStatus($"Slideshow error: {t.Exception?.InnerException?.Message}");
                         else
@@ -214,15 +216,17 @@ namespace FracturingFog
             //  Each region shows 8 color themes
 
             // Region Focus mode timings: fewer themes per region, longer durations, shorter fade for a calmer, more contemplative slideshow when the region is the main changing element.
-            const int themesPerRegion = 3;
-            const int themeDurationMs = 12_000;   // 12 s fully visible per theme
+            // When audio-reactive is active the theme duration becomes a soft upper bound;
+            // the beat handler flips _slideshowSkipTheme to advance early.
+            int themesPerRegion = 3;
+            int themeDurationMs = ShouldUseBeatDrivenTiming() ? 60_000 : 12_000;
             const int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
             const int fadeSteps = 22;
             const int fadeStepMs = fadeDurationMs / fadeSteps;
 
             // Color Focus mode timings: more themes per region, shorter durations, longer fade for more visual interest when the theme is the main changing element.
-            const int themesPerRegionCF = 8;
-            const int themeDurationMsCF = 3_000;   // 3 s fully visible per theme
+            int themesPerRegionCF = 8;
+            int themeDurationMsCF = ShouldUseBeatDrivenTiming() ? 60_000 : 3_000;
             const int fadeDurationMsCF = 4_000;   // 4 s cross-fade (overlaps end of theme slot)
             const int fadeStepsCF = 44;
             const int fadeStepMsCF = fadeDurationMsCF / fadeStepsCF;
