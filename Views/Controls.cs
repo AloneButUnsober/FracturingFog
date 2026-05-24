@@ -215,6 +215,20 @@ namespace FracturingFog.Views
 
             /// <summary>Max suggestions to surface when <see cref="SuggestedFor"/> is set.</summary>
             public int SuggestionCount { get; set; } = 8;
+
+            /// <summary>
+            /// When true, the combo lists only themes that round-trip through
+            /// <see cref="Models.DataDrivenColorThemes.Export"/> (i.e. themes
+            /// editable in the Color Theme Editor). Toggle is only surfaced
+            /// from the editor's own combo context menu.
+            /// </summary>
+            public bool EditableOnly { get; set; }
+        }
+
+        private static bool IsThemeEditable(string name)
+        {
+            var map = Models.ColorPalette.GetPaletteByName(name);
+            return map != null && Models.DataDrivenColorThemes.Export(map) != null;
         }
 
         private static ColorComboSortState GetOrCreateSortState(ComboBox comboBox)
@@ -232,12 +246,15 @@ namespace FracturingFog.Views
             comboBox.SelectedIndexChanged -= func;
             comboBox.Items.Clear();
 
+            bool Allow(string n) => !state.EditableOnly || IsThemeEditable(n);
+
             // Suggestion section comes first, regardless of sort mode, so the
             // top picks are always one click away when an equation is active.
             if (state.SuggestedFor != null)
             {
                 var picks = Models.ThemeRecommender.RecommendNames(
                     state.SuggestedFor, Models.ColorPalette.Palettes, state.SuggestionCount);
+                if (state.EditableOnly) picks = picks.Where(Allow).ToList();
                 if (picks.Count > 0)
                 {
                     comboBox.Items.Add("— Suggested for equation —");
@@ -252,20 +269,21 @@ namespace FracturingFog.Views
                     {
                         var palettes = Models.ColorPalette.GetPalettesByType(type);
                         if (palettes.Count == 0) continue;
+                        var names = palettes.ToImmutableSortedDictionary().Keys.Where(Allow).ToList();
+                        if (names.Count == 0) continue;
                         comboBox.Items.Add($"— {type} —");
-                        foreach (var name in palettes.ToImmutableSortedDictionary().Keys)
-                            comboBox.Items.Add(name);
+                        foreach (var name in names) comboBox.Items.Add(name);
                     }
                     break;
 
                 case ColorComboSortMode.All:
-                    foreach (var name in CollectAllThemeNames())
+                    foreach (var name in CollectAllThemeNames().Where(Allow))
                         comboBox.Items.Add(name);
                     break;
 
                 case ColorComboSortMode.ByKind:
                     var byKind = Models.ColorPalette.GetPalettesByType(state.KindFilter);
-                    foreach (var name in byKind.ToImmutableSortedDictionary().Keys)
+                    foreach (var name in byKind.ToImmutableSortedDictionary().Keys.Where(Allow))
                         comboBox.Items.Add(name);
                     break;
             }
@@ -330,7 +348,8 @@ namespace FracturingFog.Views
         public static void AttachColorComboSortMenu(
             ComboBox comboBox,
             EventHandler selectionHandler,
-            Action? onAfterRebuild = null)
+            Action? onAfterRebuild = null,
+            bool includeEditableOnlyOption = false)
         {
             if (comboBox == null) return;
             GetOrCreateSortState(comboBox);
@@ -339,7 +358,7 @@ namespace FracturingFog.Views
             {
                 if (e.Button != MouseButtons.Right) return;
                 if (comboBox.DroppedDown) comboBox.DroppedDown = false;
-                ShowColorComboSortMenu(comboBox, selectionHandler, onAfterRebuild, e.Location);
+                ShowColorComboSortMenu(comboBox, selectionHandler, onAfterRebuild, includeEditableOnlyOption, e.Location);
             };
         }
 
@@ -347,6 +366,7 @@ namespace FracturingFog.Views
             ComboBox comboBox,
             EventHandler selectionHandler,
             Action? onAfterRebuild,
+            bool includeEditableOnlyOption,
             Point screenLocal)
         {
             var state = GetOrCreateSortState(comboBox);
@@ -370,6 +390,24 @@ namespace FracturingFog.Views
                     onAfterRebuild?.Invoke();
                 };
                 menu.Items.Add(item);
+            }
+
+            if (includeEditableOnlyOption)
+            {
+                var editableItem = new ToolStripMenuItem("Editable only")
+                {
+                    Checked = state.EditableOnly,
+                    ToolTipText = "Hide themes that cannot be opened in the Color Theme Editor.",
+                };
+                editableItem.Click += (s, e) =>
+                {
+                    string? prev = comboBox.SelectedItem?.ToString();
+                    state.EditableOnly = !state.EditableOnly;
+                    RebuildColorCombo(comboBox, selectionHandler, prev);
+                    onAfterRebuild?.Invoke();
+                };
+                menu.Items.Add(editableItem);
+                menu.Items.Add(new ToolStripSeparator());
             }
 
             Add("Default", ColorComboSortMode.Default, null, state.Mode == ColorComboSortMode.Default);
