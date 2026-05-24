@@ -88,7 +88,7 @@ namespace FracturingFog.Models
         public string? UserBulbSource { get; set; }
         public string? UserBulbName { get; set; }
         public int UserBulbIterations { get; set; } = 8;
-        public double UserBulbBailout { get; set; } = 4.0;       // |z| escape threshold
+        public double UserBulbBailout { get; set; } = 16.0;      // |z| escape threshold
         public double UserBulbCameraDistance { get; set; } = 3.0;
         public double UserBulbCameraTheta { get; set; } = Math.PI * 0.25;
         public double UserBulbCameraPhi { get; set; } = Math.PI * 0.35;

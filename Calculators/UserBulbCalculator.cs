@@ -14,8 +14,10 @@
 // trajectories run in lockstep — base c plus three perturbed-c trajectories
 // (c + h·êx, c + h·êy, c + h·êz). After iteration, the three column lengths
 // (|z_perturbed − z_base| / h) bound the Jacobian; we take the max column
-// norm as a conservative spectral-radius proxy. Final DE: 0.5 · log(r)·r/|J|
-// (Hubbard–Douady form, identical to Mandelbulb's analytic version).
+// norm as a conservative spectral-radius proxy. Final DE: 0.5 · r / |J|
+// (Lipschitz form). Hubbard–Douady's log(r)·r/|J| only holds for power maps
+// z → z^p + c; arbitrary user steps (trig, hyperbolic, polynomial mixes)
+// do not have power-law growth, so the log factor distorts surfaces.
 //
 // Cost: 4× delegate calls per DE iter (vs 1× for the heuristic path). For
 // the typical 96-step raymarch × 8 DE iters × 4 normal probes per pixel
@@ -175,11 +177,20 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         double camTheta = FractalParameters.UserBulbCameraTheta;
         double camPhi = FractalParameters.UserBulbCameraPhi;
 
-        double camX = camDist * Math.Sin(camPhi) * Math.Cos(camTheta);
-        double camY = camDist * Math.Cos(camPhi);
-        double camZ = camDist * Math.Sin(camPhi) * Math.Sin(camTheta);
+        // Orbit camera around target = (CenterX, -CenterY, 0). CenterX/Y is the
+        // user pan in world units. Camera distance from target shrinks with
+        // Zoom so the same world point stays centered on screen at every zoom
+        // level. Previous build added pan to ray-angle u/v instead, which made
+        // the apparent center drift as camDist changed.
+        double targetX = CenterX;
+        double targetY = -CenterY;
+        double targetZ = 0.0;
 
-        double[] fwd = Normalize3(-camX, -camY, -camZ);
+        double camX = targetX + camDist * Math.Sin(camPhi) * Math.Cos(camTheta);
+        double camY = targetY + camDist * Math.Cos(camPhi);
+        double camZ = targetZ + camDist * Math.Sin(camPhi) * Math.Sin(camTheta);
+
+        double[] fwd = Normalize3(targetX - camX, targetY - camY, targetZ - camZ);
         double[] worldUp = { 0, 1, 0 };
         double[] right = Normalize3(
             fwd[1] * worldUp[2] - fwd[2] * worldUp[1],
@@ -194,8 +205,8 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         double aspect = (double)width / height;
         double fovScale = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
 
-        double panU = CenterX;
-        double panV = -CenterY;
+        // Pan now handled by camera orbit target above — ray u/v stays
+        // centered on (0,0) in NDC.
 
         double[] light = Normalize3(
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Cos(FractalParameters.UserBulbLightTheta),
@@ -207,12 +218,12 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
-            double v = (1.0 - 2.0 * (y + 0.5) / height) * fovScale + panV;
+            double v = (1.0 - 2.0 * (y + 0.5) / height) * fovScale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
                 System.Threading.Interlocked.Increment(ref total);
-                double u = (2.0 * (x + 0.5) / width - 1.0) * fovScale * aspect + panU;
+                double u = (2.0 * (x + 0.5) / width - 1.0) * fovScale * aspect;
                 double rdx = right[0] * u + up[0] * v + fwd[0];
                 double rdy = right[1] * u + up[1] * v + fwd[1];
                 double rdz = right[2] * u + up[2] * v + fwd[2];
@@ -278,7 +289,8 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
     /// with c = world-space sample point. Numerical Jacobian: three parallel
     /// trajectories run with c perturbed by +h on each axis. Column lengths
     /// of (z_perturbed − z_base) / h bound dz/dc; max column length acts as
-    /// the spectral-radius proxy. Final DE: 0.5 · log(r) · r / |J|.
+    /// the spectral-radius proxy. Final DE: 0.5 · r / |J| (Lipschitz form,
+    /// works for arbitrary growth profiles).
     ///
     /// Cost = 4× delegate calls per DE iteration (1 base + 3 perturbed).
     /// </summary>
@@ -324,7 +336,7 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         double j2 = (zz - z).Length / h;
         double dr = Math.Max(Math.Max(j0, j1), j2);
 
-        return 0.5 * Math.Log(Math.Max(r, 1e-10)) * r / Math.Max(dr, 1e-10);
+        return 0.5 * r / Math.Max(dr, 1e-10);
     }
 
     private static double[] Normalize3(double x, double y, double z)
