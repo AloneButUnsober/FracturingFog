@@ -13,7 +13,7 @@ namespace FracturingFog
     public sealed partial class MainForm
     {
         private AudioEngine? _audioEngine;
-        private readonly AudioSettings _audioSettings = new();
+        private AudioSettings _audioSettings = AudioSettingsStore.Load();
         private int _audioBeatsSinceTheme;
         private int _audioBeatsSinceRegion;
         private readonly object _audioStateLock = new();
@@ -28,6 +28,9 @@ namespace FracturingFog
 
         /// <summary>Returns true if the slideshow should defer to beat events for advancement.</summary>
         private bool ShouldUseBeatDrivenTiming() => IsAudioReactiveActive && _slideshowRunning;
+
+        /// <summary>Returns the analyzer's current BPM estimate, or 0 if unknown / inactive.</summary>
+        public double GetReactiveBpm() => _audioEngine?.BeatSource.EstimatedBpm ?? 0;
 
         /// <summary>Master toggle from UI checkbox. Starts engine if a slideshow is running.</summary>
         public void SetAudioReactiveEnabled(bool enabled)
@@ -44,6 +47,7 @@ namespace FracturingFog
             SetStatus(enabled
                 ? $"Audio-reactive slideshow: ON ({_audioSettings.Source})"
                 : "Audio-reactive slideshow: OFF");
+            PersistAudioSettings();
         }
 
         /// <summary>Apply a new settings snapshot. Reconfigures engine if running.</summary>
@@ -57,6 +61,8 @@ namespace FracturingFog
                                                             updated.BeatsPerRegion);
             _audioSettings.RouteSynthThroughAnalyzer = updated.RouteSynthThroughAnalyzer;
             _audioSettings.PlaySynthOutput = updated.PlaySynthOutput;
+            _audioSettings.SynthBpm = System.Math.Clamp(updated.SynthBpm, 30, 240);
+            _fractalSynth?.SetBpm(_audioSettings.SynthBpm);
 
             if (_audioEngine != null && _audioEngine.IsRunning)
             {
@@ -105,6 +111,7 @@ namespace FracturingFog
             if (_fractalSynth == null)
             {
                 _fractalSynth = new FractalSynth(MandelbrotIterationProbe);
+                _fractalSynth.SetBpm(_audioSettings.SynthBpm);
                 PushSynthViewport();
                 _synthViewportTimer = new System.Windows.Forms.Timer { Interval = 500 };
                 _synthViewportTimer.Tick += (s, e) => PushSynthViewport();
@@ -235,7 +242,20 @@ namespace FracturingFog
             if (dlg.ShowDialog(this) == DialogResult.OK)
             {
                 ApplyAudioSettings(dlg.Result);
+                AudioSettingsStore.Save(_audioSettings);
             }
         }
+
+        /// <summary>Restore Enabled state + sync UI checkbox after settings load.</summary>
+        public void InitializeAudioFromDisk()
+        {
+            // Reflect loaded Enabled state in the floating menu checkbox without
+            // re-firing CheckedChanged in a way that double-starts the engine.
+            _floatingMenu.SetAudioReactiveChecked(_audioSettings.Enabled);
+            if (_audioSettings.Enabled) EnsureAudioEngineStarted();
+        }
+
+        /// <summary>Persist whenever Enabled toggles or settings change.</summary>
+        private void PersistAudioSettings() => AudioSettingsStore.Save(_audioSettings);
     }
 }

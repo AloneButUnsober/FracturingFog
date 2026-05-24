@@ -1118,6 +1118,7 @@ public sealed partial class MainForm : Form
         if (!_qualityCombo.IsDisposed) _floatingMenu.Quality = _currentQualityName;
         UpdateAdaptiveAvailability();
         _floatingMenu.Show();
+        InitializeAudioFromDisk();
     }
 
     /// <summary>

@@ -220,16 +220,32 @@ namespace FracturingFog
             // the beat handler flips _slideshowSkipTheme to advance early.
             int themesPerRegion = 3;
             int themeDurationMs = ShouldUseBeatDrivenTiming() ? 60_000 : 12_000;
-            const int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
-            const int fadeSteps = 22;
-            const int fadeStepMs = fadeDurationMs / fadeSteps;
+            int fadeDurationMs = 2_000;   // 2 s cross-fade (overlaps end of theme slot)
+            int fadeSteps = 22;
+            int fadeStepMs = fadeDurationMs / fadeSteps;
 
             // Color Focus mode timings: more themes per region, shorter durations, longer fade for more visual interest when the theme is the main changing element.
             int themesPerRegionCF = 8;
             int themeDurationMsCF = ShouldUseBeatDrivenTiming() ? 60_000 : 3_000;
-            const int fadeDurationMsCF = 4_000;   // 4 s cross-fade (overlaps end of theme slot)
-            const int fadeStepsCF = 44;
-            const int fadeStepMsCF = fadeDurationMsCF / fadeStepsCF;
+            int fadeDurationMsCF = 4_000;   // 4 s cross-fade (overlaps end of theme slot)
+            int fadeStepsCF = 44;
+            int fadeStepMsCF = fadeDurationMsCF / fadeStepsCF;
+
+            // Beat-derived fade override: when audio-reactive + BPM known, use
+            // half a beat for the region-focus fade and one full beat for the
+            // color-focus fade. Step count fixed at ~22/44; step ms recomputed.
+            if (ShouldUseBeatDrivenTiming())
+            {
+                double bpm = GetReactiveBpm();
+                if (bpm > 30)
+                {
+                    double beatMs = 60_000.0 / bpm;
+                    fadeDurationMs = System.Math.Max(200, (int)(beatMs * 0.5));
+                    fadeStepMs = System.Math.Max(10, fadeDurationMs / fadeSteps);
+                    fadeDurationMsCF = System.Math.Max(400, (int)beatMs);
+                    fadeStepMsCF = System.Math.Max(10, fadeDurationMsCF / fadeStepsCF);
+                }
+            }
             int lastRegionIdx = -1;
             int lastThemeIdx = -1;
             int renderCounter = 0;
