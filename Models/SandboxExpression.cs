@@ -24,7 +24,7 @@
 //   z, c, n               (input slots, refreshed per iteration)
 //   pi, e, i              (constants)
 // Functions:
-//   Sin Cos Tan Exp Log Sqrt Abs Conj Re Im Arg Pow(z,w)
+//   Sin Cos Tan Sinh Cosh Tanh Exp Log Sqrt Abs Conj Re Im Arg Pow(z,w)
 
 using System;
 using System.Collections.Generic;
@@ -176,9 +176,12 @@ namespace FracturingFog.Models
             var x = Args[0].Eval(env);
             switch (Name)
             {
-                case "sin":  return x.IsReal ? SbxVal.Real(Math.Sin(x.R))  : SbxVal.Cx(Complex.Sin(x.AsComplex()));
-                case "cos":  return x.IsReal ? SbxVal.Real(Math.Cos(x.R))  : SbxVal.Cx(Complex.Cos(x.AsComplex()));
-                case "tan":  return x.IsReal ? SbxVal.Real(Math.Tan(x.R))  : SbxVal.Cx(Complex.Tan(x.AsComplex()));
+                case "sin":  return x.IsReal ? SbxVal.Real(Math.Sin(x.R))   : SbxVal.Cx(Complex.Sin(x.AsComplex()));
+                case "cos":  return x.IsReal ? SbxVal.Real(Math.Cos(x.R))   : SbxVal.Cx(Complex.Cos(x.AsComplex()));
+                case "tan":  return x.IsReal ? SbxVal.Real(Math.Tan(x.R))   : SbxVal.Cx(Complex.Tan(x.AsComplex()));
+                case "sinh": return x.IsReal ? SbxVal.Real(Math.Sinh(x.R))  : SbxVal.Cx(Complex.Sinh(x.AsComplex()));
+                case "cosh": return x.IsReal ? SbxVal.Real(Math.Cosh(x.R))  : SbxVal.Cx(Complex.Cosh(x.AsComplex()));
+                case "tanh": return x.IsReal ? SbxVal.Real(Math.Tanh(x.R))  : SbxVal.Cx(Complex.Tanh(x.AsComplex()));
                 case "exp":  return x.IsReal ? SbxVal.Real(Math.Exp(x.R))  : SbxVal.Cx(Complex.Exp(x.AsComplex()));
                 case "log":  return x.IsReal && x.R > 0
                                 ? SbxVal.Real(Math.Log(x.R))
@@ -455,7 +458,8 @@ namespace FracturingFog.Models
 
             private static int ArityOf(string name) => name switch
             {
-                "sin" or "cos" or "tan" or "exp" or "log" or "sqrt"
+                "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
+                    or "exp" or "log" or "sqrt"
                     or "abs" or "conj" or "re" or "im" or "arg" => 1,
                 "pow" => 2,
                 _ => -1

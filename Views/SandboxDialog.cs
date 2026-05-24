@@ -56,7 +56,7 @@ namespace FracturingFog.Views
 
             _hint = new Label
             {
-                Text = "Expression returns Complex. Vars: z, c, n. Funcs: sin cos tan exp log sqrt abs conj re im arg pow(a,b)." + Environment.NewLine +
+                Text = "Expression returns Complex. Vars: z, c, n. Funcs: sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg pow(a,b)." + Environment.NewLine +
                        "Const: pi, e, i. Ops: + - * / ^ unary-. Ternary: cond ? a : b. Compare: < > <= >= == !=. Logical: && || !. Let: let x = expr in body." + Environment.NewLine +
                        "Example:  let zz = z*z in zz + c",
                 Left = 10, Top = 10, AutoSize = true,
