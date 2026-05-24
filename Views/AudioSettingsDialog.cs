@@ -30,13 +30,25 @@ namespace FracturingFog.Views
         private readonly TrackBar[] _eqSliders = new TrackBar[5];
         private readonly Label[] _eqValueLabels = new Label[5];
         private readonly Button _eqResetButton;
+        private readonly TrackBar _fadeFracSlider;
+        private readonly Label _fadeFracLabel;
+        private readonly Button? _slideshowToggleButton;
+        private readonly Action? _slideshowToggle;
+        private readonly Func<bool>? _slideshowIsRunning;
+        private readonly System.Windows.Forms.Timer? _slideshowStateTimer;
         private static readonly string[] EqBandNames =
             { "Bass", "LowMid", "Mid", "HighMid", "High" };
 
         public AudioSettings Result { get; private set; }
 
         public AudioSettingsDialog(AudioSettings current, IBeatSource? liveSource)
+            : this(current, liveSource, null, null) { }
+
+        public AudioSettingsDialog(AudioSettings current, IBeatSource? liveSource,
+                                   Action? slideshowToggle, Func<bool>? slideshowIsRunning)
         {
+            _slideshowToggle = slideshowToggle;
+            _slideshowIsRunning = slideshowIsRunning;
             _settings = Clone(current);
             _liveSource = liveSource;
             Result = _settings;
@@ -44,7 +56,7 @@ namespace FracturingFog.Views
             Text = "Audio-Reactive Slideshow";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(440, 580);
+            ClientSize = new Size(440, 640);
             BackColor = Color.FromArgb(28, 28, 28);
             ForeColor = Color.WhiteSmoke;
             MaximizeBox = false;
@@ -214,6 +226,29 @@ namespace FracturingFog.Views
             }
             y += 6;
 
+            // ── Cross-fade duration (fraction of one detected beat) ───────────
+            AddLabel("Fade × beat:", 12, y);
+            int fadeInit = System.Math.Clamp(
+                (int)System.Math.Round(_settings.FadeBeatFraction * 100.0), 10, 200);
+            _fadeFracSlider = new TrackBar
+            {
+                Left = 130, Top = y - 4, Width = 220,
+                Minimum = 10, Maximum = 200, Value = fadeInit,
+                TickFrequency = 25, TickStyle = TickStyle.BottomRight,
+                BackColor = Color.FromArgb(28, 28, 28),
+            };
+            _fadeFracSlider.ValueChanged += (s, e) =>
+                _fadeFracLabel.Text = $"{_fadeFracSlider.Value / 100.0:F2}× beat";
+            Controls.Add(_fadeFracSlider);
+            _fadeFracLabel = new Label
+            {
+                Left = _fadeFracSlider.Right + 2, Top = y + 2, Width = 80, AutoSize = false,
+                Text = $"{fadeInit / 100.0:F2}× beat", ForeColor = Color.WhiteSmoke,
+                BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft,
+            };
+            Controls.Add(_fadeFracLabel);
+            y += 36;
+
             _bpmLabel = new Label
             {
                 Left = 12, Top = y, Width = 200, AutoSize = false,
@@ -228,6 +263,30 @@ namespace FracturingFog.Views
                 Font = new Font("Segoe UI", 9f, FontStyle.Regular),
             };
             Controls.Add(_levelLabel);
+
+            if (_slideshowToggle != null && _slideshowIsRunning != null)
+            {
+                _slideshowToggleButton = new Button
+                {
+                    Left = 12, Top = ClientSize.Height - 36,
+                    Width = 130, Height = 26, FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(40, 55, 40), ForeColor = Color.White,
+                    Text = _slideshowIsRunning() ? "■ Stop Slideshow" : "▶ Start Slideshow",
+                };
+                _slideshowToggleButton.FlatAppearance.BorderColor = Color.FromArgb(60, 100, 60);
+                _slideshowToggleButton.Click += (s, e) =>
+                {
+                    try { _slideshowToggle(); } catch { }
+                    RefreshSlideshowButton();
+                };
+                Controls.Add(_slideshowToggleButton);
+
+                // Re-poll a few times to catch async start/stop reaching running state.
+                _slideshowStateTimer = new System.Windows.Forms.Timer { Interval = 250 };
+                _slideshowStateTimer.Tick += (s, e) => RefreshSlideshowButton();
+                _slideshowStateTimer.Start();
+                FormClosed += (s, e) => _slideshowStateTimer.Stop();
+            }
 
             _okButton = new Button
             {
@@ -339,7 +398,22 @@ namespace FracturingFog.Views
             var weights = new float[5];
             for (int i = 0; i < 5; i++) weights[i] = _eqSliders[i].Value / 100f;
             _settings.BandWeights = weights;
+            _settings.FadeBeatFraction = System.Math.Clamp(_fadeFracSlider.Value / 100.0, 0.1, 2.0);
             Result = _settings;
+        }
+
+        private void RefreshSlideshowButton()
+        {
+            if (_slideshowToggleButton == null || _slideshowIsRunning == null) return;
+            bool running = _slideshowIsRunning();
+            string desired = running ? "■ Stop Slideshow" : "▶ Start Slideshow";
+            if (_slideshowToggleButton.Text != desired)
+                _slideshowToggleButton.Text = desired;
+            var bg = running ? Color.FromArgb(70, 30, 30) : Color.FromArgb(40, 55, 40);
+            var border = running ? Color.FromArgb(120, 50, 50) : Color.FromArgb(60, 100, 60);
+            if (_slideshowToggleButton.BackColor != bg)
+                _slideshowToggleButton.BackColor = bg;
+            _slideshowToggleButton.FlatAppearance.BorderColor = border;
         }
 
         private static AudioSettings Clone(AudioSettings s) => new()
@@ -356,6 +430,7 @@ namespace FracturingFog.Views
             BandWeights = s.BandWeights != null
                 ? (float[])s.BandWeights.Clone()
                 : new[] { 1f, 1f, 1f, 1f, 1f },
+            FadeBeatFraction = s.FadeBeatFraction,
         };
     }
 }

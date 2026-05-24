@@ -19,6 +19,7 @@ namespace FracturingFog
         private readonly object _audioStateLock = new();
         private FractalSynth? _fractalSynth;
         private System.Windows.Forms.Timer? _synthViewportTimer;
+        private Views.AudioSettingsDialog? _audioDialog;
 
         public bool IsAudioReactiveActive =>
             _audioSettings.Enabled
@@ -62,6 +63,7 @@ namespace FracturingFog
             _audioSettings.RouteSynthThroughAnalyzer = updated.RouteSynthThroughAnalyzer;
             _audioSettings.PlaySynthOutput = updated.PlaySynthOutput;
             _audioSettings.SynthBpm = System.Math.Clamp(updated.SynthBpm, 30, 240);
+            _audioSettings.FadeBeatFraction = System.Math.Clamp(updated.FadeBeatFraction, 0.1, 2.0);
             if (updated.BandWeights != null && updated.BandWeights.Length >= 5)
             {
                 _audioSettings.BandWeights = new[]
@@ -246,12 +248,44 @@ namespace FracturingFog
 
         private void ShowAudioSettingsDialog()
         {
-            using var dlg = new Views.AudioSettingsDialog(_audioSettings, _audioEngine?.BeatSource);
-            if (dlg.ShowDialog(this) == DialogResult.OK)
+            if (_audioDialog != null && !_audioDialog.IsDisposed)
             {
-                ApplyAudioSettings(dlg.Result);
-                AudioSettingsStore.Save(_audioSettings);
+                if (_audioDialog.WindowState == FormWindowState.Minimized)
+                    _audioDialog.WindowState = FormWindowState.Normal;
+                _audioDialog.BringToFront();
+                _audioDialog.Activate();
+                return;
             }
+
+            var dlg = new Views.AudioSettingsDialog(
+                _audioSettings,
+                _audioEngine?.BeatSource,
+                ToggleSlideshowFromAudioDialog,
+                () => _slideshowRunning);
+            _audioDialog = dlg;
+            dlg.FormClosed += (s, e) =>
+            {
+                try
+                {
+                    if (dlg.DialogResult == DialogResult.OK)
+                    {
+                        ApplyAudioSettings(dlg.Result);
+                        AudioSettingsStore.Save(_audioSettings);
+                    }
+                }
+                finally
+                {
+                    if (ReferenceEquals(_audioDialog, dlg)) _audioDialog = null;
+                    dlg.Dispose();
+                }
+            };
+            dlg.Show(this);
+        }
+
+        private void ToggleSlideshowFromAudioDialog()
+        {
+            if (_slideshowRunning) StopSlideshow();
+            else StartSlideshow();
         }
 
         /// <summary>Restore Enabled state + sync UI checkbox after settings load.</summary>
