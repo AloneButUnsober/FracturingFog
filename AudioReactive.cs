@@ -288,12 +288,10 @@ namespace FracturingFog
             else StartSlideshow();
         }
 
-        /// <summary>Restore Enabled state + sync UI checkbox after settings load.</summary>
+        /// <summary>Restore Enabled state after settings load. UI surface lives in the
+        /// SlideshowSettingsDialog now, so no checkbox needs syncing here.</summary>
         public void InitializeAudioFromDisk()
         {
-            // Reflect loaded Enabled state in the floating menu checkbox without
-            // re-firing CheckedChanged in a way that double-starts the engine.
-            _floatingMenu.SetAudioReactiveChecked(_audioSettings.Enabled);
             if (_audioSettings.Enabled) EnsureAudioEngineStarted();
         }
 

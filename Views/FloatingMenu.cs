@@ -55,9 +55,7 @@ namespace FracturingFog.Views
         private readonly Button _deleteColorThemeButton;
         private readonly Button _loadColorThemesButton;
         private readonly Button _editColorThemeButton;
-        private readonly CheckBox _chkSlideshowUseExtremeRegions;
-        private CheckBox? _chkAudioReactive;
-        private Button? _audioSettingsButton;
+        private Button? _slideshowSettingsButton;
         private readonly Button _saveViewButton;
         private readonly Button _delRegionButton;
         private readonly Button _closeButton;
@@ -131,9 +129,7 @@ namespace FracturingFog.Views
         public event EventHandler OnDelRegionClick;
         public event EventHandler OnExportRegionsClick;
         public event EventHandler OnImportRegionsClick;
-        public event EventHandler OnChangeIncludeExtremeRegionsChange;
-        public event EventHandler<bool>? OnAudioReactiveToggled;
-        public event EventHandler? OnAudioSettingsClick;
+        public event EventHandler? OnSlideshowSettingsClick;
         public event EventHandler OnScreenshotClick;
         public event EventHandler OnVideoClick;
         public event EventHandler OnGridClick;
@@ -220,16 +216,6 @@ namespace FracturingFog.Views
         {
             get { return _colorThemeCombo.Text; }
             set { _colorThemeCombo.Text = value; }
-        }
-
-        /// <summary>Set the Audio-React checkbox state without firing the toggle event.</summary>
-        public void SetAudioReactiveChecked(bool value)
-        {
-            if (_chkAudioReactive == null) return;
-            var handler = OnAudioReactiveToggled;
-            OnAudioReactiveToggled = null;
-            _chkAudioReactive.Checked = value;
-            OnAudioReactiveToggled = handler;
         }
 
         #endregion Public Members
@@ -1116,60 +1102,24 @@ namespace FracturingFog.Views
             //_coordPanel.Controls.Add(_taaFadeEndSlider);
             #endregion Brightness & Contrast sliders
 
-            _chkSlideshowUseExtremeRegions = new CheckBox
+            _slideshowSettingsButton = new Button
             {
-                Text = "Slideshow: Use Extreme Regions",
+                Text = "Slideshow Settings…",
                 Left = 68,
                 Top = sliderTop + 48,
-                AutoSize = true,
-                AutoCheck = true,
-                ForeColor = Color.FromArgb(200, 120, 120),
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                BackColor = Color.Transparent,
-                Checked = false,
-            };
-            _menuPanel.Controls.Add(_chkSlideshowUseExtremeRegions);
-            _chkSlideshowUseExtremeRegions.CheckedChanged += (s, e) =>
-            {
-                FractalRegionLibrary.Instance.IncludeExtremeInAll = _chkSlideshowUseExtremeRegions.Checked;
-            };
-
-            _chkAudioReactive = new CheckBox
-            {
-                Text = "Audio-React Slideshow",
-                Left = 68,
-                Top = sliderTop + 72,
-                AutoSize = true,
-                AutoCheck = true,
-                ForeColor = Color.FromArgb(120, 200, 160),
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                BackColor = Color.Transparent,
-                Checked = false,
-            };
-            _menuPanel.Controls.Add(_chkAudioReactive);
-            _chkAudioReactive.CheckedChanged += (s, e) =>
-                OnAudioReactiveToggled?.Invoke(this, _chkAudioReactive.Checked);
-            _toolTip.SetToolTip(_chkAudioReactive,
-                "Drive theme/region changes from a detected beat in system audio, a file, or fractal-generated audio.");
-
-            _audioSettingsButton = new Button
-            {
-                Text = "Audio…",
-                Left = _chkAudioReactive.Left + _chkAudioReactive.PreferredSize.Width + 8,
-                Top = sliderTop + 70,
-                Width = 60,
-                Height = 22,
+                Width = 180,
+                Height = 24,
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(30, 50, 45),
-                ForeColor = Color.FromArgb(180, 220, 200),
+                BackColor = Color.FromArgb(40, 55, 50),
+                ForeColor = Color.FromArgb(200, 230, 210),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 Cursor = Cursors.Hand,
             };
-            _audioSettingsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 110, 90);
-            _audioSettingsButton.Click += (s, e) => OnAudioSettingsClick?.Invoke(this, EventArgs.Empty);
-            _menuPanel.Controls.Add(_audioSettingsButton);
-            _toolTip.SetToolTip(_audioSettingsButton,
-                "Configure audio source, sensitivity, and beats-per-change.");
+            _slideshowSettingsButton.FlatAppearance.BorderColor = Color.FromArgb(60, 110, 90);
+            _slideshowSettingsButton.Click += (s, e) => OnSlideshowSettingsClick?.Invoke(this, EventArgs.Empty);
+            _menuPanel.Controls.Add(_slideshowSettingsButton);
+            _toolTip.SetToolTip(_slideshowSettingsButton,
+                "Configure slideshow timing, extreme regions, and audio-reactive options.");
 
             #endregion Coordinate / Navigate panel
 
@@ -1367,9 +1317,6 @@ namespace FracturingFog.Views
 
         private void OnQualityComboSelectionChanged(object? s, EventArgs e) =>
             OnQualityComboChanged?.Invoke(s, e);
-
-        private void OnChangeIncludeExtremeRegionsCBChange(object? s, EventArgs e) =>
-            OnChangeIncludeExtremeRegionsChange?.Invoke(s, e);
 
         private void OnScreenshotButtonClick(object? s, EventArgs e) =>
             OnScreenshotClick?.Invoke(s, e);
