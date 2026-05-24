@@ -37,20 +37,28 @@ namespace FracturingFog.Models
 
         protected LightSource KeyLight;
         protected LightSource FillLight;
+        protected LightSource RimLight;
+        protected bool UseRimLight;
 
         protected virtual float Steepness => 1.5f;
         protected virtual float Ambient => 0.12f;
         protected virtual float KeySpecScale => 0.85f;
         protected virtual float FillSpecScale => 0.25f;
         protected virtual float FillDiffScale => 0.35f;
+        protected virtual float RimSpecScale => 1.0f;
+        protected virtual float RimDiffScale => 0.20f;
 
         public LightSource ExportKeyLight => KeyLight;
         public LightSource ExportFillLight => FillLight;
+        public LightSource ExportRimLight => RimLight;
+        public bool ExportUseRimLight => UseRimLight;
         public float ExportSteepness => Steepness;
         public float ExportAmbient => Ambient;
         public float ExportKeySpecScale => KeySpecScale;
         public float ExportFillSpecScale => FillSpecScale;
         public float ExportFillDiffScale => FillDiffScale;
+        public float ExportRimSpecScale => RimSpecScale;
+        public float ExportRimDiffScale => RimDiffScale;
 
         /// <summary>
         /// Subclass supplies the unlit base colour as a [0,1] RGB triple.
@@ -129,6 +137,27 @@ namespace FracturingFog.Models
                 b += sf * FillLight.SpecB;
             }
 
+            // Rim light (optional).
+            if (UseRimLight)
+            {
+                float dr = MathF.Max(0f, Nx * RimLight.Lx + Ny * RimLight.Ly + Nz * RimLight.Lz);
+                r += dr * RimLight.DiffR * aR * RimDiffScale;
+                g += dr * RimLight.DiffG * aG * RimDiffScale;
+                b += dr * RimLight.DiffB * aB * RimDiffScale;
+
+                float hrx = RimLight.Lx, hry = RimLight.Ly, hrz = RimLight.Lz + 1f;
+                float hrl = MathF.Sqrt(hrx * hrx + hry * hry + hrz * hrz);
+                if (hrl > 1e-8f)
+                {
+                    hrx /= hrl; hry /= hrl; hrz /= hrl;
+                    float sr = MathF.Pow(MathF.Max(0f, Nx * hrx + Ny * hry + Nz * hrz),
+                                         RimLight.Shininess) * RimSpecScale;
+                    r += sr * RimLight.SpecR;
+                    g += sr * RimLight.SpecG;
+                    b += sr * RimLight.SpecB;
+                }
+            }
+
             byte R = (byte)(Math.Clamp(r, 0f, 1f) * 255f);
             byte G = (byte)(Math.Clamp(g, 0f, 1f) * 255f);
             byte B = (byte)(Math.Clamp(b, 0f, 1f) * 255f);
@@ -148,6 +177,8 @@ namespace FracturingFog.Models
         protected virtual PbrLightingMode LightingMode => PbrLightingMode.PBRRealistic;
         protected LightSource KeyLight;
         protected LightSource FillLight;
+        protected LightSource RimLight;
+        protected bool UseRimLight;
         protected virtual float Steepness => 1.6f;
         protected virtual float Ambient => 0.05f;
 
@@ -169,6 +200,8 @@ namespace FracturingFog.Models
 
         public LightSource ExportKeyLight => KeyLight;
         public LightSource ExportFillLight => FillLight;
+        public LightSource ExportRimLight => RimLight;
+        public bool ExportUseRimLight => UseRimLight;
         public float ExportSteepness => Steepness;
         public float ExportAmbient => Ambient;
         public PbrLightingMode ExportLightingMode => LightingMode;
@@ -214,6 +247,7 @@ namespace FracturingFog.Models
             float r = 0f, g = 0f, b = 0f;
             AddLight(KeyLight, keyMul, ref r, ref g, ref b);
             AddLight(FillLight, fillMul, ref r, ref g, ref b);
+            if (UseRimLight) AddLight(RimLight, fillMul, ref r, ref g, ref b);
 
             float amb = Ambient * ambMul;
             r += mat.BaseR * amb;

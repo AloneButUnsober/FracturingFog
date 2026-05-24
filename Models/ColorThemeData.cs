@@ -167,11 +167,20 @@ namespace FracturingFog.Models
         public LightSourceData? KeyLight { get; set; }
         public LightSourceData? FillLight { get; set; }
 
+        /// <summary>
+        /// Optional third (rim) light. Null = disabled (backwards-compatible default).
+        /// Intended for back/side accent highlights — typically opposite the key
+        /// with high shininess and low diffuse.
+        /// </summary>
+        public LightSourceData? RimLight { get; set; }
+
         // ── Phong3D extras ────────────────────────────────────────────────────
 
         public float KeySpecScale { get; set; } = 0.85f;
         public float FillSpecScale { get; set; } = 0.25f;
         public float FillDiffScale { get; set; } = 0.35f;
+        public float RimSpecScale { get; set; } = 1.0f;
+        public float RimDiffScale { get; set; } = 0.20f;
 
         // ── PBR extras ────────────────────────────────────────────────────────
 

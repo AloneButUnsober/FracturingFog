@@ -304,6 +304,7 @@ namespace FracturingFog.Models
 
         private readonly float _cycleSpeed, _steepness, _ambient;
         private readonly float _keySpecScale, _fillSpecScale, _fillDiffScale;
+        private readonly float _rimSpecScale, _rimDiffScale;
 
         protected override float CycleSpeed => _cycleSpeed;
         protected override float Steepness => _steepness;
@@ -311,6 +312,8 @@ namespace FracturingFog.Models
         protected override float KeySpecScale => _keySpecScale;
         protected override float FillSpecScale => _fillSpecScale;
         protected override float FillDiffScale => _fillDiffScale;
+        protected override float RimSpecScale => _rimSpecScale;
+        protected override float RimDiffScale => _rimDiffScale;
 
         private readonly uint _inSetColor;
         uint IColorMap.InSetColor => _inSetColor;
@@ -331,6 +334,8 @@ namespace FracturingFog.Models
             _keySpecScale = data.KeySpecScale;
             _fillSpecScale = data.FillSpecScale;
             _fillDiffScale = data.FillDiffScale;
+            _rimSpecScale = data.RimSpecScale;
+            _rimDiffScale = data.RimDiffScale;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
 
             foreach (var s in data.Stops)
@@ -338,6 +343,11 @@ namespace FracturingFog.Models
 
             KeyLight = (data.KeyLight ?? DefaultKey()).ToLightSource();
             FillLight = (data.FillLight ?? DefaultFill()).ToLightSource();
+            if (data.RimLight != null)
+            {
+                RimLight = data.RimLight.ToLightSource();
+                UseRimLight = true;
+            }
         }
 
         private static LightSourceData DefaultKey() => new()
@@ -431,6 +441,11 @@ namespace FracturingFog.Models
 
             KeyLight = (data.KeyLight ?? DefaultKey()).ToLightSource();
             FillLight = (data.FillLight ?? DefaultFill()).ToLightSource();
+            if (data.RimLight != null)
+            {
+                RimLight = data.RimLight.ToLightSource();
+                UseRimLight = true;
+            }
         }
 
         protected override float GlowBoost(float t)

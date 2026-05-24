@@ -48,6 +48,17 @@ namespace FracturingFog.Models
         protected LightSource FillLight;
 
         /// <summary>
+        /// Optional tertiary (rim) light — typically behind/side of the subject
+        /// with high shininess + low diffuse for an accent edge highlight.
+        /// When <see cref="UseRimLight"/> is false the rim block is skipped at
+        /// zero cost so existing themes pay no perf penalty.
+        /// </summary>
+        protected LightSource RimLight;
+
+        /// <summary>True if subclass populated <see cref="RimLight"/>.</summary>
+        protected bool UseRimLight;
+
+        /// <summary>
         /// Controls how many gradient cycles appear per 1/CycleSpeed smooth-units.
         /// Match the value used by the flat counterpart (default 0.02 = cycle
         /// every 50 smooth-units).
@@ -87,16 +98,26 @@ namespace FracturingFog.Models
         /// </summary>
         protected virtual float FillDiffScale => 0.35f;
 
+        /// <summary>Scale factor for the rim specular highlight (default 1.0).</summary>
+        protected virtual float RimSpecScale => 1.0f;
+
+        /// <summary>Scale factor for the rim diffuse contribution (default 0.20).</summary>
+        protected virtual float RimDiffScale => 0.20f;
+
         // ── Export accessors (used by JSON serialisation) ─────────────────────
 
         public LightSource ExportKeyLight => KeyLight;
         public LightSource ExportFillLight => FillLight;
+        public LightSource ExportRimLight => RimLight;
+        public bool ExportUseRimLight => UseRimLight;
         public float ExportCycleSpeed => CycleSpeed;
         public float ExportSteepness => Steepness;
         public float ExportAmbient => Ambient;
         public float ExportKeySpecScale => KeySpecScale;
         public float ExportFillSpecScale => FillSpecScale;
         public float ExportFillDiffScale => FillDiffScale;
+        public float ExportRimSpecScale => RimSpecScale;
+        public float ExportRimDiffScale => RimDiffScale;
 
         // ── Interface routing — declared ONCE for all subclasses ──────────────
         //
@@ -174,6 +195,26 @@ namespace FracturingFog.Models
                 r += sf * FillLight.SpecR;
                 g += sf * FillLight.SpecG;
                 b += sf * FillLight.SpecB;
+            }
+
+            // Rim light (optional — typically back/side accent).
+            if (UseRimLight)
+            {
+                float dr = MathF.Max(0f, Nx*RimLight.Lx + Ny*RimLight.Ly + Nz*RimLight.Lz);
+                r += dr * RimLight.DiffR * aR * RimDiffScale;
+                g += dr * RimLight.DiffG * aG * RimDiffScale;
+                b += dr * RimLight.DiffB * aB * RimDiffScale;
+
+                float hrx = RimLight.Lx, hry = RimLight.Ly, hrz = RimLight.Lz + 1f;
+                float hrl = MathF.Sqrt(hrx*hrx + hry*hry + hrz*hrz);
+                if (hrl > 1e-8f)
+                {
+                    hrx/=hrl; hry/=hrl; hrz/=hrl;
+                    float sr = MathF.Pow(MathF.Max(0f, Nx*hrx+Ny*hry+Nz*hrz), RimLight.Shininess) * RimSpecScale;
+                    r += sr * RimLight.SpecR;
+                    g += sr * RimLight.SpecG;
+                    b += sr * RimLight.SpecB;
+                }
             }
 
             byte R = (byte)(Math.Clamp(r, 0f, 1f) * 255f);
