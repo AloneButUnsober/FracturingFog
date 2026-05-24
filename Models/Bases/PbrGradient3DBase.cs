@@ -243,6 +243,8 @@ namespace FracturingFog.Models
 
         protected LightSource KeyLight;
         protected LightSource FillLight;
+        protected LightSource RimLight;
+        protected bool UseRimLight;
 
         protected virtual float CycleSpeed => 0.02f;
         protected virtual float Steepness => 1.6f;
@@ -280,6 +282,8 @@ namespace FracturingFog.Models
 
         public LightSource ExportKeyLight => KeyLight;
         public LightSource ExportFillLight => FillLight;
+        public LightSource ExportRimLight => RimLight;
+        public bool ExportUseRimLight => UseRimLight;
         public float ExportCycleSpeed => CycleSpeed;
         public float ExportSteepness => Steepness;
         public float ExportAmbient => Ambient;
@@ -361,9 +365,10 @@ namespace FracturingFog.Models
 
             float r = 0f, g = 0f, b = 0f;
 
-            // 4. Direct lights (key + fill)
+            // 4. Direct lights (key + fill + optional rim)
             AddLight(KeyLight, exposure, ref r, ref g, ref b);
             AddLight(FillLight, exposure, ref r, ref g, ref b);
+            if (UseRimLight) AddLight(RimLight, exposure, ref r, ref g, ref b);
 
             // 5. Ambient — diffuse for non-metals, F0-tinted spec for metals.
             float kdAmb = 1f - mat.Metalness;

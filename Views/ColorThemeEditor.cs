@@ -101,10 +101,12 @@ namespace FracturingFog.Views
 
         // 3D shared
         private readonly NumericUpDown _txSteepness, _txAmbient;
-        private readonly LightSourceControl _keyLight, _fillLight;
+        private readonly LightSourceControl _keyLight, _fillLight, _rimLight;
+        private readonly CheckBox _chkUseRim;
 
         // Phong
         private readonly NumericUpDown _txKeySpec, _txFillSpec, _txFillDiff;
+        private readonly NumericUpDown _txRimSpec, _txRimDiff;
 
         // PBR
         private readonly ComboBox _cmbPbrMode;
@@ -524,12 +526,41 @@ namespace FracturingFog.Views
             _fillLight.OnChanged += (s, e) => OnFieldChanged();
             _threeDBox.Controls.Add(_fillLight);
 
-            _threeDBox.Height = _fillLight.Bottom + 12;
+            _chkUseRim = new CheckBox
+            {
+                Text = "Enable Rim Light",
+                Left = 8,
+                Top = _fillLight.Bottom + 6,
+                AutoSize = true,
+                ForeColor = Color.FromArgb(200, 200, 120),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                BackColor = Color.Transparent,
+            };
+            _chkUseRim.CheckedChanged += (s, e) =>
+            {
+                _rimLight.Enabled = _chkUseRim.Checked;
+                _txRimSpec.Enabled = _chkUseRim.Checked;
+                _txRimDiff.Enabled = _chkUseRim.Checked;
+                OnFieldChanged();
+            };
+            _threeDBox.Controls.Add(_chkUseRim);
+
+            _rimLight = new LightSourceControl("Rim Light")
+            {
+                Left = 6,
+                Top = _chkUseRim.Bottom + 4,
+                Width = ColWidth - 14,
+                Enabled = false,
+            };
+            _rimLight.OnChanged += (s, e) => OnFieldChanged();
+            _threeDBox.Controls.Add(_rimLight);
+
+            _threeDBox.Height = _rimLight.Bottom + 12;
 
             rightY = _threeDBox.Bottom + 6;
 
             // ── Phong extras ────────────────────────────────────────────────
-            _phongBox = MakeGroup("Phong3D Extras", RightX, rightY, ColWidth, 110);
+            _phongBox = MakeGroup("Phong3D Extras", RightX, rightY, ColWidth, 170);
             _root.Controls.Add(_phongBox);
 
             AddLabel(_phongBox, "Key spec:", 8, 24);
@@ -546,6 +577,18 @@ namespace FracturingFog.Views
             _txFillDiff = MakeNumeric(90, 78, 0M, 10M, 0.35M, 3);
             _txFillDiff.ValueChanged += (s, e) => OnFieldChanged();
             _phongBox.Controls.Add(_txFillDiff);
+
+            AddLabel(_phongBox, "Rim spec:", 8, 108);
+            _txRimSpec = MakeNumeric(90, 106, 0M, 10M, 1.0M, 3);
+            _txRimSpec.ValueChanged += (s, e) => OnFieldChanged();
+            _txRimSpec.Enabled = false;
+            _phongBox.Controls.Add(_txRimSpec);
+
+            AddLabel(_phongBox, "Rim diff:", 8, 136);
+            _txRimDiff = MakeNumeric(90, 134, 0M, 10M, 0.20M, 3);
+            _txRimDiff.ValueChanged += (s, e) => OnFieldChanged();
+            _txRimDiff.Enabled = false;
+            _phongBox.Controls.Add(_txRimDiff);
 
             rightY = _phongBox.Bottom + 6;
 
@@ -936,10 +979,17 @@ namespace FracturingFog.Views
                 _txAmbient.Value = ClampDec((decimal)data.Ambient, _txAmbient.Minimum, _txAmbient.Maximum);
                 _keyLight.Load(data.KeyLight);
                 _fillLight.Load(data.FillLight);
+                _chkUseRim.Checked = data.RimLight != null;
+                _rimLight.Load(data.RimLight ?? DefaultRim());
+                _rimLight.Enabled = _chkUseRim.Checked;
 
                 _txKeySpec.Value = ClampDec((decimal)data.KeySpecScale, _txKeySpec.Minimum, _txKeySpec.Maximum);
                 _txFillSpec.Value = ClampDec((decimal)data.FillSpecScale, _txFillSpec.Minimum, _txFillSpec.Maximum);
                 _txFillDiff.Value = ClampDec((decimal)data.FillDiffScale, _txFillDiff.Minimum, _txFillDiff.Maximum);
+                _txRimSpec.Value = ClampDec((decimal)data.RimSpecScale, _txRimSpec.Minimum, _txRimSpec.Maximum);
+                _txRimDiff.Value = ClampDec((decimal)data.RimDiffScale, _txRimDiff.Minimum, _txRimDiff.Maximum);
+                _txRimSpec.Enabled = _chkUseRim.Checked;
+                _txRimDiff.Enabled = _chkUseRim.Checked;
 
                 int pbrIdx = _cmbPbrMode.FindStringExact(data.PbrLightingMode.ToString());
                 _cmbPbrMode.SelectedIndex = pbrIdx >= 0 ? pbrIdx : 0;
@@ -999,9 +1049,12 @@ namespace FracturingFog.Views
                 Ambient = (float)_txAmbient.Value,
                 KeyLight = _keyLight.Save(),
                 FillLight = _fillLight.Save(),
+                RimLight = _chkUseRim.Checked ? _rimLight.Save() : null,
                 KeySpecScale = (float)_txKeySpec.Value,
                 FillSpecScale = (float)_txFillSpec.Value,
                 FillDiffScale = (float)_txFillDiff.Value,
+                RimSpecScale = (float)_txRimSpec.Value,
+                RimDiffScale = (float)_txRimDiff.Value,
                 PbrLightingMode = Enum.TryParse<PbrLightingMode>((string?)_cmbPbrMode.SelectedItem ?? "PBRRealistic", out var m) ? m : PbrLightingMode.PBRRealistic,
                 GlowBoostExponent = (float)_txGlowExp.Value,
                 GlowBoostScale = (float)_txGlowScale.Value,
@@ -1023,6 +1076,22 @@ namespace FracturingFog.Views
             if (_rdPbr.Checked) return ColorThemeKind.Pbr3D;
             return ColorThemeKind.Gradient;
         }
+
+        /// <summary>Sensible starting values for a freshly-enabled rim light
+        /// (back/side accent, high shininess, low diffuse, white specular).</summary>
+        private static LightSourceData DefaultRim() => new()
+        {
+            Lx = 0.5f,
+            Ly = -0.7f,
+            Lz = 0.3f,
+            DiffR = 0.3f,
+            DiffG = 0.3f,
+            DiffB = 0.3f,
+            SpecR = 1f,
+            SpecG = 1f,
+            SpecB = 1f,
+            Shininess = 128f,
+        };
 
         private void UpdateVisibleKindSections()
         {
@@ -1269,6 +1338,11 @@ namespace FracturingFog.Views
             {
                 if (data.KeyLight != null) AppendLight(sb, "KeyLight", data.KeyLight);
                 if (data.FillLight != null) AppendLight(sb, "FillLight", data.FillLight);
+                if (data.RimLight != null)
+                {
+                    AppendLight(sb, "RimLight", data.RimLight);
+                    sb.AppendLine("            UseRimLight = true;");
+                }
             }
             sb.AppendLine("        }");
 
