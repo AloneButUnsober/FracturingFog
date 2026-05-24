@@ -1635,7 +1635,7 @@ public sealed partial class MainForm : Form
             FractalType.Mandelbulb => (0.0, 0.0, 1.0),
             FractalType.Sandbox => (0.0, 0.0, 1.0),
             FractalType.UserBulb => (0.0, 0.0, 1.0),
-            FractalType.TearDrop => (0.0, 0.0, 1.0),
+            FractalType.TearDrop => (0.0, 0.0, 0.16),
             _ => (-0.5, 0.0, 1.0)
         };
         _centerXLo = _centerX2 = _centerX3 = 0.0;
@@ -1649,6 +1649,7 @@ public sealed partial class MainForm : Form
 
         ApplyViewState();
         TriggerCalculation();
+        _miniMapPanel?.RequestRedraw();
     }
 
     /// <summary>
@@ -1745,6 +1746,7 @@ public sealed partial class MainForm : Form
                 _lastUploadedBuffer = null;
                 TriggerCalculation();
             }
+            _miniMapPanel?.RequestRedraw();
         };
         dlg.FormClosed += (_, _) => { _paramsDialog = null; };
         _paramsDialog = dlg;
@@ -2741,7 +2743,9 @@ public sealed partial class MainForm : Form
                     ApplyViewState();
                     TriggerCalculation();
                 },
-                getSwatchColor: GetSwatchColor);
+                getSwatchColor: GetSwatchColor,
+                getFractalType: () => _currentFractalType,
+                getFractalParams: () => _fractalParams);
 
             _miniMapPanel.Left = _renderPanel.ClientSize.Width - _miniMapPanel.Width - 4;
             _miniMapPanel.Top = _renderPanel.ClientSize.Height - _miniMapPanel.Height - 4;
