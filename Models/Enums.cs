@@ -21,7 +21,8 @@ namespace FracturingFog
         UserEquation,
         Mandelbulb,
         Sandbox,
-        UserBulb
+        UserBulb,
+        TearDrop
     }
 
     public enum RenderProfile { Preview, Final }

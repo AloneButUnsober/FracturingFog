@@ -179,6 +179,39 @@ namespace FracturingFog.FFMath
             return new DD(r1, r2);
         }
 
+        /// <summary>DD / DD — Hida-Li-Bailey three-step long division.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD operator /(DD a, DD b)
+        {
+            // q1 ≈ a / b at double precision.
+            double q1 = a.Hi / b.Hi;
+            // r = a - q1·b  (DD residual)
+            DD r = a - b * q1;
+            double q2 = r.Hi / b.Hi;
+            // r' = r - q2·b
+            r = r - b * q2;
+            double q3 = r.Hi / b.Hi;
+            // Renormalise q1 + q2 + q3 into a DD.
+            var (s1, s2) = QuickTwoSum(q1, q2);
+            s2 += q3;
+            var (rr1, rr2) = QuickTwoSum(s1, s2);
+            return new DD(rr1, rr2);
+        }
+
+        /// <summary>DD / double.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static DD operator /(DD a, double b)
+        {
+            double q1 = a.Hi / b;
+            // r = a - q1·b (exact via TwoProduct on q1*b).
+            var (p, e) = TwoProduct(q1, b);
+            var (s, t) = TwoSum(a.Hi, -p);
+            t += a.Lo - e;
+            double q2 = (s + t) / b;
+            var (r1, r2) = QuickTwoSum(q1, q2);
+            return new DD(r1, r2);
+        }
+
         // ── Comparison ────────────────────────────────────────────────────────
         //
         // For the Mandelbrot escape check |z|² ≥ R², comparing the Hi word is
