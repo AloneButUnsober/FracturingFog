@@ -538,16 +538,17 @@ namespace FracturingFog.Views
             Controls.Add(_regionCombo);
 
             // ── Target coordinates ────────────────────────────────────────────
+            // CX/CY are displayed as a single decimal/scientific string that
+            // collapses all four QD limbs into one number. Paste accepts either
+            // the single-string form or the legacy pipe-delimited "Hi|Lo|X2|X3".
             Controls.Add(MkLabel("Target CX:", 8, 50));
             _txCX = MkTx(104, 47);
-            _txCX.Text = currentCX.ToString("R", CultureInfo.InvariantCulture);
-            _txCX.TextChanged += TxCXChangedClearLimbs;
+            _txCX.Text = FormHelpers.FormatCoordSingle(currentCX, 0, 0, 0);
             Controls.Add(_txCX);
 
             Controls.Add(MkLabel("Target CY:", 8, 80));
             _txCY = MkTx(104, 77);
-            _txCY.Text = currentCY.ToString("R", CultureInfo.InvariantCulture);
-            _txCY.TextChanged += TxCYChangedClearLimbs;
+            _txCY.Text = FormHelpers.FormatCoordSingle(currentCY, 0, 0, 0);
             Controls.Add(_txCY);
 
             Controls.Add(MkLabel("Target Zoom:", 8, 110));
@@ -981,8 +982,8 @@ namespace FracturingFog.Views
         {
             var ic = CultureInfo.InvariantCulture;
             var ns = NumberStyles.Float;
-            bool okCX = double.TryParse(_txCX.Text.Trim(), ns, ic, out cx);
-            bool okCY = double.TryParse(_txCY.Text.Trim(), ns, ic, out cy);
+            bool okCX = FormHelpers.TryParseCoordAny(_txCX.Text, out cx, out _, out _, out _);
+            bool okCY = FormHelpers.TryParseCoordAny(_txCY.Text, out cy, out _, out _, out _);
             bool okZ = double.TryParse(_txZoom.Text.Trim(), ns, ic, out zoom);
             bool okS = TryGetSeconds(out seconds);
             return okCX && okCY && okZ && zoom > 0 && okS;
@@ -994,11 +995,30 @@ namespace FracturingFog.Views
             out double cyHi, out double cyLo, out double cy2, out double cy3,
             out double zoom, out double seconds)
         {
-            cxLo = _targetCXLo; cx2 = _targetCX2; cx3 = _targetCX3;
-            cyLo = _targetCYLo; cy2 = _targetCY2; cy3 = _targetCY3;
-            if (!TryGetTarget(out cxHi, out cyHi, out zoom, out seconds))
+            // Reparse the textbox each time so that user-pasted single-string or
+            // pipe-delimited QD values are honoured even when no region was
+            // picked from the combo. Fall back to the cached region limbs only
+            // when the textbox parse yields a single-limb (Hi-only) value.
+            bool okCX = FormHelpers.TryParseCoordAny(_txCX.Text,
+                out cxHi, out cxLo, out cx2, out cx3);
+            bool okCY = FormHelpers.TryParseCoordAny(_txCY.Text,
+                out cyHi, out cyLo, out cy2, out cy3);
+
+            // If the textbox is just the Hi limb (typed by hand or from a
+            // shallow region), the parser yields zeros for Lo/X2/X3 — fold the
+            // cached region limbs back in so deep targets keep their precision.
+            if (okCX && cxLo == 0 && cx2 == 0 && cx3 == 0)
+            { cxLo = _targetCXLo; cx2 = _targetCX2; cx3 = _targetCX3; }
+            if (okCY && cyLo == 0 && cy2 == 0 && cy3 == 0)
+            { cyLo = _targetCYLo; cy2 = _targetCY2; cy3 = _targetCY3; }
+
+            var ic = CultureInfo.InvariantCulture;
+            var ns = NumberStyles.Float;
+            bool okZ = double.TryParse(_txZoom.Text.Trim(), ns, ic, out zoom);
+            bool okS = TryGetSeconds(out seconds);
+            if (!okCX || !okCY || !okZ || zoom <= 0 || !okS)
             {
-                cxHi = cyHi = zoom = seconds = 0;
+                cxHi = cxLo = cx2 = cx3 = cyHi = cyLo = cy2 = cy3 = zoom = seconds = 0;
                 return false;
             }
             return true;
@@ -1039,8 +1059,9 @@ namespace FracturingFog.Views
             }
 
             var ic = CultureInfo.InvariantCulture;
-            // Capture extended-precision limbs first, then set Hi via the
-            // textbox — the TextChanged handler would otherwise clear them.
+            // Cache limbs for the legacy TryGetTargetQD fallback path. The
+            // textbox itself carries the full QD value as a single-string
+            // digest, so paste-back reparses to the same four-limb tuple.
             _targetCXLo = region.CenterXLo;
             _targetCX2 = region.CenterX2;
             _targetCX3 = region.CenterX3;
@@ -1048,12 +1069,10 @@ namespace FracturingFog.Views
             _targetCY2 = region.CenterY2;
             _targetCY3 = region.CenterY3;
 
-            _txCX.TextChanged -= TxCXChangedClearLimbs;
-            _txCY.TextChanged -= TxCYChangedClearLimbs;
-            _txCX.Text = region.CenterX.ToString("R", ic);
-            _txCY.Text = region.CenterY.ToString("R", ic);
-            _txCX.TextChanged += TxCXChangedClearLimbs;
-            _txCY.TextChanged += TxCYChangedClearLimbs;
+            _txCX.Text = FormHelpers.FormatCoordSingle(
+                region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+            _txCY.Text = FormHelpers.FormatCoordSingle(
+                region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
 
             double z = region.Zoom;
             double cap = QualityPreset.Ultra.ZoomMax;
@@ -1063,10 +1082,5 @@ namespace FracturingFog.Views
             TargetIterations = region.Iterations;
         }
 
-        private void TxCXChangedClearLimbs(object? s, EventArgs e)
-        { _targetCXLo = _targetCX2 = _targetCX3 = 0.0; TargetIterations = 0; }
-
-        private void TxCYChangedClearLimbs(object? s, EventArgs e)
-        { _targetCYLo = _targetCY2 = _targetCY3 = 0.0; TargetIterations = 0; }
     }
 }

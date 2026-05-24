@@ -1444,7 +1444,7 @@ public sealed partial class MainForm : Form
         if (_floatingMenu != null &&
             !_floatingMenu.IsDisposed)
         {
-            _floatingMenu.CY = FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3);
+            _floatingMenu.CY = FormatCoordSingle(_centerY, _centerYLo, _centerY2, _centerY3);
         }
 
         OnGoClick(sender, e);
@@ -2854,11 +2854,11 @@ public sealed partial class MainForm : Form
         if (_floatingMenu != null &&
             !_floatingMenu.IsDisposed)
         {
-            // CX/CY may be plain decimals or pipe-separated QD format; validate Hi part only.
-            string cxHi = _floatingMenu.CX.Trim().Split('|')[0].Trim();
-            string cyHi = _floatingMenu.CY.Trim().Split('|')[0].Trim();
-            return double.TryParse(cxHi, ns, ic, out cx)
-                && double.TryParse(cyHi, ns, ic, out cy)
+            // CX/CY may be pipe-separated QD format, a single decimal/scientific
+            // QD digest, or a plain decimal. Parse all forms and validate the Hi limb.
+            bool okCx = FormHelpers.TryParseCoordAny(_floatingMenu.CX, out cx, out _, out _, out _);
+            bool okCy = FormHelpers.TryParseCoordAny(_floatingMenu.CY, out cy, out _, out _, out _);
+            return okCx && okCy
                 && double.TryParse(_floatingMenu.ZoomString.Trim(), ns, ic, out zoom) && zoom > 0
                 && int.TryParse(_floatingMenu.Iter.Trim(), out iter) && iter >= 64;
 
@@ -3927,21 +3927,13 @@ public sealed partial class MainForm : Form
 
 
 
-    // Parses a coordinate string: either a plain decimal or a pipe-separated
-    // "Hi|Lo|X2|X3" produced by FormatCoord. Returns false if Hi fails to parse.
+    // Parses a coordinate string: accepts either a pipe-separated
+    // "Hi|Lo|X2|X3" (native FormatCoord output) or a single decimal/scientific
+    // string (FormatCoordSingle output, used by the on-screen textboxes).
+    // Returns false if the input cannot be parsed in either form.
     private static bool TryParseQDCoord(string text,
         out double hi, out double lo, out double x2, out double x3)
-    {
-        hi = lo = x2 = x3 = 0.0;
-        var ic = System.Globalization.CultureInfo.InvariantCulture;
-        var ns = System.Globalization.NumberStyles.Float;
-        var parts = text.Trim().Split('|');
-        if (!double.TryParse(parts[0].Trim(), ns, ic, out hi)) return false;
-        if (parts.Length > 1 && !double.TryParse(parts[1].Trim(), ns, ic, out lo)) return false;
-        if (parts.Length > 2 && !double.TryParse(parts[2].Trim(), ns, ic, out x2)) return false;
-        if (parts.Length > 3 && !double.TryParse(parts[3].Trim(), ns, ic, out x3)) return false;
-        return true;
-    }
+        => FormHelpers.TryParseCoordAny(text, out hi, out lo, out x2, out x3);
 
     private void UpdateCoordBoxes()
     {
@@ -3952,8 +3944,8 @@ public sealed partial class MainForm : Form
             if (_calculator != null && _floatingMenu != null)
             {
                 _floatingMenu.UpdateCoordBoxes(
-                FormatCoord(_centerX, _centerXLo, _centerX2, _centerX3),
-                FormatCoord(_centerY, _centerYLo, _centerY2, _centerY3),
+                FormatCoordSingle(_centerX, _centerXLo, _centerX2, _centerX3),
+                FormatCoordSingle(_centerY, _centerYLo, _centerY2, _centerY3),
                 _zoom.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
                 _calculator.MaxIterations.ToString());
 

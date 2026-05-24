@@ -42,6 +42,7 @@ namespace FracturingFog.Views
         private readonly CheckBox _chkLockIter;
         private readonly Button _goButton;
         private readonly Button _flipButton;
+        private readonly Button _copyCoordsButton;
         private readonly Button _exportRegionsButton;
         private readonly Button _importRegionsButton;
         private Label? _currentRegionLabel;
@@ -738,6 +739,27 @@ namespace FracturingFog.Views
             _flipButton.Click += (s, e) => OnFlipButtonClick(s, e);
             navigationGrpBox.Controls.Add(_flipButton);
 
+            // Copy button — dumps CX/CY/Zoom/Iterations to the clipboard in a
+            // human-readable, line-per-field layout for easy sharing/paste-back.
+            _copyCoordsButton = new Button
+            {
+                Text = "Copy",
+                Width = 54,
+                Height = 26,
+                Left = _flipButton.Left + _flipButton.Width + 4,
+                Top = buttonTop,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 80, 40),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+            };
+            _copyCoordsButton.FlatAppearance.BorderColor = Color.FromArgb(70, 120, 70);
+            _toolTip.SetToolTip(_copyCoordsButton,
+                "Copy CX / CY / Zoom / Iterations to the clipboard");
+            _copyCoordsButton.Click += (s, e) => OnCopyCoordsClick();
+            navigationGrpBox.Controls.Add(_copyCoordsButton);
+
             #endregion Navigation Group Box
 
             #region Color Theme Import/Export buttons
@@ -1148,6 +1170,30 @@ namespace FracturingFog.Views
 
         private void OnFlipButtonClick(object? s, EventArgs e) =>
             OnFlipClick?.Invoke(s, e);
+
+        /// <summary>
+        /// Copies the current CX / CY / Zoom / Iterations textbox values to the
+        /// clipboard as four labelled lines. The CX/CY values are emitted in
+        /// whatever form the textboxes currently display (single-string by
+        /// default; pipe-delimited if the user pasted that form unchanged).
+        /// </summary>
+        private void OnCopyCoordsClick()
+        {
+            try
+            {
+                string text =
+                    $"CX: {_txCX.Text}\r\n" +
+                    $"CY: {_txCY.Text}\r\n" +
+                    $"Zoom: {_txZoom.Text}\r\n" +
+                    $"Iterations: {_txIter.Text}\r\n";
+                Clipboard.SetText(text);
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                // Clipboard contention with another process — silently ignore;
+                // user can simply click Copy again.
+            }
+        }
 
         private void OnResetButtonClick(object? s, EventArgs e) =>
             OnResetClick?.Invoke(s, e);
