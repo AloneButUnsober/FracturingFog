@@ -1,3 +1,12 @@
+// SlideshowSettings.cs
+//
+// Plain DTO consumed by both the legacy WinForms SlideshowSettingsDialog
+// and the new Avalonia SlideshowSettingsView. Lives in the shared
+// FracturingFog.Abstractions assembly so the Avalonia shell (which cannot
+// reference the WinExe) can bind to it without duplication. The namespace
+// stays FracturingFog.Models so existing WinForms consumers compile
+// untouched after the file moved out of the WinExe project.
+
 namespace FracturingFog.Models
 {
     /// <summary>User-tunable slideshow timing + master toggles. Persisted via SlideshowSettingsStore.</summary>

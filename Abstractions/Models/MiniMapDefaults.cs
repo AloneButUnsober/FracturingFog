@@ -7,11 +7,14 @@
 // Zoom convention matches IFractalCalculator: scale = (3.5/maxDim) / Zoom.
 // So at MapW=220, Zoom=1.5 → ~2.33-unit horizontal span.
 
-using FracturingFog.Models;
+// Namespace moved into FracturingFog.Models when promoted to the shared
+// Abstractions assembly so both the Avalonia MiniMapControl and the legacy
+// WinForms MiniMapPanel can pull defaults from one source of truth.
+// Visibility changed from internal → public for the same reason.
 
-namespace FracturingFog.Views;
+namespace FracturingFog.Models;
 
-internal static class MiniMapDefaults
+public static class MiniMapDefaults
 {
     public readonly record struct ViewBounds(double CenterX, double CenterY, double Zoom);
 

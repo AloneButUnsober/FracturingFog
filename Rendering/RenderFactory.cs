@@ -5,6 +5,7 @@
 // initialisation fails for any reason.
 
 using System;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog;
 
@@ -34,6 +35,52 @@ public static class RendererFactory
         }
 
         return new DirectXRenderer(hwnd, width, height);
+    }
+
+    /// <summary>
+    /// Phase 2 surface-aware overload. Accepts an <see cref="IGpuSurface"/> from
+    /// whichever shell hosts the renderer (WinForms control wrapper today,
+    /// Avalonia <c>NativeControlHost</c> in the new shell) and subscribes the
+    /// renderer to the surface's Resized / HandleLost events so the swap chain
+    /// follows DPI and window-size changes automatically.
+    ///
+    /// Only <see cref="GpuSurfaceKind.Win32Hwnd"/> is supported today — the
+    /// DirectX 11/12 backends require an HWND. Non-Windows surface kinds will
+    /// be served by future Skia / Vulkan / Metal backends once those projects
+    /// land (see Phase 2.4 in PHASE2_AVALONIA_MIGRATION.md).
+    /// </summary>
+    public static IFractalRenderer Create(IGpuSurface surface, bool force_D3D11 = false)
+    {
+        ArgumentNullException.ThrowIfNull(surface);
+
+        if (surface.Kind != GpuSurfaceKind.Win32Hwnd)
+            throw new PlatformNotSupportedException(
+                $"DirectX renderer requires a Win32 HWND surface; got {surface.Kind}. " +
+                "Run on Windows or wait for the Skia/Vulkan backend (Phase 2.4).");
+
+        if (surface.Handle == IntPtr.Zero)
+            throw new InvalidOperationException(
+                "IGpuSurface.Handle is null — the native control has not been created yet. " +
+                "Subscribe to GpuSurfaceControl.SurfaceReady before calling Create.");
+
+        // Surfaces start out at the control's logical size before the first
+        // layout pass. Clamp to >=1 so swap chain creation does not fail with
+        // an invalid description; the first Resized event will correct the size.
+        int w = System.Math.Max(1, surface.PixelWidth);
+        int h = System.Math.Max(1, surface.PixelHeight);
+
+        IFractalRenderer renderer = Create(surface.Handle, w, h, force_D3D11);
+
+        // Wire the surface's lifecycle to the renderer. The surface owns the
+        // native handle so it is responsible for telling the renderer when the
+        // backing window resizes or disappears.
+        surface.Resized += (_, _) =>
+            renderer.Resize(System.Math.Max(1, surface.PixelWidth),
+                            System.Math.Max(1, surface.PixelHeight));
+
+        surface.HandleLost += (_, _) => renderer.Dispose();
+
+        return renderer;
     }
 
     /// <summary>

@@ -66,27 +66,31 @@ FracturingFog.Legacy.WinForms (net10.0-windows, deletable when port complete)
 - WinExe also `Remove`s `Compile`/`None`/`EmbeddedResource`/`Content` under `Abstractions\**` and `UI.Avalonia\**` to stop the implicit SDK glob from compiling sibling-project sources into the WinExe twice.
 
 ### 2.1 — Renderer abstraction
-- [ ] Move `Rendering/DirectXRenderer.cs` + `DirectX12Renderer.cs` into `FracturingFog.Rendering.D3D` project
-- [ ] `HwndGpuSurface : IGpuSurface` wraps current HWND-based init
-- [ ] `RenderFactory` returns surface-aware renderer
-- [ ] Verify existing WinForms `MainForm` still runs unchanged after move
-- [ ] Verify Avalonia shell can render same fractal (proof-of-life)
+- [ ] Move `Rendering/DirectXRenderer.cs` + `DirectX12Renderer.cs` into `FracturingFog.Rendering.D3D` project (deferred — not required for proof of life; will move when WinForms shell is retired in step 2.3)
+- [ ] `HwndGpuSurface : IGpuSurface` wraps current HWND-based init (deferred — only needed once the WinForms shell also speaks IGpuSurface; the legacy MainForm still uses raw HWND directly)
+- [x] `RendererFactory` returns surface-aware renderer via `Create(IGpuSurface)` overload that validates surface kind, clamps size, and wires Resized / HandleLost
+- [x] WinForms `MainForm` path untouched — legacy HWND-based `Create(IntPtr, int, int)` overload preserved; full solution builds green
+- [x] Avalonia shell renders animated test pattern through the live DX renderer (`AvaloniaBootstrap.cs` in WinExe; `AvaloniaShell.OnSurfaceReady` hook in UI.Avalonia keeps the shell renderer-agnostic). Real fractal output arrives with the calculator wiring in step 2.3.
 
 ### 2.2 — Dialog ports (incremental, one PR per dialog)
-Priority order (simplest → most coupled):
-- [ ] `FloatingHelp.axaml`
-- [ ] `AudioSettingsDialog.axaml`
-- [ ] `SlideshowSettingsDialog.axaml`
-- [ ] `FractalParamsDialog.axaml`
-- [ ] `ImagePaletteDialog.axaml`
-- [ ] `SandboxDialog.axaml`
-- [ ] `UserEquationDialog.axaml`
-- [ ] `UserBulbDialog.axaml`
-- [ ] `ColorThemeEditor.axaml` (largest)
-- [ ] `FloatingMenu.axaml` (largest, deepest coupling)
-- [ ] `MiniMapPanel` → `MiniMapControl.axaml`
-- [ ] `SlideshowVcrPanel` → `SlideshowVcrControl.axaml`
-- [ ] `MiniDepthPanel` → `MiniDepthControl.axaml`
+Priority order is now by **line count ascending** (re-ordered after measuring the WinForms files — `FloatingHelp.cs` is 3,431 lines of static help text and not the easiest target despite being a "help" dialog).
+
+- [x] `SlideshowSettingsView.axaml` (was `SlideshowSettingsDialog.cs`, 223 lines)
+- [x] `MiniDepthControl.axaml` (was `MiniDepthPanel.cs`, 307 lines)
+- [x] `FractalParamsView.axaml` (was `FractalParamsDialog.cs`, 349 lines)
+- [x] `UserEquationView.axaml` (was `UserEquationDialog.cs`, 435 lines)
+- [x] `AudioSettingsView.axaml` (was `AudioSettingsDialog.cs`, 437 lines)
+- [x] `SandboxView.axaml` (was `SandboxDialog.cs`, 483 lines)
+- [x] `MiniMapControl.axaml` (was `MiniMapPanel.cs`, 512 lines — render-only Avalonia control consuming host-supplied thumbnail bitmaps; bg calculator pipeline stays in main project)
+- [ ] `ImagePaletteView.axaml` (801 lines)
+- [ ] `UserBulbView.axaml` (1,203 lines)
+- [ ] `ColorThemeEditorView.axaml` (1,448 lines)
+- [ ] `FloatingMenuView.axaml` (1,541 lines, deepest coupling — port last)
+- [ ] `FloatingHelpView.axaml` (3,431 lines of mostly static markup — separate effort; consider XAML resource files for the help text)
+- [x] `SlideshowVcrControl.axaml` (was `SlideshowVcrPanel.cs`, 152 lines)
+- [x] `MiniMapDefaults` moved to Abstractions (66 lines; namespace now `FracturingFog.Models`, visibility `public` for cross-shell use)
+
+Models migrate to the shared `FracturingFog.Abstractions` assembly **as each dialog needs them** (namespace stays `FracturingFog.Models` so legacy WinForms code compiles untouched). Done so far: `SlideshowSettings`, `FractalParameters` + `AffineMap` + `UserBulbParam` + `UserBulbChainStep` + `Enums.cs` (`FractalType`, `QualityLevel`, `RenderProfile`).
 
 Each port:
 1. Extract view-model class from current code-behind (commands, observable props).
