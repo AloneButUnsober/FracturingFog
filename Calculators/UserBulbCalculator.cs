@@ -26,12 +26,12 @@
 // geometrically correct for highly non-conformal maps where the Lipschitz
 // proxy would over- or under-estimate.
 //
-// Surface normals are central differences on DE field — three extra raymarch
-// DE evaluations per shaded pixel (Mandelbulb-style), matching the existing
-// MandelbulbCalculator visual.
+// Surface normals are forward differences on DE field (3 extra probes per
+// shaded pixel; base value reused from raymarch hit).
 
 using System;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -116,7 +116,29 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 return;
             }
             var result = script.RunAsync().GetAwaiter().GetResult();
-            _compiled = result.ReturnValue;
+            var fn = result.ReturnValue;
+
+            // Smoke test: invoke once with finite inputs; reject if it throws
+            // or returns non-finite components. Lets the raymarch inner loop
+            // drop its try/catch.
+            try
+            {
+                var probe = fn(Vec3.Zero, new Vec3(0.5, 0.5, 0.5), 0);
+                if (!double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
+                {
+                    LastError = "Step function returned non-finite components on probe input.";
+                    _compiled = null;
+                    return;
+                }
+            }
+            catch (Exception probeEx)
+            {
+                LastError = $"Step function threw on probe: {probeEx.Message}";
+                _compiled = null;
+                return;
+            }
+
+            _compiled = fn;
             _compiledSource = source;
             LastError = string.Empty;
         }
@@ -152,10 +174,6 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         }
 
         var fn = _compiled;
-        System.Diagnostics.Debug.WriteLine(
-            $"[UserBulb] Calculate W={Width} H={Height} compiled={fn != null} " +
-            $"srcLen={(FractalParameters.UserBulbSource ?? string.Empty).Length} " +
-            $"lastError='{LastError}'");
         if (fn == null)
         {
             Array.Clear(ColorBuffer);
@@ -172,6 +190,8 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         double eps = Math.Max(1e-5, FractalParameters.UserBulbEpsilon);
         double bailout = Math.Max(1.0, FractalParameters.UserBulbBailout);
         double jacH = Math.Max(1e-8, FractalParameters.UserBulbJacobianH);
+        double cullRadius = Math.Max(0.1, FractalParameters.UserBulbCullRadius);
+        double cullRadiusSq = cullRadius * cullRadius;
 
         double camDist = FractalParameters.UserBulbCameraDistance / Math.Max(0.05, Zoom);
         double camTheta = FractalParameters.UserBulbCameraTheta;
@@ -190,31 +210,25 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         double camY = targetY + camDist * Math.Cos(camPhi);
         double camZ = targetZ + camDist * Math.Sin(camPhi) * Math.Sin(camTheta);
 
-        double[] fwd = Normalize3(targetX - camX, targetY - camY, targetZ - camZ);
-        double[] worldUp = { 0, 1, 0 };
-        double[] right = Normalize3(
-            fwd[1] * worldUp[2] - fwd[2] * worldUp[1],
-            fwd[2] * worldUp[0] - fwd[0] * worldUp[2],
-            fwd[0] * worldUp[1] - fwd[1] * worldUp[0]);
-        double[] up = {
-            right[1] * fwd[2] - right[2] * fwd[1],
-            right[2] * fwd[0] - right[0] * fwd[2],
-            right[0] * fwd[1] - right[1] * fwd[0],
-        };
+        var fwd = Normalize3(targetX - camX, targetY - camY, targetZ - camZ);
+        const double worldUpX = 0, worldUpY = 1, worldUpZ = 0;
+        var right = Normalize3(
+            fwd.Y * worldUpZ - fwd.Z * worldUpY,
+            fwd.Z * worldUpX - fwd.X * worldUpZ,
+            fwd.X * worldUpY - fwd.Y * worldUpX);
+        var up = (
+            X: right.Y * fwd.Z - right.Z * fwd.Y,
+            Y: right.Z * fwd.X - right.X * fwd.Z,
+            Z: right.X * fwd.Y - right.Y * fwd.X);
 
         double aspect = (double)width / height;
         double fovScale = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
 
-        // Pan now handled by camera orbit target above — ray u/v stays
-        // centered on (0,0) in NDC.
-
-        double[] light = Normalize3(
+        var light = Normalize3(
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Cos(FractalParameters.UserBulbLightTheta),
             Math.Cos(FractalParameters.UserBulbLightPhi),
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Sin(FractalParameters.UserBulbLightTheta));
 
-        int hits = 0;
-        int total = 0;
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -222,49 +236,76 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
-                System.Threading.Interlocked.Increment(ref total);
                 double u = (2.0 * (x + 0.5) / width - 1.0) * fovScale * aspect;
-                double rdx = right[0] * u + up[0] * v + fwd[0];
-                double rdy = right[1] * u + up[1] * v + fwd[1];
-                double rdz = right[2] * u + up[2] * v + fwd[2];
+                double rdx = right.X * u + up.X * v + fwd.X;
+                double rdy = right.Y * u + up.Y * v + fwd.Y;
+                double rdz = right.Z * u + up.Z * v + fwd.Z;
                 var dn = Normalize3(rdx, rdy, rdz);
-                rdx = dn[0]; rdy = dn[1]; rdz = dn[2];
+                rdx = dn.X; rdy = dn.Y; rdz = dn.Z;
 
-                double px = camX, py = camY, pz = camZ;
-                double tTotal = 0;
+                // Bounding sphere clip: ray vs sphere centered on target,
+                // radius = cullRadius. Skip raymarch entirely if miss.
+                double ocx = camX - targetX;
+                double ocy = camY - targetY;
+                double ocz = camZ - targetZ;
+                double bSphere = ocx * rdx + ocy * rdy + ocz * rdz;
+                double cSphere = ocx * ocx + ocy * ocy + ocz * ocz - cullRadiusSq;
+                double discSphere = bSphere * bSphere - cSphere;
+                int idx = rowBase + x;
+                if (discSphere < 0)
+                {
+                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    continue;
+                }
+                double sqrtDisc = Math.Sqrt(discSphere);
+                double tEnter = -bSphere - sqrtDisc;
+                double tExit = -bSphere + sqrtDisc;
+                if (tExit < 0)
+                {
+                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    continue;
+                }
+                double tStart = Math.Max(0.0, tEnter);
+
+                double px = camX + rdx * tStart;
+                double py = camY + rdy * tStart;
+                double pz = camZ + rdz * tStart;
+                double tTotal = tStart;
                 bool hit = false;
                 int hitStep = 0;
+                double hitDist = 0.0;
 
                 for (int step = 0; step < maxSteps; step++)
                 {
                     if (ct.IsCancellationRequested) return;
-                    double dist = UserBulbDE(fn, px, py, pz, deIter, bailout, jacH, out _);
+                    double dist = UserBulbDE(fn, px, py, pz, deIter, bailout, jacH);
                     if (dist < eps)
                     {
                         hit = true;
                         hitStep = step;
+                        hitDist = dist;
                         break;
                     }
-                    if (tTotal > 12.0) break;
+                    if (tTotal > tExit + 1.0) break;
                     px += rdx * dist; py += rdy * dist; pz += rdz * dist;
                     tTotal += dist;
                 }
 
-                int idx = rowBase + x;
                 if (!hit)
                 {
                     ColorBuffer[idx] = ColorMap.InSetColor;
                     continue;
                 }
-                System.Threading.Interlocked.Increment(ref hits);
 
+                // Forward-diff normals: reuse hitDist as f(p), 3 extra probes.
                 double h = eps * 2;
-                double n0 = UserBulbDE(fn, px + h, py, pz, deIter, bailout, jacH, out _) - UserBulbDE(fn, px - h, py, pz, deIter, bailout, jacH, out _);
-                double n1 = UserBulbDE(fn, px, py + h, pz, deIter, bailout, jacH, out _) - UserBulbDE(fn, px, py - h, pz, deIter, bailout, jacH, out _);
-                double n2 = UserBulbDE(fn, px, py, pz + h, deIter, bailout, jacH, out _) - UserBulbDE(fn, px, py, pz - h, deIter, bailout, jacH, out _);
+                double invH = 1.0 / h;
+                double n0 = (UserBulbDE(fn, px + h, py, pz, deIter, bailout, jacH) - hitDist) * invH;
+                double n1 = (UserBulbDE(fn, px, py + h, pz, deIter, bailout, jacH) - hitDist) * invH;
+                double n2 = (UserBulbDE(fn, px, py, pz + h, deIter, bailout, jacH) - hitDist) * invH;
                 var nrm = Normalize3(n0, n1, n2);
 
-                double diffuse = Math.Max(0.0, nrm[0] * light[0] + nrm[1] * light[1] + nrm[2] * light[2]);
+                double diffuse = Math.Max(0.0, nrm.X * light.X + nrm.Y * light.Y + nrm.Z * light.Z);
                 double ambient = 0.15;
                 double shade = ambient + diffuse * (1.0 - ambient);
 
@@ -273,15 +314,13 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
                 // need a varying scalar across surface).
                 float smooth = (float)hitStep * (256f / Math.Max(1, maxSteps))
                              + (float)(tTotal * 4.0);
-                uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
+                uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm.X, (float)nrm.Y);
                 byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);
                 byte G = (byte)Math.Clamp(((baseColor >> 8) & 0xFF) * shade, 0, 255);
                 byte B = (byte)Math.Clamp((baseColor & 0xFF) * shade, 0, 255);
                 ColorBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
             }
         });
-        System.Diagnostics.Debug.WriteLine(
-            $"[UserBulb] done hits={hits}/{total} ({(total > 0 ? 100.0*hits/total : 0):F1}%)");
     }
 
     /// <summary>
@@ -293,12 +332,15 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
     /// works for arbitrary growth profiles).
     ///
     /// Cost = 4× delegate calls per DE iteration (1 base + 3 perturbed).
+    ///
+    /// Caller (Compile) smoke-tests the delegate for throw/non-finite so this
+    /// hot loop omits try/catch; non-finite r breaks early.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double UserBulbDE(
         Func<Vec3, Vec3, int, Vec3> fn,
         double cx, double cy, double cz,
-        int iter, double bailout, double h,
-        out double escape)
+        int iter, double bailout, double h)
     {
         var cBase = new Vec3(cx, cy, cz);
         var cPx = new Vec3(cx + h, cy, cz);
@@ -310,24 +352,14 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         var zy = Vec3.Zero;
         var zz = Vec3.Zero;
         double r = 0.0;
-        escape = iter;
         for (int i = 0; i < iter; i++)
         {
             r = z.Length;
-            if (r > bailout) { escape = i; break; }
-            try
-            {
-                z  = fn(z,  cBase, i);
-                zx = fn(zx, cPx,   i);
-                zy = fn(zy, cPy,   i);
-                zz = fn(zz, cPz,   i);
-            }
-            catch
-            {
-                escape = iter;
-                r = bailout * 2;
-                break;
-            }
+            if (!double.IsFinite(r) || r > bailout) break;
+            z  = fn(z,  cBase, i);
+            zx = fn(zx, cPx,   i);
+            zy = fn(zy, cPy,   i);
+            zz = fn(zz, cPz,   i);
         }
 
         // Forward-diff Jacobian column lengths: |∂z/∂c_axis| ≈ |z_pert − z| / h.
@@ -339,10 +371,12 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         return 0.5 * r / Math.Max(dr, 1e-10);
     }
 
-    private static double[] Normalize3(double x, double y, double z)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static (double X, double Y, double Z) Normalize3(double x, double y, double z)
     {
         double len = Math.Sqrt(x * x + y * y + z * z);
-        if (len < 1e-10) return new[] { 0.0, 0.0, 0.0 };
-        return new[] { x / len, y / len, z / len };
+        if (len < 1e-10) return (0.0, 0.0, 0.0);
+        double inv = 1.0 / len;
+        return (x * inv, y * inv, z * inv);
     }
 }

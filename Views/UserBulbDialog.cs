@@ -42,6 +42,7 @@ namespace FracturingFog.Views
         private readonly NumericUpDown _epsBox;
         private readonly NumericUpDown _bailoutBox;
         private readonly NumericUpDown _jacHBox;
+        private readonly NumericUpDown _cullBox;
         private bool _suppressRender;
 
         public event Action? CompileRequested;
@@ -208,6 +209,7 @@ namespace FracturingFog.Views
 
             _epsBox = AddLabeledNumeric("Epsilon:", 10, gy, 0.00001m, 0.1m, 0.0005m, (decimal)_params.UserBulbEpsilon, 5);
             _jacHBox = AddLabeledNumeric("Jac h:",  180, gy, 0.0000001m, 0.01m, 0.00005m, (decimal)_params.UserBulbJacobianH, 7);
+            _cullBox = AddLabeledNumeric("Cull r:", 360, gy, 0.1m, 50m, 0.25m, (decimal)_params.UserBulbCullRadius, 2);
 
             // Wire all knobs → RenderRequested.
             _camDistBox.ValueChanged   += OnCameraChanged;
@@ -220,6 +222,7 @@ namespace FracturingFog.Views
             _epsBox.ValueChanged       += OnRenderChanged;
             _bailoutBox.ValueChanged   += OnRenderChanged;
             _jacHBox.ValueChanged      += OnRenderChanged;
+            _cullBox.ValueChanged      += OnRenderChanged;
         }
 
         private const string DefaultSource =
@@ -290,6 +293,7 @@ namespace FracturingFog.Views
             _params.UserBulbEpsilon = (double)_epsBox.Value;
             _params.UserBulbBailout = (double)_bailoutBox.Value;
             _params.UserBulbJacobianH = (double)_jacHBox.Value;
+            _params.UserBulbCullRadius = (double)_cullBox.Value;
             RenderRequested?.Invoke();
         }
 
