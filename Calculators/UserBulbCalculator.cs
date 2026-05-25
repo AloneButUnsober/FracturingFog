@@ -35,9 +35,11 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Emit;
 
+using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 
@@ -62,10 +64,48 @@ public sealed class UserBulbCalculator : IFractalCalculator
     public FractalParameters FractalParameters { get; set; } = new();
 
     public string LastError { get; private set; } = string.Empty;
-    public bool IsCompiled => _compiled != null;
+    public bool IsCompiled => _compiled != null || _compiledQuat != null;
 
-    private Func<Vec3, Vec3, int, Vec3>? _compiled;
+    /// <summary>Sample DE for mesh export. Uses currently-compiled fn + params.</summary>
+    public double SampleDE(double x, double y, double z)
+    {
+        if (_compiled == null && _compiledQuat == null) return double.PositiveInfinity;
+        double[] pArr = new double[_compiledParamNames.Length + 1];
+        var ps = FractalParameters.UserBulbParams;
+        if (ps != null)
+        {
+            for (int i = 0; i < _compiledParamNames.Length; i++)
+                pArr[i] = ps.Find(q => q.Name == _compiledParamNames[i])?.Value ?? 0.0;
+        }
+        pArr[_compiledParamNames.Length] = FractalParameters.UserBulbTime;
+        int iter = Math.Max(2, FractalParameters.UserBulbIterations);
+        double bailout = Math.Max(1, FractalParameters.UserBulbBailout);
+        double jacH = Math.Max(1e-8, FractalParameters.UserBulbJacobianH);
+        bool jul = FractalParameters.UserBulbJuliaMode;
+        if (_compiledQuat != null)
+        {
+            return UserBulbQuatDE(_compiledQuat, FractalParameters.UserBulbQuatSliceW,
+                x, y, z, iter, bailout, jacH, pArr,
+                jul, FractalParameters.UserBulbJuliaCW, FractalParameters.UserBulbJuliaCX,
+                FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ);
+        }
+        return UserBulbDE(_compiled!, x, y, z, iter, bailout, jacH, pArr,
+            jul, FractalParameters.UserBulbJuliaCX, FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ);
+    }
+
+    /// <summary>When true, render at half resolution and nearest-upscale into
+    /// ColorBuffer. Used by MainForm during camera drag for interactive frame
+    /// rate; full-res render fires after drag ends.</summary>
+    public bool LowResPreview { get; set; } = false;
+
+    private Func<Vec3, Vec3, int, double[], Vec3>? _compiled;
+    private Func<Quat, Quat, int, double[], Quat>? _compiledQuat;
+    private string[] _compiledParamNames = Array.Empty<string>();
     private string _compiledSource = string.Empty;
+    private UserBulbAxisModeKind _compiledAxisMode = UserBulbAxisModeKind.Vec3;
+    private AnalyticDEPattern _analyticPattern = new(AnalyticDEKind.None, 0);
+    private readonly UserBulbTemporalCache _cache = new();
+    private UserBulbGpuCalculator? _gpu;
 
     public UserBulbCalculator(int width, int height) => Resize(width, height);
 
@@ -86,105 +126,348 @@ public sealed class UserBulbCalculator : IFractalCalculator
     /// </summary>
     public void Compile(string source)
     {
-        if (string.IsNullOrWhiteSpace(source))
+        var chain = FractalParameters.UserBulbChain;
+        bool useChain = chain != null && chain.Count > 0;
+        if (!useChain && string.IsNullOrWhiteSpace(source))
         {
             _compiled = null;
+            _compiledQuat = null;
             LastError = "Source is empty";
             return;
         }
 
+        var axisMode = FractalParameters.UserBulbAxisMode;
+        var paramNames = ValidateAndExtractParamNames(FractalParameters.UserBulbParams);
         try
         {
-            string code = WrapUserSource(source);
-            var options = ScriptOptions.Default
-                .AddReferences(
-                    typeof(Vec3).Assembly,
-                    typeof(Complex).Assembly,
-                    typeof(object).Assembly,
-                    typeof(Math).Assembly)
-                .AddImports("System", "System.Numerics", "System.Math", "FracturingFog.Models");
+            string code;
+            if (useChain)
+            {
+                if (axisMode == UserBulbAxisModeKind.Quat)
+                {
+                    LastError = "Chain mode currently Vec3-only. Switch axis or clear chain.";
+                    _compiled = null; _compiledQuat = null;
+                    return;
+                }
+                code = WrapUserSourceChain(chain!, paramNames);
+            }
+            else
+            {
+                code = axisMode == UserBulbAxisModeKind.Quat
+                    ? WrapUserSourceQuat(source, paramNames)
+                    : WrapUserSource(source, paramNames);
+            }
+            var tree = CSharpSyntaxTree.ParseText(code);
+            var refs = new[]
+            {
+                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(Math).Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(Complex).Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(Vec3).Assembly.Location),
+                MetadataReference.CreateFromFile(
+                    System.IO.Path.Combine(
+                        System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
+                        "System.Runtime.dll")),
+            };
+            var compilation = CSharpCompilation.Create(
+                "UserBulbDyn_" + Guid.NewGuid().ToString("N"),
+                new[] { tree },
+                refs,
+                new CSharpCompilationOptions(
+                    OutputKind.DynamicallyLinkedLibrary,
+                    optimizationLevel: OptimizationLevel.Release));
 
-            var script = CSharpScript.Create<Func<Vec3, Vec3, int, Vec3>>(code, options);
-            var compilation = script.Compile();
-            if (compilation.Length > 0)
+            using var ms = new System.IO.MemoryStream();
+            EmitResult emit = compilation.Emit(ms);
+            if (!emit.Success)
             {
                 var sb = new System.Text.StringBuilder();
-                foreach (var diag in compilation)
-                    sb.AppendLine(diag.ToString());
+                foreach (var diag in emit.Diagnostics)
+                    if (diag.Severity == DiagnosticSeverity.Error) sb.AppendLine(diag.ToString());
                 LastError = sb.ToString();
                 _compiled = null;
                 return;
             }
-            var result = script.RunAsync().GetAwaiter().GetResult();
-            var fn = result.ReturnValue;
+            ms.Seek(0, System.IO.SeekOrigin.Begin);
+            var asm = System.Reflection.Assembly.Load(ms.ToArray());
+            var type = asm.GetType("FracturingFogDyn.UserBulbStep");
+            var method = type?.GetMethod("Step");
+            if (method == null)
+            {
+                LastError = "Internal: emit produced no Step method.";
+                _compiled = null;
+                _compiledQuat = null;
+                return;
+            }
+            Func<Vec3, Vec3, int, double[], Vec3>? fn = null;
+            Func<Quat, Quat, int, double[], Quat>? fnQ = null;
+            if (axisMode == UserBulbAxisModeKind.Quat)
+            {
+                fnQ = (Func<Quat, Quat, int, double[], Quat>)Delegate.CreateDelegate(
+                    typeof(Func<Quat, Quat, int, double[], Quat>), method);
+            }
+            else
+            {
+                fn = (Func<Vec3, Vec3, int, double[], Vec3>)Delegate.CreateDelegate(
+                    typeof(Func<Vec3, Vec3, int, double[], Vec3>), method);
+            }
 
             // Smoke test: invoke once with finite inputs; reject if it throws
             // or returns non-finite components. Lets the raymarch inner loop
             // drop its try/catch.
+            double[] probeParams = new double[paramNames.Length + 1];
             try
             {
-                var probe = fn(Vec3.Zero, new Vec3(0.5, 0.5, 0.5), 0);
-                if (!double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
+                if (axisMode == UserBulbAxisModeKind.Quat)
                 {
-                    LastError = "Step function returned non-finite components on probe input.";
-                    _compiled = null;
-                    return;
+                    var pq = fnQ!(Quat.Zero, new Quat(0.5, 0.5, 0.5, 0.5), 0, probeParams);
+                    if (!double.IsFinite(pq.W) || !double.IsFinite(pq.X) || !double.IsFinite(pq.Y) || !double.IsFinite(pq.Z))
+                    {
+                        LastError = "Step function returned non-finite components on probe input.";
+                        _compiledQuat = null;
+                        return;
+                    }
+                }
+                else
+                {
+                    var probe = fn!(Vec3.Zero, new Vec3(0.5, 0.5, 0.5), 0, probeParams);
+                    if (!double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
+                    {
+                        LastError = "Step function returned non-finite components on probe input.";
+                        _compiled = null;
+                        return;
+                    }
                 }
             }
             catch (Exception probeEx)
             {
                 LastError = $"Step function threw on probe: {probeEx.Message}";
                 _compiled = null;
+                _compiledQuat = null;
                 return;
             }
 
-            _compiled = fn;
+            if (axisMode == UserBulbAxisModeKind.Quat) { _compiledQuat = fnQ; _compiled = null; }
+            else { _compiled = fn; _compiledQuat = null; }
             _compiledSource = source;
+            _compiledAxisMode = axisMode;
+            _compiledParamNames = paramNames;
+            _analyticPattern = axisMode == UserBulbAxisModeKind.Vec3
+                ? UserBulbAnalyticDE.Detect(source)
+                : new AnalyticDEPattern(AnalyticDEKind.None, 0);
             LastError = string.Empty;
         }
         catch (Exception ex)
         {
             LastError = ex.Message;
             _compiled = null;
+            _compiledQuat = null;
         }
     }
 
-    private static string WrapUserSource(string body)
+    private static string WrapUserSource(string body, string[] paramNames)
     {
         string wrappedBody = body.Contains("return") ? body : $"return {body};";
         return $@"
-Vec3 __Step(Vec3 z, Vec3 c, int n)
+using System;
+using System.Numerics;
+using static System.Math;
+using FracturingFog.Models;
+
+namespace FracturingFogDyn
 {{
-    {wrappedBody}
+    public static class UserBulbStep
+    {{
+        public static Vec3 Step(Vec3 z, Vec3 c, int n, double[] __p)
+        {{
+            {ParamLocals(paramNames)}
+            {wrappedBody}
+        }}
+    }}
 }}
-return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n));
 ";
+    }
+
+    private static string WrapUserSourceQuat(string body, string[] paramNames)
+    {
+        string wrappedBody = body.Contains("return") ? body : $"return {body};";
+        return $@"
+using System;
+using System.Numerics;
+using static System.Math;
+using FracturingFog.Models;
+
+namespace FracturingFogDyn
+{{
+    public static class UserBulbStep
+    {{
+        public static Quat Step(Quat z, Quat c, int n, double[] __p)
+        {{
+            {ParamLocals(paramNames)}
+            {wrappedBody}
+        }}
+    }}
+}}
+";
+    }
+
+    private static string WrapUserSourceChain(System.Collections.Generic.List<UserBulbChainStep> steps, string[] paramNames)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Numerics;");
+        sb.AppendLine("using static System.Math;");
+        sb.AppendLine("using FracturingFog.Models;");
+        sb.AppendLine("namespace FracturingFogDyn {");
+        sb.AppendLine("public static class UserBulbStep {");
+        for (int i = 0; i < steps.Count; i++)
+        {
+            string body = steps[i].Source ?? "return z;";
+            string wrappedBody = body.Contains("return") ? body : $"return {body};";
+            sb.AppendLine($"    static Vec3 Step_{i}(Vec3 z, Vec3 c, int n, double[] __p, ChainCtx ctx) {{");
+            sb.Append(ParamLocals(paramNames));
+            sb.AppendLine($"        {wrappedBody}");
+            sb.AppendLine("    }");
+        }
+        sb.AppendLine("    public static Vec3 Step(Vec3 z, Vec3 c, int n, double[] __p) {");
+        sb.AppendLine("        var ctx = new ChainCtx();");
+        sb.AppendLine("        Vec3 last = z;");
+        for (int i = 0; i < steps.Count; i++)
+        {
+            string name = string.IsNullOrWhiteSpace(steps[i].OutputName) ? $"step{i}" : steps[i].OutputName;
+            sb.AppendLine($"        last = Step_{i}(z, c, n, __p, ctx); ctx.Set(\"{name}\", last);");
+        }
+        sb.AppendLine("        return last;");
+        sb.AppendLine("    } } }");
+        return sb.ToString();
+    }
+
+    private static string ParamLocals(string[] names)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < names.Length; i++)
+            sb.AppendLine($"            double {names[i]} = __p[{i}];");
+        // `t` is reserved: animation time, always at end of __p.
+        sb.AppendLine($"            double t = __p[__p.Length - 1];");
+        return sb.ToString();
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex IdentRe =
+        new(@"^[A-Za-z_][A-Za-z0-9_]*$");
+
+    private static readonly System.Collections.Generic.HashSet<string> ReservedParamNames = new() { "t", "z", "c", "n" };
+
+    private static string[] ValidateAndExtractParamNames(System.Collections.Generic.List<UserBulbParam> ps)
+    {
+        if (ps == null || ps.Count == 0) return Array.Empty<string>();
+        var seen = new System.Collections.Generic.HashSet<string>();
+        var names = new System.Collections.Generic.List<string>(ps.Count);
+        foreach (var p in ps)
+        {
+            if (string.IsNullOrWhiteSpace(p.Name)) continue;
+            if (!IdentRe.IsMatch(p.Name)) continue;
+            if (ReservedParamNames.Contains(p.Name)) continue;
+            if (!seen.Add(p.Name)) continue;
+            names.Add(p.Name);
+        }
+        return names.ToArray();
     }
 
     public void Calculate(CancellationToken ct = default)
     {
-        // Lazy compile from FractalParameters if not yet done.
-        if (_compiled == null)
+        // Lazy compile / recompile when source, chain, or axis mode changes.
+        string chainKey = FractalParameters.UserBulbChain == null || FractalParameters.UserBulbChain.Count == 0
+            ? string.Empty
+            : string.Join("\n##\n", FractalParameters.UserBulbChain.ConvertAll(s => s.OutputName + ":" + s.Source));
+        string effectiveSource = string.IsNullOrEmpty(chainKey)
+            ? (FractalParameters.UserBulbSource ?? string.Empty)
+            : chainKey;
+        bool needsCompile =
+            (_compiled == null && _compiledQuat == null)
+            || _compiledAxisMode != FractalParameters.UserBulbAxisMode
+            || effectiveSource != _compiledSource;
+        if (needsCompile && (!string.IsNullOrWhiteSpace(FractalParameters.UserBulbSource) || !string.IsNullOrEmpty(chainKey)))
         {
-            if (!string.IsNullOrWhiteSpace(FractalParameters.UserBulbSource)
-                && FractalParameters.UserBulbSource != _compiledSource)
-            {
-                Compile(FractalParameters.UserBulbSource);
-            }
+            Compile(FractalParameters.UserBulbSource ?? string.Empty);
+            _compiledSource = effectiveSource;
         }
 
         var fn = _compiled;
-        if (fn == null)
+        var fnQ = _compiledQuat;
+        bool quatMode = FractalParameters.UserBulbAxisMode == UserBulbAxisModeKind.Quat;
+        if ((quatMode && fnQ == null) || (!quatMode && fn == null))
         {
             Array.Clear(ColorBuffer);
             uint bg = ColorMap.InSetColor;
             for (int i = 0; i < ColorBuffer.Length; i++) ColorBuffer[i] = bg;
             return;
         }
+        double sliceW = FractalParameters.UserBulbQuatSliceW;
+
+        // Build param-value array matching compiled names plus trailing time
+        // slot. Out-of-band edits (added/removed params since compile) result
+        // in 0-fills; recompile triggers when names change via dialog.
+        double[] pArr = new double[_compiledParamNames.Length + 1];
+        var ps = FractalParameters.UserBulbParams;
+        if (ps != null)
+        {
+            for (int i = 0; i < _compiledParamNames.Length; i++)
+            {
+                var entry = ps.Find(q => q.Name == _compiledParamNames[i]);
+                pArr[i] = entry?.Value ?? 0.0;
+            }
+        }
+        pArr[_compiledParamNames.Length] = FractalParameters.UserBulbTime;
+
+        bool juliaMode = FractalParameters.UserBulbJuliaMode;
+        double jcX = FractalParameters.UserBulbJuliaCX;
+        double jcY = FractalParameters.UserBulbJuliaCY;
+        double jcZ = FractalParameters.UserBulbJuliaCZ;
+        double jcW = FractalParameters.UserBulbJuliaCW;
+        var colorDriver = FractalParameters.UserBulbColorDriver;
+        double trapX = FractalParameters.UserBulbOrbitTrapX;
+        double trapY = FractalParameters.UserBulbOrbitTrapY;
+        double trapZ = FractalParameters.UserBulbOrbitTrapZ;
+        int iterAxis = FractalParameters.UserBulbIterComponentAxis;
+
+        bool clipEnabled = FractalParameters.UserBulbClipPlaneEnabled;
+        var (clipNX, clipNY, clipNZ) = Normalize3(
+            FractalParameters.UserBulbClipPlaneNX,
+            FractalParameters.UserBulbClipPlaneNY,
+            FractalParameters.UserBulbClipPlaneNZ);
+        double clipD = FractalParameters.UserBulbClipPlaneD;
+
+        // Lighting
+        var (light2X, light2Y, light2Z) = Normalize3(
+            Math.Sin(FractalParameters.UserBulbLight2Phi) * Math.Cos(FractalParameters.UserBulbLight2Theta),
+            Math.Cos(FractalParameters.UserBulbLight2Phi),
+            Math.Sin(FractalParameters.UserBulbLight2Phi) * Math.Sin(FractalParameters.UserBulbLight2Theta));
+        var (light3X, light3Y, light3Z) = Normalize3(
+            Math.Sin(FractalParameters.UserBulbLight3Phi) * Math.Cos(FractalParameters.UserBulbLight3Theta),
+            Math.Cos(FractalParameters.UserBulbLight3Phi),
+            Math.Sin(FractalParameters.UserBulbLight3Phi) * Math.Sin(FractalParameters.UserBulbLight3Theta));
+        double L1I = FractalParameters.UserBulbLight1Intensity;
+        double L2I = FractalParameters.UserBulbLight2Intensity;
+        double L3I = FractalParameters.UserBulbLight3Intensity;
+        uint L1C = FractalParameters.UserBulbLight1Color;
+        uint L2C = FractalParameters.UserBulbLight2Color;
+        uint L3C = FractalParameters.UserBulbLight3Color;
+        double shadowSoft = FractalParameters.UserBulbShadowSoft;
+        int aoSamples = FractalParameters.UserBulbAOSamples;
+        double aoStrength = FractalParameters.UserBulbAOStrength;
+        double fogDensity = FractalParameters.UserBulbFogDensity;
+        uint bgTop = FractalParameters.UserBulbBgTopColor;
+        uint bgBot = FractalParameters.UserBulbBgBottomColor;
 
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+
+        bool lowRes = LowResPreview;
+        int fullW = Width;
+        int fullH = Height;
+        int ss = lowRes ? 1 : Math.Clamp(FractalParameters.UserBulbSuperSample, 1, 4);
+        int width = lowRes ? Math.Max(1, fullW / 2) : fullW * ss;
+        int height = lowRes ? Math.Max(1, fullH / 2) : fullH * ss;
+        uint[] renderBuffer = (lowRes || ss > 1) ? new uint[width * height] : ColorBuffer;
         int deIter = Math.Max(2, FractalParameters.UserBulbIterations);
         int maxSteps = Math.Max(16, FractalParameters.UserBulbMaxSteps);
         double eps = Math.Max(1e-5, FractalParameters.UserBulbEpsilon);
@@ -192,6 +475,15 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         double jacH = Math.Max(1e-8, FractalParameters.UserBulbJacobianH);
         double cullRadius = Math.Max(0.1, FractalParameters.UserBulbCullRadius);
         double cullRadiusSq = cullRadius * cullRadius;
+
+        // DE mode selection. Auto: use analytic if pattern detected AND probe agrees.
+        var deMode = FractalParameters.UserBulbDEMode;
+        bool useAnalytic =
+            !juliaMode && (
+                (deMode == UserBulbDEModeKind.Analytic && _analyticPattern.Kind != AnalyticDEKind.None)
+                || (deMode == UserBulbDEModeKind.Auto && _analyticPattern.Kind != AnalyticDEKind.None
+                    && UserBulbAnalyticDE.AcceptAuto(fn!, _analyticPattern, deIter, bailout, jacH, pArr)));
+        double analyticPower = _analyticPattern.Power;
 
         double camDist = FractalParameters.UserBulbCameraDistance / Math.Max(0.05, Zoom);
         double camTheta = FractalParameters.UserBulbCameraTheta;
@@ -222,12 +514,117 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
             Z: right.X * fwd.Y - right.Y * fwd.X);
 
         double aspect = (double)width / height;
-        double fovScale = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
+        double fovRad = FractalParameters.UserBulbFovDegrees * Math.PI / 180.0;
+        double fovScale = Math.Tan(0.5 * Math.Clamp(fovRad, 0.05, Math.PI - 0.05));
 
         var light = Normalize3(
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Cos(FractalParameters.UserBulbLightTheta),
             Math.Cos(FractalParameters.UserBulbLightPhi),
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Sin(FractalParameters.UserBulbLightTheta));
+
+        // GPU path: only when backend=GPU AND source detected as analytic power map.
+        // Translator additionally validates user grammar.
+        if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
+            && !lowRes
+            && !quatMode
+            && !juliaMode
+            && _analyticPattern.Kind != AnalyticDEKind.None)
+        {
+            var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
+            if (trans.Ok)
+            {
+                _gpu ??= new UserBulbGpuCalculator();
+                var gp = new GpuRenderParams
+                {
+                    Width = width, Height = height,
+                    CamX = camX, CamY = camY, CamZ = camZ,
+                    TargetX = targetX, TargetY = targetY, TargetZ = targetZ,
+                    FwdX = fwd.X, FwdY = fwd.Y, FwdZ = fwd.Z,
+                    RightX = right.X, RightY = right.Y, RightZ = right.Z,
+                    UpX = up.X, UpY = up.Y, UpZ = up.Z,
+                    FovScale = fovScale, Aspect = aspect,
+                    LightX = light.X, LightY = light.Y, LightZ = light.Z,
+                    DEIter = deIter, MaxSteps = maxSteps,
+                    Eps = eps, Bailout = bailout, CullRadiusSq = cullRadiusSq,
+                    Power = analyticPower,
+                    InSetColor = ColorMap.InSetColor,
+                };
+                if (_gpu.Render(ColorBuffer, gp)) return;
+                // GPU failed → log + fall through to CPU.
+                LastError = _gpu.LastError;
+            }
+        }
+
+        // Temporal cache: identity blit on unchanged scene+camera.
+        string sceneKey = lowRes ? string.Empty : BuildSceneKey();
+        bool tempReuse = FractalParameters.UserBulbTemporalReuse && !lowRes;
+        if (tempReuse)
+        {
+            var decision = _cache.Decide(sceneKey, width, height, camX, camY, camZ, fwd.X, fwd.Y, fwd.Z);
+            if (decision == ReuseDecision.Identity && _cache.Buffer != null)
+            {
+                Array.Copy(_cache.Buffer, ColorBuffer, ColorBuffer.Length);
+                return;
+            }
+        }
+
+        // Cone-march prepass: for each tile, march a cone with widened eps
+        // along the tile center ray and cache tMin (entry distance to surface
+        // candidate). Per-pixel raymarch starts there with a 5% safety margin.
+        const int tileSize = 16;
+        int tilesX = (width + tileSize - 1) / tileSize;
+        int tilesY = (height + tileSize - 1) / tileSize;
+        double[] tileTMin = new double[tilesX * tilesY];
+        double coneEps = eps * tileSize * 0.5;
+        Parallel.For(0, tilesY, new ParallelOptions { CancellationToken = ct }, ty =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int cy = Math.Min(height - 1, ty * tileSize + tileSize / 2);
+            double v = (1.0 - 2.0 * (cy + 0.5) / height) * fovScale;
+            for (int tx = 0; tx < tilesX; tx++)
+            {
+                int cx = Math.Min(width - 1, tx * tileSize + tileSize / 2);
+                double u = (2.0 * (cx + 0.5) / width - 1.0) * fovScale * aspect;
+                double rdx = right.X * u + up.X * v + fwd.X;
+                double rdy = right.Y * u + up.Y * v + fwd.Y;
+                double rdz = right.Z * u + up.Z * v + fwd.Z;
+                var dn = Normalize3(rdx, rdy, rdz);
+                rdx = dn.X; rdy = dn.Y; rdz = dn.Z;
+
+                double ocx = camX - targetX;
+                double ocy = camY - targetY;
+                double ocz = camZ - targetZ;
+                double bS = ocx * rdx + ocy * rdy + ocz * rdz;
+                double cS = ocx * ocx + ocy * ocy + ocz * ocz - cullRadiusSq;
+                double disc = bS * bS - cS;
+                if (disc < 0) { tileTMin[ty * tilesX + tx] = double.PositiveInfinity; continue; }
+                double sq = Math.Sqrt(disc);
+                double tEn = Math.Max(0.0, -bS - sq);
+                double tEx = -bS + sq;
+                if (tEx < 0) { tileTMin[ty * tilesX + tx] = double.PositiveInfinity; continue; }
+
+                double px = camX + rdx * tEn;
+                double py = camY + rdy * tEn;
+                double pz = camZ + rdz * tEn;
+                double tT = tEn;
+                double tMin = double.PositiveInfinity;
+                int coneSteps = Math.Max(8, maxSteps / 4);
+                for (int s = 0; s < coneSteps; s++)
+                {
+                    if (ct.IsCancellationRequested) return;
+                    double d = quatMode
+                        ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                        : useAnalytic
+                            ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
+                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                    if (d < coneEps) { tMin = tT; break; }
+                    if (tT > tEx + 1.0) break;
+                    px += rdx * d; py += rdy * d; pz += rdz * d;
+                    tT += d;
+                }
+                tileTMin[ty * tilesX + tx] = tMin;
+            }
+        });
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -254,7 +651,7 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
                 int idx = rowBase + x;
                 if (discSphere < 0)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    renderBuffer[idx] = SkyColor(rdy, bgBot, bgTop);
                     continue;
                 }
                 double sqrtDisc = Math.Sqrt(discSphere);
@@ -262,10 +659,18 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
                 double tExit = -bSphere + sqrtDisc;
                 if (tExit < 0)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    renderBuffer[idx] = SkyColor(rdy, bgBot, bgTop);
                     continue;
                 }
                 double tStart = Math.Max(0.0, tEnter);
+
+                // Cone-march tile hint: start at tile tMin with safety margin.
+                // Infinity = center ray missed; corners may still hit, so do
+                // NOT skip — fall back to sphere entry.
+                int tileIdx = (y / tileSize) * tilesX + (x / tileSize);
+                double hint = tileTMin[tileIdx];
+                if (!double.IsInfinity(hint))
+                    tStart = Math.Max(tStart, hint * 0.9);
 
                 double px = camX + rdx * tStart;
                 double py = camY + rdy * tStart;
@@ -278,9 +683,21 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
                 for (int step = 0; step < maxSteps; step++)
                 {
                     if (ct.IsCancellationRequested) return;
-                    double dist = UserBulbDE(fn, px, py, pz, deIter, bailout, jacH);
+                    double dist = quatMode
+                        ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                        : useAnalytic
+                            ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
+                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
                     if (dist < eps)
                     {
+                        // Clip plane: if surface point is on positive side of plane, skip past.
+                        if (clipEnabled && (px * clipNX + py * clipNY + pz * clipNZ - clipD) > 0)
+                        {
+                            double skip = Math.Max(eps * 2, 0.01);
+                            px += rdx * skip; py += rdy * skip; pz += rdz * skip;
+                            tTotal += skip;
+                            continue;
+                        }
                         hit = true;
                         hitStep = step;
                         hitDist = dist;
@@ -293,32 +710,223 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
 
                 if (!hit)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    renderBuffer[idx] = SkyColor(rdy, bgBot, bgTop);
                     continue;
                 }
 
                 // Forward-diff normals: reuse hitDist as f(p), 3 extra probes.
                 double h = eps * 2;
                 double invH = 1.0 / h;
-                double n0 = (UserBulbDE(fn, px + h, py, pz, deIter, bailout, jacH) - hitDist) * invH;
-                double n1 = (UserBulbDE(fn, px, py + h, pz, deIter, bailout, jacH) - hitDist) * invH;
-                double n2 = (UserBulbDE(fn, px, py, pz + h, deIter, bailout, jacH) - hitDist) * invH;
+                double dxp = quatMode
+                    ? UserBulbQuatDE(fnQ!, sliceW, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                    : useAnalytic
+                        ? UserBulbAnalyticDE.PowerDE(fn!, px + h, py, pz, deIter, bailout, analyticPower, pArr)
+                        : UserBulbDE(fn!, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                double dyp = quatMode
+                    ? UserBulbQuatDE(fnQ!, sliceW, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                    : useAnalytic
+                        ? UserBulbAnalyticDE.PowerDE(fn!, px, py + h, pz, deIter, bailout, analyticPower, pArr)
+                        : UserBulbDE(fn!, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                double dzp = quatMode
+                    ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                    : useAnalytic
+                        ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz + h, deIter, bailout, analyticPower, pArr)
+                        : UserBulbDE(fn!, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                double n0 = (dxp - hitDist) * invH;
+                double n1 = (dyp - hitDist) * invH;
+                double n2 = (dzp - hitDist) * invH;
                 var nrm = Normalize3(n0, n1, n2);
 
-                double diffuse = Math.Max(0.0, nrm.X * light.X + nrm.Y * light.Y + nrm.Z * light.Z);
+                // 3-light shading + optional AO/shadows.
                 double ambient = 0.15;
-                double shade = ambient + diffuse * (1.0 - ambient);
+                double sR = 0, sG = 0, sB = 0;
+                AccumulateLight(L1I, L1C, light.X, light.Y, light.Z, nrm, ref sR, ref sG, ref sB);
+                AccumulateLight(L2I, L2C, light2X, light2Y, light2Z, nrm, ref sR, ref sG, ref sB);
+                AccumulateLight(L3I, L3C, light3X, light3Y, light3Z, nrm, ref sR, ref sG, ref sB);
+                double ao = 1.0;
+                if (aoSamples > 0)
+                {
+                    double occl = 0, normW = 0;
+                    for (int k = 1; k <= aoSamples; k++)
+                    {
+                        double d = eps * Math.Pow(2, k);
+                        double sampleD = quatMode
+                            ? UserBulbQuatDE(fnQ!, sliceW, px + nrm.X * d, py + nrm.Y * d, pz + nrm.Z * d, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                            : useAnalytic
+                                ? UserBulbAnalyticDE.PowerDE(fn!, px + nrm.X * d, py + nrm.Y * d, pz + nrm.Z * d, deIter, bailout, analyticPower, pArr)
+                                : UserBulbDE(fn!, px + nrm.X * d, py + nrm.Y * d, pz + nrm.Z * d, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                        occl += Math.Max(0, d - sampleD) / d;
+                        normW += 1.0;
+                    }
+                    ao = Math.Clamp(1.0 - aoStrength * (occl / Math.Max(normW, 1)), 0, 1);
+                }
+                double shade = ambient + ao * (1.0 - ambient);
+                sR = ambient + (sR / 255.0) * (1.0 - ambient);
+                sG = ambient + (sG / 255.0) * (1.0 - ambient);
+                sB = ambient + (sB / 255.0) * (1.0 - ambient);
+                sR *= ao; sG *= ao; sB *= ao;
 
-                // Color driver: raymarch step count + depth. See
-                // MandelbulbCalculator for rationale (non-3D gradient themes
-                // need a varying scalar across surface).
-                float smooth = (float)hitStep * (256f / Math.Max(1, maxSteps))
-                             + (float)(tTotal * 4.0);
-                uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm.X, (float)nrm.Y);
-                byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);
-                byte G = (byte)Math.Clamp(((baseColor >> 8) & 0xFF) * shade, 0, 255);
-                byte B = (byte)Math.Clamp((baseColor & 0xFF) * shade, 0, 255);
-                ColorBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                // Color driver: feeds ColorMap.Map. Default StepDepth = step + depth.
+                float smooth;
+                float nA = (float)nrm.X, nB = (float)nrm.Y;
+                if (colorDriver == BulbColorDriver.StepDepth)
+                {
+                    smooth = (float)hitStep * (256f / Math.Max(1, maxSteps))
+                           + (float)(tTotal * 4.0);
+                }
+                else
+                {
+                    var cm = EvalColorMetrics(fn, fnQ, quatMode, sliceW, px, py, pz, deIter, bailout, pArr,
+                        juliaMode, jcW, jcX, jcY, jcZ, trapX, trapY, trapZ);
+                    switch (colorDriver)
+                    {
+                        case BulbColorDriver.OrbitTrap:
+                            smooth = (float)(double.IsInfinity(cm.TrapMin) ? 0 : cm.TrapMin * 128.0);
+                            break;
+                        case BulbColorDriver.EscapeAngle:
+                            smooth = (float)((cm.EscapeAngle + Math.PI) * (128.0 / Math.PI));
+                            break;
+                        case BulbColorDriver.FinalMagnitude:
+                            smooth = (float)Math.Min(255.0, cm.FinalR * 32.0);
+                            break;
+                        case BulbColorDriver.IterComponent:
+                            double comp = iterAxis == 1 ? cm.FinalZ.Y : iterAxis == 2 ? cm.FinalZ.Z : cm.FinalZ.X;
+                            smooth = (float)((comp + 2.0) * 64.0);
+                            break;
+                        case BulbColorDriver.Normal:
+                            smooth = (float)((nrm.X + 1.0) * 128.0);
+                            nA = (float)nrm.Y; nB = (float)nrm.Z;
+                            break;
+                        default:
+                            smooth = (float)hitStep * (256f / Math.Max(1, maxSteps))
+                                   + (float)(tTotal * 4.0);
+                            break;
+                    }
+                }
+                uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, nA, nB);
+                double br = ((baseColor >> 16) & 0xFF) * sR;
+                double bg = ((baseColor >> 8) & 0xFF) * sG;
+                double bb = (baseColor & 0xFF) * sB;
+                if (fogDensity > 0)
+                {
+                    double fogF = 1.0 - Math.Exp(-tTotal * fogDensity);
+                    uint sky = SkyColor(rdy, bgBot, bgTop);
+                    br = br * (1 - fogF) + ((sky >> 16) & 0xFF) * fogF;
+                    bg = bg * (1 - fogF) + ((sky >> 8) & 0xFF) * fogF;
+                    bb = bb * (1 - fogF) + (sky & 0xFF) * fogF;
+                }
+                byte R = (byte)Math.Clamp(br, 0, 255);
+                byte G = (byte)Math.Clamp(bg, 0, 255);
+                byte B = (byte)Math.Clamp(bb, 0, 255);
+                renderBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+            }
+        });
+
+        if (lowRes)
+        {
+            UpscaleNearest(renderBuffer, width, height, ColorBuffer, fullW, fullH);
+        }
+        else if (ss > 1)
+        {
+            DownsampleBox(renderBuffer, width, height, ColorBuffer, fullW, fullH, ss);
+        }
+
+        if (!lowRes && ss == 1 && tempReuse)
+        {
+            // Save buffer for identity blit. Hit-data arrays empty (reproject
+            // path not wired yet — Identity decision doesn't need them).
+            var empty = Array.Empty<double>();
+            var emptyB = Array.Empty<bool>();
+            _cache.Save(ColorBuffer, empty, empty, empty, emptyB,
+                width, height, sceneKey,
+                camX, camY, camZ,
+                targetX, targetY, targetZ,
+                fwd.X, fwd.Y, fwd.Z,
+                right.X, right.Y, right.Z,
+                up.X, up.Y, up.Z,
+                fovScale, aspect);
+        }
+    }
+
+    private string BuildSceneKey()
+    {
+        var p = FractalParameters;
+        // Hash params bank values (named scalars passed to user fn).
+        double paramsHash = 0;
+        if (p.UserBulbParams != null)
+            foreach (var pp in p.UserBulbParams) paramsHash = paramsHash * 31.0 + pp.Value;
+        return string.Join("|",
+            _compiledSource ?? "",
+            p.UserBulbIterations, p.UserBulbBailout,
+            p.UserBulbMaxSteps, p.UserBulbEpsilon, p.UserBulbJacobianH,
+            p.UserBulbCullRadius, (int)p.UserBulbDEMode,
+            (int)p.UserBulbAxisMode, p.UserBulbQuatSliceW,
+            // Animation time — required so playback invalidates cache each frame.
+            p.UserBulbTime,
+            // Julia mode + c
+            p.UserBulbJuliaMode, p.UserBulbJuliaCX, p.UserBulbJuliaCY, p.UserBulbJuliaCZ, p.UserBulbJuliaCW,
+            // Color driver inputs
+            (int)p.UserBulbColorDriver, p.UserBulbOrbitTrapX, p.UserBulbOrbitTrapY, p.UserBulbOrbitTrapZ,
+            p.UserBulbIterComponentAxis,
+            // 3-light + AO + fog + sky
+            p.UserBulbLightTheta, p.UserBulbLightPhi, p.UserBulbLight1Intensity, p.UserBulbLight1Color,
+            p.UserBulbLight2Theta, p.UserBulbLight2Phi, p.UserBulbLight2Intensity, p.UserBulbLight2Color,
+            p.UserBulbLight3Theta, p.UserBulbLight3Phi, p.UserBulbLight3Intensity, p.UserBulbLight3Color,
+            p.UserBulbAOSamples, p.UserBulbAOStrength, p.UserBulbFogDensity,
+            p.UserBulbBgTopColor, p.UserBulbBgBottomColor,
+            // View + clip
+            p.UserBulbFovDegrees, p.UserBulbSuperSample,
+            p.UserBulbClipPlaneEnabled, p.UserBulbClipPlaneNX, p.UserBulbClipPlaneNY, p.UserBulbClipPlaneNZ, p.UserBulbClipPlaneD,
+            paramsHash,
+            ColorMap?.GetType().Name ?? "");
+    }
+
+    private static void DownsampleBox(uint[] src, int srcW, int srcH, uint[] dst, int dstW, int dstH, int ss)
+    {
+        Parallel.For(0, dstH, y =>
+        {
+            int dRow = y * dstW;
+            for (int x = 0; x < dstW; x++)
+            {
+                int sx0 = x * ss;
+                int sy0 = y * ss;
+                int rSum = 0, gSum = 0, bSum = 0;
+                int cnt = 0;
+                for (int dy = 0; dy < ss; dy++)
+                {
+                    int sRow = (sy0 + dy) * srcW;
+                    for (int dx = 0; dx < ss; dx++)
+                    {
+                        uint p = src[sRow + sx0 + dx];
+                        rSum += (int)((p >> 16) & 0xFF);
+                        gSum += (int)((p >> 8) & 0xFF);
+                        bSum += (int)(p & 0xFF);
+                        cnt++;
+                    }
+                }
+                byte rb = (byte)(rSum / cnt);
+                byte gb = (byte)(gSum / cnt);
+                byte bb = (byte)(bSum / cnt);
+                dst[dRow + x] = 0xFF000000u | ((uint)rb << 16) | ((uint)gb << 8) | bb;
+            }
+        });
+    }
+
+    /// <summary>Nearest-neighbor upscale of src into dst. Used by LowResPreview
+    /// path; cheap (one indexed read per output pixel).</summary>
+    private static void UpscaleNearest(
+        uint[] src, int srcW, int srcH,
+        uint[] dst, int dstW, int dstH)
+    {
+        Parallel.For(0, dstH, y =>
+        {
+            int sy = Math.Min(srcH - 1, y * srcH / dstH);
+            int sRow = sy * srcW;
+            int dRow = y * dstW;
+            for (int x = 0; x < dstW; x++)
+            {
+                int sx = Math.Min(srcW - 1, x * srcW / dstW);
+                dst[dRow + x] = src[sRow + sx];
             }
         });
     }
@@ -336,30 +944,88 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
     /// Caller (Compile) smoke-tests the delegate for throw/non-finite so this
     /// hot loop omits try/catch; non-finite r breaks early.
     /// </summary>
+    /// <summary>Quaternion numerical-Jacobian DE. Perturb c.W/X/Y/Z (5
+    /// trajectories total). Project z to Vec3 (X/Y/Z) for raymarch position.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double UserBulbQuatDE(
+        Func<Quat, Quat, int, double[], Quat> fn,
+        double sliceW, double cx, double cy, double cz,
+        int iter, double bailout, double h, double[] pArr,
+        bool juliaMode, double jcW, double jcX, double jcY, double jcZ)
+    {
+        Quat cBase, cPw, cPx, cPy, cPz;
+        Quat z, zw, zx, zy, zz;
+        if (juliaMode)
+        {
+            cBase = cPw = cPx = cPy = cPz = new Quat(jcW, jcX, jcY, jcZ);
+            z = new Quat(sliceW, cx, cy, cz);
+            zw = new Quat(sliceW + h, cx, cy, cz);
+            zx = new Quat(sliceW, cx + h, cy, cz);
+            zy = new Quat(sliceW, cx, cy + h, cz);
+            zz = new Quat(sliceW, cx, cy, cz + h);
+        }
+        else
+        {
+            cBase = new Quat(sliceW, cx, cy, cz);
+            cPw = new Quat(sliceW + h, cx, cy, cz);
+            cPx = new Quat(sliceW, cx + h, cy, cz);
+            cPy = new Quat(sliceW, cx, cy + h, cz);
+            cPz = new Quat(sliceW, cx, cy, cz + h);
+            z = zw = zx = zy = zz = Quat.Zero;
+        }
+        double r = 0;
+        for (int i = 0; i < iter; i++)
+        {
+            r = z.Length;
+            if (!double.IsFinite(r) || r > bailout) break;
+            z  = fn(z,  cBase, i, pArr);
+            zw = fn(zw, cPw,   i, pArr);
+            zx = fn(zx, cPx,   i, pArr);
+            zy = fn(zy, cPy,   i, pArr);
+            zz = fn(zz, cPz,   i, pArr);
+        }
+        double j0 = (zw - z).Length / h;
+        double j1 = (zx - z).Length / h;
+        double j2 = (zy - z).Length / h;
+        double j3 = (zz - z).Length / h;
+        double dr = Math.Max(Math.Max(j0, j1), Math.Max(j2, j3));
+        return 0.5 * r / Math.Max(dr, 1e-10);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double UserBulbDE(
-        Func<Vec3, Vec3, int, Vec3> fn,
+        Func<Vec3, Vec3, int, double[], Vec3> fn,
         double cx, double cy, double cz,
-        int iter, double bailout, double h)
+        int iter, double bailout, double h, double[] pArr,
+        bool juliaMode, double jcX, double jcY, double jcZ)
     {
-        var cBase = new Vec3(cx, cy, cz);
-        var cPx = new Vec3(cx + h, cy, cz);
-        var cPy = new Vec3(cx, cy + h, cz);
-        var cPz = new Vec3(cx, cy, cz + h);
-
-        var z = Vec3.Zero;
-        var zx = Vec3.Zero;
-        var zy = Vec3.Zero;
-        var zz = Vec3.Zero;
+        Vec3 cBase, cPx, cPy, cPz;
+        Vec3 z, zx, zy, zz;
+        if (juliaMode)
+        {
+            cBase = cPx = cPy = cPz = new Vec3(jcX, jcY, jcZ);
+            z  = new Vec3(cx,     cy,     cz);
+            zx = new Vec3(cx + h, cy,     cz);
+            zy = new Vec3(cx,     cy + h, cz);
+            zz = new Vec3(cx,     cy,     cz + h);
+        }
+        else
+        {
+            cBase = new Vec3(cx, cy, cz);
+            cPx = new Vec3(cx + h, cy, cz);
+            cPy = new Vec3(cx, cy + h, cz);
+            cPz = new Vec3(cx, cy, cz + h);
+            z = zx = zy = zz = Vec3.Zero;
+        }
         double r = 0.0;
         for (int i = 0; i < iter; i++)
         {
             r = z.Length;
             if (!double.IsFinite(r) || r > bailout) break;
-            z  = fn(z,  cBase, i);
-            zx = fn(zx, cPx,   i);
-            zy = fn(zy, cPy,   i);
-            zz = fn(zz, cPz,   i);
+            z  = fn(z,  cBase, i, pArr);
+            zx = fn(zx, cPx,   i, pArr);
+            zy = fn(zy, cPy,   i, pArr);
+            zz = fn(zz, cPz,   i, pArr);
         }
 
         // Forward-diff Jacobian column lengths: |∂z/∂c_axis| ≈ |z_pert − z| / h.
@@ -369,6 +1035,92 @@ return (Func<Vec3, Vec3, int, Vec3>)((Vec3 z, Vec3 c, int n) => __Step(z, c, n))
         double dr = Math.Max(Math.Max(j0, j1), j2);
 
         return 0.5 * r / Math.Max(dr, 1e-10);
+    }
+
+    private readonly struct ColorMetrics
+    {
+        public readonly double TrapMin;
+        public readonly double EscapeAngle;
+        public readonly double FinalR;
+        public readonly Vec3 FinalZ;
+        public readonly int EscapeIter;
+        public ColorMetrics(double trapMin, double escapeAngle, double finalR, Vec3 finalZ, int escapeIter)
+        {
+            TrapMin = trapMin; EscapeAngle = escapeAngle; FinalR = finalR; FinalZ = finalZ; EscapeIter = escapeIter;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ColorMetrics EvalColorMetrics(
+        Func<Vec3, Vec3, int, double[], Vec3>? fn,
+        Func<Quat, Quat, int, double[], Quat>? fnQ,
+        bool quatMode, double sliceW,
+        double px, double py, double pz,
+        int iter, double bailout, double[] pArr,
+        bool juliaMode, double jcW, double jcX, double jcY, double jcZ,
+        double trapX, double trapY, double trapZ)
+    {
+        double trapMin = double.PositiveInfinity;
+        Vec3 finalZ = Vec3.Zero;
+        double finalR = 0.0;
+        int escapeIter = iter;
+        if (quatMode && fnQ != null)
+        {
+            Quat c, z;
+            if (juliaMode) { c = new Quat(jcW, jcX, jcY, jcZ); z = new Quat(sliceW, px, py, pz); }
+            else { c = new Quat(sliceW, px, py, pz); z = Quat.Zero; }
+            for (int i = 0; i < iter; i++)
+            {
+                finalR = z.Length;
+                if (!double.IsFinite(finalR) || finalR > bailout) { escapeIter = i; break; }
+                var zv = z.ToVec3();
+                double td = Math.Sqrt((zv.X - trapX) * (zv.X - trapX) + (zv.Y - trapY) * (zv.Y - trapY) + (zv.Z - trapZ) * (zv.Z - trapZ));
+                if (td < trapMin) trapMin = td;
+                z = fnQ(z, c, i, pArr);
+            }
+            finalZ = z.ToVec3();
+        }
+        else if (fn != null)
+        {
+            Vec3 c, z;
+            if (juliaMode) { c = new Vec3(jcX, jcY, jcZ); z = new Vec3(px, py, pz); }
+            else { c = new Vec3(px, py, pz); z = Vec3.Zero; }
+            for (int i = 0; i < iter; i++)
+            {
+                finalR = z.Length;
+                if (!double.IsFinite(finalR) || finalR > bailout) { escapeIter = i; break; }
+                double td = Math.Sqrt((z.X - trapX) * (z.X - trapX) + (z.Y - trapY) * (z.Y - trapY) + (z.Z - trapZ) * (z.Z - trapZ));
+                if (td < trapMin) trapMin = td;
+                z = fn(z, c, i, pArr);
+            }
+            finalZ = z;
+        }
+        double escapeAngle = Math.Atan2(finalZ.Y, finalZ.X);
+        return new ColorMetrics(trapMin, escapeAngle, finalR, finalZ, escapeIter);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AccumulateLight(
+        double intensity, uint color,
+        double lx, double ly, double lz,
+        (double X, double Y, double Z) nrm,
+        ref double sR, ref double sG, ref double sB)
+    {
+        if (intensity <= 0) return;
+        double diffuse = Math.Max(0.0, nrm.X * lx + nrm.Y * ly + nrm.Z * lz) * intensity;
+        sR += ((color >> 16) & 0xFF) * diffuse;
+        sG += ((color >> 8) & 0xFF) * diffuse;
+        sB += (color & 0xFF) * diffuse;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint SkyColor(double rdy, uint bgBot, uint bgTop)
+    {
+        double t = Math.Clamp(0.5 * (rdy + 1.0), 0, 1);
+        byte rb = (byte)((1 - t) * ((bgBot >> 16) & 0xFF) + t * ((bgTop >> 16) & 0xFF));
+        byte gb = (byte)((1 - t) * ((bgBot >> 8) & 0xFF) + t * ((bgTop >> 8) & 0xFF));
+        byte bb = (byte)((1 - t) * (bgBot & 0xFF) + t * (bgTop & 0xFF));
+        return 0xFF000000u | ((uint)rb << 16) | ((uint)gb << 8) | bb;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

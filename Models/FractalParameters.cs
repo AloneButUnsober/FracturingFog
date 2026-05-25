@@ -102,6 +102,66 @@ namespace FracturingFog.Models
         /// skip raymarching entirely. Set large enough to enclose any feature; 2.5 covers all
         /// standard bulbs/Mandelboxes.</summary>
         public double UserBulbCullRadius { get; set; } = 2.5;
+        /// <summary>DE mode: Auto picks analytic when source matches a known power map and
+        /// a probe validates within tolerance; Analytic forces analytic (mis-detect = wrong
+        /// surface); Numerical forces numerical Jacobian.</summary>
+        public UserBulbDEModeKind UserBulbDEMode { get; set; } = UserBulbDEModeKind.Auto;
+        /// <summary>Enable identity-blit cache when scene+camera unchanged between renders.</summary>
+        public bool UserBulbTemporalReuse { get; set; } = true;
+        /// <summary>Render backend. GPU mode requires source pass UserBulbIlgpuTranslator
+        /// validation; otherwise falls back to CPU.</summary>
+        public UserBulbBackendKind UserBulbBackend { get; set; } = UserBulbBackendKind.CPU;
+        /// <summary>Algebra mode: Vec3 (3D triplex) or Quat (4D Hamilton). Affects step signature.</summary>
+        public UserBulbAxisModeKind UserBulbAxisMode { get; set; } = UserBulbAxisModeKind.Vec3;
+        /// <summary>W component of 4D slice plane (Quat mode only). c.W = this value.</summary>
+        public double UserBulbQuatSliceW { get; set; } = 0.0;
+        /// <summary>Named scalar params exposed in compiled step source. Live-tweakable.</summary>
+        public List<UserBulbParam> UserBulbParams { get; set; } = new();
+        /// <summary>Animation time global. Exposed inside user step as 'double t'.</summary>
+        public double UserBulbTime { get; set; } = 0.0;
+        /// <summary>Julia mode: hold c constant at UserBulbJuliaC; perturb initial z for Jacobian.</summary>
+        public bool UserBulbJuliaMode { get; set; } = false;
+        public double UserBulbJuliaCX { get; set; } = -0.2;
+        public double UserBulbJuliaCY { get; set; } = 0.4;
+        public double UserBulbJuliaCZ { get; set; } = 0.0;
+        public double UserBulbJuliaCW { get; set; } = 0.0;
+        /// <summary>Scalar driver feeding ColorMap.Map. Defaults to StepDepth (existing behavior).</summary>
+        public BulbColorDriver UserBulbColorDriver { get; set; } = BulbColorDriver.StepDepth;
+        public double UserBulbOrbitTrapX { get; set; } = 0.0;
+        public double UserBulbOrbitTrapY { get; set; } = 0.0;
+        public double UserBulbOrbitTrapZ { get; set; } = 0.0;
+        public int UserBulbIterComponentAxis { get; set; } = 0; // 0=X, 1=Y, 2=Z
+        // ── 3-light shading ───
+        public double UserBulbLight1Intensity { get; set; } = 1.0;
+        public uint UserBulbLight1Color { get; set; } = 0xFFFFFFFFu;
+        public double UserBulbLight2Theta { get; set; } = Math.PI * 1.25;
+        public double UserBulbLight2Phi { get; set; } = Math.PI * 0.55;
+        public double UserBulbLight2Intensity { get; set; } = 0.0;
+        public uint UserBulbLight2Color { get; set; } = 0xFFB0C8FFu;
+        public double UserBulbLight3Theta { get; set; } = Math.PI * 0.75;
+        public double UserBulbLight3Phi { get; set; } = Math.PI * 0.30;
+        public double UserBulbLight3Intensity { get; set; } = 0.0;
+        public uint UserBulbLight3Color { get; set; } = 0xFFFFC890u;
+        public double UserBulbShadowSoft { get; set; } = 0.0;
+        public int UserBulbAOSamples { get; set; } = 0;
+        public double UserBulbAOStrength { get; set; } = 0.4;
+        public double UserBulbFogDensity { get; set; } = 0.0;
+        public uint UserBulbBgTopColor { get; set; } = 0xFF202040u;
+        public uint UserBulbBgBottomColor { get; set; } = 0xFF101020u;
+        // ── Camera / view ───
+        public double UserBulbFovDegrees { get; set; } = 60.0;
+        public double UserBulbDoFAperture { get; set; } = 0.0; // 0 = off
+        public double UserBulbDoFFocusDist { get; set; } = 3.0;
+        public int UserBulbDoFSamples { get; set; } = 8;
+        public bool UserBulbClipPlaneEnabled { get; set; } = false;
+        public double UserBulbClipPlaneNX { get; set; } = 0.0;
+        public double UserBulbClipPlaneNY { get; set; } = 1.0;
+        public double UserBulbClipPlaneNZ { get; set; } = 0.0;
+        public double UserBulbClipPlaneD { get; set; } = 0.0;
+        public int UserBulbSuperSample { get; set; } = 1; // 1, 2, 4
+        /// <summary>Optional chain of named-output steps. When non-empty, replaces
+        /// UserBulbSource. Final z = last step's return value.</summary>
+        public List<UserBulbChainStep> UserBulbChain { get; set; } = new();
 
         public FractalParameters Clone()
         {
@@ -152,7 +212,51 @@ namespace FracturingFog.Models
                 UserBulbMaxSteps = UserBulbMaxSteps,
                 UserBulbEpsilon = UserBulbEpsilon,
                 UserBulbJacobianH = UserBulbJacobianH,
-                UserBulbCullRadius = UserBulbCullRadius
+                UserBulbCullRadius = UserBulbCullRadius,
+                UserBulbDEMode = UserBulbDEMode,
+                UserBulbTemporalReuse = UserBulbTemporalReuse,
+                UserBulbBackend = UserBulbBackend,
+                UserBulbAxisMode = UserBulbAxisMode,
+                UserBulbQuatSliceW = UserBulbQuatSliceW,
+                UserBulbParams = UserBulbParams.ConvertAll(p => p.Clone()),
+                UserBulbTime = UserBulbTime,
+                UserBulbJuliaMode = UserBulbJuliaMode,
+                UserBulbJuliaCX = UserBulbJuliaCX,
+                UserBulbJuliaCY = UserBulbJuliaCY,
+                UserBulbJuliaCZ = UserBulbJuliaCZ,
+                UserBulbJuliaCW = UserBulbJuliaCW,
+                UserBulbColorDriver = UserBulbColorDriver,
+                UserBulbOrbitTrapX = UserBulbOrbitTrapX,
+                UserBulbOrbitTrapY = UserBulbOrbitTrapY,
+                UserBulbOrbitTrapZ = UserBulbOrbitTrapZ,
+                UserBulbIterComponentAxis = UserBulbIterComponentAxis,
+                UserBulbLight1Intensity = UserBulbLight1Intensity,
+                UserBulbLight1Color = UserBulbLight1Color,
+                UserBulbLight2Theta = UserBulbLight2Theta,
+                UserBulbLight2Phi = UserBulbLight2Phi,
+                UserBulbLight2Intensity = UserBulbLight2Intensity,
+                UserBulbLight2Color = UserBulbLight2Color,
+                UserBulbLight3Theta = UserBulbLight3Theta,
+                UserBulbLight3Phi = UserBulbLight3Phi,
+                UserBulbLight3Intensity = UserBulbLight3Intensity,
+                UserBulbLight3Color = UserBulbLight3Color,
+                UserBulbShadowSoft = UserBulbShadowSoft,
+                UserBulbAOSamples = UserBulbAOSamples,
+                UserBulbAOStrength = UserBulbAOStrength,
+                UserBulbFogDensity = UserBulbFogDensity,
+                UserBulbBgTopColor = UserBulbBgTopColor,
+                UserBulbBgBottomColor = UserBulbBgBottomColor,
+                UserBulbFovDegrees = UserBulbFovDegrees,
+                UserBulbDoFAperture = UserBulbDoFAperture,
+                UserBulbDoFFocusDist = UserBulbDoFFocusDist,
+                UserBulbDoFSamples = UserBulbDoFSamples,
+                UserBulbClipPlaneEnabled = UserBulbClipPlaneEnabled,
+                UserBulbClipPlaneNX = UserBulbClipPlaneNX,
+                UserBulbClipPlaneNY = UserBulbClipPlaneNY,
+                UserBulbClipPlaneNZ = UserBulbClipPlaneNZ,
+                UserBulbClipPlaneD = UserBulbClipPlaneD,
+                UserBulbSuperSample = UserBulbSuperSample,
+                UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone())
             };
         }
     }
@@ -161,4 +265,33 @@ namespace FracturingFog.Models
     /// Affine map for IFS chaos game. x' = a·x + b·y + e, y' = c·x + d·y + f. Picked with weight.
     /// </summary>
     public readonly record struct AffineMap(double A, double B, double C, double D, double E, double F, double Weight);
+
+    public enum UserBulbDEModeKind
+    {
+        Auto,
+        Analytic,
+        Numerical,
+    }
+
+    public enum UserBulbBackendKind
+    {
+        CPU,
+        GPU,
+    }
+
+    public enum UserBulbAxisModeKind
+    {
+        Vec3,
+        Quat,
+    }
+
+    public enum BulbColorDriver
+    {
+        StepDepth,
+        OrbitTrap,
+        EscapeAngle,
+        FinalMagnitude,
+        IterComponent,
+        Normal,
+    }
 }

@@ -1821,6 +1821,23 @@ public sealed partial class MainForm : Form
             TriggerCalculation();
         };
         dlg.PromotionChanged += () => PopulateFractalTypeCombo();
+        dlg.ExportMeshRequested += (n, range, path) =>
+        {
+            if (_userBulbCalculator == null) return;
+            try
+            {
+                int tris = FracturingFog.Export.UserBulbMeshExporter.ExportObjVoxelSurface(
+                    path,
+                    (x, y, z) => _userBulbCalculator.SampleDE(x, y, z),
+                    _userBulbCalculator.CenterX, -_userBulbCalculator.CenterY, 0,
+                    range, n);
+                MessageBox.Show(this, $"Exported {tris} triangles to {path}", "Mesh export");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Export failed: {ex.Message}", "Mesh export error");
+            }
+        };
         dlg.FormClosed += (_, _) => { _userBulbDialog = null; };
         _userBulbDialog = dlg;
         dlg.Show(this);
@@ -3615,6 +3632,8 @@ public sealed partial class MainForm : Form
             double h = Math.Max(1, _renderPanel.ClientSize.Height);
             double dTheta = (e.X - _rightDragStart.X) / w * Math.PI;
             double dPhi = (e.Y - _rightDragStart.Y) / h * Math.PI;
+            // UserBulb: invert vertical drag — drag down should look up.
+            if (_currentFractalType == FractalType.UserBulb) dPhi = -dPhi;
 
             const double phiMin = 0.01;
             const double phiMax = Math.PI - 0.01;
@@ -3715,8 +3734,10 @@ public sealed partial class MainForm : Form
         if (_calculator == null) return;
         int saved = _calculator.MaxIterations;
         _calculator.MaxIterations = System.Math.Min(128, saved);
+        if (_userBulbCalculator != null) _userBulbCalculator.LowResPreview = true;
         TriggerCalculation(progressive: false);
         _calculator.MaxIterations = saved;
+        if (_userBulbCalculator != null) _userBulbCalculator.LowResPreview = false;
     }
 
     private void PositionGridPanel()
@@ -3801,7 +3822,15 @@ public sealed partial class MainForm : Form
         }, token)
         .ContinueWith(t =>
         {
-            if (t.IsCanceled || token.IsCancellationRequested) return;
+            if (t.IsCanceled || token.IsCancellationRequested)
+            {
+                // Cancelled render also counts as "done" for animation
+                // gating — otherwise a mid-animation cancel (e.g. user
+                // drags camera) would leave _renderInFlight=true forever.
+                if (_currentFractalType == FractalType.UserBulb)
+                    _userBulbDialog?.NotifyRenderDone();
+                return;
+            }
             if (renderer == null) return;
 
             long ms = t.IsCompletedSuccessfully ? t.Result : -1;
@@ -3835,6 +3864,11 @@ public sealed partial class MainForm : Form
                         $"zoom={curZoom:G6}  iter={curIter}  " +
                         $"{precTag}  [{ms} ms  {curW}×{curH}]" +
                         (_iterLocked ? "  [ITER LOCKED]" : ""));
+                    // Animation gating: tell UserBulb dialog the frame landed
+                    // so its next animation tick can fire. Without this the
+                    // 30 Hz timer would cancel every render mid-flight.
+                    if (_currentFractalType == FractalType.UserBulb)
+                        _userBulbDialog?.NotifyRenderDone();
                 });
             }
         }, TaskScheduler.Default);
