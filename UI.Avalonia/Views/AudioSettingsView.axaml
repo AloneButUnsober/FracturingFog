@@ -1,0 +1,182 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.AudioSettingsView"
+        x:DataType="vm:AudioSettingsViewModel"
+        Title="Audio-Reactive Slideshow"
+        Width="520"
+        SizeToContent="Height"
+        MinWidth="420"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#1C1C1C"
+        Foreground="WhiteSmoke">
+
+    <Grid Margin="12" RowDefinitions="*,Auto">
+
+        <StackPanel Grid.Row="0" Spacing="6">
+
+            <!-- Source -->
+            <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Source:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding Sources}"
+                          SelectedIndex="{Binding SourceIndex, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="File path:" VerticalAlignment="Center" />
+                <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0"
+                             Text="{Binding FilePath, Mode=TwoWay}"
+                             IsEnabled="{Binding FileModeEnabled}"
+                             Margin="0,2,6,2" />
+                    <Button Grid.Column="1"
+                            Content="Browse…"
+                            Command="{Binding BrowseFileCommand}"
+                            IsEnabled="{Binding FileModeEnabled}"
+                            Padding="10,4" />
+                </Grid>
+            </Grid>
+
+            <!-- Sensitivity slider -->
+            <Grid ColumnDefinitions="120,*,Auto" Margin="0,8,0,0">
+                <TextBlock Grid.Column="0" Text="Sensitivity:" VerticalAlignment="Center" />
+                <Slider Grid.Column="1"
+                        Minimum="0" Maximum="100" TickFrequency="10"
+                        Value="{Binding SensitivityPercent, Mode=TwoWay}"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding SensitivityLabel}"
+                           Width="50"
+                           VerticalAlignment="Center"
+                           TextAlignment="Right"
+                           Margin="6,0,0,0" />
+            </Grid>
+
+            <!-- Beat counts -->
+            <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Beats per theme:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="1" Maximum="128" Increment="1" FormatString="F0"
+                               Value="{Binding BeatsPerTheme, Mode=TwoWay}"
+                               Width="120" HorizontalAlignment="Left" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Beats per region:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="1" Maximum="512" Increment="1" FormatString="F0"
+                               Value="{Binding BeatsPerRegion, Mode=TwoWay}"
+                               Width="120" HorizontalAlignment="Left" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Synth BPM:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="30" Maximum="240" Increment="1" FormatString="F0"
+                               Value="{Binding SynthBpm, Mode=TwoWay}"
+                               Width="120" HorizontalAlignment="Left" Margin="0,2" />
+            </Grid>
+
+            <CheckBox Content="Route fractal synth output through analyzer (closed-loop sync)"
+                      IsChecked="{Binding RouteSynth, Mode=TwoWay}"
+                      IsEnabled="{Binding SynthControlsEnabled}"
+                      Margin="0,4,0,0" />
+            <CheckBox Content="Play fractal synth audio to speakers"
+                      IsChecked="{Binding PlaySynth, Mode=TwoWay}"
+                      IsEnabled="{Binding SynthControlsEnabled}" />
+
+            <!-- EQ section -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+                <TextBlock Grid.Column="0"
+                           Text="Beat-Detector EQ (per-band flux weight)"
+                           Foreground="#B4DCB4"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1"
+                        Content="Reset"
+                        Command="{Binding ResetEqCommand}"
+                        Padding="10,2"
+                        Background="#2D3732"
+                        Foreground="White" />
+            </Grid>
+
+            <!-- 5 EQ band rows. Hand-rolled (not an ItemsControl) so each row
+                 binds to its own typed property and the slider has live
+                 percent-label feedback without a converter. -->
+            <Grid ColumnDefinitions="80,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,2,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Band0Name, StringFormat='{}{0}:'}" VerticalAlignment="Center" />
+                <Slider     Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="200" TickFrequency="50" Value="{Binding Band0Percent, Mode=TwoWay}" />
+                <TextBlock  Grid.Row="0" Grid.Column="2" Text="{Binding Band0Label}" Width="50" TextAlignment="Right" VerticalAlignment="Center" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Band1Name, StringFormat='{}{0}:'}" VerticalAlignment="Center" />
+                <Slider     Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="200" TickFrequency="50" Value="{Binding Band1Percent, Mode=TwoWay}" />
+                <TextBlock  Grid.Row="1" Grid.Column="2" Text="{Binding Band1Label}" Width="50" TextAlignment="Right" VerticalAlignment="Center" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding Band2Name, StringFormat='{}{0}:'}" VerticalAlignment="Center" />
+                <Slider     Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="200" TickFrequency="50" Value="{Binding Band2Percent, Mode=TwoWay}" />
+                <TextBlock  Grid.Row="2" Grid.Column="2" Text="{Binding Band2Label}" Width="50" TextAlignment="Right" VerticalAlignment="Center" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Binding Band3Name, StringFormat='{}{0}:'}" VerticalAlignment="Center" />
+                <Slider     Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="200" TickFrequency="50" Value="{Binding Band3Percent, Mode=TwoWay}" />
+                <TextBlock  Grid.Row="3" Grid.Column="2" Text="{Binding Band3Label}" Width="50" TextAlignment="Right" VerticalAlignment="Center" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="{Binding Band4Name, StringFormat='{}{0}:'}" VerticalAlignment="Center" />
+                <Slider     Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="200" TickFrequency="50" Value="{Binding Band4Percent, Mode=TwoWay}" />
+                <TextBlock  Grid.Row="4" Grid.Column="2" Text="{Binding Band4Label}" Width="50" TextAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- Fade × beat -->
+            <Grid ColumnDefinitions="120,*,Auto" Margin="0,10,0,0">
+                <TextBlock Grid.Column="0" Text="Fade × beat:" VerticalAlignment="Center" />
+                <Slider Grid.Column="1"
+                        Minimum="10" Maximum="200" TickFrequency="25"
+                        Value="{Binding FadeFracPercent, Mode=TwoWay}"
+                        VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding FadeFracLabel}"
+                           Width="90"
+                           VerticalAlignment="Center"
+                           TextAlignment="Right"
+                           Margin="6,0,0,0" />
+            </Grid>
+
+            <!-- Meters -->
+            <Grid ColumnDefinitions="*,*" Margin="0,10,0,0">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding BpmText}"
+                           Foreground="#96DCB4"
+                           FontWeight="Bold"
+                           FontSize="14" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding LevelText}"
+                           Foreground="#DCC896"
+                           FontFamily="Consolas, monospace"
+                           HorizontalAlignment="Right" />
+            </Grid>
+
+        </StackPanel>
+
+        <!-- Bottom button row -->
+        <Grid Grid.Row="1" Margin="0,14,0,0" ColumnDefinitions="Auto,*,Auto,Auto">
+            <Button Grid.Column="0"
+                    Content="{Binding SlideshowButtonText}"
+                    Command="{Binding ToggleSlideshowCommand}"
+                    IsVisible="{Binding ShowSlideshowToggle}"
+                    Padding="14,6"
+                    Background="#283728"
+                    Foreground="White" />
+            <Button Grid.Column="2"
+                    Content="OK"
+                    Command="{Binding OkCommand}"
+                    IsDefault="True"
+                    Padding="18,6"
+                    Background="#284632"
+                    Foreground="White"
+                    Margin="0,0,6,0" />
+            <Button Grid.Column="3"
+                    Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    IsCancel="True"
+                    Padding="14,6"
+                    Background="#462828"
+                    Foreground="White" />
+        </Grid>
+
+    </Grid>
+
+</Window>

@@ -34,19 +34,19 @@
       build fails with CS1929 inside generated MainWindow.g.cs files placed
       in the WinExe's obj/ tree.
     -->
-    <PackageReference Include="Avalonia" Version="11.2.3">
+    <PackageReference Include="Avalonia" Version="12.0.3">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Desktop" Version="11.2.3">
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.3">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3">
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.3">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3">
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.3">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.2.3">
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.8">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
   </ItemGroup>

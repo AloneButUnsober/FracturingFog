@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.ReactiveUI;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog.UI.Avalonia;
 
@@ -12,10 +13,32 @@ namespace FracturingFog.UI.Avalonia;
 /// </summary>
 public static class AvaloniaShell
 {
+    /// <summary>
+    /// Optional callback fired by <see cref="Views.MainWindow"/> the first
+    /// time its GPU surface becomes available. The WinExe's Program.cs sets
+    /// this before calling <see cref="Run"/> so the Avalonia shell never has
+    /// to reference the DirectX renderer directly — that keeps UI.Avalonia
+    /// portable to platforms where Vortice is not available.
+    ///
+    /// Set to <c>null</c> (the default) to launch the Avalonia shell with no
+    /// renderer wiring, useful for layout-only testing.
+    /// </summary>
+    public static Action<IGpuSurface>? OnSurfaceReady { get; set; }
+
     public static int Run(string[] args)
     {
         return BuildAvaloniaApp()
             .StartWithClassicDesktopLifetime(args ?? Array.Empty<string>());
+    }
+
+    /// <summary>
+    /// Convenience overload — assigns the renderer bootstrap callback and
+    /// then launches the shell in a single call.
+    /// </summary>
+    public static int Run(string[] args, Action<IGpuSurface>? onSurfaceReady)
+    {
+        OnSurfaceReady = onSurfaceReady;
+        return Run(args);
     }
 
     /// <summary>
