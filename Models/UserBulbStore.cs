@@ -54,19 +54,60 @@ namespace FracturingFog.Models
             try
             {
                 Equations.Clear();
-                if (!File.Exists(EquationsFile)) return;
+                if (!File.Exists(EquationsFile))
+                {
+                    SeedDefaults();
+                    Save();
+                    return;
+                }
 
                 string json = File.ReadAllText(EquationsFile);
                 var loaded = JsonSerializer.Deserialize<List<UserBulbEntry>>(json, BuildJsonOptions());
-                if (loaded == null) return;
+                if (loaded == null)
+                {
+                    SeedDefaults();
+                    Save();
+                    return;
+                }
 
                 foreach (var e in loaded)
                     if (e != null && !string.IsNullOrWhiteSpace(e.Name)) Equations.Add(e);
+
+                if (Equations.Count == 0)
+                {
+                    SeedDefaults();
+                    Save();
+                }
             }
             catch
             {
                 Equations.Clear();
+                SeedDefaults();
             }
+        }
+
+        private void SeedDefaults()
+        {
+            Equations.Add(new UserBulbEntry { Name = "Square triplex (z*z + c)",
+                Source = "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Mandelbulb p=8",
+                Source = "return Vec3.Pow(z, 8) + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Mandelbulb p=4",
+                Source = "return Vec3.Pow(z, 4) + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Sin-bulb",
+                Source = "return Vec3.Sin(z) * 1.5 + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Abs-bulb p=8",
+                Source = "return Vec3.Pow(Vec3.Abs(z), 8) + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Mandelbox",
+                Source = "var v = Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0);\nreturn v * 2.0 + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Cosh × Sin bulb",
+                Source = "return Vec3.Sin(z) * Vec3.Cosh(z) + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Animated breathing bulb (uses t)",
+                Source = "return Vec3.Pow(z, 4 + 2*Math.Sin(t)) + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Folded abs-Y bulb",
+                Source = "return Vec3.Pow(Vec3.AbsY(z), 8) + c;" });
+            Equations.Add(new UserBulbEntry { Name = "Reflected triplex",
+                Source = "var w = new Vec3(Math.Abs(z.X), Math.Abs(z.Y), z.Z);\nreturn new Vec3(w.X*w.X - w.Y*w.Y - w.Z*w.Z, 2*w.X*w.Y, 2*w.X*w.Z) + c;" });
         }
 
         public void Save()
@@ -146,6 +187,40 @@ namespace FracturingFog.Models
             foreach (var e in Equations)
                 if (e.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return e;
             return null;
+        }
+
+        /// <summary>Export one entry to a .fbulb JSON file.</summary>
+        public bool ExportEntry(string name, string filePath)
+        {
+            var entry = GetByName(name);
+            if (entry == null) return false;
+            try
+            {
+                File.WriteAllText(filePath, JsonSerializer.Serialize(entry, BuildJsonOptions()));
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Import a .fbulb JSON file. Renames on collision (suffix N).</summary>
+        public UserBulbEntry? ImportEntry(string filePath)
+        {
+            try
+            {
+                string json = File.ReadAllText(filePath);
+                var entry = JsonSerializer.Deserialize<UserBulbEntry>(json, BuildJsonOptions());
+                if (entry == null || string.IsNullOrWhiteSpace(entry.Name)) return null;
+                string baseName = entry.Name;
+                int suffix = 1;
+                while (GetByName(entry.Name) != null)
+                {
+                    entry.Name = $"{baseName} ({suffix++})";
+                }
+                Equations.Add(entry);
+                Save();
+                return entry;
+            }
+            catch { return null; }
         }
     }
 }

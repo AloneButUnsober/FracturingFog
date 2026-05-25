@@ -76,6 +76,86 @@ namespace FracturingFog.Models
             return len < 1e-12 ? Zero : new Vec3(X / len, Y / len, Z / len);
         }
 
+        // ── Fractal-authoring helpers ───────────────────────────────────────
+
+        /// <summary>Triplex spherical power. Real Mandelbulb formula:
+        /// r=|v|, θ=atan2(y,x), φ=asin(z/r) → r^n·(cos(nφ)cos(nθ), cos(nφ)sin(nθ), sin(nφ)).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 Pow(Vec3 v, double n)
+        {
+            double r = v.Length;
+            if (r < 1e-12) return Zero;
+            double theta = Math.Atan2(v.Y, v.X) * n;
+            double phi = Math.Asin(Math.Clamp(v.Z / r, -1.0, 1.0)) * n;
+            double rn = Math.Pow(r, n);
+            double cosp = Math.Cos(phi);
+            return new Vec3(rn * cosp * Math.Cos(theta), rn * cosp * Math.Sin(theta), rn * Math.Sin(phi));
+        }
+
+        /// <summary>Rotate v around axis by angle (radians) — Rodrigues formula.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 Rot(Vec3 v, Vec3 axis, double angle)
+        {
+            var k = axis.Normalized();
+            double c = Math.Cos(angle), s = Math.Sin(angle);
+            return v * c + Cross(k, v) * s + k * (Dot(k, v) * (1.0 - c));
+        }
+
+        /// <summary>Per-axis box fold: abs(x) &gt; limit ? sign(x)·2·limit − x : x. Mandelbox.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 BoxFold(Vec3 v, double limit) => new(
+            FoldAxis(v.X, limit), FoldAxis(v.Y, limit), FoldAxis(v.Z, limit));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double FoldAxis(double x, double limit) =>
+            Math.Abs(x) > limit ? Math.Sign(x) * 2.0 * limit - x : x;
+
+        /// <summary>Sphere fold (inversion): inside rMin → ·(rMax²/rMin²); between → ·(rMax²/r²); outside → no-op.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 SphereFold(Vec3 v, double rMin, double rMax)
+        {
+            double r2 = v.LengthSquared;
+            double rMin2 = rMin * rMin;
+            double rMax2 = rMax * rMax;
+            if (r2 < rMin2) return v * (rMax2 / rMin2);
+            if (r2 < rMax2) return v * (rMax2 / r2);
+            return v;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 AbsX(Vec3 v) => new(Math.Abs(v.X), v.Y, v.Z);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 AbsY(Vec3 v) => new(v.X, Math.Abs(v.Y), v.Z);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 AbsZ(Vec3 v) => new(v.X, v.Y, Math.Abs(v.Z));
+
+        /// <summary>Periodic space repeat per axis: v − period·floor(v/period + 0.5).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 Mod(Vec3 v, double period) => new(
+            v.X - period * Math.Floor(v.X / period + 0.5),
+            v.Y - period * Math.Floor(v.Y / period + 0.5),
+            v.Z - period * Math.Floor(v.Z / period + 0.5));
+
+        /// <summary>Smooth min: −log(exp(−k·a) + exp(−k·b)) / k. DE blend with C¹ continuity.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double SMin(double a, double b, double k) =>
+            -Math.Log(Math.Exp(-k * a) + Math.Exp(-k * b)) / k;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static (double R, double Theta, double Phi) ToSpherical(Vec3 v)
+        {
+            double r = v.Length;
+            if (r < 1e-12) return (0, 0, 0);
+            return (r, Math.Atan2(v.Y, v.X), Math.Asin(Math.Clamp(v.Z / r, -1.0, 1.0)));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vec3 FromSpherical(double r, double theta, double phi)
+        {
+            double cp = Math.Cos(phi);
+            return new Vec3(r * cp * Math.Cos(theta), r * cp * Math.Sin(theta), r * Math.Sin(phi));
+        }
+
         public override string ToString() => $"({X:G6}, {Y:G6}, {Z:G6})";
     }
 }
