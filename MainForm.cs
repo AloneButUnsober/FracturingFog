@@ -3165,9 +3165,12 @@ public sealed partial class MainForm : Form
         if (ActiveControl is TextBox || ActiveControl is NumericUpDown || ActiveControl is ComboBox)
             return;
         if (_slideshowRunning || _spanning) return;
-        if (e.Control || e.Alt || e.Shift) return;
+        bool isPanKey = e.KeyCode is Keys.A or Keys.D or Keys.Q or Keys.E;
+        if (e.Control || e.Alt) return;
+        if (e.Shift && !isPanKey) return;
 
         bool is3D = Is3DFractalType(_currentFractalType);
+        const double panPreciseFactor = 0.25;   // Shift = quarter step
 
         switch (e.KeyCode)
         {
@@ -3191,33 +3194,35 @@ public sealed partial class MainForm : Form
 
         if (!is3D)
         {
-            // ── 2D: W/S = zoom, A/D = pan ────────────────────────────────────
+            // ── 2D: W/S = zoom, A/D = pan (Shift = precise) ──────────────────
             const double zoomFactor = 1.25;
             const double panFrac = 0.125;   // pan ~1/8 of viewport per key
+            double pan2D = e.Shift ? panFrac * panPreciseFactor : panFrac;
             switch (e.KeyCode)
             {
                 case Keys.W: CenterZoomBy(zoomFactor); e.Handled = true; return;
                 case Keys.S: CenterZoomBy(1.0 / zoomFactor); e.Handled = true; return;
-                case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
-                case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * panFrac), 0); e.Handled = true; return;
-                case Keys.Q: PanByPixels(0, (int)(_renderPanel.ClientSize.Height * panFrac)); e.Handled = true; return;
-                case Keys.E: PanByPixels(0, -(int)(_renderPanel.ClientSize.Height * panFrac)); e.Handled = true; return;
+                case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * pan2D), 0); e.Handled = true; return;
+                case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * pan2D), 0); e.Handled = true; return;
+                case Keys.Q: PanByPixels(0, (int)(_renderPanel.ClientSize.Height * pan2D)); e.Handled = true; return;
+                case Keys.E: PanByPixels(0, -(int)(_renderPanel.ClientSize.Height * pan2D)); e.Handled = true; return;
             }
             return;
         }
 
-        // ── 3D: W/S = distance, A/D = pan, arrows = camera, Pg/Home/End = light ─
+        // ── 3D: W/S = distance, A/D = pan (Shift = precise), arrows = camera, Pg/Home/End = light ─
         const double distStep = 0.25;
         const double rotStep = Math.PI / 36.0; // 5°
         const double pan3DFrac = 0.125;
+        double pan3D = e.Shift ? pan3DFrac * panPreciseFactor : pan3DFrac;
         switch (e.KeyCode)
         {
             case Keys.W: Adjust3DDistance(-distStep); e.Handled = true; return;
             case Keys.S: Adjust3DDistance(distStep); e.Handled = true; return;
-            case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
-            case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * pan3DFrac), 0); e.Handled = true; return;
-            case Keys.Q: PanByPixels(0, (int)(_renderPanel.ClientSize.Height * pan3DFrac)); e.Handled = true; return;
-            case Keys.E: PanByPixels(0, -(int)(_renderPanel.ClientSize.Height * pan3DFrac)); e.Handled = true; return;
+            case Keys.A: PanByPixels((int)(_renderPanel.ClientSize.Width * pan3D), 0); e.Handled = true; return;
+            case Keys.D: PanByPixels(-(int)(_renderPanel.ClientSize.Width * pan3D), 0); e.Handled = true; return;
+            case Keys.Q: PanByPixels(0, (int)(_renderPanel.ClientSize.Height * pan3D)); e.Handled = true; return;
+            case Keys.E: PanByPixels(0, -(int)(_renderPanel.ClientSize.Height * pan3D)); e.Handled = true; return;
 
             case Keys.Up: Adjust3DCameraPhi(rotStep); e.Handled = true; return;
             case Keys.Down: Adjust3DCameraPhi(-rotStep); e.Handled = true; return;
