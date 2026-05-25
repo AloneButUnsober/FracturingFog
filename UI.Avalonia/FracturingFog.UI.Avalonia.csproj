@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Class library form for now. Once Phase 2.3 swaps Program.cs to launch
+      the Avalonia shell as the primary UI, switch OutputType to WinExe.
+      Keeping it a library lets the existing FracturingFogCLD.csproj reference
+      this project and start the Avalonia window behind an avalonia CLI flag
+      without dragging in a second entry point.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>FracturingFog.UI.Avalonia</RootNamespace>
+    <AssemblyName>FracturingFog.UI.Avalonia</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Avalonia 11.2 is the current LTS line as of 2026-05.
+      Avalonia.Desktop pulls in Win32 / X11 / macOS backends so this single
+      assembly runs on all three desktops with no per-platform RID switching.
+      Themes.Fluent matches the existing dark aesthetic of the WinForms UI.
+    -->
+    <!--
+      PrivateAssets=analyzers prevents the Avalonia XAML source generators
+      from flowing transitively into the WinExe project (which references
+      this assembly but has no XAML of its own and is missing the Avalonia
+      base types the generator emits against). Without this, the WinExe
+      build fails with CS1929 inside generated MainWindow.g.cs files placed
+      in the WinExe's obj/ tree.
+    -->
+    <PackageReference Include="Avalonia" Version="11.2.3">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.3">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.2.3">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Reference the shared abstractions library only. Avalonia shell does NOT
+      depend on the WinForms WinExe — that direction is owned by the WinExe
+      so it can launch the Avalonia shell via the avalonia flag. Phase 2.1 will
+      grow this list (Core project with calculators/models) but for the
+      bootstrap step IGpuSurface is the only shared contract needed.
+    -->
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,134 @@
+# Phase 2 — Avalonia UI Migration + GPU Renderer Abstraction
+
+**Branch**: `feature/phase2-avalonia-ui`
+**Goal**: Replace WinForms UI with Avalonia 11 for proper DPI scaling and cross-platform readiness (Win/Mac/Linux). Introduce a renderer abstraction so the Vortice DirectX 11/12 path stays on Windows while future Skia/Vulkan/Metal backends can slot in.
+**Scope warning**: Large multi-week effort. Touches `MainForm.cs` (183 KB monolith), 17 dialog/view files, all event wiring, and the `DirectXRenderer` / `DirectX12Renderer` HWND hosting model.
+
+## Why
+
+- Current UI uses hardcoded pixel `ClientSize`, manual `Left/Top/Width` arithmetic, no `TableLayoutPanel`/`FlowLayoutPanel`/`AutoSize`. Breaks at non-100% DPI and unusual resolutions.
+- WinForms `PerMonitorV2` only helps if controls cooperate — they don't here.
+- `Vortice.Direct3D11/12` locks renderer to Windows. To open Mac/Linux later we need an `IGpuSurface` boundary.
+- `MainForm.cs` mixes view, view-model, and controller logic. Avalonia's MVVM-friendly bindings require a split anyway, so this is the natural cut point.
+
+## Architecture target
+
+```
+FracturingFog.Core           (netstandard2.1 / net10.0)
+  ├── Calculators/           (existing, no UI deps)
+  ├── Models/                (existing)
+  ├── Math/                  (existing)
+  ├── Interefaces/
+  │     ├── IFractalRenderer.cs   (existing)
+  │     └── IGpuSurface.cs        (NEW — abstracts swapchain/HWND/CAMetalLayer/VkSurface)
+  └── ViewModels/            (NEW — extracted from MainForm.cs)
+        ├── MainViewModel.cs
+        ├── FloatingMenuViewModel.cs
+        ├── ColorThemeEditorViewModel.cs
+        └── ...
+
+FracturingFog.Rendering.D3D  (net10.0-windows)
+  ├── DirectXRenderer.cs     (moved, implements IGpuSurface)
+  ├── DirectX12Renderer.cs
+  └── HwndGpuSurface.cs      (NEW — wraps HWND)
+
+FracturingFog.UI.Avalonia    (net10.0, cross-platform)
+  ├── App.axaml + App.axaml.cs
+  ├── Views/
+  │     ├── MainWindow.axaml
+  │     ├── FloatingMenu.axaml
+  │     ├── ColorThemeEditor.axaml
+  │     └── ... (one per current Views/*.cs)
+  ├── Controls/
+  │     └── GpuSurfaceControl.cs   (NativeControlHost wrapper around IGpuSurface)
+  └── Program.cs             (BuildAvaloniaApp — replaces existing Program.cs)
+
+FracturingFog.Legacy.WinForms (net10.0-windows, deletable when port complete)
+  └── MainForm.cs            (kept building during transition behind a build flag)
+```
+
+## Phase 2 step list
+
+### 2.0 — Setup (this session)
+- [x] Create branch `feature/phase2-avalonia-ui`
+- [x] Add `FracturingFog.Abstractions` project (UI-free shared contracts; replaces the original `Core` plan for the bootstrap step)
+- [x] Add `FracturingFog.UI.Avalonia` project (Avalonia 11.2.3, `Avalonia.Desktop`, `Avalonia.Themes.Fluent`, `Avalonia.ReactiveUI`)
+- [x] Update `.sln` to include both new projects
+- [x] Define `IGpuSurface.cs` in Abstractions — abstraction over native window handle + resize events
+- [x] Stub `GpuSurfaceControl` in Avalonia project using `NativeControlHost`
+- [x] Wire minimal Avalonia `MainWindow` that hosts `GpuSurfaceControl` (renderer wiring deferred to step 2.1)
+- [x] Add `--avalonia` CLI flag to `Program.cs` so both UIs build during transition
+- [x] All three projects build clean (`dotnet build FracturingFogCLD.sln` → 0 errors)
+
+#### Build gotchas resolved during 2.0
+- Avalonia XAML NameGenerator analyzer leaks transitively from `UI.Avalonia` into the WinExe even with `ExcludeAssets`/`PrivateAssets` set. Worked around with a `StripAvaloniaAnalyzers` MSBuild target in the WinExe csproj that removes any `@(Analyzer)` whose path contains "Avalonia".
+- Avalonia XAML compiler also auto-globs `*.axaml` under the project root. WinExe csproj now explicitly `Remove`s `AvaloniaResource`, `AvaloniaXaml`, `ApplicationDefinition`, `Page`, and `AdditionalFiles` under `UI.Avalonia\**`.
+- WinExe also `Remove`s `Compile`/`None`/`EmbeddedResource`/`Content` under `Abstractions\**` and `UI.Avalonia\**` to stop the implicit SDK glob from compiling sibling-project sources into the WinExe twice.
+
+### 2.1 — Renderer abstraction
+- [ ] Move `Rendering/DirectXRenderer.cs` + `DirectX12Renderer.cs` into `FracturingFog.Rendering.D3D` project
+- [ ] `HwndGpuSurface : IGpuSurface` wraps current HWND-based init
+- [ ] `RenderFactory` returns surface-aware renderer
+- [ ] Verify existing WinForms `MainForm` still runs unchanged after move
+- [ ] Verify Avalonia shell can render same fractal (proof-of-life)
+
+### 2.2 — Dialog ports (incremental, one PR per dialog)
+Priority order (simplest → most coupled):
+- [ ] `FloatingHelp.axaml`
+- [ ] `AudioSettingsDialog.axaml`
+- [ ] `SlideshowSettingsDialog.axaml`
+- [ ] `FractalParamsDialog.axaml`
+- [ ] `ImagePaletteDialog.axaml`
+- [ ] `SandboxDialog.axaml`
+- [ ] `UserEquationDialog.axaml`
+- [ ] `UserBulbDialog.axaml`
+- [ ] `ColorThemeEditor.axaml` (largest)
+- [ ] `FloatingMenu.axaml` (largest, deepest coupling)
+- [ ] `MiniMapPanel` → `MiniMapControl.axaml`
+- [ ] `SlideshowVcrPanel` → `SlideshowVcrControl.axaml`
+- [ ] `MiniDepthPanel` → `MiniDepthControl.axaml`
+
+Each port:
+1. Extract view-model class from current code-behind (commands, observable props).
+2. Build `.axaml` with `Grid`/`StackPanel`/`DockPanel` — no pixel literals; use `*` / `Auto` sizing and `Margin`/`Padding` in DIPs.
+3. Bind to view-model. Unit test the VM.
+4. Wire from new `MainViewModel`.
+5. Remove old `Views/*.cs` once parity confirmed.
+
+### 2.3 — MainForm decomposition
+- [ ] Extract `MainViewModel` from `MainForm.cs` (state + commands)
+- [ ] Extract input handling (pan/zoom/keyboard) into `IInputHandler` consumed by both UIs
+- [ ] Extract menu/toolbar coordination into `ShellViewModel`
+- [ ] Avalonia `MainWindow.axaml` binds to `ShellViewModel`
+- [ ] Delete `MainForm.cs` + `MainForm.Designer.cs` + `MainForm.resx`
+- [ ] Delete `FracturingFog.Legacy.WinForms` project
+
+### 2.4 — Cross-platform renderer (deferred, optional)
+- [ ] Add `FracturingFog.Rendering.Skia` (SkiaSharp GPU backend) OR `FracturingFog.Rendering.Silk` (Vulkan/OpenGL via Silk.NET)
+- [ ] CI build matrix: win-x64, linux-x64, osx-arm64
+- [ ] ILGPU compute path validated on Linux/Mac (CUDA optional, CPU fallback required)
+
+## Non-goals
+
+- Mobile/touch UI (defer until cross-platform desktop ships).
+- Rewriting `MandelbrotCalculator` / kernels — they are UI-agnostic already.
+- Theming overhaul — match current dark theme; cosmetic redesign is a separate task.
+- Removing Vortice — it stays as the Windows renderer.
+
+## Risks
+
+- **DirectX hosting in Avalonia**: `NativeControlHost` works but resize/devicelost handling needs care. Validate early in step 2.0.
+- **MVVM extraction depth**: `MainForm.cs` has tight coupling between input, view, and renderer state. Expect leaky abstractions during transition.
+- **Build time**: split projects increase first-build time. Acceptable tradeoff.
+- **DPI on multi-monitor mixed scaling**: Avalonia handles per-monitor DPI natively; verify on a 100% + 150% dual-monitor setup.
+- **Vortice swapchain rebuild on resize**: must hook Avalonia's `SizeChanged` not WinForms `Resize`.
+
+## Commit cadence
+
+- One commit per step (or sub-step) above. Format per repo convention: `<imperative summary> - BAB <yyyymmdd>`.
+- Keep WinForms build green at every commit until step 2.3 deletes it.
+- Tag `phase2-avalonia-bootstrap` after step 2.0 completes.
+
+## Reference
+
+Phase 1 (low-effort WinForms scaling fixes) is a separate parallel track on a different branch and is not blocked by this work.
