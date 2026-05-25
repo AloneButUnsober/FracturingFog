@@ -98,6 +98,10 @@ namespace FracturingFog.Models
         public double UserBulbEpsilon { get; set; } = 0.0015;
         /// <summary>Finite-diff perturbation magnitude for numerical Jacobian DE.</summary>
         public double UserBulbJacobianH { get; set; } = 1e-4;
+        /// <summary>Radius of bounding sphere around fractal target. Rays that miss this sphere
+        /// skip raymarching entirely. Set large enough to enclose any feature; 2.5 covers all
+        /// standard bulbs/Mandelboxes.</summary>
+        public double UserBulbCullRadius { get; set; } = 2.5;
 
         public FractalParameters Clone()
         {
@@ -147,7 +151,8 @@ namespace FracturingFog.Models
                 UserBulbLightPhi = UserBulbLightPhi,
                 UserBulbMaxSteps = UserBulbMaxSteps,
                 UserBulbEpsilon = UserBulbEpsilon,
-                UserBulbJacobianH = UserBulbJacobianH
+                UserBulbJacobianH = UserBulbJacobianH,
+                UserBulbCullRadius = UserBulbCullRadius
             };
         }
     }
