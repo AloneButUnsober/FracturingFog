@@ -43,6 +43,35 @@
     <None Remove="Resources\ResolutionRatios.txt" />
   </ItemGroup>
 
+  <!--
+    Exclude the sibling projects' source trees from the WinExe's implicit SDK
+    globbing. Without these excludes MSBuild compiles Abstractions/*.cs and
+    UI.Avalonia/**/*.cs twice (once into their own assemblies via the
+    ProjectReference, once into this WinExe via the default glob), producing
+    CS0436 duplicate-type warnings and CS0579 duplicate assembly-attribute
+    errors when the Avalonia project's obj/ files leak in.
+  -->
+  <ItemGroup>
+    <Compile Remove="Abstractions\**" />
+    <Compile Remove="UI.Avalonia\**" />
+    <None Remove="Abstractions\**" />
+    <None Remove="UI.Avalonia\**" />
+    <EmbeddedResource Remove="Abstractions\**" />
+    <EmbeddedResource Remove="UI.Avalonia\**" />
+    <Content Remove="Abstractions\**" />
+    <Content Remove="UI.Avalonia\**" />
+    <!--
+      Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
+      items automatically from anywhere under the project root. Strip the UI
+      shell's tree from this WinExe — those files compile inside UI.Avalonia.dll.
+    -->
+    <AvaloniaResource Remove="UI.Avalonia\**" />
+    <AvaloniaXaml Remove="UI.Avalonia\**" />
+    <ApplicationDefinition Remove="UI.Avalonia\**" />
+    <Page Remove="UI.Avalonia\**" />
+    <AdditionalFiles Remove="UI.Avalonia\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <Content Include="Resources\FracturingFog.ico" />
   </ItemGroup>
@@ -62,6 +91,40 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="ILGPU" Version="1.5.1" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Shared UI-free contracts (IGpuSurface and future siblings). -->
+    <ProjectReference Include="Abstractions\FracturingFog.Abstractions.csproj" />
+    <!--
+      Phase 2 Avalonia shell. Referenced so the avalonia CLI flag launches
+      the new UI from the same WinExe during the migration. Remove when
+      Phase 2.3 swaps to Avalonia as the primary entry point.
+
+      ExcludeAssets=analyzers blocks the transitive Avalonia source generator
+      (Avalonia.Generators.NameGenerator) from re-running inside this WinExe
+      and emitting MainWindow.g.cs against types not referenced here. The
+      generator already ran in UI.Avalonia.dll where the XAML lives.
+    -->
+    <ProjectReference Include="UI.Avalonia\FracturingFog.UI.Avalonia.csproj">
+      <ExcludeAssets>analyzers</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!--
+    Belt-and-braces: strip any analyzer assembly whose path contains
+    "Avalonia" from this project's analyzer set before CoreCompile runs.
+    Avalonia's XAML name-generator (Avalonia.NameGenerator) is delivered
+    as a NuGet analyzer that leaks transitively through the ProjectReference
+    above despite ExcludeAssets/PrivateAssets — see
+    https://github.com/AvaloniaUI/Avalonia/issues/14438 — and emits a
+    generated partial for FracturingFog.UI.Avalonia.Views.MainWindow into
+    this WinExe's obj/ tree, failing to compile because the Avalonia
+    runtime types it references are not in scope here.
+  -->
+  <Target Name="StripAvaloniaAnalyzers" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="$([System.String]::Copy('%(Analyzer.Identity)').Contains('Avalonia'))" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <None Update="Resources\colorthemes.json">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
