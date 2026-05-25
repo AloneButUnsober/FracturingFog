@@ -237,7 +237,7 @@ namespace FracturingFog.Models
             _ => Standard,
         };
 
-        internal static QualityPreset FromName(string value)
+        public static QualityPreset FromName(string value)
         {
             if (!string.IsNullOrEmpty(value))
             {

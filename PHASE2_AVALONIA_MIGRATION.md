@@ -100,12 +100,37 @@ Each port:
 5. Remove old `Views/*.cs` once parity confirmed.
 
 ### 2.3 — MainForm decomposition
-- [ ] Extract `MainViewModel` from `MainForm.cs` (state + commands)
-- [ ] Extract input handling (pan/zoom/keyboard) into `IInputHandler` consumed by both UIs
-- [ ] Extract menu/toolbar coordination into `ShellViewModel`
-- [ ] Avalonia `MainWindow.axaml` binds to `ShellViewModel`
-- [ ] Delete `MainForm.cs` + `MainForm.Designer.cs` + `MainForm.resx`
-- [ ] Delete `FracturingFog.Legacy.WinForms` project
+
+Survey done. Total monolith = 4,247 lines (`MainForm.cs`) + 818 (`Slideshow.cs`) + 1,850 (`VideoZoom.cs`) — all `sealed partial class MainForm`, 110 methods in the main file. Cut plan:
+
+**A. Pure view state → Abstractions** (no UI, no renderer)
+- `Abstractions/ViewState/FractalViewState.cs` — POCO holding `CenterX/Y` quad-precision limbs, `Zoom`, `QualityPreset`, `FractalType`, brightness/contrast/adaptive, iter lock state, and a reference to the existing `FractalParameters` (already in Abstractions). 3D camera state already lives on `FractalParameters`.
+
+**B. Input → Abstractions** (mouse + keyboard, precision-aware pan/zoom math)
+- `Abstractions/Input/InputEvents.cs` — neutral event records (`PointerInput`, `WheelInput`, `KeyInput`) so the input layer is shell-agnostic.
+- `Abstractions/Input/IFractalInputController.cs` + `FractalInputController.cs` — owns pan/zoom state, picks DD/QD/double math tier from `_zoom`, handles 2D and 3D key bindings (W/S zoom, A/D/Q/E pan, arrows for 3D camera, PgUp/PgDn/Home/End for 3D light). Raises `ViewChanged` so the renderer host re-triggers.
+
+**C. Render orchestration → main project** (renderer + 11 calculators)
+- `FractalRenderHost.cs` (stays in main; depends on all calculator types + `IFractalRenderer`) — wraps `TriggerCalculation` / `TriggerCalculationFast` / `UploadProcessedBuffer` / `BlendWatermarkOverlay` / `BlendGridOverlay` / `SelectAltCalculator` / `ApplyViewState`. Surface: `void ApplyView(FractalViewState)`, `void Trigger(bool progressive)`, `void TriggerFast()`, `void Resize(int,int)`, `event Action<RenderFrameInfo> FrameCompleted`.
+
+**D. `MainViewModel` → UI.Avalonia/ViewModels/** — top-level: holds `FractalViewState`, drives `FractalRenderHost`, owns `FractalInputController`, mirrors selected region/theme/quality/fractal-type into combos, manages brightness/contrast/adaptive + lock flags.
+
+**E. `ShellViewModel` → UI.Avalonia/ViewModels/** — owns `FloatingMenuViewModel`, lazy `ColorThemeEditorViewModel`, lazy `FloatingHelpViewModel`, mini-map + mini-depth panels, VCR + slideshow settings. Glues child VMs to the `MainViewModel`.
+
+**F.** Avalonia `MainWindow.axaml` binds to `ShellViewModel` with the existing `GpuSurfaceControl` as the render surface.
+
+**G.** Delete `MainForm.cs` + `Slideshow.cs` + `VideoZoom.cs` (or carve `Slideshow` + `VideoZoom` into engines that the `ShellViewModel` orchestrates), `MainForm.resx`, the WinForms project entry point.
+
+WinForms shell stays green during steps A–E by having MainForm consume the new objects; only step G removes it.
+
+- [x] Survey + cut plan written (above)
+- [x] A. Extract `FractalViewState` POCO to Abstractions (also moved `QualityPreset` + `QualityTier` from `Models/` to `Abstractions/Models/` since it's pure POCO; `FromName` raised from `internal` to `public` so the cross-assembly caller in `FractalRegion.cs` still compiles)
+- [x] B. Extract `IFractalInputController` + neutral input events to Abstractions (`InputEvents.cs` defines `PointerInput`/`WheelInput`/`KeyInput` records + `PointerButton`/`InputModifiers`/`InputKey`/`InputCursor` enums; `FractalInputController.cs` ports the precision-aware pan/zoom math from MainForm verbatim — double/DD/QD tiers, cursor-anchor wheel zoom, 3D right-drag camera rotation, 2D+3D key bindings. Also moved `Math/DoubleDouble.cs` + `Math/QuadDouble.cs` to `Abstractions/Math/` since the input controller references them. Controller raises `ViewChanged(RenderHint)` (Full or Fast), `StatusRequested` for quality auto-promotion notices, `CursorRequested` for drag-state cursor changes. WinForms shell still unchanged — adapter glue lands in step C.)
+- [ ] C. Extract `FractalRenderHost` to main project
+- [ ] D. Extract `MainViewModel` to UI.Avalonia
+- [ ] E. Extract `ShellViewModel` to UI.Avalonia
+- [ ] F. Wire Avalonia `MainWindow.axaml` to `ShellViewModel`
+- [ ] G. Delete `MainForm.cs` + `Slideshow.cs` + `VideoZoom.cs` + `MainForm.resx` + WinForms entry point
 
 ### 2.4 — Cross-platform renderer (deferred, optional)
 - [ ] Add `FracturingFog.Rendering.Skia` (SkiaSharp GPU backend) OR `FracturingFog.Rendering.Silk` (Vulkan/OpenGL via Silk.NET)
