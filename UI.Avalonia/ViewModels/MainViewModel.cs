@@ -205,6 +205,26 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private bool _adaptiveLocked;
     public bool AdaptiveLocked { get => _adaptiveLocked; set => this.RaiseAndSetIfChanged(ref _adaptiveLocked, value); }
 
+    // ── Overlay toggles ───────────────────────────────────────────────────
+
+    private bool _showGrid;
+    /// <summary>True to draw the Cartesian grid + axis labels above the
+    /// render surface (Avalonia.Media, not blended into the texture).</summary>
+    public bool ShowGrid
+    {
+        get => _showGrid;
+        set => this.RaiseAndSetIfChanged(ref _showGrid, value);
+    }
+
+    private bool _showWatermark;
+    /// <summary>True to draw the region/theme + program/version watermark
+    /// in the lower-right corner.</summary>
+    public bool ShowWatermark
+    {
+        get => _showWatermark;
+        set => this.RaiseAndSetIfChanged(ref _showWatermark, value);
+    }
+
     // ── Iter lock ─────────────────────────────────────────────────────────
 
     private bool _iterLocked;
