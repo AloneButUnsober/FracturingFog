@@ -3,21 +3,49 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         mc:Ignorable="d"
         x:Class="FracturingFog.UI.Avalonia.Views.MainWindow"
-        Title="Fracturing Fog (Avalonia preview)"
+        x:DataType="vm:ShellViewModel"
+        Title="Fracturing Fog"
         Width="1280" Height="800"
         MinWidth="640" MinHeight="400"
         Background="Black">
 
     <!--
-      Phase 2.0 shell. The GpuSurfaceControl is the central render target;
-      everything else (floating menu, minimap, footer) will dock around it
-      via Grid * sizing as each WinForms dialog is ported.
-
-      No hardcoded pixel coordinates anywhere in this tree — Avalonia DIPs
-      scale automatically across DPI and resolution.
+      Phase 2.3 F.2 shell layout. Binds to ShellViewModel:
+        • Top toolbar  → Main.FractalTypes / QualityPresets +
+                         FloatingMenu.RegionNames / ThemeNames
+        • Center       → GpuSurfaceControl (NativeControlHost child HWND)
+                         with an "InputSponge" Border above it. Native
+                         HWND children do not forward pointer events
+                         to Avalonia, so the sponge is the actual input
+                         target the AvaloniaInputAdapter listens on.
+        • Bottom strip → Main.StatusText
+        • Child windows (FloatingMenu / ColorThemeEditor / FloatingHelp)
+          are shown / hidden by the code-behind tracking the Shell's
+          IsXxxVisible flags.
     -->
+
+    <Window.Styles>
+        <Style Selector="Button.toolbar">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Background" Value="#222" />
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="BorderBrush" Value="#444" />
+        </Style>
+        <Style Selector="ComboBox.toolbar">
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="MinHeight" Value="26" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+    </Window.Styles>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -25,24 +53,67 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- Toolbar ─────────────────────────────────────────────────────── -->
         <Border Grid.Row="0"
-                Padding="8,4"
+                Padding="6,4"
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="0,0,0,1">
-            <TextBlock Text="Fracturing Fog — Avalonia shell (Phase 2 bootstrap)"
-                       Foreground="#C8C864"
-                       FontWeight="Bold" />
+            <DockPanel LastChildFill="False">
+                <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
+                    <TextBlock Text="Type" Classes="label" />
+                    <ComboBox Classes="toolbar"
+                              MinWidth="130"
+                              ItemsSource="{Binding Main.FractalTypes}"
+                              SelectedItem="{Binding Main.SelectedFractalType}" />
+                    <TextBlock Text="Quality" Classes="label" Margin="8,0,0,0" />
+                    <ComboBox Classes="toolbar"
+                              MinWidth="130"
+                              ItemsSource="{Binding Main.QualityPresets}"
+                              SelectedItem="{Binding Main.SelectedQuality}" />
+                    <TextBlock Text="Region" Classes="label" Margin="8,0,0,0" />
+                    <ComboBox Classes="toolbar"
+                              MinWidth="180"
+                              ItemsSource="{Binding FloatingMenu.RegionNames}"
+                              SelectedItem="{Binding FloatingMenu.SelectedRegion}" />
+                    <TextBlock Text="Theme" Classes="label" Margin="8,0,0,0" />
+                    <ComboBox Classes="toolbar"
+                              MinWidth="180"
+                              ItemsSource="{Binding FloatingMenu.ThemeNames}"
+                              SelectedItem="{Binding FloatingMenu.SelectedTheme}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Right">
+                    <Button Classes="toolbar" Content="Reset"
+                            Command="{Binding Main.ResetViewCommand}" />
+                    <Button Classes="toolbar" Content="Edit Theme"
+                            Command="{Binding ShowColorThemeEditorCommand}" />
+                    <Button Classes="toolbar" Content="Menu"
+                            Command="{Binding ShowFloatingMenuCommand}" />
+                    <Button Classes="toolbar" Content="Help"
+                            Command="{Binding ShowHelpCommand}" />
+                </StackPanel>
+            </DockPanel>
         </Border>
 
-        <ctrl:GpuSurfaceControl x:Name="GpuSurface" Grid.Row="1" />
+        <!-- Render surface + input sponge ───────────────────────────────── -->
+        <Grid Grid.Row="1">
+            <ctrl:GpuSurfaceControl x:Name="GpuSurface" />
+            <!-- Transparent input sponge above the native HWND child. Pointer
+                 + key events from this Border feed AvaloniaInputAdapter,
+                 which translates them into the IFractalInputController. -->
+            <Border x:Name="InputSponge"
+                    Background="Transparent"
+                    IsHitTestVisible="True"
+                    Focusable="True" />
+        </Grid>
 
+        <!-- Status bar ─────────────────────────────────────────────────── -->
         <Border Grid.Row="2"
                 Padding="8,4"
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="0,1,0,0">
-            <TextBlock x:Name="StatusText"
-                       Text="Surface not yet attached."
-                       Foreground="#999" />
+            <TextBlock Text="{Binding Main.StatusText}"
+                       Foreground="#C0C0C0"
+                       FontFamily="Consolas,Menlo,monospace" />
         </Border>
     </Grid>
 
