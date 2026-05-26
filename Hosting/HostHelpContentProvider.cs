@@ -40,12 +40,27 @@ namespace FracturingFog.Hosting
         public string EditorText   => HelpTextBundle.EditorText;
         public string BioText      => HelpTextBundle.BioText;
 
+        // Order mirrors the legacy WinForms FloatingHelp Math tab so users
+        // moving between the two shells see the same layout.
         public IReadOnlyList<HelpSubTab> MathSubTabs { get; } = new HelpSubTab[]
         {
-            new("Mandelbrot", HelpTextBundle.MathMandelbrotText),
-            new("Julia",      HelpTextBundle.MathJuliaText),
-            new("Newton",     HelpTextBundle.MathNewtonText),
-            new("Mandelbulb", HelpTextBundle.MathMandelbulbText),
+            new("Overview",      HelpTextBundle.MathOverviewText),
+            new("Mandelbrot",    HelpTextBundle.MathMandelbrotText),
+            new("Julia",         HelpTextBundle.MathJuliaText),
+            new("Burning Ship",  HelpTextBundle.MathBurningShipText),
+            new("Tricorn",       HelpTextBundle.MathTricornText),
+            new("Multibrot",     HelpTextBundle.MathMultibrotText),
+            new("Phoenix",       HelpTextBundle.MathPhoenixText),
+            new("Newton",        HelpTextBundle.MathNewtonText),
+            new("Nova",          HelpTextBundle.MathNovaText),
+            new("Buddhabrot",    HelpTextBundle.MathBuddhabrotText),
+            new("IFS",           HelpTextBundle.MathIFSText),
+            new("L-System",      HelpTextBundle.MathLSystemText),
+            new("Attractor",     HelpTextBundle.MathAttractorText),
+            new("Mandelbulb",    HelpTextBundle.MathMandelbulbText),
+            new("User Equation", HelpTextBundle.MathUserEquationText),
+            new("User Bulb 3D",  HelpTextBundle.MathUserBulbText),
+            new("Sandbox",       HelpTextBundle.MathSandboxText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]
