@@ -23,6 +23,8 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 
+using System.Threading.Tasks;
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -149,20 +151,21 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            // File save (theme JSON or generated C#). For F.3 this is a stub
-            // that writes to a fixed temp path so the editor's Save button
-            // doesn't no-op; the proper SaveFileDialog hookup lands once the
-            // Avalonia.Controls.ApplicationLifetimes storage provider is
-            // wired into the shell.
+            // File save (theme JSON or generated C#). Runs the Avalonia
+            // SaveFilePicker against the active main window on the UI
+            // thread. Editor blocks on args.Saved after raising the event,
+            // so we drive the async dialog synchronously here via
+            // Dispatcher + Task.Wait — fine because Save is rare and the
+            // user is already blocked on the modal picker anyway.
             shell.SaveFileRequested += (_, args) =>
             {
                 try
                 {
-                    string path = string.IsNullOrEmpty(args.SuggestedName)
-                        ? System.IO.Path.GetTempFileName()
-                        : System.IO.Path.Combine(System.IO.Path.GetTempPath(), args.SuggestedName);
-                    System.IO.File.WriteAllText(path, args.Content ?? "");
-                    args.Saved = true;
+                    string? path = Dispatcher.UIThread.InvokeAsync(() =>
+                        AvaloniaDialogs.SaveFileAsync(args.Title, args.SuggestedName, args.Filter, args.Content ?? "")
+                    ).GetAwaiter().GetResult();
+                    args.Saved = !string.IsNullOrEmpty(path);
+                    if (!args.Saved) args.ErrorMessage = null;
                 }
                 catch (Exception ex)
                 {
@@ -185,8 +188,20 @@ namespace FracturingFog.Hosting
 
             shell.MessageRequested += (_, args) =>
             {
-                // Console for now; F.3+ task swaps in a proper Avalonia MessageBox.
-                Console.WriteLine($"[{args.Title}] {args.Body}");
+                // Block the calling thread until the modal closes so the
+                // editor's args.Confirmed is filled before the handler returns.
+                try
+                {
+                    var result = Dispatcher.UIThread.InvokeAsync(() =>
+                        AvaloniaDialogs.ShowMessageAsync(args.Title, args.Body, args.ExpectsConfirmation)
+                    ).GetAwaiter().GetResult();
+                    if (args.ExpectsConfirmation)
+                        args.Confirmed = result == AvaloniaDialogs.MessageResult.Yes;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Message dialog failed: {ex.Message}");
+                }
             };
         }
 
