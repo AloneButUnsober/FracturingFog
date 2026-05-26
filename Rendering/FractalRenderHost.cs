@@ -50,6 +50,14 @@ namespace FracturingFog.Rendering
         private CancellationTokenSource? _calcCts;
         private readonly object _calcLock = new();
 
+        // Serialises every call into the D3D11 ImmediateContext. The
+        // immediate context is NOT thread-safe; before this lock landed,
+        // resize on the UI thread could overlap with UpdateTexture from a
+        // calc-continuation thread and the upcoming auto-present, locking
+        // the driver. Every _renderer.* call inside this class — and the
+        // public Present() entry point — must take this lock.
+        private readonly object _d3dGate = new();
+
         // Cached previous frame — re-uploaded on the next trigger so the
         // user sees the stale (correct) image while the next one calculates,
         // instead of black flashes at High/Ultra quality.
@@ -208,12 +216,18 @@ namespace FracturingFog.Rendering
             }
 
             // Stale-frame re-upload so the screen shows a correct (if old)
-            // image while the next frame computes.
+            // image while the next frame computes. Locked + presented so the
+            // user sees the prev frame immediately even if the next calc
+            // takes seconds.
             if (_lastUploadedBuffer != null
                 && _lastUploadedWidth == _calculator.Width
                 && _lastUploadedHeight == _calculator.Height)
             {
-                _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
+                lock (_d3dGate)
+                {
+                    _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
+                    _renderer.Render();
+                }
             }
 
             ApplyView();
@@ -306,7 +320,13 @@ namespace FracturingFog.Rendering
             int h = Math.Max(1, height);
             _lastUploadedBuffer = null;
 
-            _renderer.Resize(w, h);
+            lock (_d3dGate)
+            {
+                _renderer.Resize(w, h);
+                // Present once so the new back-buffer dimensions become
+                // visible immediately even before the next calc finishes.
+                _renderer.Render();
+            }
             _calculator.Resize(w, h);
             _escapeCalculator.Resize(w, h);
             _ifsCalculator.Resize(w, h);
@@ -404,10 +424,21 @@ namespace FracturingFog.Rendering
                 Array.Copy(src, dst, n);
             }
 
-            _renderer.UpdateTexture(dst, w, h);
+            lock (_d3dGate)
+            {
+                _renderer.UpdateTexture(dst, w, h);
+                _renderer.Render();
+            }
             _lastUploadedBuffer = dst;
             _lastUploadedWidth = w;
             _lastUploadedHeight = h;
+        }
+
+        /// <inheritdoc/>
+        public void Present()
+        {
+            if (_disposed) return;
+            lock (_d3dGate) _renderer.Render();
         }
 
         public void Dispose()
@@ -415,7 +446,7 @@ namespace FracturingFog.Rendering
             if (_disposed) return;
             _disposed = true;
             lock (_calcLock) _calcCts?.Cancel();
-            _renderer.Dispose();
+            lock (_d3dGate) _renderer.Dispose();
         }
     }
 }

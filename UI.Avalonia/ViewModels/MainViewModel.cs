@@ -142,6 +142,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (this.RaiseAndSetIfChangedReturnsChanged(ref _selectedFractalType, value))
             {
                 ViewState.FractalType = value;
+                // Snap to a fractal-appropriate default view. Without this,
+                // switching from Mandelbrot to Burning Ship / Tricorn / etc.
+                // would inherit the Mandelbrot centre+zoom and put the entire
+                // image inside the new set → every pixel hits MAX_ITER and
+                // the calc takes minutes, looking like a UI lockup.
+                ViewState.SnapToFractalDefault(value);
                 _renderHost.Trigger();
             }
         }

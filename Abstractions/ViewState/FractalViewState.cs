@@ -108,6 +108,48 @@ namespace FracturingFog.ViewState
             LockedIterations = 0;
         }
 
+        /// <summary>
+        /// Snap the centre + zoom to the canonical default view for the given
+        /// fractal type. Mirrors the per-type switch in legacy
+        /// <c>MainForm.OnFractalTypeChanged</c> so that picking Burning Ship /
+        /// Tricorn / etc. from the toolbar lands on the recognisable
+        /// silhouette of the set rather than the inherited Mandelbrot view —
+        /// which at the Mandelbrot default would put the entire image
+        /// inside the new set and burn every pixel through MAX_ITER,
+        /// looking like a lockup.
+        ///
+        /// Also clears all low-precision limbs and unlocks iterations. Leaves
+        /// post-FX (Brightness / Contrast / HistogramEq) alone.
+        /// </summary>
+        public void SnapToFractalDefault(FractalType t)
+        {
+            (CenterX, CenterY, Zoom) = t switch
+            {
+                FractalType.Mandelbrot       => (-0.5,  0.0, 1.0),
+                FractalType.Julia            => ( 0.0,  0.0, 1.0),
+                FractalType.BurningShip      => (-0.5, -0.5, 1.0),
+                FractalType.Tricorn          => ( 0.0,  0.0, 1.0),
+                FractalType.Multibrot        => ( 0.0,  0.0, 1.0),
+                FractalType.Phoenix          => ( 0.0,  0.0, 1.5),
+                FractalType.Newton           => ( 0.0,  0.0, 1.0),
+                FractalType.Nova             => ( 1.0,  0.0, 0.8),
+                FractalType.BuddhaBrot       => (-0.5,  0.0, 1.0),
+                FractalType.IFS              => ( 0.0,  0.0, 1.0),
+                FractalType.LSystem          => ( 0.0,  0.0, 1.0),
+                FractalType.StrangeAttractor => ( 0.0,  0.0, 1.0),
+                FractalType.UserEquation     => ( 0.0,  0.0, 1.0),
+                FractalType.Mandelbulb       => ( 0.0,  0.0, 1.0),
+                FractalType.Sandbox          => ( 0.0,  0.0, 1.0),
+                FractalType.UserBulb         => ( 0.0,  0.0, 1.0),
+                FractalType.TearDrop         => ( 0.0,  0.0, 0.16),
+                _                            => (-0.5,  0.0, 1.0),
+            };
+            CenterXLo = CenterX2 = CenterX3 = 0;
+            CenterYLo = CenterY2 = CenterY3 = 0;
+            IterLocked = false;
+            LockedIterations = 0;
+        }
+
         /// <summary>True when the active <see cref="Zoom"/> requires QD math
         /// to keep pan/zoom anchoring stable.</summary>
         public bool RequiresQD => Zoom > QDZoomThreshold;

@@ -22,7 +22,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 
 using System.Threading.Tasks;
 
@@ -56,7 +55,6 @@ namespace FracturingFog.Hosting
         private static FractalRenderHost? s_renderHost;
         private static FractalInputController? s_input;
         private static ShellViewModel? s_shell;
-        private static Timer? s_presentTimer;
         private static IGpuSurface? s_surface;
         private static readonly object s_gate = new();
 
@@ -114,11 +112,11 @@ namespace FracturingFog.Hosting
                 s_renderHost?.Trigger();
             });
 
-            // ── ~60 Hz present loop ──────────────────────────────────────
-            // Calculator drives UpdateTexture; the present timer pushes the
-            // most-recent texture through the swap chain at vsync rate so
-            // resize + DPI change re-presents are visible immediately.
-            s_presentTimer = new Timer(_ => Present(), null, 0, 16);
+            // No present loop. FractalRenderHost auto-presents after every
+            // texture upload and after every resize, all under its own D3D
+            // lock — so the swap chain never sees concurrent access. The
+            // previous ~60 Hz background timer raced the UI-thread Resize
+            // path on the D3D11 immediate context and locked the driver.
         }
 
         private static void WireShellHostEvents(ShellViewModel shell)
@@ -154,19 +152,17 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            // File save (theme JSON or generated C#). Runs the Avalonia
-            // SaveFilePicker against the active main window on the UI
-            // thread. Editor blocks on args.Saved after raising the event,
-            // so we drive the async dialog synchronously here via
-            // Dispatcher + Task.Wait — fine because Save is rare and the
-            // user is already blocked on the modal picker anyway.
-            shell.SaveFileRequested += (_, args) =>
+            // File save (theme JSON or generated C#). The editor awaits
+            // args.Completion before reading args.Saved / args.ErrorMessage,
+            // so we run the picker truly async without blocking the UI
+            // thread — the prior `.GetAwaiter().GetResult()` pattern
+            // deadlocked the dispatcher when raised from a UI-thread button.
+            shell.SaveFileRequested += async (_, args) =>
             {
                 try
                 {
-                    string? path = Dispatcher.UIThread.InvokeAsync(() =>
-                        AvaloniaDialogs.SaveFileAsync(args.Title, args.SuggestedName, args.Filter, args.Content ?? "")
-                    ).GetAwaiter().GetResult();
+                    string? path = await AvaloniaDialogs.SaveFileAsync(
+                        args.Title, args.SuggestedName, args.Filter, args.Content ?? "");
                     args.Saved = !string.IsNullOrEmpty(path);
                     if (!args.Saved) args.ErrorMessage = null;
                 }
@@ -176,49 +172,63 @@ namespace FracturingFog.Hosting
                     args.ErrorMessage = ex.Message;
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Save failed: {ex.Message}");
                 }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
             };
 
             // From-image flow: editor wants the host to extract a palette
-            // from a chosen image. Opens ImagePaletteView modally, blocks
-            // the calling thread on its result so args.Stops is filled
-            // before the editor's FromImage() handler returns.
-            shell.FromImageRequested += (_, args) =>
+            // from a chosen image. Opens ImagePaletteView modally on the UI
+            // thread; the editor's command awaits args.Completion (signalled
+            // in the finally block) before reading args.Stops.
+            shell.FromImageRequested += async (_, args) =>
             {
                 var service = PaletteService;
-                if (service == null) return;
+                if (service == null)
+                {
+                    args.Completion.TrySetResult(true);
+                    return;
+                }
                 try
                 {
-                    var stops = Dispatcher.UIThread.InvokeAsync(() =>
-                        AvaloniaDialogs.ShowImagePalettePickerAsync(service)
-                    ).GetAwaiter().GetResult();
-                    if (stops == null || stops.Count < 2) return;
-
-                    var defs = new List<ColorStopDef>(stops.Count);
-                    foreach (var s in stops)
-                        defs.Add(new ColorStopDef { Position = s.Position, R = s.R, G = s.G, B = s.B });
-                    args.Stops = defs;
+                    var stops = await AvaloniaDialogs.ShowImagePalettePickerAsync(service);
+                    if (stops != null && stops.Count >= 2)
+                    {
+                        var defs = new List<ColorStopDef>(stops.Count);
+                        foreach (var s in stops)
+                            defs.Add(new ColorStopDef { Position = s.Position, R = s.R, G = s.G, B = s.B });
+                        args.Stops = defs;
+                    }
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] FromImage failed: {ex.Message}");
                 }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
             };
 
-            shell.MessageRequested += (_, args) =>
+            // MessageBox: editor awaits args.Completion before reading
+            // args.Confirmed, so we never block the dispatcher.
+            shell.MessageRequested += async (_, args) =>
             {
-                // Block the calling thread until the modal closes so the
-                // editor's args.Confirmed is filled before the handler returns.
                 try
                 {
-                    var result = Dispatcher.UIThread.InvokeAsync(() =>
-                        AvaloniaDialogs.ShowMessageAsync(args.Title, args.Body, args.ExpectsConfirmation)
-                    ).GetAwaiter().GetResult();
+                    var result = await AvaloniaDialogs.ShowMessageAsync(
+                        args.Title, args.Body, args.ExpectsConfirmation);
                     if (args.ExpectsConfirmation)
                         args.Confirmed = result == AvaloniaDialogs.MessageResult.Yes;
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Message dialog failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
                 }
             };
         }
@@ -234,27 +244,10 @@ namespace FracturingFog.Hosting
             Dispatcher.UIThread.Post(() => host.Resize(w, h));
         }
 
-        private static void Present()
-        {
-            var renderer = s_renderer;
-            if (renderer == null) return;
-            try
-            {
-                renderer.Render();
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[AvaloniaShellBootstrap] Present failed: {ex.Message}");
-                Shutdown();
-            }
-        }
-
         public static void Shutdown()
         {
             lock (s_gate)
             {
-                s_presentTimer?.Dispose();
-                s_presentTimer = null;
                 try { s_shell?.Dispose(); } catch { /* ignore */ }
                 s_shell = null;
                 try { s_renderHost?.Dispose(); } catch { /* renderer disposed via host */ }
