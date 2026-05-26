@@ -98,38 +98,9 @@ namespace FracturingFog.Hosting
         public string GenerateCSharp(ColorThemeDef def)
         {
             if (def == null) throw new ArgumentNullException(nameof(def));
-            // The full BuildCSharpSource generator lives inside the legacy
-            // WinForms ColorThemeEditor as a private helper. Until it's
-            // factored out into a shared utility, this Avalonia path emits
-            // a structured stub instead — the user can still inspect the
-            // JSON via SerializeJson + paste it into a hand-written theme.
-            string safeName = MakeClassName(def.Name);
-            return string.Join(Environment.NewLine, new[]
-            {
-                "// Auto-generated stub from Avalonia ColorThemeEditor.",
-                "// TODO: factor BuildCSharpSource out of Views/ColorThemeEditor.cs",
-                "// into a shared helper and call it from HostColorThemeService.",
-                "//",
-                "// Theme name : " + def.Name,
-                "// Kind       : " + def.Kind,
-                "// Stops      : " + def.Stops.Count,
-                "//",
-                "// JSON definition follows:",
-                "/*",
-                SerializeJson(def),
-                "*/",
-                "",
-                "public sealed class " + safeName + " { /* see JSON above */ }",
-            });
-        }
-
-        private static string MakeClassName(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return "UnnamedTheme";
-            var chars = s.Where(ch => char.IsLetterOrDigit(ch) || ch == '_').ToArray();
-            string r = new string(chars);
-            if (r.Length == 0 || char.IsDigit(r[0])) r = "_" + r;
-            return r;
+            var data = ColorThemeDefAdapter.ToData(def);
+            string className = ColorThemeCsExporter.MakeClassName(def.Name);
+            return ColorThemeCsExporter.BuildCSharpSource(data, className);
         }
     }
 }
