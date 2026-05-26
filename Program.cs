@@ -23,7 +23,9 @@ static class Program
         // until every dialog has been ported and the Avalonia shell reaches
         // feature parity. See PHASE2_AVALONIA_MIGRATION.md for status.
         if (args.Length > 0 && args[0] == "--avalonia")
-            return FracturingFog.UI.Avalonia.AvaloniaShell.Run(args, AvaloniaBootstrap.OnSurfaceReady);
+            return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
+                args,
+                FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);
 
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
