@@ -82,6 +82,12 @@
                               SelectedItem="{Binding FloatingMenu.SelectedTheme}" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Right">
+                    <ToggleButton Classes="toolbar" Content="Grid"
+                                  IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
+                                  ToolTip.Tip="Show Cartesian grid overlay" />
+                    <ToggleButton Classes="toolbar" Content="Watermark"
+                                  IsChecked="{Binding Main.ShowWatermark, Mode=TwoWay}"
+                                  ToolTip.Tip="Show region/theme + program watermark" />
                     <Button Classes="toolbar" Content="Reset"
                             Command="{Binding Main.ResetViewCommand}" />
                     <Button Classes="toolbar" Content="Edit Theme"
@@ -94,9 +100,19 @@
             </DockPanel>
         </Border>
 
-        <!-- Render surface + input sponge ───────────────────────────────── -->
+        <!-- Render surface + overlays + input sponge ────────────────────── -->
         <Grid Grid.Row="1">
             <ctrl:GpuSurfaceControl x:Name="GpuSurface" />
+            <!-- Avalonia.Media-drawn Cartesian grid + slideshow watermark.
+                 IsHitTestVisible="False" so input flows through to the
+                 sponge below. -->
+            <ctrl:FractalOverlayControl x:Name="Overlay"
+                                        IsHitTestVisible="False"
+                                        ViewSource="{Binding Main.ViewState}"
+                                        ShowGrid="{Binding Main.ShowGrid}"
+                                        ShowWatermark="{Binding Main.ShowWatermark}"
+                                        RegionName="{Binding Main.SelectedRegion}"
+                                        ThemeName="{Binding Main.SelectedTheme}" />
             <!-- Transparent input sponge above the native HWND child. Pointer
                  + key events from this Border feed AvaloniaInputAdapter,
                  which translates them into the IFractalInputController. -->
