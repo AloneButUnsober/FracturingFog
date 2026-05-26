@@ -122,7 +122,8 @@
         <Border Grid.Row="2"
                 Padding="8,4"
                 Background="#161616"
-                BorderBrush="#333" BorderThickness="0,1,0,0">
+                BorderBrush="#333" BorderThickness="0,1,0,0"
+                IsVisible="{Binding IsStatusBarVisible}">
             <TextBlock Text="{Binding Main.StatusText}"
                        Foreground="#C0C0C0"
                        FontFamily="Consolas,Menlo,monospace" />

@@ -530,6 +530,37 @@ namespace FracturingFog.Rendering
             lock (_d3dGate) _renderer.Render();
         }
 
+        /// <summary>
+        /// Encode the most-recently-uploaded BGRA buffer to a PNG file at the
+        /// given path. No-op when no frame has been rendered yet. Windows
+        /// only — depends on System.Drawing.
+        /// </summary>
+        public void SaveLastFrameToPng(string path)
+        {
+            if (_disposed) return;
+            if (string.IsNullOrEmpty(path)) return;
+            if (!OperatingSystem.IsWindows()) return;
+            uint[]? buf = _lastUploadedBuffer;
+            int w = _lastUploadedWidth, h = _lastUploadedHeight;
+            if (buf == null || w <= 0 || h <= 0) return;
+            SaveBgraToPngWindows(buf, w, h, path);
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static void SaveBgraToPngWindows(uint[] bgra, int w, int h, string path)
+        {
+            var handle = System.Runtime.InteropServices.GCHandle.Alloc(bgra,
+                System.Runtime.InteropServices.GCHandleType.Pinned);
+            try
+            {
+                using var bmp = new System.Drawing.Bitmap(w, h, w * 4,
+                    System.Drawing.Imaging.PixelFormat.Format32bppArgb,
+                    handle.AddrOfPinnedObject());
+                bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            }
+            finally { handle.Free(); }
+        }
+
         public void Dispose()
         {
             if (_disposed) return;

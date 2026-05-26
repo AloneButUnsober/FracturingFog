@@ -76,5 +76,21 @@ namespace FracturingFog.Models
         /// passed in via the host service's constructor at bootstrap time.
         /// </summary>
         bool ApplyTheme(string themeName);
+
+        /// <summary>
+        /// Persist the current view state as a new user region under the given
+        /// name. Returns true on success. Implementations write through to the
+        /// host's region library (built-in regions are never overwritten —
+        /// the host should pop a friendly error and bail in that case).
+        /// </summary>
+        bool SaveCurrentAsRegion(string regionName, FractalViewState state);
+
+        /// <summary>
+        /// Remove the named region from the user library. Returns true if a
+        /// region was actually removed. Built-in regions are never deletable;
+        /// implementations should return false rather than throwing on that
+        /// path so the caller can surface a friendly message.
+        /// </summary>
+        bool DeleteRegion(string regionName);
     }
 }

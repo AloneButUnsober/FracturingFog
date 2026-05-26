@@ -164,5 +164,49 @@ namespace FracturingFog.Hosting
             _renderHost.RepaintWithPostFx();
             return true;
         }
+
+        /// <inheritdoc/>
+        public bool SaveCurrentAsRegion(string regionName, FractalViewState state)
+        {
+            if (string.IsNullOrWhiteSpace(regionName) || state == null) return false;
+
+            // Refuse to clobber a built-in. User-defined regions get
+            // replace-by-name semantics — last save wins.
+            var existing = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(r => string.Equals(r.Name, regionName, StringComparison.Ordinal));
+            if (existing != null && existing.IsBuiltIn) return false;
+            if (existing != null) FractalRegionLibrary.Instance.UserRegions.Remove(existing);
+
+            var region = new FractalRegion
+            {
+                Name = regionName,
+                CenterX  = state.CenterX,  CenterXLo = state.CenterXLo,
+                CenterX2 = state.CenterX2, CenterX3  = state.CenterX3,
+                CenterY  = state.CenterY,  CenterYLo = state.CenterYLo,
+                CenterY2 = state.CenterY2, CenterY3  = state.CenterY3,
+                Zoom = state.Zoom,
+                Iterations = state.IterLocked ? state.LockedIterations : 0,
+                FractalType = state.FractalType,
+                QualityPreset = state.Quality ?? QualityPreset.Standard,
+                RegionType = RegionType.UserDefined,
+                Description = "",
+            };
+            FractalRegionLibrary.Instance.UserRegions.Add(region);
+            FractalRegionLibrary.Instance.Save();
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool DeleteRegion(string regionName)
+        {
+            if (string.IsNullOrEmpty(regionName)) return false;
+            var lib = FractalRegionLibrary.Instance;
+            var victim = lib.UserRegions.FirstOrDefault(r =>
+                string.Equals(r.Name, regionName, StringComparison.Ordinal));
+            if (victim == null) return false; // built-ins not deletable
+            lib.UserRegions.Remove(victim);
+            lib.Save();
+            return true;
+        }
     }
 }
