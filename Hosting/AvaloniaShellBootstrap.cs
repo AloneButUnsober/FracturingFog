@@ -28,6 +28,8 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 
 using FracturingFog.Abstractions;
@@ -56,6 +58,7 @@ namespace FracturingFog.Hosting
         private static FractalInputController? s_input;
         private static ShellViewModel? s_shell;
         private static IGpuSurface? s_surface;
+        private static HostColorThemeService? s_themeService;
         private static readonly object s_gate = new();
 
         /// <summary>Palette-extraction service. Defaulted to the
@@ -90,8 +93,11 @@ namespace FracturingFog.Hosting
             // Theme service holds a reference to the render host so its
             // ApplyTheme(name) path can push a freshly-built IColorMap
             // directly onto the renderer without UI.Avalonia having to see
-            // the main-project IColorMap type.
-            var themeService = new HostColorThemeService(s_renderHost);
+            // the main-project IColorMap type. Stored statically so
+            // WireShellHostEvents can reach it for the SaveRegion / Delete
+            // / ReloadThemes flows.
+            s_themeService = new HostColorThemeService(s_renderHost);
+            var themeService = s_themeService;
             var helpProvider = new HostHelpContentProvider();
 
             // ── View model tree ──────────────────────────────────────────
@@ -235,7 +241,124 @@ namespace FracturingFog.Hosting
                     args.Completion.TrySetResult(true);
                 }
             };
+
+            // ── New #53 wires ────────────────────────────────────────────
+
+            // Close program — preferred path is the classic desktop lifetime
+            // Shutdown(0); falls back to closing the main window for IDE-launch
+            // scenarios where no lifetime exists yet.
+            shell.CloseProgramRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desk)
+                        desk.Shutdown(0);
+                    else
+                        AvaloniaDialogs.ActiveMainWindow?.Close();
+                });
+            };
+
+            // Clipboard copy — TopLevel.Clipboard is the cross-platform
+            // accessor. Fire-and-forget; failures are logged but never
+            // surface a modal because the user-perceived flow is "click → done".
+            shell.CopyToClipboardRequested += async (_, text) =>
+            {
+                try
+                {
+                    var top = AvaloniaDialogs.ActiveMainWindow != null
+                        ? TopLevel.GetTopLevel(AvaloniaDialogs.ActiveMainWindow) : null;
+                    if (top?.Clipboard != null && text != null)
+                        await top.Clipboard.SetValueAsync(DataFormat.Text, text);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Clipboard copy failed: {ex.Message}");
+                }
+            };
+
+            // Save current view as region — prompt for a name via the
+            // existing message dialog (re-used because we don't have a
+            // proper input-prompt control yet), then ask the theme service
+            // to persist. The args.Completion TCS is still signalled so the
+            // caller flow is consistent with the other host-handled events.
+            shell.SaveRegionRequested += async (_, args) =>
+            {
+                try
+                {
+                    string? name = await AvaloniaDialogs.PromptForTextAsync(
+                        "Save Region", "Region name:", suggested: Main.SelectedTheme ?? "");
+                    if (!string.IsNullOrWhiteSpace(name) && s_renderHost != null)
+                    {
+                        bool ok = ((IColorThemeService)s_themeService!)
+                            .SaveCurrentAsRegion(name!, s_renderHost.ViewState);
+                        if (ok)
+                            shell.FloatingMenu.SetRegions(s_themeService!.EnumerateRegionNames());
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] SaveRegion failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            // Delete region — confirm then ask the service.
+            shell.DeleteRegionRequested += async (_, tuple) =>
+            {
+                var (confirm, name) = tuple;
+                try
+                {
+                    var result = await AvaloniaDialogs.ShowMessageAsync(
+                        confirm.Title, confirm.Body, expectsConfirmation: true);
+                    if (result == AvaloniaDialogs.MessageResult.Yes)
+                    {
+                        if (s_themeService!.DeleteRegion(name))
+                            shell.FloatingMenu.SetRegions(s_themeService!.EnumerateRegionNames());
+                        else
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Delete Region",
+                                "That region is built-in and cannot be deleted.",
+                                expectsConfirmation: false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] DeleteRegion failed: {ex.Message}");
+                }
+                finally
+                {
+                    confirm.Completion.TrySetResult(true);
+                }
+            };
+
+            // Screenshot — encode the most-recent rendered frame to PNG via
+            // System.Drawing and write through a SaveFilePicker.
+            shell.ScreenshotRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Save Screenshot",
+                        suggestedName: $"fracturing-fog-{DateTime.Now:yyyyMMdd-HHmmss}.png",
+                        filter: "PNG image (*.png)|*.png");
+                    if (string.IsNullOrEmpty(path)) return;
+                    s_renderHost.SaveLastFrameToPng(path);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Screenshot failed: {ex.Message}");
+                }
+            };
         }
+
+        // Convenience helper for the SaveRegion handler — pulls MainViewModel
+        // through ShellViewModel so the prompt's "suggested name" can default
+        // to the currently-selected theme (a common save pattern).
+        private static MainViewModel Main => s_shell!.Main;
 
         private static void OnSurfaceResized(object? sender, EventArgs e)
         {

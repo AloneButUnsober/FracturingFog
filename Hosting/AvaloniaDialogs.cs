@@ -107,6 +107,116 @@ namespace FracturingFog.Hosting
             return list.Count == 0 ? fallback : list;
         }
 
+        /// <summary>
+        /// Runs an Avalonia SaveFilePicker and returns the chosen path (or null
+        /// on cancel). Unlike <see cref="SaveFileAsync"/> this does NOT write
+        /// any content — the caller writes through the returned path itself.
+        /// Used by binary-output flows (e.g. PNG screenshots) where the
+        /// content isn't a plain string.
+        /// </summary>
+        public static async Task<string?> PickSaveFileAsync(
+            string title,
+            string suggestedName,
+            string filter)
+        {
+            var owner = ActiveMainWindow;
+            var top = owner != null ? TopLevel.GetTopLevel(owner) : null;
+            if (top == null) return null;
+
+            var opts = new FilePickerSaveOptions
+            {
+                Title = string.IsNullOrEmpty(title) ? "Save" : title,
+                SuggestedFileName = suggestedName,
+                FileTypeChoices = ParseFilter(filter),
+            };
+            var file = await top.StorageProvider.SaveFilePickerAsync(opts);
+            return file?.TryGetLocalPath();
+        }
+
+        // ── Text prompt ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Modal text-input prompt. Returns the entered string on OK, null on
+        /// cancel. Used where the editor + menu need a simple "give me a name"
+        /// flow without a dedicated dialog VM.
+        /// </summary>
+        public static Task<string?> PromptForTextAsync(
+            string title,
+            string prompt,
+            string suggested = "")
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<string?>();
+
+            void Run()
+            {
+                var box = new TextBox
+                {
+                    Text = suggested,
+                    Watermark = prompt,
+                    Margin = new Thickness(16, 8, 16, 8),
+                    MinWidth = 320,
+                };
+                var win = new Window
+                {
+                    Title = string.IsNullOrEmpty(title) ? "Prompt" : title,
+                    Width = 420,
+                    MinWidth = 320,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+                var promptText = new TextBlock
+                {
+                    Text = prompt,
+                    Foreground = Brushes.White,
+                    Margin = new Thickness(16, 16, 16, 4),
+                    TextWrapping = TextWrapping.Wrap,
+                };
+                var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
+                var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
+                void Close(string? r)
+                {
+                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(r);
+                    win.Close();
+                }
+                ok.Click += (_, _) => Close(box.Text);
+                cancel.Click += (_, _) => Close(null);
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(16, 4, 16, 16),
+                    Spacing = 8,
+                };
+                buttonRow.Children.Add(cancel);
+                buttonRow.Children.Add(ok);
+
+                var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto") };
+                Grid.SetRow(promptText, 0);
+                Grid.SetRow(box, 1);
+                Grid.SetRow(buttonRow, 2);
+                grid.Children.Add(promptText);
+                grid.Children.Add(box);
+                grid.Children.Add(buttonRow);
+                win.Content = grid;
+                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+                box.Focus();
+                box.SelectAll();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── MessageBox ───────────────────────────────────────────────────────
 
         public enum MessageResult { Ok, Yes, No, Cancelled }

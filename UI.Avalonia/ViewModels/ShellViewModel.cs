@@ -25,6 +25,8 @@
 // it talks only to the interfaces above + the child VMs.
 
 using System;
+using System.Globalization;
+using System.Linq;
 using System.Reactive;
 using FracturingFog.Help;
 using FracturingFog.Imaging;
@@ -58,6 +60,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu = new FloatingMenuViewModel();
         FloatingMenu.SetThemes(_themeService.EnumerateThemeNames());
         FloatingMenu.SetRegions(_themeService.EnumerateRegionNames());
+        // Quality combo lives on FloatingMenu but its presets come from
+        // QualityPreset.All — the same list MainViewModel already exposes.
+        FloatingMenu.SetQualities(QualityPreset.All.Select(q => q.Name));
+        FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
 
         // ── Wire FloatingMenu → MainViewModel / ShellViewModel ───────────
         // Region/Theme picks: forward the name into MainViewModel so the
@@ -86,9 +92,143 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.ContrastSlide     += (_, v) => Main.Contrast = v;
         FloatingMenu.AdaptiveSlide     += (_, v) => Main.Adaptive = v;
 
+        // ── Newly-wired controls (#53) ───────────────────────────────────
+        // Close menu — flip the visibility flag the MainWindow binds to.
+        FloatingMenu.CloseClick        += (_, _) => IsFloatingMenuVisible = false;
+
+        // Close program — bubble up so the host (bootstrap) can shut the
+        // application down through the right Avalonia lifetime API.
+        FloatingMenu.CloseProgramClick += (_, _) => CloseProgramRequested?.Invoke(this, EventArgs.Empty);
+
+        // Grid checkbox in the menu mirrors the toolbar toggle.
+        FloatingMenu.GridToggled       += (_, v) => Main.ShowGrid = v;
+
+        // Status-bar visibility flag the MainWindow status row binds to.
+        FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;
+
+        // Copy CX / CY / Zoom / Iter to system clipboard via the host so
+        // UI.Avalonia stays free of TopLevel.Clipboard plumbing here.
+        FloatingMenu.CopyCoordsClick   += (_, _) =>
+        {
+            string text = FormatCoords(Main.ViewState);
+            CopyToClipboardRequested?.Invoke(this, text);
+        };
+
+        // Save / Delete current region: bubble up so the host can pop a
+        // small name-prompt + confirmation modal, then ask IColorThemeService
+        // to persist. Host signals back via the args.Completion TCS pattern
+        // so the editor never blocks the dispatcher.
+        FloatingMenu.SaveViewClick     += (_, _) =>
+        {
+            var args = new ThemeMessageEventArgs(
+                "Save View as Region",
+                "Enter a name for this region (cancel to abort).",
+                MessageSeverity.Question)
+            { ExpectsConfirmation = true };
+            SaveRegionRequested?.Invoke(this, args);
+        };
+        FloatingMenu.DeleteRegionClick += (_, _) =>
+        {
+            if (string.IsNullOrEmpty(Main.SelectedRegion)) return;
+            var args = new ThemeMessageEventArgs(
+                "Delete Region",
+                $"Delete user region \"{Main.SelectedRegion}\"? This cannot be undone.",
+                MessageSeverity.Question)
+            { ExpectsConfirmation = true };
+            DeleteRegionRequested?.Invoke(this, (args, Main.SelectedRegion!));
+        };
+
+        // Reload themes — pull current names back from the service in case
+        // the user edited the JSON file underneath us.
+        FloatingMenu.ReloadThemesClick += (_, _) =>
+        {
+            FloatingMenu.SetThemes(_themeService.EnumerateThemeNames());
+            FloatingMenu.SetRegions(_themeService.EnumerateRegionNames());
+        };
+
+        // Quality combo on the menu drives MainViewModel; MainViewModel's
+        // SelectedQuality setter calls Trigger() so a quality change kicks
+        // a fresh render.
+        FloatingMenu.QualityChanged    += (_, name) =>
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            try
+            {
+                var q = QualityPreset.FromName(name);
+                if (q != null) Main.SelectedQuality = q;
+            }
+            catch { /* unknown quality name — ignore */ }
+        };
+
+        // "Go" button: parse the four coord textboxes and apply.
+        FloatingMenu.GoClick           += (_, _) => ApplyCoordsFromMenu();
+
+        // Iteration lock toggle in the menu maps onto MainViewModel state.
+        FloatingMenu.IterLockChanged   += (_, e) =>
+        {
+            Main.IterLocked = e.Locked;
+            if (e.Locked && e.CurrentIter > 0) Main.LockedIterations = e.CurrentIter;
+        };
+
+        // Screenshot — host saves the most-recent BGRA buffer to disk.
+        FloatingMenu.ScreenshotClick   += (_, _) => ScreenshotRequested?.Invoke(this, EventArgs.Empty);
+
+        // FrameCompleted: refresh the menu's CX/CY/Zoom/Iter textboxes so
+        // the user sees the live values without typing them manually. Skips
+        // whichever box currently has focus — that's owned by ViewModelBase
+        // consumers in the View layer; for now we just always overwrite.
+        Main.RenderHost.FrameCompleted += (_, info) =>
+        {
+            FloatingMenu.UpdateCoords(
+                info.CenterX.ToString("G12", CultureInfo.InvariantCulture),
+                info.CenterY.ToString("G12", CultureInfo.InvariantCulture),
+                info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
+                info.Iterations.ToString(CultureInfo.InvariantCulture));
+        };
+
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
+    }
+
+    private static string FormatCoords(FracturingFog.ViewState.FractalViewState s)
+    {
+        return string.Format(CultureInfo.InvariantCulture,
+            "CX = {0:G12}\nCY = {1:G12}\nZoom = {2:G6}",
+            s.CenterX, s.CenterY, s.Zoom);
+    }
+
+    private void ApplyCoordsFromMenu()
+    {
+        bool changed = false;
+        if (double.TryParse(FloatingMenu.CX, NumberStyles.Float, CultureInfo.InvariantCulture, out double cx))
+        {
+            Main.ViewState.CenterX = cx;
+            Main.ViewState.CenterXLo = 0; Main.ViewState.CenterX2 = 0; Main.ViewState.CenterX3 = 0;
+            changed = true;
+        }
+        if (double.TryParse(FloatingMenu.CY, NumberStyles.Float, CultureInfo.InvariantCulture, out double cy))
+        {
+            Main.ViewState.CenterY = cy;
+            Main.ViewState.CenterYLo = 0; Main.ViewState.CenterY2 = 0; Main.ViewState.CenterY3 = 0;
+            changed = true;
+        }
+        if (double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
+            && zoom > 0)
+        {
+            Main.ViewState.Zoom = zoom;
+            changed = true;
+        }
+        if (int.TryParse(FloatingMenu.Iter, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iter)
+            && iter > 0)
+        {
+            Main.ViewState.IterLocked = true;
+            Main.ViewState.LockedIterations = iter;
+            Main.IterLocked = true;
+            Main.LockedIterations = iter;
+            changed = true;
+        }
+        if (changed) Main.RenderHost.Trigger();
     }
 
     public MainViewModel Main { get; }
@@ -131,6 +271,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isHelpVisible;
         set => this.RaiseAndSetIfChanged(ref _isHelpVisible, value);
+    }
+
+    private bool _isStatusBarVisible = true;
+    /// <summary>Bound to the MainWindow status row's IsVisible. Toggled by
+    /// the Status checkbox on FloatingMenu.</summary>
+    public bool IsStatusBarVisible
+    {
+        get => _isStatusBarVisible;
+        set => this.RaiseAndSetIfChanged(ref _isStatusBarVisible, value);
     }
 
     // ── Top-level commands ────────────────────────────────────────────────
@@ -206,6 +355,28 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     /// <summary>Help VM wants the host to open a URL in the system browser.</summary>
     public event EventHandler<string>? LinkRequested;
+
+    /// <summary>FloatingMenu's "Close Program" was clicked. Host shuts the
+    /// application down via the appropriate Avalonia lifetime API.</summary>
+    public event EventHandler? CloseProgramRequested;
+
+    /// <summary>Copy text to the system clipboard. Host owns the
+    /// TopLevel.Clipboard call; payload is the string to copy.</summary>
+    public event EventHandler<string>? CopyToClipboardRequested;
+
+    /// <summary>Save the current view as a new user region. Host prompts
+    /// the user for a name (via the message dialog), then asks
+    /// <see cref="IColorThemeService"/> to persist. Args carry the
+    /// confirmation TCS pattern.</summary>
+    public event EventHandler<ThemeMessageEventArgs>? SaveRegionRequested;
+
+    /// <summary>Delete an existing user region. Args carry the confirmation
+    /// prompt + the region name to delete.</summary>
+    public event EventHandler<(ThemeMessageEventArgs Confirm, string Name)>? DeleteRegionRequested;
+
+    /// <summary>Save the most-recent rendered frame to a PNG. Host pops a
+    /// SaveFilePicker and writes the BGRA buffer.</summary>
+    public event EventHandler? ScreenshotRequested;
 
     public void Dispose()
     {
