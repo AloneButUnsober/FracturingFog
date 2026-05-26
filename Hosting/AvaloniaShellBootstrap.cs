@@ -20,6 +20,7 @@
 // them into UI.Avalonia.
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 
@@ -59,9 +60,11 @@ namespace FracturingFog.Hosting
         private static IGpuSurface? s_surface;
         private static readonly object s_gate = new();
 
-        /// <summary>Optional palette-extraction service injection. Bootstrap
-        /// supplies null today; F.3+ task wires the real implementation.</summary>
+        /// <summary>Palette-extraction service. Defaulted to the
+        /// System.Drawing-backed <see cref="HostPaletteExtractionService"/>;
+        /// callers may swap before <see cref="OnSurfaceReady"/> for tests.</summary>
         public static IPaletteExtractionService? PaletteService { get; set; }
+            = new HostPaletteExtractionService();
 
         public static void OnSurfaceReady(IGpuSurface surface)
         {
@@ -175,15 +178,30 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            // From-image flow: editor wants the host to extract a palette from
-            // a chosen image. F.3 leaves this unwired (PaletteService null)
-            // so the editor's "From Image…" button surfaces a message; the
-            // real wiring lands when the palette-extraction service ships.
+            // From-image flow: editor wants the host to extract a palette
+            // from a chosen image. Opens ImagePaletteView modally, blocks
+            // the calling thread on its result so args.Stops is filled
+            // before the editor's FromImage() handler returns.
             shell.FromImageRequested += (_, args) =>
             {
-                if (PaletteService == null) return;
-                // Placeholder: when the real service is wired, replace with
-                // a real Avalonia OpenFileDialog → request → args.Stops.
+                var service = PaletteService;
+                if (service == null) return;
+                try
+                {
+                    var stops = Dispatcher.UIThread.InvokeAsync(() =>
+                        AvaloniaDialogs.ShowImagePalettePickerAsync(service)
+                    ).GetAwaiter().GetResult();
+                    if (stops == null || stops.Count < 2) return;
+
+                    var defs = new List<ColorStopDef>(stops.Count);
+                    foreach (var s in stops)
+                        defs.Add(new ColorStopDef { Position = s.Position, R = s.R, G = s.G, B = s.B });
+                    args.Stops = defs;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] FromImage failed: {ex.Message}");
+                }
             };
 
             shell.MessageRequested += (_, args) =>

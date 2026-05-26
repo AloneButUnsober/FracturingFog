@@ -137,10 +137,10 @@ WinForms shell stays green during steps A–E by having MainForm consume the new
 #### F.3 follow-ups (deferred; not blockers for parity testing)
 - [ ] Real Avalonia `SaveFileDialog` via `TopLevel.StorageProvider` (currently writes to `%TEMP%`)
 - [ ] Avalonia `MessageBox` impl (currently `Console.WriteLine`)
-- [ ] `IPaletteExtractionService` concrete wiring through `Hosting/HostPaletteExtractionService.cs` (currently null)
+- [x] `IPaletteExtractionService` concrete wiring through `Hosting/HostPaletteExtractionService.cs` *(done — bridges BitmapSampler + 4 extractors + PaletteStopBuilder; AvaloniaShellBootstrap defaults `PaletteService` to it and `FromImageRequested` now pops `ImagePaletteView` with browse + drag-drop, returning ColorStopDef list to the editor)*
 - [ ] Full FloatingHelp text migration (~2,500 lines) — extract from `Views/FloatingHelp.cs` into shared resource bundle both shells read
 - [ ] DXGI / D3D11 adapter enumeration in Hardware tab (currently env-info only)
-- [ ] Extract `BuildCSharpSource` from `Views/ColorThemeEditor.cs` into a shared helper so `HostColorThemeService.GenerateCSharp` emits real class source instead of a JSON-comment stub
+- [x] Extract `BuildCSharpSource` from `Views/ColorThemeEditor.cs` into a shared helper so `HostColorThemeService.GenerateCSharp` emits real class source instead of a JSON-comment stub *(done — `Models/ColorThemeCsExporter.cs`, both shells call it; legacy editor + `HostColorThemeService.GenerateCSharp` swapped over)*
 - [ ] Grid + watermark overlays via Avalonia.Media (FractalRenderHost intentionally skipped these from the legacy MainForm)
 
 ### 2.4 — Cross-platform renderer (deferred, optional)
