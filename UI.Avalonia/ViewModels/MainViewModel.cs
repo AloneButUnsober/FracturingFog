@@ -69,6 +69,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _input.CursorRequested += (_, req) => CursorRequest = req;
         _renderHost.FrameCompleted += OnFrameCompleted;
         _renderHost.StatusRequested += (_, txt) => StatusText = txt;
+        _renderHost.ColorMapChanged += OnRenderHostColorMapChanged;
+        _overlayContrastLuma = _renderHost.OverlayContrastLuma;
 
         _panStopDebounce = new System.Threading.Timer(_ =>
         {
@@ -83,6 +85,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public FractalViewState ViewState { get; }
     public IFractalInputController Input => _input;
     public IFractalRenderHost RenderHost => _renderHost;
+
+    private byte _overlayContrastLuma = 255;
+    /// <summary>Pre-sampled luminance of the active colour map's middle band,
+    /// mirrored from the render host. The overlay control binds here so it
+    /// can pick a contrast-aware ink colour (white on dark, near-black on
+    /// light) without UI.Avalonia needing to see the main-project
+    /// <c>IColorMap</c> type. Re-read after every
+    /// <see cref="IFractalRenderHost.ColorMapChanged"/>.</summary>
+    public byte OverlayContrastLuma
+    {
+        get => _overlayContrastLuma;
+        private set => this.RaiseAndSetIfChanged(ref _overlayContrastLuma, value);
+    }
 
     public ObservableCollection<QualityPreset> QualityPresets { get; }
     public ObservableCollection<FractalType> FractalTypes { get; }
@@ -109,14 +124,30 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public string? SelectedRegion
     {
         get => _selectedRegion;
-        set => this.RaiseAndSetIfChanged(ref _selectedRegion, value);
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _selectedRegion, value))
+            {
+                // Push to render host so the watermark sees the new label
+                // on the next composited frame.
+                _renderHost.RegionName = value;
+                if (_showWatermark) _renderHost.RepaintWithPostFx();
+            }
+        }
     }
 
     private string? _selectedTheme;
     public string? SelectedTheme
     {
         get => _selectedTheme;
-        set => this.RaiseAndSetIfChanged(ref _selectedTheme, value);
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _selectedTheme, value))
+            {
+                _renderHost.ThemeName = value;
+                if (_showWatermark) _renderHost.RepaintWithPostFx();
+            }
+        }
     }
 
     private QualityPreset _selectedQuality;
@@ -214,21 +245,36 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // ── Overlay toggles ───────────────────────────────────────────────────
 
     private bool _showGrid;
-    /// <summary>True to draw the Cartesian grid + axis labels above the
-    /// render surface (Avalonia.Media, not blended into the texture).</summary>
+    /// <summary>True to blend the Cartesian grid + axis labels into the
+    /// uploaded texture. Writes through to the render host so the next
+    /// repaint includes the overlay.</summary>
     public bool ShowGrid
     {
         get => _showGrid;
-        set => this.RaiseAndSetIfChanged(ref _showGrid, value);
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _showGrid, value))
+            {
+                _renderHost.ShowGrid = value;
+                _renderHost.RepaintWithPostFx();
+            }
+        }
     }
 
     private bool _showWatermark;
-    /// <summary>True to draw the region/theme + program/version watermark
-    /// in the lower-right corner.</summary>
+    /// <summary>True to blend the region/theme + program/version watermark
+    /// into the lower-right corner of the uploaded texture.</summary>
     public bool ShowWatermark
     {
         get => _showWatermark;
-        set => this.RaiseAndSetIfChanged(ref _showWatermark, value);
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _showWatermark, value))
+            {
+                _renderHost.ShowWatermark = value;
+                _renderHost.RepaintWithPostFx();
+            }
+        }
     }
 
     // ── Iter lock ─────────────────────────────────────────────────────────
@@ -314,6 +360,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private void OnRenderHostColorMapChanged(object? sender, EventArgs e)
+    {
+        OverlayContrastLuma = _renderHost.OverlayContrastLuma;
+    }
+
     private void OnFrameCompleted(object? sender, RenderFrameInfo info)
     {
         // Mirrors the legacy status string in MainForm.TriggerCalculation.
@@ -330,6 +381,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         _input.ViewChanged -= OnInputViewChanged;
         _renderHost.FrameCompleted -= OnFrameCompleted;
+        _renderHost.ColorMapChanged -= OnRenderHostColorMapChanged;
         _panStopDebounce.Dispose();
     }
 }

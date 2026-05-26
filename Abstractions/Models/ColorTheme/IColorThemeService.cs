@@ -13,6 +13,8 @@
 
 using System.Collections.Generic;
 
+using FracturingFog.ViewState;
+
 namespace FracturingFog.Models
 {
     /// <summary>
@@ -58,5 +60,21 @@ namespace FracturingFog.Models
         /// <summary>Generate a concrete-class C# source file equivalent to
         /// this theme (drop-in replacement for the data-driven runtime).</summary>
         string GenerateCSharp(ColorThemeDef def);
+
+        /// <summary>
+        /// Resolve <paramref name="regionName"/> through the host region library
+        /// and stamp its centre / zoom / fractal type / per-engine parameters
+        /// into <paramref name="state"/>. Returns true when the region was
+        /// found and applied. The caller is responsible for triggering a render.
+        /// </summary>
+        bool ApplyRegion(string regionName, FractalViewState state);
+
+        /// <summary>
+        /// Build the colour map named <paramref name="themeName"/> and push it
+        /// onto the host's active render host. Returns true on success.
+        /// Implementations need a concrete reference to the render host —
+        /// passed in via the host service's constructor at bootstrap time.
+        /// </summary>
+        bool ApplyTheme(string themeName);
     }
 }

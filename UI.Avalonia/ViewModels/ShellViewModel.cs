@@ -60,8 +60,25 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.SetRegions(_themeService.EnumerateRegionNames());
 
         // ── Wire FloatingMenu → MainViewModel / ShellViewModel ───────────
-        FloatingMenu.RegionComboChanged += (_, name) => Main.SetRegionName(name);
-        FloatingMenu.ColorThemeChanged  += (_, name) => Main.SetThemeName(name);
+        // Region/Theme picks: forward the name into MainViewModel so the
+        // toolbar labels mirror the selection, then ask the host service to
+        // actually apply (mutate ViewState for a region, push a new IColorMap
+        // for a theme). Without these two calls the combos were label-only —
+        // user saw no view change and the symptom looked like flaky bindings.
+        FloatingMenu.RegionComboChanged += (_, name) =>
+        {
+            Main.SetRegionName(name);
+            if (string.IsNullOrEmpty(name)) return;
+            if (_themeService.ApplyRegion(name, Main.ViewState))
+                Main.RenderHost.Trigger();
+        };
+        FloatingMenu.ColorThemeChanged  += (_, name) =>
+        {
+            Main.SetThemeName(name);
+            if (string.IsNullOrEmpty(name)) return;
+            _themeService.ApplyTheme(name);
+            // ApplyTheme already calls RepaintWithPostFx; nothing else needed.
+        };
         FloatingMenu.ResetClick        += (_, _) => Main.ResetViewCommand.Execute().Subscribe();
         FloatingMenu.HelpClick         += (_, _) => ShowHelp();
         FloatingMenu.EditThemeClick    += (_, _) => ShowColorThemeEditor();

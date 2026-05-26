@@ -58,6 +58,13 @@ namespace FracturingFog.Rendering
         // public Present() entry point — must take this lock.
         private readonly object _d3dGate = new();
 
+        // CPU compositor for grid + watermark. Reused across frames. Only
+        // touched from the calculator continuation, which serialises with
+        // every other consumer behind _d3dGate.
+        private readonly FractalOverlayCompositor _overlay = OperatingSystem.IsWindows()
+            ? new FractalOverlayCompositor()
+            : null!;
+
         // Cached previous frame — re-uploaded on the next trigger so the
         // user sees the stale (correct) image while the next one calculates,
         // instead of black flashes at High/Ultra quality.
@@ -109,6 +116,22 @@ namespace FracturingFog.Rendering
         public event EventHandler<RenderFrameInfo>? FrameCompleted;
         public event EventHandler? AnimationFrameUploaded;
         public event EventHandler<string>? StatusRequested;
+        public event EventHandler? ColorMapChanged;
+
+        // ── Overlay state (CPU-composited into the BGRA buffer) ──────────
+        //
+        // On Windows the GpuSurfaceControl is a NativeControlHost wrapping a
+        // real HWND; the OS composites that HWND above every Avalonia control
+        // regardless of XAML Z-order, so an Avalonia.Media overlay can't
+        // render on top of it. Instead the host blends the grid + watermark
+        // into the BGRA pixel buffer on the CPU before the swap-chain upload.
+
+        public bool ShowGrid { get; set; }
+        public bool ShowWatermark { get; set; }
+        public string? RegionName { get; set; }
+        public string? ThemeName { get; set; }
+        public string? ProgramName { get; set; } = "Fracturing Fog";
+        public string? ProgramVersion { get; set; }
 
         /// <summary>The renderer this host drives. Exposed so the shell can
         /// call Render() in its idle loop.</summary>
@@ -122,7 +145,9 @@ namespace FracturingFog.Rendering
 
         /// <summary>Mutable colour map applied across all calculators. Setting
         /// this updates every alt calculator so a theme switch is a single
-        /// assignment from the caller's perspective.</summary>
+        /// assignment from the caller's perspective. Raises
+        /// <see cref="ColorMapChanged"/> after the propagation so overlay
+        /// controls can refresh their contrast colour.</summary>
         public IColorMap ColorMap
         {
             get => _calculator.ColorMap;
@@ -140,6 +165,51 @@ namespace FracturingFog.Rendering
                 _sandboxCalculator.ColorMap = value;
                 _userBulbCalculator.ColorMap = value;
                 _tearDropCalculator.ColorMap = value;
+                ColorMapChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Samples the active colour map at five iteration depths spread
+        /// across the iteration range and Rec.709-weights the resulting RGB
+        /// triplets into a single luminance byte. Cheap (five Map() calls,
+        /// recomputed only on theme change via <see cref="ColorMapChanged"/>)
+        /// and lets the Abstractions interface stay free of the main-project
+        /// <c>IColorMap</c> reference.
+        /// </remarks>
+        public byte OverlayContrastLuma
+        {
+            get
+            {
+                var map = _calculator.ColorMap;
+                if (map == null) return 255;
+                try
+                {
+                    int maxIter = Math.Max(1, map.MaxIterations);
+                    int[] samples =
+                    {
+                        map.Map(0.10f * maxIter, 0.10f, maxIter, 0.0f, 0.0f),
+                        map.Map(0.30f * maxIter, 0.05f, maxIter, 0.0f, 0.0f),
+                        map.Map(0.50f * maxIter, 0.02f, maxIter, 0.0f, 0.0f),
+                        map.Map(0.80f * maxIter, 0.005f, maxIter, 0.0f, 0.0f),
+                        map.SwatchSample,
+                    };
+                    double sum = 0;
+                    foreach (int packed in samples)
+                    {
+                        byte r = (byte)((packed >> 16) & 0xFF);
+                        byte g = (byte)((packed >> 8) & 0xFF);
+                        byte b = (byte)(packed & 0xFF);
+                        sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                    }
+                    double avg = sum / samples.Length;
+                    return (byte)Math.Clamp((int)avg, 0, 255);
+                }
+                catch
+                {
+                    return 255; // fall back to "dark image" → overlay picks white
+                }
             }
         }
 
@@ -422,6 +492,25 @@ namespace FracturingFog.Rendering
             else
             {
                 Array.Copy(src, dst, n);
+            }
+
+            // Composite grid + watermark on top of the post-FX buffer so the
+            // overlay survives every backend (Windows HWND swap-chain
+            // included, where Avalonia.Media overlays are occluded). Only
+            // runs when at least one toggle is on.
+            if ((ShowGrid || ShowWatermark) && OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    _overlay.Composite(dst, w, h, ViewState,
+                        ShowGrid, ShowWatermark, OverlayContrastLuma,
+                        RegionName, ThemeName, ProgramName, ProgramVersion);
+                }
+                catch (Exception ex)
+                {
+                    // Overlay must never block the render pipeline.
+                    Console.Error.WriteLine($"[FractalRenderHost] Overlay composite failed: {ex.Message}");
+                }
             }
 
             lock (_d3dGate)

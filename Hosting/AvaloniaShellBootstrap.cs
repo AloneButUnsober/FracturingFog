@@ -87,7 +87,11 @@ namespace FracturingFog.Hosting
             s_input = new FractalInputController(viewState);
 
             // ── Services ─────────────────────────────────────────────────
-            var themeService = new HostColorThemeService();
+            // Theme service holds a reference to the render host so its
+            // ApplyTheme(name) path can push a freshly-built IColorMap
+            // directly onto the renderer without UI.Avalonia having to see
+            // the main-project IColorMap type.
+            var themeService = new HostColorThemeService(s_renderHost);
             var helpProvider = new HostHelpContentProvider();
 
             // ── View model tree ──────────────────────────────────────────

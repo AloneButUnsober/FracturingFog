@@ -23,12 +23,28 @@ using System.Text.Json.Serialization;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
+using FracturingFog.ViewState;
 
 namespace FracturingFog.Hosting
 {
     /// <inheritdoc/>
     public sealed class HostColorThemeService : IColorThemeService
     {
+        private readonly FractalRenderHost? _renderHost;
+
+        /// <summary>
+        /// Construct a host theme service. Pass the active render host so the
+        /// service can push freshly-built IColorMap instances onto it when
+        /// <see cref="ApplyTheme"/> fires. The parameterless overload below
+        /// remains for the editor-only path (FromImage / save / export) where
+        /// no render host exists.
+        /// </summary>
+        public HostColorThemeService(FractalRenderHost? renderHost = null)
+        {
+            _renderHost = renderHost;
+        }
+
         /// <summary>
         /// Translate a theme definition into a runtime IColorMap. Used by the
         /// Avalonia shell when a preview pushes a not-yet-saved theme onto
@@ -101,6 +117,52 @@ namespace FracturingFog.Hosting
             var data = ColorThemeDefAdapter.ToData(def);
             string className = ColorThemeCsExporter.MakeClassName(def.Name);
             return ColorThemeCsExporter.BuildCSharpSource(data, className);
+        }
+
+        /// <inheritdoc/>
+        public bool ApplyRegion(string regionName, FractalViewState state)
+        {
+            if (string.IsNullOrEmpty(regionName) || state == null) return false;
+            FractalRegion? region = null;
+            foreach (var r in FractalRegionLibrary.Instance.All)
+            {
+                if (string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                {
+                    region = r;
+                    break;
+                }
+            }
+            if (region == null) return false;
+
+            state.CenterX  = region.CenterX;  state.CenterXLo = region.CenterXLo;
+            state.CenterX2 = region.CenterX2; state.CenterX3  = region.CenterX3;
+            state.CenterY  = region.CenterY;  state.CenterYLo = region.CenterYLo;
+            state.CenterY2 = region.CenterY2; state.CenterY3  = region.CenterY3;
+            state.Zoom = region.Zoom > 0 ? region.Zoom : state.Zoom;
+            state.FractalType = region.FractalType;
+            if (region.QualityPreset != null) state.Quality = region.QualityPreset;
+            if (region.Iterations > 0)
+            {
+                state.IterLocked = true;
+                state.LockedIterations = region.Iterations;
+            }
+            else
+            {
+                state.IterLocked = false;
+                state.LockedIterations = 0;
+            }
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool ApplyTheme(string themeName)
+        {
+            if (string.IsNullOrEmpty(themeName) || _renderHost == null) return false;
+            var map = ColorPalette.GetPaletteByName(themeName);
+            if (map == null) return false;
+            _renderHost.ColorMap = map;
+            _renderHost.RepaintWithPostFx();
+            return true;
         }
     }
 }

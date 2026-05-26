@@ -94,5 +94,46 @@ namespace FracturingFog.Render
         /// <summary>Raised when the host wants the status bar updated with
         /// a string ("Calculating…", "Quality → Ultra (zoom 1.2e22)", etc.).</summary>
         event EventHandler<string>? StatusRequested;
+
+        /// <summary>Perceived luminance of the active colour map's middle band,
+        /// in [0, 255]. Sampled by the host across a handful of iteration
+        /// depths and Rec.709-weighted. Exposed so overlay controls (grid +
+        /// watermark) can pick a contrast-aware ink colour without reaching
+        /// into the main-project <c>IColorMap</c> type from here (that would
+        /// reverse the existing Abstractions → main dependency direction).
+        /// Implementations return 255 (white) when no map is bound yet so
+        /// the overlay falls back to black ink.</summary>
+        byte OverlayContrastLuma { get; }
+
+        /// <summary>Raised whenever the active colour map is replaced — typically
+        /// from a theme pick or a color-theme-editor live preview. Shell-side
+        /// overlays subscribe so they can re-read
+        /// <see cref="OverlayContrastLuma"/> and invalidate.</summary>
+        event EventHandler? ColorMapChanged;
+
+        // ── Overlay state ────────────────────────────────────────────────
+        //
+        // Grid + watermark are CPU-composited into the BGRA buffer the host
+        // hands the renderer (on Windows the swap-chain HWND occludes every
+        // Avalonia.Media overlay regardless of XAML Z-order, so an in-tree
+        // Avalonia overlay can't render on top of it). The shell sets these
+        // flags + label strings; the host blends them into every uploaded
+        // frame from now on.
+
+        /// <summary>True to blend the Cartesian grid + axis labels into the
+        /// next uploaded frame. Take effect on the next render — the caller
+        /// typically follows a toggle with <see cref="RepaintWithPostFx"/>
+        /// so the change shows up immediately.</summary>
+        bool ShowGrid { get; set; }
+
+        /// <summary>True to blend the region/theme + program-name watermark
+        /// into the next uploaded frame.</summary>
+        bool ShowWatermark { get; set; }
+
+        /// <summary>Region label rendered in the watermark.</summary>
+        string? RegionName { get; set; }
+
+        /// <summary>Theme label rendered in the watermark.</summary>
+        string? ThemeName { get; set; }
     }
 }
