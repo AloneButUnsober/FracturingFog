@@ -52,6 +52,14 @@ public sealed class FractalOverlayControl : Control
     public static readonly StyledProperty<string?> ProgramVersionProperty =
         AvaloniaProperty.Register<FractalOverlayControl, string?>(nameof(ProgramVersion));
 
+    /// <summary>Pre-sampled mid-band luminance of the active colour map in
+    /// [0, 255]. 255 = fully white image → overlay picks black ink; low values
+    /// → overlay picks white. Sampled host-side and mirrored through
+    /// MainViewModel.OverlayContrastLuma so UI.Avalonia stays free of the
+    /// main-project IColorMap type.</summary>
+    public static readonly StyledProperty<byte> ContrastLumaProperty =
+        AvaloniaProperty.Register<FractalOverlayControl, byte>(nameof(ContrastLuma), defaultValue: (byte)0);
+
     public FractalViewState? ViewSource
     {
         get => GetValue(ViewSourceProperty);
@@ -94,6 +102,14 @@ public sealed class FractalOverlayControl : Control
         set => SetValue(ProgramVersionProperty, value);
     }
 
+    /// <summary>Pre-sampled luminance of the active colour map's mid band.
+    /// Bound from MainViewModel.OverlayContrastLuma.</summary>
+    public byte ContrastLuma
+    {
+        get => GetValue(ContrastLumaProperty);
+        set => SetValue(ContrastLumaProperty, value);
+    }
+
     private readonly DispatcherTimer _ticker;
 
     public FractalOverlayControl()
@@ -117,7 +133,8 @@ public sealed class FractalOverlayControl : Control
             RegionNameProperty,
             ThemeNameProperty,
             ProgramNameProperty,
-            ProgramVersionProperty);
+            ProgramVersionProperty,
+            ContrastLumaProperty);
     }
 
     public override void Render(DrawingContext context)
@@ -130,17 +147,21 @@ public sealed class FractalOverlayControl : Control
         if (w <= 1 || h <= 1) return;
 
         var state = ViewSource;
+        // Pick contrast colour from pre-sampled luma byte the host writes
+        // through MainViewModel.OverlayContrastLuma. White ink on dark images;
+        // near-black on light. 0 default treats unbound as "dark" → white ink.
+        Color contrast = ContrastLuma < 128 ? Colors.White : Color.FromRgb(20, 20, 20);
 
         if (ShowGrid && state != null)
-            DrawCartesianGrid(context, w, h, state);
+            DrawCartesianGrid(context, w, h, state, contrast);
 
         if (ShowWatermark)
-            DrawWatermark(context, w, h);
+            DrawWatermark(context, w, h, contrast);
     }
 
     // ── Grid ──────────────────────────────────────────────────────────────
 
-    private static void DrawCartesianGrid(DrawingContext ctx, double w, double h, FractalViewState s)
+    private static void DrawCartesianGrid(DrawingContext ctx, double w, double h, FractalViewState s, Color contrast)
     {
         double cx = s.CenterX, cy = s.CenterY, zoom = s.Zoom;
         if (zoom <= 0 || double.IsNaN(zoom) || double.IsInfinity(zoom)) return;
@@ -148,14 +169,13 @@ public sealed class FractalOverlayControl : Control
         double scale = 3.5 / (Math.Max(w, h) * zoom);
         double xMin = cx - w * scale * 0.5, xMax = cx + w * scale * 0.5;
         double yMin = cy - h * scale * 0.5, yMax = cy + h * scale * 0.5;
-
-        // Fixed light grid colour until IFractalRenderHost surfaces the
-        // active IColorMap; see overlay TODO in PHASE2_AVALONIA_MIGRATION.md.
-        Color contrast = Colors.White;
         var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(160, contrast.R, contrast.G, contrast.B)), 1.0);
         var axisPen = new Pen(new SolidColorBrush(Color.FromArgb(210, contrast.R, contrast.G, contrast.B)), 1.8);
         var labelBrush = new SolidColorBrush(Color.FromArgb(200, contrast.R, contrast.G, contrast.B));
-        var shadowBrush = new SolidColorBrush(Color.FromArgb(120, 0, 0, 0));
+        // Shadow inverts ink so dark text gets a white halo and vice versa.
+        bool darkInk = (contrast.R + contrast.G + contrast.B) < 384;
+        byte hs = darkInk ? (byte)255 : (byte)0;
+        var shadowBrush = new SolidColorBrush(Color.FromArgb(120, hs, hs, hs));
 
         var labelTypeface = new Typeface("Consolas");
         double labelSize = 10;
@@ -239,7 +259,7 @@ public sealed class FractalOverlayControl : Control
 
     // ── Watermark ────────────────────────────────────────────────────────
 
-    private void DrawWatermark(DrawingContext ctx, double w, double h)
+    private void DrawWatermark(DrawingContext ctx, double w, double h, Color contrast)
     {
         string main = "";
         if (!string.IsNullOrEmpty(RegionName)) main = RegionName!;
@@ -251,10 +271,13 @@ public sealed class FractalOverlayControl : Control
         var mainTypeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold);
         var subTypeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.SemiBold);
 
-        Color contrast = PickContrastColorFallback();
         var mainBrush = new SolidColorBrush(Color.FromArgb(205, contrast.R, contrast.G, contrast.B));
         var subBrush = new SolidColorBrush(Color.FromArgb(180, contrast.R, contrast.G, contrast.B));
-        var shadowBrush = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0));
+        // Shadow direction flips with contrast so it always reads as a halo:
+        // dark ink → white halo, light ink → black halo.
+        bool darkInk = (contrast.R + contrast.G + contrast.B) < 384; // 128*3
+        byte hs = darkInk ? (byte)255 : (byte)0;
+        var shadowBrush = new SolidColorBrush(Color.FromArgb(160, hs, hs, hs));
 
         var mainText = new FormattedText(main, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             mainTypeface, 18, mainBrush);
@@ -281,5 +304,4 @@ public sealed class FractalOverlayControl : Control
         ctx.DrawText(subText, new Point(subX, subY));
     }
 
-    private static Color PickContrastColorFallback() => Colors.White;
 }

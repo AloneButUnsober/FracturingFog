@@ -100,19 +100,15 @@
             </DockPanel>
         </Border>
 
-        <!-- Render surface + overlays + input sponge ────────────────────── -->
+        <!-- Render surface + input sponge ─────────────────────────────────
+             Grid + watermark are CPU-composited into the BGRA buffer by
+             FractalRenderHost before swap-chain upload (the GpuSurfaceControl
+             is a NativeControlHost wrapping a Win32 HWND, and on Windows the
+             OS composites that HWND on top of all Avalonia content
+             regardless of XAML Z-order — so an Avalonia.Media overlay above
+             this Grid would not be visible). -->
         <Grid Grid.Row="1">
             <ctrl:GpuSurfaceControl x:Name="GpuSurface" />
-            <!-- Avalonia.Media-drawn Cartesian grid + slideshow watermark.
-                 IsHitTestVisible="False" so input flows through to the
-                 sponge below. -->
-            <ctrl:FractalOverlayControl x:Name="Overlay"
-                                        IsHitTestVisible="False"
-                                        ViewSource="{Binding Main.ViewState}"
-                                        ShowGrid="{Binding Main.ShowGrid}"
-                                        ShowWatermark="{Binding Main.ShowWatermark}"
-                                        RegionName="{Binding Main.SelectedRegion}"
-                                        ThemeName="{Binding Main.SelectedTheme}" />
             <!-- Transparent input sponge above the native HWND child. Pointer
                  + key events from this Border feed AvaloniaInputAdapter,
                  which translates them into the IFractalInputController. -->
