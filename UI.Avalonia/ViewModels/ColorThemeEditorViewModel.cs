@@ -36,6 +36,7 @@ using System.Linq;
 using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using FracturingFog.Models;
@@ -70,11 +71,17 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         CopyCurrentCommand = ReactiveCommand.Create(CopyCurrent);
         RevertCommand = ReactiveCommand.Create(Revert);
         ApplyCommand = ReactiveCommand.Create(PushPreview);
-        SaveCommand = ReactiveCommand.Create(SaveToLibrary);
-        ExportJsonCommand = ReactiveCommand.Create(ExportJson);
-        ExportCSharpCommand = ReactiveCommand.Create(ExportCSharp);
+        // Save / Export / FromImage all round-trip through the host (modal
+        // dialogs, file pickers, palette extractor). Created via
+        // CreateFromTask so the command itself is async — the editor never
+        // blocks the UI thread waiting on the host. The host fills the args
+        // and signals the per-args TaskCompletionSource; the editor awaits
+        // it before reading the result fields.
+        SaveCommand = ReactiveCommand.CreateFromTask(SaveToLibraryAsync);
+        ExportJsonCommand = ReactiveCommand.CreateFromTask(ExportJsonAsync);
+        ExportCSharpCommand = ReactiveCommand.CreateFromTask(ExportCSharpAsync);
         HelpCommand = ReactiveCommand.Create(() => HelpRequested?.Invoke(this, EventArgs.Empty));
-        FromImageCommand = ReactiveCommand.Create(FromImage);
+        FromImageCommand = ReactiveCommand.CreateFromTask(FromImageAsync);
         AddStopCommand = ReactiveCommand.Create(AddStop);
         AddBandCommand = ReactiveCommand.Create(AddBand);
         RemoveStopCommand = ReactiveCommand.Create<ColorStopRowVm>(RemoveStop);
@@ -227,10 +234,16 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         FieldChanged();
     }
 
-    private void FromImage()
+    private async Task FromImageAsync()
     {
         var args = new ThemeFromImageEventArgs();
         FromImageRequested?.Invoke(this, args);
+        // Host is responsible for completing args.Completion after its modal
+        // closes. If no host subscriber exists, complete immediately so the
+        // editor doesn't hang.
+        if (FromImageRequested == null) args.Completion.TrySetResult(true);
+        await args.Completion.Task;
+
         if (args.Stops == null || args.Stops.Count < 2) return;
 
         _suppressChange = true;
@@ -621,17 +634,17 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         PushPreview();
     }
 
-    private void SaveToLibrary()
+    private async Task SaveToLibraryAsync()
     {
         var def = BuildDef();
         if (string.IsNullOrWhiteSpace(def.Name))
         {
-            MessageRequested?.Invoke(this, new ThemeMessageEventArgs("Save Theme", "Name cannot be empty.", MessageSeverity.Warning));
+            await RaiseMessageAsync(new ThemeMessageEventArgs("Save Theme", "Name cannot be empty.", MessageSeverity.Warning));
             return;
         }
         if (def.Stops == null || def.Stops.Count < 2)
         {
-            MessageRequested?.Invoke(this, new ThemeMessageEventArgs("Save Theme", "Need at least 2 color stops.", MessageSeverity.Warning));
+            await RaiseMessageAsync(new ThemeMessageEventArgs("Save Theme", "Need at least 2 color stops.", MessageSeverity.Warning));
             return;
         }
         if (_service.ThemeExistsInLibrary(def.Name))
@@ -640,7 +653,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                 $"A user theme named \"{def.Name}\" already exists.\n\nReplace it?",
                 MessageSeverity.Question)
             { ExpectsConfirmation = true };
-            MessageRequested?.Invoke(this, confirm);
+            await RaiseMessageAsync(confirm);
             if (!confirm.Confirmed) return;
         }
 
@@ -655,10 +668,10 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         _suppressChange = false;
         _loadedSourceName = def.Name;
 
-        MessageRequested?.Invoke(this, new ThemeMessageEventArgs("Save Theme", $"\"{def.Name}\" saved.", MessageSeverity.Info));
+        await RaiseMessageAsync(new ThemeMessageEventArgs("Save Theme", $"\"{def.Name}\" saved.", MessageSeverity.Info));
     }
 
-    private void ExportJson()
+    private async Task ExportJsonAsync()
     {
         var def = BuildDef();
         string json = _service.SerializeJson(def);
@@ -669,17 +682,17 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
             Content = json,
         };
-        SaveFileRequested?.Invoke(this, args);
+        await RaiseSaveFileAsync(args);
         if (!args.Saved && !string.IsNullOrEmpty(args.ErrorMessage))
-            MessageRequested?.Invoke(this, new ThemeMessageEventArgs("Export", "Export failed:\n" + args.ErrorMessage, MessageSeverity.Error));
+            await RaiseMessageAsync(new ThemeMessageEventArgs("Export", "Export failed:\n" + args.ErrorMessage, MessageSeverity.Error));
     }
 
-    private void ExportCSharp()
+    private async Task ExportCSharpAsync()
     {
         var def = BuildDef();
         if (def.Stops == null || def.Stops.Count < 2)
         {
-            MessageRequested?.Invoke(this, new ThemeMessageEventArgs("Export C#", "Need at least 2 color stops.", MessageSeverity.Warning));
+            await RaiseMessageAsync(new ThemeMessageEventArgs("Export C#", "Need at least 2 color stops.", MessageSeverity.Warning));
             return;
         }
         string code = _service.GenerateCSharp(def);
@@ -690,9 +703,32 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             Filter = "C# files (*.cs)|*.cs|All files (*.*)|*.*",
             Content = code,
         };
-        SaveFileRequested?.Invoke(this, args);
+        await RaiseSaveFileAsync(args);
         if (!args.Saved && !string.IsNullOrEmpty(args.ErrorMessage))
-            MessageRequested?.Invoke(this, new ThemeMessageEventArgs("Export C#", "Export failed:\n" + args.ErrorMessage, MessageSeverity.Error));
+            await RaiseMessageAsync(new ThemeMessageEventArgs("Export C#", "Export failed:\n" + args.ErrorMessage, MessageSeverity.Error));
+    }
+
+    // ── Async event raisers ───────────────────────────────────────────────
+    //
+    // Each helper raises the event synchronously (so any host subscriber sees
+    // it immediately) then awaits the TaskCompletionSource the host signals
+    // when it's done. If no host subscribed, complete immediately so the
+    // editor never hangs in isolation (designer / tests).
+
+    private Task RaiseMessageAsync(ThemeMessageEventArgs args)
+    {
+        var handler = MessageRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) args.Completion.TrySetResult(true);
+        return args.Completion.Task;
+    }
+
+    private Task RaiseSaveFileAsync(ThemeSaveFileEventArgs args)
+    {
+        var handler = SaveFileRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) args.Completion.TrySetResult(true);
+        return args.Completion.Task;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -940,6 +976,13 @@ public sealed class ThemeMessageEventArgs : EventArgs
     public bool ExpectsConfirmation { get; set; }
     /// <summary>Host fills with Yes/No result when <see cref="ExpectsConfirmation"/>.</summary>
     public bool Confirmed { get; set; }
+
+    /// <summary>Host signals here after it has finished interacting with the
+    /// user (or immediately, for sync hosts). The editor awaits this before
+    /// reading <see cref="Confirmed"/>. Without this, the editor would have
+    /// to block the UI thread on a Dispatcher round-trip and deadlock the
+    /// modal dialog pump.</summary>
+    public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 public sealed class ThemeSaveFileEventArgs : EventArgs
@@ -953,6 +996,11 @@ public sealed class ThemeSaveFileEventArgs : EventArgs
     /// <summary>Host sets when an exception occurred so the VM can surface
     /// a follow-up message box.</summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>Host signals here after the SaveFilePicker closes (or
+    /// immediately on cancel / failure). The editor awaits this before
+    /// reading <see cref="Saved"/> / <see cref="ErrorMessage"/>.</summary>
+    public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 public sealed class ThemeFromImageEventArgs : EventArgs
@@ -960,6 +1008,10 @@ public sealed class ThemeFromImageEventArgs : EventArgs
     /// <summary>Host fills with the image-derived stops on success; leave
     /// null or fewer than 2 entries to cancel the apply.</summary>
     public List<ColorStopDef>? Stops { get; set; }
+
+    /// <summary>Host signals here after the image-palette dialog closes.
+    /// The editor awaits this before reading <see cref="Stops"/>.</summary>
+    public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 // ReactiveObjectExtensions.RaiseAndSetIfChangedReturnsChanged is defined

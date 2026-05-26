@@ -71,6 +71,16 @@ namespace FracturingFog.Render
         /// calculation — used by the slider live-tune path.</summary>
         void RepaintWithPostFx();
 
+        /// <summary>Present the current GPU back buffer to the screen.
+        /// Safe to call from any thread — the host serialises this with
+        /// every other renderer access (UpdateTexture / Resize) so the
+        /// underlying D3D11 immediate context is never touched concurrently.
+        /// Callers normally do NOT need to invoke this — the host auto-presents
+        /// after each successful frame upload and after each resize. It is
+        /// exposed mainly so shells that want a periodic redraw (e.g. an
+        /// animation slideshow) can drive it explicitly.</summary>
+        void Present();
+
         /// <summary>Raised after each completed calculation. Carries the
         /// info MainForm currently pushes into the status bar.</summary>
         event EventHandler<RenderFrameInfo>? FrameCompleted;
