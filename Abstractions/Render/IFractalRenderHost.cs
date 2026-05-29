@@ -71,6 +71,22 @@ namespace FracturingFog.Render
         /// calculation — used by the slider live-tune path.</summary>
         void RepaintWithPostFx();
 
+        /// <summary>
+        /// Copy the currently-displayed BGRA frame (the last buffer uploaded to
+        /// the renderer). Returns an empty array with zeroed dimensions when no
+        /// frame has been presented yet. Used by the slideshow cross-fade as the
+        /// outgoing image to blend from.
+        /// </summary>
+        uint[] SnapshotFrame(out int width, out int height);
+
+        /// <summary>
+        /// Upload an externally-prepared BGRA buffer straight to the renderer and
+        /// present it — no calculation, no post-FX, no overlay. Used by the
+        /// slideshow cross-fade to push each blended transition frame. The buffer
+        /// becomes the new "last uploaded" frame.
+        /// </summary>
+        void PresentBuffer(uint[] bgra, int width, int height);
+
         /// <summary>Present the current GPU back buffer to the screen.
         /// Safe to call from any thread — the host serialises this with
         /// every other renderer access (UpdateTexture / Resize) so the

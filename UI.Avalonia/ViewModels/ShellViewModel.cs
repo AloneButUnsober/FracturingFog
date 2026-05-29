@@ -33,6 +33,7 @@ using FracturingFog.Imaging;
 using FracturingFog.Input;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.UI.Avalonia.Slideshow;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -46,6 +47,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>True while the host window is in borderless multi-monitor
     /// span mode. Toggled by the FloatingMenu Span button.</summary>
     private bool _isSpanning;
+
+    /// <summary>Avalonia slideshow cycler. Lazily created on first Start.</summary>
+    private SlideshowEngine? _slideshow;
 
     public ShellViewModel(
         IFractalRenderHost renderHost,
@@ -224,6 +228,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // PosterRenderer offscreen at the chosen resolution and saves to disk.
         FloatingMenu.PosterClick += (_, _) => PosterRequested?.Invoke(this, EventArgs.Empty);
 
+        // Slideshow — toggle the Avalonia cycler (region + theme hard-cuts).
+        // The ported VCR panel drives pause / skip / stop while it runs.
+        SlideshowVcr = new SlideshowVcrViewModel();
+        SlideshowVcr.PlayPauseClicked += (_, _) =>
+        {
+            _slideshow?.TogglePause();
+            SlideshowVcr.SetPaused(_slideshow?.IsPaused ?? false);
+        };
+        SlideshowVcr.StopClicked       += (_, _) => _slideshow?.Stop();
+        SlideshowVcr.SkipRegionClicked += (_, _) => _slideshow?.SkipRegion();
+        SlideshowVcr.SkipThemeClicked  += (_, _) => _slideshow?.SkipTheme();
+
+        FloatingMenu.SlideshowClick += (_, _) => ToggleSlideshow();
+
         // FrameCompleted: refresh the menu's CX/CY/Zoom/Iter textboxes so
         // the user sees the live values without typing them manually. Skips
         // whichever box currently has focus — that's owned by ViewModelBase
@@ -267,6 +285,27 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         Main.RenderHost.Trigger();
     }
 
+    /// <summary>Start or stop the Avalonia slideshow cycler. Shows / hides the
+    /// VCR panel and lazily constructs the engine on first run.</summary>
+    private void ToggleSlideshow()
+    {
+        if (_slideshow is { IsRunning: true })
+        {
+            _slideshow.Stop();
+            return;
+        }
+
+        if (_slideshow == null)
+        {
+            _slideshow = new SlideshowEngine(Main.RenderHost, _themeService, new SlideshowSettings());
+            _slideshow.Stopped += (_, _) => IsSlideshowVcrVisible = false;
+        }
+
+        SlideshowVcr.SetPaused(false);
+        IsSlideshowVcrVisible = true;
+        _slideshow.Start();
+    }
+
     private void ApplyCoordsFromMenu()
     {
         bool changed = false;
@@ -302,6 +341,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     public MainViewModel Main { get; }
     public FloatingMenuViewModel FloatingMenu { get; }
+
+    /// <summary>VCR transport for the running slideshow. Shown only while
+    /// <see cref="IsSlideshowVcrVisible"/> is true.</summary>
+    public SlideshowVcrViewModel SlideshowVcr { get; }
+
+    private bool _isSlideshowVcrVisible;
+    public bool IsSlideshowVcrVisible
+    {
+        get => _isSlideshowVcrVisible;
+        set => this.RaiseAndSetIfChanged(ref _isSlideshowVcrVisible, value);
+    }
 
     // ── Lazy dialog VMs ───────────────────────────────────────────────────
 
