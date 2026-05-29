@@ -51,6 +51,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Toolbar ─────────────────────────────────────────────────────── -->
@@ -118,8 +119,16 @@
                     Focusable="True" />
         </Grid>
 
+        <!-- Slideshow VCR transport ───────────────────────────────────────
+             Lives in its own layout band (not over the render grid) so the
+             native swap-chain HWND can't occlude it. Visible only while the
+             Avalonia slideshow cycler is running. -->
+        <Border Grid.Row="2" IsVisible="{Binding IsSlideshowVcrVisible}">
+            <ctrl:SlideshowVcrControl DataContext="{Binding SlideshowVcr}" />
+        </Border>
+
         <!-- Status bar ─────────────────────────────────────────────────── -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Padding="8,4"
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="0,1,0,0"

@@ -465,6 +465,53 @@ namespace FracturingFog.Rendering
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
         }
 
+        /// <summary>
+        /// Replace the active colour map and re-colourise the CURRENT frame so the
+        /// change is visible immediately. Mandelbrot takes the cheap path
+        /// (RecolorFromBuffers via <c>ApplyBandDitherRecolor(0)</c> — no recompute);
+        /// alt calculators have no cheap recolor, so they fall back to a full
+        /// <see cref="Trigger"/>. Replaces the old "set ColorMap + RepaintWithPostFx"
+        /// path that re-uploaded the stale (old-map) buffer, so themes only took
+        /// effect on the next pan/zoom.
+        /// </summary>
+        public void ApplyColorMap(IColorMap map)
+        {
+            if (_disposed || map == null) return;
+            ColorMap = map; // propagate to every calculator + raise ColorMapChanged
+
+            if (SelectAltCalculator(ViewState.FractalType) == null)
+            {
+                // Mandelbrot — recolour from the cached smooth/iteration buffers
+                // using the just-assigned map, then upload + present.
+                _calculator.ApplyBandDitherRecolor(0.0);
+                UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
+            }
+            else
+            {
+                // No cheap recolor for alt calculators — recompute.
+                Trigger();
+            }
+        }
+
+        /// <summary>
+        /// Set the active colour map and recolour the current frame into a
+        /// returned BGRA copy WITHOUT presenting. Mandelbrot fast path only —
+        /// returns null for alt calculators (no cheap recolor) so the caller can
+        /// fall back to a hard cut. The live colour map is updated so the
+        /// post-fade state is consistent. Used by the slideshow theme cross-fade.
+        /// </summary>
+        public uint[]? RecolorActiveToBuffer(IColorMap map)
+        {
+            if (_disposed || map == null) return null;
+            if (SelectAltCalculator(ViewState.FractalType) != null) return null; // Mandelbrot only
+            ColorMap = map;
+            _calculator.ApplyBandDitherRecolor(0.0);
+            var src = _calculator.ColorBuffer;
+            var copy = new uint[src.Length];
+            Array.Copy(src, copy, src.Length);
+            return copy;
+        }
+
         // ── Internals ─────────────────────────────────────────────────────────
 
         private IFractalCalculator? SelectAltCalculator(FractalType type) => type switch
@@ -567,6 +614,37 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
             lock (_d3dGate) _renderer.Render();
+        }
+
+        /// <inheritdoc/>
+        public uint[] SnapshotFrame(out int width, out int height)
+        {
+            var buf = _lastUploadedBuffer;
+            if (buf == null)
+            {
+                width = 0; height = 0;
+                return Array.Empty<uint>();
+            }
+            width = _lastUploadedWidth;
+            height = _lastUploadedHeight;
+            var copy = new uint[buf.Length];
+            Array.Copy(buf, copy, buf.Length);
+            return copy;
+        }
+
+        /// <inheritdoc/>
+        public void PresentBuffer(uint[] bgra, int width, int height)
+        {
+            if (_disposed || bgra == null || width <= 0 || height <= 0) return;
+            if (bgra.Length < (long)width * height) return;
+            lock (_d3dGate)
+            {
+                _renderer.UpdateTexture(bgra, width, height);
+                _renderer.Render();
+            }
+            _lastUploadedBuffer = bgra;
+            _lastUploadedWidth = width;
+            _lastUploadedHeight = height;
         }
 
         /// <summary>

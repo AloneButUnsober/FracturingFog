@@ -133,6 +133,51 @@ namespace FracturingFog.Models
         /// path so the caller can surface a friendly message.
         /// </summary>
         bool DeleteTheme(string themeName);
+
+        /// <summary>
+        /// Display names of the host's curated slideshow regions (the subset
+        /// the WinForms slideshow cycles through). Used by the Avalonia
+        /// slideshow engine to pick the next region.
+        /// </summary>
+        IReadOnlyList<string> EnumerateSlideshowRegionNames();
+
+        /// <summary>Zoom level of the named region (0 when not found). Used to
+        /// filter the theme pool to themes recommended at that depth.</summary>
+        double GetRegionZoom(string regionName);
+
+        /// <summary>Theme names recommended for the given zoom level — themes
+        /// whose max-recommended-zoom is below <paramref name="zoom"/> are
+        /// excluded so a deep-zoom region doesn't get a washed-out palette.</summary>
+        IReadOnlyList<string> EnumerateThemeNamesForZoom(double zoom);
+
+        /// <summary>
+        /// Set the active colour map to the named theme WITHOUT recolouring or
+        /// presenting the current frame. Used by the slideshow region commit:
+        /// the map must be in place before the region recompute so the new frame
+        /// renders with the right palette, but presenting here would flash the
+        /// outgoing region recoloured. Returns false when the theme is unknown.
+        /// </summary>
+        bool ApplyThemeSilent(string themeName);
+
+        /// <summary>
+        /// Recolour the current frame with the named theme and return the new
+        /// BGRA buffer WITHOUT presenting (used as the incoming image for a
+        /// slideshow theme cross-fade). The live colour map is updated to the
+        /// new theme so the post-fade state is consistent. Returns null when the
+        /// active fractal has no cheap recolor path (caller falls back to a hard
+        /// cut). <paramref name="width"/>/<paramref name="height"/> are advisory;
+        /// the returned buffer matches the live render size.
+        /// </summary>
+        uint[]? RenderThemeOffscreen(string themeName, int width, int height);
+
+        /// <summary>
+        /// Render the named region (with the named theme) to a fresh offscreen
+        /// BGRA buffer at <paramref name="width"/>×<paramref name="height"/> —
+        /// a full calculation that does NOT disturb the live view. Used as the
+        /// incoming image for a slideshow region cross-fade. Returns null for
+        /// non-Mandelbrot regions or unresolved names.
+        /// </summary>
+        uint[]? RenderRegionOffscreen(string regionName, string themeName, int width, int height);
     }
 
     /// <summary>Outcome of <see cref="IColorThemeService.ExportUserRegionsToFile"/>.</summary>

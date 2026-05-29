@@ -132,6 +132,21 @@ namespace FracturingFog.Hosting
                     break;
                 }
             }
+            // Fallback: the slideshow draws from AllSlideshowRegions, which also
+            // includes the random-pool entries that FractalRegionLibrary.All
+            // omits. Without this, slideshow picks from that pool resolve to null
+            // and the region never changes.
+            if (region == null)
+            {
+                foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
+                {
+                    if (string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                    {
+                        region = r;
+                        break;
+                    }
+                }
+            }
             if (region == null) return false;
 
             state.CenterX  = region.CenterX;  state.CenterXLo = region.CenterXLo;
@@ -160,8 +175,23 @@ namespace FracturingFog.Hosting
             if (string.IsNullOrEmpty(themeName) || _renderHost == null) return false;
             var map = ColorPalette.GetPaletteByName(themeName);
             if (map == null) return false;
+            // ApplyColorMap recolours the current frame in place (Mandelbrot) or
+            // recomputes (alt calculators) so the theme change shows immediately.
+            // The old ColorMap + RepaintWithPostFx path re-uploaded the stale
+            // buffer, so themes only took effect after the next pan/zoom.
+            _renderHost.ApplyColorMap(map);
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool ApplyThemeSilent(string themeName)
+        {
+            if (string.IsNullOrEmpty(themeName) || _renderHost == null) return false;
+            var map = ColorPalette.GetPaletteByName(themeName);
+            if (map == null) return false;
+            // ColorMap setter propagates to every calculator (no upload/present);
+            // the next Trigger recomputes with this palette.
             _renderHost.ColorMap = map;
-            _renderHost.RepaintWithPostFx();
             return true;
         }
 
@@ -418,6 +448,91 @@ namespace FracturingFog.Hosting
             // themes aren't in it, so it returns false for those (the host
             // surfaces a friendly "built-in cannot be deleted" message).
             return UserColorThemeLibrary.Instance.Remove(themeName);
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateSlideshowRegionNames()
+        {
+            var list = new List<string>();
+            foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
+                list.Add(r.Name);
+            return list;
+        }
+
+        /// <inheritdoc/>
+        public double GetRegionZoom(string regionName)
+        {
+            if (string.IsNullOrEmpty(regionName)) return 0.0;
+            foreach (var r in FractalRegionLibrary.Instance.All)
+                if (string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                    return r.Zoom;
+            foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
+                if (string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                    return r.Zoom;
+            return 0.0;
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateThemeNamesForZoom(double zoom)
+            => ColorPalette.GetPaletteNamesForZoom(zoom);
+
+        /// <inheritdoc/>
+        public uint[]? RenderThemeOffscreen(string themeName, int width, int height)
+        {
+            if (_renderHost == null || string.IsNullOrEmpty(themeName)) return null;
+            var map = ColorPalette.GetPaletteByName(themeName);
+            if (map == null) return null;
+            // Recolours the live Mandelbrot frame in place + returns a copy.
+            // Returns null for alt calculators (no cheap recolor).
+            return _renderHost.RecolorActiveToBuffer(map);
+        }
+
+        /// <inheritdoc/>
+        public uint[]? RenderRegionOffscreen(string regionName, string themeName, int width, int height)
+        {
+            if (string.IsNullOrEmpty(regionName) || width <= 0 || height <= 0) return null;
+
+            FractalRegion? region = null;
+            foreach (var r in FractalRegionLibrary.Instance.All)
+                if (string.Equals(r.Name, regionName, StringComparison.Ordinal)) { region = r; break; }
+            if (region == null)
+                foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
+                    if (string.Equals(r.Name, regionName, StringComparison.Ordinal)) { region = r; break; }
+            if (region == null) return null;
+
+            // Cross-fade only supports Mandelbrot regions (the slideshow pool is
+            // Mandelbrot-only); other types fall back to a hard cut.
+            if (region.FractalType != FractalType.Mandelbrot) return null;
+
+            var map = ColorPalette.GetPaletteByName(themeName);
+            if (map == null) return null;
+
+            var quality = region.QualityPreset ?? QualityPreset.Standard;
+            int iters = region.Iterations > 0 ? region.Iterations : quality.ComputeIterations(region.Zoom);
+
+            try
+            {
+                var calc = new MandelbrotCalculator(width, height)
+                {
+                    CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                    CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                    CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                    CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                    Zoom = region.Zoom,
+                    MaxIterations = iters,
+                    ColorMap = map,
+                    Quality = quality,
+                };
+                calc.Calculate(System.Threading.CancellationToken.None);
+                var src = calc.ColorBuffer;
+                var copy = new uint[src.Length];
+                System.Array.Copy(src, copy, src.Length);
+                return copy;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>
