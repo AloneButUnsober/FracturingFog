@@ -28,6 +28,7 @@ using System.Threading.Tasks;
 using System.Web;
 using System.Windows.Forms;
 
+using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Views;
@@ -2624,99 +2625,20 @@ public sealed partial class MainForm : Form
     /// watermark will be placed) instead of using the swatch, yielding a colour
     /// that is always readable against the actual rendered content.
     /// </summary>
+    // Contrast-colour logic now lives in FracturingFog.Imaging.ImageExport
+    // (shared with the Avalonia shell). Thin forwarders keep existing call
+    // sites unchanged.
     private static Color ComputeContrastColor(
         Color swatch,
         bool watermark = false,
         uint[]? pixels = null,
         int imgW = 0,
         int imgH = 0)
-    {
-        Color baseColor = swatch;
-
-        // When in watermark mode and we have pixel data, sample the region
-        // where the watermark text will land (lower-right corner).
-        if (watermark && pixels != null && imgW > 0 && imgH > 0)
-        {
-            // The watermark main line uses 16px bold; estimate ~300×22 px.
-            // The sub-line uses 8px bold; estimate ~300×12 px.
-            // Together the bounding box is roughly 320×42 px ending at
-            // (imgW-2, imgH-2) (from AddWaterMark positioning).
-            const int regionW = 320;
-            const int regionH = 46;
-            int x0 = Math.Max(0, imgW - regionW - 20);
-            int y0 = Math.Max(0, imgH - regionH - 2);
-            int x1 = Math.Min(imgW, imgW);
-            int y1 = Math.Min(imgH, imgH);
-
-            long sumR = 0, sumG = 0, sumB = 0, count = 0;
-            for (int row = y0; row < y1; row++)
-            {
-                int rb = row * imgW;
-                for (int col = x0; col < x1; col++)
-                {
-                    uint p = pixels[rb + col];
-                    sumR += (p >> 16) & 0xFF;
-                    sumG += (p >> 8) & 0xFF;
-                    sumB += p & 0xFF;
-                    count++;
-                }
-            }
-
-            if (count > 0)
-                baseColor = Color.FromArgb(
-                    (int)(sumR / count),
-                    (int)(sumG / count),
-                    (int)(sumB / count));
-        }
-
-        // Compute complementary + luminance-adjusted colour.
-        float r = baseColor.R / 255f, g = baseColor.G / 255f, b = baseColor.B / 255f;
-        float cmax = System.Math.Max(r, System.Math.Max(g, b));
-        float cmin = System.Math.Min(r, System.Math.Min(g, b));
-        float delta = cmax - cmin;
-        float l = (cmax + cmin) * 0.5f;
-        float h2 = 0f;
-        if (delta > 0.001f)
-        {
-            if (cmax == r) h2 = ((g - b) / delta) % 6f;
-            else if (cmax == g) h2 = (b - r) / delta + 2f;
-            else h2 = (r - g) / delta + 4f;
-            h2 = (h2 / 6f + 1f) % 1f;
-        }
-        float s2 = delta < 0.001f ? 0f : delta / (1f - System.Math.Abs(2f * l - 1f));
-        float hc = (h2 + 0.5f) % 1f;
-        float lc = l < 0.5f
-            ? System.Math.Clamp(1f - l * 0.6f, 0.65f, 1.0f)
-            : System.Math.Clamp(1f - l * 1.4f, 0.0f, 0.35f);
-        float sc = System.Math.Clamp(s2 * 0.5f + 0.5f, 0.5f, 1.0f);
-        float cv = (1f - System.Math.Abs(2f * lc - 1f)) * sc;
-        float xv = cv * (1f - System.Math.Abs((hc * 6f) % 2f - 1f));
-        float m = lc - cv * 0.5f;
-        float rr, gg, bb;
-        switch ((int)(hc * 6f))
-        {
-            case 0: rr = cv; gg = xv; bb = 0; break;
-            case 1: rr = xv; gg = cv; bb = 0; break;
-            case 2: rr = 0; gg = cv; bb = xv; break;
-            case 3: rr = 0; gg = xv; bb = cv; break;
-            case 4: rr = xv; gg = 0; bb = cv; break;
-            default: rr = cv; gg = 0; bb = xv; break;
-        }
-        // Watermark mode is always fully opaque; fade flag kept for non-watermark uses.
-        int alpha = watermark ? 205 : 255;
-        return Color.FromArgb(
-            alpha,
-            (int)System.Math.Clamp((rr + m) * 255f, 0, 255),
-            (int)System.Math.Clamp((gg + m) * 255f, 0, 255),
-            (int)System.Math.Clamp((bb + m) * 255f, 0, 255));
-    }
+        => ImageExport.ComputeContrastColor(swatch, watermark, pixels, imgW, imgH);
 
     // Backward-compatible overload used by GridOverlayPanel (no pixel sampling).
     private static Color ComputeContrastColorSimple(Color swatch, bool fade = false)
-    {
-        var c = ComputeContrastColor(swatch);
-        return fade ? Color.FromArgb(75, c.R, c.G, c.B) : c;
-    }
+        => ImageExport.ComputeContrastColorSimple(swatch, fade);
 
     private void ToggleMiniDepth()
     {

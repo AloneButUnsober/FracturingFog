@@ -220,6 +220,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             SpanToggleRequested?.Invoke(this, _isSpanning);
         };
 
+        // Poster — host pops the poster-size dialog, then runs the shared
+        // PosterRenderer offscreen at the chosen resolution and saves to disk.
+        FloatingMenu.PosterClick += (_, _) => PosterRequested?.Invoke(this, EventArgs.Empty);
+
         // FrameCompleted: refresh the menu's CX/CY/Zoom/Iter textboxes so
         // the user sees the live values without typing them manually. Skips
         // whichever box currently has focus — that's owned by ViewModelBase
@@ -475,6 +479,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// is true to enter span mode, false to restore the prior window geometry.
     /// Host owns the Avalonia Window manipulation.</summary>
     public event EventHandler<bool>? SpanToggleRequested;
+
+    /// <summary>Render a high-resolution poster. Host pops the poster-size
+    /// dialog + a SaveFilePicker, then runs the shared PosterRenderer.</summary>
+    public event EventHandler? PosterRequested;
 
     /// <summary>Re-pull region names from the service into the menu combo.
     /// Called by the host after a successful import.</summary>

@@ -17,10 +17,12 @@
 
 using System;
 using System.Diagnostics;
+using System.Drawing.Imaging;
 using System.Threading;
 using System.Threading.Tasks;
 
 using FracturingFog.Calculators;
+using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Render;
 using FracturingFog.ViewState;
@@ -211,6 +213,43 @@ namespace FracturingFog.Rendering
                     return 255; // fall back to "dark image" → overlay picks white
                 }
             }
+        }
+
+        /// <summary>
+        /// Snapshot the current view + colour state into a
+        /// <see cref="PosterRequest"/> for an offscreen high-resolution render.
+        /// Used by the Avalonia shell's Poster command (the shared
+        /// <see cref="PosterRenderer"/> does the actual calc + save). The full
+        /// quad-precision centre is copied so a Mandelbrot deep zoom survives
+        /// the re-render at poster resolution.
+        /// </summary>
+        public PosterRequest CreatePosterRequest(
+            int width, int height, bool rotate,
+            string path, ImageFormat format, string watermark, string subText)
+        {
+            var s = ViewState;
+            int effIters = _calculator.MaxIterations > 0
+                ? _calculator.MaxIterations
+                : s.Quality.ComputeIterations(s.Zoom);
+
+            return new PosterRequest
+            {
+                FractalType = s.FractalType,
+                Width = width,
+                Height = height,
+                CenterX = s.CenterX, CenterXLo = s.CenterXLo, CenterX2 = s.CenterX2, CenterX3 = s.CenterX3,
+                CenterY = s.CenterY, CenterYLo = s.CenterYLo, CenterY2 = s.CenterY2, CenterY3 = s.CenterY3,
+                Zoom = s.Zoom,
+                MaxIterations = effIters,
+                ColorMap = _calculator.ColorMap,
+                Quality = s.Quality,
+                FractalParameters = s.FractalParameters,
+                Rotate = rotate,
+                Path = path,
+                Format = format,
+                Watermark = watermark,
+                SubText = subText,
+            };
         }
 
         // ── ApplyView ─────────────────────────────────────────────────────────

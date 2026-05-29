@@ -1,4 +1,5 @@
-﻿using FracturingFog.Interefaces;
+﻿using FracturingFog.Imaging;
+using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using System;
 using System.Diagnostics;
@@ -153,52 +154,19 @@ namespace FracturingFog
         /// must use the MandelbrotCalculator branch to preserve QD-limb state).
         /// </summary>
         private IFractalCalculator? BuildAltCalculatorForCapture(FractalType type, int w, int h)
-        {
-            IFractalCalculator? c = type switch
+            => PosterRenderer.BuildCaptureCalculator(new PosterRequest
             {
-                FractalType.Mandelbrot       => null,
-                FractalType.Julia            => new EscapeTimeCalculator(w, h),
-                FractalType.BurningShip      => new EscapeTimeCalculator(w, h),
-                FractalType.Tricorn          => new EscapeTimeCalculator(w, h),
-                FractalType.Multibrot        => new EscapeTimeCalculator(w, h),
-                FractalType.Phoenix          => new EscapeTimeCalculator(w, h),
-                FractalType.IFS              => new IFSCalculator(w, h),
-                FractalType.LSystem          => new LSystemCalculator(w, h),
-                FractalType.StrangeAttractor => new AttractorCalculator(w, h),
-                FractalType.BuddhaBrot       => new BuddhabrotCalculator(w, h),
-                FractalType.Newton           => new NewtonCalculator(w, h),
-                FractalType.Nova             => new NewtonCalculator(w, h),
-                FractalType.UserEquation     => new UserEquationCalculator(w, h),
-                FractalType.Mandelbulb       => new MandelbulbCalculator(w, h),
-                FractalType.Sandbox          => new SandboxCalculator(w, h),
-                FractalType.UserBulb         => new UserBulbCalculator(w, h),
-                _                            => null
-            };
-            if (c == null) return null;
-            c.CenterX = _calculator!.CenterX;
-            c.CenterY = _calculator!.CenterY;
-            c.Zoom = _calculator!.Zoom;
-            c.MaxIterations = _calculator!.MaxIterations;
-            c.Quality = _quality;
-            c.ColorMap = _calculator!.ColorMap;
-            switch (c)
-            {
-                case EscapeTimeCalculator e:
-                    e.FractalType = type;
-                    e.FractalParameters = _fractalParams;
-                    break;
-                case IFSCalculator ifs:        ifs.FractalParameters = _fractalParams; break;
-                case LSystemCalculator ls:     ls.FractalParameters = _fractalParams; break;
-                case AttractorCalculator a:    a.FractalParameters = _fractalParams; break;
-                case BuddhabrotCalculator b:   b.FractalParameters = _fractalParams; break;
-                case NewtonCalculator n:       n.FractalParameters = _fractalParams; break;
-                case UserEquationCalculator u: u.FractalParameters = _fractalParams; break;
-                case MandelbulbCalculator m:   m.FractalParameters = _fractalParams; break;
-                case SandboxCalculator sb:     sb.FractalParameters = _fractalParams; break;
-                case UserBulbCalculator ub:    ub.FractalParameters = _fractalParams; break;
-            }
-            return c;
-        }
+                FractalType = type,
+                Width = w,
+                Height = h,
+                CenterX = _calculator!.CenterX,
+                CenterY = _calculator!.CenterY,
+                Zoom = _calculator!.Zoom,
+                MaxIterations = _calculator!.MaxIterations,
+                Quality = _quality,
+                ColorMap = _calculator!.ColorMap,
+                FractalParameters = _fractalParams,
+            });
 
         private void TakeWallpaperScreenshot(string path, ImageFormat format, string waterMark, string subText)
         {
@@ -313,17 +281,26 @@ namespace FracturingFog
             foreach (System.Windows.Forms.Control c in Controls)
                 if (c.Dock == System.Windows.Forms.DockStyle.Top) toolbarH += c.Height;
 
-            FractalType type = _currentFractalType;
-            IFractalCalculator? altCalc = BuildAltCalculatorForCapture(type, fullW, fullH);
-
-            double cx = _calculator!.CenterX, cxLo = _calculator!.CenterXLo;
-            double cx2 = _calculator!.CenterX2, cx3 = _calculator!.CenterX3;
-            double cy = _calculator!.CenterY, cyLo = _calculator!.CenterYLo;
-            double cy2 = _calculator!.CenterY2, cy3 = _calculator!.CenterY3;
-            double zoom = _calculator!.Zoom;
-            int maxIter = _calculator!.MaxIterations;
-            IColorMap map = _calculator!.ColorMap;
-            QualityPreset q = _quality;
+            var req = new PosterRequest
+            {
+                FractalType = _currentFractalType,
+                Width = fullW,
+                Height = fullH,
+                CenterX = _calculator!.CenterX, CenterXLo = _calculator!.CenterXLo,
+                CenterX2 = _calculator!.CenterX2, CenterX3 = _calculator!.CenterX3,
+                CenterY = _calculator!.CenterY, CenterYLo = _calculator!.CenterYLo,
+                CenterY2 = _calculator!.CenterY2, CenterY3 = _calculator!.CenterY3,
+                Zoom = _calculator!.Zoom,
+                MaxIterations = _calculator!.MaxIterations,
+                ColorMap = _calculator!.ColorMap,
+                Quality = _quality,
+                FractalParameters = _fractalParams,
+                Rotate = isPortrait || rotateImage,
+                Path = path,
+                Format = format,
+                Watermark = waterMark,
+                SubText = subText,
+            };
 
             long mpix = (long)fullW * fullH / 1_000_000;
             _screenshotButton.Enabled = false;
@@ -339,35 +316,7 @@ namespace FracturingFog
                 token = _wallpaperCts.Token;
             }
 
-            var sw = Stopwatch.StartNew();
-
-            Task.Run<(uint[] Buffer, int Width, int Height)>(() =>
-            {
-                if (altCalc != null)
-                {
-                    altCalc.Calculate(token);
-                    token.ThrowIfCancellationRequested();
-                    return (altCalc.ColorBuffer, altCalc.Width, altCalc.Height);
-                }
-                var tempCalc = new MandelbrotCalculator(fullW, fullH)
-                {
-                    CenterX = cx,
-                    CenterXLo = cxLo,
-                    CenterX2 = cx2,
-                    CenterX3 = cx3,
-                    CenterY = cy,
-                    CenterYLo = cyLo,
-                    CenterY2 = cy2,
-                    CenterY3 = cy3,
-                    Zoom = zoom,
-                    MaxIterations = maxIter,
-                    ColorMap = map,
-                    Quality = q
-                };
-                tempCalc.Calculate(token);
-                token.ThrowIfCancellationRequested();
-                return (tempCalc.ColorBuffer, tempCalc.Width, tempCalc.Height);
-            }, token)
+            Task.Run(() => PosterRenderer.RenderToFile(req, token), token)
             .ContinueWith(t =>
             {
                 if (!IsHandleCreated || _disposed) return;
@@ -389,207 +338,29 @@ namespace FracturingFog
                         return;
                     }
 
-                    sw.Stop();
-                    var result = t.Result;
-                    try
-                    {
-                        // Rotate 90° clockwise when portrait or rotateImage is requested.
-                        // The landscape render (width × height) becomes portrait (height × width).
-                        if (isPortrait || rotateImage)
-                        {
-                            var rotated = new uint[result.Buffer.Length];
-                            for (int y = 0; y < result.Height; y++)
-                                for (int x = 0; x < result.Width; x++)
-                                    rotated[x * result.Height + (result.Height - 1 - y)] = result.Buffer[y * result.Width + x];
-                            // After 90° CW rotation the saved dimensions are result.Height × result.Width.
-                            var fontColor = ComputeContrastColor(GetSwatchColor(),
-                                watermark: true, pixels: rotated, imgW: result.Height, imgH: result.Width);
-                            SavePixelsToFile(
-                                rotated,
-                                result.Height,
-                                result.Width,
-                                path,
-                                format,
-                                waterMark,
-                                fontColor,
-                                subText,
-                                true);
-                            SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Height}×{result.Width} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
-                        }
-                        else
-                        {
-                            var fontColor = ComputeContrastColor(GetSwatchColor(),
-                                watermark: true, pixels: result.Buffer,
-                                imgW: result.Width, imgH: result.Height);
-                            SavePixelsToFile(
-                                result.Buffer,
-                                result.Width,
-                                result.Height,
-                                path,
-                                format,
-                                waterMark,
-                                fontColor,
-                                subText,
-                                true);
-                            SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({result.Width}×{result.Height} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{sw.ElapsedMilliseconds} ms]");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Windows.Forms.MessageBox.Show(
-                            $"Failed to save poster:\n\n{ex.Message}",
-                            "Screenshot Error",
-                            System.Windows.Forms.MessageBoxButtons.OK,
-                            System.Windows.Forms.MessageBoxIcon.Error); }
+                    var r = t.Result;
+                    SetStatus($"Poster saved  →  {Path.GetFileName(path)}  ({r.SavedWidth}×{r.SavedHeight} px,  {new FileInfo(path).Length / 1024:N0} KB)  [{r.ElapsedMs} ms]");
                 });
             }, TaskScheduler.Default);
         }
 
-        private static unsafe void SavePixelsToFile(
+        // ── Image-IO helpers now live in FracturingFog.Imaging.ImageExport ──
+        // (shared with the Avalonia shell). These thin private forwarders keep
+        // the existing MainForm/Slideshow call sites compiling unchanged.
+
+        private static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFormat format,
             string watermarkText, Color fontColor, string subText = "", bool poster = false)
-        {
-            using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-            var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
-                                    ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                fixed (uint* src = pixels)
-                {
-                    if (bmpData.Stride == w * 4)
-                        Buffer.MemoryCopy(src, (void*)bmpData.Scan0, (long)w * h * 4, (long)w * h * 4);
-                    else
-                    {
-                        byte* dst = (byte*)bmpData.Scan0;
-                        for (int row = 0; row < h; row++)
-                            Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
-                                              dst + (long)row * bmpData.Stride,
-                                              (long)w * 4, (long)w * 4);
-                    }
-                }
-            }
-            finally { bmp.UnlockBits(bmpData); }
-
-            if (format == ImageFormat.Tiff)
-            {
-                ImageCodecInfo? codec = null;
-                foreach (var c in ImageCodecInfo.GetImageEncoders())
-                    if (c.MimeType == "image/tiff") { codec = c; break; }
-                if (codec != null)
-                {
-                    using var ep = new EncoderParameters(1);
-                    ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Compression, (long)EncoderValue.CompressionLZW);
-                    bmp.Save(path, codec, ep);
-                }
-                else bmp.Save(path, format);
-            }
-            else bmp.Save(path, format);
-
-            Debug.WriteLine($"Watermark text: '{watermarkText}'");
-            if (!string.IsNullOrEmpty(watermarkText))
-            {
-                using var g = Graphics.FromImage(bmp);
-                AddWaterMark(g, watermarkText, w, h, fontColor, subText, poster);
-                bmp.Save(path, format);
-            }
-        }
+            => ImageExport.SavePixelsToFile(pixels, w, h, path, format, watermarkText, fontColor, subText, poster);
 
         private static void AddWaterMark(
-            Graphics g,
-            string text,
-            int width,
-            int height,
-            Color fontColor,
-            string subText = "",
-            bool poster = false)
-        {
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            var sz = g.MeasureString(text, font);
-            int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-            var pos = new PointF(width - sz.Width - 20, height - sz.Height - yOffset);
+            Graphics g, string text, int width, int height,
+            Color fontColor, string subText = "", bool poster = false)
+            => ImageExport.AddWaterMark(g, text, width, height, fontColor, subText, poster);
 
-            // Outline colour: opposite luminance of fill, ~75% opacity.
-            float lum = (fontColor.R * 0.299f + fontColor.G * 0.587f + fontColor.B * 0.114f) / 255f;
-            Color outlineColor = lum < 0.5f
-                ? Color.FromArgb(190, 255, 255, 255)
-                : Color.FromArgb(190, 0, 0, 0);
-
-            float mainStroke = poster ? System.Math.Max(2f, fontSize / 10f) : 2f;
-            float subStroke = poster ? System.Math.Max(1.5f, fontSize / 16f) : 1.5f;
-
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-            DrawOutlinedString(g, text, font, pos, fontColor, outlineColor, mainStroke);
-
-            if (!string.IsNullOrEmpty(subText))
-            {
-                using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
-                var sz2 = g.MeasureString(subText, fontSmall);
-                int subTextOffset = poster ? 0 : 2;
-                var subPos = new PointF(width - sz2.Width - 55, height - sz2.Height - subTextOffset);
-                DrawOutlinedString(g, subText, fontSmall, subPos, fontColor, outlineColor, subStroke);
-            }
-        }
-
-        private static void DrawOutlinedString(
-            Graphics g, string text, Font font, PointF pos,
-            Color fill, Color outline, float strokeWidth)
-        {
-            using var path = new System.Drawing.Drawing2D.GraphicsPath();
-            path.AddString(text, font.FontFamily, (int)font.Style, font.Size, pos,
-                System.Drawing.StringFormat.GenericDefault);
-            using var pen = new Pen(outline, strokeWidth)
-            {
-                LineJoin = System.Drawing.Drawing2D.LineJoin.Round,
-                MiterLimit = 2f
-            };
-            g.DrawPath(pen, path);
-            using var brush = new SolidBrush(fill);
-            g.FillPath(brush, path);
-        }
-
-        /// <summary>
-        /// Computes the on-image bounding box the watermark will occupy.
-        /// Used by the slideshow overlay to allocate only a small bitmap
-        /// instead of a full-frame one.
-        /// </summary>
         private static Rectangle MeasureWatermarkBBox(
             string text, string subText, int width, int height, bool poster = false)
-        {
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var dummy = new Bitmap(1, 1);
-            using var g = Graphics.FromImage(dummy);
-
-            var sz = g.MeasureString(text, font);
-            int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-            float left = width - sz.Width - 20;
-            float top = height - sz.Height - yOffset;
-            float right = left + sz.Width;
-            float bottom = top + sz.Height;
-
-            if (!string.IsNullOrEmpty(subText))
-            {
-                using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
-                var sz2 = g.MeasureString(subText, fontSmall);
-                int subTextOffset = poster ? 0 : 2;
-                float sLeft = width - sz2.Width - 55;
-                float sTop = height - sz2.Height - subTextOffset;
-                left = System.Math.Min(left, sLeft);
-                top = System.Math.Min(top, sTop);
-                right = System.Math.Max(right, sLeft + sz2.Width);
-                bottom = System.Math.Max(bottom, sTop + sz2.Height);
-            }
-
-            // Pad for outline stroke + AA fringe.
-            const int pad = 6;
-            int x0 = System.Math.Max(0, (int)System.Math.Floor(left) - pad);
-            int y0 = System.Math.Max(0, (int)System.Math.Floor(top) - pad);
-            int x1 = System.Math.Min(width, (int)System.Math.Ceiling(right) + pad);
-            int y1 = System.Math.Min(height, (int)System.Math.Ceiling(bottom) + pad);
-            return new Rectangle(x0, y0, x1 - x0, y1 - y0);
-        }
+            => ImageExport.MeasureWatermarkBBox(text, subText, width, height, poster);
 
         #endregion Screen Capture
     }
