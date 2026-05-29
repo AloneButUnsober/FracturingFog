@@ -434,6 +434,98 @@ namespace FracturingFog.Hosting
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] SlideshowSettings failed: {ex.Message}");
                 }
             };
+
+            // ── New #55 wires — colour-theme library IO ──────────────────
+
+            // Export user themes — pick a path, then serialize the library.
+            shell.ExportThemesRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_themeService == null) return;
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Export Color Themes",
+                        suggestedName: "colorthemes.json",
+                        filter: "JSON File (*.json)|*.json");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    var result = ((IColorThemeService)s_themeService).ExportUserThemesToFile(path);
+                    if (!result.Success)
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Export Themes",
+                            result.ErrorMessage ?? "Export failed.",
+                            expectsConfirmation: false);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ExportThemes failed: {ex.Message}");
+                }
+            };
+
+            // Import themes — pick a path, merge, refresh the combo.
+            shell.ImportThemesRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_themeService == null) return;
+                    string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                        "Import Color Themes",
+                        filter: "JSON File (*.json)|*.json|All Files (*.*)|*.*");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    var result = ((IColorThemeService)s_themeService).ImportThemesFromFile(path);
+                    if (result.Success)
+                    {
+                        shell.RefreshThemeListsFromService();
+                        if (result.Added == 0)
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Import Themes",
+                                "No new themes imported (all entries already exist).",
+                                expectsConfirmation: false);
+                    }
+                    else
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Themes",
+                            result.ErrorMessage ?? "Import failed.",
+                            expectsConfirmation: false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ImportThemes failed: {ex.Message}");
+                }
+            };
+
+            // Delete theme — confirm then ask the service. Built-in themes
+            // aren't in the user library, so DeleteTheme returns false for them.
+            shell.DeleteThemeRequested += async (_, tuple) =>
+            {
+                var (confirm, name) = tuple;
+                try
+                {
+                    var result = await AvaloniaDialogs.ShowMessageAsync(
+                        confirm.Title, confirm.Body, expectsConfirmation: true);
+                    if (result == AvaloniaDialogs.MessageResult.Yes)
+                    {
+                        if (s_themeService!.DeleteTheme(name))
+                            shell.RefreshThemeListsFromService();
+                        else
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Delete Theme",
+                                "That theme is built-in and cannot be deleted.",
+                                expectsConfirmation: false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] DeleteTheme failed: {ex.Message}");
+                }
+                finally
+                {
+                    confirm.Completion.TrySetResult(true);
+                }
+            };
         }
 
         // Convenience helper for the SaveRegion handler — pulls MainViewModel

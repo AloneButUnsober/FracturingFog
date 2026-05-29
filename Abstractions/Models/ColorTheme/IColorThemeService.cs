@@ -109,6 +109,30 @@ namespace FracturingFog.Models
         /// name are skipped. Returns counts and an optional error message.
         /// </summary>
         RegionImportResult ImportRegionsFromFile(string path);
+
+        /// <summary>
+        /// Serialize the host's user-defined colour themes to the given file
+        /// path as a JSON array (byte-identical to the user library on disk so
+        /// a re-import round-trips). Built-in/algorithmic themes are never
+        /// exported. The returned <see cref="ThemeExportResult"/> carries the
+        /// count and an optional error message.
+        /// </summary>
+        ThemeExportResult ExportUserThemesToFile(string path);
+
+        /// <summary>
+        /// Read a colour-theme JSON array and merge its entries into the user
+        /// library. Duplicates by name (case-insensitive) are skipped. Returns
+        /// counts and an optional error message.
+        /// </summary>
+        ThemeImportResult ImportThemesFromFile(string path);
+
+        /// <summary>
+        /// Remove the named theme from the user library. Returns true if a
+        /// theme was actually removed. Built-in/algorithmic themes are never
+        /// deletable; implementations return false rather than throwing on that
+        /// path so the caller can surface a friendly message.
+        /// </summary>
+        bool DeleteTheme(string themeName);
     }
 
     /// <summary>Outcome of <see cref="IColorThemeService.ExportUserRegionsToFile"/>.</summary>
@@ -139,6 +163,34 @@ namespace FracturingFog.Models
         public int Added { get; }
         public int Skipped { get; }
         public int SandboxEquationsAdded { get; }
+        public string? ErrorMessage { get; }
+        public bool Success => string.IsNullOrEmpty(ErrorMessage);
+    }
+
+    /// <summary>Outcome of <see cref="IColorThemeService.ExportUserThemesToFile"/>.</summary>
+    public readonly struct ThemeExportResult
+    {
+        public ThemeExportResult(int themeCount, string? error)
+        {
+            ThemeCount = themeCount;
+            ErrorMessage = error;
+        }
+        public int ThemeCount { get; }
+        public string? ErrorMessage { get; }
+        public bool Success => string.IsNullOrEmpty(ErrorMessage);
+    }
+
+    /// <summary>Outcome of <see cref="IColorThemeService.ImportThemesFromFile"/>.</summary>
+    public readonly struct ThemeImportResult
+    {
+        public ThemeImportResult(int added, int skipped, string? error)
+        {
+            Added = added;
+            Skipped = skipped;
+            ErrorMessage = error;
+        }
+        public int Added { get; }
+        public int Skipped { get; }
         public string? ErrorMessage { get; }
         public bool Success => string.IsNullOrEmpty(ErrorMessage);
     }

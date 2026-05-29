@@ -335,6 +335,91 @@ namespace FracturingFog.Hosting
             return new RegionImportResult(added, skipped, sandboxAdded, null);
         }
 
+        /// <inheritdoc/>
+        public ThemeExportResult ExportUserThemesToFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return new ThemeExportResult(0, "Empty path.");
+
+            try
+            {
+                // Force a reload so the export reflects whatever's currently on
+                // disk (the user may have imported / edited since launch).
+                UserColorThemeLibrary.Instance.Load();
+                var themes = UserColorThemeLibrary.Instance.Themes;
+                if (themes.Count == 0)
+                    return new ThemeExportResult(0, "No user themes to export.");
+
+                // Reuse the library's own serializer options so the file is
+                // byte-identical to colorthemes.json (a re-import round-trips).
+                string json = JsonSerializer.Serialize(themes, UserColorThemeLibrary.BuildJsonOptions());
+                File.WriteAllText(path, json);
+                return new ThemeExportResult(themes.Count, null);
+            }
+            catch (Exception ex)
+            {
+                return new ThemeExportResult(0, ex.Message);
+            }
+        }
+
+        /// <inheritdoc/>
+        public ThemeImportResult ImportThemesFromFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return new ThemeImportResult(0, 0, "Empty path.");
+            if (!File.Exists(path))
+                return new ThemeImportResult(0, 0, "File does not exist.");
+
+            List<ColorThemeData>? imported;
+            try
+            {
+                string text = File.ReadAllText(path);
+                imported = JsonSerializer.Deserialize<List<ColorThemeData>>(
+                    text, UserColorThemeLibrary.BuildJsonOptions());
+            }
+            catch (Exception ex)
+            {
+                return new ThemeImportResult(0, 0, ex.Message);
+            }
+
+            if (imported == null || imported.Count == 0)
+                return new ThemeImportResult(0, 0, "File contains no theme entries.");
+
+            // Merge against the current on-disk library; skip dups by name.
+            UserColorThemeLibrary.Instance.Load();
+            int added = 0, skipped = 0;
+            foreach (var theme in imported)
+            {
+                if (theme == null || string.IsNullOrWhiteSpace(theme.Name)) { skipped++; continue; }
+                if (UserColorThemeLibrary.Instance.Themes
+                        .Any(t => t.Name.Equals(theme.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    skipped++;
+                    continue;
+                }
+                theme.Category = "User";
+                UserColorThemeLibrary.Instance.Themes.Add(theme);
+                added++;
+            }
+
+            if (added > 0)
+            {
+                UserColorThemeLibrary.Instance.Save();
+                ColorPalette.RebuildUserPalettes();
+            }
+            return new ThemeImportResult(added, skipped, null);
+        }
+
+        /// <inheritdoc/>
+        public bool DeleteTheme(string themeName)
+        {
+            if (string.IsNullOrWhiteSpace(themeName)) return false;
+            // Remove() only touches the user library; built-in/algorithmic
+            // themes aren't in it, so it returns false for those (the host
+            // surfaces a friendly "built-in cannot be deleted" message).
+            return UserColorThemeLibrary.Instance.Remove(themeName);
+        }
+
         /// <summary>
         /// On-disk format for region export bundles (Version >= 2). Mirrors
         /// the private nested type in legacy MainForm.cs.

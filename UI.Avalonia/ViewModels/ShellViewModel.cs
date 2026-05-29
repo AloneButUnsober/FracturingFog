@@ -189,6 +189,23 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // from the persisted SlideshowSettings, then writes back on OK.
         FloatingMenu.SlideshowSettingsClick += (_, _) => SlideshowSettingsRequested?.Invoke(this, EventArgs.Empty);
 
+        // Export / Import / Delete user colour themes — same shape as the
+        // region IO above. Export/Import bubble to a file picker on the host;
+        // Delete confirms against the currently-selected theme then asks the
+        // service. Built-in themes aren't deletable (service returns false).
+        FloatingMenu.ExportThemeClick += (_, _) => ExportThemesRequested?.Invoke(this, EventArgs.Empty);
+        FloatingMenu.ImportThemeClick += (_, _) => ImportThemesRequested?.Invoke(this, EventArgs.Empty);
+        FloatingMenu.DeleteThemeClick += (_, _) =>
+        {
+            if (string.IsNullOrEmpty(Main.SelectedTheme)) return;
+            var args = new ThemeMessageEventArgs(
+                "Delete Theme",
+                $"Delete user theme \"{Main.SelectedTheme}\"? This cannot be undone.",
+                MessageSeverity.Question)
+            { ExpectsConfirmation = true };
+            DeleteThemeRequested?.Invoke(this, (args, Main.SelectedTheme!));
+        };
+
         // FrameCompleted: refresh the menu's CX/CY/Zoom/Iter textboxes so
         // the user sees the live values without typing them manually. Skips
         // whichever box currently has focus — that's owned by ViewModelBase
@@ -363,7 +380,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         IsHelpVisible = true;
     }
 
-    private void RefreshThemeListsFromService()
+    /// <summary>Re-pull theme names from the service into the menu combo.
+    /// Called after the editor saves, or by the host after import/delete.</summary>
+    public void RefreshThemeListsFromService()
     {
         FloatingMenu.SetThemes(_themeService.EnumerateThemeNames());
     }
@@ -424,6 +443,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Open the slideshow-settings dialog. Host seeds it from the
     /// persisted SlideshowSettings and writes back on OK.</summary>
     public event EventHandler? SlideshowSettingsRequested;
+
+    /// <summary>Export user-defined colour themes to a JSON file. Host pops a
+    /// SaveFilePicker then calls IColorThemeService.ExportUserThemesToFile.</summary>
+    public event EventHandler? ExportThemesRequested;
+
+    /// <summary>Import colour themes from a JSON file. Host pops an
+    /// OpenFilePicker then calls IColorThemeService.ImportThemesFromFile and
+    /// refreshes the theme combo via <see cref="RefreshThemeListsFromService"/>.</summary>
+    public event EventHandler? ImportThemesRequested;
+
+    /// <summary>Delete an existing user theme. Args carry the confirmation
+    /// prompt + the theme name to delete.</summary>
+    public event EventHandler<(ThemeMessageEventArgs Confirm, string Name)>? DeleteThemeRequested;
 
     /// <summary>Re-pull region names from the service into the menu combo.
     /// Called by the host after a successful import.</summary>
