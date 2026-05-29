@@ -22,7 +22,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-
+using System.Threading;
 using System.Threading.Tasks;
 
 using Avalonia;
@@ -548,6 +548,63 @@ namespace FracturingFog.Hosting
                     if (enter) EnterSpanMode(win);
                     else ExitSpanMode(win);
                 });
+            };
+
+            // Poster — pop the size dialog, pick a path, then render offscreen
+            // at full resolution via the shared PosterRenderer (same engine the
+            // legacy WinForms poster path uses) and save.
+            shell.PosterRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+
+                    var dims = await AvaloniaDialogs.ShowPosterAsync();
+                    if (dims == null) return;
+
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Save Poster Image",
+                        suggestedName: $"fracturing-fog-poster-{DateTime.Now:yyyyMMdd-HHmmss}.png",
+                        filter: "PNG image (*.png)|*.png|TIFF image (*.tiff;*.tif)|*.tiff;*.tif|BMP image (*.bmp)|*.bmp");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                    var format = ext switch
+                    {
+                        ".bmp" => System.Drawing.Imaging.ImageFormat.Bmp,
+                        ".tif" or ".tiff" => System.Drawing.Imaging.ImageFormat.Tiff,
+                        _ => System.Drawing.Imaging.ImageFormat.Png,
+                    };
+
+                    string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
+                        ? s_renderHost.RegionName!
+                        : "Fracturing Fog";
+                    if (!string.IsNullOrEmpty(s_renderHost.ThemeName))
+                        watermark += " - " + s_renderHost.ThemeName;
+                    string subText = $"Fracturing Fog {DateTime.Now.Year}";
+
+                    var req = s_renderHost.CreatePosterRequest(
+                        dims.Value.Width, dims.Value.Height, rotate: dims.Value.Portrait,
+                        path, format, watermark, subText);
+
+                    try
+                    {
+                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None));
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster Saved",
+                            $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
+                            expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster", $"Render failed:\n{ex.Message}", expectsConfirmation: false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Poster failed: {ex.Message}");
+                }
             };
         }
 

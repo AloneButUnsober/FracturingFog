@@ -280,6 +280,148 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
+        // ── Poster print ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Modal poster-size prompt mirroring the legacy WinForms PosterDialog:
+        /// poster width/height in inches × a DPI preset (150 / 300 / 600) gives
+        /// the output pixel dimensions. Returns (PixelWidth, PixelHeight,
+        /// Portrait) on OK, null on cancel. Portrait also drives the 90° rotate.
+        /// </summary>
+        public static Task<(int Width, int Height, bool Portrait)?> ShowPosterAsync()
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<(int, int, bool)?>();
+
+            void Run()
+            {
+                var widthTx = new TextBox { Text = "24", MinWidth = 70, PlaceholderText = "inches" };
+                var heightTx = new TextBox { Text = "36", MinWidth = 70, PlaceholderText = "inches" };
+
+                var portrait = new CheckBox { Content = "Portrait orientation", IsChecked = true, Foreground = Brushes.White };
+
+                var lowDpi = new RadioButton { Content = "Low (150 DPI)", GroupName = "dpi", Foreground = Brushes.White };
+                var medDpi = new RadioButton { Content = "Med (300 DPI)", GroupName = "dpi", IsChecked = true, Foreground = Brushes.White };
+                var highDpi = new RadioButton { Content = "High (600 DPI)", GroupName = "dpi", Foreground = Brushes.White };
+
+                var pixelLabel = new TextBlock
+                {
+                    Foreground = Brushes.LightGray,
+                    Margin = new Thickness(0, 6, 0, 0),
+                    TextWrapping = TextWrapping.Wrap,
+                };
+
+                int Dpi() => lowDpi.IsChecked == true ? 150 : highDpi.IsChecked == true ? 600 : 300;
+                (int w, int h) Pixels()
+                {
+                    int.TryParse(widthTx.Text, out int wi);
+                    int.TryParse(heightTx.Text, out int hi);
+                    if (wi < 0) wi = 0;
+                    if (hi < 0) hi = 0;
+                    int dpi = Dpi();
+                    return (wi * dpi, hi * dpi);
+                }
+                void Refresh()
+                {
+                    var (pw, ph) = Pixels();
+                    pixelLabel.Text = $"Output: {pw:N0} × {ph:N0} px  ({(long)pw * ph / 1_000_000:N0} MP)";
+                }
+                widthTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) Refresh(); };
+                heightTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) Refresh(); };
+                lowDpi.IsCheckedChanged += (_, _) => Refresh();
+                medDpi.IsCheckedChanged += (_, _) => Refresh();
+                highDpi.IsCheckedChanged += (_, _) => Refresh();
+                Refresh();
+
+                var win = new Window
+                {
+                    Title = "Poster Print",
+                    Width = 380,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+
+                static TextBlock Lbl(string t) => new()
+                {
+                    Text = t,
+                    Foreground = Brushes.White,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+
+                var grid = new Grid
+                {
+                    Margin = new Thickness(16),
+                    ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto"),
+                };
+                void Place(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); grid.Children.Add(c); }
+
+                var wLbl = Lbl("Poster width (in):");
+                var hLbl = Lbl("Poster height (in):");
+                wLbl.Margin = new Thickness(0, 0, 8, 6);
+                hLbl.Margin = new Thickness(0, 0, 8, 6);
+                widthTx.Margin = new Thickness(0, 0, 0, 6);
+                heightTx.Margin = new Thickness(0, 0, 0, 6);
+                Place(wLbl, 0, 0); Place(widthTx, 0, 1);
+                Place(hLbl, 1, 0); Place(heightTx, 1, 1);
+
+                var dpiRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 0, 0, 4) };
+                dpiRow.Children.Add(lowDpi);
+                dpiRow.Children.Add(medDpi);
+                dpiRow.Children.Add(highDpi);
+                Grid.SetRow(dpiRow, 2); Grid.SetColumn(dpiRow, 0); Grid.SetColumnSpan(dpiRow, 2);
+                grid.Children.Add(dpiRow);
+
+                Grid.SetRow(portrait, 3); Grid.SetColumn(portrait, 0); Grid.SetColumnSpan(portrait, 2);
+                grid.Children.Add(portrait);
+
+                Grid.SetRow(pixelLabel, 4); Grid.SetColumn(pixelLabel, 0); Grid.SetColumnSpan(pixelLabel, 2);
+                grid.Children.Add(pixelLabel);
+
+                var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
+                var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
+                void Close((int, int, bool)? r) { if (!tcs.Task.IsCompleted) tcs.TrySetResult(r); win.Close(); }
+                ok.Click += (_, _) =>
+                {
+                    var (pw, ph) = Pixels();
+                    if (pw <= 0 || ph <= 0)
+                    {
+                        pixelLabel.Foreground = Brushes.OrangeRed;
+                        pixelLabel.Text = "Enter positive width and height in inches.";
+                        return;
+                    }
+                    Close((pw, ph, portrait.IsChecked == true));
+                };
+                cancel.Click += (_, _) => Close(null);
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(0, 12, 0, 0),
+                    Spacing = 8,
+                };
+                buttonRow.Children.Add(cancel);
+                buttonRow.Children.Add(ok);
+                Grid.SetRow(buttonRow, 5); Grid.SetColumn(buttonRow, 0); Grid.SetColumnSpan(buttonRow, 2);
+                grid.Children.Add(buttonRow);
+
+                win.Content = grid;
+                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── MessageBox ───────────────────────────────────────────────────────
 
         public enum MessageResult { Ok, Yes, No, Cancelled }
