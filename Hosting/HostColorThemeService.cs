@@ -208,5 +208,142 @@ namespace FracturingFog.Hosting
             lib.Save();
             return true;
         }
+
+        /// <inheritdoc/>
+        public RegionExportResult ExportUserRegionsToFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return new RegionExportResult(0, 0, "Empty path.");
+
+            try
+            {
+                // Skip UserEquation + UserBulb — their source isn't portable
+                // via a plain regions JSON (UserEquation references by name
+                // only, UserBulb embeds source useless without the surrounding
+                // compile pipeline). Matches legacy MainForm.OnExportRegionsClick.
+                var userRegions = FractalRegionLibrary.Instance.UserRegions
+                    .Where(r => r.FractalType != FractalType.UserEquation
+                             && r.FractalType != FractalType.UserBulb)
+                    .ToList();
+                if (userRegions.Count == 0)
+                    return new RegionExportResult(0, 0, "No exportable custom regions.");
+
+                var sandboxNames = userRegions
+                    .Where(r => r.FractalType == FractalType.Sandbox && !string.IsNullOrWhiteSpace(r.SandboxName))
+                    .Select(r => r.SandboxName!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var sandboxEquations = new List<SandboxEquationEntry>();
+                foreach (var name in sandboxNames)
+                {
+                    var entry = SandboxEquationStore.Instance.GetByName(name);
+                    if (entry != null)
+                        sandboxEquations.Add(new SandboxEquationEntry
+                        {
+                            Name = entry.Name,
+                            Source = entry.Source,
+                            Promoted = entry.Promoted,
+                        });
+                }
+
+                var bundle = new RegionExportBundle
+                {
+                    Version = 2,
+                    Regions = userRegions,
+                    SandboxEquations = sandboxEquations,
+                };
+
+                var opts = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(path, JsonSerializer.Serialize(bundle, opts));
+                return new RegionExportResult(userRegions.Count, sandboxEquations.Count, null);
+            }
+            catch (Exception ex)
+            {
+                return new RegionExportResult(0, 0, ex.Message);
+            }
+        }
+
+        /// <inheritdoc/>
+        public RegionImportResult ImportRegionsFromFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return new RegionImportResult(0, 0, 0, "Empty path.");
+            if (!File.Exists(path))
+                return new RegionImportResult(0, 0, 0, "File does not exist.");
+
+            List<FractalRegion>? imported;
+            List<SandboxEquationEntry>? importedSandbox = null;
+
+            try
+            {
+                string text = File.ReadAllText(path);
+                string trimmed = text.TrimStart();
+                if (trimmed.StartsWith("{"))
+                {
+                    var bundle = JsonSerializer.Deserialize<RegionExportBundle>(text);
+                    imported = bundle?.Regions;
+                    importedSandbox = bundle?.SandboxEquations;
+                }
+                else
+                {
+                    imported = JsonSerializer.Deserialize<List<FractalRegion>>(text);
+                }
+            }
+            catch (Exception ex)
+            {
+                return new RegionImportResult(0, 0, 0, ex.Message);
+            }
+
+            if (imported == null || imported.Count == 0)
+                return new RegionImportResult(0, 0, 0, "File contains no region entries.");
+
+            int sandboxAdded = 0;
+            if (importedSandbox != null && importedSandbox.Count > 0)
+            {
+                SandboxEquationStore.Instance.Load();
+                foreach (var eq in importedSandbox)
+                {
+                    if (eq == null || string.IsNullOrWhiteSpace(eq.Name)) continue;
+                    if (SandboxEquationStore.Instance.GetByName(eq.Name) != null) continue;
+                    SandboxEquationStore.Instance.Equations.Add(new SandboxEquationEntry
+                    {
+                        Name = eq.Name,
+                        Source = eq.Source ?? string.Empty,
+                        Promoted = eq.Promoted,
+                    });
+                    sandboxAdded++;
+                }
+                if (sandboxAdded > 0) SandboxEquationStore.Instance.Save();
+            }
+
+            int added = 0, skipped = 0;
+            foreach (var region in imported)
+            {
+                if (string.IsNullOrWhiteSpace(region.Name)) { skipped++; continue; }
+                region.RegionType = RegionType.UserDefined;
+                if (FractalRegionLibrary.Instance.FindByName(region.Name) != null)
+                {
+                    skipped++;
+                    continue;
+                }
+                FractalRegionLibrary.Instance.UserRegions.Add(region);
+                added++;
+            }
+
+            if (added > 0) FractalRegionLibrary.Instance.Save();
+            return new RegionImportResult(added, skipped, sandboxAdded, null);
+        }
+
+        /// <summary>
+        /// On-disk format for region export bundles (Version >= 2). Mirrors
+        /// the private nested type in legacy MainForm.cs.
+        /// </summary>
+        private sealed class RegionExportBundle
+        {
+            public int Version { get; set; } = 2;
+            public List<FractalRegion> Regions { get; set; } = new();
+            public List<SandboxEquationEntry> SandboxEquations { get; set; } = new();
+        }
     }
 }

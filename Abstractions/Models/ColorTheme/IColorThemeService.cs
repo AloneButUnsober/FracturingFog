@@ -92,5 +92,54 @@ namespace FracturingFog.Models
         /// path so the caller can surface a friendly message.
         /// </summary>
         bool DeleteRegion(string regionName);
+
+        /// <summary>
+        /// Serialize the host's user-defined regions to the given file path as
+        /// a JSON bundle. Implementations may exclude region types whose source
+        /// isn't portable (UserEquation references by name only; UserBulb
+        /// embeds source useless without the surrounding compile pipeline).
+        /// The returned <see cref="RegionExportResult"/> carries counts and an
+        /// optional error message.
+        /// </summary>
+        RegionExportResult ExportUserRegionsToFile(string path);
+
+        /// <summary>
+        /// Read a regions-bundle JSON file (new bundle format or legacy bare
+        /// array) and merge its contents into the user library. Duplicates by
+        /// name are skipped. Returns counts and an optional error message.
+        /// </summary>
+        RegionImportResult ImportRegionsFromFile(string path);
+    }
+
+    /// <summary>Outcome of <see cref="IColorThemeService.ExportUserRegionsToFile"/>.</summary>
+    public readonly struct RegionExportResult
+    {
+        public RegionExportResult(int regionCount, int sandboxCount, string? error)
+        {
+            RegionCount = regionCount;
+            SandboxEquationCount = sandboxCount;
+            ErrorMessage = error;
+        }
+        public int RegionCount { get; }
+        public int SandboxEquationCount { get; }
+        public string? ErrorMessage { get; }
+        public bool Success => string.IsNullOrEmpty(ErrorMessage);
+    }
+
+    /// <summary>Outcome of <see cref="IColorThemeService.ImportRegionsFromFile"/>.</summary>
+    public readonly struct RegionImportResult
+    {
+        public RegionImportResult(int added, int skipped, int sandboxAdded, string? error)
+        {
+            Added = added;
+            Skipped = skipped;
+            SandboxEquationsAdded = sandboxAdded;
+            ErrorMessage = error;
+        }
+        public int Added { get; }
+        public int Skipped { get; }
+        public int SandboxEquationsAdded { get; }
+        public string? ErrorMessage { get; }
+        public bool Success => string.IsNullOrEmpty(ErrorMessage);
     }
 }

@@ -133,6 +133,69 @@ namespace FracturingFog.Hosting
             return file?.TryGetLocalPath();
         }
 
+        /// <summary>
+        /// Runs an Avalonia OpenFilePicker (single-select) and returns the
+        /// chosen local path, or null on cancel. Filter follows the same
+        /// WinForms-style "Name (*.ext)|*.ext|..." grammar as
+        /// <see cref="SaveFileAsync"/>.
+        /// </summary>
+        public static async Task<string?> PickOpenFileAsync(
+            string title,
+            string filter)
+        {
+            var owner = ActiveMainWindow;
+            var top = owner != null ? TopLevel.GetTopLevel(owner) : null;
+            if (top == null) return null;
+
+            var opts = new FilePickerOpenOptions
+            {
+                Title = string.IsNullOrEmpty(title) ? "Open" : title,
+                AllowMultiple = false,
+                FileTypeFilter = ParseFilter(filter),
+            };
+            var files = await top.StorageProvider.OpenFilePickerAsync(opts);
+            return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+        }
+
+        // ── Slideshow settings ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Opens the Avalonia <see cref="SlideshowSettingsView"/> bound to a
+        /// new <see cref="SlideshowSettingsViewModel"/> seeded from
+        /// <paramref name="current"/> / <paramref name="audioReactive"/>.
+        /// Returns the chosen settings + audio-reactive flag on OK, null on
+        /// Cancel.
+        /// </summary>
+        public static Task<(global::FracturingFog.Models.SlideshowSettings Settings, bool AudioReactive)?>
+            ShowSlideshowSettingsAsync(
+                global::FracturingFog.Models.SlideshowSettings current,
+                bool audioReactive)
+        {
+            var tcs = new TaskCompletionSource<(global::FracturingFog.Models.SlideshowSettings, bool)?>();
+
+            void Run()
+            {
+                var vm = new SlideshowSettingsViewModel(current, audioReactive);
+                var win = new SlideshowSettingsView { DataContext = vm };
+                win.Closed += (_, _) =>
+                {
+                    if (tcs.Task.IsCompleted) return;
+                    if (vm.Result != null)
+                        tcs.TrySetResult((vm.Result, vm.AudioReactiveResult));
+                    else
+                        tcs.TrySetResult(null);
+                };
+                var owner = ActiveMainWindow;
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── Text prompt ──────────────────────────────────────────────────────
 
         /// <summary>
