@@ -38,6 +38,7 @@ using FracturingFog.Imaging;
 using FracturingFog.Input;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Render;
 using FracturingFog.Rendering;
 using FracturingFog.UI.Avalonia.ViewModels;
 using FracturingFog.UI.Avalonia.Views;
@@ -108,6 +109,10 @@ namespace FracturingFog.Hosting
             s_themeService = new HostColorThemeService(s_renderHost);
             var themeService = s_themeService;
             var helpProvider = new HostHelpContentProvider();
+
+            // Hand the render host its theme service so the video slideshow
+            // engine can cycle regions/themes per leg (legacy VideoZoom parity).
+            s_renderHost.AttachThemeService(themeService);
 
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
@@ -606,6 +611,178 @@ namespace FracturingFog.Hosting
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Poster failed: {ex.Message}");
                 }
             };
+
+            // ── #64 — Video zoom ─────────────────────────────────────────
+            //
+            // Pop the (programmatic, main-project) video dialog seeded from the
+            // current view, then hand the request back to the shell on the UI
+            // thread. The shell owns the button label + VCR visibility and the
+            // IVideoZoomController start call; the engine itself runs on a
+            // background Task and marshals its events via Dispatcher.
+            shell.VideoRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+                    var vs = s_renderHost.ViewState;
+                    var req = await AvaloniaDialogs.ShowVideoAsync(vs.CenterX, vs.CenterY, vs.Zoom);
+                    if (req == null) return;
+                    Dispatcher.UIThread.Post(() => s_shell?.StartVideoFromRequest(req));
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Video failed: {ex.Message}");
+                }
+            };
+
+            // Recording finished — the engine has finalised the temp MP4 and/or
+            // PNG sequence. On success, prompt for save destinations; on cancel
+            // or fault, discard the temp artefacts. Fires on a background thread
+            // → marshal the prompts onto the UI thread.
+            ((IVideoZoomController)s_renderHost!).RecordingFinished += (_, result) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try { await HandleRecordingFinished(result); }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] RecordingFinished failed: {ex.Message}");
+                    }
+                });
+            };
+        }
+
+        // ── #64 — Video recording save prompts ───────────────────────────────
+
+        private static async Task HandleRecordingFinished(VideoRecordingResult result)
+        {
+            // Cancelled / faulted: nothing to keep — delete temp artefacts.
+            if (result.Cancelled)
+            {
+                if (!string.IsNullOrEmpty(result.Mp4TempPath) && System.IO.File.Exists(result.Mp4TempPath))
+                    try { System.IO.File.Delete(result.Mp4TempPath); } catch { }
+                if (!string.IsNullOrEmpty(result.PngFolder) && System.IO.Directory.Exists(result.PngFolder))
+                    try { System.IO.Directory.Delete(result.PngFolder, recursive: true); } catch { }
+                return;
+            }
+
+            // 1. MP4 — SaveFileDialog then move the temp file into place.
+            if (!string.IsNullOrEmpty(result.Mp4TempPath) && System.IO.File.Exists(result.Mp4TempPath))
+                await PromptSaveMp4(result.Mp4TempPath!);
+
+            // 2. PNG sequence — pick a destination folder, move the frames, then
+            //    optionally encode with ffmpeg.
+            if (!string.IsNullOrEmpty(result.PngFolder) && System.IO.Directory.Exists(result.PngFolder))
+                await PromptSaveLossless(result.PngFolder!, result.Encode);
+        }
+
+        private static async Task PromptSaveMp4(string tempPath)
+        {
+            string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                "Save Video Zoom",
+                suggestedName: $"FracturingFog_Zoom_{DateTime.Now:yyyyMMdd_HHmmss}.mp4",
+                filter: "MP4 video (*.mp4)|*.mp4");
+
+            if (string.IsNullOrEmpty(path))
+            {
+                try { System.IO.File.Delete(tempPath); } catch { }
+                SetStatus("Recorded video discarded.");
+                return;
+            }
+
+            try
+            {
+                System.IO.File.Move(tempPath, path, overwrite: true);
+                SetStatus($"Video saved: {System.IO.Path.GetFileName(path)}");
+            }
+            catch (Exception ex)
+            {
+                try { System.IO.File.Delete(tempPath); } catch { }
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Save Video", $"Failed to save video:\n{ex.Message}", expectsConfirmation: false);
+            }
+        }
+
+        private static async Task PromptSaveLossless(string pngFolder, VideoLosslessEncode encode)
+        {
+            // 1. Pick destination folder for the PNG sequence.
+            string? destFolder = await AvaloniaDialogs.PickFolderAsync(
+                "Choose a folder to keep the lossless PNG sequence" +
+                (encode != VideoLosslessEncode.None
+                    ? " (an encoded video will also be written next to it)" : ""));
+
+            if (string.IsNullOrEmpty(destFolder))
+            {
+                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                SetStatus("Lossless PNG sequence discarded.");
+                return;
+            }
+
+            // 2. Move temp folder contents into a uniquely-named subfolder.
+            string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string finalFolder = System.IO.Path.Combine(destFolder, $"FracturingFog_Zoom_{stamp}");
+            try
+            {
+                System.IO.Directory.CreateDirectory(finalFolder);
+                foreach (string src in System.IO.Directory.EnumerateFiles(pngFolder))
+                {
+                    string dst = System.IO.Path.Combine(finalFolder, System.IO.Path.GetFileName(src));
+                    System.IO.File.Move(src, dst, overwrite: true);
+                }
+                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+            }
+            catch (Exception ex)
+            {
+                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Save Lossless", $"Failed to move PNG sequence:\n{ex.Message}", expectsConfirmation: false);
+                return;
+            }
+
+            SetStatus($"Lossless PNG sequence saved: {finalFolder}");
+
+            if (encode == VideoLosslessEncode.None) return;
+            if (!FfmpegEncoder.IsAvailable())
+            {
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Save Lossless",
+                    "ffmpeg.exe is no longer available — keeping PNG sequence only.",
+                    expectsConfirmation: false);
+                return;
+            }
+
+            // 3. Encode with ffmpeg next to the PNG folder.
+            var preset = encode switch
+            {
+                VideoLosslessEncode.LosslessH264Mp4 => FfmpegEncoder.Preset.LosslessH264Mp4,
+                VideoLosslessEncode.Ffv1Mkv => FfmpegEncoder.Preset.Ffv1Mkv,
+                VideoLosslessEncode.HighQualityH264Mp4 => FfmpegEncoder.Preset.HighQualityH264Mp4,
+                _ => FfmpegEncoder.Preset.LosslessH264Mp4,
+            };
+            string ext = FfmpegEncoder.DefaultExtensionFor(preset);
+            string outPath = System.IO.Path.Combine(destFolder, $"FracturingFog_Zoom_{stamp}.{ext}");
+
+            SetStatus($"Encoding lossless video → {System.IO.Path.GetFileName(outPath)} (ffmpeg)…");
+            try
+            {
+                var (ok, log) = await FfmpegEncoder.EncodeAsync(
+                    finalFolder, outPath, preset,
+                    onProgressLine: line =>
+                    {
+                        if (line.StartsWith("frame=", StringComparison.OrdinalIgnoreCase))
+                            Dispatcher.UIThread.Post(() => SetStatus($"ffmpeg: {line.Trim()}"));
+                    });
+                if (ok)
+                    SetStatus($"Encoded: {System.IO.Path.GetFileName(outPath)}");
+                else
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "Save Lossless", "ffmpeg encode failed.\n\n" + log, expectsConfirmation: false);
+            }
+            catch (Exception ex)
+            {
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Save Lossless", $"ffmpeg encode exception:\n{ex.Message}", expectsConfirmation: false);
+            }
         }
 
         // ── Span-mode helpers ────────────────────────────────────────────────
@@ -670,6 +847,15 @@ namespace FracturingFog.Hosting
         // through ShellViewModel so the prompt's "suggested name" can default
         // to the currently-selected theme (a common save pattern).
         private static MainViewModel Main => s_shell!.Main;
+
+        // Status helper — null-conditional can't sit on an assignment LHS, so
+        // route status updates through a guarded setter. Callers are already on
+        // the UI thread (recording prompts run inside a Dispatcher.Post).
+        private static void SetStatus(string text)
+        {
+            var sh = s_shell;
+            if (sh != null) sh.Main.SetStatus(text);
+        }
 
         private static void OnSurfaceResized(object? sender, EventArgs e)
         {

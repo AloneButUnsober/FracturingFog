@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -155,6 +156,26 @@ namespace FracturingFog.Hosting
             };
             var files = await top.StorageProvider.OpenFilePickerAsync(opts);
             return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+        }
+
+        /// <summary>
+        /// Opens a folder picker and returns the chosen directory's local path,
+        /// or null on cancel. Used by the video lossless-save flow to pick a
+        /// destination for the PNG sequence.
+        /// </summary>
+        public static async Task<string?> PickFolderAsync(string title)
+        {
+            var owner = ActiveMainWindow;
+            var top = owner != null ? TopLevel.GetTopLevel(owner) : null;
+            if (top == null) return null;
+
+            var opts = new FolderPickerOpenOptions
+            {
+                Title = string.IsNullOrEmpty(title) ? "Choose Folder" : title,
+                AllowMultiple = false,
+            };
+            var folders = await top.StorageProvider.OpenFolderPickerAsync(opts);
+            return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
         }
 
         // ── Slideshow settings ───────────────────────────────────────────────
@@ -410,6 +431,409 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
+                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
+        // ── Video Zoom ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Avalonia port of the legacy WinForms <c>VideoDialog</c>. Collects the
+        /// full single-shot / slideshow configuration (target QD coordinates,
+        /// zoom, duration, recording flags, post-encode choice, reverse, TAA
+        /// blend, band dither) and returns a <see cref="global::FracturingFog.Render.VideoZoomRequest"/>.
+        /// Returns null on Cancel. <see cref="global::FracturingFog.Render.VideoZoomRequest.IsSlideshow"/>
+        /// distinguishes the Slideshow button from Start.
+        ///
+        /// Built programmatically here (rather than as an axaml view in
+        /// UI.Avalonia) because the parsing/region lookup leans on main-project
+        /// internals — FormHelpers' QD coordinate codec, FractalRegionLibrary,
+        /// FfmpegEncoder availability — that the Avalonia assembly cannot see.
+        /// </summary>
+        public static Task<global::FracturingFog.Render.VideoZoomRequest?> ShowVideoAsync(
+            double currentCX, double currentCY, double currentZoom)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<global::FracturingFog.Render.VideoZoomRequest?>();
+
+            void Run()
+            {
+                const double CustomSecsMin = 0.5;
+                const double CustomSecsMax = 300.0;
+                var ic = System.Globalization.CultureInfo.InvariantCulture;
+                double ultraCap = global::FracturingFog.Models.QualityPreset.Ultra.ZoomMax;
+                bool ffmpegHere = global::FracturingFog.FfmpegEncoder.IsAvailable();
+
+                // Cached QD limbs for the picked region (folded into the parsed
+                // textbox value when the textbox carries only the Hi limb).
+                double targetCXLo = 0, targetCX2 = 0, targetCX3 = 0;
+                double targetCYLo = 0, targetCY2 = 0, targetCY3 = 0;
+                int targetIterations = 0;
+                bool suppressRegionPick = false;
+
+                // ── Controls ─────────────────────────────────────────────
+                var regionCombo = new ComboBox { MinWidth = 280, HorizontalAlignment = HorizontalAlignment.Stretch };
+                regionCombo.Items.Add("— select region —");
+                foreach (var r in global::FracturingFog.Models.FractalRegionLibrary.Instance.All
+                             .OrderBy(r => r.IsBuiltIn ? 0 : 1).ThenBy(r => r.Name))
+                    regionCombo.Items.Add(r.Name);
+                regionCombo.SelectedIndex = 0;
+
+                var txCX = new TextBox
+                {
+                    Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(currentCX, 0, 0, 0),
+                    FontFamily = new FontFamily("Consolas"),
+                };
+                var txCY = new TextBox
+                {
+                    Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(currentCY, 0, 0, 0),
+                    FontFamily = new FontFamily("Consolas"),
+                };
+                var txZoom = new TextBox
+                {
+                    Text = Math.Max(currentZoom * 10.0, 100.0).ToString("G6", ic),
+                    FontFamily = new FontFamily("Consolas"),
+                };
+
+                var capWarn = new TextBlock
+                {
+                    Text = $"Max target zoom: {ultraCap:G3} (Ultra). Deeper values are clamped.",
+                    Foreground = new SolidColorBrush(Color.FromRgb(180, 160, 100)),
+                    FontStyle = FontStyle.Italic,
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 2, 0, 0),
+                };
+
+                // ── Speed radios ─────────────────────────────────────────
+                var rbSlow = new RadioButton { Content = "Slow (15 s)", GroupName = "vidspeed", Foreground = Brushes.LightGray };
+                var rbMed = new RadioButton { Content = "Medium (8 s)", GroupName = "vidspeed", IsChecked = true, Foreground = Brushes.LightGray };
+                var rbFast = new RadioButton { Content = "Fast (4 s)", GroupName = "vidspeed", Foreground = Brushes.LightGray };
+                var rbCustom = new RadioButton { Content = "Custom:", GroupName = "vidspeed", Foreground = Brushes.LightGray };
+                var txCustomSecs = new TextBox { Text = "30", Width = 70, FontFamily = new FontFamily("Consolas") };
+                txCustomSecs.GotFocus += (_, _) => rbCustom.IsChecked = true;
+                txCustomSecs.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == TextBox.TextProperty && txCustomSecs.IsFocused)
+                        rbCustom.IsChecked = true;
+                };
+                var customHint = new TextBlock
+                {
+                    Text = $"seconds (0.5 – {CustomSecsMax:F0})",
+                    Foreground = Brushes.LightGray,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+
+                var chkConstantRate = new CheckBox
+                {
+                    Content = "Constant Rate (slideshow): scale duration by depth",
+                    Foreground = Brushes.LightGray,
+                };
+                var chkSaveVideo = new CheckBox
+                {
+                    Content = "Save video as MP4 (single-shot only — ignored for slideshow)",
+                    Foreground = Brushes.LightGray,
+                };
+                var chkSaveLossless = new CheckBox
+                {
+                    Content = "Save lossless (PNG sequence — single-shot only)",
+                    Foreground = Brushes.LightGray,
+                };
+
+                var encodeCombo = new ComboBox { MinWidth = 280, HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = false };
+                encodeCombo.Items.Add("Keep PNG sequence only");
+                if (ffmpegHere)
+                {
+                    encodeCombo.Items.Add("Lossless H.264 (CRF 0) → .mp4");
+                    encodeCombo.Items.Add("FFV1 → .mkv");
+                    encodeCombo.Items.Add("Visually-lossless H.264 (CRF 18) → .mp4");
+                }
+                else
+                {
+                    encodeCombo.Items.Add("(ffmpeg.exe not found — only PNG output available)");
+                }
+                encodeCombo.SelectedIndex = 0;
+                chkSaveLossless.IsCheckedChanged += (_, _) =>
+                    encodeCombo.IsEnabled = chkSaveLossless.IsChecked == true && ffmpegHere;
+
+                var chkReverse = new CheckBox
+                {
+                    Content = "Reverse zoom (start at target, end at classic view)",
+                    Foreground = Brushes.LightGray,
+                };
+
+                // ── Smoothing (TAA blend + band dither) ──────────────────
+                var taaSlider = new Slider { Minimum = 0, Maximum = 100, Value = 55, TickFrequency = 10, Width = 230 };
+                var taaValue = new TextBlock { Text = "55%", Foreground = Brushes.LightGray, Width = 40, VerticalAlignment = VerticalAlignment.Center };
+                taaSlider.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == RangeBase.ValueProperty)
+                        taaValue.Text = $"{(int)Math.Round(taaSlider.Value)}%";
+                };
+
+                var chkBandDither = new CheckBox { Content = "Band dither:", Foreground = Brushes.LightGray, VerticalAlignment = VerticalAlignment.Center };
+                var ditherSlider = new Slider { Minimum = 0, Maximum = 100, Value = 25, TickFrequency = 10, Width = 230, IsEnabled = false };
+                var ditherValue = new TextBlock { Text = "25%", Foreground = Brushes.LightGray, Width = 40, VerticalAlignment = VerticalAlignment.Center };
+                chkBandDither.IsCheckedChanged += (_, _) => ditherSlider.IsEnabled = chkBandDither.IsChecked == true;
+                ditherSlider.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == RangeBase.ValueProperty)
+                        ditherValue.Text = $"{(int)Math.Round(ditherSlider.Value)}%";
+                };
+
+                var errLabel = new TextBlock
+                {
+                    Foreground = Brushes.OrangeRed,
+                    TextWrapping = TextWrapping.Wrap,
+                    IsVisible = false,
+                    Margin = new Thickness(0, 4, 0, 0),
+                };
+
+                // ── Region pick: prefill targets from the chosen region ──
+                regionCombo.SelectionChanged += (_, _) =>
+                {
+                    if (suppressRegionPick) return;
+                    int idx = regionCombo.SelectedIndex;
+                    if (idx <= 0) return;
+                    string? name = regionCombo.SelectedItem as string;
+                    if (string.IsNullOrEmpty(name)) return;
+                    var region = global::FracturingFog.Models.FractalRegionLibrary.Instance.FindByName(name);
+                    if (region == null) return;
+
+                    // Note: FractalRegionLibrary.All excludes Extreme regions by
+                    // default, so the legacy Extreme-confirmation prompt is
+                    // unreachable here; deep targets are simply clamped to the
+                    // Ultra cap (the cap-warn label states this).
+                    targetCXLo = region.CenterXLo; targetCX2 = region.CenterX2; targetCX3 = region.CenterX3;
+                    targetCYLo = region.CenterYLo; targetCY2 = region.CenterY2; targetCY3 = region.CenterY3;
+
+                    txCX.Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(
+                        region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                    txCY.Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(
+                        region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+
+                    double z = region.Zoom;
+                    if (z > ultraCap) z = ultraCap;
+                    txZoom.Text = z.ToString("G6", ic);
+                    targetIterations = region.Iterations;
+                };
+
+                // ── Parsing ──────────────────────────────────────────────
+                bool TryGetSeconds(out double seconds)
+                {
+                    if (rbCustom.IsChecked == true)
+                    {
+                        if (!double.TryParse(txCustomSecs.Text?.Trim(), System.Globalization.NumberStyles.Float, ic, out seconds))
+                            return false;
+                        return seconds >= CustomSecsMin && seconds <= CustomSecsMax;
+                    }
+                    seconds = rbSlow.IsChecked == true ? 15.0 : rbFast.IsChecked == true ? 4.0 : 8.0;
+                    return true;
+                }
+
+                bool TryGetTargetQD(
+                    out double cxHi, out double cxLo, out double cx2, out double cx3,
+                    out double cyHi, out double cyLo, out double cy2, out double cy3,
+                    out double zoom, out double seconds)
+                {
+                    bool okCX = global::FracturingFog.Views.FormHelpers.TryParseCoordAny(
+                        txCX.Text ?? "", out cxHi, out cxLo, out cx2, out cx3);
+                    bool okCY = global::FracturingFog.Views.FormHelpers.TryParseCoordAny(
+                        txCY.Text ?? "", out cyHi, out cyLo, out cy2, out cy3);
+
+                    if (okCX && cxLo == 0 && cx2 == 0 && cx3 == 0)
+                    { cxLo = targetCXLo; cx2 = targetCX2; cx3 = targetCX3; }
+                    if (okCY && cyLo == 0 && cy2 == 0 && cy3 == 0)
+                    { cyLo = targetCYLo; cy2 = targetCY2; cy3 = targetCY3; }
+
+                    bool okZ = double.TryParse(txZoom.Text?.Trim(), System.Globalization.NumberStyles.Float, ic, out zoom);
+                    bool okS = TryGetSeconds(out seconds);
+                    if (!okCX || !okCY || !okZ || zoom <= 0 || !okS)
+                    {
+                        cxHi = cxLo = cx2 = cx3 = cyHi = cyLo = cy2 = cy3 = zoom = seconds = 0;
+                        return false;
+                    }
+                    return true;
+                }
+
+                // ── Window + layout ──────────────────────────────────────
+                var win = new Window
+                {
+                    Title = "Video Zoom",
+                    Width = 440,
+                    MinWidth = 420,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Topmost = true,
+                    Background = new SolidColorBrush(Color.FromRgb(35, 35, 35)),
+                };
+
+                static TextBlock Lbl(string t) => new()
+                {
+                    Text = t,
+                    Foreground = Brushes.LightGray,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
+                };
+
+                Grid LabeledRow(string label, Control field)
+                {
+                    var g = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
+                    var l = Lbl(label);
+                    Grid.SetColumn(l, 0);
+                    Grid.SetColumn(field, 1);
+                    g.Children.Add(l);
+                    g.Children.Add(field);
+                    return g;
+                }
+
+                // Speed group
+                var speedTop = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14 };
+                speedTop.Children.Add(rbSlow);
+                speedTop.Children.Add(rbMed);
+                speedTop.Children.Add(rbFast);
+                var speedCustomRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+                speedCustomRow.Children.Add(rbCustom);
+                speedCustomRow.Children.Add(txCustomSecs);
+                speedCustomRow.Children.Add(customHint);
+                var speedBox = new StackPanel { Spacing = 2 };
+                speedBox.Children.Add(new TextBlock { Text = "Zoom Speed", Foreground = Brushes.LightGray, FontWeight = FontWeight.Bold });
+                speedBox.Children.Add(speedTop);
+                speedBox.Children.Add(speedCustomRow);
+
+                // Smoothing group
+                var taaRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                taaRow.Children.Add(new TextBlock { Text = "Temporal blend:", Foreground = Brushes.LightGray, Width = 100, VerticalAlignment = VerticalAlignment.Center });
+                taaRow.Children.Add(taaSlider);
+                taaRow.Children.Add(taaValue);
+                var ditherRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
+                chkBandDither.Width = 100;
+                ditherRow.Children.Add(chkBandDither);
+                ditherRow.Children.Add(ditherSlider);
+                ditherRow.Children.Add(ditherValue);
+                var smoothBox = new StackPanel { Spacing = 2 };
+                smoothBox.Children.Add(new TextBlock { Text = "Smoothing (Video Only)", Foreground = Brushes.LightGray, FontWeight = FontWeight.Bold });
+                smoothBox.Children.Add(taaRow);
+                smoothBox.Children.Add(ditherRow);
+
+                // Buttons
+                var slideshowBtn = new Button { Content = "Slideshow", MinWidth = 96, Background = new SolidColorBrush(Color.FromRgb(55, 40, 70)), Foreground = Brushes.White };
+                var startBtn = new Button { Content = "Start", MinWidth = 76, IsDefault = true, Background = new SolidColorBrush(Color.FromRgb(60, 80, 60)), Foreground = Brushes.White };
+                var cancelBtn = new Button { Content = "Cancel", MinWidth = 76, IsCancel = true, Background = new SolidColorBrush(Color.FromRgb(60, 60, 60)), Foreground = Brushes.White };
+
+                void Close(global::FracturingFog.Render.VideoZoomRequest? r)
+                {
+                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(r);
+                    win.Close();
+                }
+
+                global::FracturingFog.Render.VideoLosslessEncode MapEncode()
+                {
+                    if (chkSaveLossless.IsChecked != true || !encodeCombo.IsEnabled)
+                        return global::FracturingFog.Render.VideoLosslessEncode.None;
+                    return encodeCombo.SelectedIndex switch
+                    {
+                        1 => global::FracturingFog.Render.VideoLosslessEncode.LosslessH264Mp4,
+                        2 => global::FracturingFog.Render.VideoLosslessEncode.Ffv1Mkv,
+                        3 => global::FracturingFog.Render.VideoLosslessEncode.HighQualityH264Mp4,
+                        _ => global::FracturingFog.Render.VideoLosslessEncode.None,
+                    };
+                }
+
+                startBtn.Click += (_, _) =>
+                {
+                    if (!TryGetTargetQD(out double cxHi, out double cxLo, out double cx2, out double cx3,
+                                        out double cyHi, out double cyLo, out double cy2, out double cy3,
+                                        out double zoom, out double seconds))
+                    {
+                        errLabel.Text = "Enter valid target CX / CY, a positive zoom, and " +
+                                        $"(if Custom) a duration between {CustomSecsMin} and {CustomSecsMax:F0} s.";
+                        errLabel.IsVisible = true;
+                        return;
+                    }
+                    Close(new global::FracturingFog.Render.VideoZoomRequest
+                    {
+                        TargetCXHi = cxHi, TargetCXLo = cxLo, TargetCX2 = cx2, TargetCX3 = cx3,
+                        TargetCYHi = cyHi, TargetCYLo = cyLo, TargetCY2 = cy2, TargetCY3 = cy3,
+                        TargetZoom = zoom,
+                        TargetIterations = targetIterations,
+                        Seconds = seconds,
+                        IsSlideshow = false,
+                        IsReverse = chkReverse.IsChecked == true,
+                        IsSaveVideo = chkSaveVideo.IsChecked == true,
+                        IsSaveLossless = chkSaveLossless.IsChecked == true,
+                        LosslessEncode = MapEncode(),
+                        TaaSmoothing = (int)Math.Round(taaSlider.Value),
+                        BandDither = chkBandDither.IsChecked == true,
+                        BandDitherStrength = (int)Math.Round(ditherSlider.Value),
+                    });
+                };
+
+                slideshowBtn.Click += (_, _) =>
+                {
+                    double? secsOverride = null;
+                    if (rbCustom.IsChecked == true)
+                    {
+                        if (!double.TryParse(txCustomSecs.Text?.Trim(), System.Globalization.NumberStyles.Float, ic, out double secs)
+                            || secs < CustomSecsMin || secs > CustomSecsMax)
+                        {
+                            errLabel.Text = $"Custom duration must be between {CustomSecsMin} and {CustomSecsMax:F0} seconds.";
+                            errLabel.IsVisible = true;
+                            return;
+                        }
+                        secsOverride = secs;
+                    }
+                    Close(new global::FracturingFog.Render.VideoZoomRequest
+                    {
+                        IsSlideshow = true,
+                        SlideshowSecondsOverride = secsOverride,
+                        IsConstantRate = chkConstantRate.IsChecked == true,
+                        IsReverse = chkReverse.IsChecked == true,
+                        TaaSmoothing = (int)Math.Round(taaSlider.Value),
+                        BandDither = chkBandDither.IsChecked == true,
+                        BandDitherStrength = (int)Math.Round(ditherSlider.Value),
+                    });
+                };
+                cancelBtn.Click += (_, _) => Close(null);
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Margin = new Thickness(0, 12, 0, 0),
+                };
+                buttonRow.Children.Add(slideshowBtn);
+                buttonRow.Children.Add(startBtn);
+                buttonRow.Children.Add(cancelBtn);
+
+                var root = new StackPanel { Margin = new Thickness(14), Spacing = 8 };
+                root.Children.Add(LabeledRow("Region:", regionCombo));
+                root.Children.Add(LabeledRow("Target CX:", txCX));
+                root.Children.Add(LabeledRow("Target CY:", txCY));
+                root.Children.Add(LabeledRow("Target Zoom:", txZoom));
+                root.Children.Add(capWarn);
+                root.Children.Add(speedBox);
+                root.Children.Add(chkConstantRate);
+                root.Children.Add(chkSaveVideo);
+                root.Children.Add(chkSaveLossless);
+                root.Children.Add(LabeledRow("Post-encode:", encodeCombo));
+                root.Children.Add(chkReverse);
+                root.Children.Add(smoothBox);
+                root.Children.Add(errLabel);
+                root.Children.Add(buttonRow);
+
+                win.Content = root;
                 win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
 
                 if (owner != null) _ = win.ShowDialog(owner);

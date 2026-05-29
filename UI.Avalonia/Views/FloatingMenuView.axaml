@@ -98,7 +98,7 @@
                         </UniformGrid>
                         <UniformGrid Columns="3">
                             <Button Classes="action slideshow" Content="Slideshow"     Command="{Binding SlideshowCommand}"     ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />
-                            <Button Classes="action video"     Content="Video"         Command="{Binding VideoCommand}"         ToolTip.Tip="Animated zoom" Margin="0,0,4,0" />
+                            <Button Classes="action video"     Content="{Binding VideoButtonText}" Command="{Binding VideoCommand}" ToolTip.Tip="Animated zoom" Margin="0,0,4,0" />
                             <Button Classes="action danger"    Content="Close Program" Command="{Binding CloseProgramCommand}"  ToolTip.Tip="Exit Fracturing Fog" />
                         </UniformGrid>
                         <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">

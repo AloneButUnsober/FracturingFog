@@ -111,6 +111,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _statusText, value);
     }
 
+    /// <summary>Public passthrough so the shell + host (video / slideshow
+    /// engines) can push status text without exposing the private setter.</summary>
+    public void SetStatus(string text) => StatusText = text;
+
     private InputCursorRequest _cursorRequest = new(InputCursor.Default);
     public InputCursorRequest CursorRequest
     {

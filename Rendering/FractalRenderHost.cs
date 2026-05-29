@@ -30,7 +30,10 @@ using FracturingFog.ViewState;
 namespace FracturingFog.Rendering
 {
     /// <inheritdoc/>
-    public sealed class FractalRenderHost : IFractalRenderHost
+    /// <remarks>The Video Zoom engine (IVideoZoomController) lives in the
+    /// FractalRenderHost.Video.cs partial — it needs direct access to the
+    /// calculator fleet, the upload pipeline and the recolor internals.</remarks>
+    public sealed partial class FractalRenderHost : IFractalRenderHost
     {
         private readonly IFractalRenderer _renderer;
 
@@ -682,6 +685,14 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
             _disposed = true;
+            // Tear down any running video / slideshow first so its background
+            // loop stops touching the calculator + renderer before disposal.
+            lock (_videoLock) _videoCts?.Cancel();
+            lock (_videoSlideshowLock)
+            {
+                _videoSlideshowCts?.Cancel();
+                _videoSlideshowLegCts?.Cancel();
+            }
             lock (_calcLock) _calcCts?.Cancel();
             lock (_d3dGate) _renderer.Dispose();
         }
