@@ -1,12 +1,10 @@
 // Hosting/HostHelpContentProvider.cs
 //
-// Minimal IHelpContentProvider for the Avalonia shell. The full FloatingHelp
-// in the legacy WinForms project hard-codes ~2,500 lines of static help text
-// in private string builders; the long-term plan is to extract those into
-// shared resources both shells can read. Until then, this provider returns
-// the program name + version plus a short placeholder for each tab so the
-// Avalonia shell is usable while the heavy text migration is queued as a
-// separate task.
+// IHelpContentProvider for the Avalonia shell. Live system info (program name
+// + version, DXGI adapters, D3D11 feature level, CPU / OS / memory) is gathered
+// here; all long-form tab prose is read from the shared HelpTextBundle in the
+// Abstractions assembly, so the Avalonia FloatingHelp window renders the same
+// full text the WinForms FloatingHelp has shipped for years.
 
 using System;
 using System.Collections.Generic;

@@ -425,7 +425,7 @@ namespace FracturingFog.Rendering
                         $"src={_calculator.Width}x{_calculator.Height} " +
                         $"upload={_lastUploadedWidth}x{_lastUploadedHeight} :: {ex}");
                     ClearVideoRecordingState(deleteTempFile: true);
-                    RaiseStatus($"MP4 recording disabled: {ex.GetType().Name} {ex.Message}");
+                    RaiseStatus("MP4 recording disabled (frame encode error).");
                 }
             }
 

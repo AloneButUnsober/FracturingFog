@@ -41,7 +41,15 @@ public static class AvaloniaInputAdapter
 
         target.Focusable = true;
 
-        void OnPressed(object? s, PointerPressedEventArgs e) => controller.OnPointerDown(ToPointer(e, target));
+        void OnPressed(object? s, PointerPressedEventArgs e)
+        {
+            // Clicking the render surface grabs keyboard focus so the WASD /
+            // QE pan-zoom and 3D camera/light keys route here. A Focusable
+            // Border is not auto-focused on click in Avalonia, so do it
+            // explicitly — otherwise the controller never sees a KeyDown.
+            target.Focus();
+            controller.OnPointerDown(ToPointer(e, target));
+        }
         void OnMoved(object? s, PointerEventArgs e)        => controller.OnPointerMove(ToPointer(e, target));
         void OnReleased(object? s, PointerReleasedEventArgs e) => controller.OnPointerUp(ToPointerReleased(e, target));
         void OnDouble(object? s, TappedEventArgs e)         => controller.OnPointerDoubleClick(ToPointerFromTap(e, target));
@@ -77,6 +85,16 @@ public static class AvaloniaInputAdapter
             controller.CursorRequested  -= OnCursor;
         });
     }
+
+    /// <summary>
+    /// Builds a shell-neutral <see cref="KeyInput"/> from an Avalonia key
+    /// event, using <paramref name="surface"/> for the client dimensions.
+    /// The result's <see cref="KeyInput.Key"/> is <see cref="InputKey.None"/>
+    /// for keys the controller does not care about. Exposed so the window can
+    /// forward pan / zoom / 3-D camera keys to the controller when keyboard
+    /// focus is on a toolbar control rather than the input sponge.
+    /// </summary>
+    public static KeyInput BuildKeyInput(KeyEventArgs e, Visual surface) => ToKey(e, surface);
 
     // ── Event translators ────────────────────────────────────────────────
 

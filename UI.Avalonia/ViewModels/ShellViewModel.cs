@@ -132,15 +132,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // small name-prompt + confirmation modal, then ask IColorThemeService
         // to persist. Host signals back via the args.Completion TCS pattern
         // so the editor never blocks the dispatcher.
-        FloatingMenu.SaveViewClick     += (_, _) =>
-        {
-            var args = new ThemeMessageEventArgs(
-                "Save View as Region",
-                "Enter a name for this region (cancel to abort).",
-                MessageSeverity.Question)
-            { ExpectsConfirmation = true };
-            SaveRegionRequested?.Invoke(this, args);
-        };
+        FloatingMenu.SaveViewClick     += (_, _) => TriggerSaveView();
         FloatingMenu.DeleteRegionClick += (_, _) =>
         {
             if (string.IsNullOrEmpty(Main.SelectedRegion)) return;
@@ -306,6 +298,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
+        ShowFractalParamsCommand  = ReactiveCommand.Create(
+            () => FractalParamsRequested?.Invoke(this, EventArgs.Empty));
     }
 
     private static string FormatCoords(FracturingFog.ViewState.FractalViewState s)
@@ -331,6 +325,55 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         FloatingMenu.CY = s.CenterY.ToString("G12", CultureInfo.InvariantCulture);
         Main.RenderHost.Trigger();
+    }
+
+    /// <summary>Route a command-level keyboard shortcut forwarded by the
+    /// window (M / T / R / V / Escape). Pan/zoom/3D-camera keys are owned by
+    /// the input controller; these UI commands have no home there, so the
+    /// window hands them here. Mirrors the universal shortcuts from the
+    /// WinForms <c>MainForm.OnKeyDown</c>. Returns true if consumed.</summary>
+    public bool HandleCommandKey(InputKey key)
+    {
+        switch (key)
+        {
+            case InputKey.M:                       // toggle floating menu
+                IsFloatingMenuVisible = !IsFloatingMenuVisible;
+                return true;
+            case InputKey.T:                       // open colour-theme editor
+                ShowColorThemeEditor();
+                return true;
+            case InputKey.R:                       // reset view
+                Main.ResetViewCommand.Execute().Subscribe();
+                return true;
+            case InputKey.V:                       // save current view as region
+                TriggerSaveView();
+                return true;
+            case InputKey.Escape:                  // exit span, else stop a run
+                if (_isSpanning)
+                {
+                    _isSpanning = false;
+                    FloatingMenu.SpanButtonText = "Span";
+                    SpanToggleRequested?.Invoke(this, false);
+                    return true;
+                }
+                if (_video is { IsRunning: true }) { _video.Stop(); return true; }
+                if (_slideshow is { IsRunning: true }) { _slideshow.Stop(); return true; }
+                return false;
+        }
+        return false;
+    }
+
+    /// <summary>Bubble a "save current view as a named region" request up to
+    /// the host (which pops the name-prompt modal). Shared by the FloatingMenu
+    /// Save-View button and the V keyboard shortcut.</summary>
+    private void TriggerSaveView()
+    {
+        var args = new ThemeMessageEventArgs(
+            "Save View as Region",
+            "Enter a name for this region (cancel to abort).",
+            MessageSeverity.Question)
+        { ExpectsConfirmation = true };
+        SaveRegionRequested?.Invoke(this, args);
     }
 
     /// <summary>Start or stop the Avalonia slideshow cycler. Shows / hides the
@@ -454,6 +497,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, bool> ShowFloatingMenuCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
     private void ShowColorThemeEditor()
     {
@@ -586,6 +630,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// pops the Avalonia VideoDialog; on OK it calls back into
     /// <see cref="StartVideoFromRequest"/> with the collected request.</summary>
     public event EventHandler? VideoRequested;
+
+    /// <summary>User clicked the fractal-type Params button. Host pops the
+    /// Avalonia <c>FractalParamsView</c> seeded from the shared ViewState's
+    /// <c>FractalParameters</c> + active <c>FractalType</c>, and re-renders on
+    /// each live change. Mirrors the legacy WinForms FractalParamsDialog.</summary>
+    public event EventHandler? FractalParamsRequested;
 
     /// <summary>Begin a video zoom / slideshow from a request the host
     /// collected via the dialog. Sets the button label + (slideshow) shows the

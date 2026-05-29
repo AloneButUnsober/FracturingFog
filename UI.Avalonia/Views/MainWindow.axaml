@@ -89,6 +89,9 @@
                     <ToggleButton Classes="toolbar" Content="Watermark"
                                   IsChecked="{Binding Main.ShowWatermark, Mode=TwoWay}"
                                   ToolTip.Tip="Show region/theme + program watermark" />
+                    <Button Classes="toolbar" Content="Params"
+                            Command="{Binding ShowFractalParamsCommand}"
+                            ToolTip.Tip="Edit parameters for the current fractal type" />
                     <Button Classes="toolbar" Content="Reset"
                             Command="{Binding Main.ResetViewCommand}" />
                     <Button Classes="toolbar" Content="Edit Theme"
