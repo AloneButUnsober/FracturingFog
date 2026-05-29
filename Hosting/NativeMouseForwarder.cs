@@ -1,0 +1,236 @@
+// Hosting/NativeMouseForwarder.cs
+//
+// Win32 mouse-message bridge for the Avalonia shell.
+//
+// The GPU swap chain lives on a native child HWND hosted by Avalonia's
+// NativeControlHost (GpuSurfaceControl). On Windows the OS composites that
+// HWND on top of all Avalonia content and routes every WM_MOUSE* /
+// WM_*BUTTON* / WM_MOUSEWHEEL straight to it — so the transparent
+// "InputSponge" Border layered above the surface in XAML never receives a
+// pointer event (Avalonia hit-testing cannot reach behind the native
+// window). Keyboard still works because logical focus stays on the Avalonia
+// sponge, but mouse pan / zoom / 3D-orbit were dead.
+//
+// This subclass intercepts the native HWND's mouse messages and translates
+// them into the shell-neutral PointerInput / WheelInput records the
+// IFractalInputController already understands — the same records the
+// AvaloniaInputAdapter emits from the sponge. Lives in the main WinExe
+// because it needs Win32 P/Invoke (UI.Avalonia stays platform-neutral).
+
+using System;
+using System.Runtime.InteropServices;
+
+using FracturingFog.Input;
+
+namespace FracturingFog.Hosting
+{
+    internal static class NativeMouseForwarder
+    {
+        // Keep the delegate rooted so the GC never collects the thunk the
+        // subclass table points at.
+        private static SUBCLASSPROC? s_proc;
+        private static IFractalInputController? s_controller;
+        private static IntPtr s_hwnd;
+
+        // ── Window messages ──────────────────────────────────────────────────
+        private const uint WM_MOUSEMOVE     = 0x0200;
+        private const uint WM_LBUTTONDOWN   = 0x0201;
+        private const uint WM_LBUTTONUP     = 0x0202;
+        private const uint WM_LBUTTONDBLCLK = 0x0203;
+        private const uint WM_RBUTTONDOWN   = 0x0204;
+        private const uint WM_RBUTTONUP     = 0x0205;
+        private const uint WM_MBUTTONDOWN   = 0x0207;
+        private const uint WM_MBUTTONUP     = 0x0208;
+        private const uint WM_MOUSEWHEEL    = 0x020A;
+
+        // ── wParam button/modifier flags ─────────────────────────────────────
+        private const int MK_LBUTTON = 0x0001;
+        private const int MK_RBUTTON = 0x0002;
+        private const int MK_SHIFT   = 0x0004;
+        private const int MK_CONTROL = 0x0008;
+        private const int MK_MBUTTON = 0x0010;
+
+        // ── Class style ──────────────────────────────────────────────────────
+        private const int GCL_STYLE   = -26;
+        private const int CS_DBLCLKS  = 0x0008;
+
+        private static readonly UIntPtr SubclassId = (UIntPtr)1;
+
+        /// <summary>Subclass <paramref name="hwnd"/> (the swap-chain native
+        /// window) so its mouse messages drive <paramref name="controller"/>.
+        /// Must be called on the thread that owns the HWND (the UI thread).</summary>
+        public static void Attach(IntPtr hwnd, IFractalInputController controller)
+        {
+            if (hwnd == IntPtr.Zero || controller == null) return;
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+            s_controller = controller;
+            s_hwnd = hwnd;
+            s_proc = WndProc;
+
+            // Ensure the class delivers WM_*BUTTONDBLCLK so double-click
+            // recenter works (Avalonia's native child class may lack CS_DBLCLKS).
+            EnableDoubleClicks(hwnd);
+
+            SetWindowSubclass(hwnd, s_proc, SubclassId, UIntPtr.Zero);
+        }
+
+        public static void Detach()
+        {
+            if (s_hwnd != IntPtr.Zero && s_proc != null)
+            {
+                try { RemoveWindowSubclass(s_hwnd, s_proc, SubclassId); } catch { /* ignore */ }
+            }
+            s_hwnd = IntPtr.Zero;
+            s_proc = null;
+            s_controller = null;
+        }
+
+        private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam,
+                                      UIntPtr id, UIntPtr data)
+        {
+            var c = s_controller;
+            if (c != null)
+            {
+                switch (msg)
+                {
+                    case WM_LBUTTONDOWN:
+                        SetCapture(hWnd);
+                        c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Left, wParam));
+                        return IntPtr.Zero;
+                    case WM_RBUTTONDOWN:
+                        SetCapture(hWnd);
+                        c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Right, wParam));
+                        return IntPtr.Zero;
+                    case WM_MBUTTONDOWN:
+                        c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Middle, wParam));
+                        return IntPtr.Zero;
+                    case WM_MOUSEMOVE:
+                        c.OnPointerMove(Pointer(hWnd, lParam, ButtonsFromWParam(wParam), wParam));
+                        return IntPtr.Zero;
+                    case WM_LBUTTONUP:
+                        ReleaseCapture();
+                        c.OnPointerUp(Pointer(hWnd, lParam, PointerButton.Left, wParam));
+                        return IntPtr.Zero;
+                    case WM_RBUTTONUP:
+                        ReleaseCapture();
+                        c.OnPointerUp(Pointer(hWnd, lParam, PointerButton.Right, wParam));
+                        return IntPtr.Zero;
+                    case WM_MBUTTONUP:
+                        c.OnPointerUp(Pointer(hWnd, lParam, PointerButton.Middle, wParam));
+                        return IntPtr.Zero;
+                    case WM_LBUTTONDBLCLK:
+                        c.OnPointerDoubleClick(Pointer(hWnd, lParam, PointerButton.Left, wParam));
+                        return IntPtr.Zero;
+                    case WM_MOUSEWHEEL:
+                        c.OnWheel(Wheel(hWnd, wParam, lParam));
+                        return IntPtr.Zero;
+                }
+            }
+            return DefSubclassProc(hWnd, msg, wParam, lParam);
+        }
+
+        // ── Record builders ──────────────────────────────────────────────────
+
+        private static PointerInput Pointer(IntPtr hWnd, IntPtr lParam, PointerButton btn, IntPtr wParam)
+        {
+            int x = LoWordSigned(lParam);
+            int y = HiWordSigned(lParam);
+            GetClientSize(hWnd, out int w, out int h);
+            return new PointerInput(x, y, w, h, btn, ModsFromFlags(LoWord(wParam)));
+        }
+
+        private static WheelInput Wheel(IntPtr hWnd, IntPtr wParam, IntPtr lParam)
+        {
+            // WM_MOUSEWHEEL coords are screen-relative; map them to client space.
+            var pt = new POINT { X = LoWordSigned(lParam), Y = HiWordSigned(lParam) };
+            ScreenToClient(hWnd, ref pt);
+            GetClientSize(hWnd, out int w, out int h);
+            int delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
+            return new WheelInput(pt.X, pt.Y, w, h, delta, ModsFromFlags(LoWord(wParam)));
+        }
+
+        private static PointerButton ButtonsFromWParam(IntPtr wParam)
+        {
+            int f = LoWord(wParam);
+            var b = PointerButton.None;
+            if ((f & MK_LBUTTON) != 0) b |= PointerButton.Left;
+            if ((f & MK_RBUTTON) != 0) b |= PointerButton.Right;
+            if ((f & MK_MBUTTON) != 0) b |= PointerButton.Middle;
+            return b;
+        }
+
+        private static InputModifiers ModsFromFlags(int f)
+        {
+            var m = InputModifiers.None;
+            if ((f & MK_SHIFT) != 0)   m |= InputModifiers.Shift;
+            if ((f & MK_CONTROL) != 0) m |= InputModifiers.Control;
+            return m;
+        }
+
+        private static void GetClientSize(IntPtr h, out int w, out int hgt)
+        {
+            if (GetClientRect(h, out RECT r))
+            {
+                w = Math.Max(1, r.Right - r.Left);
+                hgt = Math.Max(1, r.Bottom - r.Top);
+            }
+            else { w = 1; hgt = 1; }
+        }
+
+        private static void EnableDoubleClicks(IntPtr hwnd)
+        {
+            try
+            {
+                long s = GetClassLongPtr(hwnd, GCL_STYLE).ToInt64();
+                if ((s & CS_DBLCLKS) == 0)
+                    SetClassLongPtr(hwnd, GCL_STYLE, new IntPtr(s | CS_DBLCLKS));
+            }
+            catch { /* non-fatal: double-click recenter just won't fire */ }
+        }
+
+        private static int LoWord(IntPtr v) => (int)(v.ToInt64() & 0xFFFF);
+        private static int LoWordSigned(IntPtr v) => (short)(v.ToInt64() & 0xFFFF);
+        private static int HiWordSigned(IntPtr v) => (short)((v.ToInt64() >> 16) & 0xFFFF);
+
+        // ── P/Invoke ─────────────────────────────────────────────────────────
+
+        private delegate IntPtr SUBCLASSPROC(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam,
+                                             UIntPtr uIdSubclass, UIntPtr dwRefData);
+
+        [DllImport("comctl32.dll", SetLastError = true)]
+        private static extern bool SetWindowSubclass(IntPtr hWnd, SUBCLASSPROC pfnSubclass,
+                                                     UIntPtr uIdSubclass, UIntPtr dwRefData);
+
+        [DllImport("comctl32.dll", SetLastError = true)]
+        private static extern bool RemoveWindowSubclass(IntPtr hWnd, SUBCLASSPROC pfnSubclass,
+                                                        UIntPtr uIdSubclass);
+
+        [DllImport("comctl32.dll")]
+        private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetCapture(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")]
+        private static extern IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "SetClassLongPtrW")]
+        private static extern IntPtr SetClassLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT { public int X, Y; }
+    }
+}

@@ -60,6 +60,14 @@ namespace FracturingFog.Hosting
         private static ShellViewModel? s_shell;
         private static IGpuSurface? s_surface;
         private static HostColorThemeService? s_themeService;
+        private static FractalParamsView? s_paramsWin;
+
+        // Dedicated source-compiled editors (one window each, modeless).
+        private static UserEquationView? s_userEqWin;
+        private static SandboxView? s_sandboxWin;
+        private static UserBulbView? s_userBulbWin;
+        private static DispatcherTimer? s_userBulbAnimTimer;
+
         private static readonly object s_gate = new();
 
         // ── Span-mode (borderless multi-monitor fullscreen) saved state ──────
@@ -98,6 +106,13 @@ namespace FracturingFog.Hosting
             var initialMap = ColorPalette.GetPaletteByName("HSV");
             s_renderHost = new FractalRenderHost(s_renderer, viewState, w, h, initialMap);
             s_input = new FractalInputController(viewState);
+
+            // The swap-chain HWND composites on top of all Avalonia content, so
+            // the XAML InputSponge never receives a pointer event. Subclass the
+            // native window and forward its mouse messages into the controller.
+            // (Runs on the UI thread — OnSurfaceReady fires from the native
+            // control's CreateNativeControlCore.)
+            NativeMouseForwarder.Attach(surface.Handle, s_input);
 
             // ── Services ─────────────────────────────────────────────────
             // Theme service holds a reference to the render host so its
@@ -635,6 +650,64 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // ── Fractal-type parameters ──────────────────────────────────
+            //
+            // Pop the per-type parameter editor seeded from the shared
+            // ViewState. The VM mutates ViewState.FractalParameters in place
+            // and fires ParamChanged on every control edit, so we re-render
+            // live. Shown modeless (legacy parity) and tracked so a second
+            // click re-focuses the existing window instead of stacking copies.
+            shell.FractalParamsRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+                    var vs = s_renderHost.ViewState;
+
+                    // UserEquation / Sandbox / UserBulb carry their own
+                    // source-compiled editors (source textbox + knobs), not the
+                    // generic FractalParamsView. Route each to its dedicated
+                    // window — mirrors legacy MainForm.ShowUserEquationDialog /
+                    // ShowSandboxDialog / ShowUserBulbDialog.
+                    switch (vs.FractalType)
+                    {
+                        case global::FracturingFog.FractalType.UserEquation:
+                            OpenUserEquationEditor(vs.FractalParameters);
+                            return;
+                        case global::FracturingFog.FractalType.Sandbox:
+                            OpenSandboxEditor(vs.FractalParameters);
+                            return;
+                        case global::FracturingFog.FractalType.UserBulb:
+                            OpenUserBulbEditor(vs.FractalParameters);
+                            return;
+                    }
+
+                    // Already open → bring to front rather than duplicate.
+                    if (s_paramsWin != null)
+                    {
+                        s_paramsWin.Activate();
+                        return;
+                    }
+
+                    var vm = new FractalParamsViewModel(
+                        vs.FractalType,
+                        vs.FractalParameters,
+                        ifsPresets: new List<string>(IFSPresets.All.Keys),
+                        lsystemPresets: new List<string>(LSystemPresets.All.Keys),
+                        attractorPresets: null,
+                        attractorDefaults: global::FracturingFog.AttractorCalculator.DefaultParams);
+                    vm.ParamChanged += () => s_renderHost?.Trigger();
+
+                    var win = new FractalParamsView { DataContext = vm };
+                    win.Closed += (_, _) => s_paramsWin = null;
+                    s_paramsWin = win;
+
+                    var owner = AvaloniaDialogs.ActiveMainWindow;
+                    if (owner != null) win.Show(owner);
+                    else win.Show();
+                });
+            };
+
             // Recording finished — the engine has finalised the temp MP4 and/or
             // PNG sequence. On success, prompt for save destinations; on cancel
             // or fault, discard the temp artefacts. Fires on a background thread
@@ -650,6 +723,199 @@ namespace FracturingFog.Hosting
                     }
                 });
             };
+        }
+
+        // ── Source-compiled editors (UserEquation / Sandbox / UserBulb) ──────
+        //
+        // These three fractal types carry a dedicated editor window (source
+        // textbox + per-type knobs) rather than the generic FractalParamsView.
+        // The VMs are UI-agnostic: they raise CompileRequested / RenderRequested
+        // / PromotionChanged plus synchronous prompt callbacks the host fills
+        // here. Compile runs through FractalRenderHost's CompileXxx wrappers so
+        // the calculator types stay inside the main project. Mirrors legacy
+        // MainForm.ShowUserEquationDialog / ShowSandboxDialog / ShowUserBulbDialog.
+        //
+        // PromotionChanged is intentionally not wired: the Avalonia fractal-type
+        // combo is bound to the fixed FractalType enum (MainViewModel.FractalTypes)
+        // and does not surface promoted named equations as extra entries the way
+        // the legacy WinForms combo did.
+
+        private static void OpenUserEquationEditor(global::FracturingFog.Models.FractalParameters p)
+        {
+            if (s_renderHost == null) return;
+            if (s_userEqWin != null) { s_userEqWin.Activate(); return; }
+
+            var vm = new UserEquationViewModel(p);
+            vm.CompileRequested += () =>
+            {
+                var (ok, error) = s_renderHost!.CompileUserEquation(p.UserEquationSource ?? "return z*z + c;");
+                vm.ShowError(error);
+                if (ok) s_renderHost.Trigger();
+            };
+            vm.RenderRequested += () => s_renderHost!.Trigger();
+            vm.NamePromptRequested += def => PromptName("Save Equation", "Enter a name:", def);
+            vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved equation \"{name}\"?", "Delete Equation");
+
+            var win = new UserEquationView { DataContext = vm };
+            win.Closed += (_, _) => s_userEqWin = null;
+            s_userEqWin = win;
+
+            ShowEditor(win);
+            vm.TriggerCompile();
+        }
+
+        private static void OpenSandboxEditor(global::FracturingFog.Models.FractalParameters p)
+        {
+            if (s_renderHost == null) return;
+            if (s_sandboxWin != null) { s_sandboxWin.Activate(); return; }
+
+            var vm = new SandboxViewModel(p);
+            vm.CompileRequested += () =>
+            {
+                var (ok, error) = s_renderHost!.CompileSandbox(p.SandboxSource ?? "z*z + c");
+                vm.ShowError(error);
+                if (ok) s_renderHost.Trigger();
+            };
+            vm.NamePromptRequested += def => PromptName("Save Sandbox Equation", "Enter a name:", def);
+            vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved sandbox equation \"{name}\"?", "Delete");
+            vm.SaveFilePromptRequested += defName =>
+                PickSaveSync("Export Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*", defName);
+            vm.OpenFilePromptRequested += () =>
+                PickOpenSync("Import Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
+            vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
+
+            var win = new SandboxView { DataContext = vm };
+            win.Closed += (_, _) => s_sandboxWin = null;
+            s_sandboxWin = win;
+
+            ShowEditor(win);
+            vm.TriggerCompile();
+        }
+
+        private static void OpenUserBulbEditor(global::FracturingFog.Models.FractalParameters p)
+        {
+            if (s_renderHost == null) return;
+            if (s_userBulbWin != null) { s_userBulbWin.Activate(); return; }
+
+            var vm = new UserBulbViewModel(p);
+            vm.CompileRequested += (_, _) =>
+            {
+                var (ok, error) = s_renderHost!.CompileUserBulb(p.UserBulbSource ?? string.Empty);
+                vm.ShowError(error ?? string.Empty);
+                if (ok) s_renderHost.Trigger();
+            };
+            vm.RenderRequested += (_, _) => s_renderHost!.Trigger();
+            vm.NamePromptRequested += (_, e) => e.Result = PromptName(e.Caption, "Enter a name:", e.DefaultValue);
+            vm.ConfirmDeleteRequested += (_, e) => e.Result = ConfirmYesNo(e.Message, "Confirm");
+            vm.OpenFilePromptRequested += (_, e) => e.Path = PickOpenSync(e.Title, e.Filter);
+            vm.SaveFilePromptRequested += (_, e) => e.Path = PickSaveSync(e.Title, e.Filter, e.DefaultName);
+            vm.MessageRequested += (_, msg) => ShowInfo("UserBulb", msg, false);
+            vm.ExportMeshRequested += (_, e) =>
+            {
+                if (s_renderHost == null) return;
+                try
+                {
+                    int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportObjVoxelSurface(
+                        e.Path,
+                        (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z),
+                        s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0,
+                        e.Range, e.GridN);
+                    ShowInfo("Mesh export", $"Exported {tris} triangles to {e.Path}", false);
+                }
+                catch (Exception ex)
+                {
+                    ShowInfo("Mesh export error", $"Export failed: {ex.Message}", true);
+                }
+            };
+
+            // ~30 Hz animation pump. The VM advances t and raises RenderRequested
+            // only when no frame is in flight; NotifyRenderDone re-opens the gate
+            // off the host's AnimationFrameUploaded so timer ticks don't pile up.
+            void OnFrameUploaded(object? _, EventArgs __) => vm.NotifyRenderDone();
+            s_renderHost.AnimationFrameUploaded += OnFrameUploaded;
+
+            var lastTick = DateTime.UtcNow;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+            timer.Tick += (_, _) =>
+            {
+                var now = DateTime.UtcNow;
+                double dt = (now - lastTick).TotalSeconds;
+                lastTick = now;
+                vm.AnimationTick(dt);
+            };
+            timer.Start();
+            s_userBulbAnimTimer = timer;
+
+            var win = new UserBulbView { DataContext = vm };
+            win.Closed += (_, _) =>
+            {
+                timer.Stop();
+                if (s_renderHost != null) s_renderHost.AnimationFrameUploaded -= OnFrameUploaded;
+                s_userBulbAnimTimer = null;
+                s_userBulbWin = null;
+            };
+            s_userBulbWin = win;
+
+            ShowEditor(win);
+            vm.TriggerCompile();
+        }
+
+        private static void ShowEditor(Window win)
+        {
+            var owner = AvaloniaDialogs.ActiveMainWindow;
+            if (owner != null) win.Show(owner);
+            else win.Show();
+        }
+
+        // ── Synchronous host prompts ─────────────────────────────────────────
+        //
+        // The source-editor VMs expect synchronous-return prompt callbacks
+        // (Func<…>/EventArgs.Result), but Avalonia's dialog stack is async-only.
+        // Rather than pump a nested dispatcher frame, lean on the Win32 common
+        // dialogs already available here (this is a WinExe with UseWindowsForms):
+        // they run their own modal message loop and return synchronously.
+
+        private static string? PromptName(string title, string prompt, string defaultValue)
+        {
+            string r = Microsoft.VisualBasic.Interaction.InputBox(prompt, title, defaultValue ?? string.Empty);
+            return string.IsNullOrWhiteSpace(r) ? null : r;
+        }
+
+        private static bool ConfirmYesNo(string message, string title)
+            => System.Windows.Forms.MessageBox.Show(
+                   message, title,
+                   System.Windows.Forms.MessageBoxButtons.YesNo,
+                   System.Windows.Forms.MessageBoxIcon.Question)
+               == System.Windows.Forms.DialogResult.Yes;
+
+        private static void ShowInfo(string title, string body, bool isError)
+            => System.Windows.Forms.MessageBox.Show(
+                   body, title,
+                   System.Windows.Forms.MessageBoxButtons.OK,
+                   isError ? System.Windows.Forms.MessageBoxIcon.Error
+                           : System.Windows.Forms.MessageBoxIcon.Information);
+
+        private static string? PickOpenSync(string title, string filter)
+        {
+            using var d = new System.Windows.Forms.OpenFileDialog
+            {
+                Title = string.IsNullOrEmpty(title) ? "Open" : title,
+                Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
+                CheckFileExists = true,
+            };
+            return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
+        }
+
+        private static string? PickSaveSync(string title, string filter, string defaultName)
+        {
+            using var d = new System.Windows.Forms.SaveFileDialog
+            {
+                Title = string.IsNullOrEmpty(title) ? "Save" : title,
+                Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
+                FileName = defaultName ?? string.Empty,
+                OverwritePrompt = true,
+            };
+            return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
         }
 
         // ── #64 — Video recording save prompts ───────────────────────────────
@@ -872,6 +1138,12 @@ namespace FracturingFog.Hosting
         {
             lock (s_gate)
             {
+                try { NativeMouseForwarder.Detach(); } catch { /* ignore */ }
+                try { s_userBulbAnimTimer?.Stop(); } catch { /* ignore */ }
+                s_userBulbAnimTimer = null;
+                try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;
+                try { s_sandboxWin?.Close(); }  catch { /* ignore */ } s_sandboxWin = null;
+                try { s_userBulbWin?.Close(); } catch { /* ignore */ } s_userBulbWin = null;
                 try { s_shell?.Dispose(); } catch { /* ignore */ }
                 s_shell = null;
                 try { s_renderHost?.Dispose(); } catch { /* renderer disposed via host */ }

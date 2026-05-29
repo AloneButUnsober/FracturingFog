@@ -53,6 +53,31 @@ view-state and color pipeline.
   Right-click        Context menu (toolbar, mini-map, etc.)
   Reset (R)          Restore default view (-0.5, 0, zoom 0.3)
 
+=== Keyboard ===
+
+  Commands (any fractal)
+    M      Toggle the floating coordinate / control menu
+    T      Open the colour-theme editor
+    R      Reset the view to the default for the current fractal
+    V      Save the current view as a named region
+    Esc    Exit monitor-span, or stop a running video / slideshow
+
+  2-D pan & zoom
+    W / S  Zoom in / out (centered)
+    A / D  Pan left / right
+    Q / E  Pan up / down
+    Shift  Hold with a pan key for a precise quarter-step
+
+  3-D  (Mandelbulb / User Bulb 3D)
+    W / S          Move the camera closer / farther
+    A / D / Q / E  Pan
+    Arrow keys     Orbit the camera (azimuth / elevation)
+    PgUp / PgDn    Rotate the light azimuth
+    Home / End     Rotate the light elevation
+
+  (Pan / zoom / camera keys are ignored while a text box has focus
+   and while a slideshow is running.)
+
 === Toolbar / Floating Menu ===
 
   Span        Span the window across all monitors

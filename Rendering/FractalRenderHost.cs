@@ -148,6 +148,47 @@ namespace FracturingFog.Rendering
         /// view-state contract.</summary>
         public MandelbrotCalculator Mandelbrot => _calculator;
 
+        // ── Source-compiled calculators (UserEquation / Sandbox / UserBulb) ──
+        // The Avalonia shell's dedicated editors live in UI.Avalonia and can't
+        // see these main-project calculators directly. These thin wrappers let
+        // the bootstrap drive Compile() + read the result without exposing the
+        // calculator types across the project boundary. Each returns
+        // (ok, error): ok mirrors IsCompiled, error is null on success.
+
+        /// <summary>Compile the Roslyn-backed UserEquation source.</summary>
+        public (bool ok, string? error) CompileUserEquation(string source)
+        {
+            _userEquationCalculator.Compile(source);
+            _lastUploadedBuffer = null;   // force a fresh recompute on next Trigger
+            return (_userEquationCalculator.IsCompiled,
+                string.IsNullOrEmpty(_userEquationCalculator.LastError) ? null : _userEquationCalculator.LastError);
+        }
+
+        /// <summary>Compile the restricted Sandbox-DSL source.</summary>
+        public (bool ok, string? error) CompileSandbox(string source)
+        {
+            _sandboxCalculator.Compile(source);
+            _lastUploadedBuffer = null;
+            return (_sandboxCalculator.IsCompiled,
+                string.IsNullOrEmpty(_sandboxCalculator.LastError) ? null : _sandboxCalculator.LastError);
+        }
+
+        /// <summary>Compile the 3D UserBulb source (per-component / quat step).</summary>
+        public (bool ok, string? error) CompileUserBulb(string source)
+        {
+            _userBulbCalculator.Compile(source);
+            _lastUploadedBuffer = null;
+            return (_userBulbCalculator.IsCompiled,
+                string.IsNullOrEmpty(_userBulbCalculator.LastError) ? null : _userBulbCalculator.LastError);
+        }
+
+        /// <summary>Distance-estimator sampler for UserBulb mesh export.</summary>
+        public double SampleUserBulbDE(double x, double y, double z) => _userBulbCalculator.SampleDE(x, y, z);
+
+        /// <summary>UserBulb sampling-space centre (mesh export origin).</summary>
+        public double UserBulbCenterX => _userBulbCalculator.CenterX;
+        public double UserBulbCenterY => _userBulbCalculator.CenterY;
+
         /// <summary>Mutable colour map applied across all calculators. Setting
         /// this updates every alt calculator so a theme switch is a single
         /// assignment from the caller's perspective. Raises

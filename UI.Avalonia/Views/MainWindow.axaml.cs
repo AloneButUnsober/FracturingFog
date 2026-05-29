@@ -18,7 +18,9 @@
 using System;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using FracturingFog.Input;
 using FracturingFog.UI.Avalonia.Controls;
 using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
@@ -29,6 +31,7 @@ public sealed partial class MainWindow : Window
 {
     private ShellViewModel? _shell;
     private IDisposable? _inputAdapter;
+    private Border? _sponge;
 
     private FloatingMenuView? _menuWin;
     private ColorThemeEditorView? _editorWin;
@@ -57,6 +60,77 @@ public sealed partial class MainWindow : Window
 
         DataContextChanged += OnDataContextChanged;
         Closed += OnClosed;
+
+        // Grab keyboard focus onto the InputSponge as soon as the window
+        // opens so WASD/QE pan-zoom and the 3D camera/light keys work
+        // before the user's first click. A Focusable Border is not
+        // auto-focused by Avalonia, so without this the controller never
+        // sees a KeyDown until the surface is clicked.
+        Opened += OnOpened;
+
+        // Command-level shortcuts (M/T/R/V/Escape). Pan/zoom/3D keys are
+        // consumed by the InputSponge's AvaloniaInputAdapter and never reach
+        // here; the controller returns false for these UI commands, so they
+        // bubble up unhandled and we route them to the shell. Mirrors the
+        // universal shortcuts in WinForms MainForm.OnKeyDown.
+        KeyDown += OnWindowKeyDown;
+    }
+
+    private void OnOpened(object? sender, EventArgs e)
+    {
+        _sponge ??= this.FindControl<Border>("InputSponge");
+        _sponge?.Focus();
+    }
+
+    private void FocusSponge() => _sponge?.Focus();
+
+    // ── Command-key routing ───────────────────────────────────────────────
+
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_shell == null || e.Handled) return;
+
+        // Don't steal keys from an editable control (toolbar combos / dialog
+        // fields). Escape is always allowed so it can cancel span / a run.
+        if (e.Key != Key.Escape && IsEditableFocused()) return;
+
+        // Command keys (M/T/R/V/Escape) — unmodified only; Ctrl/Alt/Shift
+        // combos are reserved (diagnostic toggles, precise-pan).
+        if (e.KeyModifiers == KeyModifiers.None)
+        {
+            InputKey cmd = e.Key switch
+            {
+                Key.M => InputKey.M,
+                Key.T => InputKey.T,
+                Key.R => InputKey.R,
+                Key.V => InputKey.V,
+                Key.Escape => InputKey.Escape,
+                _ => InputKey.None,
+            };
+            if (cmd != InputKey.None)
+            {
+                if (_shell.HandleCommandKey(cmd)) e.Handled = true;
+                return;
+            }
+        }
+
+        // Pan / zoom / 3-D camera + light keys. Forwarded to the controller
+        // here so they still work when keyboard focus sits on a toolbar
+        // button (after a click) rather than the input sponge. When the
+        // sponge IS focused its adapter handles the key first and sets
+        // e.Handled, so this is skipped. A focused ComboBox is caught by the
+        // IsEditableFocused() guard above, so its own arrow / type-ahead
+        // navigation is preserved.
+        if (_sponge == null) return;
+        var ki = AvaloniaInputAdapter.BuildKeyInput(e, _sponge);
+        if (ki.Key != InputKey.None && _shell.Main.Input.OnKeyDown(ki))
+            e.Handled = true;
+    }
+
+    private bool IsEditableFocused()
+    {
+        var focused = FocusManager?.GetFocusedElement();
+        return focused is TextBox or ComboBox or AutoCompleteBox or NumericUpDown;
     }
 
     // ── Shell wiring ──────────────────────────────────────────────────────
@@ -72,11 +146,12 @@ public sealed partial class MainWindow : Window
     {
         _shell = shell;
 
-        var sponge = this.FindControl<Border>("InputSponge");
-        if (sponge != null)
-            _inputAdapter = AvaloniaInputAdapter.Attach(sponge, shell.Main.Input);
+        _sponge ??= this.FindControl<Border>("InputSponge");
+        if (_sponge != null)
+            _inputAdapter = AvaloniaInputAdapter.Attach(_sponge, shell.Main.Input);
 
         shell.PropertyChanged += OnShellPropertyChanged;
+        shell.Main.PropertyChanged += OnMainPropertyChanged;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
@@ -90,8 +165,23 @@ public sealed partial class MainWindow : Window
         _inputAdapter = null;
 
         if (_shell != null)
+        {
             _shell.PropertyChanged -= OnShellPropertyChanged;
+            _shell.Main.PropertyChanged -= OnMainPropertyChanged;
+        }
         _shell = null;
+    }
+
+    // Picking a fractal type / quality from a toolbar combo leaves keyboard
+    // focus on that combo, so the WASD/QE pan-zoom + arrow/PgUp/etc. 3-D
+    // camera keys would route to the combo instead of the controller. Pull
+    // focus back to the input sponge after the selection lands so the keys
+    // immediately drive the fractal — no extra click on the surface needed.
+    private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainViewModel.SelectedFractalType)
+                           or nameof(MainViewModel.SelectedQuality))
+            FocusSponge();
     }
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
