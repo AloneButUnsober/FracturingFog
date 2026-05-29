@@ -139,6 +139,16 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Label for the Span button. Flips between "Span" and "Back"
+    /// as the host enters/exits borderless multi-monitor fullscreen. The
+    /// ShellViewModel sets this when it forwards <see cref="SpanClick"/>.</summary>
+    private string _spanButtonText = "Span";
+    public string SpanButtonText
+    {
+        get => _spanButtonText;
+        set => this.RaiseAndSetIfChanged(ref _spanButtonText, value);
+    }
+
     /// <summary>Mirror an externally-driven region selection without firing
     /// <see cref="RegionComboChanged"/>. Used when the toolbar or theme editor
     /// jumps to a region and we want the menu combo to track it.</summary>

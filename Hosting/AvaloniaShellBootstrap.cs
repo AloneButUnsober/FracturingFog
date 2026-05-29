@@ -61,6 +61,15 @@ namespace FracturingFog.Hosting
         private static HostColorThemeService? s_themeService;
         private static readonly object s_gate = new();
 
+        // ── Span-mode (borderless multi-monitor fullscreen) saved state ──────
+        private static bool s_spanning;
+        private static WindowState s_preSpanState;
+        private static WindowDecorations s_preSpanDecorations;
+        private static PixelPoint s_preSpanPosition;
+        private static double s_preSpanWidth;
+        private static double s_preSpanHeight;
+        private static bool s_preSpanTopmost;
+
         /// <summary>Palette-extraction service. Defaulted to the
         /// System.Drawing-backed <see cref="HostPaletteExtractionService"/>;
         /// callers may swap before <see cref="OnSurfaceReady"/> for tests.</summary>
@@ -526,6 +535,78 @@ namespace FracturingFog.Hosting
                     confirm.Completion.TrySetResult(true);
                 }
             };
+
+            // Span — toggle borderless fullscreen across every monitor. The
+            // ShellViewModel owns the intent (and the button label); we own the
+            // Avalonia Window geometry and restore it verbatim on exit.
+            shell.SpanToggleRequested += (_, enter) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var win = AvaloniaDialogs.ActiveMainWindow;
+                    if (win == null) return;
+                    if (enter) EnterSpanMode(win);
+                    else ExitSpanMode(win);
+                });
+            };
+        }
+
+        // ── Span-mode helpers ────────────────────────────────────────────────
+
+        /// <summary>Stretch the window borderless across the union of all
+        /// monitor bounds (legacy WinForms parity: Bounds = VirtualScreen).
+        /// Saves the prior geometry so <see cref="ExitSpanMode"/> can restore it.</summary>
+        private static void EnterSpanMode(Window win)
+        {
+            if (s_spanning) return;
+
+            var screens = win.Screens;
+            if (screens == null || screens.All.Count == 0) return;
+
+            // Capture restore state before mutating anything.
+            s_preSpanState = win.WindowState;
+            s_preSpanDecorations = win.WindowDecorations;
+            s_preSpanPosition = win.Position;
+            s_preSpanWidth = double.IsNaN(win.Width) ? win.Bounds.Width : win.Width;
+            s_preSpanHeight = double.IsNaN(win.Height) ? win.Bounds.Height : win.Height;
+            s_preSpanTopmost = win.Topmost;
+
+            // Union of every screen's pixel bounds.
+            int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+            foreach (var s in screens.All)
+            {
+                var b = s.Bounds;
+                if (b.X < minX) minX = b.X;
+                if (b.Y < minY) minY = b.Y;
+                if (b.X + b.Width > maxX) maxX = b.X + b.Width;
+                if (b.Y + b.Height > maxY) maxY = b.Y + b.Height;
+            }
+
+            // Window.Width/Height are DIPs; screen bounds are physical pixels.
+            double scaling = win.RenderScaling;
+            if (scaling <= 0) scaling = 1.0;
+
+            win.WindowState = WindowState.Normal;
+            win.WindowDecorations = WindowDecorations.None;
+            win.Topmost = true;
+            win.Position = new PixelPoint(minX, minY);
+            win.Width = (maxX - minX) / scaling;
+            win.Height = (maxY - minY) / scaling;
+            s_spanning = true;
+        }
+
+        /// <summary>Restore the window geometry captured by
+        /// <see cref="EnterSpanMode"/>.</summary>
+        private static void ExitSpanMode(Window win)
+        {
+            if (!s_spanning) return;
+            win.WindowDecorations = s_preSpanDecorations;
+            win.Topmost = s_preSpanTopmost;
+            win.Position = s_preSpanPosition;
+            win.Width = s_preSpanWidth;
+            win.Height = s_preSpanHeight;
+            win.WindowState = s_preSpanState;
+            s_spanning = false;
         }
 
         // Convenience helper for the SaveRegion handler — pulls MainViewModel
