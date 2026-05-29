@@ -173,6 +173,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Screenshot — host saves the most-recent BGRA buffer to disk.
         FloatingMenu.ScreenshotClick   += (_, _) => ScreenshotRequested?.Invoke(this, EventArgs.Empty);
 
+        // Export / Import user regions — host pops a file picker then asks
+        // IColorThemeService to serialize / merge. After an import the host
+        // refreshes the region combo so new entries show without a restart.
+        FloatingMenu.ExportRegionsClick += (_, _) => ExportRegionsRequested?.Invoke(this, EventArgs.Empty);
+        FloatingMenu.ImportRegionsClick += (_, _) => ImportRegionsRequested?.Invoke(this, EventArgs.Empty);
+
+        // Flip — mirror the view across the real axis by negating every CY
+        // limb (Hi + 3 low limbs) so deep-zoom precision survives. Re-parsing
+        // the textbox would drop the low limbs, so we mutate the view state
+        // directly and retrigger.
+        FloatingMenu.FlipClick         += (_, _) => FlipVertical();
+
+        // Slideshow settings — host pops the ported Avalonia dialog seeded
+        // from the persisted SlideshowSettings, then writes back on OK.
+        FloatingMenu.SlideshowSettingsClick += (_, _) => SlideshowSettingsRequested?.Invoke(this, EventArgs.Empty);
+
         // FrameCompleted: refresh the menu's CX/CY/Zoom/Iter textboxes so
         // the user sees the live values without typing them manually. Skips
         // whichever box currently has focus — that's owned by ViewModelBase
@@ -196,6 +212,24 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         return string.Format(CultureInfo.InvariantCulture,
             "CX = {0:G12}\nCY = {1:G12}\nZoom = {2:G6}",
             s.CenterX, s.CenterY, s.Zoom);
+    }
+
+    /// <summary>Mirror the view across the real axis: negate all four CY
+    /// limbs so deep-zoom precision survives, mirror the menu CY textbox,
+    /// then retrigger. No-op when already on the axis.</summary>
+    private void FlipVertical()
+    {
+        var s = Main.ViewState;
+        if (s.CenterY == 0.0 && s.CenterYLo == 0.0 && s.CenterY2 == 0.0 && s.CenterY3 == 0.0)
+            return;
+
+        s.CenterY  = -s.CenterY;
+        s.CenterYLo = -s.CenterYLo;
+        s.CenterY2 = -s.CenterY2;
+        s.CenterY3 = -s.CenterY3;
+
+        FloatingMenu.CY = s.CenterY.ToString("G12", CultureInfo.InvariantCulture);
+        Main.RenderHost.Trigger();
     }
 
     private void ApplyCoordsFromMenu()
@@ -377,6 +411,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Save the most-recent rendered frame to a PNG. Host pops a
     /// SaveFilePicker and writes the BGRA buffer.</summary>
     public event EventHandler? ScreenshotRequested;
+
+    /// <summary>Export user-defined regions to a JSON bundle. Host pops a
+    /// SaveFilePicker then calls IColorThemeService.ExportUserRegionsToFile.</summary>
+    public event EventHandler? ExportRegionsRequested;
+
+    /// <summary>Import regions from a JSON bundle. Host pops an OpenFilePicker
+    /// then calls IColorThemeService.ImportRegionsFromFile and refreshes the
+    /// region combo via <see cref="RefreshRegionListsFromService"/>.</summary>
+    public event EventHandler? ImportRegionsRequested;
+
+    /// <summary>Open the slideshow-settings dialog. Host seeds it from the
+    /// persisted SlideshowSettings and writes back on OK.</summary>
+    public event EventHandler? SlideshowSettingsRequested;
+
+    /// <summary>Re-pull region names from the service into the menu combo.
+    /// Called by the host after a successful import.</summary>
+    public void RefreshRegionListsFromService()
+    {
+        FloatingMenu.SetRegions(_themeService.EnumerateRegionNames());
+    }
 
     public void Dispose()
     {

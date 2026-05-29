@@ -353,6 +353,87 @@ namespace FracturingFog.Hosting
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Screenshot failed: {ex.Message}");
                 }
             };
+
+            // ── New #54 wires ────────────────────────────────────────────
+
+            // Export user regions — pick a path, then serialize the bundle.
+            shell.ExportRegionsRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_themeService == null) return;
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Export Custom Regions",
+                        suggestedName: "regions.json",
+                        filter: "JSON File (*.json)|*.json");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    var result = ((IColorThemeService)s_themeService).ExportUserRegionsToFile(path);
+                    if (!result.Success)
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Export Regions",
+                            result.ErrorMessage ?? "Export failed.",
+                            expectsConfirmation: false);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ExportRegions failed: {ex.Message}");
+                }
+            };
+
+            // Import regions — pick a path, merge, refresh the combo.
+            shell.ImportRegionsRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_themeService == null) return;
+                    string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                        "Import Custom Regions",
+                        filter: "JSON File (*.json)|*.json|All Files (*.*)|*.*");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    var result = ((IColorThemeService)s_themeService).ImportRegionsFromFile(path);
+                    if (result.Success)
+                    {
+                        shell.RefreshRegionListsFromService();
+                        if (result.Added == 0)
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Import Regions",
+                                "No new regions imported (all entries already exist).",
+                                expectsConfirmation: false);
+                    }
+                    else
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Regions",
+                            result.ErrorMessage ?? "Import failed.",
+                            expectsConfirmation: false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ImportRegions failed: {ex.Message}");
+                }
+            };
+
+            // Slideshow settings — load persisted settings, pop the dialog,
+            // write back on OK. The Avalonia shell doesn't run the slideshow
+            // engine yet (legacy Slideshow.cs stays intact per scope), but the
+            // settings round-trip so the values persist for when it lands.
+            shell.SlideshowSettingsRequested += async (_, _) =>
+            {
+                try
+                {
+                    var current = SlideshowSettingsStore.Load();
+                    var chosen = await AvaloniaDialogs.ShowSlideshowSettingsAsync(current, audioReactive: false);
+                    if (chosen != null)
+                        SlideshowSettingsStore.Save(chosen.Value.Settings);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] SlideshowSettings failed: {ex.Message}");
+                }
+            };
         }
 
         // Convenience helper for the SaveRegion handler — pulls MainViewModel
