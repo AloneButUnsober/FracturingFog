@@ -149,6 +149,16 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _spanButtonText, value);
     }
 
+    /// <summary>Label for the Video button. Flips between "Video" and "Stop"
+    /// while a single-shot video zoom or the video slideshow is running. The
+    /// ShellViewModel sets this when it forwards <see cref="VideoClick"/>.</summary>
+    private string _videoButtonText = "Video";
+    public string VideoButtonText
+    {
+        get => _videoButtonText;
+        set => this.RaiseAndSetIfChanged(ref _videoButtonText, value);
+    }
+
     /// <summary>Mirror an externally-driven region selection without firing
     /// <see cref="RegionComboChanged"/>. Used when the toolbar or theme editor
     /// jumps to a region and we want the menu combo to track it.</summary>

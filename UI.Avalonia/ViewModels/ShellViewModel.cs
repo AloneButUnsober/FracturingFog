@@ -28,6 +28,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
+using Avalonia.Threading;
 using FracturingFog.Help;
 using FracturingFog.Imaging;
 using FracturingFog.Input;
@@ -50,6 +51,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     /// <summary>Avalonia slideshow cycler. Lazily created on first Start.</summary>
     private SlideshowEngine? _slideshow;
+
+    /// <summary>Video Zoom engine — the same concrete object as the render
+    /// host (FractalRenderHost implements both IFractalRenderHost and
+    /// IVideoZoomController). Null only if the host doesn't implement it.</summary>
+    private readonly IVideoZoomController? _video;
 
     public ShellViewModel(
         IFractalRenderHost renderHost,
@@ -230,17 +236,59 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // Slideshow — toggle the Avalonia cycler (region + theme hard-cuts).
         // The ported VCR panel drives pause / skip / stop while it runs.
+        // The VCR transport is shared between the native region/theme cycler
+        // and the video slideshow. Each handler routes to whichever is active:
+        // the video controller takes precedence when its slideshow is running
+        // (Stop ends the run; SkipRegion/SkipTheme both advance the leg; the
+        // video slideshow has no pause).
         SlideshowVcr = new SlideshowVcrViewModel();
         SlideshowVcr.PlayPauseClicked += (_, _) =>
         {
+            if (_video is { IsSlideshowRunning: true }) return;
             _slideshow?.TogglePause();
             SlideshowVcr.SetPaused(_slideshow?.IsPaused ?? false);
         };
-        SlideshowVcr.StopClicked       += (_, _) => _slideshow?.Stop();
-        SlideshowVcr.SkipRegionClicked += (_, _) => _slideshow?.SkipRegion();
-        SlideshowVcr.SkipThemeClicked  += (_, _) => _slideshow?.SkipTheme();
+        SlideshowVcr.StopClicked += (_, _) =>
+        {
+            if (_video is { IsSlideshowRunning: true }) _video.Stop();
+            else _slideshow?.Stop();
+        };
+        SlideshowVcr.SkipRegionClicked += (_, _) =>
+        {
+            if (_video is { IsSlideshowRunning: true }) _video.SkipLeg();
+            else _slideshow?.SkipRegion();
+        };
+        SlideshowVcr.SkipThemeClicked += (_, _) =>
+        {
+            if (_video is { IsSlideshowRunning: true }) _video.SkipLeg();
+            else _slideshow?.SkipTheme();
+        };
 
         FloatingMenu.SlideshowClick += (_, _) => ToggleSlideshow();
+
+        // ── Video Zoom (#64) ─────────────────────────────────────────────
+        // The Video button toggles: while a single-shot zoom or the video
+        // slideshow runs, it stops; otherwise it asks the host to pop the
+        // dialog (host owns ShowVideoAsync — main-project FormHelpers / region
+        // library / ffmpeg lookups). Engine events fire on a background thread,
+        // so every VM mutation is marshalled to the UI thread.
+        _video = renderHost as IVideoZoomController;
+        FloatingMenu.VideoClick += (_, _) =>
+        {
+            if (_video is { IsRunning: true }) _video.Stop();
+            else VideoRequested?.Invoke(this, EventArgs.Empty);
+        };
+        if (_video != null)
+        {
+            _video.StatusChanged += (_, text) =>
+                Dispatcher.UIThread.Post(() => Main.SetStatus(text));
+            _video.Stopped += (_, _) =>
+                Dispatcher.UIThread.Post(() =>
+                {
+                    FloatingMenu.VideoButtonText = "Video";
+                    IsSlideshowVcrVisible = false;
+                });
+        }
 
         // FrameCompleted: refresh the menu's CX/CY/Zoom/Iter textboxes so
         // the user sees the live values without typing them manually. Skips
@@ -533,6 +581,32 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Render a high-resolution poster. Host pops the poster-size
     /// dialog + a SaveFilePicker, then runs the shared PosterRenderer.</summary>
     public event EventHandler? PosterRequested;
+
+    /// <summary>User clicked the Video button (and nothing is running). Host
+    /// pops the Avalonia VideoDialog; on OK it calls back into
+    /// <see cref="StartVideoFromRequest"/> with the collected request.</summary>
+    public event EventHandler? VideoRequested;
+
+    /// <summary>Begin a video zoom / slideshow from a request the host
+    /// collected via the dialog. Sets the button label + (slideshow) shows the
+    /// VCR transport, then drives the engine. Called on the UI thread.</summary>
+    public void StartVideoFromRequest(VideoZoomRequest request)
+    {
+        if (_video == null || request == null) return;
+        if (_video.IsRunning) return;
+
+        FloatingMenu.VideoButtonText = "Stop";
+        if (request.IsSlideshow)
+        {
+            SlideshowVcr.SetPaused(false);
+            IsSlideshowVcrVisible = true;
+            _video.StartSlideshow(request);
+        }
+        else
+        {
+            _video.StartVideo(request);
+        }
+    }
 
     /// <summary>Re-pull region names from the service into the menu combo.
     /// Called by the host after a successful import.</summary>
