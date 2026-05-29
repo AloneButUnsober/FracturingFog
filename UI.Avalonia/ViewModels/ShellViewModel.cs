@@ -43,6 +43,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private readonly IPaletteExtractionService? _paletteService;
     private readonly IHelpContentProvider _helpProvider;
 
+    /// <summary>True while the host window is in borderless multi-monitor
+    /// span mode. Toggled by the FloatingMenu Span button.</summary>
+    private bool _isSpanning;
+
     public ShellViewModel(
         IFractalRenderHost renderHost,
         IFractalInputController input,
@@ -204,6 +208,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 MessageSeverity.Question)
             { ExpectsConfirmation = true };
             DeleteThemeRequested?.Invoke(this, (args, Main.SelectedTheme!));
+        };
+
+        // Span — toggle borderless multi-monitor fullscreen. This VM owns the
+        // intent + button label; the host owns the actual Window geometry
+        // (SystemDecorations / position / size) and restores it on exit.
+        FloatingMenu.SpanClick += (_, _) =>
+        {
+            _isSpanning = !_isSpanning;
+            FloatingMenu.SpanButtonText = _isSpanning ? "Back" : "Span";
+            SpanToggleRequested?.Invoke(this, _isSpanning);
         };
 
         // FrameCompleted: refresh the menu's CX/CY/Zoom/Iter textboxes so
@@ -456,6 +470,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Delete an existing user theme. Args carry the confirmation
     /// prompt + the theme name to delete.</summary>
     public event EventHandler<(ThemeMessageEventArgs Confirm, string Name)>? DeleteThemeRequested;
+
+    /// <summary>Toggle borderless multi-monitor fullscreen. The bool payload
+    /// is true to enter span mode, false to restore the prior window geometry.
+    /// Host owns the Avalonia Window manipulation.</summary>
+    public event EventHandler<bool>? SpanToggleRequested;
 
     /// <summary>Re-pull region names from the service into the menu combo.
     /// Called by the host after a successful import.</summary>

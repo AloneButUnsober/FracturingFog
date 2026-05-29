@@ -92,7 +92,7 @@
                         <TextBlock Classes="section" Text="View" />
                         <UniformGrid Columns="4" Margin="0,4,0,0">
                             <Button Classes="action neutral" Content="Reset"  Command="{Binding ResetCommand}"      ToolTip.Tip="Reset view to default center and zoom" Margin="0,0,4,4" />
-                            <Button Classes="action neutral" Content="Span"   Command="{Binding SpanCommand}"       ToolTip.Tip="Span across all monitors" Margin="0,0,4,4" />
+                            <Button Classes="action neutral" Content="{Binding SpanButtonText}" Command="{Binding SpanCommand}" ToolTip.Tip="Span across all monitors" Margin="0,0,4,4" />
                             <Button Classes="action neutral" Content="Image"  Command="{Binding ScreenshotCommand}" ToolTip.Tip="High-resolution screenshot" Margin="0,0,4,4" />
                             <Button Classes="action neutral" Content="Poster" Command="{Binding PosterCommand}"     ToolTip.Tip="Print-ready poster image" Margin="0,0,0,4" />
                         </UniformGrid>
