@@ -51,6 +51,8 @@ namespace FracturingFog.Batch
 
             try
             {
+                if (opts.Remote)
+                    return RemoteBatchRunner.Run(opts);
                 return opts.Mode switch
                 {
                     BatchMode.Image => BatchRenderer.RenderImage(opts),
@@ -120,6 +122,13 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --keep-frames               Keep PNG frame folder after encode");
             Console.WriteLine("  --no-keep-frames            Delete PNG frame folder after encode");
             Console.WriteLine();
+            Console.WriteLine("Remote rendering (uses a saved FFClient connection + render preset):");
+            Console.WriteLine("  --remote                    Route this batch through a remote FracturingFog server");
+            Console.WriteLine("  --connection NAME           Saved client-connection name (required with --remote)");
+            Console.WriteLine("  --render NAME               Saved render-preset name (required with --remote)");
+            Console.WriteLine("                              Image vs video is decided by the preset's Mode field,");
+            Console.WriteLine("                              NOT by --mode. Match --out extension to the preset.");
+            Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine("  FracturingFog --batch --region \"Seahorse Valley\" --theme Fire \\");
             Console.WriteLine("                --width 3840 --height 2160 --out C:\\out\\seahorse.png");
@@ -129,6 +138,14 @@ namespace FracturingFog.Batch
             Console.WriteLine();
             Console.WriteLine("  FracturingFog --batch --mode video --region \"Mini Mandelbrot\" \\");
             Console.WriteLine("                --theme Plasma --lossless ffv1 --seconds 30 --out C:\\out\\");
+            Console.WriteLine();
+            Console.WriteLine("  Remote image (preset Mode = image):");
+            Console.WriteLine("  FracturingFog --batch --remote --connection render-box \\");
+            Console.WriteLine("                --render seahorse_4k --out C:\\out\\poster.png");
+            Console.WriteLine();
+            Console.WriteLine("  Remote video (preset Mode = video):");
+            Console.WriteLine("  FracturingFog --batch --remote --connection render-box \\");
+            Console.WriteLine("                --render seahorse_30s --out C:\\out\\zoom.mp4");
         }
     }
 }

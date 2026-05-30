@@ -93,6 +93,10 @@
                 <TextBox Classes="helpBody" Text="{Binding BatchText}" />
             </TabItem>
 
+            <TabItem Header="Client / Server">
+                <TextBox Classes="helpBody" Text="{Binding ClientServerText}" />
+            </TabItem>
+
             <TabItem Header="Audio">
                 <TextBox Classes="helpBody" Text="{Binding AudioText}" />
             </TabItem>

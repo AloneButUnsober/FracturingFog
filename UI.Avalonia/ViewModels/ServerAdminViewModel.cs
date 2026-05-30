@@ -1,0 +1,251 @@
+// ViewModels/ServerAdminViewModel.cs
+// Phase 3 server admin dialog. Polls server.status once per second while
+// the dialog is visible. Exposes Start/Restart/Kill controls that operate
+// on a local --server child process the UI spawns (Process.Start of own
+// exe). The Apply button rewrites ServerConfig and signals the running
+// server to soft-restart on next idle (v1: just kill + respawn).
+
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Reactive;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
+
+using Avalonia.Threading;
+using FracturingFog.Client;
+using FracturingFog.Server;
+using FracturingFog.Server.Protocol;
+using ReactiveUI;
+
+namespace FracturingFog.UI.Avalonia.ViewModels;
+
+public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
+{
+    private readonly DispatcherTimer _poll;
+    private Process? _childProc;
+    private bool _disposed;
+
+    public ServerAdminViewModel()
+    {
+        Config = ServerConfig.LoadOrDefault();
+        Port = Config.Port;
+        MaxMinutes = Config.MaxMinutes;
+        AllowOverride = Config.AllowOverride;
+
+        StartCommand   = ReactiveCommand.Create(Start);
+        RestartCommand = ReactiveCommand.Create(Restart);
+        KillCommand    = ReactiveCommand.Create(Kill);
+        ApplyCommand   = ReactiveCommand.Create(Apply);
+        RefreshCommand = ReactiveCommand.CreateFromTask(PollOnceAsync);
+        CloseCommand   = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+
+        _poll = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, async (_, _) =>
+        {
+            if (_disposed) return;
+            await PollOnceAsync();
+        });
+    }
+
+    public ServerConfig Config { get; private set; }
+
+    private int _port;
+    public int Port { get => _port; set => this.RaiseAndSetIfChanged(ref _port, value); }
+
+    private int _maxMinutes;
+    public int MaxMinutes { get => _maxMinutes; set => this.RaiseAndSetIfChanged(ref _maxMinutes, value); }
+
+    private bool _allowOverride;
+    public bool AllowOverride { get => _allowOverride; set => this.RaiseAndSetIfChanged(ref _allowOverride, value); }
+
+    private string _status = "Unknown";
+    public string Status { get => _status; set => this.RaiseAndSetIfChanged(ref _status, value); }
+
+    private bool _isOnline;
+    public bool IsOnline
+    {
+        get => _isOnline;
+        set => this.RaiseAndSetIfChanged(ref _isOnline, value);
+    }
+
+    private long _uptimeSeconds;
+    public long UptimeSeconds { get => _uptimeSeconds; set => this.RaiseAndSetIfChanged(ref _uptimeSeconds, value); }
+
+    private int _inFlight;
+    public int InFlight { get => _inFlight; set => this.RaiseAndSetIfChanged(ref _inFlight, value); }
+
+    private long _completed;
+    public long Completed { get => _completed; set => this.RaiseAndSetIfChanged(ref _completed, value); }
+
+    private long _failed;
+    public long Failed { get => _failed; set => this.RaiseAndSetIfChanged(ref _failed, value); }
+
+    private string? _lastError;
+    public string? LastError { get => _lastError; set => this.RaiseAndSetIfChanged(ref _lastError, value); }
+
+    public void StartPolling() => _poll.Start();
+    public void StopPolling()  => _poll.Stop();
+
+    public async Task PollOnceAsync()
+    {
+        // First cheap probe — TCP port. mTLS handshake costs more, so we
+        // only attempt a server.status RPC when the port is listening AND
+        // a client cert path is configured.
+        bool listening = ServerInstanceProbe.IsListening("127.0.0.1", Config.Port);
+        if (!listening)
+        {
+            IsOnline = false;
+            Status = "off";
+            return;
+        }
+        IsOnline = true;
+        Status = $"listening on 127.0.0.1:{Config.Port}";
+
+        // Try fetch detailed status if we have a self-signed bundle to use.
+        string certDir = ServerConfig.DefaultCertDir();
+        string clientPfx = Path.Combine(certDir, "client.pfx");
+        string caPfx     = Path.Combine(certDir, "ca.pfx");
+        if (!File.Exists(clientPfx) || !File.Exists(caPfx)) return;
+
+        try
+        {
+            await using var conn = await FFClientConnection.ConnectAsync(new FFClientConnection.ConnectOptions
+            {
+                Host = "127.0.0.1",
+                Port = Config.Port,
+                ClientCertPath = clientPfx,
+                ServerCaCertPath = caPfx,
+            }, CancellationToken.None).ConfigureAwait(true);
+
+            ServerStatusDto s = await conn.GetStatusAsync(CancellationToken.None).ConfigureAwait(true);
+            UptimeSeconds = s.UptimeSeconds;
+            InFlight = s.InFlight;
+            Completed = s.Completed;
+            Failed = s.Failed;
+            LastError = string.IsNullOrEmpty(s.LastErrorCode) ? null : $"{s.LastErrorCode}: {s.LastErrorMessage}";
+            Status = $"running, queue={s.InFlight}/{s.QueueDepth}, completed={s.Completed}, max={s.MaxMinutes}min";
+        }
+        catch (Exception ex)
+        {
+            Status = $"listening but status RPC failed: {ex.Message}";
+        }
+    }
+
+    private void Start()
+    {
+        if (IsOnline)
+        {
+            LastError = "already running";
+            return;
+        }
+        SpawnChild();
+    }
+
+    private void Restart()
+    {
+        Kill();
+        Thread.Sleep(300);
+        SpawnChild();
+    }
+
+    private void Kill()
+    {
+        try
+        {
+            if (_childProc != null && !_childProc.HasExited)
+            {
+                _childProc.Kill(entireProcessTree: false);
+                _childProc.WaitForExit(2000);
+            }
+        }
+        catch { }
+        _childProc = null;
+    }
+
+    private void SpawnChild()
+    {
+        try
+        {
+            string exe = Process.GetCurrentProcess().MainModule?.FileName
+                       ?? Assembly.GetEntryAssembly()?.Location
+                       ?? "FracturingFog.exe";
+            var psi = new ProcessStartInfo
+            {
+                FileName = exe,
+                UseShellExecute = true,
+                CreateNoWindow = false,
+                WindowStyle = ProcessWindowStyle.Normal,
+            };
+            psi.ArgumentList.Add("--server");
+            psi.ArgumentList.Add("--port"); psi.ArgumentList.Add(Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add("--max-minutes"); psi.ArgumentList.Add(MaxMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (AllowOverride) psi.ArgumentList.Add("--allow-override");
+
+            _childProc = Process.Start(psi);
+            LastError = _childProc != null ? "child started" : "child failed to start";
+        }
+        catch (Exception ex)
+        {
+            LastError = "start failed: " + ex.Message;
+        }
+    }
+
+    private void Apply()
+    {
+        Config.Port = Port;
+        Config.MaxMinutes = MaxMinutes;
+        Config.AllowOverride = AllowOverride;
+        try { Config.Save(); }
+        catch (Exception ex) { LastError = "save failed: " + ex.Message; return; }
+
+        // The running server picked up --max-minutes / --allow-override at
+        // spawn and does not re-read server-config.json. The previous
+        // behaviour ("config saved" but render still uses the old timeout)
+        // was misleading — users would change Max minutes to 1 and watch a
+        // 144-second render complete because the running server still had
+        // its startup value. Auto-restart when we own the child so the new
+        // settings take effect immediately; otherwise surface that the
+        // running server must be restarted out-of-band.
+        bool childOwned = _childProc != null && !_childProc.HasExited;
+        if (childOwned)
+        {
+            try
+            {
+                Restart();
+                LastError = $"config saved and child restarted (max={MaxMinutes}min, port={Port})";
+            }
+            catch (Exception ex)
+            {
+                LastError = "config saved, child restart failed: " + ex.Message;
+            }
+            return;
+        }
+
+        if (IsOnline)
+        {
+            LastError = "config saved BUT a server is running that this UI did not spawn — " +
+                        "stop it and start a new one for the new settings to take effect";
+        }
+        else
+        {
+            LastError = "config saved (server is off — new settings apply on next Start)";
+        }
+    }
+
+    public ReactiveCommand<Unit, Unit> StartCommand { get; }
+    public ReactiveCommand<Unit, Unit> RestartCommand { get; }
+    public ReactiveCommand<Unit, Unit> KillCommand { get; }
+    public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
+    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+
+    public event EventHandler? CloseRequested;
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _poll.Stop();
+    }
+}

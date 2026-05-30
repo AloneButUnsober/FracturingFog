@@ -1,0 +1,104 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        mc:Ignorable="d"
+        x:Class="FracturingFog.UI.Avalonia.Views.ServerAdminView"
+        x:DataType="vm:ServerAdminViewModel"
+        Title="FracturingFog — Server Admin"
+        Width="520" Height="520"
+        MinWidth="460" MinHeight="420"
+        Background="#171717">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#DDD" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Background" Value="#1B1B1B" />
+            <Setter Property="BorderBrush" Value="#2E2E2E" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#2E6BC8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="12,5" />
+        </Style>
+        <Style Selector="Button.danger">
+            <Setter Property="Background" Value="#A03333" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="12,5" />
+        </Style>
+    </Window.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="12">
+
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Local Server Status" />
+                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="State" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding Status}" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Uptime (s)" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding UptimeSeconds}" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="In-flight" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding InFlight}" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Completed" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding Completed}" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Failed" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Classes="value" Text="{Binding Failed}" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Last error" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="5" Grid.Column="1" Classes="value" Text="{Binding LastError}" Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Configuration" />
+                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Port" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding Port}" Minimum="1" Maximum="65535" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Max minutes" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding MaxMinutes}" Minimum="1" Maximum="10000" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Allow override" Margin="0,4,0,0" />
+                        <CheckBox  Grid.Row="2" Grid.Column="1" IsChecked="{Binding AllowOverride}" Margin="0,4,0,0"
+                                   Foreground="#EEE"
+                                   ToolTip.Tip="Honour client requestedMaxMinutes above the default" />
+                    </Grid>
+                    <Button Classes="primary" Content="Apply (saves config)" Command="{Binding ApplyCommand}"
+                            HorizontalAlignment="Right" Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Lifecycle" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Classes="primary" Content="Start"   Command="{Binding StartCommand}" />
+                        <Button Classes="primary" Content="Restart" Command="{Binding RestartCommand}" />
+                        <Button Classes="danger"  Content="Kill"    Command="{Binding KillCommand}" />
+                        <Button Classes="primary" Content="Refresh" Command="{Binding RefreshCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
+        </StackPanel>
+    </ScrollViewer>
+</Window>

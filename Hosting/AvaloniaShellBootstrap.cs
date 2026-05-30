@@ -213,6 +213,11 @@ namespace FracturingFog.Hosting
 
             WireShellHostEvents(s_shell);
 
+            // Phase 3: start the 5-second probe that drives the status-bar
+            // "● Server: running / off" indicator. Uses the default server
+            // port (47823) unless a server-config.json under %APPDATA% overrides.
+            s_shell.StartServerPing(FracturingFog.Server.ServerConfig.LoadOrDefault().Port);
+
             // ── Surface lifetime ─────────────────────────────────────────
             surface.Resized += OnSurfaceResized;
             surface.HandleLost += (_, _) => Shutdown();

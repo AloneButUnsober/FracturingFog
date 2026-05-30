@@ -57,6 +57,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ReloadThemesCommand     = MakeCmd(() => ReloadThemesClick?.Invoke(this, EventArgs.Empty));
         EditThemeCommand        = MakeCmd(() => EditThemeClick?.Invoke(this, EventArgs.Empty));
         SlideshowSettingsCommand= MakeCmd(() => SlideshowSettingsClick?.Invoke(this, EventArgs.Empty));
+        ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
+        ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
     }
 
     private static ReactiveCommand<Unit, Unit> MakeCmd(Action a) => ReactiveCommand.Create(a);
@@ -473,6 +475,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ReloadThemesCommand { get; }
     public ReactiveCommand<Unit, Unit> EditThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> ServerCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClientCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
 
@@ -498,6 +502,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? ReloadThemesClick;
     public event EventHandler? EditThemeClick;
     public event EventHandler? SlideshowSettingsClick;
+    public event EventHandler? ServerClick;
+    public event EventHandler? ClientClick;
 
     public event EventHandler<string>? RegionComboChanged;
     public event EventHandler<string>? ColorThemeChanged;

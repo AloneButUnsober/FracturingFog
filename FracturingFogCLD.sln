@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Rendering.Sil
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Rendering.Skia", "Rendering.Skia\FracturingFog.Rendering.Skia.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Server", "Server\FracturingFog.Server.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Client", "Client\FracturingFog.Client.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -58,6 +62,18 @@ Global
 		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Publish|x64.Build.0 = Release|x64
 		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Release|x64.ActiveCfg = Release|x64
 		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

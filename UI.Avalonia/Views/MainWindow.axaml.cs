@@ -37,6 +37,8 @@ public sealed partial class MainWindow : Window
     private FloatingMenuView? _menuWin;
     private ColorThemeEditorView? _editorWin;
     private FloatingHelpView? _helpWin;
+    private FFClientView? _ffClientWin;
+    private ServerAdminView? _serverAdminWin;
 
     // Set true in OnClosed so per-window Closing handlers stop cancelling
     // the close (otherwise app shutdown leaves child windows orphaned).
@@ -213,6 +215,14 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.Help):
                 SyncHelp();
                 break;
+            case nameof(ShellViewModel.IsFFClientVisible):
+            case nameof(ShellViewModel.FFClient):
+                SyncFFClient();
+                break;
+            case nameof(ShellViewModel.IsServerAdminVisible):
+            case nameof(ShellViewModel.ServerAdmin):
+                SyncServerAdmin();
+                break;
         }
     }
 
@@ -296,6 +306,60 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncFFClient()
+    {
+        if (_shell == null) return;
+        if (_shell.IsFFClientVisible && _shell.FFClient != null)
+        {
+            if (_ffClientWin == null)
+            {
+                _ffClientWin = new FFClientView { DataContext = _shell.FFClient };
+                _ffClientWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsFFClientVisible = false;
+                };
+            }
+            else if (_ffClientWin.DataContext != _shell.FFClient)
+            {
+                _ffClientWin.DataContext = _shell.FFClient;
+            }
+            if (!_ffClientWin.IsVisible) _ffClientWin.Show(this);
+        }
+        else
+        {
+            _ffClientWin?.Hide();
+        }
+    }
+
+    private void SyncServerAdmin()
+    {
+        if (_shell == null) return;
+        if (_shell.IsServerAdminVisible && _shell.ServerAdmin != null)
+        {
+            if (_serverAdminWin == null)
+            {
+                _serverAdminWin = new ServerAdminView { DataContext = _shell.ServerAdmin };
+                _serverAdminWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsServerAdminVisible = false;
+                };
+            }
+            else if (_serverAdminWin.DataContext != _shell.ServerAdmin)
+            {
+                _serverAdminWin.DataContext = _shell.ServerAdmin;
+            }
+            if (!_serverAdminWin.IsVisible) _serverAdminWin.Show(this);
+        }
+        else
+        {
+            _serverAdminWin?.Hide();
+        }
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         _shuttingDown = true;
@@ -305,6 +369,8 @@ public sealed partial class MainWindow : Window
         _menuWin?.Close();
         _editorWin?.Close();
         _helpWin?.Close();
+        _ffClientWin?.Close();
+        _serverAdminWin?.Close();
 
         DetachShell();
     }

@@ -60,6 +60,13 @@
       bootstrap step IGpuSurface is the only shared contract needed.
     -->
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <!--
+      Phase 3 — FFClient dialog + ServerAdmin dialog consume the mTLS
+      JSON-RPC client + the AES-GCM credential vault. ServerAdmin also
+      polls the server.status RPC and surfaces the same protocol DTOs.
+    -->
+    <ProjectReference Include="..\Server\FracturingFog.Server.csproj" />
+    <ProjectReference Include="..\Client\FracturingFog.Client.csproj" />
   </ItemGroup>
 
 </Project>

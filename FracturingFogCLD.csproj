@@ -57,21 +57,29 @@
     <Compile Remove="Rendering.Silk\**" />
     <Compile Remove="Rendering.Silk.Smoke\**" />
     <Compile Remove="Rendering.Skia\**" />
+    <Compile Remove="Server\**" />
+    <Compile Remove="Client\**" />
     <None Remove="Abstractions\**" />
     <None Remove="UI.Avalonia\**" />
     <None Remove="Rendering.Silk\**" />
     <None Remove="Rendering.Silk.Smoke\**" />
     <None Remove="Rendering.Skia\**" />
+    <None Remove="Server\**" />
+    <None Remove="Client\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
     <EmbeddedResource Remove="Rendering.Silk\**" />
     <EmbeddedResource Remove="Rendering.Silk.Smoke\**" />
     <EmbeddedResource Remove="Rendering.Skia\**" />
+    <EmbeddedResource Remove="Server\**" />
+    <EmbeddedResource Remove="Client\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
     <Content Remove="Rendering.Silk\**" />
     <Content Remove="Rendering.Silk.Smoke\**" />
     <Content Remove="Rendering.Skia\**" />
+    <Content Remove="Server\**" />
+    <Content Remove="Client\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
       items automatically from anywhere under the project root. Strip the UI
@@ -133,6 +141,17 @@
       drivers. Default behaviour is unchanged.
     -->
     <ProjectReference Include="Rendering.Skia\FracturingFog.Rendering.Skia.csproj" />
+    <!--
+      Phase 3 headless server engine. The WinExe hosts FFServer under
+      the server CLI flag. Stays UI-free; no Avalonia bleed.
+    -->
+    <ProjectReference Include="Server\FracturingFog.Server.csproj" />
+    <!--
+      Phase 3 client lib (mTLS JSON-RPC consumer + persistence). Shared
+      between the Avalonia FFClient dialog and the WinExe headless batch
+      remote path.
+    -->
+    <ProjectReference Include="Client\FracturingFog.Client.csproj" />
   </ItemGroup>
 
   <!--

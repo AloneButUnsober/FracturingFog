@@ -5,6 +5,7 @@ using System.Windows.Forms;
 
 using FracturingFog.Benchmarks;
 using FracturingFog.Batch;
+using FracturingFog.ServerHost;
 
 namespace FracturingFog;
 
@@ -43,6 +44,12 @@ static class Program
         // progress meter is visible from cmd/PowerShell.
         if (args.Length > 0 && (args[0] == "--batch" || args[0] == "-b"))
             return BatchEntry.Run(args);
+
+        // Headless render server: JSON-RPC over mTLS TCP, reuses the same
+        // PosterRenderer + video pipeline the --batch path drives. Mutex
+        // gated so only one server instance runs per machine.
+        if (args.Length > 0 && args[0] == "--server")
+            return ServerEntry.Run(args);
 
         // --winforms forces the legacy WinForms shell. Default path is the
         // Avalonia shell.

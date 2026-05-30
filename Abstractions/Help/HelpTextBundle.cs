@@ -2633,5 +2633,221 @@ JSON.
     not z_(n−1).  True Phoenix-style recurrences cannot be
     expressed directly.
 ";
+
+        public const string ClientServerText =
+@"=== Fracturing Fog — Client / Server ===
+
+Render fractals on one machine, drive the render from another. The same
+FracturingFog.exe runs in three modes:
+
+    UI            FracturingFog.exe                      (default)
+    Server        FracturingFog.exe --server [opts]      (headless)
+    Remote batch  FracturingFog.exe --batch --remote ... (headless)
+
+All traffic is mutual TLS (mTLS). Saved cert passwords on the client are
+encrypted with AES-GCM under a master password the user enters once per
+UI session.
+
+=== 1. Starting the server ===
+
+  FracturingFog.exe --server
+
+On first run, the server creates a self-signed cert bundle in:
+
+  %APPDATA%\FracturingFog\server-certs\
+      ca.pfx       (trust root)
+      server.pfx   (server identity)
+      client.pfx   (client identity — give to each client)
+
+By default the server binds loopback only (127.0.0.1). To accept
+connections from other machines:
+
+  FracturingFog.exe --server --bind 0.0.0.0
+
+Server CLI flags:
+
+  --bind ADDR        127.0.0.1 by default. 0.0.0.0 = all interfaces.
+  --port N           TCP port. Default 47823.
+  --max-minutes N    Per-job render ceiling. Default 240.
+  --allow-override   Let client request a longer timeout.
+  --queue-depth N    Max queued jobs. Default 1. Excess → 'busy'.
+  --cert PATH        Override server identity PFX.
+  --client-ca PATH   Override CA used to validate client certs.
+  --log-dir PATH     %APPDATA%\FracturingFog\server-logs\ by default.
+  --work-dir PATH    %APPDATA%\FracturingFog\server-work\ by default.
+
+The Server… admin dialog (Floating Menu → Server…) shows the local
+server's status, lets you edit max-minutes / allow-override / queue
+depth, and offers Start / Restart / Kill for a local --server child
+process. It does not control remote servers.
+
+Status bar shows green ● Server when a local server is listening on
+the configured port.
+
+=== 2. Certificate setup ===
+
+Same machine (loopback):
+
+  1. Run FracturingFog.exe --server once.
+  2. Client dialog → Client cert → browse to %APPDATA%\FracturingFog\
+     server-certs\client.pfx.
+  3. Server CA → ca.pfx from the same folder.
+  4. Cert password is blank (dev certs have none).
+
+Different machine:
+
+  1. On the server host: FracturingFog.exe --server --bind 0.0.0.0.
+  2. Copy client.pfx + ca.pfx to the client over a trusted channel
+     (encrypted USB, SCP — do NOT email them).
+  3. Client dialog browses to the copies. Leave Cert password blank.
+
+Production / shared deployment:
+
+  Generate per-user client certs signed by the same CA via your own
+  PKI (openssl / dotnet / corporate CA). Each user gets their own
+  client.pfx; all trust the same server. Store the .pfx with a
+  password and enter that password in the Cert password field — it
+  will be sealed under your master password.
+
+=== 3. Master password ===
+
+The first time you Save a connection with a non-empty cert password,
+the master password becomes the vault key. Every subsequent session
+must enter the SAME master password to decrypt saved entries.
+
+  • Empty vault: any password works (the first save sets it).
+  • Existing sealed entries: Unlock attempts a decrypt to verify.
+  • No recovery. Forgotten master pw → delete
+    %APPDATA%\FracturingFog\client-connections.json and re-add.
+
+The master password is held in process memory only. Closing the UI
+clears it.
+
+=== 4. Client dialog ===
+
+  Connection group:    pick / save / delete a named server target.
+                       Browse to client cert + server CA. Cert pw
+                       is optional.
+
+  Render preset group: name + Mode (image / video — banner above
+                       turns orange for video) + Fractal (filtered:
+                       UserEquation / Sandbox / UserBulb removed) +
+                       Region / Theme (editable comboboxes) +
+                       Quality + Size + Manual coords + Video
+                       sub-form.
+
+  Output group:        path (blank = prompt on response) + return
+                       mode (inline = bytes over TLS; saved-path =
+                       server keeps + returns the path).
+
+  Render button:       label tracks Mode — reads 'Render Image' when
+                       Mode = image, 'Render Video' when Mode = video.
+                       Runs once; disabled while in-flight. Status
+                       line shows Connecting → Rendering → Done
+                       (NNN ms, WxH). Errors in red.
+
+=== 4a. Rendering a video from the Client dialog ===
+
+The same dialog produces both stills and videos — the Mode combo
+decides which, and the Render button relabels itself.
+
+  1. Unlock master password.
+  2. Pick a saved connection.
+  3. In the Render Preset group, set Mode = video.
+     • The banner above the form turns orange and reads
+       '▶ VIDEO MODE — output will be an MP4/MKV'.
+     • The Render button at the bottom reads 'Render Video'.
+  4. Set the end target with a Region (recommended) or Manual
+     coords/zoom.
+  5. In the 'Video options' sub-form near the bottom:
+        seconds      duration of the clip (0.5–600)
+        fps          frame rate (1–240, typical 30 or 60)
+        start zoom   how zoomed-out frame 0 is (e.g. 0.5 = full
+                     set, then animates IN to the region's zoom)
+        reverse      tick to animate OUT instead
+        lossless     none = browser-friendly MP4 (default)
+                     h264 = lossless MP4 via ffmpeg
+                     ffv1 = lossless MKV via ffmpeg
+                     h264hq = high-quality (near-lossless) MP4
+  6. Output: set a local file path ending .mp4 (or .mkv for ffv1),
+     or leave blank to be prompted on completion.
+  7. Click 'Render Video'. Server renders, encodes, returns bytes.
+
+Notes:
+  • Lossless h264 / ffv1 / h264hq require ffmpeg.exe on the SERVER's
+    PATH. The 'none' preset uses the built-in Mp4Writer.
+  • Inline (default) streams the file back in 1 MB chunks. For long
+    videos pick return mode 'saved-path' so the server keeps the file
+    and just returns its path (you read it later over file share).
+  • Total bytes can be large — a 60-second 4K lossless render is
+    multi-GB. The 'none' preset is usually the right starting point.
+
+=== 5. Batch / remote batch ===
+
+Headless single render against a saved connection + saved preset.
+Image OR video — the preset's Mode field drives which path runs.
+The CLI prints 'mode : image' or 'mode : video' on startup so you
+can confirm before the render begins.
+
+  Image:
+    FracturingFog.exe --batch --remote ^
+        --connection NAME ^
+        --render NAME ^
+        --out C:\out\poster.png
+
+  Video (the preset's Mode = video):
+    FracturingFog.exe --batch --remote ^
+        --connection NAME ^
+        --render NAME ^
+        --out C:\out\zoom.mp4
+
+If your preset's Mode = video but you pass an .png path to --out,
+the bytes are still video bytes — name --out to match what the
+preset produces (.mp4 / .mkv).
+
+The CLI prompts for the master password on stdin (no echo), unlocks
+the vault, runs the same protocol the UI uses, writes returned bytes
+to --out. Exit 0 on success.
+
+=== 6. Common errors ===
+
+  forbidden-fractal   Preset (or its region tag) names UserEquation /
+                      Sandbox / UserBulb. Pick another type.
+  unknown-region      Region not in the server's library. Save it
+                      server-side or switch to manual coords.
+  unknown-theme       Theme not in the server's library.
+  bad-request         Out-of-range dimensions / video seconds / fps.
+                      Limits: 16-32768 px, 0.5-600 s, 1-240 fps,
+                      64 megapixel ceiling.
+  timeout             Render took longer than --max-minutes.
+  busy                Server queue full. Retry or raise queue depth.
+  ArgumentException   Saved connection has no client cert path.
+    'path'            Open it, browse to the .pfx, Save again.
+  Wrong password      Master pw mismatch. See section 3.
+  Hangs on Connect    Wrong host/port, firewall, or server bound
+                      loopback-only.
+
+=== 7. Security summary ===
+
+  • Server defaults to loopback only. --bind 0.0.0.0 is a conscious
+    step before exposing on a network.
+  • mTLS — server rejects any client that does not chain to its CA.
+  • User-code fractal types blocked at the protocol layer.
+  • Per-job timeouts + queue cap + 32 concurrent TLS session limit.
+  • Image cap 32768 × 32768; default 64-megapixel pixel ceiling.
+  • Vault: AES-GCM, PBKDF2-SHA256 200k iterations, per-entry salt.
+  • Dev certs are convenient for localhost. For network deployment
+    issue real certs via your own PKI and pass them via --cert /
+    --client-ca.
+
+=== 8. File locations ===
+
+  %APPDATA%\FracturingFog\server-config.json
+  %APPDATA%\FracturingFog\server-certs\*.pfx
+  %APPDATA%\FracturingFog\server-logs\*.log
+  %APPDATA%\FracturingFog\server-work\
+  %APPDATA%\FracturingFog\client-connections.json   (sealed)
+  %APPDATA%\FracturingFog\client-render-presets.json
+";
     }
 }
