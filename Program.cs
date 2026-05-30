@@ -4,6 +4,7 @@ using System;
 using System.Windows.Forms;
 
 using FracturingFog.Benchmarks;
+using FracturingFog.Batch;
 
 namespace FracturingFog;
 
@@ -37,11 +38,20 @@ static class Program
             }
         }
 
-        // Phase 2 bootstrap: --avalonia launches the new responsive shell.
-        // Default path stays on WinForms so existing workflow is unaffected
-        // until every dialog has been ported and the Avalonia shell reaches
-        // feature parity. See PHASE2_AVALONIA_MIGRATION.md for status.
-        if (args.Length > 0 && args[0] == "--avalonia")
+        // Headless batch processing: render single image or zoom video to disk
+        // without showing any UI. Attaches to the parent console so the
+        // progress meter is visible from cmd/PowerShell.
+        if (args.Length > 0 && (args[0] == "--batch" || args[0] == "-b"))
+            return BatchEntry.Run(args);
+
+        // --winforms forces the legacy WinForms shell. Default path is the
+        // Avalonia shell.
+        bool forceWinForms = false;
+        foreach (var a in args)
+            if (string.Equals(a, "--winforms", StringComparison.OrdinalIgnoreCase))
+                { forceWinForms = true; break; }
+
+        if (!forceWinForms)
             return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
                 args,
                 FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);
