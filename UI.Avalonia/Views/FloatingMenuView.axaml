@@ -117,7 +117,8 @@
                 <Border Classes="group">
                     <StackPanel Spacing="6">
                         <TextBlock Classes="section" Text="Region Navigation" />
-                        <ComboBox ItemsSource="{Binding RegionNames}"
+                        <ComboBox x:Name="RegionCombo"
+                                  ItemsSource="{Binding RegionNames}"
                                   SelectedItem="{Binding SelectedRegion}"
                                   HorizontalAlignment="Stretch"
                                   Margin="0,4,0,0" />
@@ -168,7 +169,8 @@
                 <Border Classes="group">
                     <StackPanel Spacing="6">
                         <TextBlock Classes="section" Text="Color Themes" />
-                        <ComboBox ItemsSource="{Binding ThemeNames}"
+                        <ComboBox x:Name="ThemeCombo"
+                                  ItemsSource="{Binding ThemeNames}"
                                   SelectedItem="{Binding SelectedTheme}"
                                   HorizontalAlignment="Stretch"
                                   Margin="0,4,0,0" />

@@ -94,7 +94,8 @@
                             <TextBlock Classes="section" Text="Target" />
                             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Region:" Margin="0,0,8,4" />
-                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                <ComboBox x:Name="RegionCombo"
+                                          Grid.Row="0" Grid.Column="1"
                                           ItemsSource="{Binding RegionNames}"
                                           SelectedItem="{Binding SelectedRegion}"
                                           Margin="0,0,0,4">
@@ -105,7 +106,8 @@
                                     </ComboBox.Styles>
                                 </ComboBox>
                                 <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Theme:" Margin="0,0,8,0" />
-                                <ComboBox Grid.Row="1" Grid.Column="1"
+                                <ComboBox x:Name="ThemeCombo"
+                                          Grid.Row="1" Grid.Column="1"
                                           ItemsSource="{Binding ThemeNames}"
                                           SelectedItem="{Binding SelectedTheme}"
                                           HorizontalAlignment="Stretch" />

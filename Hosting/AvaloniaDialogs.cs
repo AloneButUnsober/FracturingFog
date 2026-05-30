@@ -30,6 +30,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
+using FracturingFog.Audio;
 using FracturingFog.Imaging;
 using FracturingFog.UI.Avalonia.ViewModels;
 using FracturingFog.UI.Avalonia.Views;
@@ -198,6 +199,10 @@ namespace FracturingFog.Hosting
             {
                 var vm = new SlideshowSettingsViewModel(current, audioReactive);
                 var win = new SlideshowSettingsView { DataContext = vm };
+                // Audio… button — open the audio-reactive settings dialog as a
+                // nested modal owned by this window. Without this wiring the
+                // button raised its event into the void (the dialog never showed).
+                vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
                 win.Closed += (_, _) =>
                 {
                     if (tcs.Task.IsCompleted) return;
@@ -208,6 +213,58 @@ namespace FracturingFog.Hosting
                 };
                 var owner = ActiveMainWindow;
                 if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
+        // ── Audio-reactive settings ────────────────────────────────────────────
+
+        /// <summary>
+        /// Opens the Avalonia <see cref="AudioSettingsView"/> bound to a fresh
+        /// <see cref="AudioSettingsViewModel"/> seeded from the persisted
+        /// <see cref="AudioSettingsStore"/>. Persists the edited settings on OK.
+        /// Shown as a nested modal owned by <paramref name="owner"/> (the
+        /// Slideshow-Settings dialog). No live meter pump is wired here — there
+        /// is no active beat source in the settings context, so BPM/level read
+        /// "—" (the VM degrades gracefully when liveSource is null).
+        /// </summary>
+        public static Task ShowAudioSettingsAsync(Window? owner)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            void Run()
+            {
+                var current = AudioSettingsStore.Load();
+                var vm = new AudioSettingsViewModel(current, liveSource: null);
+                var win = new AudioSettingsView { DataContext = vm };
+
+                // Browse… → Avalonia open-file picker; push the chosen path back.
+                vm.BrowseFileRequested += async (_, _) =>
+                {
+                    var path = await PickOpenFileAsync(
+                        "Choose Audio File",
+                        "Audio (*.mp3;*.wav;*.flac;*.ogg)|*.mp3;*.wav;*.flac;*.ogg|All files (*.*)|*.*");
+                    if (!string.IsNullOrEmpty(path)) vm.FilePath = path!;
+                };
+
+                // OK commits vm.Result; persist it. Cancel raises false → no save.
+                vm.CloseRequested += (_, ok) =>
+                {
+                    if (ok)
+                    {
+                        try { AudioSettingsStore.Save(vm.Result); } catch { }
+                    }
+                };
+
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
+
+                if (owner != null) _ = win.ShowDialog(owner);
+                else if (ActiveMainWindow != null) _ = win.ShowDialog(ActiveMainWindow);
                 else win.Show();
             }
 

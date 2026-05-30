@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text.Encodings.Web;
@@ -71,6 +72,85 @@ namespace FracturingFog.Hosting
             foreach (var r in FractalRegionLibrary.Instance.All)
                 list.Add(r.Name);
             return list;
+        }
+
+        // ── Sort-aware combo enumeration (parity with WinForms Controls.cs) ──
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateThemeNames(ThemeSortMode mode, string? kindFilter, bool editableOnly)
+        {
+            // Force user-library reload so freshly-imported themes appear.
+            ColorPalette.LoadUserThemes();
+
+            bool Allow(string n) => !editableOnly || IsThemeEditable(n);
+            var result = new List<string>();
+
+            switch (mode)
+            {
+                case ThemeSortMode.All:
+                    result.AddRange(CollectAllThemeNames().Where(Allow));
+                    break;
+
+                case ThemeSortMode.ByKind:
+                    if (Enum.TryParse<ColorPaletteType>(kindFilter, out var k))
+                    {
+                        var byKind = ColorPalette.GetPalettesByType(k);
+                        result.AddRange(byKind.ToImmutableSortedDictionary().Keys.Where(Allow));
+                    }
+                    break;
+
+                default: // Default — grouped by kind with "— {kind} —" headers
+                    foreach (var type in Enum.GetValues<ColorPaletteType>())
+                    {
+                        var palettes = ColorPalette.GetPalettesByType(type);
+                        if (palettes.Count == 0) continue;
+                        var names = palettes.ToImmutableSortedDictionary().Keys.Where(Allow).ToList();
+                        if (names.Count == 0) continue;
+                        result.Add($"— {type} —");
+                        result.AddRange(names);
+                    }
+                    break;
+            }
+            return result;
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateThemeKinds()
+            => Enum.GetValues<ColorPaletteType>().Select(t => t.ToString()).ToList();
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateRegionNames(RegionSortMode mode, FractalType typeFilter)
+        {
+            var result = new List<string> { "— select region —" };
+
+            IEnumerable<FractalRegion> source = FractalRegionLibrary.Instance.All;
+            IEnumerable<FractalRegion> regions = mode == RegionSortMode.ByFractalType
+                ? source.Where(r => r.FractalType == typeFilter)
+                        .OrderBy(r => r.IsBuiltIn ? 0 : 1).ThenBy(r => r.Name)
+                : source.OrderBy(r => r.IsBuiltIn ? 0 : 1).ThenBy(r => r.Name);
+
+            foreach (var r in regions) result.Add(r.Name);
+            return result;
+        }
+
+        /// <summary>True when a theme round-trips through
+        /// <see cref="DataDrivenColorThemes.Export"/> (i.e. it can be opened in
+        /// the Color Theme Editor). Mirrors Controls.IsThemeEditable.</summary>
+        private static bool IsThemeEditable(string name)
+        {
+            var map = ColorPalette.GetPaletteByName(name);
+            return map != null && DataDrivenColorThemes.Export(map) != null;
+        }
+
+        /// <summary>Every theme name across all kinds, flat Ordinal-alphabetical.
+        /// Mirrors Controls.CollectAllThemeNames.</summary>
+        private static IEnumerable<string> CollectAllThemeNames()
+        {
+            var names = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var type in Enum.GetValues<ColorPaletteType>())
+                foreach (var name in ColorPalette.GetPalettesByType(type).Keys)
+                    names.Add(name);
+            return names;
         }
 
         public ColorThemeDef? LoadTheme(string themeName)
@@ -155,18 +235,92 @@ namespace FracturingFog.Hosting
             state.CenterY2 = region.CenterY2; state.CenterY3  = region.CenterY3;
             state.Zoom = region.Zoom > 0 ? region.Zoom : state.Zoom;
             state.FractalType = region.FractalType;
+            // Source-compiled types (UserEquation / Sandbox / UserBulb) carry
+            // their equation by name in the region. Pull the live source from the
+            // store into FractalParameters + force a recompile so the calculator
+            // renders the right equation instead of a blank in-set fill. Mirrors
+            // legacy MainForm.LoadRegionFractalParams.
+            LoadRegionFractalParams(region, state);
             if (region.QualityPreset != null) state.Quality = region.QualityPreset;
-            if (region.Iterations > 0)
-            {
-                state.IterLocked = true;
-                state.LockedIterations = region.Iterations;
-            }
-            else
-            {
-                state.IterLocked = false;
-                state.LockedIterations = 0;
-            }
+            // A region jump must NOT toggle the iteration lock — legacy
+            // MainForm.ApplyRegion leaves _iterLocked untouched and lets the
+            // adaptive (zoom-scaled) iteration count drive the render. Forcing
+            // the lock on here was the regression that made every built-in
+            // region — and any UserEquation/Sandbox/UserBulb recall — pin the
+            // lock checkbox on. The user keeps full control via the checkbox.
             return true;
+        }
+
+        /// <summary>
+        /// Loads region-specific source-compiled equation parameters
+        /// (UserEquation / Sandbox / UserBulb) into the shared FractalParameters
+        /// and forces a recompile. The calculators only lazily compile when no
+        /// delegate exists yet, so switching between two saved equations needs
+        /// an explicit Compile — hence the concrete-host cast. Center/zoom/iter
+        /// are owned by ApplyRegion; this only touches the equation slots.
+        /// Mirrors legacy MainForm.LoadRegionFractalParams.
+        /// </summary>
+        private void LoadRegionFractalParams(FractalRegion region, FractalViewState state)
+        {
+            var p = state.FractalParameters;
+            if (p == null) return;
+            var host = _renderHost as FractalRenderHost;
+
+            if (region.FractalType == FractalType.UserEquation
+                && !string.IsNullOrWhiteSpace(region.UserEquationName))
+            {
+                var entry = UserEquationStore.Instance.GetByName(region.UserEquationName);
+                if (entry != null)
+                {
+                    p.UserEquationSource = entry.Source;
+                    p.UserEquationName = entry.Name;
+                    host?.CompileUserEquation(entry.Source);
+                }
+            }
+
+            if (region.FractalType == FractalType.Sandbox
+                && !string.IsNullOrWhiteSpace(region.SandboxName))
+            {
+                var entry = SandboxEquationStore.Instance.GetByName(region.SandboxName);
+                if (entry != null)
+                {
+                    p.SandboxSource = entry.Source;
+                    p.SandboxName = entry.Name;
+                    host?.CompileSandbox(entry.Source);
+                }
+            }
+
+            if (region.FractalType == FractalType.UserBulb)
+            {
+                string? source = null;
+                var entry = !string.IsNullOrWhiteSpace(region.UserBulbName)
+                    ? UserBulbStore.Instance.GetByName(region.UserBulbName)
+                    : null;
+                if (entry != null)
+                {
+                    source = entry.Source;
+                    p.UserBulbSource = entry.Source;
+                    p.UserBulbName = entry.Name;
+                }
+                else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
+                {
+                    source = region.UserBulbSource;
+                    p.UserBulbSource = region.UserBulbSource;
+                    p.UserBulbName = region.UserBulbName;
+                }
+
+                if (region.UserBulbCameraDistance > 0)
+                {
+                    p.UserBulbCameraDistance = region.UserBulbCameraDistance;
+                    p.UserBulbCameraTheta = region.UserBulbCameraTheta;
+                    p.UserBulbCameraPhi = region.UserBulbCameraPhi;
+                    p.UserBulbLightTheta = region.UserBulbLightTheta;
+                    p.UserBulbLightPhi = region.UserBulbLightPhi;
+                }
+
+                if (!string.IsNullOrWhiteSpace(source))
+                    host?.CompileUserBulb(source);
+            }
         }
 
         /// <inheritdoc/>
@@ -207,6 +361,7 @@ namespace FracturingFog.Hosting
             if (existing != null && existing.IsBuiltIn) return false;
             if (existing != null) FractalRegionLibrary.Instance.UserRegions.Remove(existing);
 
+            var p = state.FractalParameters;
             var region = new FractalRegion
             {
                 Name = regionName,
@@ -219,6 +374,20 @@ namespace FracturingFog.Hosting
                 FractalType = state.FractalType,
                 QualityPreset = state.Quality ?? QualityPreset.Standard,
                 RegionType = RegionType.UserDefined,
+                // Source-compiled types carry their equation identity so recall
+                // (LoadRegionFractalParams) can reload + recompile. UserEquation
+                // and Sandbox reference a saved entry by name; UserBulb embeds
+                // its source + camera/light. Without this, recalled equation
+                // regions render a blank in-set fill. Mirrors legacy MainForm.
+                UserEquationName = state.FractalType == FractalType.UserEquation ? p?.UserEquationName : null,
+                SandboxName      = state.FractalType == FractalType.Sandbox      ? p?.SandboxName      : null,
+                UserBulbName     = state.FractalType == FractalType.UserBulb     ? p?.UserBulbName     : null,
+                UserBulbSource   = state.FractalType == FractalType.UserBulb     ? p?.UserBulbSource   : null,
+                UserBulbCameraDistance = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraDistance ?? 0 : 0,
+                UserBulbCameraTheta    = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraTheta    ?? 0 : 0,
+                UserBulbCameraPhi      = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraPhi      ?? 0 : 0,
+                UserBulbLightTheta     = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightTheta     ?? 0 : 0,
+                UserBulbLightPhi       = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightPhi       ?? 0 : 0,
                 Description = "",
             };
             FractalRegionLibrary.Instance.UserRegions.Add(region);

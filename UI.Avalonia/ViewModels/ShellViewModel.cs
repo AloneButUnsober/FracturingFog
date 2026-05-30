@@ -72,8 +72,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         Main = new MainViewModel(renderHost, input);
         FloatingMenu = new FloatingMenuViewModel();
-        FloatingMenu.SetThemes(_themeService.EnumerateThemeNames());
-        FloatingMenu.SetRegions(_themeService.EnumerateRegionNames());
+        // Hand the menu the theme service so its Region / Theme combos can
+        // group + sort + right-click-filter themselves (parity with the
+        // WinForms combos). AttachThemeService performs the initial fill.
+        FloatingMenu.AttachThemeService(_themeService);
         // Quality combo lives on FloatingMenu but its presets come from
         // QualityPreset.All — the same list MainViewModel already exposes.
         FloatingMenu.SetQualities(QualityPreset.All.Select(q => q.Name));
@@ -90,7 +92,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             Main.SetRegionName(name);
             if (string.IsNullOrEmpty(name)) return;
             if (_themeService.ApplyRegion(name, Main.ViewState))
+            {
+                // ApplyRegion sets ViewState.FractalType directly (it owns the
+                // region's centre/zoom, so it bypasses the SelectedFractalType
+                // setter which would SnapToFractalDefault and clobber them).
+                // Mirror the type into the toolbar combo without snapping.
+                Main.SetFractalTypeSilent(Main.ViewState.FractalType);
                 Main.RenderHost.Trigger();
+            }
         };
         FloatingMenu.ColorThemeChanged  += (_, name) =>
         {
@@ -148,8 +157,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // the user edited the JSON file underneath us.
         FloatingMenu.ReloadThemesClick += (_, _) =>
         {
-            FloatingMenu.SetThemes(_themeService.EnumerateThemeNames());
-            FloatingMenu.SetRegions(_themeService.EnumerateRegionNames());
+            FloatingMenu.RefreshThemes();
+            FloatingMenu.RefreshRegions();
         };
 
         // Quality combo on the menu drives MainViewModel; MainViewModel's
@@ -419,11 +428,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             changed = true;
         }
         if (int.TryParse(FloatingMenu.Iter, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iter)
-            && iter > 0)
+            && iter > 0 && Main.IterLocked)
         {
-            Main.ViewState.IterLocked = true;
-            Main.ViewState.LockedIterations = iter;
-            Main.IterLocked = true;
+            // "Go" never enables the lock (parity with legacy OnGoClick); it
+            // only refreshes the held iteration count when the lock is already
+            // on. When unlocked the render stays adaptive — flip the lock
+            // checkbox to pin a fixed count.
             Main.LockedIterations = iter;
             changed = true;
         }
@@ -544,7 +554,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Called after the editor saves, or by the host after import/delete.</summary>
     public void RefreshThemeListsFromService()
     {
-        FloatingMenu.SetThemes(_themeService.EnumerateThemeNames());
+        FloatingMenu.RefreshThemes();
     }
 
     // ── Host-handled events (forwarded up from child VMs) ────────────────
@@ -662,7 +672,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Called by the host after a successful import.</summary>
     public void RefreshRegionListsFromService()
     {
-        FloatingMenu.SetRegions(_themeService.EnumerateRegionNames());
+        FloatingMenu.RefreshRegions();
     }
 
     public void Dispose()

@@ -129,6 +129,16 @@ namespace FracturingFog.Hosting
             // engine can cycle regions/themes per leg (legacy VideoZoom parity).
             s_renderHost.AttachThemeService(themeService);
 
+            // ── Persisted libraries ──────────────────────────────────────
+            // Mirror MainForm startup (MainForm.cs ~873): load user regions +
+            // equation stores from disk. Without this the region combos only
+            // surface built-ins (UserRegions stays empty), and saved
+            // equations don't appear in their editors' Saved lists.
+            try { FractalRegionLibrary.Instance.Load(); } catch { }
+            try { UserEquationStore.Instance.Load(); }    catch { }
+            try { SandboxEquationStore.Instance.Load(); }  catch { }
+            try { UserBulbStore.Instance.Load(); }         catch { }
+
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
 

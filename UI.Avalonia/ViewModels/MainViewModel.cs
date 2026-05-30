@@ -188,6 +188,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Mirror the active fractal type into the toolbar combo without
+    /// snapping the view or re-triggering. Used after a region jump set
+    /// ViewState.FractalType directly — region jumps own their centre/zoom, so
+    /// the SnapToFractalDefault in the normal setter must be bypassed.</summary>
+    public void SetFractalTypeSilent(FractalType type)
+    {
+        if (_selectedFractalType != type)
+        {
+            _selectedFractalType = type;
+            this.RaisePropertyChanged(nameof(SelectedFractalType));
+        }
+    }
+
     // ── Post-FX (write-through to view state, repaint without recalc) ─────
 
     private int _brightness;
@@ -300,6 +313,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 ViewState.LockedIterations = _lockedIterations;
                 _renderHost.Trigger();
             }
+        }
+    }
+
+    /// <summary>Mirror an iter-lock state that was already applied to the shared
+    /// ViewState (e.g. by a region jump) into the VM without re-triggering a
+    /// render or recomputing the lock target. Keeps the toolbar/menu checkbox
+    /// in sync with what the render is actually doing.</summary>
+    public void SetIterLockSilent(bool locked, int lockedIterations)
+    {
+        if (lockedIterations > 0 && lockedIterations != _lockedIterations)
+        {
+            _lockedIterations = Math.Max(64, lockedIterations);
+            this.RaisePropertyChanged(nameof(LockedIterations));
+        }
+        if (locked != _iterLocked)
+        {
+            _iterLocked = locked;
+            this.RaisePropertyChanged(nameof(IterLocked));
         }
     }
 
