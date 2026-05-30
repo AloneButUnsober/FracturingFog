@@ -1,14 +1,20 @@
-﻿// IFractalRenderer.cs
-// Shared abstraction for DirectX 11 and DirectX 12 renderer implementations.
-// MainForm holds an IFractalRenderer so it is decoupled from the concrete type.
+// IFractalRenderer.cs
+// Shared abstraction for renderer implementations. Lives in Abstractions so
+// Phase 2.4 cross-platform backends (Rendering.Silk OpenGL/Vulkan, Skia
+// future) can implement it without referencing the main WinExe.
+//
+// Namespace deliberately kept at FracturingFog (not FracturingFog.Abstractions)
+// so the legacy WinForms shell and the existing Vortice DX renderers continue
+// to compile against the same fully-qualified name they always did.
 
 using System;
 
 namespace FracturingFog;
 
 /// <summary>
-/// Common interface implemented by both DirectXRenderer (D3D11) and
-/// DirectX12Renderer (D3D12).  Exposes only what MainForm needs.
+/// Common interface implemented by DirectXRenderer (D3D11), DirectX12Renderer
+/// (D3D12), and SilkGLRenderer (OpenGL 3.3 — Linux/Mac). Exposes only what
+/// MainForm / FractalRenderHost need.
 /// </summary>
 public interface IFractalRenderer : IDisposable
 {

@@ -1,0 +1,94 @@
+# Phase 2.4 cross-platform build matrix.
+#
+# Validates that the platform-neutral assemblies (Abstractions, UI.Avalonia,
+# Rendering.Silk) compile on Linux and macOS in addition to Windows. The
+# WinExe project (FracturingFogCLD.csproj, net10.0-windows + WinForms) is
+# Windows-only by construction so it is skipped on the Linux/Mac legs.
+
+name: Cross-platform build
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            build_winexe: true
+          - os: ubuntu-latest
+            rid: linux-x64
+            build_winexe: false
+          - os: macos-latest
+            rid: osx-arm64
+            build_winexe: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Platform-neutral assemblies build on every leg.
+      - name: Build Abstractions
+        run: dotnet build Abstractions/FracturingFog.Abstractions.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build Rendering.Silk
+        run: dotnet build Rendering.Silk/FracturingFog.Rendering.Silk.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build UI.Avalonia
+        run: dotnet build UI.Avalonia/FracturingFog.UI.Avalonia.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      # WinForms WinExe only builds on Windows (net10.0-windows TFM + Vortice).
+      - name: Build WinExe
+        if: matrix.build_winexe
+        run: dotnet build FracturingFogCLD.csproj -c Release
+
+      # Smoke test: ensure the Silk assembly publishes without missing native
+      # dependencies on each RID. Avalonia + Silk.NET pull RID-specific
+      # natives (libSkiaSharp, libSilk.NET.OpenGL, etc.); a successful publish
+      # proves the RID matrix in the csprojs covers the platforms we ship.
+      - name: Publish Rendering.Silk
+        run: dotnet publish Rendering.Silk/FracturingFog.Rendering.Silk.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/silk-${{ matrix.rid }}
+
+      - name: Publish UI.Avalonia
+        run: dotnet publish UI.Avalonia/FracturingFog.UI.Avalonia.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/avalonia-${{ matrix.rid }}
+
+      # Headless GL smoke. Builds the tiny cross-platform smoke CLI and runs
+      # SmokeOneFrame — opens a 256x256 GLFW window, uploads one frame, prints
+      # the GL renderer string, exits 0. Catches broken Silk.NET natives,
+      # missing libGL, or wrong RID resolution before the WinExe ever ships.
+      - name: Build Silk smoke CLI
+        run: dotnet build Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Install libGL + xvfb (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1 libglu1-mesa xvfb x11-utils libxrandr2 libxinerama1 libxcursor1 libxi6
+
+      - name: Run Silk smoke (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: xvfb-run -a dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }}
+
+      - name: Run Silk smoke (Windows)
+        if: matrix.os == 'windows-latest'
+        run: dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }}
+
+      # macOS GLFW needs an interactive session for OpenGL; skip the smoke run
+      # there and let the build/publish step cover the cross-platform check.
+      # Re-enable once SilkCglContextAdapter lands and the smoke moves to
+      # an offscreen FBO path that does not require a window server.

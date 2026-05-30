@@ -38,25 +38,45 @@ public static class RendererFactory
     }
 
     /// <summary>
+    /// Optional host-supplied fallback for non-<see cref="GpuSurfaceKind.Win32Hwnd"/>
+    /// surfaces. The Avalonia bootstrap on Linux/macOS plants the Silk.NET
+    /// OpenGL backend here (see <c>FracturingFog.Rendering.Silk</c>); the
+    /// WinForms shell leaves it null. When null and a non-HWND surface arrives
+    /// the factory throws — same behaviour as before Phase 2.4.
+    /// </summary>
+    public static Func<IGpuSurface, IFractalRenderer?>? NonWin32Backend { get; set; }
+
+    /// <summary>
     /// Phase 2 surface-aware overload. Accepts an <see cref="IGpuSurface"/> from
     /// whichever shell hosts the renderer (WinForms control wrapper today,
     /// Avalonia <c>NativeControlHost</c> in the new shell) and subscribes the
     /// renderer to the surface's Resized / HandleLost events so the swap chain
     /// follows DPI and window-size changes automatically.
     ///
-    /// Only <see cref="GpuSurfaceKind.Win32Hwnd"/> is supported today — the
-    /// DirectX 11/12 backends require an HWND. Non-Windows surface kinds will
-    /// be served by future Skia / Vulkan / Metal backends once those projects
-    /// land (see Phase 2.4 in PHASE2_AVALONIA_MIGRATION.md).
+    /// Non-Win32 surface kinds route through <see cref="NonWin32Backend"/> when
+    /// the host has registered one (Phase 2.4 cross-platform path).
     /// </summary>
     public static IFractalRenderer Create(IGpuSurface surface, bool force_D3D11 = false)
     {
         ArgumentNullException.ThrowIfNull(surface);
 
         if (surface.Kind != GpuSurfaceKind.Win32Hwnd)
+        {
+            IFractalRenderer? alt = NonWin32Backend?.Invoke(surface);
+            if (alt is not null)
+            {
+                surface.Resized += (_, _) =>
+                    alt.Resize(System.Math.Max(1, surface.PixelWidth),
+                               System.Math.Max(1, surface.PixelHeight));
+                surface.HandleLost += (_, _) => alt.Dispose();
+                return alt;
+            }
+
             throw new PlatformNotSupportedException(
                 $"DirectX renderer requires a Win32 HWND surface; got {surface.Kind}. " +
-                "Run on Windows or wait for the Skia/Vulkan backend (Phase 2.4).");
+                "Register RendererFactory.NonWin32Backend with a Silk/Skia/Metal " +
+                "factory (Phase 2.4) before constructing the surface, or run on Windows.");
+        }
 
         if (surface.Handle == IntPtr.Zero)
             throw new InvalidOperationException(

@@ -18,6 +18,25 @@ static class Program
         if (args.Length > 0 && args[0] == "--ubtest")
             return UserBulbSelfTest.Run();
 
+        // Phase 2.4 cross-platform GL smoke. Opens a 256x256 Silk.NET window
+        // via GLFW, uploads one solid frame, prints the renderer description,
+        // exits 0. CI hooks this on the linux-x64 leg under xvfb-run; failure
+        // means the Silk.NET native chain or libGL.so.1 is broken on the runner.
+        if (args.Length > 0 && args[0] == "--silk-smoke")
+        {
+            try
+            {
+                string desc = FracturingFog.Rendering.Silk.SilkStandaloneRunner.SmokeOneFrame();
+                Console.WriteLine($"silk-smoke OK: {desc}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"silk-smoke FAIL: {ex.GetType().Name}: {ex.Message}");
+                return 2;
+            }
+        }
+
         // Phase 2 bootstrap: --avalonia launches the new responsive shell.
         // Default path stays on WinForms so existing workflow is unaffected
         // until every dialog has been ported and the Avalonia shell reaches

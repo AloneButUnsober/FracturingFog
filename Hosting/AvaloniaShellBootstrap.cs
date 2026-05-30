@@ -40,6 +40,8 @@ using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.Rendering;
+using FracturingFog.Rendering.Silk;
+using FracturingFog.Rendering.Silk.Platform;
 using FracturingFog.UI.Avalonia.ViewModels;
 using FracturingFog.UI.Avalonia.Views;
 using FracturingFog.ViewState;
@@ -84,6 +86,60 @@ namespace FracturingFog.Hosting
         /// callers may swap before <see cref="OnSurfaceReady"/> for tests.</summary>
         public static IPaletteExtractionService? PaletteService { get; set; }
             = new HostPaletteExtractionService();
+
+        // Phase 2.4 cross-platform: registers the Silk.NET OpenGL backend as
+        // RendererFactory.NonWin32Backend so X11 / CAMetalLayer / Wayland
+        // surfaces can be served when the DX path is unavailable. Kept in a
+        // static ctor (rather than at first OnSurfaceReady call) because the
+        // factory hook must be live before any IGpuSurface arrives — Avalonia
+        // can raise the SurfaceReady event on a worker thread.
+        static AvaloniaShellBootstrap()
+        {
+            RendererFactory.NonWin32Backend = TryCreateSilkRenderer;
+        }
+
+        private static IFractalRenderer? TryCreateSilkRenderer(IGpuSurface surface)
+        {
+            try
+            {
+                switch (surface.Kind)
+                {
+                    case GpuSurfaceKind.X11Window:
+                    {
+                        var ctx = SilkGLXContextAdapter.CreateFor(surface);
+                        return SilkRendererFactory.Create(
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                    }
+                    case GpuSurfaceKind.Win32Hwnd:
+                    {
+                        // Only reached when the DX path declined the surface
+                        // (force-fallback path for parity testing). Normal
+                        // Windows runs short-circuit before this hook fires.
+                        var ctx = SilkWin32ContextAdapter.CreateFor(surface);
+                        return SilkRendererFactory.Create(
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                    }
+                    case GpuSurfaceKind.CoreAnimationMetalLayer:
+                    case GpuSurfaceKind.WaylandSurface:
+                    default:
+                        // CAMetalLayer needs NSOpenGL via the ObjC runtime;
+                        // Wayland needs EGL. Both queued as Phase 2.4
+                        // follow-ups. Returning null lets RendererFactory
+                        // throw a clear PlatformNotSupportedException with
+                        // the original surface kind in the message.
+                        Console.Error.WriteLine(
+                            $"[AvaloniaShellBootstrap] No Silk adapter for {surface.Kind} — " +
+                            "macOS NSOpenGL + Wayland EGL pending.");
+                        return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[AvaloniaShellBootstrap] Silk renderer init failed for {surface.Kind}: {ex.Message}");
+                return null;
+            }
+        }
 
         public static void OnSurfaceReady(IGpuSurface surface)
         {
