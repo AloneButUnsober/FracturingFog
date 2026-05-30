@@ -34,6 +34,7 @@ namespace FracturingFog.Hosting
 
         public string AboutText    => HelpTextBundle.AboutText;
         public string FeaturesText => HelpTextBundle.FeaturesText;
+        public string BatchText    => HelpTextBundle.BatchText;
         public string AudioText    => HelpTextBundle.AudioText;
         public string EditorText   => HelpTextBundle.EditorText;
         public string BioText      => HelpTextBundle.BioText;
