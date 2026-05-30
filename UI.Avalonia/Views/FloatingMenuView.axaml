@@ -220,6 +220,21 @@
                         HorizontalAlignment="Stretch"
                         Margin="0,0,0,8"
                         ToolTip.Tip="Configure slideshow timing + audio-reactive options" />
+
+                <!-- Server / Client (Phase 3 remote rendering) -->
+                <UniformGrid Columns="2" Margin="0,0,0,8">
+                    <Button Classes="action neutral"
+                            Content="Server…"
+                            Command="{Binding ServerCommand}"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,4,0"
+                            ToolTip.Tip="Local FracturingFog render server: status, metrics, start/restart/kill" />
+                    <Button Classes="action neutral"
+                            Content="Client…"
+                            Command="{Binding ClientCommand}"
+                            HorizontalAlignment="Stretch"
+                            ToolTip.Tip="Connect to a remote FracturingFog server and render there" />
+                </UniformGrid>
             </StackPanel>
         </ScrollViewer>
     </Grid>

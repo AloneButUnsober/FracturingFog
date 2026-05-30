@@ -34,6 +34,12 @@ namespace FracturingFog.Help
         string EditorText { get; }
         string BioText { get; }
 
+        /// <summary>Phase 3 — client/server walkthrough: cert setup, master
+        /// password, connection save, render preset, remote batch, common
+        /// errors, security notes. Static text from
+        /// <see cref="HelpTextBundle.ClientServerText"/>.</summary>
+        string ClientServerText { get; }
+
         /// <summary>Math tab is itself a TabControl — each entry becomes one
         /// sub-tab. Order is preserved.</summary>
         IReadOnlyList<HelpSubTab> MathSubTabs { get; }

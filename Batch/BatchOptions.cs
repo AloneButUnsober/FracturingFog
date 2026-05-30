@@ -67,6 +67,20 @@ namespace FracturingFog.Batch
 
         public bool Verbose { get; set; }
 
+        // ── Phase 3 remote rendering ──────────────────────────────────────
+        /// <summary>True when --remote was passed; flips dispatch into the
+        /// FFClientConnection path. Both --connection and --render become
+        /// required, and the local rendering pipeline is bypassed.</summary>
+        public bool Remote { get; set; }
+
+        /// <summary>Required with --remote. Names a saved entry in
+        /// %APPDATA%\FracturingFog\client-connections.json.</summary>
+        public string? RemoteConnection { get; set; }
+
+        /// <summary>Required with --remote. Names a saved preset in
+        /// %APPDATA%\FracturingFog\client-render-presets.json.</summary>
+        public string? RemotePreset { get; set; }
+
         public static bool TryParse(string[] args, int startIndex, out BatchOptions opts, out string? error)
         {
             opts = new BatchOptions();
@@ -219,6 +233,20 @@ namespace FracturingFog.Batch
                         opts.Verbose = true;
                         break;
 
+                    case "--remote":
+                        opts.Remote = true;
+                        break;
+
+                    case "--connection":
+                        if (!Next(args, ref i, a, out string conn, out error)) return false;
+                        opts.RemoteConnection = conn;
+                        break;
+
+                    case "--render":
+                        if (!Next(args, ref i, a, out string preset, out error)) return false;
+                        opts.RemotePreset = preset;
+                        break;
+
                     case "--help":
                     case "-?":
                         error = "__help__";
@@ -231,6 +259,19 @@ namespace FracturingFog.Batch
             }
 
             // Validation
+            if (opts.Remote)
+            {
+                if (string.IsNullOrWhiteSpace(opts.RemoteConnection))
+                    { error = "--remote requires --connection NAME"; return false; }
+                if (string.IsNullOrWhiteSpace(opts.RemotePreset))
+                    { error = "--remote requires --render NAME"; return false; }
+                if (string.IsNullOrWhiteSpace(opts.OutputPath))
+                    { error = "--remote requires --out PATH for the returned bytes"; return false; }
+                // All other render-shape validation is owned by the saved preset
+                // + the server's RequestLimits; nothing more to check here.
+                return true;
+            }
+
             if (string.IsNullOrWhiteSpace(opts.RegionName))
             {
                 if (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null)

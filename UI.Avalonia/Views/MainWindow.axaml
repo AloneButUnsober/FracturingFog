@@ -138,9 +138,18 @@
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="0,1,0,0"
                 IsVisible="{Binding IsStatusBarVisible}">
-            <TextBlock Text="{Binding Main.StatusText}"
-                       Foreground="#C0C0C0"
-                       FontFamily="Consolas,Menlo,monospace" />
+            <DockPanel LastChildFill="True">
+                <!-- Server up/down indicator on the right edge of the status bar -->
+                <TextBlock DockPanel.Dock="Right"
+                           Text="{Binding LocalServerIndicator}"
+                           Foreground="{Binding LocalServerBrush}"
+                           FontFamily="Consolas,Menlo,monospace"
+                           Margin="12,0,0,0"
+                           ToolTip.Tip="Local FracturingFog render server status — open Floating Menu → Server… for controls" />
+                <TextBlock Text="{Binding Main.StatusText}"
+                           Foreground="#C0C0C0"
+                           FontFamily="Consolas,Menlo,monospace" />
+            </DockPanel>
         </Border>
     </Grid>
 

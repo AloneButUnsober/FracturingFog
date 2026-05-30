@@ -98,6 +98,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.ResetClick        += (_, _) => Main.ResetViewCommand.Execute().Subscribe();
         FloatingMenu.HelpClick         += (_, _) => ShowHelp();
         FloatingMenu.EditThemeClick    += (_, _) => ShowColorThemeEditor();
+        FloatingMenu.ServerClick       += (_, _) => ShowServerAdmin();
+        FloatingMenu.ClientClick       += (_, _) => ShowFFClient();
         FloatingMenu.BrightnessSlide   += (_, v) => Main.Brightness = v;
         FloatingMenu.ContrastSlide     += (_, v) => Main.Contrast = v;
         FloatingMenu.AdaptiveSlide     += (_, v) => Main.Adaptive = v;
@@ -457,6 +459,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _help, value);
     }
 
+    // ── Phase 3 dialogs ──────────────────────────────────────────────────
+
+    private FFClientViewModel? _ffClient;
+    public FFClientViewModel? FFClient
+    {
+        get => _ffClient;
+        private set => this.RaiseAndSetIfChanged(ref _ffClient, value);
+    }
+
+    private ServerAdminViewModel? _serverAdmin;
+    public ServerAdminViewModel? ServerAdmin
+    {
+        get => _serverAdmin;
+        private set => this.RaiseAndSetIfChanged(ref _serverAdmin, value);
+    }
+
     // ── Window visibility flags (bound to Window.IsVisible) ──────────────
 
     private bool _isFloatingMenuVisible;
@@ -487,6 +505,53 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isStatusBarVisible;
         set => this.RaiseAndSetIfChanged(ref _isStatusBarVisible, value);
+    }
+
+    private bool _isFFClientVisible;
+    public bool IsFFClientVisible
+    {
+        get => _isFFClientVisible;
+        set => this.RaiseAndSetIfChanged(ref _isFFClientVisible, value);
+    }
+
+    private bool _isServerAdminVisible;
+    public bool IsServerAdminVisible
+    {
+        get => _isServerAdminVisible;
+        set => this.RaiseAndSetIfChanged(ref _isServerAdminVisible, value);
+    }
+
+    // ── Local server indicator (status bar dot) ──────────────────────────
+
+    private string _localServerIndicator = "● Server: off";
+    public string LocalServerIndicator
+    {
+        get => _localServerIndicator;
+        set => this.RaiseAndSetIfChanged(ref _localServerIndicator, value);
+    }
+
+    private string _localServerBrush = "#666666";
+    public string LocalServerBrush
+    {
+        get => _localServerBrush;
+        set => this.RaiseAndSetIfChanged(ref _localServerBrush, value);
+    }
+
+    private DispatcherTimer? _serverPingTimer;
+    public void StartServerPing(int defaultPort)
+    {
+        if (_serverPingTimer != null) return;
+        _serverPingTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, (_, _) =>
+        {
+            bool up = FracturingFog.Server.ServerInstanceProbe.IsListening("127.0.0.1", defaultPort);
+            LocalServerIndicator = up ? $"● Server: running ({defaultPort})" : "● Server: off";
+            LocalServerBrush = up ? "#5DD27B" : "#666666";
+        });
+        _serverPingTimer.Start();
+        // Fire one immediate probe so the indicator isn't grey for 5 s on launch.
+        bool up0 = FracturingFog.Server.ServerInstanceProbe.IsListening("127.0.0.1", defaultPort);
+        LocalServerIndicator = up0 ? $"● Server: running ({defaultPort})" : "● Server: off";
+        LocalServerBrush = up0 ? "#5DD27B" : "#666666";
     }
 
     // ── Top-level commands ────────────────────────────────────────────────
@@ -559,6 +624,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             ColorThemeEditor = vm;
         }
         IsColorThemeEditorVisible = true;
+    }
+
+    private void ShowFFClient()
+    {
+        if (FFClient == null)
+            FFClient = new FFClientViewModel(_themeService);
+        IsFFClientVisible = true;
+    }
+
+    private void ShowServerAdmin()
+    {
+        if (ServerAdmin == null)
+            ServerAdmin = new ServerAdminViewModel();
+        IsServerAdminVisible = true;
     }
 
     private void ShowHelp()
