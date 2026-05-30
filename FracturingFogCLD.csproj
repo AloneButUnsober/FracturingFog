@@ -56,18 +56,22 @@
     <Compile Remove="UI.Avalonia\**" />
     <Compile Remove="Rendering.Silk\**" />
     <Compile Remove="Rendering.Silk.Smoke\**" />
+    <Compile Remove="Rendering.Skia\**" />
     <None Remove="Abstractions\**" />
     <None Remove="UI.Avalonia\**" />
     <None Remove="Rendering.Silk\**" />
     <None Remove="Rendering.Silk.Smoke\**" />
+    <None Remove="Rendering.Skia\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
     <EmbeddedResource Remove="Rendering.Silk\**" />
     <EmbeddedResource Remove="Rendering.Silk.Smoke\**" />
+    <EmbeddedResource Remove="Rendering.Skia\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
     <Content Remove="Rendering.Silk\**" />
     <Content Remove="Rendering.Silk.Smoke\**" />
+    <Content Remove="Rendering.Skia\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
       items automatically from anywhere under the project root. Strip the UI
@@ -122,6 +126,13 @@
       No runtime cost on Windows (the DX path always wins).
     -->
     <ProjectReference Include="Rendering.Silk\FracturingFog.Rendering.Silk.csproj" />
+    <!--
+      Phase 2.4 sibling backend (Skia CPU). Referenced so the WinExe ships
+      the assembly alongside the Silk + DX backends; bootstrap can pick it
+      as an alternate NonWin32Backend on hosts with broken or absent GL
+      drivers. Default behaviour is unchanged.
+    -->
+    <ProjectReference Include="Rendering.Skia\FracturingFog.Rendering.Skia.csproj" />
   </ItemGroup>
 
   <!--

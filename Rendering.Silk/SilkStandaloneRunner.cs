@@ -140,4 +140,98 @@ public sealed class SilkStandaloneRunner : IDisposable
         runner.Run();
         return desc;
     }
+
+    /// <summary>
+    /// Offscreen FBO smoke: opens an invisible GLFW window solely to obtain a
+    /// GL 3.3 core context, then renders into a renderbuffer-backed FBO and
+    /// reads back one pixel via glReadPixels to prove the upload + textured
+    /// blit path round-trips without depending on a visible swapchain.
+    ///
+    /// Rationale: a true windowless context on Linux needs EGL_MESA_platform_
+    /// surfaceless or OSMesa, neither of which Silk.NET's GLFW build links
+    /// against. So Linux CI still needs xvfb-run to satisfy GLFW's X server
+    /// probe — but macOS no longer needs an interactive session because the
+    /// runner's headless WindowServer accepts invisible windows. Use this
+    /// variant on all three legs; the Linux workflow keeps xvfb-run, the
+    /// macOS workflow drops the previous skip.
+    ///
+    /// Returns the renderer description plus the read-back pixel as an ARGB
+    /// hex string for diagnostic logging.
+    /// </summary>
+    public static string SmokeOneFrameOffscreen(int width = 64, int height = 64)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(height, 1);
+
+        var opts = WindowOptions.Default with
+        {
+            Size = new global::Silk.NET.Maths.Vector2D<int>(width, height),
+            Title = "Silk Smoke (offscreen)",
+            IsVisible = false,
+            API = new GraphicsAPI(
+                ContextAPI.OpenGL,
+                ContextProfile.Core,
+                ContextFlags.ForwardCompatible,
+                new APIVersion(3, 3))
+        };
+
+        IWindow window = global::Silk.NET.Windowing.Window.Create(opts);
+        try
+        {
+            window.Initialize();
+            using var gl = GL.GetApi(window);
+
+            using var renderer = new SilkGLRenderer(
+                gl, width, height,
+                makeCurrent: () => window.MakeCurrent(),
+                swap: () => { /* no swap — drawing into FBO */ });
+
+            // Build a renderbuffer-backed FBO matching the requested size.
+            uint colorRb = gl.GenRenderbuffer();
+            gl.BindRenderbuffer(GLEnum.Renderbuffer, colorRb);
+            gl.RenderbufferStorage(GLEnum.Renderbuffer, GLEnum.Rgba8, (uint)width, (uint)height);
+
+            uint fbo = gl.GenFramebuffer();
+            gl.BindFramebuffer(GLEnum.Framebuffer, fbo);
+            gl.FramebufferRenderbuffer(GLEnum.Framebuffer, GLEnum.ColorAttachment0,
+                                       GLEnum.Renderbuffer, colorRb);
+
+            GLEnum status = gl.CheckFramebufferStatus(GLEnum.Framebuffer);
+            if (status != GLEnum.FramebufferComplete)
+                throw new InvalidOperationException($"FBO incomplete: 0x{(int)status:X4}");
+
+            // Upload one solid BGRA frame and draw into the FBO.
+            var buf = new uint[width * height];
+            Array.Fill(buf, 0xFF335577u);   // arbitrary distinctive BGRA pattern
+            renderer.UpdateTexture(buf, width, height);
+            renderer.Render();
+            gl.Finish();
+
+            // Read centre pixel back. RGBA8 framebuffer → BGRA8 source means
+            // R==0x77, G==0x55, B==0x33 (alpha 0xFF) once the GL pipeline
+            // honours GL_BGRA + GL_UNSIGNED_INT_8_8_8_8_REV. We assert on the
+            // non-zero channel value to catch broken format paths.
+            var px = new byte[4];
+            unsafe
+            {
+                fixed (byte* p = px)
+                {
+                    gl.ReadPixels(width / 2, height / 2, 1, 1,
+                                  PixelFormat.Rgba, PixelType.UnsignedByte, p);
+                }
+            }
+
+            // Tidy GL state (window dispose handles ctx teardown).
+            gl.BindFramebuffer(GLEnum.Framebuffer, 0);
+            gl.DeleteFramebuffer(fbo);
+            gl.DeleteRenderbuffer(colorRb);
+
+            uint roundTripped = (uint)(px[0] << 16 | px[1] << 8 | px[2]);
+            return $"{renderer.RendererDescription} — readback 0x{roundTripped:X6}";
+        }
+        finally
+        {
+            window.Dispose();
+        }
+    }
 }
