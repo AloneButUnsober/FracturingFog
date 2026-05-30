@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Phase 2.4 sibling backend. Targets net10.0 (cross-platform, no -windows
+      TFM) so the assembly can be referenced from win/linux/macos hosts that
+      do not want to ship native GL drivers.
+
+      Why a Skia sibling next to Rendering.Silk:
+        * Avalonia already ships SkiaSharp as its default 2D rasteriser on
+          every desktop; this backend reuses those same RID-resolved natives
+          (libSkiaSharp.so / .dylib / .dll) so no new platform-native files
+          enter the publish output.
+        * Hosts that do not have a working GL stack (headless build agents,
+          locked-down VMs, ancient Mesa) can still render the fractal at
+          full quality without xvfb or virtual GPU plumbing.
+        * The CPU buffer pipeline (uint[] BGRA) already matches Skia's
+          BGRA8888 colour type byte-for-byte — wrapping is zero-copy via
+          SKImage.FromPixels on a pinned buffer.
+
+      Multi-RID handled by the SkiaSharp package's RID-specific deps; no
+      RuntimeIdentifier needed at csproj level. Recommended publish RIDs
+      mirror the CI matrix: win-x64 / linux-x64 / osx-arm64.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64;arm64</Platforms>
+    <RootNamespace>FracturingFog.Rendering.Skia</RootNamespace>
+    <AssemblyName>FracturingFog.Rendering.Skia</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      SkiaSharp 2.88 is the long-term-support line as of 2026. Pulls the
+      native libSkiaSharp build for every desktop RID transparently — no
+      extra NativeAssets.* package needed for the standard win-x64 /
+      linux-x64 / osx-arm64 set.
+    -->
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

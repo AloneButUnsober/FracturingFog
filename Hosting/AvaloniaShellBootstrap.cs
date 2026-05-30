@@ -120,16 +120,29 @@ namespace FracturingFog.Hosting
                             ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
                     }
                     case GpuSurfaceKind.CoreAnimationMetalLayer:
+                    {
+                        // Avalonia hands NSView* on macOS via NativeControlHost
+                        // even when the enum label says CoreAnimationMetalLayer.
+                        // SilkCglContextAdapter binds NSOpenGLContext.setView:
+                        // to that NSView and produces a 3.2 core context that
+                        // SilkGLRenderer's 3.3 GLSL shaders compile against.
+                        var ctx = SilkCglContextAdapter.CreateFor(surface);
+                        return SilkRendererFactory.Create(
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                    }
                     case GpuSurfaceKind.WaylandSurface:
+                    {
+                        // Wayland native: EGL bound to GL (not GLES), 3.3 core
+                        // forward-compatible. The adapter opens its own
+                        // wl_display_connect so it does not require Avalonia
+                        // to surface its internal display pointer.
+                        var ctx = SilkEglContextAdapter.CreateFor(surface);
+                        return SilkRendererFactory.Create(
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                    }
                     default:
-                        // CAMetalLayer needs NSOpenGL via the ObjC runtime;
-                        // Wayland needs EGL. Both queued as Phase 2.4
-                        // follow-ups. Returning null lets RendererFactory
-                        // throw a clear PlatformNotSupportedException with
-                        // the original surface kind in the message.
                         Console.Error.WriteLine(
-                            $"[AvaloniaShellBootstrap] No Silk adapter for {surface.Kind} — " +
-                            "macOS NSOpenGL + Wayland EGL pending.");
+                            $"[AvaloniaShellBootstrap] No Silk adapter for surface kind {surface.Kind}.");
                         return null;
                 }
             }

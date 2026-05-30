@@ -52,6 +52,9 @@ jobs:
       - name: Build UI.Avalonia
         run: dotnet build UI.Avalonia/FracturingFog.UI.Avalonia.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
+      - name: Build Rendering.Skia
+        run: dotnet build Rendering.Skia/FracturingFog.Rendering.Skia.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
       # WinForms WinExe only builds on Windows (net10.0-windows TFM + Vortice).
       - name: Build WinExe
         if: matrix.build_winexe
@@ -67,10 +70,19 @@ jobs:
       - name: Publish UI.Avalonia
         run: dotnet publish UI.Avalonia/FracturingFog.UI.Avalonia.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/avalonia-${{ matrix.rid }}
 
+      - name: Publish Rendering.Skia
+        run: dotnet publish Rendering.Skia/FracturingFog.Rendering.Skia.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/skia-${{ matrix.rid }}
+
       # Headless GL smoke. Builds the tiny cross-platform smoke CLI and runs
-      # SmokeOneFrame — opens a 256x256 GLFW window, uploads one frame, prints
-      # the GL renderer string, exits 0. Catches broken Silk.NET natives,
-      # missing libGL, or wrong RID resolution before the WinExe ever ships.
+      # SmokeOneFrameOffscreen by default — opens an invisible GLFW window
+      # solely to obtain a 3.3 core context, renders into an FBO, reads a
+      # pixel back via glReadPixels. Catches broken Silk.NET natives, missing
+      # libGL, or wrong RID resolution before the WinExe ever ships.
+      #
+      # macOS now runs the smoke because invisible GLFW windows do not need
+      # an interactive session — the headless WindowServer accepts them.
+      # Linux still wraps xvfb-run because GLFW links X11 at startup; a true
+      # surfaceless path is parked behind the EGL adapter follow-up.
       - name: Build Silk smoke CLI
         run: dotnet build Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
@@ -82,13 +94,12 @@ jobs:
 
       - name: Run Silk smoke (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: xvfb-run -a dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }}
+        run: xvfb-run -a dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
 
       - name: Run Silk smoke (Windows)
         if: matrix.os == 'windows-latest'
-        run: dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }}
+        run: dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
 
-      # macOS GLFW needs an interactive session for OpenGL; skip the smoke run
-      # there and let the build/publish step cover the cross-platform check.
-      # Re-enable once SilkCglContextAdapter lands and the smoke moves to
-      # an offscreen FBO path that does not require a window server.
+      - name: Run Silk smoke (macOS)
+        if: matrix.os == 'macos-latest'
+        run: dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
