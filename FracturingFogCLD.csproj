@@ -54,12 +54,20 @@
   <ItemGroup>
     <Compile Remove="Abstractions\**" />
     <Compile Remove="UI.Avalonia\**" />
+    <Compile Remove="Rendering.Silk\**" />
+    <Compile Remove="Rendering.Silk.Smoke\**" />
     <None Remove="Abstractions\**" />
     <None Remove="UI.Avalonia\**" />
+    <None Remove="Rendering.Silk\**" />
+    <None Remove="Rendering.Silk.Smoke\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
+    <EmbeddedResource Remove="Rendering.Silk\**" />
+    <EmbeddedResource Remove="Rendering.Silk.Smoke\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
+    <Content Remove="Rendering.Silk\**" />
+    <Content Remove="Rendering.Silk.Smoke\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
       items automatically from anywhere under the project root. Strip the UI
@@ -107,6 +115,13 @@
     <ProjectReference Include="UI.Avalonia\FracturingFog.UI.Avalonia.csproj">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
+    <!--
+      Phase 2.4 cross-platform renderer (Silk.NET OpenGL). Referenced so the
+      WinExe ships the assembly alongside the DirectX backends; the host
+      bootstrap registers it as RendererFactory.NonWin32Backend on Linux/macOS.
+      No runtime cost on Windows (the DX path always wins).
+    -->
+    <ProjectReference Include="Rendering.Silk\FracturingFog.Rendering.Silk.csproj" />
   </ItemGroup>
 
   <!--
