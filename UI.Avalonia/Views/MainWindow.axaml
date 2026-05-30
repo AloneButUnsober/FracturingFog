@@ -72,12 +72,14 @@
                               ItemsSource="{Binding Main.QualityPresets}"
                               SelectedItem="{Binding Main.SelectedQuality}" />
                     <TextBlock Text="Region" Classes="label" Margin="8,0,0,0" />
-                    <ComboBox Classes="toolbar"
+                    <ComboBox x:Name="ToolbarRegionCombo"
+                              Classes="toolbar"
                               MinWidth="180"
                               ItemsSource="{Binding FloatingMenu.RegionNames}"
                               SelectedItem="{Binding FloatingMenu.SelectedRegion}" />
                     <TextBlock Text="Theme" Classes="label" Margin="8,0,0,0" />
-                    <ComboBox Classes="toolbar"
+                    <ComboBox x:Name="ToolbarThemeCombo"
+                              Classes="toolbar"
                               MinWidth="180"
                               ItemsSource="{Binding FloatingMenu.ThemeNames}"
                               SelectedItem="{Binding FloatingMenu.SelectedTheme}" />

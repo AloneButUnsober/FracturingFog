@@ -17,6 +17,30 @@ using FracturingFog.ViewState;
 
 namespace FracturingFog.Models
 {
+    /// <summary>Sort/filter mode for a colour-theme combo. Mirrors the WinForms
+    /// <c>Controls.ColorComboSortMode</c>. The enum lives in Abstractions (not
+    /// the main project's <c>ColorPaletteType</c>) so UI.Avalonia can reference
+    /// it; the actual palette-kind names cross the boundary as strings.</summary>
+    public enum ThemeSortMode
+    {
+        /// <summary>Grouped by palette kind with "— {kind} —" headers; alpha within.</summary>
+        Default,
+        /// <summary>Flat alphabetical across every kind.</summary>
+        All,
+        /// <summary>Filtered to a single palette kind (see kindFilter), alpha.</summary>
+        ByKind,
+    }
+
+    /// <summary>Sort/filter mode for a region combo. Mirrors the WinForms
+    /// <c>Controls.RegionComboSortMode</c>.</summary>
+    public enum RegionSortMode
+    {
+        /// <summary>Built-ins first (alpha), then user regions (alpha). All fractal types.</summary>
+        Default,
+        /// <summary>Filtered to a single <see cref="FractalType"/>, built-ins first, alpha.</summary>
+        ByFractalType,
+    }
+
     /// <summary>
     /// Host-provided service implementing every theme-registry / serializer
     /// operation the Avalonia ColorThemeEditor needs.
@@ -37,6 +61,31 @@ namespace FracturingFog.Models
         /// view to an interesting spot before tuning colour.
         /// </summary>
         IReadOnlyList<string> EnumerateRegionNames();
+
+        /// <summary>
+        /// Theme names for a colour combo built per <paramref name="mode"/>.
+        /// In <see cref="ThemeSortMode.Default"/> the list is grouped by palette
+        /// kind with selectable "— {kind} —" header rows (callers must ignore a
+        /// selection whose text starts with "—"). <paramref name="kindFilter"/>
+        /// is the kind name (from <see cref="EnumerateThemeKinds"/>) used only in
+        /// <see cref="ThemeSortMode.ByKind"/>. When <paramref name="editableOnly"/>
+        /// is true only themes openable in the editor are listed.
+        /// </summary>
+        IReadOnlyList<string> EnumerateThemeNames(ThemeSortMode mode, string? kindFilter, bool editableOnly);
+
+        /// <summary>Display names of every palette kind, in enum order. Used to
+        /// build the per-kind entries of the theme combo's right-click sort
+        /// menu (the kind enum itself is main-project-only).</summary>
+        IReadOnlyList<string> EnumerateThemeKinds();
+
+        /// <summary>
+        /// Region names for a region combo built per <paramref name="mode"/>.
+        /// The list always begins with a selectable "— select region —"
+        /// placeholder (callers must ignore a selection starting with "—").
+        /// <paramref name="typeFilter"/> applies only in
+        /// <see cref="RegionSortMode.ByFractalType"/>.
+        /// </summary>
+        IReadOnlyList<string> EnumerateRegionNames(RegionSortMode mode, FractalType typeFilter);
 
         /// <summary>
         /// Load a theme by name and return its UI-neutral definition.

@@ -32,6 +32,7 @@ public sealed partial class MainWindow : Window
     private ShellViewModel? _shell;
     private IDisposable? _inputAdapter;
     private Border? _sponge;
+    private bool _sortMenusAttached;
 
     private FloatingMenuView? _menuWin;
     private ColorThemeEditorView? _editorWin;
@@ -149,6 +150,19 @@ public sealed partial class MainWindow : Window
         _sponge ??= this.FindControl<Border>("InputSponge");
         if (_sponge != null)
             _inputAdapter = AvaloniaInputAdapter.Attach(_sponge, shell.Main.Input);
+
+        // Right-click sort menus on the toolbar Region / Theme combos. The
+        // build callbacks read the live _shell so they stay correct if the
+        // DataContext is swapped; attach once so ContextRequested handlers
+        // don't stack on re-attach.
+        if (!_sortMenusAttached)
+        {
+            ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarRegionCombo"),
+                () => _shell?.FloatingMenu.BuildRegionSortMenu() ?? System.Array.Empty<ComboMenuItem>());
+            ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarThemeCombo"),
+                () => _shell?.FloatingMenu.BuildThemeSortMenu() ?? System.Array.Empty<ComboMenuItem>());
+            _sortMenusAttached = true;
+        }
 
         shell.PropertyChanged += OnShellPropertyChanged;
         shell.Main.PropertyChanged += OnMainPropertyChanged;

@@ -51,14 +51,24 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     private bool _suppressChange;
     private string? _loadedSourceName;
 
+    // Combo sort/filter state (parity with WinForms Controls.cs). The editor's
+    // theme combo additionally exposes an "Editable only" toggle.
+    private ThemeSortMode _themeSort = ThemeSortMode.Default;
+    private string? _themeKind;
+    private bool _themeEditableOnly;
+    private RegionSortMode _regionSort = RegionSortMode.Default;
+    private FractalType _regionType = FractalType.Mandelbrot;
+
     public ColorThemeEditorViewModel(IColorThemeService service,
                                      string? initialThemeName,
                                      string? initialRegionName)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
 
-        ThemeNames = new ObservableCollection<string>(service.EnumerateThemeNames());
-        RegionNames = new ObservableCollection<string>(service.EnumerateRegionNames());
+        ThemeNames = new ObservableCollection<string>(
+            service.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly));
+        RegionNames = new ObservableCollection<string>(
+            service.EnumerateRegionNames(_regionSort, _regionType));
 
         KeyLight = new LightSourceRowVm(DefaultKey(), this);
         FillLight = new LightSourceRowVm(DefaultFill(), this);
@@ -121,19 +131,22 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public string? SelectedTheme
     {
         get => _selectedTheme;
-        set => this.RaiseAndSetIfChanged(ref _selectedTheme, value);
+        // The XAML binds SelectedItem here directly, so the setter is the
+        // combo's change hook — drive the load through OnThemeComboSelected
+        // (which guards against suppress + header rows).
+        set { this.RaiseAndSetIfChanged(ref _selectedTheme, value); OnThemeComboSelected(value); }
     }
 
     private string? _selectedRegion;
     public string? SelectedRegion
     {
         get => _selectedRegion;
-        set => this.RaiseAndSetIfChanged(ref _selectedRegion, value);
+        set { this.RaiseAndSetIfChanged(ref _selectedRegion, value); OnRegionComboSelected(value); }
     }
 
     private void OnThemeComboSelected(string? name)
     {
-        if (_suppressChange || string.IsNullOrEmpty(name)) return;
+        if (_suppressChange || string.IsNullOrEmpty(name) || IsHeader(name)) return;
         LoadFromTheme(name);
         // Always push preview on explicit theme pick — even if live-preview
         // is unchecked — so the user sees the chosen theme immediately.
@@ -143,8 +156,86 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
 
     private void OnRegionComboSelected(string? name)
     {
-        if (_suppressChange || string.IsNullOrEmpty(name)) return;
+        if (_suppressChange || string.IsNullOrEmpty(name) || IsHeader(name)) return;
         RegionRequested?.Invoke(this, name);
+    }
+
+    /// <summary>True for non-selectable group headers / placeholders the sort
+    /// menus inject ("— Kind —", "— select region —").</summary>
+    private static bool IsHeader(string? s)
+        => !string.IsNullOrEmpty(s) && s.StartsWith("—", StringComparison.Ordinal);
+
+    // ── Sort-aware combo refresh + right-click menu builders ────────────────
+
+    /// <summary>Re-pull theme names under the current sort state, preserving
+    /// the current selection when it survives.</summary>
+    public void RefreshThemes()
+    {
+        string? prev = _selectedTheme;
+        _suppressChange = true;
+        ThemeNames.Clear();
+        foreach (var n in _service.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly))
+            ThemeNames.Add(n);
+        if (!string.IsNullOrEmpty(prev) && ThemeNames.Contains(prev)) SelectedTheme = prev;
+        _suppressChange = false;
+    }
+
+    /// <summary>Re-pull region names under the current sort state, preserving
+    /// the current selection when it survives.</summary>
+    public void RefreshRegions()
+    {
+        string? prev = _selectedRegion;
+        _suppressChange = true;
+        RegionNames.Clear();
+        foreach (var n in _service.EnumerateRegionNames(_regionSort, _regionType))
+            RegionNames.Add(n);
+        if (!string.IsNullOrEmpty(prev) && RegionNames.Contains(prev)) SelectedRegion = prev;
+        _suppressChange = false;
+    }
+
+    /// <summary>Theme combo sort menu — Default / All / per-kind, plus the
+    /// editor-only "Editable only" toggle. Mirrors Controls with
+    /// includeEditableOnlyOption: true.</summary>
+    public IReadOnlyList<ComboMenuItem> BuildThemeSortMenu()
+    {
+        var items = new List<ComboMenuItem>
+        {
+            ComboMenuItem.Item("Editable only", _themeEditableOnly,
+                () => { _themeEditableOnly = !_themeEditableOnly; RefreshThemes(); }),
+            ComboMenuItem.Separator,
+            ComboMenuItem.Item("Default", _themeSort == ThemeSortMode.Default,
+                () => { _themeSort = ThemeSortMode.Default; RefreshThemes(); }),
+            ComboMenuItem.Item("All (A–Z)", _themeSort == ThemeSortMode.All,
+                () => { _themeSort = ThemeSortMode.All; RefreshThemes(); }),
+            ComboMenuItem.Separator,
+        };
+        foreach (var kind in _service.EnumerateThemeKinds())
+        {
+            string k = kind;
+            bool chk = _themeSort == ThemeSortMode.ByKind && _themeKind == k;
+            items.Add(ComboMenuItem.Item(k, chk,
+                () => { _themeSort = ThemeSortMode.ByKind; _themeKind = k; RefreshThemes(); }));
+        }
+        return items;
+    }
+
+    /// <summary>Region combo sort menu — Default / per-FractalType.</summary>
+    public IReadOnlyList<ComboMenuItem> BuildRegionSortMenu()
+    {
+        var items = new List<ComboMenuItem>
+        {
+            ComboMenuItem.Item("Default", _regionSort == RegionSortMode.Default,
+                () => { _regionSort = RegionSortMode.Default; RefreshRegions(); }),
+            ComboMenuItem.Separator,
+        };
+        foreach (var t in Enum.GetValues<FractalType>())
+        {
+            FractalType ft = t;
+            bool chk = _regionSort == RegionSortMode.ByFractalType && _regionType == ft;
+            items.Add(ComboMenuItem.Item(ft.ToString(), chk,
+                () => { _regionSort = RegionSortMode.ByFractalType; _regionType = ft; RefreshRegions(); }));
+        }
+        return items;
     }
 
     // ── Identity ──────────────────────────────────────────────────────────
@@ -663,7 +754,8 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         // Refresh the names list so the new entry appears, and select it.
         _suppressChange = true;
         ThemeNames.Clear();
-        foreach (var n in _service.EnumerateThemeNames()) ThemeNames.Add(n);
+        foreach (var n in _service.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly))
+            ThemeNames.Add(n);
         SelectedTheme = def.Name;
         _suppressChange = false;
         _loadedSourceName = def.Name;

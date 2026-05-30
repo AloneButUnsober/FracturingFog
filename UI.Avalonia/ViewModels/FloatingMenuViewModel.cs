@@ -19,7 +19,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive;
+using FracturingFog.Models;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -91,6 +93,93 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         finally { _suppressQualityChange = false; }
     }
 
+    // ── Sort-aware combo refresh (Region + Theme right-click parity) ────────
+    //
+    // The host service knows how to group / sort / filter; the VM holds the
+    // current sort state and re-pulls the names whenever it changes. Headers
+    // ("— Kind —" / "— select region —") arrive as plain items the SelectedXxx
+    // setters ignore (see the "—" guard below).
+
+    private IColorThemeService? _themeService;
+    private ThemeSortMode _themeSort = ThemeSortMode.Default;
+    private string? _themeKind;
+    private bool _themeEditableOnly;
+    private RegionSortMode _regionSort = RegionSortMode.Default;
+    private FractalType _regionType = FractalType.Mandelbrot;
+
+    /// <summary>Hand the menu the host theme service so its Region / Theme
+    /// combos can sort + filter themselves. Performs the initial fill.</summary>
+    public void AttachThemeService(IColorThemeService service)
+    {
+        _themeService = service;
+        RefreshRegions();
+        RefreshThemes();
+    }
+
+    /// <summary>Re-pull theme names under the current sort state, preserving the
+    /// current selection when it survives the rebuild.</summary>
+    public void RefreshThemes()
+    {
+        if (_themeService == null) return;
+        string? prev = _selectedTheme;
+        SetThemes(_themeService.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly));
+        if (!string.IsNullOrEmpty(prev) && ThemeNames.Contains(prev)) SetThemeSilent(prev);
+    }
+
+    /// <summary>Re-pull region names under the current sort state, preserving the
+    /// current selection when it survives the rebuild.</summary>
+    public void RefreshRegions()
+    {
+        if (_themeService == null) return;
+        string? prev = _selectedRegion;
+        SetRegions(_themeService.EnumerateRegionNames(_regionSort, _regionType));
+        if (!string.IsNullOrEmpty(prev) && RegionNames.Contains(prev)) SetRegionSilent(prev);
+    }
+
+    /// <summary>Build the theme combo's right-click sort menu (Default / All /
+    /// per-kind). Mirrors Controls.ShowColorComboSortMenu (no Editable-only
+    /// toggle — that lives on the editor's combo).</summary>
+    public IReadOnlyList<ComboMenuItem> BuildThemeSortMenu()
+    {
+        var items = new List<ComboMenuItem>
+        {
+            ComboMenuItem.Item("Default", _themeSort == ThemeSortMode.Default,
+                () => { _themeSort = ThemeSortMode.Default; RefreshThemes(); }),
+            ComboMenuItem.Item("All (A–Z)", _themeSort == ThemeSortMode.All,
+                () => { _themeSort = ThemeSortMode.All; RefreshThemes(); }),
+            ComboMenuItem.Separator,
+        };
+        if (_themeService != null)
+            foreach (var kind in _themeService.EnumerateThemeKinds())
+            {
+                string k = kind;
+                bool chk = _themeSort == ThemeSortMode.ByKind && _themeKind == k;
+                items.Add(ComboMenuItem.Item(k, chk,
+                    () => { _themeSort = ThemeSortMode.ByKind; _themeKind = k; RefreshThemes(); }));
+            }
+        return items;
+    }
+
+    /// <summary>Build the region combo's right-click sort menu (Default /
+    /// per-FractalType). Mirrors Controls.ShowRegionComboSortMenu.</summary>
+    public IReadOnlyList<ComboMenuItem> BuildRegionSortMenu()
+    {
+        var items = new List<ComboMenuItem>
+        {
+            ComboMenuItem.Item("Default", _regionSort == RegionSortMode.Default,
+                () => { _regionSort = RegionSortMode.Default; RefreshRegions(); }),
+            ComboMenuItem.Separator,
+        };
+        foreach (var t in Enum.GetValues<FractalType>())
+        {
+            FractalType ft = t;
+            bool chk = _regionSort == RegionSortMode.ByFractalType && _regionType == ft;
+            items.Add(ComboMenuItem.Item(ft.ToString(), chk,
+                () => { _regionSort = RegionSortMode.ByFractalType; _regionType = ft; RefreshRegions(); }));
+        }
+        return items;
+    }
+
     private string? _selectedRegion;
     public string? SelectedRegion
     {
@@ -98,7 +187,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         set
         {
             this.RaiseAndSetIfChanged(ref _selectedRegion, value);
-            if (!_suppressRegionChange && !string.IsNullOrEmpty(value))
+            if (!_suppressRegionChange && !string.IsNullOrEmpty(value) && !IsHeader(value))
                 RegionComboChanged?.Invoke(this, value!);
         }
     }
@@ -110,10 +199,16 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         set
         {
             this.RaiseAndSetIfChanged(ref _selectedTheme, value);
-            if (!_suppressThemeChange && !string.IsNullOrEmpty(value))
+            if (!_suppressThemeChange && !string.IsNullOrEmpty(value) && !IsHeader(value))
                 ColorThemeChanged?.Invoke(this, value!);
         }
     }
+
+    /// <summary>True for non-selectable group headers / placeholders the sort
+    /// menus inject ("— Kind —", "— select region —"). Em-dash prefix matches
+    /// the WinForms convention (Controls.cs).</summary>
+    private static bool IsHeader(string? s)
+        => !string.IsNullOrEmpty(s) && s.StartsWith("—", StringComparison.Ordinal);
 
     private string? _selectedResolution;
     public string? SelectedResolution
@@ -204,6 +299,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private string _iter = "256";
     public string Iter { get => _iter; set => this.RaiseAndSetIfChanged(ref _iter, value); }
 
+    private bool _suppressIterLock;
     private bool _iterLocked;
     public bool IterLocked
     {
@@ -211,8 +307,24 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         set
         {
             this.RaiseAndSetIfChanged(ref _iterLocked, value);
-            if (int.TryParse(Iter, out var i)) IterLockChanged?.Invoke(this, new IterLockEventArgs(value, i));
+            if (!_suppressIterLock && int.TryParse(Iter, out var i))
+                IterLockChanged?.Invoke(this, new IterLockEventArgs(value, i));
         }
+    }
+
+    /// <summary>Update the lock checkbox (and iteration textbox) to mirror a
+    /// state set elsewhere (region jump / startup) without re-firing
+    /// IterLockChanged back into the shell.</summary>
+    public void SetIterLockSilent(bool locked, int iterations)
+    {
+        _suppressIterLock = true;
+        try
+        {
+            if (iterations > 0)
+                Iter = iterations.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            IterLocked = locked;
+        }
+        finally { _suppressIterLock = false; }
     }
 
     /// <summary>Bulk-update from host. Skips the property that the user is
