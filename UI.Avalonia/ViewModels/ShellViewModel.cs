@@ -87,20 +87,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // actually apply (mutate ViewState for a region, push a new IColorMap
         // for a theme). Without these two calls the combos were label-only —
         // user saw no view change and the symptom looked like flaky bindings.
-        FloatingMenu.RegionComboChanged += (_, name) =>
-        {
-            Main.SetRegionName(name);
-            if (string.IsNullOrEmpty(name)) return;
-            if (_themeService.ApplyRegion(name, Main.ViewState))
-            {
-                // ApplyRegion sets ViewState.FractalType directly (it owns the
-                // region's centre/zoom, so it bypasses the SelectedFractalType
-                // setter which would SnapToFractalDefault and clobber them).
-                // Mirror the type into the toolbar combo without snapping.
-                Main.SetFractalTypeSilent(Main.ViewState.FractalType);
-                Main.RenderHost.Trigger();
-            }
-        };
+        FloatingMenu.RegionComboChanged += (_, name) => JumpToRegion(name);
         FloatingMenu.ColorThemeChanged  += (_, name) =>
         {
             Main.SetThemeName(name);
@@ -509,6 +496,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
+    /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
+    /// via the host service, mirror the resulting fractal type into the toolbar
+    /// (without snapping its centre/zoom), then trigger a render. Shared by the
+    /// FloatingMenu region combo and the Color Theme Editor's region pick so
+    /// both paths actually move the view instead of only relabelling it.</summary>
+    private void JumpToRegion(string? name)
+    {
+        Main.SetRegionName(name);
+        if (string.IsNullOrEmpty(name)) return;
+        if (_themeService.ApplyRegion(name, Main.ViewState))
+        {
+            // ApplyRegion sets ViewState.FractalType directly (it owns the
+            // region's centre/zoom, so it bypasses the SelectedFractalType
+            // setter which would SnapToFractalDefault and clobber them).
+            // Mirror the type into the toolbar combo without snapping.
+            Main.SetFractalTypeSilent(Main.ViewState.FractalType);
+            Main.RenderHost.Trigger();
+        }
+    }
+
     private void ShowColorThemeEditor()
     {
         if (ColorThemeEditor == null)
@@ -517,7 +524,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 initialThemeName: Main.SelectedTheme,
                 initialRegionName: Main.SelectedRegion);
             // Wire editor events that affect the main view.
-            vm.RegionRequested        += (_, name) => Main.SetRegionName(name);
+            // Region pick must actually move the view (mutate ViewState +
+            // render), not just relabel the watermark — share the same jump
+            // the FloatingMenu region combo uses, then mirror the pick into
+            // the menu combo so the toolbar reflects it.
+            vm.RegionRequested        += (_, name) => { JumpToRegion(name); FloatingMenu.SetRegionSilent(name); };
             vm.EditorThemeSelected    += (_, name) => Main.SetThemeName(name);
             vm.ThemeSavedToLibrary    += (_, _)    => RefreshThemeListsFromService();
             vm.HelpRequested          += (_, _)    => ShowHelp();
@@ -525,7 +536,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // the host translates it into an IColorMap on its IColorThemeService
             // impl and pushes onto the render host. The actual translation
             // lives outside the VM (host-owned) — we just relay.
-            vm.PreviewRequested       += (_, def)  => ColorThemePreviewRequested?.Invoke(this, def);
+            vm.PreviewRequested       += (_, def)  =>
+            {
+                ColorThemePreviewRequested?.Invoke(this, def);
+                // Post-FX defaults (Brightness / Contrast / Adaptive) aren't
+                // part of the IColorMap — push them through the MainViewModel
+                // setters so ViewState + the repaint/recalc stay in sync.
+                // Mirrors legacy MainForm.ApplyThemePostFx: a null field resets
+                // the value to neutral 0; a locked slider is left untouched so
+                // the user can pin a preferred value across theme edits.
+                if (!Main.BrightnessLocked) Main.Brightness = def.Brightness ?? 0;
+                if (!Main.ContrastLocked)   Main.Contrast   = def.Contrast   ?? 0;
+                if (!Main.AdaptiveLocked)   Main.Adaptive   = def.Adaptive   ?? 0;
+            };
             // From-image flow currently raised by the editor when "From
             // Image…" is clicked. The host implements IPaletteExtractionService
             // and pops the ImagePaletteView; the editor consumes the returned

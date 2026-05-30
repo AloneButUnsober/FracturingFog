@@ -178,8 +178,12 @@ namespace FracturingFog.Hosting
                 var map = HostColorThemeService.BuildColorMap(def);
                 if (map != null && s_renderHost != null)
                 {
-                    s_renderHost.ColorMap = map;
-                    s_renderHost.RepaintWithPostFx();
+                    // ApplyColorMap recolours the current frame in place
+                    // (Mandelbrot) or recomputes (alt calculators). The old
+                    // "ColorMap = map; RepaintWithPostFx()" path re-uploaded the
+                    // stale, old-map buffer, so editor edits only showed after
+                    // the next pan/zoom.
+                    s_renderHost.ApplyColorMap(map);
                 }
             };
 
