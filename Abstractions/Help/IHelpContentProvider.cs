@@ -29,6 +29,7 @@ namespace FracturingFog.Help
 
         string AboutText { get; }
         string FeaturesText { get; }
+        string BatchText { get; }
         string AudioText { get; }
         string EditorText { get; }
         string BioText { get; }

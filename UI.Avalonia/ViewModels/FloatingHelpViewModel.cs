@@ -32,6 +32,7 @@ public sealed class FloatingHelpViewModel : ViewModelBase
         TitleText    = $"{content.ProgramName} v{content.ProgramVersion} — Help";
         AboutText    = content.AboutText;
         FeaturesText = content.FeaturesText;
+        BatchText    = content.BatchText;
         AudioText    = content.AudioText;
         EditorText   = content.EditorText;
         BioText      = content.BioText;
@@ -51,6 +52,7 @@ public sealed class FloatingHelpViewModel : ViewModelBase
     public string TitleText { get; }
     public string AboutText { get; }
     public string FeaturesText { get; }
+    public string BatchText { get; }
     public string AudioText { get; }
     public string EditorText { get; }
     public string BioText { get; }

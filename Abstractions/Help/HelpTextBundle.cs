@@ -146,6 +146,225 @@ view-state and color pipeline.
   Perturbation theory (Series Approx. + BLA) accelerates deep zooms.
 ";
 
+        public const string BatchText =
+@"=== Batch / Command-Line Processing ===
+
+Fracturing Fog can render images and zoom videos headlessly from a
+command line, with no GUI window. The same calculator, palette, and
+quality pipeline used interactively backs every batch render, so a
+batch job produces output identical to what you would see in the UI
+at the same coordinates and resolution.
+
+Launch from cmd or PowerShell. The executable attaches to the parent
+console so progress meters and final paths are visible inline.
+
+=== Default UI vs --winforms ===
+
+By default the program now opens the Avalonia shell. Pass --winforms
+to launch the legacy WinForms shell instead:
+
+    FracturingFog --winforms
+
+The two shells share all calculators, themes, and regions on disk.
+
+=== Invoking batch mode ===
+
+    FracturingFog --batch [options]
+    FracturingFog -b     [options]
+    FracturingFog --batch --help        (full flag reference)
+
+Batch mode is mutually exclusive with the interactive shells — when
+--batch is present no UI window opens; the process renders, writes
+the requested file(s), and exits.
+
+Exit codes:
+    0   success
+    1   unhandled runtime error during render
+    2   bad command-line argument
+    3   --lossless selected but ffmpeg.exe not found
+    4   ffmpeg encode pass failed
+
+=== Region source (pick one) ===
+
+    --region NAME, -r NAME
+        Name of a built-in region (""Seahorse Valley"", ""Mini
+        Mandelbrot"", ""Classic Full View"", etc.) or a user-saved
+        region. Case-insensitive. Loads center, zoom, iterations,
+        fractal type, and authored quality preset.
+
+    --x VAL --y VAL --zoom VAL [--iter N]
+        Manual coordinates. Supply all three of x / y / zoom for
+        a free render. --iter is optional (defaults to 1000 when
+        omitted and no region default is in play).
+
+Manual flags override individual fields of a named region, so
+combining them is supported — e.g. --region ""Seahorse Valley""
+--iter 4000 keeps the saved center but lifts iteration count.
+
+=== Common flags ===
+
+    --fractal TYPE, -f TYPE
+        Fractal family. One of:
+            Mandelbrot, Julia, BurningShip, Tricorn, Multibrot,
+            Phoenix, Newton, Nova, BuddhaBrot, IFS, LSystem,
+            StrangeAttractor, UserEquation, Mandelbulb, Sandbox,
+            UserBulb, TearDrop
+        Defaults to the region's saved type, else Mandelbrot.
+
+    --theme NAME, -t NAME
+        Color theme name as shown in the Theme picker. Built-in
+        names like ""HSV"", ""Fire"", ""Plasma"", ""Inferno"" all work,
+        as do user-imported JSON themes. Default: HSV.
+
+    --quality NAME, -q NAME
+        Draft | Standard | High | Ultra | Extreme. Default Standard.
+        Higher tiers raise iteration ceilings and engage QD math.
+
+    --width N, -w N        Output width  in pixels (default 1920)
+    --height N, -h N       Output height in pixels (default 1080)
+
+    --out PATH, -o PATH     (required)
+        Image mode  — file path. Extension picks format:
+            .png   PNG
+            .tif / .tiff   TIFF (LZW)
+            .bmp   BMP
+        If --out is a folder, a filename is synthesized from the
+        region/coords + theme + timestamp.
+
+        Video mode — file path OR folder. With --lossless none a
+        .mp4 file path is used directly; with --lossless h264/ffv1/
+        h264hq the extension is forced to match the preset
+        (mp4 / mkv / mp4). A folder is acceptable in both cases.
+
+    --name NAME, -n NAME
+        Override the auto-generated base filename (extension is
+        still chosen by the chosen format / encoder).
+
+    --verbose, -v
+        Print stack traces on failure and extra diagnostics.
+
+=== Mode ===
+
+    --mode image|video, -m image|video
+        Default: image.
+
+=== Image mode ===
+
+Renders a single still through the same offscreen path the
+interactive Image button uses (PosterRenderer). A console spinner
+runs while the calculator is working; the final line reports the
+saved file size and elapsed time.
+
+Example:
+    FracturingFog --batch --region ""Seahorse Valley"" --theme Fire ^
+                  --width 3840 --height 2160 --out C:\out\seahorse.png
+
+=== Video mode ===
+
+Animates a smooth log-zoom from --start-zoom into the target's
+zoom, rendering one full frame per video frame. Frame N's
+coordinate is the target center (or interpolated when --reverse
+is used); zoom follows a smoothstep-eased exponential between
+start and target.
+
+Video-only flags:
+    --seconds VAL          Duration in seconds (default 20.0,  0.5–600)
+    --fps N                Frames per second  (default 30,     1–240)
+    --start-zoom VAL       Starting zoom      (default 0.5 = full view)
+    --reverse              Zoom OUT from target back to full view
+
+Frame-by-frame progress meter:
+    Video [################----------------]  52.0%  elapsed 00:03  eta 00:02  frame 26/50  zoom 14.2
+
+PNG frame folder is written alongside the video. By default it is
+kept when --lossless none and deleted when an ffmpeg lossless
+preset is used (since the frames are then intermediates). Override
+with --keep-frames or --no-keep-frames.
+
+=== Lossless video encoding ===
+
+    --lossless TYPE, -l TYPE      Default: none
+
+      none         Built-in Windows Media Foundation H.264 MP4
+                   writer (no external dependencies). Best for
+                   quick exports; encoder runs while frames are
+                   produced.
+
+      h264         libx264 -qp 0 (mathematically lossless), MP4
+                   container, yuv444p, +faststart. Best fidelity;
+                   large files. Requires ffmpeg.exe.
+
+      ffv1         FFV1 v3 in Matroska. True lossless intermediate;
+                   significantly smaller than uncompressed but
+                   still exact. Best for archival / editing
+                   pipelines. Requires ffmpeg.exe.
+
+      h264hq       libx264 -crf 18, MP4, yuv420p. Visually
+                   lossless, much smaller files. Best for sharing.
+                   Requires ffmpeg.exe.
+
+When a lossless preset is selected, the workflow is two-phase:
+  1. Render every frame to disk as a PNG sequence
+     (frame_NNNNNN.png starting at 000001 — image2 demuxer
+     compatible).
+  2. Invoke ffmpeg on the sequence with the preset's argument set.
+     ffmpeg progress is parsed and shown as a second meter:
+        Encode [##############################--]  87.0%  …
+
+ffmpeg.exe is discovered in:
+  1. The app folder.
+  2. The app's Tools\ and Resources\ subfolders.
+  3. PATH.
+
+If --lossless is set to anything other than none and ffmpeg.exe
+cannot be located, batch mode exits 3 with a hint.
+
+    --keep-frames       Retain the PNG folder after encode
+    --no-keep-frames    Delete the PNG folder after encode
+
+=== Examples ===
+
+  4K screenshot of the seahorse valley with the Fire palette:
+      FracturingFog --batch --region ""Seahorse Valley"" --theme Fire ^
+                    --width 3840 --height 2160 --out C:\out\seahorse.png
+
+  Manual coords screenshot at high quality:
+      FracturingFog --batch --x -0.7269 --y 0.1889 --zoom 2500 ^
+                    --iter 4000 --theme Plasma --quality High ^
+                    --width 1920 --height 1080 --out C:\out\twist.png
+
+  30-second WMF MP4 zoom into Mini Mandelbrot:
+      FracturingFog --batch --mode video --region ""Mini Mandelbrot"" ^
+                    --theme Plasma --seconds 30 --fps 30 ^
+                    --out C:\out\zoom.mp4
+
+  60-second lossless FFV1 archival zoom (folder out):
+      FracturingFog --batch --mode video --region ""Seahorse Valley"" ^
+                    --theme Fire --seconds 60 --fps 60 ^
+                    --lossless ffv1 --keep-frames --out C:\out\
+
+  Reverse zoom-out from a saved user region as visually-lossless mp4:
+      FracturingFog --batch --mode video --region ""MyDeepPick"" ^
+                    --theme Inferno --seconds 20 --reverse ^
+                    --lossless h264hq --out C:\out\dive_out.mp4
+
+=== Notes ===
+
+  • Built-in regions and user-saved regions/themes are loaded from
+    %APPDATA%\FracturingFog\ at batch start, so anything authored
+    in the interactive shell is immediately accessible by name.
+
+  • Width/height are rounded down to the nearest even number in
+    video mode (codec constraint).
+
+  • Batch mode honours the same QD-precision auto-promotion the
+    interactive shell uses, so deep-zoom regions at zoom 1e25+
+    render correctly without any extra flags.
+
+  • Multiple batch invocations can run in parallel; each renders
+    in its own process and writes to its own --out path.
+";
+
         public const string AudioText =
 @"=== Audio-Reactive Slideshow ===
 

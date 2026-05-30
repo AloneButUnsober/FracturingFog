@@ -89,6 +89,10 @@
                 <TextBox Classes="helpBody" Text="{Binding FeaturesText}" />
             </TabItem>
 
+            <TabItem Header="Batch / CLI">
+                <TextBox Classes="helpBody" Text="{Binding BatchText}" />
+            </TabItem>
+
             <TabItem Header="Audio">
                 <TextBox Classes="helpBody" Text="{Binding AudioText}" />
             </TabItem>
