@@ -58,19 +58,32 @@
         <Border Grid.Row="0"
                 Padding="6,4"
                 Background="#161616"
-                BorderBrush="#333" BorderThickness="0,0,0,1">
+                BorderBrush="#333" BorderThickness="0,0,0,1"
+                IsVisible="{Binding IsToolbarVisible}">
             <DockPanel LastChildFill="False">
                 <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
                     <TextBlock Text="Type" Classes="label" />
                     <ComboBox Classes="toolbar"
-                              MinWidth="130"
-                              ItemsSource="{Binding Main.FractalTypes}"
-                              SelectedItem="{Binding Main.SelectedFractalType}" />
+                              MinWidth="150"
+                              ItemsSource="{Binding Main.FractalEntries}"
+                              SelectedItem="{Binding Main.SelectedFractalEntry}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate DataType="vm:FractalTypeEntry">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                     <TextBlock Text="Quality" Classes="label" Margin="8,0,0,0" />
                     <ComboBox Classes="toolbar"
                               MinWidth="130"
                               ItemsSource="{Binding Main.QualityPresets}"
-                              SelectedItem="{Binding Main.SelectedQuality}" />
+                              SelectedItem="{Binding Main.SelectedQuality}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                     <TextBlock Text="Region" Classes="label" Margin="8,0,0,0" />
                     <ComboBox x:Name="ToolbarRegionCombo"
                               Classes="toolbar"

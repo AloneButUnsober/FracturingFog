@@ -40,6 +40,7 @@
         </Style>
         <Style Selector="TabItem">
             <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="12" />
         </Style>
     </Window.Styles>
 
@@ -131,6 +132,7 @@
                 Content="Close"
                 Command="{Binding CloseCommand}"
                 HorizontalAlignment="Center"
+                HorizontalContentAlignment="Center"
                 Margin="0,8,0,0"
                 Width="140" />
     </Grid>
