@@ -15,4 +15,13 @@ public sealed class ChunkDto
     [JsonPropertyName("total")] public int Total { get; set; }
     [JsonPropertyName("bytesBase64")]
     public string BytesBase64 { get; set; } = "";
+
+    /// <summary>Base64-encoded SHA-256 of the decoded chunk bytes. TLS
+    /// already authenticates the stream, so this is defense in depth
+    /// against an in-process bug (e.g. ArrayPool reuse error, file
+    /// truncation, mid-stream disk swap) silently corrupting a chunk
+    /// before encode. Optional for older clients — when present the
+    /// receiver MUST verify.</summary>
+    [JsonPropertyName("sha256")]
+    public string? Sha256 { get; set; }
 }

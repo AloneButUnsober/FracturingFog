@@ -41,7 +41,11 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         RefreshCommand = ReactiveCommand.CreateFromTask(PollOnceAsync);
         CloseCommand   = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
 
-        _poll = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, async (_, _) =>
+        // 5-second cadence: each poll opens a fresh mTLS handshake (no
+        // pooling in v1), which costs ~50-100 ms server CPU. At 1 Hz the
+        // admin dialog imposes 5-10% CPU floor on an otherwise idle
+        // server. 5 s keeps the UI responsive without paying that tax.
+        _poll = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, async (_, _) =>
         {
             if (_disposed) return;
             await PollOnceAsync();
@@ -92,7 +96,7 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         // First cheap probe — TCP port. mTLS handshake costs more, so we
         // only attempt a server.status RPC when the port is listening AND
         // a client cert path is configured.
-        bool listening = ServerInstanceProbe.IsListening("127.0.0.1", Config.Port);
+        bool listening = await ServerInstanceProbe.IsListeningAsync("127.0.0.1", Config.Port).ConfigureAwait(true);
         if (!listening)
         {
             IsOnline = false;

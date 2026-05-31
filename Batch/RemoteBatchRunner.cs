@@ -108,7 +108,12 @@ public static class RemoteBatchRunner
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(opts.OutputPath))!);
         byte[] bytes = Convert.FromBase64String(b64);
-        await File.WriteAllBytesAsync(opts.OutputPath, bytes).ConfigureAwait(false);
+        // Atomic write so a crash mid-flush does not leave the user's
+        // chosen output file truncated. Sibling .tmp + rename keeps an
+        // existing output unmodified until the new bytes are durable.
+        string tmp = opts.OutputPath + ".tmp";
+        await File.WriteAllBytesAsync(tmp, bytes).ConfigureAwait(false);
+        File.Move(tmp, opts.OutputPath, overwrite: true);
         Console.WriteLine($"saved {bytes.Length:N0} bytes → {opts.OutputPath}  ({resp.ElapsedMs} ms)");
         return 0;
     }
@@ -116,10 +121,31 @@ public static class RemoteBatchRunner
     private static string PromptPasswordOnStdin(string prompt)
     {
         Console.Write(prompt);
+
+        // Console.ReadKey(intercept:true) throws InvalidOperationException
+        // when stdin is redirected (CI pipelines, "echo pw | FracturingFog"),
+        // which would crash the batch with no actionable message. Detect
+        // redirection up front and fall back to ReadLine. The password
+        // will then echo, which is the standard Unix convention for
+        // non-interactive password feeds — the caller chose to redirect.
+        if (Console.IsInputRedirected)
+        {
+            Console.WriteLine("[stdin is redirected — password will echo]");
+            return Console.ReadLine() ?? "";
+        }
+
         var sb = new System.Text.StringBuilder();
         while (true)
         {
-            var k = Console.ReadKey(intercept: true);
+            ConsoleKeyInfo k;
+            try { k = Console.ReadKey(intercept: true); }
+            catch (InvalidOperationException)
+            {
+                // Late fallback if Console.IsInputRedirected returned
+                // false but ReadKey still rejects (terminal-less host).
+                Console.WriteLine();
+                return Console.ReadLine() ?? sb.ToString();
+            }
             if (k.Key == ConsoleKey.Enter) { Console.WriteLine(); break; }
             if (k.Key == ConsoleKey.Backspace)
             {
