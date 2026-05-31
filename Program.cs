@@ -20,6 +20,36 @@ static class Program
         if (args.Length > 0 && args[0] == "--ubtest")
             return UserBulbSelfTest.Run();
 
+        // CalculatorGen-emitted self-tests: validates that the scalar and
+        // AVX2 paths of a generated calculator agree on a fixed sample grid.
+        // Pass the calculator name (sans "Calculator" suffix) as arg[1].
+        // Currently wired for MandelbrotZ2; add cases as more calculators
+        // are generated.
+        if (args.Length > 0 && args[0] == "--gentest")
+        {
+            string target = args.Length > 1 ? args[1] : "MandelbrotZ2";
+            string report;
+            bool ok;
+            switch (target)
+            {
+                case "MandelbrotZ2":
+                    ok = FracturingFog.Calculators.Generated
+                            .MandelbrotZ2CalculatorSelfTest.Run(out report);
+                    break;
+                default:
+                    report = $"Unknown gentest target: {target}";
+                    ok = false;
+                    break;
+            }
+            // WinExe subsystem detaches stdout; write to file so the result is
+            // observable from a parent shell.
+            string outPath = System.IO.Path.Combine(
+                AppContext.BaseDirectory, "gentest.out");
+            System.IO.File.WriteAllText(outPath, report + Environment.NewLine);
+            Console.WriteLine(report);   // harmless if there's an attached console
+            return ok ? 0 : 1;
+        }
+
         // Phase 2.4 cross-platform GL smoke. Opens a 256x256 Silk.NET window
         // via GLFW, uploads one solid frame, prints the renderer description,
         // exits 0. CI hooks this on the linux-x64 leg under xvfb-run; failure

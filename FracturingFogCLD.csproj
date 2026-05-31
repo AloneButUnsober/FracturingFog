@@ -60,6 +60,7 @@
     <Compile Remove="Server\**" />
     <Compile Remove="Server.Tests\**" />
     <Compile Remove="Client\**" />
+    <Compile Remove="CalculatorGen\**" />
     <None Remove="Abstractions\**" />
     <None Remove="UI.Avalonia\**" />
     <None Remove="Rendering.Silk\**" />
@@ -68,6 +69,7 @@
     <None Remove="Server\**" />
     <None Remove="Server.Tests\**" />
     <None Remove="Client\**" />
+    <None Remove="CalculatorGen\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
     <EmbeddedResource Remove="Rendering.Silk\**" />
@@ -76,6 +78,7 @@
     <EmbeddedResource Remove="Server\**" />
     <EmbeddedResource Remove="Server.Tests\**" />
     <EmbeddedResource Remove="Client\**" />
+    <EmbeddedResource Remove="CalculatorGen\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
     <Content Remove="Rendering.Silk\**" />
@@ -84,6 +87,7 @@
     <Content Remove="Server\**" />
     <Content Remove="Server.Tests\**" />
     <Content Remove="Client\**" />
+    <Content Remove="CalculatorGen\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
       items automatically from anywhere under the project root. Strip the UI

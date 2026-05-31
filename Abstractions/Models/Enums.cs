@@ -22,7 +22,13 @@ namespace FracturingFog
         Mandelbulb,
         Sandbox,
         UserBulb,
-        TearDrop
+        TearDrop,
+        /// <summary>CalculatorGen-emitted z² + c (drop-in replacement for the
+        /// hand-tuned MandelbrotCalculator demo). Carries the generator's full
+        /// pipeline: scalar + AVX2 + ILGPU GPU + perturbation + BLA. Exposed
+        /// so the toolbar can switch between the legacy implementation and
+        /// the generated one for direct A/B comparisons.</summary>
+        GeneratedMandelbrotZ2,
     }
 
     public enum RenderProfile { Preview, Final }

@@ -51,6 +51,7 @@ namespace FracturingFog.Rendering
         private SandboxCalculator _sandboxCalculator;
         private UserBulbCalculator _userBulbCalculator;
         private TearDropCalculator _tearDropCalculator;
+        private FracturingFog.Calculators.Generated.MandelbrotZ2Calculator _generatedZ2Calculator;
 
         private CancellationTokenSource? _calcCts;
         private readonly object _calcLock = new();
@@ -98,6 +99,7 @@ namespace FracturingFog.Rendering
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
             _tearDropCalculator = new TearDropCalculator(w, h);
+            _generatedZ2Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ2Calculator(w, h);
 
             if (initialColorMap != null)
             {
@@ -113,6 +115,7 @@ namespace FracturingFog.Rendering
                 _sandboxCalculator.ColorMap = initialColorMap;
                 _userBulbCalculator.ColorMap = initialColorMap;
                 _tearDropCalculator.ColorMap = initialColorMap;
+                _generatedZ2Calculator.ColorMap = initialColorMap;
             }
         }
 
@@ -211,6 +214,7 @@ namespace FracturingFog.Rendering
                 _sandboxCalculator.ColorMap = value;
                 _userBulbCalculator.ColorMap = value;
                 _tearDropCalculator.ColorMap = value;
+                _generatedZ2Calculator.ColorMap = value;
                 ColorMapChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -413,6 +417,20 @@ namespace FracturingFog.Rendering
                     case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                     case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                     case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
+                    case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz:
+                        // Big+ deep zoom: plumb the full DD/QD centre limbs +
+                        // opt into the perturbation + BLA paths so the
+                        // generated calc tracks the legacy MandelbrotCalculator
+                        // through QD-precision zooms (~1e50 ceiling).
+                        gz.CenterXLo = ViewState.CenterXLo;
+                        gz.CenterX2  = ViewState.CenterX2;
+                        gz.CenterX3  = ViewState.CenterX3;
+                        gz.CenterYLo = ViewState.CenterYLo;
+                        gz.CenterY2  = ViewState.CenterY2;
+                        gz.CenterY3  = ViewState.CenterY3;
+                        gz.UsePerturbation = true;
+                        gz.UseBla          = true;
+                        break;
                 }
             }
 
@@ -448,7 +466,13 @@ namespace FracturingFog.Rendering
                 else
                     UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
 
+                // hp == true → status bar shows [DD]/[QD]. For alt calcs the
+                // legacy flag is meaningless (only MandelbrotCalculator wires
+                // it), so query the calculator's own label if it exposes one
+                // — currently only the generated GZ calc does.
                 bool hp = !useAlt && calc.IsHighPrecisionActive;
+                if (useAlt && altCalc is FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gzAlt)
+                    hp = gzAlt.LastPrecisionLabel == "DD" || gzAlt.LastPrecisionLabel == "QD";
                 int curW = useAlt ? altCalc!.Width : calc.Width;
                 int curH = useAlt ? altCalc!.Height : calc.Height;
                 int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
@@ -492,6 +516,7 @@ namespace FracturingFog.Rendering
             _sandboxCalculator.Resize(w, h);
             _userBulbCalculator.Resize(w, h);
             _tearDropCalculator.Resize(w, h);
+            _generatedZ2Calculator.Resize(w, h);
 
             ApplyView();
             Trigger();
@@ -577,6 +602,7 @@ namespace FracturingFog.Rendering
             FractalType.Sandbox => _sandboxCalculator,
             FractalType.UserBulb => _userBulbCalculator,
             FractalType.TearDrop => _tearDropCalculator,
+            FractalType.GeneratedMandelbrotZ2 => _generatedZ2Calculator,
             _ => null
         };
 

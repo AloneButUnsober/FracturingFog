@@ -61,6 +61,7 @@ namespace FracturingFog.Hosting
             new("User Equation", HelpTextBundle.MathUserEquationText),
             new("User Bulb 3D",  HelpTextBundle.MathUserBulbText),
             new("Sandbox",       HelpTextBundle.MathSandboxText),
+            new("Mandelbrot Z² (Generated)", HelpTextBundle.MathGeneratedZ2Text),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]
