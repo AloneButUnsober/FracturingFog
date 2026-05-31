@@ -32,6 +32,18 @@ namespace FracturingFog.Hosting
         private static IFractalInputController? s_controller;
         private static IntPtr s_hwnd;
 
+        // ── Context-menu callback ────────────────────────────────────────────
+        // Fired from WM_RBUTTONUP after the controller has been notified.
+        // The bool argument is true when the click looked like a drag (>1 s
+        // held or pointer moved beyond a small dead-zone), which is the cue
+        // the UI uses to suppress the menu in 3D fractal modes where the
+        // right button is overloaded for camera rotation.
+        public static Action<bool>? ContextMenuRequested;
+        private static DateTime s_rightDownUtc;
+        private static int s_rightDownX, s_rightDownY;
+        private const int RightHoldSuppressMs = 1000;
+        private const int RightMoveSuppressPx = 5;
+
         // ── Window messages ──────────────────────────────────────────────────
         private const uint WM_MOUSEMOVE     = 0x0200;
         private const uint WM_LBUTTONDOWN   = 0x0201;
@@ -100,6 +112,9 @@ namespace FracturingFog.Hosting
                         return IntPtr.Zero;
                     case WM_RBUTTONDOWN:
                         SetCapture(hWnd);
+                        s_rightDownUtc = DateTime.UtcNow;
+                        s_rightDownX = LoWordSigned(lParam);
+                        s_rightDownY = HiWordSigned(lParam);
                         c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Right, wParam));
                         return IntPtr.Zero;
                     case WM_MBUTTONDOWN:
@@ -115,6 +130,16 @@ namespace FracturingFog.Hosting
                     case WM_RBUTTONUP:
                         ReleaseCapture();
                         c.OnPointerUp(Pointer(hWnd, lParam, PointerButton.Right, wParam));
+                        {
+                            int upX = LoWordSigned(lParam);
+                            int upY = HiWordSigned(lParam);
+                            double heldMs = (DateTime.UtcNow - s_rightDownUtc).TotalMilliseconds;
+                            int dx = upX - s_rightDownX;
+                            int dy = upY - s_rightDownY;
+                            bool moved = (dx * dx + dy * dy) > (RightMoveSuppressPx * RightMoveSuppressPx);
+                            bool wasDrag = heldMs > RightHoldSuppressMs || moved;
+                            try { ContextMenuRequested?.Invoke(wasDrag); } catch { /* UI errors must not crash native callback */ }
+                        }
                         return IntPtr.Zero;
                     case WM_MBUTTONUP:
                         c.OnPointerUp(Pointer(hWnd, lParam, PointerButton.Middle, wParam));

@@ -85,51 +85,76 @@ public sealed partial class MainWindow : Window
         _sponge?.Focus();
     }
 
-    // Right-click menu on the render surface. Built in code-behind (not in
-    // XAML) because the ContextMenu lives outside the visual tree, so its
-    // {Binding} expressions don't see the ShellViewModel under compiled
-    // bindings. Same pattern ComboSortMenu uses for the toolbar combos —
-    // ContextRequested + MenuFlyout.ShowAt with direct command invocation.
+    // Right-click menu on the render surface. Built in code-behind because
+    // it dispatches against ShellViewModel rather than compiled bindings.
+    //
+    // Open path: the GPU swap-chain HWND composites on top of every Avalonia
+    // pixel and intercepts every WM_MOUSE* — so neither the InputSponge's
+    // ContextRequested nor a window-level PointerReleased ever fires for a
+    // click over the render area. NativeMouseForwarder subclasses that HWND,
+    // and on WM_RBUTTONUP it raises AvaloniaShell.ContextMenuRequested with
+    // a drag flag computed from down/up timestamp + distance. MainWindow
+    // listens here and pops the menu, suppressing in 3D modes when the click
+    // looked like a camera-rotate drag (matching legacy MainForm).
     private bool _contextMenuAttached;
+    private ContextMenu? _contextMenu;
+    private Border? _contextMenuTarget;
+
     private void AttachContextMenu(Border sponge, ShellViewModel shell)
     {
         if (_contextMenuAttached) return;
         _contextMenuAttached = true;
 
-        sponge.ContextRequested += (_, e) =>
-        {
-            var flyout = new MenuFlyout();
-            AddItem(flyout, "Toolbar",            () => shell.IsToolbarVisible   = !shell.IsToolbarVisible);
-            AddItem(flyout, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
-            AddItem(flyout, "Status",             () => shell.IsStatusBarVisible = !shell.IsStatusBarVisible);
-            AddItem(flyout, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
-            AddItem(flyout, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
-            flyout.Items.Add(new Separator());
-            AddItem(flyout, "Span Monitors",      () => shell.ToggleSpanCommand.Execute().Subscribe());
-            flyout.Items.Add(new Separator());
-            AddItem(flyout, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
-            AddItem(flyout, "Watermark",          () => shell.Main.ShowWatermark = !shell.Main.ShowWatermark);
-            flyout.Items.Add(new Separator());
-            AddItem(flyout, "Video",              () => shell.ToggleVideoCommand.Execute().Subscribe());
-            flyout.Items.Add(new Separator());
-            AddItem(flyout, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
-            AddItem(flyout, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
-            flyout.Items.Add(new Separator());
-            AddItem(flyout, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
-            AddItem(flyout, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
-            flyout.Items.Add(new Separator());
-            AddItem(flyout, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
+        _contextMenu = BuildContextMenu(shell);
+        _contextMenuTarget = sponge;
+        // Assign so the menu is parented to a control that's in the visual
+        // tree (Open() needs a PlacementTarget that's attached); the assign
+        // does not affect the Avalonia auto-open path because no
+        // PointerReleased ever reaches the sponge.
+        sponge.ContextMenu = _contextMenu;
 
-            flyout.ShowAt(sponge, showAtPointer: true);
-            e.Handled = true;
+        AvaloniaShell.ContextMenuRequested = wasDrag =>
+        {
+            if (shell.Main.ViewState.Is3D && wasDrag) return;
+            if (_contextMenu == null || _contextMenuTarget == null) return;
+            // ContextMenu.Open(control) shows at the cursor by default
+            // (Placement = Pointer is the framework default for ContextMenu).
+            if (_contextMenu.IsOpen) _contextMenu.Close();
+            _contextMenu.Open(_contextMenuTarget);
         };
     }
 
-    private static void AddItem(MenuFlyout flyout, string header, Action invoke)
+    private static ContextMenu BuildContextMenu(ShellViewModel shell)
+    {
+        var menu = new ContextMenu();
+        AddItem(menu, "Toolbar",            () => shell.IsToolbarVisible   = !shell.IsToolbarVisible);
+        AddItem(menu, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
+        AddItem(menu, "Status",             () => shell.IsStatusBarVisible = !shell.IsStatusBarVisible);
+        AddItem(menu, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
+        AddItem(menu, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Span Monitors",      () => shell.ToggleSpanCommand.Execute().Subscribe());
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
+        AddItem(menu, "Watermark",          () => shell.Main.ShowWatermark = !shell.Main.ShowWatermark);
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Video",              () => shell.ToggleVideoCommand.Execute().Subscribe());
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
+        AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
+        AddItem(menu, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
+        return menu;
+    }
+
+    private static void AddItem(ContextMenu menu, string header, Action invoke)
     {
         var mi = new MenuItem { Header = header };
         mi.Click += (_, _) => invoke();
-        flyout.Items.Add(mi);
+        menu.Items.Add(mi);
     }
 
     private void FocusSponge() => _sponge?.Focus();
@@ -200,6 +225,9 @@ public sealed partial class MainWindow : Window
         if (_sponge != null)
         {
             _inputAdapter = AvaloniaInputAdapter.Attach(_sponge, shell.Main.Input);
+            // Right-click menu attached to the InputSponge — pops only on the
+            // rendered image area, matching legacy MainForm where the
+            // ContextMenuStrip lived on _renderPanel.
             AttachContextMenu(_sponge, shell);
         }
 
@@ -414,6 +442,7 @@ public sealed partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _shuttingDown = true;
+        AvaloniaShell.ContextMenuRequested = null;
         _inputAdapter?.Dispose();
         _inputAdapter = null;
 

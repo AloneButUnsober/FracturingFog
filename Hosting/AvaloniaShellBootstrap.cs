@@ -182,6 +182,15 @@ namespace FracturingFog.Hosting
             // (Runs on the UI thread — OnSurfaceReady fires from the native
             // control's CreateNativeControlCore.)
             NativeMouseForwarder.Attach(surface.Handle, s_input);
+            // Bridge native HWND right-click release to the Avalonia shell so
+            // MainWindow can open its context menu (Avalonia's own
+            // ContextRequested never fires — WM_RBUTTONUP is swallowed by the
+            // subclass above so Windows never raises WM_CONTEXTMENU).
+            NativeMouseForwarder.ContextMenuRequested = wasDrag =>
+            {
+                try { FracturingFog.UI.Avalonia.AvaloniaShell.ContextMenuRequested?.Invoke(wasDrag); }
+                catch { /* swallow — must not crash the native subclass */ }
+            };
 
             // ── Services ─────────────────────────────────────────────────
             // Theme service holds a reference to the render host so its
