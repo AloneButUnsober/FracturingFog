@@ -53,9 +53,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         QualityPresets = new ObservableCollection<QualityPreset>(QualityPreset.All);
         FractalTypes = new ObservableCollection<FractalType>(
             (FractalType[])Enum.GetValues(typeof(FractalType)));
+        FractalEntries = new ObservableCollection<FractalTypeEntry>();
+        RebuildFractalEntries();
 
         _selectedQuality = ViewState.Quality;
         _selectedFractalType = ViewState.FractalType;
+        _selectedFractalEntry = FindEntryForType(_selectedFractalType);
         _brightness = ViewState.Brightness;
         _contrast = ViewState.Contrast;
         _adaptive = ViewState.HistogramEq;
@@ -101,6 +104,58 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     public ObservableCollection<QualityPreset> QualityPresets { get; }
     public ObservableCollection<FractalType> FractalTypes { get; }
+
+    /// <summary>Toolbar Type combo entries: hard-coded FractalType values
+    /// followed by a "— Registered —" divider + every promoted equation from
+    /// <see cref="RegisteredFractalCatalog"/>. Drives the new combo binding
+    /// so saved equations are selectable without opening a dialog.</summary>
+    public ObservableCollection<FractalTypeEntry> FractalEntries { get; }
+
+    private static readonly (FractalType Type, string Label)[] BuiltInFractalLabels =
+    {
+        (FractalType.Mandelbrot,       "Mandelbrot"),
+        (FractalType.Julia,            "Julia"),
+        (FractalType.BurningShip,      "Burning Ship"),
+        (FractalType.Tricorn,          "Tricorn"),
+        (FractalType.Multibrot,        "Multibrot"),
+        (FractalType.Phoenix,          "Phoenix"),
+        (FractalType.Newton,           "Newton"),
+        (FractalType.BuddhaBrot,       "Buddhabrot"),
+        (FractalType.IFS,              "IFS"),
+        (FractalType.LSystem,          "L-System"),
+        (FractalType.StrangeAttractor, "Strange Attractor"),
+        (FractalType.UserEquation,     "User Equation"),
+        (FractalType.Mandelbulb,       "Mandelbulb (3D)"),
+        (FractalType.Sandbox,          "Sandbox"),
+        (FractalType.UserBulb,         "User Bulb (3D)"),
+        (FractalType.TearDrop,         "Tear Drop"),
+    };
+
+    /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label
+    /// table + the current <see cref="RegisteredFractalCatalog"/> snapshot.
+    /// Call after a user equation is saved/promoted so the combo picks up
+    /// the new entry.</summary>
+    public void RebuildFractalEntries()
+    {
+        FractalEntries.Clear();
+        foreach (var (t, label) in BuiltInFractalLabels)
+            FractalEntries.Add(FractalTypeEntry.BuiltIn(t, label));
+
+        var promoted = RegisteredFractalCatalog.Snapshot();
+        if (promoted.Count > 0)
+        {
+            FractalEntries.Add(FractalTypeEntry.Divider());
+            foreach (var r in promoted)
+                FractalEntries.Add(FractalTypeEntry.FromPromoted(r));
+        }
+    }
+
+    private FractalTypeEntry? FindEntryForType(FractalType type)
+    {
+        foreach (var e in FractalEntries)
+            if (!e.IsDivider && e.Promoted == null && e.Type == type) return e;
+        return null;
+    }
 
     // ── Status + cursor ───────────────────────────────────────────────────
 
@@ -183,6 +238,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // image inside the new set → every pixel hits MAX_ITER and
                 // the calc takes minutes, looking like a UI lockup.
                 ViewState.SnapToFractalDefault(value);
+                var entry = FindEntryForType(value);
+                if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
+                {
+                    _selectedFractalEntry = entry;
+                    this.RaisePropertyChanged(nameof(SelectedFractalEntry));
+                }
                 _renderHost.Trigger();
             }
         }
@@ -198,6 +259,83 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             _selectedFractalType = type;
             this.RaisePropertyChanged(nameof(SelectedFractalType));
+        }
+        var entry = FindEntryForType(type);
+        if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
+        {
+            _selectedFractalEntry = entry;
+            this.RaisePropertyChanged(nameof(SelectedFractalEntry));
+        }
+    }
+
+    private FractalTypeEntry? _selectedFractalEntry;
+    /// <summary>Toolbar Type combo binding target. Distinguishes built-in
+    /// FractalType picks from promoted RegisteredFractal picks: the latter
+    /// also loads the equation source into FractalParameters and recompiles
+    /// the appropriate engine before switching FractalType. Selecting the
+    /// "— Registered —" divider is bounced back to the prior entry.</summary>
+    public FractalTypeEntry? SelectedFractalEntry
+    {
+        get => _selectedFractalEntry;
+        set
+        {
+            if (value == null) return;
+            if (value.IsDivider)
+            {
+                // Revert combo to whatever the canonical entry is.
+                var revert = FindEntryForType(_selectedFractalType);
+                if (revert != null && !ReferenceEquals(_selectedFractalEntry, revert))
+                {
+                    _selectedFractalEntry = revert;
+                    this.RaisePropertyChanged(nameof(SelectedFractalEntry));
+                }
+                return;
+            }
+            if (ReferenceEquals(_selectedFractalEntry, value)) return;
+            _selectedFractalEntry = value;
+            this.RaisePropertyChanged(nameof(SelectedFractalEntry));
+
+            if (value.Promoted != null)
+            {
+                ApplyPromoted(value.Promoted);
+                if (_selectedFractalType != value.Type)
+                {
+                    _selectedFractalType = value.Type;
+                    ViewState.FractalType = value.Type;
+                    ViewState.SnapToFractalDefault(value.Type);
+                    this.RaisePropertyChanged(nameof(SelectedFractalType));
+                }
+                _renderHost.Trigger();
+            }
+            else
+            {
+                // Built-in entry — go through the SelectedFractalType setter
+                // so the snap-to-default + retrigger path stays in one place.
+                SelectedFractalType = value.Type;
+            }
+        }
+    }
+
+    private void ApplyPromoted(RegisteredFractal r)
+    {
+        var p = ViewState.FractalParameters;
+        switch (r.Engine)
+        {
+            case EquationEngine.Sandbox:
+                p.SandboxSource = r.Source;
+                p.SandboxName = r.Name;
+                _renderHost.CompileSandbox(r.Source);
+                break;
+            case EquationEngine.UserEquation:
+                p.UserEquationSource = r.Source;
+                p.UserEquationName = r.Name;
+                _renderHost.CompileUserEquation(r.Source);
+                break;
+            case EquationEngine.UserBulb:
+                p.UserBulbSource = r.Source;
+                p.UserBulbName = r.Name;
+                _renderHost.CompileUserBulb(r.Source);
+                break;
         }
     }
 

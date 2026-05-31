@@ -85,6 +85,53 @@ public sealed partial class MainWindow : Window
         _sponge?.Focus();
     }
 
+    // Right-click menu on the render surface. Built in code-behind (not in
+    // XAML) because the ContextMenu lives outside the visual tree, so its
+    // {Binding} expressions don't see the ShellViewModel under compiled
+    // bindings. Same pattern ComboSortMenu uses for the toolbar combos —
+    // ContextRequested + MenuFlyout.ShowAt with direct command invocation.
+    private bool _contextMenuAttached;
+    private void AttachContextMenu(Border sponge, ShellViewModel shell)
+    {
+        if (_contextMenuAttached) return;
+        _contextMenuAttached = true;
+
+        sponge.ContextRequested += (_, e) =>
+        {
+            var flyout = new MenuFlyout();
+            AddItem(flyout, "Toolbar",            () => shell.IsToolbarVisible   = !shell.IsToolbarVisible);
+            AddItem(flyout, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
+            AddItem(flyout, "Status",             () => shell.IsStatusBarVisible = !shell.IsStatusBarVisible);
+            AddItem(flyout, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
+            AddItem(flyout, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
+            flyout.Items.Add(new Separator());
+            AddItem(flyout, "Span Monitors",      () => shell.ToggleSpanCommand.Execute().Subscribe());
+            flyout.Items.Add(new Separator());
+            AddItem(flyout, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
+            AddItem(flyout, "Watermark",          () => shell.Main.ShowWatermark = !shell.Main.ShowWatermark);
+            flyout.Items.Add(new Separator());
+            AddItem(flyout, "Video",              () => shell.ToggleVideoCommand.Execute().Subscribe());
+            flyout.Items.Add(new Separator());
+            AddItem(flyout, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
+            AddItem(flyout, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
+            flyout.Items.Add(new Separator());
+            AddItem(flyout, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
+            AddItem(flyout, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
+            flyout.Items.Add(new Separator());
+            AddItem(flyout, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
+
+            flyout.ShowAt(sponge, showAtPointer: true);
+            e.Handled = true;
+        };
+    }
+
+    private static void AddItem(MenuFlyout flyout, string header, Action invoke)
+    {
+        var mi = new MenuItem { Header = header };
+        mi.Click += (_, _) => invoke();
+        flyout.Items.Add(mi);
+    }
+
     private void FocusSponge() => _sponge?.Focus();
 
     // ── Command-key routing ───────────────────────────────────────────────
@@ -151,7 +198,10 @@ public sealed partial class MainWindow : Window
 
         _sponge ??= this.FindControl<Border>("InputSponge");
         if (_sponge != null)
+        {
             _inputAdapter = AvaloniaInputAdapter.Attach(_sponge, shell.Main.Input);
+            AttachContextMenu(_sponge, shell);
+        }
 
         // Right-click sort menus on the toolbar Region / Theme combos. The
         // build callbacks read the live _shell so they stay correct if the
@@ -196,6 +246,7 @@ public sealed partial class MainWindow : Window
     private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MainViewModel.SelectedFractalType)
+                           or nameof(MainViewModel.SelectedFractalEntry)
                            or nameof(MainViewModel.SelectedQuality))
             FocusSponge();
     }

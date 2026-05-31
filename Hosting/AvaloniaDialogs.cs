@@ -373,8 +373,8 @@ namespace FracturingFog.Hosting
 
             void Run()
             {
-                var widthTx = new TextBox { Text = "24", MinWidth = 70, PlaceholderText = "inches" };
-                var heightTx = new TextBox { Text = "36", MinWidth = 70, PlaceholderText = "inches" };
+                var widthTx = new TextBox { Text = "24", MinWidth = 70, Watermark = "inches" };
+                var heightTx = new TextBox { Text = "36", MinWidth = 70, Watermark = "inches" };
 
                 var portrait = new CheckBox { Content = "Portrait orientation", IsChecked = true, Foreground = Brushes.White };
 

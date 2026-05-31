@@ -75,7 +75,7 @@ namespace FracturingFog.Hosting
         // ── Span-mode (borderless multi-monitor fullscreen) saved state ──────
         private static bool s_spanning;
         private static WindowState s_preSpanState;
-        private static WindowDecorations s_preSpanDecorations;
+        private static SystemDecorations s_preSpanDecorations;
         private static PixelPoint s_preSpanPosition;
         private static double s_preSpanWidth;
         private static double s_preSpanHeight;
@@ -1153,7 +1153,7 @@ namespace FracturingFog.Hosting
 
             // Capture restore state before mutating anything.
             s_preSpanState = win.WindowState;
-            s_preSpanDecorations = win.WindowDecorations;
+            s_preSpanDecorations = win.SystemDecorations;
             s_preSpanPosition = win.Position;
             s_preSpanWidth = double.IsNaN(win.Width) ? win.Bounds.Width : win.Width;
             s_preSpanHeight = double.IsNaN(win.Height) ? win.Bounds.Height : win.Height;
@@ -1175,7 +1175,7 @@ namespace FracturingFog.Hosting
             if (scaling <= 0) scaling = 1.0;
 
             win.WindowState = WindowState.Normal;
-            win.WindowDecorations = WindowDecorations.None;
+            win.SystemDecorations = SystemDecorations.None;
             win.Topmost = true;
             win.Position = new PixelPoint(minX, minY);
             win.Width = (maxX - minX) / scaling;
@@ -1188,7 +1188,7 @@ namespace FracturingFog.Hosting
         private static void ExitSpanMode(Window win)
         {
             if (!s_spanning) return;
-            win.WindowDecorations = s_preSpanDecorations;
+            win.SystemDecorations = s_preSpanDecorations;
             win.Topmost = s_preSpanTopmost;
             win.Position = s_preSpanPosition;
             win.Width = s_preSpanWidth;

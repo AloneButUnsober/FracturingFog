@@ -299,6 +299,30 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
         ShowFractalParamsCommand  = ReactiveCommand.Create(
             () => FractalParamsRequested?.Invoke(this, EventArgs.Empty));
+
+        // Context-menu commands. Toolbar / status / grid / watermark are
+        // simple flag flips; the rest delegate to the existing private
+        // handlers + event raisers so a right-click reaches the same code
+        // as the FloatingMenu buttons.
+        ToggleToolbarCommand   = ReactiveCommand.Create(() => IsToolbarVisible = !IsToolbarVisible);
+        ToggleStatusBarCommand = ReactiveCommand.Create(() => IsStatusBarVisible = !IsStatusBarVisible);
+        ToggleGridCommand      = ReactiveCommand.Create(() => Main.ShowGrid = !Main.ShowGrid);
+        ToggleWatermarkCommand = ReactiveCommand.Create(() => Main.ShowWatermark = !Main.ShowWatermark);
+        ToggleSpanCommand      = ReactiveCommand.Create(() =>
+        {
+            _isSpanning = !_isSpanning;
+            FloatingMenu.SpanButtonText = _isSpanning ? "Back" : "Span";
+            SpanToggleRequested?.Invoke(this, _isSpanning);
+        });
+        ToggleSlideshowCommand = ReactiveCommand.Create(ToggleSlideshow);
+        ToggleVideoCommand     = ReactiveCommand.Create(() =>
+        {
+            if (_video is { IsRunning: true }) _video.Stop();
+            else VideoRequested?.Invoke(this, EventArgs.Empty);
+        });
+        SaveRegionCommand      = ReactiveCommand.Create(TriggerSaveView);
+        ScreenshotCommand      = ReactiveCommand.Create(
+            () => ScreenshotRequested?.Invoke(this, EventArgs.Empty));
     }
 
     private static string FormatCoords(FracturingFog.ViewState.FractalViewState s)
@@ -508,6 +532,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isStatusBarVisible, value);
     }
 
+    private bool _isToolbarVisible = true;
+    /// <summary>Bound to the MainWindow toolbar row's IsVisible. Toggled by
+    /// the Toolbar context-menu item.</summary>
+    public bool IsToolbarVisible
+    {
+        get => _isToolbarVisible;
+        set => this.RaiseAndSetIfChanged(ref _isToolbarVisible, value);
+    }
+
     private bool _isFFClientVisible;
     public bool IsFFClientVisible
     {
@@ -570,6 +603,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
+
+    // Context-menu commands (right-click on render surface).
+    public ReactiveCommand<Unit, bool> ToggleToolbarCommand { get; }
+    public ReactiveCommand<Unit, bool> ToggleStatusBarCommand { get; }
+    public ReactiveCommand<Unit, bool> ToggleGridCommand { get; }
+    public ReactiveCommand<Unit, bool> ToggleWatermarkCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSpanCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSlideshowCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleVideoCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveRegionCommand { get; }
+    public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
 
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar

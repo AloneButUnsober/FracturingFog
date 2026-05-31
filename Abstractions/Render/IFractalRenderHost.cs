@@ -151,5 +151,16 @@ namespace FracturingFog.Render
 
         /// <summary>Theme label rendered in the watermark.</summary>
         string? ThemeName { get; set; }
+
+        /// <summary>Compile the Roslyn-backed UserEquation source. Returns
+        /// (true, null) on success; (false, error) when the compiler rejects
+        /// it. Used by promoted registered-equation pickers in the shell.</summary>
+        (bool ok, string? error) CompileUserEquation(string source);
+
+        /// <summary>Compile the restricted Sandbox-DSL source.</summary>
+        (bool ok, string? error) CompileSandbox(string source);
+
+        /// <summary>Compile the 3D UserBulb step source.</summary>
+        (bool ok, string? error) CompileUserBulb(string source);
     }
 }
