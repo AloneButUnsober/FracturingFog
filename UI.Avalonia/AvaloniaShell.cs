@@ -25,6 +25,17 @@ public static class AvaloniaShell
     /// </summary>
     public static Action<IGpuSurface>? OnSurfaceReady { get; set; }
 
+    /// <summary>
+    /// Invoked by the host bootstrap (from its native HWND mouse subclass)
+    /// when the user releases the right mouse button over the render surface.
+    /// The Avalonia <see cref="Views.MainWindow"/> assigns this to its
+    /// context-menu opener. The bool argument is <c>true</c> when the click
+    /// looked like a drag (long-hold or moved beyond a small dead-zone), so
+    /// the menu can suppress itself in 3D fractal modes where the right
+    /// button is overloaded for camera rotation.
+    /// </summary>
+    public static Action<bool>? ContextMenuRequested { get; set; }
+
     public static int Run(string[] args)
     {
         return BuildAvaloniaApp()
