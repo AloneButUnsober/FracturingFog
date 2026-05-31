@@ -28,6 +28,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using FracturingFog.Help;
 using FracturingFog.Imaging;
@@ -541,17 +542,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public void StartServerPing(int defaultPort)
     {
         if (_serverPingTimer != null) return;
-        _serverPingTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, (_, _) =>
+        // Async probe — the sync overload would Wait(500ms) on the
+        // dispatcher every tick when the server is down, freezing the
+        // UI thread.
+        _serverPingTimer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, async (_, _) =>
         {
-            bool up = FracturingFog.Server.ServerInstanceProbe.IsListening("127.0.0.1", defaultPort);
+            bool up = await FracturingFog.Server.ServerInstanceProbe.IsListeningAsync("127.0.0.1", defaultPort).ConfigureAwait(true);
             LocalServerIndicator = up ? $"● Server: running ({defaultPort})" : "● Server: off";
             LocalServerBrush = up ? "#5DD27B" : "#666666";
         });
         _serverPingTimer.Start();
         // Fire one immediate probe so the indicator isn't grey for 5 s on launch.
-        bool up0 = FracturingFog.Server.ServerInstanceProbe.IsListening("127.0.0.1", defaultPort);
-        LocalServerIndicator = up0 ? $"● Server: running ({defaultPort})" : "● Server: off";
-        LocalServerBrush = up0 ? "#5DD27B" : "#666666";
+        _ = Task.Run(async () =>
+        {
+            bool up0 = await FracturingFog.Server.ServerInstanceProbe.IsListeningAsync("127.0.0.1", defaultPort).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                LocalServerIndicator = up0 ? $"● Server: running ({defaultPort})" : "● Server: off";
+                LocalServerBrush = up0 ? "#5DD27B" : "#666666";
+            });
+        });
     }
 
     // ── Top-level commands ────────────────────────────────────────────────

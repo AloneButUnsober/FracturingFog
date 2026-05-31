@@ -44,7 +44,10 @@ public sealed class RenderOptionsStore
     {
         path ??= DefaultPath();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOpts));
+        // Atomic write — same reasoning as ClientConnectionStore.Save.
+        string tmp = path + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(this, JsonOpts));
+        File.Move(tmp, path, overwrite: true);
     }
 
     public RenderOptionPreset? FindByName(string name) =>

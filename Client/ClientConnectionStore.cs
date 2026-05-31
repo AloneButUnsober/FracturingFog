@@ -84,7 +84,15 @@ public sealed class ClientConnectionStore
             Iterations = Iterations,
             Entries = Entries,
         };
-        File.WriteAllText(path, JsonSerializer.Serialize(dto, JsonOpts));
+        string json = JsonSerializer.Serialize(dto, JsonOpts);
+
+        // Atomic write: a crash / power loss between WriteAllText opening
+        // the file and the body landing on disk leaves the vault corrupt
+        // and the user loses every saved connection. Write to a sibling
+        // .tmp, fsync the directory entry, then atomic rename into place.
+        string tmp = path + ".tmp";
+        File.WriteAllText(tmp, json);
+        File.Move(tmp, path, overwrite: true);
     }
 
     public string? UnlockPfxPassword(ClientConnectionEntry e, string masterPassword)

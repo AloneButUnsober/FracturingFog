@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
@@ -21,7 +22,7 @@ namespace FracturingFog.ServerHost;
 
 public sealed class HostFractalRenderEngine : IFractalRenderEngine
 {
-    public RenderArtifact Render(
+    public Task<RenderArtifact> RenderAsync(
         RenderRequestDto req,
         string workDir,
         ISessionLog log,
@@ -37,6 +38,13 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             throw new ServerProtocolException("unknown-region", $"unknown region '{req.RegionName}'");
 
         double cx, cy, zoom;
+        // Quad-precision lower limbs (CenterX = Hi, plus 3 lo words). Only the
+        // Mandelbrot path consumes them; alt calculators ignore them. Without
+        // these, a deep-zoom saved region (e.g. "Deep Julias" at zoom 2.3e19)
+        // renders at the Hi-word coordinate only — visibly different from the
+        // UI render which uses the full quad. See PosterRenderer.cs:108-123.
+        double cxLo = 0, cx2 = 0, cx3 = 0;
+        double cyLo = 0, cy2 = 0, cy3 = 0;
         int iter;
         FractalType ftype;
         QualityPreset quality;
@@ -56,6 +64,21 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             bool bothZero  = reqCxZero && reqCyZero;
             cx = (req.CenterX is double xv && !bothZero) ? xv : region.CenterX;
             cy = (req.CenterY is double yv && !bothZero) ? yv : region.CenterY;
+            // Limb selection follows the Hi-word choice: when the client
+            // overrode the Hi-word centre, use the client-supplied limbs (0
+            // by default in the DTO); when we fell back to the region centre,
+            // take the region's limbs so deep-zoom precision survives.
+            bool useClientCentre = (req.CenterX is double && !bothZero);
+            if (useClientCentre)
+            {
+                cxLo = req.CenterXLo; cx2 = req.CenterX2; cx3 = req.CenterX3;
+                cyLo = req.CenterYLo; cy2 = req.CenterY2; cy3 = req.CenterY3;
+            }
+            else
+            {
+                cxLo = region.CenterXLo; cx2 = region.CenterX2; cx3 = region.CenterX3;
+                cyLo = region.CenterYLo; cy2 = region.CenterY2; cy3 = region.CenterY3;
+            }
             iter = (req.Iterations is int ri && ri > 0)
                 ? ri
                 : (region.Iterations > 0 ? region.Iterations : 1000);
@@ -75,6 +98,8 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             cx = req.CenterX.Value;
             cy = req.CenterY.Value;
             zoom = req.Zoom.Value;
+            cxLo = req.CenterXLo; cx2 = req.CenterX2; cx3 = req.CenterX3;
+            cyLo = req.CenterYLo; cy2 = req.CenterY2; cy3 = req.CenterY3;
             iter = (req.Iterations is int ri && ri > 0) ? ri : 1000;
             ftype = declaredType;
             quality = QualityPreset.FromName(req.QualityName);
@@ -94,17 +119,21 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             ?? throw new ServerProtocolException("unknown-theme", $"unknown theme '{req.ThemeName}'");
 
         bool isVideo = string.Equals(req.Mode, "video", StringComparison.OrdinalIgnoreCase);
+        bool hasQuadLimbs = cxLo != 0 || cx2 != 0 || cx3 != 0 || cyLo != 0 || cy2 != 0 || cy3 != 0;
         log.Info($"resolved: fractal={ftype} cx={cx:G14} cy={cy:G14} zoom={zoom:G6} iter={iter} " +
-                 $"size={req.Width}x{req.Height} quality={quality.Name} theme={req.ThemeName}");
+                 $"size={req.Width}x{req.Height} quality={quality.Name} theme={req.ThemeName} " +
+                 $"quadLimbs={(hasQuadLimbs ? "yes" : "no")}");
 
         return isVideo
-            ? RenderVideoArtifact(req, ftype, cx, cy, zoom, iter, theme, quality, region, workDir, log, ct)
-            : RenderImageArtifact(req, ftype, cx, cy, zoom, iter, theme, quality, region, workDir, log, ct);
+            ? RenderVideoArtifactAsync(req, ftype, cx, cxLo, cx2, cx3, cy, cyLo, cy2, cy3, zoom, iter, theme, quality, region, workDir, log, ct)
+            : RenderImageArtifactAsync(req, ftype, cx, cxLo, cx2, cx3, cy, cyLo, cy2, cy3, zoom, iter, theme, quality, region, workDir, log, ct);
     }
 
-    private static RenderArtifact RenderImageArtifact(
+    private static Task<RenderArtifact> RenderImageArtifactAsync(
         RenderRequestDto req, FractalType ftype,
-        double cx, double cy, double zoom, int iter,
+        double cx, double cxLo, double cx2, double cx3,
+        double cy, double cyLo, double cy2, double cy3,
+        double zoom, int iter,
         IColorMap theme, QualityPreset quality, FractalRegion? region,
         string workDir, ISessionLog log, CancellationToken ct)
     {
@@ -117,7 +146,13 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             Width = req.Width,
             Height = req.Height,
             CenterX = cx,
+            CenterXLo = cxLo,
+            CenterX2 = cx2,
+            CenterX3 = cx3,
             CenterY = cy,
+            CenterYLo = cyLo,
+            CenterY2 = cy2,
+            CenterY3 = cy3,
             Zoom = zoom,
             MaxIterations = iter,
             ColorMap = theme,
@@ -130,23 +165,31 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             SubText = "Fracturing Fog server render",
         };
 
-        var sw = Stopwatch.StartNew();
-        var result = PosterRenderer.RenderToFile(poster, ct);
-        sw.Stop();
-        log.Info($"image saved: {Path.GetFileName(outPath)} {result.SavedWidth}x{result.SavedHeight} elapsedMs={result.ElapsedMs}");
-
-        return new RenderArtifact
+        // CPU-bound rasterization runs on a thread-pool worker. The outer
+        // caller (FFServer) awaits the returned Task so the dispatch loop
+        // is not blocked even when a render takes minutes.
+        return Task.Run(() =>
         {
-            FilePath = outPath,
-            Width = result.SavedWidth,
-            Height = result.SavedHeight,
-            ElapsedMs = result.ElapsedMs,
-        };
+            var sw = Stopwatch.StartNew();
+            var result = PosterRenderer.RenderToFile(poster, ct);
+            sw.Stop();
+            log.Info($"image saved: {Path.GetFileName(outPath)} {result.SavedWidth}x{result.SavedHeight} elapsedMs={result.ElapsedMs}");
+
+            return new RenderArtifact
+            {
+                FilePath = outPath,
+                Width = result.SavedWidth,
+                Height = result.SavedHeight,
+                ElapsedMs = result.ElapsedMs,
+            };
+        }, ct);
     }
 
-    private static RenderArtifact RenderVideoArtifact(
+    private static async Task<RenderArtifact> RenderVideoArtifactAsync(
         RenderRequestDto req, FractalType ftype,
-        double cx, double cy, double targetZoom, int iter,
+        double cx, double cxLo, double cx2, double cx3,
+        double cy, double cyLo, double cy2, double cy3,
+        double targetZoom, int iter,
         IColorMap theme, QualityPreset quality, FractalRegion? region,
         string workDir, ISessionLog log, CancellationToken ct)
     {
@@ -170,7 +213,8 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             "h264"   => FfmpegEncoder.Preset.LosslessH264Mp4,
             "ffv1"   => FfmpegEncoder.Preset.Ffv1Mkv,
             "h264hq" => FfmpegEncoder.Preset.HighQualityH264Mp4,
-            _        => throw new InvalidOperationException($"unknown lossless preset '{req.Lossless}'"),
+            _        => throw new ServerProtocolException("bad-request",
+                          $"unknown lossless preset '{req.Lossless}' (expected none|h264|ffv1|h264hq)"),
         };
 
         string finalVideoPath;
@@ -180,7 +224,8 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             string ext = FfmpegEncoder.DefaultExtensionFor(losslessPreset.Value);
             finalVideoPath = Path.Combine(workDir, baseName + "." + ext);
             if (!FfmpegEncoder.IsAvailable())
-                throw new InvalidOperationException("ffmpeg.exe not found; cannot satisfy lossless preset");
+                throw new ServerProtocolException("ffmpeg-missing",
+                    "ffmpeg.exe not found on server; cannot satisfy lossless preset");
         }
         else
         {
@@ -193,10 +238,15 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         Mp4Writer? mp4 = null;
         if (losslessPreset == null)
         {
+            // Client asked for video mode. A silent fallback to "PNG
+            // sequence only" leaves the documented .mp4 path empty —
+            // client reads it and hits FileNotFound. Surface the real
+            // reason now so the user sees something actionable.
             try { mp4 = new Mp4Writer(finalVideoPath, outW, outH, req.VideoFps, 1); }
             catch (Exception ex)
             {
-                log.Warn($"Mp4Writer init failed ({ex.Message}); PNG sequence only");
+                throw new ServerProtocolException("render-failed",
+                    $"Mp4Writer init failed: {ex.Message}. Use --lossless h264 to force ffmpeg encode instead.");
             }
         }
 
@@ -205,51 +255,68 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         long ticksPerFrame = (long)(10_000_000L / Math.Max(req.VideoFps, 1));
 
         var sw = Stopwatch.StartNew();
-        int framesWritten = 0;
-        try
+
+        // Frame generation is CPU-bound; offload to a thread-pool worker
+        // so the awaiting caller (FFServer dispatch) does not block its
+        // own context. ffmpeg encode is launched as a child process and
+        // is awaited natively below — no more GetAwaiter().GetResult().
+        Mp4Writer? mp4Local = mp4;
+        int framesWritten = await Task.Run(() =>
         {
-            for (int f = 0; f < totalFrames; f++)
+            int written = 0;
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                double t = totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
-                double te = t * t * (3.0 - 2.0 * t);
-                double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
-
-                uint[] buffer = RenderOneFrame(ftype, outW, outH, cx, cy, frameZoom, iter, theme, quality, ct);
-
-                if (mp4 != null)
+                for (int f = 0; f < totalFrames; f++)
                 {
-                    try { mp4.WriteFrame(buffer, (long)f * ticksPerFrame); }
-                    catch (Exception ex)
+                    ct.ThrowIfCancellationRequested();
+                    double t = totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
+                    double te = t * t * (3.0 - 2.0 * t);
+                    double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
+
+                    uint[] buffer = RenderOneFrame(
+                        ftype, outW, outH,
+                        cx, cxLo, cx2, cx3,
+                        cy, cyLo, cy2, cy3,
+                        frameZoom, iter, theme, quality, ct);
+
+                    if (mp4Local != null)
                     {
-                        log.Warn($"mp4 write failed at frame {f}: {ex.Message}");
-                        try { mp4.Dispose(); } catch { }
-                        mp4 = null;
+                        try { mp4Local.WriteFrame(buffer, (long)f * ticksPerFrame); }
+                        catch (Exception ex)
+                        {
+                            // Abort instead of half-encoded video + full PNG
+                            // set. Previous behaviour produced an unplayable
+                            // mp4 that the client could not detect.
+                            try { mp4Local.Dispose(); } catch { }
+                            mp4Local = null;
+                            throw new ServerProtocolException("render-failed",
+                                $"mp4 write failed at frame {f}: {ex.Message}");
+                        }
                     }
+
+                    string framePath = Path.Combine(pngFolder, $"frame_{f + 1:D6}.png");
+                    ImageExport.SavePixelsToFile(
+                        buffer, outW, outH, framePath, ImageFormat.Png,
+                        watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
+
+                    written++;
+                    if ((f & 0x1F) == 0)
+                        log.Info($"frame {f + 1}/{totalFrames} zoom={frameZoom:G4}");
                 }
-
-                string framePath = Path.Combine(pngFolder, $"frame_{f + 1:D6}.png");
-                ImageExport.SavePixelsToFile(
-                    buffer, outW, outH, framePath, ImageFormat.Png,
-                    watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
-
-                framesWritten++;
-                if ((f & 0x1F) == 0)
-                    log.Info($"frame {f + 1}/{totalFrames} zoom={frameZoom:G4}");
             }
-        }
-        finally
-        {
-            try { mp4?.Dispose(); } catch { }
-        }
+            finally
+            {
+                try { mp4Local?.Dispose(); } catch { }
+            }
+            return written;
+        }, ct).ConfigureAwait(false);
 
         if (losslessPreset != null)
         {
             log.Info($"encoding via ffmpeg ({losslessPreset.Value})");
-            var task = FfmpegEncoder.EncodeAsync(
+            var (ok, ffLog) = await FfmpegEncoder.EncodeAsync(
                 pngFolder, finalVideoPath, losslessPreset.Value,
-                fps: req.VideoFps, ct: ct);
-            var (ok, ffLog) = task.GetAwaiter().GetResult();
+                fps: req.VideoFps, ct: ct).ConfigureAwait(false);
             if (!ok) throw new InvalidOperationException("ffmpeg encode failed: " + TailLog(ffLog, 800));
         }
 
@@ -275,7 +342,9 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
 
     private static uint[] RenderOneFrame(
         FractalType ftype, int w, int h,
-        double cx, double cy, double zoom, int iter,
+        double cx, double cxLo, double cx2, double cx3,
+        double cy, double cyLo, double cy2, double cy3,
+        double zoom, int iter,
         IColorMap theme, QualityPreset quality, CancellationToken ct)
     {
         IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(new PosterRequest
@@ -295,9 +364,14 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             return CopyBuffer(alt.ColorBuffer, w, h);
         }
 
+        // Mandelbrot path consumes the full quad-precision centre. Without the
+        // Lo/2/3 limbs the calculator collapses to the Hi-word coordinate,
+        // which for deep zooms (zoom > ~1e16) is visibly off the saved spot.
         var calc = new MandelbrotCalculator(w, h)
         {
-            CenterX = cx, CenterY = cy, Zoom = zoom,
+            CenterX = cx, CenterXLo = cxLo, CenterX2 = cx2, CenterX3 = cx3,
+            CenterY = cy, CenterYLo = cyLo, CenterY2 = cy2, CenterY3 = cy3,
+            Zoom = zoom,
             MaxIterations = iter,
             ColorMap = theme, Quality = quality,
         };
