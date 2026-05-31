@@ -131,10 +131,10 @@
 
                         <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0">
                             <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="CX:" Margin="0,0,8,4" />
-                            <TextBox   Classes="coord" Grid.Row="0" Grid.Column="1" Text="{Binding CX}"   Margin="0,0,0,4" />
+                            <TextBox   Classes="coord" Grid.Row="0" Grid.Column="1" Text="{Binding CX, UpdateSourceTrigger=PropertyChanged}"   Margin="0,0,0,4" />
 
                             <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="CY:" Margin="0,0,8,4" />
-                            <TextBox   Classes="coord" Grid.Row="1" Grid.Column="1" Text="{Binding CY}"   Margin="0,0,0,4" />
+                            <TextBox   Classes="coord" Grid.Row="1" Grid.Column="1" Text="{Binding CY, UpdateSourceTrigger=PropertyChanged}"   Margin="0,0,0,4" />
 
                             <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Quality:" Margin="0,0,8,4" />
                             <ComboBox Grid.Row="2" Grid.Column="1"
@@ -144,10 +144,10 @@
                                       Margin="0,0,0,4" />
 
                             <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Zoom:" Margin="0,0,8,4" />
-                            <TextBox   Classes="coord" Grid.Row="3" Grid.Column="1" Text="{Binding Zoom}" Margin="0,0,0,4" />
+                            <TextBox   Classes="coord" Grid.Row="3" Grid.Column="1" Text="{Binding Zoom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
 
                             <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Iterations:" Margin="0,0,8,0" />
-                            <TextBox   Classes="coord" Grid.Row="4" Grid.Column="1" Text="{Binding Iter}" />
+                            <TextBox   Classes="coord" Grid.Row="4" Grid.Column="1" Text="{Binding Iter, UpdateSourceTrigger=PropertyChanged}" />
                         </Grid>
 
                         <CheckBox Content="Lock Iterations"

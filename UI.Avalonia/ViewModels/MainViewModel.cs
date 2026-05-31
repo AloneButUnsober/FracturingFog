@@ -129,6 +129,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Sandbox,          "Sandbox"),
         (FractalType.UserBulb,         "User Bulb (3D)"),
         (FractalType.TearDrop,         "Tear Drop"),
+        (FractalType.GeneratedMandelbrotZ2, "Mandelbrot Z² (Generated)"),
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

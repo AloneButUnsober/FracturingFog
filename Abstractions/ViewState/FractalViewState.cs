@@ -142,6 +142,7 @@ namespace FracturingFog.ViewState
                 FractalType.Sandbox          => ( 0.0,  0.0, 1.0),
                 FractalType.UserBulb         => ( 0.0,  0.0, 1.0),
                 FractalType.TearDrop         => ( 0.0,  0.0, 0.16),
+                FractalType.GeneratedMandelbrotZ2 => (-0.5, 0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;

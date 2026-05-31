@@ -1,0 +1,72 @@
+// AstDifferentiator.cs
+//
+// Symbolic differentiation of polynomial-in-(z,c) ASTs. Used to:
+//   • Track dz/dc per iteration (Inigo Quilez normals + Milnor/Hubbard
+//     exterior distance estimate).
+//   • Provide the dp/dz coefficient (the "A" term) for Bilinear
+//     Approximation (Tier 5, future).
+//   • Provide the dp/dc coefficient (the "B" term) for BLA and the
+//     constant term in perturbation expansion (Tier 4, future).
+//
+// The differentiator is intentionally minimal — it operates on the
+// restricted polynomial grammar so each rule is a closed-form one-liner.
+// Output is paired with the simplifier to collapse the inevitable
+// 0·x and 1·x nodes.
+
+namespace FracturingFog.CalculatorGen.Parser;
+
+public static class AstDifferentiator
+{
+    public enum Var { Z, C }
+
+    /// <summary>Symbolic derivative of <paramref name="node"/> with
+    /// respect to <paramref name="v"/>. The returned tree is NOT
+    /// simplified; pass it through <see cref="AstSimplifier.Simplify"/>.</summary>
+    public static AstNode Diff(AstNode node, Var v) => node switch
+    {
+        ZRef       => v == Var.Z ? new RealConst(1.0) : new RealConst(0.0),
+        CRef       => v == Var.C ? new RealConst(1.0) : new RealConst(0.0),
+        DRef       => new RealConst(0.0),               // opaque under both vars
+        DeltaRef   => new RealConst(0.0),               // perturbation: opaque
+        EpsRef     => new RealConst(0.0),               // perturbation: opaque
+        RealConst  => new RealConst(0.0),
+        Neg n      => new Neg(Diff(n.Operand, v)),
+        Add a      => new Add(Diff(a.Left, v), Diff(a.Right, v)),
+        Sub s      => new Sub(Diff(s.Left, v), Diff(s.Right, v)),
+        // Product rule: (fg)' = f'g + fg'
+        Mul m      => new Add(new Mul(Diff(m.Left, v),  m.Right),
+                              new Mul(m.Left,            Diff(m.Right, v))),
+        // Power-of-AST chain rule: (u^n)' = n · u^(n-1) · u'
+        Pow p      => p.Exponent == 0
+                       ? new RealConst(0.0)
+                       : new Mul(new RealConst(p.Exponent),
+                                 new Mul(new Pow(p.Base, p.Exponent - 1),
+                                         Diff(p.Base, v))),
+        _ => throw new InvalidOperationException($"Cannot differentiate {node.GetType().Name}"),
+    };
+
+    /// <summary>
+    /// Build the per-iteration update rule for dz/dc given the step
+    /// function z_{n+1} = p(z, c):
+    ///
+    ///     dz_{n+1}/dc  =  (∂p/∂z) · (dz_n/dc)  +  (∂p/∂c)
+    ///
+    /// The returned AST is simplified and references the symbolic
+    /// <see cref="DRef"/> node for the current dz/dc value.
+    /// </summary>
+    public static AstNode BuildDerivativeUpdate(AstNode stepFn)
+    {
+        var dpdz = AstSimplifier.Simplify(Diff(stepFn, Var.Z));
+        var dpdc = AstSimplifier.Simplify(Diff(stepFn, Var.C));
+        var update = new Add(new Mul(dpdz, new DRef()), dpdc);
+        return AstSimplifier.Simplify(update);
+    }
+
+    /// <summary>Convenience: simplified ∂p/∂z.</summary>
+    public static AstNode DpDz(AstNode stepFn)
+        => AstSimplifier.Simplify(Diff(stepFn, Var.Z));
+
+    /// <summary>Convenience: simplified ∂p/∂c.</summary>
+    public static AstNode DpDc(AstNode stepFn)
+        => AstSimplifier.Simplify(Diff(stepFn, Var.C));
+}

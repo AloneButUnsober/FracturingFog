@@ -287,9 +287,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // consumers in the View layer; for now we just always overwrite.
         Main.RenderHost.FrameCompleted += (_, info) =>
         {
+            // Surface DD/QD limbs in the menu as Hi|Lo[|Lo2|Lo3] when the
+            // view state carries any non-zero low limb. The textbox already
+            // accepts the same format for input, so copy-paste round-trips
+            // a deep-zoom region without losing precision.
+            var s = Main.ViewState;
             FloatingMenu.UpdateCoords(
-                info.CenterX.ToString("G12", CultureInfo.InvariantCulture),
-                info.CenterY.ToString("G12", CultureInfo.InvariantCulture),
+                FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3),
+                FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
                 info.Iterations.ToString(CultureInfo.InvariantCulture));
         };
@@ -423,16 +428,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private void ApplyCoordsFromMenu()
     {
         bool changed = false;
-        if (double.TryParse(FloatingMenu.CX, NumberStyles.Float, CultureInfo.InvariantCulture, out double cx))
+        // Coord fields accept pipe-separated limbs so deep-zoom regions
+        // (Hi, Lo, Lo2, Lo3 in DD/QD format) can be pasted in directly:
+        //   "-1.9918151296901943|-7.821983681126658E-17"
+        // A single value (no pipe) sets the Hi limb and zeros the rest.
+        if (TryParseLimbs(FloatingMenu.CX, out double cxHi, out double cxLo, out double cxL2, out double cxL3))
         {
-            Main.ViewState.CenterX = cx;
-            Main.ViewState.CenterXLo = 0; Main.ViewState.CenterX2 = 0; Main.ViewState.CenterX3 = 0;
+            Main.ViewState.CenterX = cxHi;
+            Main.ViewState.CenterXLo = cxLo; Main.ViewState.CenterX2 = cxL2; Main.ViewState.CenterX3 = cxL3;
             changed = true;
         }
-        if (double.TryParse(FloatingMenu.CY, NumberStyles.Float, CultureInfo.InvariantCulture, out double cy))
+        if (TryParseLimbs(FloatingMenu.CY, out double cyHi, out double cyLo, out double cyL2, out double cyL3))
         {
-            Main.ViewState.CenterY = cy;
-            Main.ViewState.CenterYLo = 0; Main.ViewState.CenterY2 = 0; Main.ViewState.CenterY3 = 0;
+            Main.ViewState.CenterY = cyHi;
+            Main.ViewState.CenterYLo = cyLo; Main.ViewState.CenterY2 = cyL2; Main.ViewState.CenterY3 = cyL3;
             changed = true;
         }
         if (double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
@@ -452,6 +461,43 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             changed = true;
         }
         if (changed) Main.RenderHost.Trigger();
+    }
+
+    // Format DD/QD limbs as "Hi" when only Hi is set, "Hi|Lo" when Lo is
+    // non-zero, and so on up to four limbs. Matches the parse format of
+    // TryParseLimbs so display / input round-trip cleanly.
+    private static string FormatLimbs(double hi, double lo, double l2, double l3)
+    {
+        // Pick the highest non-zero limb and print everything up to it.
+        int n = 1;
+        if (l3 != 0.0) n = 4;
+        else if (l2 != 0.0) n = 3;
+        else if (lo != 0.0) n = 2;
+
+        string h = hi.ToString("G17", CultureInfo.InvariantCulture);
+        if (n == 1) return h;
+        string p1 = lo.ToString("G17", CultureInfo.InvariantCulture);
+        if (n == 2) return $"{h}|{p1}";
+        string p2 = l2.ToString("G17", CultureInfo.InvariantCulture);
+        if (n == 3) return $"{h}|{p1}|{p2}";
+        string p3 = l3.ToString("G17", CultureInfo.InvariantCulture);
+        return $"{h}|{p1}|{p2}|{p3}";
+    }
+
+    // Parse "Hi", "Hi|Lo", "Hi|Lo|Lo2", or "Hi|Lo|Lo2|Lo3" into four
+    // double limbs. Missing limbs default to zero. Returns true when at
+    // least the Hi limb parsed.
+    private static bool TryParseLimbs(string? s, out double hi, out double lo, out double l2, out double l3)
+    {
+        hi = lo = l2 = l3 = 0.0;
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        var parts = s.Split('|');
+        if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out hi))
+            return false;
+        if (parts.Length > 1) double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lo);
+        if (parts.Length > 2) double.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l2);
+        if (parts.Length > 3) double.TryParse(parts[3].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l3);
+        return true;
     }
 
     public MainViewModel Main { get; }

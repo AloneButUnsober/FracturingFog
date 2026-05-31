@@ -938,6 +938,16 @@ namespace FracturingFog.Rendering
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
+                case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz:
+                    gz.CenterXLo = _calculator.CenterXLo;
+                    gz.CenterX2  = _calculator.CenterX2;
+                    gz.CenterX3  = _calculator.CenterX3;
+                    gz.CenterYLo = _calculator.CenterYLo;
+                    gz.CenterY2  = _calculator.CenterY2;
+                    gz.CenterY3  = _calculator.CenterY3;
+                    gz.UsePerturbation = true;
+                    gz.UseBla          = true;
+                    break;
             }
         }
 

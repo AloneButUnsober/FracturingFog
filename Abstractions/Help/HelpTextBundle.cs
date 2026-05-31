@@ -2849,5 +2849,155 @@ to --out. Exit 0 on success.
   %APPDATA%\FracturingFog\client-connections.json   (sealed)
   %APPDATA%\FracturingFog\client-render-presets.json
 ";
+
+        public const string MathGeneratedZ2Text =
+@"=== Mandelbrot Z² (Generated) ===
+
+A drop-in z² + c calculator emitted by the in-tree CalculatorGen tool
+from a single-line equation, NOT hand-written. Same recurrence and
+visual output as the standard Mandelbrot set, but the entire C# class
+— scalar reference loop, AVX2 lane loop, ILGPU GPU kernel, perturbation
+deep-zoom path, and BLA acceleration — is mechanically generated from
+the source string
+
+    z*z + c
+
+This tab documents what the generator produces and how to drive it.
+For the math of the Mandelbrot set itself, see the Mandelbrot tab.
+
+=== Why a generator? ===
+
+  • Stop hand-writing one ~500-line C# file per fractal family.
+  • Guarantee scalar / AVX2 / GPU / perturbation / BLA paths stay in
+    lock-step — they are all derived from the same AST.
+  • Make adding new polynomial fractals (z^3 + c, z^16 + c, custom
+    polynomials) a one-line invocation instead of an LLM session.
+
+=== Five execution paths ===
+
+The generator emits these in a single class. All five are validated
+against the scalar reference path by the auto-generated SelfTest.cs.
+
+  1. Scalar           Reference path. Plain `double` arithmetic.
+                      One pixel at a time. Used as the ground truth.
+
+  2. AVX2 + FMA       Vector256<double>, four pixels per lane.
+                      Complex multiply via Fma.MultiplyAdd /
+                      MultiplyAddNegated. Per-lane bailout via
+                      Avx.BlendVariable so escaped lanes freeze.
+
+  4. Perturbation     Reference orbit at view centre + per-pixel δ
+                      iteration using the symbolic Taylor expansion
+                      of p(Z+δ, C+ε) - p(Z, C). For z²+c the
+                      expansion is exact: ε + 2Zδ + δ². Used when
+                      Zoom ≥ PerturbZoomThreshold (default 1e12).
+
+  5. BLA              Bilinear approximation. Pre-computes
+                      A_n = ∂p/∂z(Z_n) and B_n = ∂p/∂c(Z_n) along
+                      the reference orbit. At each iter, takes a
+                      linear step δ_new = A·δ + B·ε if validity
+                      holds (|δ| ≤ 1e-3·|Z|); else falls back to
+                      the full perturbation step.
+
+  6. ILGPU GPU        Lazy-init ILGPU Context + Accelerator. One
+                      work item per pixel. Reads back a struct of
+                      (iter, zr, zi, dr, di) per pixel and runs the
+                      colour map on the CPU so themes work.
+
+Toggle paths via calculator properties:
+
+    UseGpu                = true | false   (opt-in)
+    UsePerturbation       = true | false   (opt-in)
+    PerturbZoomThreshold  = 1e12           (gate)
+    UseBla                = true | false   (requires UsePerturbation)
+
+=== Selecting in the UI ===
+
+Toolbar Type combo →  ""Mandelbrot Z² (Generated)""
+
+The entry sits next to the hand-tuned ""Mandelbrot"" so direct A/B
+comparisons against the legacy implementation are one click apart.
+Default centre and zoom match the standard Mandelbrot view. Pan,
+zoom, region jumps, theme switches, capture, and video all work
+unchanged — the generated class implements the same
+IFractalCalculator contract every other engine uses.
+
+=== Self-test ===
+
+Every --selftest invocation writes a sibling validator. Running
+
+    FracturingFog --gentest MandelbrotZ2
+
+renders a 64×64 grid through all five paths and reports drift:
+
+    MandelbrotZ2CalculatorSelfTest — scalar ↔ AVX2 ↔ GPU agreement
+      grid:           64×64 = 4096 pixels
+      max iterations: 256
+      mismatches:     0 (0.00%)
+      mean |Δit|:     0.0000
+      max  |Δit|:     0  (tolerance: 1)
+      gpu in-set:     cpu=523  gpu=523  diff=0  → PASS
+      perturbation:   cpu=523  pt=523  diff=0  → PASS
+      bla:            cpu=523  bla=523  diff=0  → PASS
+      result:         PASS
+
+Tolerances:
+  • Scalar ↔ AVX2:    maxAbsDiff ≤ 1 (one ULP shift in bailout test)
+  • Scalar ↔ GPU:     ≤ 4 boundary pixels   (FMA / device math drift)
+  • Scalar ↔ Perturb: ≤ 4 boundary pixels   (round-off in ref orbit)
+  • Scalar ↔ BLA:     ≤ 8 boundary pixels   (linearised δ² omission)
+
+Output is also mirrored to gentest.out next to the exe (the program
+runs WinExe so stdout is detached from the parent console).
+
+=== Adding more generated calculators ===
+
+The repo ships one demo (Mandelbrot Z²). To generate another:
+
+    dotnet run --project CalculatorGen -c Release -- ^
+        --equation ""z*z*z + c"" ^
+        --name MandelbrotZ3 ^
+        --out Calculators\Generated ^
+        --selftest
+
+Grammar accepted:
+    z, c                          complex variables
+    real literals (incl. 1e-3)    treated as (n, 0) complex
+    + - *                         complex arithmetic
+    ^N                             integer power 0..16, base = z or c
+    ( )                           grouping
+    unary -                       complex negation
+
+Not yet supported:
+    /  sin  cos  exp  log  |z|  conj  conditional branches
+
+Once generated, add a FractalType enum value, plumb through the four
+FractalRenderHost touchpoints (field / ctor / colour map / Resize /
+SelectAltCalculator dispatch), add a BuiltInFractalLabels entry, and
+the new calc appears in the dropdown alongside Mandelbrot Z².
+
+=== Where this lives ===
+
+  CalculatorGen\                       — generator project (console exe)
+  CalculatorGen\Parser\                — AST nodes, lexer, parser,
+                                         symbolic differentiator,
+                                         simplifier, Taylor expander
+                                         for perturbation
+  CalculatorGen\Emitters\              — scalar, AVX2, perturbation
+                                         emitters (each subclasses
+                                         EmitterBase)
+  CalculatorGen\Templates\             — Calculator.template.cs +
+                                         SelfTest.template.cs (emit
+                                         placeholders)
+  CalculatorGen\SampleOutput\          — reference outputs for diffing
+  Calculators\Generated\               — actively built generated calcs
+
+Full authoring guide:
+    Docs\CalculatorGen-Authoring.md
+
+Includes complete coverage of the AST node types, simplifier rules,
+imag-zero optimisation, perturbation Taylor builder, BLA validity
+criterion, the ILGPU lifecycle, and trade-offs / future work.
+";
     }
 }

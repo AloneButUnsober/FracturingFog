@@ -1133,6 +1133,7 @@ unless the slider is locked.
             sub.TabPages.Add(BuildMathSubTab("User Equation",  MathUserEquationText()));
             sub.TabPages.Add(BuildMathSubTab("User Bulb 3D",   MathUserBulbText()));
             sub.TabPages.Add(BuildMathSubTab("Sandbox",        MathSandboxText()));
+            sub.TabPages.Add(BuildMathSubTab("Mandelbrot Z² (Generated)", FracturingFog.Help.HelpTextBundle.MathGeneratedZ2Text));
 
             page.Controls.Add(sub);
             return page;
