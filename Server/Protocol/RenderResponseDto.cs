@@ -50,4 +50,14 @@ public sealed class RenderResponseDto
 
     /// <summary>Number of chunk envelopes the receiver should expect.</summary>
     [JsonPropertyName("chunkCount")] public int ChunkCount { get; set; }
+
+    /// <summary>Base64-encoded SHA-256 of the entire rendered artifact.
+    /// Set for both inline AND streamed responses. The client computes
+    /// the same hash over the bytes it assembled and MUST refuse the
+    /// result on mismatch. Catches in-process corruption that TLS
+    /// cannot — for example, an artifact that was rewritten on disk
+    /// between hash compute and send, or a ChunkDto.Sha256 that was
+    /// accidentally computed over a stale buffer.</summary>
+    [JsonPropertyName("artifactSha256")]
+    public string? ArtifactSha256 { get; set; }
 }

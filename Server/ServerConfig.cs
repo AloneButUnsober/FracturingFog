@@ -29,6 +29,42 @@ public sealed class ServerConfig
     [JsonPropertyName("maxConcurrentConnections")]
     public int MaxConcurrentConnections { get; set; } = 32;
 
+    /// <summary>Sustained accepted-TCP-connection rate per remote IP, per
+    /// minute. Bursts are still allowed up to <see cref="RateLimitBurst"/>.
+    /// 0 disables the per-IP limiter (only the global connection cap applies).</summary>
+    [JsonPropertyName("rateLimitPerMinute")] public int RateLimitPerMinute { get; set; }
+
+    /// <summary>Maximum standing token allowance per IP. Higher values let
+    /// legitimate retry loops + UI reconnects burst without penalty; lower
+    /// values close attacker SYN floods faster.</summary>
+    [JsonPropertyName("rateLimitBurst")]     public int RateLimitBurst     { get; set; } = 10;
+
+    /// <summary>When true, restrict TLS to v1.3 only. Default false to
+    /// keep older clients compatible. Set true for hardened deployments —
+    /// TLS 1.2 retains a number of deprecated ciphersuites + RSA key
+    /// exchange that 1.3 dropped.</summary>
+    [JsonPropertyName("requireTls13")]    public bool   RequireTls13    { get; set; }
+
+    /// <summary>Cert revocation policy applied during the TLS handshake.
+    /// "none" (default) skips CRL/OCSP — appropriate for the self-signed
+    /// dev bundle which has no revocation infra. "online" / "offline"
+    /// map to X509RevocationMode.Online / Offline for real-PKI deployments.</summary>
+    [JsonPropertyName("revocationCheckMode")]
+    public string RevocationCheckMode { get; set; } = "none";
+
+    /// <summary>Optional pin: when non-empty, the presented client cert
+    /// thumbprint (hex, case-insensitive, spaces/dashes ignored) must
+    /// match one of these in addition to chaining to <see cref="ClientCaCertPath"/>.
+    /// Empty = chain-trust alone is sufficient.</summary>
+    [JsonPropertyName("allowedClientThumbprints")]
+    public System.Collections.Generic.List<string> AllowedClientThumbprints { get; set; } = new();
+
+    /// <summary>Age in hours above which leftover job-* subdirs in
+    /// <see cref="WorkDir"/> are deleted on server startup. 0 disables
+    /// the sweep. Default 1 — anything older than one hour is from a
+    /// previous crash or kill and is safe to discard.</summary>
+    [JsonPropertyName("workDirStaleHours")] public double WorkDirStaleHours { get; set; } = 1.0;
+
     [JsonPropertyName("serverCertPath")]  public string? ServerCertPath { get; set; }
     [JsonPropertyName("clientCaCertPath")] public string? ClientCaCertPath { get; set; }
 

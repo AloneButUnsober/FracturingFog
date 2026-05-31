@@ -29,6 +29,18 @@ public sealed class RenderRequestDto
     [JsonPropertyName("zoom")]    public double? Zoom    { get; set; }
     [JsonPropertyName("iterations")] public int? Iterations { get; set; }
 
+    // Quad-precision lower limbs of the centre. Only the Mandelbrot calculator
+    // consumes these; alt calculators read CenterX/CenterY (Hi) only. Required
+    // so a deep-zoom saved region (e.g. "Deep Julias" at zoom 2.3e19) survives
+    // the wire — without these the server renders at the Hi-word location only
+    // and the image lands at a visibly different coordinate than the UI render.
+    [JsonPropertyName("centerXLo")] public double CenterXLo { get; set; }
+    [JsonPropertyName("centerX2")]  public double CenterX2  { get; set; }
+    [JsonPropertyName("centerX3")]  public double CenterX3  { get; set; }
+    [JsonPropertyName("centerYLo")] public double CenterYLo { get; set; }
+    [JsonPropertyName("centerY2")]  public double CenterY2  { get; set; }
+    [JsonPropertyName("centerY3")]  public double CenterY3  { get; set; }
+
     [JsonPropertyName("themeName")]   public string ThemeName   { get; set; } = "HSV";
     [JsonPropertyName("qualityName")] public string QualityName { get; set; } = "Standard";
 

@@ -6,6 +6,7 @@
 // assembly stays compile-clean against just Abstractions.
 
 using System.Threading;
+using System.Threading.Tasks;
 using FracturingFog.Server.Protocol;
 
 namespace FracturingFog.Server;
@@ -16,8 +17,10 @@ public interface IFractalRenderEngine
     /// Renders <paramref name="request"/> into <paramref name="workDir"/> and
     /// returns the path the server should hand back (inline-bytes mode reads
     /// from the path then deletes; saved-path mode returns it as-is).
+    /// Async so the implementation can await ffmpeg encode + frame IO without
+    /// pinning a thread-pool slot inside the per-job queue gate.
     /// </summary>
-    RenderArtifact Render(
+    Task<RenderArtifact> RenderAsync(
         RenderRequestDto request,
         string workDir,
         ISessionLog log,
