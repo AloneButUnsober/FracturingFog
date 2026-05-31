@@ -36,7 +36,10 @@ public sealed class FFServer
     private readonly IFractalRenderEngine _engine;
     private readonly ServerTrust _trust;
     private readonly RemoteCertificateValidationCallback _clientValidator;
+    private readonly SslProtocols _enabledTlsProtocols;
+    private readonly X509RevocationMode _revocationMode;
     private readonly SemaphoreSlim _queueGate;
+    private readonly EndpointRateLimiter _rateLimiter;
 
     /// <summary>Outer cap on accepted-but-still-open TCP connections,
     /// including ones still in the TLS handshake. Bounds memory + thread
@@ -48,9 +51,14 @@ public sealed class FFServer
         Config = config;
         _engine = engine;
         _trust = trust;
-        _clientValidator = ServerCertLoader.BuildClientValidator(trust.TrustedClientCAs);
+        _revocationMode = ParseRevocationMode(config.RevocationCheckMode);
+        _clientValidator = ServerCertLoader.BuildClientValidator(
+            trust.TrustedClientCAs, config.AllowedClientThumbprints, _revocationMode,
+            trust.IntermediateClientCAs);
+        _enabledTlsProtocols = config.RequireTls13 ? SslProtocols.Tls13 : (SslProtocols.Tls12 | SslProtocols.Tls13);
         _queueGate = new SemaphoreSlim(Math.Max(1, config.QueueDepth));
         _connectionGate = new SemaphoreSlim(Math.Max(1, config.MaxConcurrentConnections));
+        _rateLimiter = new EndpointRateLimiter(config.RateLimitPerMinute, config.RateLimitBurst);
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -75,6 +83,24 @@ public sealed class FFServer
             try { tcp = await listener.AcceptTcpClientAsync(ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
             catch (ObjectDisposedException)    { break; }
+
+            // Per-IP token bucket — close the socket immediately for IPs
+            // that exceed their sustained-accept budget. Runs BEFORE the
+            // global connection gate so abusive IPs cannot occupy slots
+            // that legitimate IPs need.
+            if (_rateLimiter.Enabled &&
+                !_rateLimiter.TryAccept(tcp.Client.RemoteEndPoint as IPEndPoint))
+            {
+                try { tcp.Close(); } catch { }
+                continue;
+            }
+
+            // NoDelay: JSON-RPC envelopes are small (≤ 1 MB chunks); Nagle's
+            // 200 ms wait stacks with every status poll round-trip.
+            // KeepAlive: long renders behind NAT silently lose the
+            // connection if the OS sees nothing for the keepalive window.
+            try { tcp.NoDelay = true; } catch { }
+            try { tcp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); } catch { }
 
             // Drop the connection immediately if we are already at the
             // concurrency cap. Two-second wait so a brief surge does not
@@ -121,13 +147,27 @@ public sealed class FFServer
                 {
                     ServerCertificate = _trust.ServerIdentity,
                     ClientCertificateRequired = true,
-                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-                    CertificateRevocationCheckMode = X509RevocationMode.NoCheck,
+                    EnabledSslProtocols = _enabledTlsProtocols,
+                    CertificateRevocationCheckMode = _revocationMode,
                     RemoteCertificateValidationCallback = _clientValidator,
                 }, handshakeCts.Token).ConfigureAwait(false);
             }
 
-            string? clientThumb = (ssl.RemoteCertificate as X509Certificate2)?.Thumbprint;
+            // ssl.RemoteCertificate may be a plain X509Certificate (not
+            // X509Certificate2) on some runtimes — `as X509Certificate2`
+            // would silently null out the audit thumbprint. Wrap so the
+            // session log always records who authenticated.
+            string? clientThumb = null;
+            if (ssl.RemoteCertificate != null)
+            {
+                try
+                {
+                    using var c2 = ssl.RemoteCertificate as X509Certificate2
+                        ?? new X509Certificate2(ssl.RemoteCertificate);
+                    clientThumb = c2.Thumbprint;
+                }
+                catch { /* leave null */ }
+            }
             sessLog = SessionLogger.Open(
                 Config.LogDir ?? ServerConfig.DefaultLogDir(),
                 remoteStr,
@@ -214,6 +254,17 @@ public sealed class FFServer
         QueueDepth = Config.QueueDepth,
     };
 
+    /// <summary>Maximum length of any string field on an incoming
+    /// <see cref="RenderRequestDto"/>. Hard cap so an attacker cannot
+    /// ship a 200 MB RegionName inside the 256 MB frame envelope and
+    /// force expensive lookups + log lines per request.</summary>
+    public const int MaxDtoStringLength = 256;
+
+    /// <summary>Maximum length of a single log line. Defends per-session
+    /// log files against being filled by attacker-supplied DTO content
+    /// (regionName, themeName, errorMessage echoed back into a log line).</summary>
+    public const int MaxLogLineLength = 512;
+
     private async Task HandleRenderAsync(MessageEnvelope env, SslStream ssl, SessionLogger log, CancellationToken ct)
     {
         RenderRequestDto? req;
@@ -227,6 +278,12 @@ public sealed class FFServer
         if (req is null)
         {
             await ReplyErrorAsync(ssl, env.Id, "bad-request", "missing params", ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (!ValidateDtoStringLengths(req, out string? lengthErr))
+        {
+            await ReplyErrorAsync(ssl, env.Id, "bad-request", lengthErr!, ct).ConfigureAwait(false);
             return;
         }
 
@@ -255,6 +312,18 @@ public sealed class FFServer
             return;
         }
 
+        // MaxIterations gate: the inner calculator loop runs once per
+        // escape-test per pixel. Without this an attacker who hits the
+        // pixel cap can still ask for iterations=10^9 and pin the worker
+        // for hours under the queue gate. Region-driven iterations also
+        // pass through here when the request inlines them.
+        if (req.Iterations is int reqIter && reqIter > Limits.MaxIterations)
+        {
+            await ReplyErrorAsync(ssl, env.Id, "limit-exceeded",
+                $"iterations={reqIter:N0} exceeds host cap {Limits.MaxIterations:N0}", ct).ConfigureAwait(false);
+            return;
+        }
+
         bool isVideo = string.Equals(env.Method, "render.video", StringComparison.Ordinal);
         if (isVideo)
         {
@@ -268,6 +337,19 @@ public sealed class FFServer
             {
                 await ReplyErrorAsync(ssl, env.Id, "limit-exceeded",
                     $"videoFps must be {Limits.MinVideoFps}..{Limits.MaxVideoFps}", ct).ConfigureAwait(false);
+                return;
+            }
+            // Aggregate frame-pixel budget. A request that passes
+            // MaxPixels (single-frame) + MaxVideoSeconds (duration) +
+            // MaxVideoFps individually can still ask for 8K × 600s × 240fps
+            // ≈ 36 trillion pixels of work. This is the single check that
+            // closes that gap.
+            long framePixels = pixels * (long)Math.Ceiling(req.VideoSeconds * req.VideoFps);
+            if (framePixels > Limits.MaxVideoFramePixels)
+            {
+                await ReplyErrorAsync(ssl, env.Id, "limit-exceeded",
+                    $"video pixel-budget {framePixels:N0} exceeds host cap " +
+                    $"{Limits.MaxVideoFramePixels:N0} (w×h×seconds×fps)", ct).ConfigureAwait(false);
                 return;
             }
         }
@@ -290,8 +372,9 @@ public sealed class FFServer
             $"job-{DateTime.UtcNow:yyyyMMdd_HHmmss}-{Guid.NewGuid():N}".Substring(0, 40));
         Directory.CreateDirectory(workDir);
 
-        log.Info($"render begin: method={env.Method} type={parsedType} {req.Width}x{req.Height} " +
-                 $"region={req.RegionName ?? "(coords)"} theme={req.ThemeName} timeoutMin={minutes}");
+        log.Info(TruncateLogLine(
+            $"render begin: method={env.Method} type={parsedType} {req.Width}x{req.Height} " +
+            $"region={req.RegionName ?? "(coords)"} theme={req.ThemeName} timeoutMin={minutes}"));
 
         using var inFlight = Metrics.BeginRender();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -301,8 +384,8 @@ public sealed class FFServer
         Exception? failure = null;
         try
         {
-            artifact = await Task.Run(() => _engine.Render(
-                req, workDir, new SessionLoggerAdapter(log), cts.Token), cts.Token)
+            artifact = await _engine.RenderAsync(
+                req, workDir, new SessionLoggerAdapter(log), cts.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
@@ -360,6 +443,21 @@ public sealed class FFServer
                 return;
             }
 
+            // Hash once up front so the same digest goes on the inline
+            // response AND on streamed responses' RenderResponseDto, before
+            // any chunks ship. Client verifies after assembly.
+            string artifactHash;
+            try { artifactHash = await ComputeFileSha256Base64Async(artifact.FilePath, ct).ConfigureAwait(false); }
+            catch (Exception ex)
+            {
+                Metrics.RecordFailure("internal", $"hash artifact: {ex.Message}");
+                await ReplyErrorAsync(ssl, env.Id, "internal",
+                    $"could not hash rendered artifact: {ex.Message}", ct).ConfigureAwait(false);
+                TryCleanWorkDir(workDir);
+                return;
+            }
+            resp.ArtifactSha256 = artifactHash;
+
             if (fileSize > InlineSingleEnvelopeThreshold)
             {
                 resp.Streaming = true;
@@ -367,10 +465,18 @@ public sealed class FFServer
                 resp.ChunkCount = (int)((fileSize + ChunkBytes - 1) / ChunkBytes);
                 Metrics.RecordSuccess();
                 log.Info($"render done: elapsedMs={artifact.ElapsedMs} bytes=streamed " +
-                         $"size={fileSize:N0} chunks={resp.ChunkCount}");
-                await ReplyResultAsync(ssl, env.Id, resp, ct).ConfigureAwait(false);
-                await StreamArtifactChunksAsync(ssl, env.Id, artifact.FilePath, resp.ChunkCount, log, ct).ConfigureAwait(false);
-                TryCleanWorkDir(workDir);
+                         $"size={fileSize:N0} chunks={resp.ChunkCount} sha256={artifactHash[..Math.Min(16, artifactHash.Length)]}…");
+                // Wrap stream + reply in try/finally so a client disconnect
+                // mid-chunk does not leak the workdir. Without this the
+                // exception unwinds past TryCleanWorkDir and the per-job
+                // PNG frame folder lives on disk until WorkDirSweeper
+                // (next server start) catches it.
+                try
+                {
+                    await ReplyResultAsync(ssl, env.Id, resp, ct).ConfigureAwait(false);
+                    await StreamArtifactChunksAsync(ssl, env.Id, artifact.FilePath, resp.ChunkCount, log, ct).ConfigureAwait(false);
+                }
+                finally { TryCleanWorkDir(workDir); }
                 return;
             }
 
@@ -391,8 +497,16 @@ public sealed class FFServer
         }
         else
         {
-            resp.SavedPath = artifact.FilePath;
-            resp.FrameFolderPath = artifact.FrameFolderPath;
+            // Return only the workdir-relative tail so server.SavedPath
+            // does not leak the host's filesystem layout (e.g. %APPDATA%
+            // paths or per-OS user-profile prefixes) to authenticated
+            // clients. The client treats SavedPath as an opaque token
+            // it hands back to the operator anyway — the full path was
+            // never actionable on the client side.
+            resp.SavedPath = StripWorkDirPrefix(artifact.FilePath, workDir);
+            resp.FrameFolderPath = artifact.FrameFolderPath != null
+                ? StripWorkDirPrefix(artifact.FrameFolderPath, workDir)
+                : null;
         }
 
         Metrics.RecordSuccess();
@@ -422,11 +536,15 @@ public sealed class FFServer
                 int read = await fs.ReadAsync(buf.AsMemory(0, ChunkBytes), ct).ConfigureAwait(false);
                 if (read <= 0) break;
 
+                string chunkSha = Convert.ToBase64String(
+                    System.Security.Cryptography.SHA256.HashData(buf.AsSpan(0, read)));
+
                 var payload = new ChunkDto
                 {
                     Seq = seq,
                     Total = totalChunks,
                     BytesBase64 = Convert.ToBase64String(buf, 0, read),
+                    Sha256 = chunkSha,
                 };
                 var chunkEnv = new MessageEnvelope
                 {
@@ -439,6 +557,84 @@ public sealed class FFServer
             }
             if (seq != totalChunks)
                 log.Warn($"chunk count mismatch: emitted={seq} expected={totalChunks}");
+        }
+        finally { ArrayPool<byte>.Shared.Return(buf); }
+    }
+
+    private static string StripWorkDirPrefix(string fullPath, string workDir)
+    {
+        try
+        {
+            string norm = Path.GetFullPath(fullPath);
+            string root = Path.GetFullPath(workDir);
+            if (norm.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                string rel = norm[root.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return Path.Combine(Path.GetFileName(root), rel);
+            }
+        }
+        catch { }
+        // Fall back to the bare filename — never echo the host's full
+        // %APPDATA% prefix even if normalization fails.
+        return Path.GetFileName(fullPath);
+    }
+
+    private static X509RevocationMode ParseRevocationMode(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return X509RevocationMode.NoCheck;
+        return s.Trim().ToLowerInvariant() switch
+        {
+            "online"  => X509RevocationMode.Online,
+            "offline" => X509RevocationMode.Offline,
+            _         => X509RevocationMode.NoCheck,
+        };
+    }
+
+    private static bool ValidateDtoStringLengths(RenderRequestDto req, out string? err)
+    {
+        // Reject any string field that exceeds MaxDtoStringLength. The
+        // outer frame cap is 256 MB; without this an attacker could ship
+        // a single 200 MB RegionName / ThemeName / OutputName and force
+        // expensive resolution + log lines per request.
+        if (Long(req.Mode, "mode")) { err = TooLong("mode"); return false; }
+        if (Long(req.RegionName, "regionName")) { err = TooLong("regionName"); return false; }
+        if (Long(req.FractalType, "fractalType")) { err = TooLong("fractalType"); return false; }
+        if (Long(req.ThemeName, "themeName")) { err = TooLong("themeName"); return false; }
+        if (Long(req.QualityName, "qualityName")) { err = TooLong("qualityName"); return false; }
+        if (Long(req.OutputName, "outputName")) { err = TooLong("outputName"); return false; }
+        if (Long(req.Lossless, "lossless")) { err = TooLong("lossless"); return false; }
+        if (Long(req.ReturnMode, "returnMode")) { err = TooLong("returnMode"); return false; }
+        err = null;
+        return true;
+
+        static bool Long(string? s, string _) => s != null && s.Length > MaxDtoStringLength;
+        static string TooLong(string field) =>
+            $"field '{field}' exceeds {MaxDtoStringLength}-char limit";
+    }
+
+    private static string TruncateLogLine(string s)
+    {
+        if (s.Length <= MaxLogLineLength) return s;
+        return s[..MaxLogLineLength] + "…[truncated]";
+    }
+
+    private static async Task<string> ComputeFileSha256Base64Async(string path, CancellationToken ct)
+    {
+        await using var fs = new FileStream(
+            path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            bufferSize: 1 << 20, useAsync: true);
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        byte[] buf = ArrayPool<byte>.Shared.Rent(1 << 20);
+        try
+        {
+            while (true)
+            {
+                int n = await fs.ReadAsync(buf, ct).ConfigureAwait(false);
+                if (n <= 0) break;
+                sha.TransformBlock(buf, 0, n, null, 0);
+            }
+            sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            return Convert.ToBase64String(sha.Hash!);
         }
         finally { ArrayPool<byte>.Shared.Return(buf); }
     }

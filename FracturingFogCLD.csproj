@@ -58,6 +58,7 @@
     <Compile Remove="Rendering.Silk.Smoke\**" />
     <Compile Remove="Rendering.Skia\**" />
     <Compile Remove="Server\**" />
+    <Compile Remove="Server.Tests\**" />
     <Compile Remove="Client\**" />
     <None Remove="Abstractions\**" />
     <None Remove="UI.Avalonia\**" />
@@ -65,6 +66,7 @@
     <None Remove="Rendering.Silk.Smoke\**" />
     <None Remove="Rendering.Skia\**" />
     <None Remove="Server\**" />
+    <None Remove="Server.Tests\**" />
     <None Remove="Client\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
@@ -72,6 +74,7 @@
     <EmbeddedResource Remove="Rendering.Silk.Smoke\**" />
     <EmbeddedResource Remove="Rendering.Skia\**" />
     <EmbeddedResource Remove="Server\**" />
+    <EmbeddedResource Remove="Server.Tests\**" />
     <EmbeddedResource Remove="Client\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
@@ -79,6 +82,7 @@
     <Content Remove="Rendering.Silk.Smoke\**" />
     <Content Remove="Rendering.Skia\**" />
     <Content Remove="Server\**" />
+    <Content Remove="Server.Tests\**" />
     <Content Remove="Client\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml

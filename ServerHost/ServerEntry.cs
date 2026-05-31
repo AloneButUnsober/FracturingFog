@@ -45,6 +45,11 @@ public static class ServerEntry
         Directory.CreateDirectory(cfg.LogDir);
         Directory.CreateDirectory(cfg.WorkDir);
 
+        int swept = WorkDirSweeper.Sweep(cfg.WorkDir, cfg.WorkDirStaleHours,
+            line => Console.WriteLine(line));
+        if (swept > 0)
+            Console.WriteLine($"workdir sweep: removed {swept} stale job folder(s)");
+
         string certDir = ServerConfig.DefaultCertDir();
         string serverPfx;
         string caPfx;
@@ -143,6 +148,28 @@ public static class ServerEntry
                     if (!NextInt(args, ref i, a, out int qd, out err)) return false;
                     cfg.QueueDepth = qd; break;
 
+                case "--rate-limit-per-minute":
+                    if (!NextInt(args, ref i, a, out int rpm, out err)) return false;
+                    cfg.RateLimitPerMinute = rpm; break;
+
+                case "--rate-limit-burst":
+                    if (!NextInt(args, ref i, a, out int rb, out err)) return false;
+                    cfg.RateLimitBurst = rb; break;
+
+                case "--require-tls13":
+                    cfg.RequireTls13 = true; break;
+
+                case "--pin-thumbprint":
+                    if (!Next(args, ref i, a, out string pt, out err)) return false;
+                    cfg.AllowedClientThumbprints.Add(pt); break;
+
+                case "--workdir-stale-hours":
+                    if (!Next(args, ref i, a, out string wsh, out err)) return false;
+                    if (!double.TryParse(wsh, System.Globalization.NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double wshv))
+                        { err = $"{a} expected number, got '{wsh}'"; return false; }
+                    cfg.WorkDirStaleHours = wshv; break;
+
                 case "--cert":
                     if (!Next(args, ref i, a, out string cp, out err)) return false;
                     cfg.ServerCertPath = cp; break;
@@ -209,6 +236,13 @@ public static class ServerEntry
         Console.WriteLine($"  --max-minutes N      Per-job render ceiling (default {ServerConfig.DefaultMaxMinutes})");
         Console.WriteLine("  --allow-override     Honour client requestedMaxMinutes above the default");
         Console.WriteLine("  --queue-depth N      Max concurrent renders (default 1)");
+        Console.WriteLine("  --rate-limit-per-minute N");
+        Console.WriteLine("                       Sustained accepted connections per remote IP / minute (0 disables)");
+        Console.WriteLine("  --rate-limit-burst N Max standing token allowance per IP (default 10)");
+        Console.WriteLine("  --require-tls13      Restrict TLS to v1.3 only (default v1.2 + v1.3)");
+        Console.WriteLine("  --pin-thumbprint HEX Pin a specific client cert thumbprint; repeat for multiple");
+        Console.WriteLine("  --workdir-stale-hours N");
+        Console.WriteLine("                       Delete job-* subdirs older than N hours on startup (default 1, 0 disables)");
         Console.WriteLine("  --cert PATH          Server identity PFX (empty password)");
         Console.WriteLine("  --client-ca PATH     Trusted client CA bundle PFX (empty password)");
         Console.WriteLine("  --log-dir PATH       Per-session log directory");

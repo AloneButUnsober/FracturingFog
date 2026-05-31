@@ -67,6 +67,14 @@ public sealed class FFClientConnection : IAsyncDisposable
                 ex);
         }
 
+        // NoDelay: status-poll round-trips finish in one packet — Nagle's
+        // 200 ms wait would dominate. KeepAlive: long renders sit idle on
+        // the wire until the response envelope arrives; without keepalive
+        // a NAT mapping can expire and the client never sees the result.
+        try { tcp.NoDelay = true; } catch { }
+        try { tcp.Client.SetSocketOption(System.Net.Sockets.SocketOptionLevel.Socket,
+            System.Net.Sockets.SocketOptionName.KeepAlive, true); } catch { }
+
         RemoteCertificateValidationCallback validate = (s, presented, chain, errors) =>
         {
             if (trustedServerCAs.Count == 0) return errors == SslPolicyErrors.None;
@@ -105,6 +113,7 @@ public sealed class FFClientConnection : IAsyncDisposable
         req.Mode = "image";
         var resp = await CallAsync<RenderResponseDto>("render.image", req, ct).ConfigureAwait(false);
         await AssembleStreamedBytesAsync(resp, isVideo: false, ct).ConfigureAwait(false);
+        VerifyArtifactHash(resp, isVideo: false);
         return resp;
     }
 
@@ -113,6 +122,7 @@ public sealed class FFClientConnection : IAsyncDisposable
         req.Mode = "video";
         var resp = await CallAsync<RenderResponseDto>("render.video", req, ct).ConfigureAwait(false);
         await AssembleStreamedBytesAsync(resp, isVideo: true, ct).ConfigureAwait(false);
+        VerifyArtifactHash(resp, isVideo: true);
         return resp;
     }
 
@@ -139,6 +149,19 @@ public sealed class FFClientConnection : IAsyncDisposable
                 throw new System.IO.InvalidDataException(
                     $"chunk out of order: expected seq={nextSeq}, got {chunk.Seq}");
             byte[] decoded = Convert.FromBase64String(chunk.BytesBase64);
+
+            // Per-chunk integrity. Skipped only when the server elected
+            // not to send a digest (older protocol). Mismatch means TLS
+            // delivered bytes the server never blessed — refuse the result.
+            if (!string.IsNullOrEmpty(chunk.Sha256))
+            {
+                string actual = Convert.ToBase64String(
+                    System.Security.Cryptography.SHA256.HashData(decoded));
+                if (!string.Equals(actual, chunk.Sha256, StringComparison.Ordinal))
+                    throw new System.IO.InvalidDataException(
+                        $"chunk {nextSeq}: sha256 mismatch (expected {chunk.Sha256}, got {actual})");
+            }
+
             ms.Write(decoded, 0, decoded.Length);
             nextSeq++;
         }
@@ -149,6 +172,20 @@ public sealed class FFClientConnection : IAsyncDisposable
         string b64 = Convert.ToBase64String(ms.ToArray());
         if (isVideo) resp.Mp4BytesBase64 = b64;
         else         resp.PngBytesBase64 = b64;
+    }
+
+    private static void VerifyArtifactHash(RenderResponseDto resp, bool isVideo)
+    {
+        if (string.IsNullOrEmpty(resp.ArtifactSha256)) return;
+        string? b64 = isVideo ? resp.Mp4BytesBase64 : resp.PngBytesBase64;
+        if (string.IsNullOrEmpty(b64)) return; // saved-path mode — nothing inline to hash
+
+        byte[] bytes = Convert.FromBase64String(b64);
+        string actual = Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(bytes));
+        if (!string.Equals(actual, resp.ArtifactSha256, StringComparison.Ordinal))
+            throw new System.IO.InvalidDataException(
+                $"artifact sha256 mismatch (expected {resp.ArtifactSha256}, got {actual})");
     }
 
     private async Task<TResult> CallAsync<TResult>(string method, object payload, CancellationToken ct)
