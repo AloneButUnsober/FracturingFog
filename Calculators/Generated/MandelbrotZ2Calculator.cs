@@ -14,7 +14,7 @@
 //                  =  (z + z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 23:10:49 UTC
+// Generated: 2026-06-01 23:56:00 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -604,7 +604,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     // per-pixel δ iteration using the symbolic expansion of
     //
     //     δ_{n+1}  =  p(Z+δ, C+ε)  −  p(Z, C)
-    //                 =  ε + (z + z)*δ + δ*δ
+    //                 =  (z + z)*δ + δ*δ + ε
     //
     // For polynomial step functions the expansion is exact — no
     // truncation error beyond the round-off of the reference orbit's
@@ -1164,12 +1164,12 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     Vector512<double> pim2 = Avx512F.Add(Zi_v, Zi_v);
                     Vector512<double> pre3 = Avx512F.FusedMultiplyAddNegated(pim2, di, Avx512F.Multiply(pre1, dr));
                     Vector512<double> pim4 = Avx512F.FusedMultiplyAdd(pre1, di, Avx512F.Multiply(pim2, dr));
-                    Vector512<double> pre5 = Avx512F.Add(er_v, pre3);
-                    Vector512<double> pim6 = Avx512F.Add(ei_v, pim4);
-                    Vector512<double> pre7 = Avx512F.FusedMultiplyAddNegated(di, di, Avx512F.Multiply(dr, dr));
-                    Vector512<double> pim8 = Avx512F.FusedMultiplyAdd(dr, di, Avx512F.Multiply(di, dr));
-                    Vector512<double> pre9 = Avx512F.Add(pre5, pre7);
-                    Vector512<double> pim10 = Avx512F.Add(pim6, pim8);
+                    Vector512<double> pre5 = Avx512F.FusedMultiplyAddNegated(di, di, Avx512F.Multiply(dr, dr));
+                    Vector512<double> pim6 = Avx512F.FusedMultiplyAdd(dr, di, Avx512F.Multiply(di, dr));
+                    Vector512<double> pre7 = Avx512F.Add(pre3, pre5);
+                    Vector512<double> pim8 = Avx512F.Add(pim4, pim6);
+                    Vector512<double> pre9 = Avx512F.Add(pre7, er_v);
+                    Vector512<double> pim10 = Avx512F.Add(pim8, ei_v);
                     Vector512<double> dr_new = pre9;
                     Vector512<double> di_new = pim10;
                             Vector512<double> keep = activeMask.AsDouble();
@@ -1402,8 +1402,8 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                                 // outcome, fewer branches.
                             }
                         }
-                    double dr_new = ((er + ((Zr + Zr) * dr - (Zi + Zi) * di)) + (dr * dr - di * di));
-                    double di_new = ((ei + ((Zr + Zr) * di + (Zi + Zi) * dr)) + (dr * di + di * dr));
+                    double dr_new = ((((Zr + Zr) * dr - (Zi + Zi) * di) + (dr * dr - di * di)) + er);
+                    double di_new = ((((Zr + Zr) * di + (Zi + Zi) * dr) + (dr * di + di * dr)) + ei);
                         dr = dr_new; di = di_new;
                     }
                     // Two reasons to fall to per-pixel HP-direct:

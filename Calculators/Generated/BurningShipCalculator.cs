@@ -14,7 +14,7 @@
 //                  =  1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 23:11:15 UTC
+// Generated: 2026-06-01 23:56:19 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce

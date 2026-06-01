@@ -34,9 +34,27 @@ public static class AstPerturbation
         AstNode result = new RealConst(0.0);
         const int maxOrder = 32;
 
-        for (int k = 0; k <= maxOrder; k++)
+        // Outer loop is m (ε powers), inner is k (δ powers). Term emission
+        // order matters at deep zoom because the AST builds a left-assoc
+        // Add chain whose floating-point evaluation order matches the
+        // emission order. Pure-δ terms (m=0) dominate at deep zoom — they
+        // carry the |2Z·δ| ~ |Z|·|δ| magnitude that grows iteration-over-
+        // iteration. ε terms (m≥1) are tiny because ε itself is sub-ULP
+        // relative to Z at zoom > 1e12. If ε is added in the middle of
+        // the sum (the old k-outer/m-inner order), the dominant pure-δ
+        // term that follows it dwarfs ε via ULP rounding → ε contribution
+        // is lost → per-pixel signal collapses → high-detail regions
+        // render as solid-colour blobs. Adding ε LAST (this order) lets
+        // ε's per-pixel value survive as a fresh addition at its own
+        // scale. Matches legacy MandelbrotCalculator's hand-coded form
+        // (`(2Z + δ)·δ + ε` for z²+c) which adds dc last for the same
+        // reason. Reported as the "blob/dot at center" bug at zoom 1e12+
+        // on AVX-2 hardware (no AVX-512), where the scalar tail runs
+        // entirely and this expression order is the per-iter precision
+        // gate.
+        for (int m = 0; m <= maxOrder; m++)
         {
-            for (int m = 0; m + k <= maxOrder; m++)
+            for (int k = 0; k + m <= maxOrder; k++)
             {
                 if (k + m == 0) continue;
                 AstNode partial = stepFn;
