@@ -14,7 +14,7 @@
 //                  =  ((z + z)*z + z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 23:01:06 UTC
+// Generated: 2026-06-01 23:11:11 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -1125,6 +1125,13 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                     Vector512<long>   escapeIter = lZero;
                     Vector512<double> finalZrVec = dZero, finalZiVec = dZero;
                     Vector512<double> finalDrvVec = dZero, finalDivVec = dZero;
+                    // Capture pre-escape δ per lane → DD-promoted smooth count
+                    // post-loop (refZr/refZrLo + δ → DD |z|²). Without this the
+                    // SIMD path collapses to plain-double `log(|z|)` whose LSBs
+                    // die in the float cast past zoom 1e12, producing ~5× fewer
+                    // unique smooth values per decade vs the scalar/HP-direct
+                    // path that uses ColorForDd.
+                    Vector512<double> finalDrVec = dZero, finalDiVec = dZero;
                     Vector512<long>   glitchMask = lZero;
 
                     for (int it = 0; it < refOrbitLen; it++)
@@ -1146,6 +1153,9 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                         finalZiVec = Avx512F.BlendVariable(finalZiVec, zi_v, newlyEscapedD);
                         finalDrvVec = Avx512F.BlendVariable(finalDrvVec, drv, newlyEscapedD);
                         finalDivVec = Avx512F.BlendVariable(finalDivVec, div, newlyEscapedD);
+                        // δ at moment of escape (before this iter's δ-update).
+                        finalDrVec = Avx512F.BlendVariable(finalDrVec, dr, newlyEscapedD);
+                        finalDiVec = Avx512F.BlendVariable(finalDiVec, di, newlyEscapedD);
                         activeMask = Avx512F.And(activeMask, activeL);
                         if (activeMask.Equals(lZero)) break;
                         escapeIter = Avx512F.Add(escapeIter, Avx512F.And(oneL, activeMask));
@@ -1240,11 +1250,14 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                     Span<double> finZiS  = stackalloc double[8];
                     Span<double> finDrvS = stackalloc double[8];
                     Span<double> finDivS = stackalloc double[8];
+                    Span<double> finDrS  = stackalloc double[8];
+                    Span<double> finDiS  = stackalloc double[8];
                     Span<long>   actS    = stackalloc long[8];
                     Span<long>   glS     = stackalloc long[8];
                     escapeIter.CopyTo(itersS);
                     finalZrVec.CopyTo(finZrS); finalZiVec.CopyTo(finZiS);
                     finalDrvVec.CopyTo(finDrvS); finalDivVec.CopyTo(finDivS);
+                    finalDrVec.CopyTo(finDrS); finalDiVec.CopyTo(finDiS);
                     activeMask.CopyTo(actS); glitchMask.CopyTo(glS);
 
                     for (int k = 0; k < 8; k++)
@@ -1277,11 +1290,27 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                         }
                         // Active lanes that finished refOrbitLen without
                         // escaping (only possible when refOrbitLen == maxIt
-                        // — caught above otherwise) are in-set; ColorFor
+                        // — caught above otherwise) are in-set; ColorForDd
                         // returns the in-set entry when it >= maxIt.
                         int it = actS[k] != 0 ? maxIt : (int)itersS[k];
-                        ColorBuffer[rowBase + x + k] = ColorFor(
-                            it, finZrS[k], finZiS[k], finDrvS[k], finDivS[k], maxIt, rowBase + x + k);
+                        // DD-promote |z|² from QD ref orbit (Hi+Lo limbs)
+                        // plus per-lane δ — matches scalar path's precision
+                        // so smooth count survives the log-log cast past
+                        // zoom 1e12. In-set lanes skip the math; ColorForDd
+                        // short-circuits on it >= maxIt.
+                        FracturingFog.FFMath.DD lzMag2 = FracturingFog.FFMath.DD.Zero;
+                        if (it < maxIt)
+                        {
+                            int itIdx = it;
+                            var lzr_dd = new FracturingFog.FFMath.DD(refZr[itIdx], refZrLo[itIdx])
+                                       + new FracturingFog.FFMath.DD(finDrS[k], 0.0);
+                            var lzi_dd = new FracturingFog.FFMath.DD(refZi[itIdx], refZiLo[itIdx])
+                                       + new FracturingFog.FFMath.DD(finDiS[k], 0.0);
+                            lzMag2 = lzr_dd.Square() + lzi_dd.Square();
+                        }
+                        ColorBuffer[rowBase + x + k] = ColorForDd(
+                            it, finZrS[k], finZiS[k], lzMag2,
+                            finDrvS[k], finDivS[k], maxIt, rowBase + x + k);
                     }
                 }
             }

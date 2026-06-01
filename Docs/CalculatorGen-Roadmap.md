@@ -435,17 +435,26 @@ flips priority.
   |center| ~ 1). Update accumulates to zero. Fix lives in the
   Avalonia/WinForms pan-zoom command pipeline, not in CalcGen.
 
-- **Generated perturbation loses detail past zoom 1e12** — probe
-  (`--saprobe`) at user's report coords (-1.1727, -0.2968) shows
-  generated PT path produces ~5× fewer unique colours per decade vs
-  legacy `MandelbrotCalculator`. Workaround in `FractalRenderHost`:
-  disable `UsePerturbation` for `MandelbrotZ2Calculator`, route
-  through `TryRenderHpDirect` (QD per-pixel from iter 0) which
-  probe confirms matches legacy exactly. Slower but correct. Root
-  cause not isolated — tested Horner vs Taylor δ-step,
-  DD-precision smooth count, glitch-bypass: all yield same numbers.
-  Both gen and legacy run identical math on the same data type
-  (QD ref orbit, double δ). Investigation needed: maybe AVX-512 lane
-  vs legacy AVX-512 path subtly differ in escape capture, or the
-  Avx512PerturbationEmitter's Taylor expansion order accumulates
-  more rounding than legacy's hand-written `(2Z+δ)·δ` macro.
+- [x] **Generated perturbation loses detail past zoom 1e12** — FIXED.
+  Root cause: AVX-512 SIMD lane in the perturbation path called
+  `ColorFor` (plain-double smooth count) while the scalar tail
+  called `ColorForDd` (DD-precision smooth count via QD ref
+  orbit's Lo limbs). Past zoom 1e12 every escaped pixel has
+  `|z| ≈ √Bailout` whose plain-double `log(|z|)` is constant across
+  many adjacent pixels — only LSBs vary, which die in the
+  `Math.Log` → `Math.Log2` chain → `(float)` cast. Per-decade
+  unique-value count drops ~5×. Legacy `MandelbrotCalculator` is
+  masked because its ref orbit is DD throughout, so the SIMD lane's
+  per-lane `(zr, zi)` are DD-precision additions and the smooth
+  count never collapses. Fix: SIMD lane now captures per-lane δ at
+  moment of escape into `finalDrVec / finalDiVec`; the scatter
+  loop reconstructs `|z|²` as DD via
+  `DD(refZr[it], refZrLo[it]) + DD(dr, 0)` and routes to
+  `ColorForDd`. In-set lanes skip the DD math (short-circuited).
+  Touches: `Calculator.template.cs` AVX-512 lane block only — 3
+  blend additions + 1 span pair + 1 ColorFor→ColorForDd swap with
+  inline DD promote. All 6 stock calcs regenerated; `--gentest
+  MandelbrotZ2` 0 diff; `--calcgen-test` 90/90 PASS.
+  `FractalRenderHost.Trigger` GZ2 branch re-enables
+  `UsePerturbation = true; UseBla = true; UseSa = true`. User-side
+  verification needed at coords (-1.1727, -0.2968) zoom 1e12-1e16.

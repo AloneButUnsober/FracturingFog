@@ -452,15 +452,15 @@ namespace FracturingFog.Rendering
                         gz2.CenterYLo = ViewState.CenterYLo;
                         gz2.CenterY2  = ViewState.CenterY2;
                         gz2.CenterY3  = ViewState.CenterY3;
-                        // WORKAROUND (task #14): generated perturbation
-                        // loses ~5x detail per decade past zoom 1e12 vs
-                        // legacy MandelbrotCalculator. BLA hierarchy
-                        // (item 12) was tested as a potential fix —
-                        // ineffective. Disable perturbation → template
-                        // routes to TryRenderHpDirect at zoom ≥ 1e12.
-                        gz2.UsePerturbation = false;
-                        gz2.UseBla          = false;
-                        gz2.UseSa           = false;
+                        // Task #14 fixed: AVX-512 perturbation lane now
+                        // promotes |z|² to DD (using refZrLo/refZiLo) and
+                        // calls ColorForDd — matches scalar tail precision.
+                        // Smooth count survives the log-log cast past
+                        // zoom 1e12; per-decade unique-value count tracks
+                        // legacy MandelbrotCalculator.
+                        gz2.UsePerturbation = true;
+                        gz2.UseBla          = true;
+                        gz2.UseSa           = true;
                         break;
                     case FracturingFog.Calculators.Generated.MandelbrotZ3Calculator gz3:
                         gz3.CenterXLo = ViewState.CenterXLo;
