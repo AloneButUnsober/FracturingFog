@@ -67,12 +67,41 @@ namespace FracturingFog.FFMath
 
         /// <summary>
         /// Build a BLA hierarchy from a reference orbit (Z values stored as doubles).
+        /// Mandelbrot-specific: level-0 hardcoded to A = 2·Z, B = 1.
+        /// For other polynomials (z³+c, etc.) use the level-0-array overload.
         /// </summary>
         /// <param name="refZr">Reference orbit real parts.</param>
         /// <param name="refZi">Reference orbit imaginary parts.</param>
         /// <param name="refLen">Number of valid reference iterations (orbit may have terminated by escape).</param>
         /// <param name="dcMaxAbs">Maximum |dc| over all pixels — needed for merge validity.</param>
         public BlaTable(double[] refZr, double[] refZi, int refLen, double dcMaxAbs)
+            : this(BuildMandelbrotLevel0(refZr, refZi, refLen), refLen, dcMaxAbs)
+        {
+        }
+
+        private static Bla[] BuildMandelbrotLevel0(double[] refZr, double[] refZi, int refLen)
+        {
+            var level0 = new Bla[refLen];
+            for (int n = 0; n < refLen; n++)
+            {
+                double zr = refZr[n], zi = refZi[n];
+                double zMag = System.Math.Sqrt(zr * zr + zi * zi);
+                double r = Epsilon * zMag;
+                level0[n] = new Bla(2.0 * zr, 2.0 * zi, 1.0, 0.0, r * r, 1);
+            }
+            return level0;
+        }
+
+        /// <summary>
+        /// Build a BLA hierarchy from pre-computed level-0 BLAs.
+        /// Used by CalculatorGen-generated calculators that build per-equation
+        /// level-0 (A = ∂p/∂z(Z_n), B = ∂p/∂c(Z_n)) via emitted code at ref-
+        /// orbit construction time. The merge logic (levels 1..) is the same.
+        /// </summary>
+        /// <param name="level0">Per-step BLA at iter n (length ≥ refLen).</param>
+        /// <param name="refLen">Number of valid reference iterations.</param>
+        /// <param name="dcMaxAbs">Maximum |dc| over all pixels.</param>
+        public BlaTable(Bla[] level0, int refLen, double dcMaxAbs)
         {
             RefLen = refLen;
             int maxLevel = 0;
@@ -90,19 +119,9 @@ namespace FracturingFog.FFMath
             }
             Data = new Bla[total];
 
-            // Level 0 — single perturbation step:
-            //   δ' = (2·Z + δ)·δ + dc  ≈  2·Z·δ + dc
-            //   A = 2·Z, B = 1, validity r = ε·|Z|
+            // Level 0 — caller-provided.
             for (int n = 0; n < LevelLen[0]; n++)
-            {
-                double zr = refZr[n], zi = refZi[n];
-                double zMag = System.Math.Sqrt(zr * zr + zi * zi);
-                double r = Epsilon * zMag;
-                Data[LevelStart[0] + n] = new Bla(
-                    2.0 * zr, 2.0 * zi,
-                    1.0, 0.0,
-                    r * r, 1);
-            }
+                Data[LevelStart[0] + n] = level0[n];
 
             // Higher levels — merge two consecutive prior-level BLAs.
             //   A_m = A2 · A1

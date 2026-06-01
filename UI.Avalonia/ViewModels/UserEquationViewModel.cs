@@ -1,8 +1,12 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using FracturingFog.CalculatorGen;
 using FracturingFog.Models;
 using ReactiveUI;
 
@@ -49,6 +53,8 @@ public sealed class UserEquationViewModel : ViewModelBase
         RotPlus90Command = ReactiveCommand.Create(() => BumpRotation(90.0));
         RotMinus90Command = ReactiveCommand.Create(() => BumpRotation(-90.0));
         RotResetCommand = ReactiveCommand.Create(() => SetRotation(0.0));
+        GenerateViaCalcGenCommand = ReactiveCommand.Create(OnGenerateViaCalcGen);
+        HotLoadViaCalcGenCommand = ReactiveCommand.Create(OnHotLoadViaCalcGen);
 
         _params.UserEquationSource = _source;
     }
@@ -123,6 +129,8 @@ public sealed class UserEquationViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> RotPlus90Command { get; }
     public ReactiveCommand<Unit, Unit> RotMinus90Command { get; }
     public ReactiveCommand<Unit, Unit> RotResetCommand { get; }
+    public ReactiveCommand<Unit, Unit> GenerateViaCalcGenCommand { get; }
+    public ReactiveCommand<Unit, Unit> HotLoadViaCalcGenCommand { get; }
 
     public event Action? CompileRequested;
     public event Action? RenderRequested;
@@ -133,6 +141,11 @@ public sealed class UserEquationViewModel : ViewModelBase
 
     /// <summary>Host shows a yes/no confirm and returns true to proceed.</summary>
     public event Func<string, bool>? ConfirmDeleteRequested;
+
+    /// <summary>Host compiles + loads the equation via CalcGen and swaps
+    /// the result onto the render pipeline. Args: (equation, className).
+    /// Return value: null on success, error message on failure.</summary>
+    public event Func<string, string, string?>? HotLoadRequested;
 
     /// <summary>Force an immediate compile (cancel pending debounce).</summary>
     public void TriggerCompile()
@@ -207,6 +220,103 @@ public sealed class UserEquationViewModel : ViewModelBase
 
         _params.UserEquationName = entry.Name;
         RefreshSavedList(entry.Name);
+    }
+
+    // ── CalcGen pipeline ─────────────────────────────────────────────────
+    //
+    // Run the user's equation through CalculatorGen and write the
+    // generated calculator to Calculators/Generated/. CalcGen's grammar
+    // is stricter than UserEquationCalculator's Roslyn-backed source: it
+    // expects a bare polynomial RHS (e.g. `z*z + c`, no `return`, no
+    // semicolons), so this method extracts the RHS from the user's
+    // C# expression-body source. Anything CalcGen can't parse → status
+    // shows the error and no file is written. On success, the user must
+    // rebuild the app for the generated calculator to appear in the
+    // FractalType dropdown — there's no in-process hot-load yet.
+    private void OnGenerateViaCalcGen()
+    {
+        string source = _source ?? string.Empty;
+        // Strip `return ` prefix and trailing `;` so a user pasting the
+        // editor's default "return z*z + c;" works without re-formatting.
+        string equation = Regex.Replace(source.Trim(), @"^\s*return\s+", "");
+        equation = equation.TrimEnd(';').Trim();
+        if (string.IsNullOrWhiteSpace(equation))
+        {
+            ShowError("Equation is empty.");
+            return;
+        }
+
+        string baseName = string.IsNullOrWhiteSpace(_params.UserEquationName)
+            ? "UserGenerated"
+            : Regex.Replace(_params.UserEquationName, @"[^A-Za-z0-9_]", "");
+        if (string.IsNullOrEmpty(baseName)) baseName = "UserGenerated";
+
+        var result = CalculatorGenApi.Generate(equation, baseName, includeSelfTest: true);
+        if (!result.Ok)
+        {
+            ShowError($"CalcGen: {result.Error}");
+            return;
+        }
+
+        try
+        {
+            string outDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Calculators", "Generated");
+            outDir = Path.GetFullPath(outDir);
+            Directory.CreateDirectory(outDir);
+            string calcPath = Path.Combine(outDir, $"{result.ClassName}.cs");
+            File.WriteAllText(calcPath, result.Source, new UTF8Encoding(false));
+            if (result.SelfTest != null)
+            {
+                string stPath = Path.Combine(outDir, $"{result.ClassName}SelfTest.cs");
+                File.WriteAllText(stPath, result.SelfTest, new UTF8Encoding(false));
+            }
+            StatusText = $"✓ CalcGen → {Path.GetFileName(calcPath)} (rebuild to pick up)";
+            StatusIsError = false;
+        }
+        catch (Exception ex)
+        {
+            ShowError($"CalcGen write failed: {ex.Message}");
+        }
+    }
+
+    // Compile + load via CalcGen WITHOUT touching disk. Calls the host's
+    // HotLoadRequested callback, which runs Roslyn over the generated
+    // source and swaps the resulting calculator onto the render
+    // pipeline. The new calculator stays active until the host clears
+    // it or the user closes/reopens the dialog.
+    private void OnHotLoadViaCalcGen()
+    {
+        string source = _source ?? string.Empty;
+        string equation = Regex.Replace(source.Trim(), @"^\s*return\s+", "");
+        equation = equation.TrimEnd(';').Trim();
+        if (string.IsNullOrWhiteSpace(equation))
+        {
+            ShowError("Equation is empty.");
+            return;
+        }
+
+        string baseName = string.IsNullOrWhiteSpace(_params.UserEquationName)
+            ? "UserHotLoaded"
+            : Regex.Replace(_params.UserEquationName, @"[^A-Za-z0-9_]", "");
+        if (string.IsNullOrEmpty(baseName)) baseName = "UserHotLoaded";
+
+        var handler = HotLoadRequested;
+        if (handler == null)
+        {
+            ShowError("Hot-load not wired by host.");
+            return;
+        }
+
+        string? err = handler.Invoke(equation, baseName);
+        if (err == null)
+        {
+            StatusText = $"✓ Hot-loaded {baseName}Calculator";
+            StatusIsError = false;
+        }
+        else
+        {
+            ShowError(err);
+        }
     }
 
     private void OnDelete()

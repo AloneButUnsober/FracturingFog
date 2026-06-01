@@ -49,12 +49,24 @@
                     Padding="14,4" />
         </Grid>
 
-        <!-- Row 2: promote toggle -->
-        <CheckBox Grid.Row="2"
-                  Content="Promote to fractal list"
-                  IsChecked="{Binding Promote, Mode=TwoWay}"
-                  IsEnabled="{Binding PromoteEnabled}"
-                  Margin="0,0,0,6" />
+        <!-- Row 2: promote toggle + CalcGen export -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+            <CheckBox Grid.Column="0"
+                      Content="Promote to fractal list"
+                      IsChecked="{Binding Promote, Mode=TwoWay}"
+                      IsEnabled="{Binding PromoteEnabled}" />
+            <Button Grid.Column="1"
+                    Content="Compile &amp; Load"
+                    Command="{Binding HotLoadViaCalcGenCommand}"
+                    ToolTip.Tip="Generate, Roslyn-compile, and load the equation as a hot calculator. No rebuild required — replaces the active calc immediately."
+                    Margin="0,0,6,0"
+                    Padding="14,4" />
+            <Button Grid.Column="2"
+                    Content="Generate via CalcGen"
+                    Command="{Binding GenerateViaCalcGenCommand}"
+                    ToolTip.Tip="Run the equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
+                    Padding="14,4" />
+        </Grid>
 
         <!-- Row 3: rotation row -->
         <Grid Grid.Row="3"

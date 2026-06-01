@@ -13,9 +13,7 @@
 //   --selftest       Also emit <Name>SelfTest.cs validating scalar↔AVX2.
 //   --dry-run        Print to stdout instead of writing files.
 
-using System.Reflection;
 using System.Text;
-using FracturingFog.CalculatorGen.Emitters;
 using FracturingFog.CalculatorGen.Parser;
 
 namespace FracturingFog.CalculatorGen;
@@ -29,6 +27,8 @@ public static class Program
         string outDir    = "./Generated";
         bool dryRun      = false;
         bool selfTest    = false;
+        bool analyze     = false;
+        double bailout   = 512.0;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -39,11 +39,66 @@ public static class Program
                 case "--out":       case "-o": outDir   = args[++i]; break;
                 case "--selftest":              selfTest = true; break;
                 case "--dry-run":               dryRun   = true; break;
+                case "--analyze":               analyze  = true; break;
+                case "--bailout":              bailout  = double.Parse(args[++i],
+                    System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--help": case "-h":      PrintHelp(); return 0;
                 default:
                     Console.Error.WriteLine($"Unknown arg: {args[i]}");
                     PrintHelp();
                     return 2;
+            }
+        }
+
+        // --analyze: parse + diff + print, no file output, no template
+        // expansion. Lets users sanity-check an equation before paying
+        // the full generation pipeline.
+        if (analyze)
+        {
+            if (string.IsNullOrWhiteSpace(equation))
+            {
+                Console.Error.WriteLine("--analyze requires --equation.");
+                return 2;
+            }
+            try
+            {
+                var root = EquationParser.Parse(equation);
+                var dpdz = AstDifferentiator.DpDz(root);
+                var dpdc = AstDifferentiator.DpDc(root);
+                var deriv = AstDifferentiator.BuildDerivativeUpdate(root);
+                bool hasConj = AstHelpers.Contains<Conj>(root);
+                bool hasFolded = AstHelpers.Contains<Folded>(root);
+                bool hasDiv = AstHelpers.Contains<Div>(root);
+                bool hasTrans = AstHelpers.Contains<Sin>(root)
+                             || AstHelpers.Contains<Cos>(root)
+                             || AstHelpers.Contains<Exp>(root)
+                             || AstHelpers.Contains<Log>(root);
+                int saDegree = AstSaDetector.DetectZdPlusC(root);
+                Console.Out.WriteLine($"Equation:    {equation}");
+                Console.Out.WriteLine($"Parsed AST:  {AstPrinter.Print(root)}");
+                Console.Out.WriteLine($"∂p/∂z:       {AstPrinter.Print(dpdz)}");
+                Console.Out.WriteLine($"∂p/∂c:       {AstPrinter.Print(dpdc)}");
+                Console.Out.WriteLine($"dz/dc step:  {AstPrinter.Print(deriv)}");
+                Console.Out.WriteLine($"Has Conj:    {hasConj}");
+                Console.Out.WriteLine($"Has Folded:  {hasFolded}");
+                Console.Out.WriteLine($"Has Div:     {hasDiv}");
+                Console.Out.WriteLine($"Has Trans:   {hasTrans}");
+                Console.Out.WriteLine($"SupportsDe:  {!(hasConj || hasFolded)}");
+                Console.Out.WriteLine($"SupportsPT:  {!(hasConj || hasFolded || hasDiv || hasTrans)}");
+                Console.Out.WriteLine($"SA degree:   {(saDegree >= 2 ? saDegree.ToString() : "(not z^d+c)")}");
+                var (genPoly, genDeg) = AstSaDetector.DetectPolyInZPlusC(root);
+                if (genPoly != null && saDegree < 2)
+                    Console.Out.WriteLine($"SA generic:  degree {genDeg}, F(z) = {AstPrinter.Print(genPoly)}");
+                if (saDegree >= 2)
+                {
+                    Console.Out.WriteLine($"Perturb δ:   {AstPrinter.Print(AstPerturbation.BuildDeltaUpdate(root))}");
+                }
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Parse error: {ex.Message}");
+                return 1;
             }
         }
 
@@ -54,136 +109,38 @@ public static class Program
             return 2;
         }
 
-        if (!name.EndsWith("Calculator", StringComparison.Ordinal))
-            name += "Calculator";
-
-        AstNode root;
-        try
+        var result = CalculatorGenApi.Generate(equation, name, selfTest, bailout);
+        if (!result.Ok)
         {
-            root = EquationParser.Parse(equation);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Parse error: {ex.Message}");
+            Console.Error.WriteLine(result.Error);
             return 1;
-        }
-
-        // Derive symbolic ∂p/∂z, ∂p/∂c and the dz/dc update rule.
-        var dpdz   = AstDifferentiator.DpDz(root);
-        var dpdc   = AstDifferentiator.DpDc(root);
-        var derivUpdate = AstDifferentiator.BuildDerivativeUpdate(root);
-
-        // Emit bodies. Two emitters per target (Avx2Emitter is stateful —
-        // accumulates SSA temps per body — so we need separate instances).
-        string scalarZBody = new ScalarEmitter().EmitNewValueBody(root,        "z", indent: "            ");
-        string scalarDBody = new ScalarEmitter().EmitNewValueBody(derivUpdate, "d", indent: "            ");
-        string avxZBody    = new Avx2Emitter("                ", tempPrefix: "z_").EmitNewValueBody(root,        "z");
-        string avxDBody    = new Avx2Emitter("                ", tempPrefix: "d_").EmitNewValueBody(derivUpdate, "d");
-
-        // Tier 4 perturbation. Symbolic Taylor expansion of p(Z+δ, C+ε) − p(Z, C).
-        var perturbDelta   = AstPerturbation.BuildDeltaUpdate(root);
-        string perturbBody = new PerturbationEmitter()
-            .EmitDeltaBody(perturbDelta, indent: "                    ");
-
-        // Deep-zoom DD perturbation. Same Taylor body, emitted with DD-typed
-        // bindings so per-pixel δ keeps ~31 digits at zoom levels where a
-        // double-precision δ would have its ε contribution absorbed by Z.
-        string perturbDdBody = new DdEmitter()
-            .EmitDdDeltaBody(perturbDelta, indent: "                    ");
-
-        // dz/dc derivative update inside the perturbation loop. The
-        // derivative carries the per-pixel signal that the smooth-count
-        // formula loses at deep zoom (where log2(log2(|z|)) round-trips
-        // through float and collapses to a single value per iteration
-        // band) — distance estimate and surface normals depend on it.
-        string perturbDerivBody = new PerturbDerivEmitter()
-            .EmitDerivBody(derivUpdate, indent: "                    ");
-
-        // Tier 5 BLA coefficient bodies. A = ∂p/∂z(Z, C), B = ∂p/∂c(Z, C),
-        // both emitted as scalar real+imag pairs operating on the reference
-        // orbit's zr/zi (the template binds Z to those names).
-        string blaABody = new ScalarEmitter().EmitNewValueBody(dpdz, "A", indent: "                    ");
-        string blaBBody = new ScalarEmitter().EmitNewValueBody(dpdc, "B", indent: "                    ");
-
-        // Tier 3 / Big+ — QD reference orbit. Same polynomial step but in
-        // QuadDouble arithmetic (~62 decimal digits) so the reference orbit
-        // remains accurate at zoom levels past 1e25.
-        string qdZBody = new QdEmitter().EmitQdBody(root, indent: "                ");
-
-        // HP-direct iteration bodies. Used by the per-pixel fallback when
-        // the perturbation reference orbit escapes — every pixel iterates
-        // z = p(z, c) directly in DD or QD precision. Mirrors what the
-        // legacy MandelbrotCalculator does in ComputePixelHP / ComputePixelQD.
-        string ddDirectBody = new DdDirectEmitter()
-            .EmitDdDirectBody(root, indent: "                    ");
-        string qdDirectBody = new QdDirectEmitter()
-            .EmitQdDirectBody(root, indent: "                    ");
-
-        string template = LoadTemplate("Calculator.template.cs");
-        string rendered = template
-            .Replace("{{CLASS_NAME}}",      name)
-            .Replace("{{EQUATION_SOURCE}}", equation)
-            .Replace("{{DPDZ_TEXT}}",       AstPrinter.Print(dpdz))
-            .Replace("{{DPDC_TEXT}}",       AstPrinter.Print(dpdc))
-            .Replace("{{DERIV_TEXT}}",      AstPrinter.Print(derivUpdate))
-            .Replace("{{TIMESTAMP}}",       DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC"))
-            .Replace("{{SCALAR_Z_BODY}}",   scalarZBody)
-            .Replace("{{SCALAR_D_BODY}}",   scalarDBody)
-            .Replace("{{AVX2_Z_BODY}}",     avxZBody)
-            .Replace("{{AVX2_D_BODY}}",     avxDBody)
-            .Replace("{{PERTURB_DELTA_BODY}}", perturbBody)
-            .Replace("{{PERTURB_DELTA_DD_BODY}}", perturbDdBody)
-            .Replace("{{PERTURB_DERIV_BODY}}", perturbDerivBody)
-            .Replace("{{PERTURB_DELTA_TEXT}}", AstPrinter.Print(perturbDelta))
-            .Replace("{{BLA_A_BODY}}", blaABody)
-            .Replace("{{BLA_B_BODY}}", blaBBody)
-            .Replace("{{QD_Z_BODY}}", qdZBody)
-            .Replace("{{DD_DIRECT_BODY}}", ddDirectBody)
-            .Replace("{{QD_DIRECT_BODY}}", qdDirectBody);
-
-        string selfTestRendered = string.Empty;
-        if (selfTest)
-        {
-            string stTmpl = LoadTemplate("SelfTest.template.cs");
-            selfTestRendered = stTmpl.Replace("{{CLASS_NAME}}", name);
         }
 
         if (dryRun)
         {
-            Console.Out.Write(rendered);
-            if (selfTest)
+            Console.Out.Write(result.Source);
+            if (result.SelfTest != null)
             {
                 Console.Out.WriteLine();
                 Console.Out.WriteLine("// ───── self-test ─────");
-                Console.Out.Write(selfTestRendered);
+                Console.Out.Write(result.SelfTest);
             }
             return 0;
         }
 
         Directory.CreateDirectory(outDir);
-        string calcPath = Path.Combine(outDir, $"{name}.cs");
-        File.WriteAllText(calcPath, rendered, new UTF8Encoding(false));
+        string calcPath = Path.Combine(outDir, $"{result.ClassName}.cs");
+        File.WriteAllText(calcPath, result.Source, new UTF8Encoding(false));
         Console.Out.WriteLine($"Wrote {calcPath}");
 
-        if (selfTest)
+        if (result.SelfTest != null)
         {
-            string stPath = Path.Combine(outDir, $"{name}SelfTest.cs");
-            File.WriteAllText(stPath, selfTestRendered, new UTF8Encoding(false));
+            string stPath = Path.Combine(outDir, $"{result.ClassName}SelfTest.cs");
+            File.WriteAllText(stPath, result.SelfTest, new UTF8Encoding(false));
             Console.Out.WriteLine($"Wrote {stPath}");
         }
 
         return 0;
-    }
-
-    private static string LoadTemplate(string fileName)
-    {
-        var asm = Assembly.GetExecutingAssembly();
-        string resName = asm.GetManifestResourceNames()
-            .First(n => n.EndsWith(fileName, StringComparison.Ordinal));
-        using var stream = asm.GetManifestResourceStream(resName)
-            ?? throw new InvalidOperationException($"Embedded template missing: {fileName}");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
     }
 
     private static void PrintHelp()

@@ -21,4 +21,17 @@
     <EmbeddedResource Include="Templates\SelfTest.template.cs" />
   </ItemGroup>
 
+  <!--
+    Roslyn compiler — used by CalculatorGenApi.TryCompileAndLoad to
+    Roslyn-compile a freshly-generated calculator into an in-memory
+    assembly so the UserEquation dialog can hot-load it without an
+    app restart. The CLI workflow doesn't need this (it writes a .cs
+    file and exits), so the dependency is technically optional from
+    the CLI's perspective — but it's small and saves a second NuGet
+    resolution from main consumers.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
 </Project>

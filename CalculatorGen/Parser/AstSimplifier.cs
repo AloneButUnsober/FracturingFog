@@ -37,13 +37,30 @@ public static class AstSimplifier
 
     private static AstNode SimplifyOnce(AstNode node) => node switch
     {
-        Neg n => SimplifyNeg(Simplify(n.Operand)),
-        Add a => SimplifyAdd(Simplify(a.Left), Simplify(a.Right)),
-        Sub s => SimplifySub(Simplify(s.Left), Simplify(s.Right)),
-        Mul m => SimplifyMul(Simplify(m.Left), Simplify(m.Right)),
-        Pow p => SimplifyPow(Simplify(p.Base), p.Exponent),
+        Neg n   => SimplifyNeg(Simplify(n.Operand)),
+        Add a   => SimplifyAdd(Simplify(a.Left), Simplify(a.Right)),
+        Sub s   => SimplifySub(Simplify(s.Left), Simplify(s.Right)),
+        Mul m   => SimplifyMul(Simplify(m.Left), Simplify(m.Right)),
+        Pow p   => SimplifyPow(Simplify(p.Base), p.Exponent),
+        Div d   => SimplifyDiv(Simplify(d.Left), Simplify(d.Right)),
+        Conj cj => new Conj(Simplify(cj.Operand)),
+        Folded f => new Folded(Simplify(f.Operand)),
+        Sin s2  => new Sin(Simplify(s2.Operand)),
+        Cos c2  => new Cos(Simplify(c2.Operand)),
+        Exp ex  => new Exp(Simplify(ex.Operand)),
+        Log lg  => new Log(Simplify(lg.Operand)),
         _ => node,
     };
+
+    private static AstNode SimplifyDiv(AstNode l, AstNode r)
+    {
+        if (l is RealConst lk && lk.Value == 0.0) return new RealConst(0.0);
+        if (r is RealConst rk && rk.Value == 1.0) return l;
+        if (r is RealConst rk2 && rk2.Value == -1.0) return SimplifyNeg(l);
+        if (l is RealConst a && r is RealConst b && b.Value != 0.0)
+            return new RealConst(a.Value / b.Value);
+        return new Div(l, r);
+    }
 
     private static AstNode SimplifyNeg(AstNode a) => a switch
     {

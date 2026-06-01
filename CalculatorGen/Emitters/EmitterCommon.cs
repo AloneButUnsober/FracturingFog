@@ -57,6 +57,35 @@ public abstract class EmitterBase
     protected abstract ComplexExpr OpMul(ComplexExpr a, ComplexExpr b);
     protected abstract ComplexExpr OpNeg(ComplexExpr a);
 
+    /// <summary>Complex division a/b. Default implementation uses
+    /// (a·conj(b)) / |b|². Subclasses override for SIMD or DD/QD targets.</summary>
+    protected virtual ComplexExpr OpDiv(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpDiv not implemented in this emitter");
+
+    /// <summary>Complex conjugate (re, im) → (re, -im).</summary>
+    protected virtual ComplexExpr OpConj(ComplexExpr a) =>
+        throw new InvalidOperationException("OpConj not implemented in this emitter");
+
+    /// <summary>BurningShip fold (re, im) → (|re|, |im|). Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpFold(ComplexExpr a) =>
+        throw new InvalidOperationException("OpFold not implemented in this emitter");
+
+    /// <summary>Complex sine. Holomorphic.</summary>
+    protected virtual ComplexExpr OpSin(ComplexExpr a) =>
+        throw new InvalidOperationException("OpSin not implemented in this emitter");
+
+    /// <summary>Complex cosine. Holomorphic.</summary>
+    protected virtual ComplexExpr OpCos(ComplexExpr a) =>
+        throw new InvalidOperationException("OpCos not implemented in this emitter");
+
+    /// <summary>Complex exponential. Holomorphic.</summary>
+    protected virtual ComplexExpr OpExp(ComplexExpr a) =>
+        throw new InvalidOperationException("OpExp not implemented in this emitter");
+
+    /// <summary>Complex natural log. Holomorphic on C\{0}.</summary>
+    protected virtual ComplexExpr OpLog(ComplexExpr a) =>
+        throw new InvalidOperationException("OpLog not implemented in this emitter");
+
     public ComplexExpr Emit(AstNode node) => node switch
     {
         ZRef        => new ComplexExpr(ZRe,     ZIm,     ImZero: false),
@@ -70,6 +99,13 @@ public abstract class EmitterBase
         Sub s       => OpSub(Emit(s.Left), Emit(s.Right)),
         Mul m       => OpMul(Emit(m.Left), Emit(m.Right)),
         Pow p       => EmitPow(p),
+        Div d       => OpDiv(Emit(d.Left), Emit(d.Right)),
+        Conj cj     => OpConj(Emit(cj.Operand)),
+        Folded f    => OpFold(Emit(f.Operand)),
+        Sin s2      => OpSin(Emit(s2.Operand)),
+        Cos c2      => OpCos(Emit(c2.Operand)),
+        Exp ex      => OpExp(Emit(ex.Operand)),
+        Log lg      => OpLog(Emit(lg.Operand)),
         _ => throw new InvalidOperationException($"Unhandled AST node: {node.GetType().Name}"),
     };
 

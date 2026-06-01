@@ -49,10 +49,36 @@ public sealed class EquationParser
     {
         var t = _tokens[_pos];
         if (t.Kind != kind)
-            throw new FormatException($"Expected {kind} at position {t.Position}, got {t.Kind} ('{t.Lexeme}').");
+            throw new FormatException(
+                $"Expected {Describe(kind)} at {t.Where}, got {Describe(t.Kind)} ('{t.Lexeme}').");
         _pos++;
         return t;
     }
+
+    // Friendly names for diagnostics — "'+' or '-'" reads better than
+    // "Plus" to non-implementers.
+    private static string Describe(TokenKind k) => k switch
+    {
+        TokenKind.Number => "number",
+        TokenKind.ZVar   => "'z'",
+        TokenKind.CVar   => "'c'",
+        TokenKind.Plus   => "'+'",
+        TokenKind.Minus  => "'-'",
+        TokenKind.Star   => "'*'",
+        TokenKind.Slash  => "'/'",
+        TokenKind.Caret  => "'^'",
+        TokenKind.LParen => "'('",
+        TokenKind.RParen => "')'",
+        TokenKind.Conj   => "conj(...)",
+        TokenKind.Fold   => "fold(...)",
+        TokenKind.Sqr    => "sqr(...)",
+        TokenKind.Sin    => "sin(...)",
+        TokenKind.Cos    => "cos(...)",
+        TokenKind.Exp    => "exp(...)",
+        TokenKind.Log    => "log(...)",
+        TokenKind.End    => "end of input",
+        _                => k.ToString(),
+    };
 
     private AstNode ParseExpr()
     {
@@ -74,10 +100,10 @@ public sealed class EquationParser
         while (Match(TokenKind.Star, TokenKind.Slash))
         {
             var op = Advance();
-            if (op.Kind == TokenKind.Slash)
-                throw new FormatException($"Division not supported in Phase A (position {op.Position}).");
             var right = ParseFactor();
-            left = new Mul(left, right);
+            left = op.Kind == TokenKind.Slash
+                ? new Div(left, right)
+                : new Mul(left, right);
         }
         return left;
     }
@@ -89,8 +115,9 @@ public sealed class EquationParser
         {
             var caret = Advance();
             var exp = Expect(TokenKind.Number);
-            if (!int.TryParse(exp.Lexeme, out int n) || n < 0 || n > 16)
-                throw new FormatException($"Exponent at {exp.Position} must be a non-negative integer ≤ 16; got '{exp.Lexeme}'.");
+            if (!int.TryParse(exp.Lexeme, out int n) || n < 0 || n > 64)
+                throw new FormatException(
+                    $"Exponent at {exp.Where} must be a non-negative integer ≤ 64; got '{exp.Lexeme}'.");
             return new Pow(node, n);
         }
         return node;
@@ -125,8 +152,56 @@ public sealed class EquationParser
                 var inner = ParseExpr();
                 Expect(TokenKind.RParen);
                 return inner;
+            case TokenKind.Conj:
+                Advance();
+                Expect(TokenKind.LParen);
+                var conjArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Conj(conjArg);
+            case TokenKind.Fold:
+                Advance();
+                Expect(TokenKind.LParen);
+                var foldArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Folded(foldArg);
+            case TokenKind.Sqr:
+                // sqr(x) ≡ x*x. Desugar at parse time — keeps every
+                // downstream stage (differentiator, expander, emitters,
+                // SA detector) unchanged. The squared expression
+                // pattern-matches AstSaDetector's z*z chain so sqr(z)+c
+                // still triggers SA at degree 2.
+                Advance();
+                Expect(TokenKind.LParen);
+                var sqrArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Mul(sqrArg, sqrArg);
+            case TokenKind.Sin:
+                Advance();
+                Expect(TokenKind.LParen);
+                var sinArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Sin(sinArg);
+            case TokenKind.Cos:
+                Advance();
+                Expect(TokenKind.LParen);
+                var cosArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Cos(cosArg);
+            case TokenKind.Exp:
+                Advance();
+                Expect(TokenKind.LParen);
+                var expArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Exp(expArg);
+            case TokenKind.Log:
+                Advance();
+                Expect(TokenKind.LParen);
+                var logArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Log(logArg);
             default:
-                throw new FormatException($"Unexpected token {t.Kind} ('{t.Lexeme}') at position {t.Position}.");
+                throw new FormatException(
+                    $"Unexpected {Describe(t.Kind)} ('{t.Lexeme}') at {t.Where}.");
         }
     }
 }

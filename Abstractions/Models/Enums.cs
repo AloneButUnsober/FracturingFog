@@ -29,6 +29,20 @@ namespace FracturingFog
         /// so the toolbar can switch between the legacy implementation and
         /// the generated one for direct A/B comparisons.</summary>
         GeneratedMandelbrotZ2,
+        /// <summary>CalculatorGen-emitted z³ + c. Same generator pipeline as
+        /// GeneratedMandelbrotZ2 — different exponent. The orbit and set
+        /// shape differ visually from Mandelbrot.</summary>
+        GeneratedMandelbrotZ3,
+        /// <summary>CalculatorGen-emitted z⁴ + c.</summary>
+        GeneratedMandelbrotZ4,
+        /// <summary>CalculatorGen-emitted z⁵ + c.</summary>
+        GeneratedMandelbrotZ5,
+        /// <summary>CalculatorGen-emitted conj(z)² + c (Tricorn). Anti-
+        /// holomorphic — distance estimate disabled, smooth-count only.</summary>
+        GeneratedTricorn,
+        /// <summary>CalculatorGen-emitted (|Re(z)| + i|Im(z)|)² + c
+        /// (BurningShip). Non-holomorphic — DE disabled.</summary>
+        GeneratedBurningShip,
     }
 
     public enum RenderProfile { Preview, Final }
