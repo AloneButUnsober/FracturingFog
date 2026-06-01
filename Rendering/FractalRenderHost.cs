@@ -52,6 +52,15 @@ namespace FracturingFog.Rendering
         private UserBulbCalculator _userBulbCalculator;
         private TearDropCalculator _tearDropCalculator;
         private FracturingFog.Calculators.Generated.MandelbrotZ2Calculator _generatedZ2Calculator;
+        private FracturingFog.Calculators.Generated.MandelbrotZ3Calculator _generatedZ3Calculator;
+        private FracturingFog.Calculators.Generated.MandelbrotZ4Calculator _generatedZ4Calculator;
+        private FracturingFog.Calculators.Generated.MandelbrotZ5Calculator _generatedZ5Calculator;
+        private FracturingFog.Calculators.Generated.TricornCalculator     _generatedTricornCalculator;
+        private FracturingFog.Calculators.Generated.BurningShipCalculator _generatedBurningShipCalculator;
+        // Dynamically loaded calculator from the UserEquation "Compile &
+        // Load" path. Null when no hot-loaded calc is active; non-null
+        // takes priority over the FractalType-dispatched alt calculators.
+        private IFractalCalculator? _dynamicAltCalculator;
 
         private CancellationTokenSource? _calcCts;
         private readonly object _calcLock = new();
@@ -100,6 +109,11 @@ namespace FracturingFog.Rendering
             _userBulbCalculator = new UserBulbCalculator(w, h);
             _tearDropCalculator = new TearDropCalculator(w, h);
             _generatedZ2Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ2Calculator(w, h);
+            _generatedZ3Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ3Calculator(w, h);
+            _generatedZ4Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ4Calculator(w, h);
+            _generatedZ5Calculator = new FracturingFog.Calculators.Generated.MandelbrotZ5Calculator(w, h);
+            _generatedTricornCalculator     = new FracturingFog.Calculators.Generated.TricornCalculator(w, h);
+            _generatedBurningShipCalculator = new FracturingFog.Calculators.Generated.BurningShipCalculator(w, h);
 
             if (initialColorMap != null)
             {
@@ -116,6 +130,11 @@ namespace FracturingFog.Rendering
                 _userBulbCalculator.ColorMap = initialColorMap;
                 _tearDropCalculator.ColorMap = initialColorMap;
                 _generatedZ2Calculator.ColorMap = initialColorMap;
+                _generatedZ3Calculator.ColorMap = initialColorMap;
+                _generatedZ4Calculator.ColorMap = initialColorMap;
+                _generatedZ5Calculator.ColorMap = initialColorMap;
+                _generatedTricornCalculator.ColorMap     = initialColorMap;
+                _generatedBurningShipCalculator.ColorMap = initialColorMap;
             }
         }
 
@@ -215,6 +234,11 @@ namespace FracturingFog.Rendering
                 _userBulbCalculator.ColorMap = value;
                 _tearDropCalculator.ColorMap = value;
                 _generatedZ2Calculator.ColorMap = value;
+                _generatedZ3Calculator.ColorMap = value;
+                _generatedZ4Calculator.ColorMap = value;
+                _generatedZ5Calculator.ColorMap = value;
+                _generatedTricornCalculator.ColorMap     = value;
+                _generatedBurningShipCalculator.ColorMap = value;
                 ColorMapChanged?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -417,19 +441,56 @@ namespace FracturingFog.Rendering
                     case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                     case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                     case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
-                    case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz:
+                    case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz2:
                         // Big+ deep zoom: plumb the full DD/QD centre limbs +
                         // opt into the perturbation + BLA paths so the
                         // generated calc tracks the legacy MandelbrotCalculator
                         // through QD-precision zooms (~1e50 ceiling).
-                        gz.CenterXLo = ViewState.CenterXLo;
-                        gz.CenterX2  = ViewState.CenterX2;
-                        gz.CenterX3  = ViewState.CenterX3;
-                        gz.CenterYLo = ViewState.CenterYLo;
-                        gz.CenterY2  = ViewState.CenterY2;
-                        gz.CenterY3  = ViewState.CenterY3;
-                        gz.UsePerturbation = true;
-                        gz.UseBla          = true;
+                        gz2.CenterXLo = ViewState.CenterXLo;
+                        gz2.CenterX2  = ViewState.CenterX2;
+                        gz2.CenterX3  = ViewState.CenterX3;
+                        gz2.CenterYLo = ViewState.CenterYLo;
+                        gz2.CenterY2  = ViewState.CenterY2;
+                        gz2.CenterY3  = ViewState.CenterY3;
+                        // WORKAROUND (task #14): generated perturbation
+                        // loses ~5x detail per decade past zoom 1e12 vs
+                        // legacy MandelbrotCalculator. BLA hierarchy
+                        // (item 12) was tested as a potential fix —
+                        // ineffective. Disable perturbation → template
+                        // routes to TryRenderHpDirect at zoom ≥ 1e12.
+                        gz2.UsePerturbation = false;
+                        gz2.UseBla          = false;
+                        gz2.UseSa           = false;
+                        break;
+                    case FracturingFog.Calculators.Generated.MandelbrotZ3Calculator gz3:
+                        gz3.CenterXLo = ViewState.CenterXLo;
+                        gz3.CenterX2  = ViewState.CenterX2;
+                        gz3.CenterX3  = ViewState.CenterX3;
+                        gz3.CenterYLo = ViewState.CenterYLo;
+                        gz3.CenterY2  = ViewState.CenterY2;
+                        gz3.CenterY3  = ViewState.CenterY3;
+                        gz3.UsePerturbation = true;
+                        gz3.UseBla          = true;
+                        break;
+                    case FracturingFog.Calculators.Generated.MandelbrotZ4Calculator gz4:
+                        gz4.CenterXLo = ViewState.CenterXLo;
+                        gz4.CenterX2  = ViewState.CenterX2;
+                        gz4.CenterX3  = ViewState.CenterX3;
+                        gz4.CenterYLo = ViewState.CenterYLo;
+                        gz4.CenterY2  = ViewState.CenterY2;
+                        gz4.CenterY3  = ViewState.CenterY3;
+                        gz4.UsePerturbation = true;
+                        gz4.UseBla          = true;
+                        break;
+                    case FracturingFog.Calculators.Generated.MandelbrotZ5Calculator gz5:
+                        gz5.CenterXLo = ViewState.CenterXLo;
+                        gz5.CenterX2  = ViewState.CenterX2;
+                        gz5.CenterX3  = ViewState.CenterX3;
+                        gz5.CenterYLo = ViewState.CenterYLo;
+                        gz5.CenterY2  = ViewState.CenterY2;
+                        gz5.CenterY3  = ViewState.CenterY3;
+                        gz5.UsePerturbation = true;
+                        gz5.UseBla          = true;
                         break;
                 }
             }
@@ -471,8 +532,20 @@ namespace FracturingFog.Rendering
                 // it), so query the calculator's own label if it exposes one
                 // — currently only the generated GZ calc does.
                 bool hp = !useAlt && calc.IsHighPrecisionActive;
-                if (useAlt && altCalc is FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gzAlt)
-                    hp = gzAlt.LastPrecisionLabel == "DD" || gzAlt.LastPrecisionLabel == "QD";
+                if (useAlt)
+                {
+                    string? lbl = altCalc switch
+                    {
+                        FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g2 => g2.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g3 => g3.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.MandelbrotZ4Calculator g4 => g4.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g5 => g5.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
+                        _ => null
+                    };
+                    hp = lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD"));
+                }
                 int curW = useAlt ? altCalc!.Width : calc.Width;
                 int curH = useAlt ? altCalc!.Height : calc.Height;
                 int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
@@ -517,6 +590,11 @@ namespace FracturingFog.Rendering
             _userBulbCalculator.Resize(w, h);
             _tearDropCalculator.Resize(w, h);
             _generatedZ2Calculator.Resize(w, h);
+            _generatedZ3Calculator.Resize(w, h);
+            _generatedZ4Calculator.Resize(w, h);
+            _generatedZ5Calculator.Resize(w, h);
+            _generatedTricornCalculator.Resize(w, h);
+            _generatedBurningShipCalculator.Resize(w, h);
 
             ApplyView();
             Trigger();
@@ -583,7 +661,28 @@ namespace FracturingFog.Rendering
 
         // ── Internals ─────────────────────────────────────────────────────────
 
-        private IFractalCalculator? SelectAltCalculator(FractalType type) => type switch
+        /// <summary>Install a hot-loaded calculator. While set it takes
+        /// priority over the FractalType-based dispatch. Pass null to
+        /// clear and revert to the static alt-calc table. Caller takes
+        /// the lifetime — the host doesn't dispose what it doesn't own.</summary>
+        public void SetDynamicAltCalculator(IFractalCalculator? alt)
+        {
+            _dynamicAltCalculator = alt;
+            if (alt != null)
+            {
+                alt.Resize(_calculator.Width, _calculator.Height);
+                alt.ColorMap = _calculator.ColorMap;
+            }
+            Trigger();
+        }
+
+        private IFractalCalculator? SelectAltCalculator(FractalType type)
+        {
+            if (_dynamicAltCalculator != null) return _dynamicAltCalculator;
+            return SelectAltCalculatorByType(type);
+        }
+
+        private IFractalCalculator? SelectAltCalculatorByType(FractalType type) => type switch
         {
             FractalType.Mandelbrot => null,
             FractalType.Julia => _escapeCalculator,
@@ -603,6 +702,11 @@ namespace FracturingFog.Rendering
             FractalType.UserBulb => _userBulbCalculator,
             FractalType.TearDrop => _tearDropCalculator,
             FractalType.GeneratedMandelbrotZ2 => _generatedZ2Calculator,
+            FractalType.GeneratedMandelbrotZ3 => _generatedZ3Calculator,
+            FractalType.GeneratedMandelbrotZ4 => _generatedZ4Calculator,
+            FractalType.GeneratedMandelbrotZ5 => _generatedZ5Calculator,
+            FractalType.GeneratedTricorn      => _generatedTricornCalculator,
+            FractalType.GeneratedBurningShip  => _generatedBurningShipCalculator,
             _ => null
         };
 

@@ -160,6 +160,14 @@
       remote path.
     -->
     <ProjectReference Include="Client\FracturingFog.Client.csproj" />
+    <!--
+      CalculatorGen library reference. The CLI exe is still built
+      separately by `dotnet build CalculatorGen\CalculatorGen.csproj`;
+      this reference exposes CalculatorGenApi.Generate() so the
+      UserEquation dialog can render a calculator from inside the app
+      in addition to the CLI workflow.
+    -->
+    <ProjectReference Include="CalculatorGen\CalculatorGen.csproj" />
   </ItemGroup>
 
   <!--

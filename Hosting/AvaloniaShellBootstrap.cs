@@ -852,6 +852,26 @@ namespace FracturingFog.Hosting
             vm.RenderRequested += () => s_renderHost!.Trigger();
             vm.NamePromptRequested += def => PromptName("Save Equation", "Enter a name:", def);
             vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved equation \"{name}\"?", "Delete Equation");
+            vm.HotLoadRequested += (eq, baseName) =>
+            {
+                try
+                {
+                    var result = FracturingFog.CalculatorGen.CalculatorGenHotLoad
+                        .TryCompileAndLoad(eq, baseName);
+                    if (!result.Ok) return result.Error;
+                    int w = s_renderHost!.Mandelbrot.Width;
+                    int h = s_renderHost.Mandelbrot.Height;
+                    var calc = (FracturingFog.Interefaces.IFractalCalculator?)
+                        Activator.CreateInstance(result.CalculatorType!, w, h);
+                    if (calc == null) return "Activator returned null.";
+                    s_renderHost.SetDynamicAltCalculator(calc);
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    return $"Hot-load failed: {ex.GetType().Name}: {ex.Message}";
+                }
+            };
 
             var win = new UserEquationView { DataContext = vm };
             win.Closed += (_, _) => s_userEqWin = null;

@@ -27,6 +27,9 @@ public static class AstSubstitute
         Sub s      => new Sub(Apply(s.Left, zRepl, cRepl), Apply(s.Right, zRepl, cRepl)),
         Mul m      => new Mul(Apply(m.Left, zRepl, cRepl), Apply(m.Right, zRepl, cRepl)),
         Pow p      => new Pow(Apply(p.Base, zRepl, cRepl), p.Exponent),
+        Div d      => new Div(Apply(d.Left, zRepl, cRepl), Apply(d.Right, zRepl, cRepl)),
+        Conj cj    => new Conj(Apply(cj.Operand, zRepl, cRepl)),
+        Folded f   => new Folded(Apply(f.Operand, zRepl, cRepl)),
         _ => throw new InvalidOperationException($"AstSubstitute: unhandled {node.GetType().Name}"),
     };
 }

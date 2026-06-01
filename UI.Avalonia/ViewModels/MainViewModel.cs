@@ -130,6 +130,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.UserBulb,         "User Bulb (3D)"),
         (FractalType.TearDrop,         "Tear Drop"),
         (FractalType.GeneratedMandelbrotZ2, "Mandelbrot Z² (Generated)"),
+        (FractalType.GeneratedMandelbrotZ3, "Mandelbrot Z³ (Generated)"),
+        (FractalType.GeneratedMandelbrotZ4, "Mandelbrot Z⁴ (Generated)"),
+        (FractalType.GeneratedMandelbrotZ5, "Mandelbrot Z⁵ (Generated)"),
+        (FractalType.GeneratedTricorn,      "Tricorn (Generated)"),
+        (FractalType.GeneratedBurningShip,  "Burning Ship (Generated)"),
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

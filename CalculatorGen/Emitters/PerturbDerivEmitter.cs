@@ -76,6 +76,63 @@ public sealed class PerturbDerivEmitter : EmitterBase
         return new($"(-{a.Re})", im, a.ImZero);
     }
 
+    protected override ComplexExpr OpDiv(ComplexExpr a, ComplexExpr b)
+    {
+        // Same closed form as ScalarEmitter — needed because dz/dc
+        // chain rule for log(u) introduces u'/u into the derivative
+        // tree even when the original equation has no Div node.
+        if (a.ImZero && b.ImZero)
+            return new($"({a.Re} / {b.Re})", "0.0", ImZero: true);
+        if (b.ImZero)
+            return new($"({a.Re} / {b.Re})", $"({a.Im} / {b.Re})", ImZero: false);
+        string d = $"({b.Re} * {b.Re} + {b.Im} * {b.Im})";
+        if (a.ImZero)
+            return new($"({a.Re} * {b.Re} / {d})", $"(-({a.Re} * {b.Im}) / {d})", ImZero: false);
+        return new(
+            $"(({a.Re} * {b.Re} + {a.Im} * {b.Im}) / {d})",
+            $"(({a.Im} * {b.Re} - {a.Re} * {b.Im}) / {d})",
+            ImZero: false);
+    }
+
+    // Transcendentals appear in derivative trees (∂sin(u)/∂z =
+    // cos(u)·u') even when the original equation doesn't disable
+    // perturbation — but item 14 hits this branch only via
+    // SupportsDe=true, SupportsPerturbation=false equations whose
+    // derivative emitter is wired anyway via the dz/dc chain. Inline
+    // scalar identities mirror ScalarEmitter.
+    protected override ComplexExpr OpSin(ComplexExpr a)
+    {
+        if (a.ImZero)
+            return new($"Math.Sin({a.Re})", "0.0", ImZero: true);
+        return new(
+            $"(Math.Sin({a.Re}) * Math.Cosh({a.Im}))",
+            $"(Math.Cos({a.Re}) * Math.Sinh({a.Im}))", ImZero: false);
+    }
+    protected override ComplexExpr OpCos(ComplexExpr a)
+    {
+        if (a.ImZero)
+            return new($"Math.Cos({a.Re})", "0.0", ImZero: true);
+        return new(
+            $"(Math.Cos({a.Re}) * Math.Cosh({a.Im}))",
+            $"(-(Math.Sin({a.Re}) * Math.Sinh({a.Im})))", ImZero: false);
+    }
+    protected override ComplexExpr OpExp(ComplexExpr a)
+    {
+        if (a.ImZero)
+            return new($"Math.Exp({a.Re})", "0.0", ImZero: true);
+        return new(
+            $"(Math.Exp({a.Re}) * Math.Cos({a.Im}))",
+            $"(Math.Exp({a.Re}) * Math.Sin({a.Im}))", ImZero: false);
+    }
+    protected override ComplexExpr OpLog(ComplexExpr a)
+    {
+        if (a.ImZero)
+            return new($"Math.Log({a.Re})", "0.0", ImZero: true);
+        return new(
+            $"(0.5 * Math.Log({a.Re} * {a.Re} + {a.Im} * {a.Im}))",
+            $"Math.Atan2({a.Im}, {a.Re})", ImZero: false);
+    }
+
     public string EmitDerivBody(AstNode root, string indent)
     {
         var e = Emit(root);

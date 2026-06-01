@@ -41,11 +41,18 @@ public static class AstExpander
 
     private static AstNode ExpandOnce(AstNode node) => node switch
     {
-        Neg n => new Neg(Expand(n.Operand)),
-        Add a => new Add(Expand(a.Left), Expand(a.Right)),
-        Sub s => new Sub(Expand(s.Left), Expand(s.Right)),
-        Mul m => DistributeMul(Expand(m.Left), Expand(m.Right)),
-        Pow p => ExpandPow(Expand(p.Base), p.Exponent),
+        Neg n   => new Neg(Expand(n.Operand)),
+        Add a   => new Add(Expand(a.Left), Expand(a.Right)),
+        Sub s   => new Sub(Expand(s.Left), Expand(s.Right)),
+        Mul m   => DistributeMul(Expand(m.Left), Expand(m.Right)),
+        Pow p   => ExpandPow(Expand(p.Base), p.Exponent),
+        // Div / Conj / Folded pass through. The perturbation Taylor
+        // builder doesn't differentiate through Div/Conj/Folded (their
+        // derivatives are 0 or quotient-rule); the expander leaves them
+        // intact so the emitters render them as primitives.
+        Div d   => new Div(Expand(d.Left), Expand(d.Right)),
+        Conj cj => new Conj(Expand(cj.Operand)),
+        Folded f => new Folded(Expand(f.Operand)),
         _ => node,
     };
 

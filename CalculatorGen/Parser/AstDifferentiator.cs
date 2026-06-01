@@ -42,6 +42,27 @@ public static class AstDifferentiator
                        : new Mul(new RealConst(p.Exponent),
                                  new Mul(new Pow(p.Base, p.Exponent - 1),
                                          Diff(p.Base, v))),
+        // Quotient rule: (f/g)' = (f'g − fg') / g²
+        Div d      => new Div(
+                          new Sub(new Mul(Diff(d.Left, v),  d.Right),
+                                  new Mul(d.Left,            Diff(d.Right, v))),
+                          new Mul(d.Right, d.Right)),
+        // Anti-holomorphic: Wirtinger ∂conj(z)/∂z = 0. Equations using
+        // conj produce a zero derivative chain — the distance estimate
+        // becomes meaningless. The SupportsDe flag emitted by CalcGen
+        // gates the call site so the colour map gets the smooth count
+        // only.
+        Conj       => new RealConst(0.0),
+        Folded     => new RealConst(0.0),
+        // Transcendentals — holomorphic chain rules:
+        //   d/dv sin(u) =  cos(u) · u'
+        //   d/dv cos(u) = -sin(u) · u'
+        //   d/dv exp(u) =  exp(u) · u'
+        //   d/dv log(u) =  u' / u
+        Sin s2     => new Mul(new Cos(s2.Operand), Diff(s2.Operand, v)),
+        Cos c2     => new Mul(new Neg(new Sin(c2.Operand)), Diff(c2.Operand, v)),
+        Exp ex     => new Mul(new Exp(ex.Operand), Diff(ex.Operand, v)),
+        Log lg     => new Div(Diff(lg.Operand, v), lg.Operand),
         _ => throw new InvalidOperationException($"Cannot differentiate {node.GetType().Name}"),
     };
 

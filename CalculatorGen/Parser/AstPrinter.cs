@@ -44,6 +44,27 @@ public static class AstPrinter
             case Pow p:
                 Wrap(sb, parentPrec, 2, () => { WriteExpr(sb, p.Base, 2); sb.Append('^').Append(p.Exponent); });
                 break;
+            case Div d:
+                Wrap(sb, parentPrec, 1, () => { WriteExpr(sb, d.Left, 1); sb.Append('/'); WriteExpr(sb, d.Right, 1); });
+                break;
+            case Conj cj:
+                sb.Append("conj("); WriteExpr(sb, cj.Operand, 0); sb.Append(')');
+                break;
+            case Folded f:
+                sb.Append("fold("); WriteExpr(sb, f.Operand, 0); sb.Append(')');
+                break;
+            case Sin s2:
+                sb.Append("sin("); WriteExpr(sb, s2.Operand, 0); sb.Append(')');
+                break;
+            case Cos c2:
+                sb.Append("cos("); WriteExpr(sb, c2.Operand, 0); sb.Append(')');
+                break;
+            case Exp ex:
+                sb.Append("exp("); WriteExpr(sb, ex.Operand, 0); sb.Append(')');
+                break;
+            case Log lg:
+                sb.Append("log("); WriteExpr(sb, lg.Operand, 0); sb.Append(')');
+                break;
             default:
                 throw new InvalidOperationException($"AstPrinter: unhandled {node.GetType().Name}");
         }

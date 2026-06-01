@@ -14,7 +14,7 @@
 //                  =  (z + z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-05-31 20:36:53 UTC
+// Generated: 2026-06-01 18:14:50 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -72,6 +72,15 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     public int Width  { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+    /// <summary>Per-pixel iteration count at escape (or MaxIterations
+    /// for in-set pixels). Populated alongside ColorBuffer by every
+    /// rendering path. Consumed by histogram-equalization passes.</summary>
+    public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
+    /// <summary>Per-pixel smooth iteration count (ν = it + 1 −
+    /// log₂(log₂|z|)) for escaped pixels, 0 for in-set. Same precision
+    /// as the value passed to the colour map; histogram equalization
+    /// bins on this directly.</summary>
+    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -96,10 +105,19 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     public double CenterY3  { get; set; }
 
     /// <summary>Threshold beyond which the perturbation path switches its
-    /// reference orbit from plain double to QuadDouble. Defaults to 1e12 —
-    /// double precision starts losing accuracy in the iterate around zoom
-    /// 1e13, so the switch lands one decade earlier for headroom.</summary>
-    public double ExtendedRefZoomThreshold { get; set; } = 1.0e12;
+    /// reference orbit from plain double to QuadDouble. Defaults to 1e9.
+    /// Double-precision ref orbits accumulate rounding error fast on
+    /// chaotic centres — by zoom ~1e10 the orbit's bottom bits are
+    /// noise, and adding the per-pixel δ (already at scale ε ~ 1e-15
+    /// for zoom 1e15) lands inside that noise band. Per-pixel pixels
+    /// then lock onto the same iteration count → solid-colour blob in
+    /// the centre of frame. QD ref orbit eliminates the issue; cost is
+    /// amortised over per-pixel work, so engaging it three decades
+    /// earlier is essentially free. (Legacy <c>MandelbrotCalculator</c>
+    /// goes one better and uses DD ref orbit always — adding the DD
+    /// codegen path is a future task; for now QD-from-1e9 closes the
+    /// quality gap.)</summary>
+    public double ExtendedRefZoomThreshold { get; set; } = 1.0e9;
 
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
     public IColorMap ColorMap { get; set; } = new HsvPalette();
@@ -142,11 +160,92 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     /// legacy MandelbrotCalculator's QDZoomThreshold. Defaults to 1e25.</summary>
     public double QdDirectZoomThreshold { get; set; } = 1.0e25;
 
-    // Bailout radius². Generous default; tighten if the equation has a
-    // smaller natural escape boundary.
-    private const double Bailout2 = 1024.0;
+    // Bailout radius². CalcGen substitutes the value at generation time
+    // via the --bailout flag (default 512 → 262144, matching legacy
+    // MandelbrotCalculator). Smaller bailout (e.g. 32 → 1024) causes
+    // smooth-count collapse at deep zoom — the orbit bails before per-
+    // pixel δ grows enough to differentiate adjacent pixels in the
+    // log2(log2(|z|)) cast. 512 gives ~3-4 extra iters past |z|=32,
+    // amplifying per-pixel δ by ~|2Z|^4 = 100×. Tighten only for
+    // fractals with smaller natural escape boundaries (Phoenix, Nova).
+    private const double Bailout2 = 262144;
+
+    /// <summary>True when CalcGen detected a z^d + c equation shape
+    /// (d in 2..5) the Series Approximation prelude has a recurrence
+    /// for. SA skips the first N_sa iterations per pixel via a polynomial
+    /// evaluation in ε using <see cref="SaOrders"/> cached coefficients.
+    /// The actual recurrence (degree-specific) is emitted into the SA
+    /// loop body via the SA-recurrence template placeholder.</summary>
+    private const bool SaEnabled = true;
+
+    /// <summary>Number of series coefficients tracked per ref-orbit step.
+    /// Higher = wider validity range = further per-pixel skip into the
+    /// orbit. Locked at codegen time because the emitter unrolls the
+    /// recurrence; to change, regenerate the calculator and update
+    /// <c>SaRecurrenceEmitter.Emit(..., order)</c> to match.</summary>
+    private const int SaOrders = 8;
+
+    /// <summary>False when the equation contains operators the Taylor
+    /// expansion can't handle (Div / Conj / Folded). When false the
+    /// perturbation path is skipped at runtime regardless of UsePerturbation
+    /// — the renderer falls back to AVX2 / scalar everywhere.</summary>
+    private const bool SupportsPerturbation = true;
+
+    /// <summary>False for anti-holomorphic equations (Conj / Folded).
+    /// Distance estimate and surface normals depend on the dz/dc chain
+    /// rule, which is zero in the Wirtinger sense for these operators —
+    /// the colour map gets the smooth count only.</summary>
+    private const bool SupportsDe = true;
+
+    /// <summary>Opt-in Series Approximation prelude (Tier 6+). Engaged
+    /// only when the equation is z²+c (the hardcoded recurrence shape)
+    /// and zoom is deep enough that skipping iters pays off. Default off;
+    /// the host enables it alongside perturbation/BLA for deep-zoom
+    /// renders.</summary>
+    public bool UseSa { get; set; } = false;
+
+    /// <summary>Relative tolerance on consecutive series orders. SA
+    /// advances as long as |S_{k+1}·ε^{k+1}| ≤ tol·|S_k·ε^k| holds for
+    /// every consecutive pair (and the tail-vs-head bound as a final
+    /// belt). Default 1e-3 matches legacy `MandelbrotCalculator`'s
+    /// proven value. Tighten (e.g. 1e-6) for more accurate SA at the
+    /// cost of less per-pixel skip — useful when the rendered image
+    /// shows banding at the SA-to-perturbation handoff. Looser
+    /// (e.g. 1e-2) maximises skip but risks visible SA-induced
+    /// artefacts.</summary>
+    public double SaTolerance { get; set; } = 1.0e-3;
 
     private double _lastPixelScale = 1.0;
+
+    // ── Reference orbit cache ───────────────────────────────────────────────
+    //
+    // The reference orbit and its BLA tables depend only on (centre, maxIt,
+    // useExtendedRef, useBla) — NOT on zoom. Zoom drives the per-pixel ε
+    // only; the orbit's Z trajectory is invariant. Caching across frames
+    // saves 20-30 % on pure-zoom interactions where the user stays on a
+    // fixed centre. A pan invalidates because the centre changed; a maxIt
+    // bump invalidates only when the new cap exceeds the cached length.
+    private double[]? _cachedRefZr, _cachedRefZi, _cachedRefZrLo, _cachedRefZiLo;
+    // Hierarchical BLA table (FracturingFog.FFMath.BlaTable). Built once
+    // per (ref orbit, scale) tuple. Each level-k entry merges 2^k single-
+    // step linear BLAs into one bulk-apply skip; per-pixel iter picks the
+    // highest valid level for its current |δ| via Lookup.
+    private BlaTable? _cachedBlaTable;
+    private double _cachedBlaDcMaxAbs;
+    // SA coefficient arrays cached alongside the ref orbit. SA shares
+    // the same cache key (centre, maxIt, precision flags) — its
+    // recurrence depends only on Z_n, never on zoom — so caching it
+    // here costs ~(2·SaOrders × maxIt) extra doubles and saves the
+    // whole SA-build loop on every zoom-only frame. Jagged layout:
+    // _cachedSaSr[k][n] is the real part of the kth-order coefficient
+    // at ref-orbit step n (k ∈ 1..SaOrders; index 0 unused).
+    private double[][]? _cachedSaSr, _cachedSaSi;
+    private int _cachedSaStart;
+    private int _cachedRefOrbitLen, _cachedMaxIt;
+    private double _cachedCenterX, _cachedCenterXLo, _cachedCenterX2, _cachedCenterX3;
+    private double _cachedCenterY, _cachedCenterYLo, _cachedCenterY2, _cachedCenterY3;
+    private bool _cachedUseExtendedRef, _cachedUseBla, _cachedUseSa;
+    private double _cachedScale;
 
     public MandelbrotZ2Calculator(int width, int height) => Resize(width, height);
 
@@ -155,6 +254,8 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
         Width  = width;
         Height = height;
         ColorBuffer = new uint[width * height];
+        IterationBuffer = new int[width * height];
+        SmoothBuffer = new float[width * height];
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -175,7 +276,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
         // the reference orbit itself escapes (centre is outside the set
         // at deep zoom) TryRenderPerturbation returns false and the
         // whole-frame HP-direct fallback below takes over.
-        if (UsePerturbation && Zoom >= PerturbZoomThreshold && TryRenderPerturbation(scale, ct))
+        if (SupportsPerturbation && UsePerturbation && Zoom >= PerturbZoomThreshold && TryRenderPerturbation(scale, ct))
             return;
 
         // Whole-frame HP-direct fallback (reference orbit escaped, or the
@@ -236,7 +337,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
             zr = zr_new; zi = zi_new;
             dr = dr_new; di = di_new;
         }
-        buf[idx] = ColorFor(it, zr, zi, dr, di, maxIt);
+        buf[idx] = ColorFor(it, zr, zi, dr, di, maxIt, idx);
     }
 
     // Iteration-count-only variant (no colour writeback). Used by the
@@ -321,7 +422,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
         zr.CopyTo(zrs); zi.CopyTo(zis);
         dr.CopyTo(drs); di.CopyTo(dis);
         for (int k = 0; k < 4; k++)
-            buf[idx + k] = ColorFor((int)its[k], zrs[k], zis[k], drs[k], dis[k], MaxIterations);
+            buf[idx + k] = ColorFor((int)its[k], zrs[k], zis[k], drs[k], dis[k], MaxIterations, idx + k);
     }
 
     // Iteration-count-only variant for the self-test (no colour writeback).
@@ -450,7 +551,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
             {
                 if (ct.IsCancellationRequested) return;
                 var rp = raw[i];
-                ColorBuffer[i] = ColorFor(rp.Iter, rp.Zr, rp.Zi, rp.Dr, rp.Di, MaxIterations);
+                ColorBuffer[i] = ColorFor(rp.Iter, rp.Zr, rp.Zi, rp.Dr, rp.Di, MaxIterations, i);
             });
             return true;
         }
@@ -532,32 +633,56 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
         QD CiQd = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
         double Cr = useExtendedRef ? (double)CrQd : CenterX;
         double Ci = useExtendedRef ? (double)CiQd : CenterY;
-        var refZr = new double[maxIt + 1];
-        var refZi = new double[maxIt + 1];
-        // DD-precision low limbs of the reference orbit. Populated in the
-        // QD branch from the next limb of the QuadDouble iterate; in the
-        // double-only branch we leave them zero (Lo == 0 means a DD with
-        // the Hi as its only significant bits — correct semantics).
-        var refZrLo = new double[maxIt + 1];
-        var refZiLo = new double[maxIt + 1];
 
-        // Tier 5 BLA tables. Per-iteration linear coefficients
+        // Cache hit: centre + precision tier + maxIt cap unchanged since
+        // the last full computation. Skip the ref orbit + BLA build and
+        // reuse arrays. Note maxIt comparison is `>=` — a cached orbit of
+        // length 8000 still serves a render with maxIt=5000 (we just
+        // iterate fewer pixels into it).
+        bool cacheHit = _cachedRefZr != null
+            && _cachedMaxIt >= maxIt
+            && _cachedUseExtendedRef == useExtendedRef
+            && _cachedUseBla == UseBla
+            && _cachedCenterX == CenterX && _cachedCenterXLo == CenterXLo
+            && _cachedCenterX2 == CenterX2 && _cachedCenterX3 == CenterX3
+            && _cachedCenterY == CenterY && _cachedCenterYLo == CenterYLo
+            && _cachedCenterY2 == CenterY2 && _cachedCenterY3 == CenterY3;
+
+        double[] refZr, refZi, refZrLo, refZiLo;
+        // Level-0 BLAs (single-step), built per-iter and folded into the
+        // hierarchical BlaTable after ref-orbit construction. The table
+        // takes ownership of the array; we don't keep a separate reference.
+        Bla[]? blaLevel0 = null;
+        int refOrbitLen;
+        const double BlaRelative = 1.0e-3;
+
+        // dcMaxAbs needs the per-frame worst-case ε for BLA merge
+        // validity radii. Computed once here so both the orbit-build
+        // path and the cache-hit re-merge path see the same value.
+        double halfWScale = Width * 0.5 * scale;
+        double halfHScale = Height * 0.5 * scale;
+        double dcMaxAbs = Math.Sqrt(halfWScale * halfWScale + halfHScale * halfHScale);
+
+        if (cacheHit)
+        {
+            refZr = _cachedRefZr!;
+            refZi = _cachedRefZi!;
+            refZrLo = _cachedRefZrLo!;
+            refZiLo = _cachedRefZiLo!;
+            refOrbitLen = Math.Min(_cachedRefOrbitLen, maxIt);
+            goto refOrbitReady;
+        }
+
+        refZr = new double[maxIt + 1];
+        refZi = new double[maxIt + 1];
+        refZrLo = new double[maxIt + 1];
+        refZiLo = new double[maxIt + 1];
+        refOrbitLen = maxIt;
+
+        // Tier 5 BLA — per-iteration level-0 coefficients
         //   A_n = ∂p/∂z(Z_n, C)  — multiplier on δ
         //   B_n = ∂p/∂c(Z_n, C)  — multiplier on ε
-        // and a validity radius |Z_n|·BlaRelative beyond which the linear
-        // step is rejected and the full perturbation expansion runs. Both
-        // arrays are built alongside the reference orbit so they cost one
-        // extra pass over the same Z trajectory.
-        double[]? blaAr = null, blaAi = null, blaBr = null, blaBi = null, blaR = null;
-        const double BlaRelative = 1.0e-3;
-        if (UseBla)
-        {
-            blaAr = new double[maxIt];
-            blaAi = new double[maxIt];
-            blaBr = new double[maxIt];
-            blaBi = new double[maxIt];
-            blaR  = new double[maxIt];
-        }
+        if (UseBla) blaLevel0 = new Bla[maxIt];
         if (useExtendedRef)
         {
             // ── QD reference orbit (Big+ deep zoom) ──────────────────────────
@@ -574,31 +699,36 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
             {
                 double zrHi = zr_q.X0, ziHi = zi_q.X0;
                 double r2 = zrHi * zrHi + ziHi * ziHi;
-                // Ref orbit escape → bail this whole frame to the per-pixel
-                // HP-direct fallback. Returning false hands control back to
-                // Calculate(), which picks DD or QD direct iteration based
-                // on zoom — matching what MandelbrotCalculator does when
-                // ComputePixelPT can't track a pixel.
-                if (r2 >= Bailout2) return false;
+                // Orbit escape: cap refOrbitLen at iter 0 → bail whole
+                // frame (centre is exterior, no perturbation possible).
+                // Cap at iter > 0 → truncate; per-pixel iter past the cap
+                // falls to HP-direct per-pixel, leaving the bulk of the
+                // frame on the fast perturbation path.
+                if (r2 >= Bailout2)
+                {
+                    if (n == 0) return false;
+                    refOrbitLen = n;
+                    break;
+                }
                 refZr[n] = zrHi;
                 refZi[n] = ziHi;
                 refZrLo[n] = zr_q.X1;
                 refZiLo[n] = zi_q.X1;
                 if (UseBla)
                 {
-                    // BLA coefficients evaluated at the high-limb Z. The
-                    // linear δ-step uses double math; pulling lower QD limbs
-                    // into it would slow it without improving the answer at
-                    // the accuracy a |δ| ≪ |Z| step requires.
+                    // BLA level-0 coefficients evaluated at the high-limb
+                    // Z. The linear δ-step uses double math; pulling lower
+                    // QD limbs into it would slow it without improving
+                    // the answer at the accuracy a |δ| ≪ |Z| step
+                    // requires.
                     double zr = zrHi, zi = ziHi;
                     double cr = Cr, ci = Ci;
                     double Ar_new = (zr + zr);
                     double Ai_new = (zi + zi);
                     double Br_new = 1.0;
                     double Bi_new = 0.0;
-                    blaAr![n] = Ar_new; blaAi![n] = Ai_new;
-                    blaBr![n] = Br_new; blaBi![n] = Bi_new;
-                    blaR![n]  = BlaRelative * Math.Sqrt(r2);
+                    double rN = BlaRelative * Math.Sqrt(r2);
+                    blaLevel0![n] = new Bla(Ar_new, Ai_new, Br_new, Bi_new, rN * rN, 1);
                 }
                 {
                 QD zr_q_new = ((zr_q * zr_q - zi_q * zi_q) + CrQd);
@@ -606,8 +736,11 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     zr_q = zr_q_new; zi_q = zi_q_new;
                 }
             }
-            refZr[maxIt] = zr_q.X0; refZi[maxIt] = zi_q.X0;
-            refZrLo[maxIt] = zr_q.X1; refZiLo[maxIt] = zi_q.X1;
+            if (refOrbitLen == maxIt)
+            {
+                refZr[maxIt] = zr_q.X0; refZi[maxIt] = zi_q.X0;
+                refZrLo[maxIt] = zr_q.X1; refZiLo[maxIt] = zi_q.X1;
+            }
         }
         else
         {
@@ -616,7 +749,12 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
             for (n = 0; n < maxIt; n++)
             {
                 double r2 = zr * zr + zi * zi;
-                if (r2 >= Bailout2) return false;
+                if (r2 >= Bailout2)
+                {
+                    if (n == 0) return false;
+                    refOrbitLen = n;
+                    break;
+                }
                 refZr[n] = zr;
                 refZi[n] = zi;
                 if (UseBla)
@@ -626,9 +764,8 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     double Ai_new = (zi + zi);
                     double Br_new = 1.0;
                     double Bi_new = 0.0;
-                    blaAr![n] = Ar_new; blaAi![n] = Ai_new;
-                    blaBr![n] = Br_new; blaBi![n] = Bi_new;
-                    blaR![n]  = BlaRelative * Math.Sqrt(r2);
+                    double rN = BlaRelative * Math.Sqrt(r2);
+                    blaLevel0![n] = new Bla(Ar_new, Ai_new, Br_new, Bi_new, rN * rN, 1);
                 }
                 // Reuse the scalar z-update body (no derivative needed for ref orbit).
                 {
@@ -639,16 +776,284 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     zr = zr_new; zi = zi_new;
                 }
             }
-            refZr[maxIt] = zr; refZi[maxIt] = zi;
+            if (refOrbitLen == maxIt) { refZr[maxIt] = zr; refZi[maxIt] = zi; }
+        }
+
+        // Stash for the next frame. Cache key captures every input the
+        // orbit depends on; zoom is excluded because the orbit's Z
+        // trajectory doesn't see it. The BLA table DOES depend on scale
+        // (dcMaxAbs in merge-validity radii) so it's cached separately
+        // gated on _cachedBlaDcMaxAbs.
+        _cachedRefZr = refZr; _cachedRefZi = refZi;
+        _cachedRefZrLo = refZrLo; _cachedRefZiLo = refZiLo;
+        _cachedRefOrbitLen = refOrbitLen;
+        _cachedMaxIt = maxIt;
+        _cachedUseExtendedRef = useExtendedRef;
+        _cachedUseBla = UseBla;
+        _cachedCenterX = CenterX; _cachedCenterXLo = CenterXLo;
+        _cachedCenterX2 = CenterX2; _cachedCenterX3 = CenterX3;
+        _cachedCenterY = CenterY; _cachedCenterYLo = CenterYLo;
+        _cachedCenterY2 = CenterY2; _cachedCenterY3 = CenterY3;
+
+        refOrbitReady:
+
+        // ── BLA hierarchy build / cache ──────────────────────────────────
+        //
+        // BLA merge validity radii depend on dcMaxAbs (worst-case |ε|),
+        // which is scale-dependent. Ref orbit caches across zoom; BLA
+        // does not. Rebuild when scale changed OR when the previous run
+        // didn't use BLA OR cache miss. Cheap relative to ref orbit.
+        BlaTable? bla = null;
+        if (UseBla)
+        {
+            if (_cachedBlaTable != null && cacheHit && _cachedBlaDcMaxAbs == dcMaxAbs)
+            {
+                bla = _cachedBlaTable;
+            }
+            else if (blaLevel0 != null)
+            {
+                bla = new BlaTable(blaLevel0, refOrbitLen, dcMaxAbs);
+                _cachedBlaTable = bla;
+                _cachedBlaDcMaxAbs = dcMaxAbs;
+            }
+            else if (cacheHit)
+            {
+                // Cache hit on ref orbit but BLA wasn't built this run
+                // and previous cached table — if any — is stale (scale
+                // differs). Rebuild level-0 from cached refZr/refZi.
+                // Mandelbrot-shape only at this hot path; non-Z²+c
+                // calculators see UseBla forced to false at host level
+                // for now, so this fallback rarely runs.
+                bla = new BlaTable(refZr, refZi, refOrbitLen, dcMaxAbs);
+                _cachedBlaTable = bla;
+                _cachedBlaDcMaxAbs = dcMaxAbs;
+            }
+        }
+
+        // ── Series Approximation (SA) prelude ────────────────────────────
+        //
+        // For polynomials whose perturbation recurrence we know in
+        // closed form (z^d+c for d=2..5 — gated by SaEnabled),
+        // we can express δ_n as a power series in ε:
+        //   δ_n  ≈  Σ_{k=1..N} S_{n,k} · ε^k
+        // The coefficients have their own recurrence — for z²+c
+        // (d=2, N=3 sample), substituting and matching ε powers:
+        //   S_{1, n+1} = 2 Z_n · S_{1, n}  +  1
+        //   S_{2, n+1} = 2 Z_n · S_{2, n}  +  S_{1, n}²
+        //   S_{3, n+1} = 2 Z_n · S_{3, n}  +  2 · S_{1, n} · S_{2, n}
+        // CalcGen emits the recurrence for any (degree ∈ 2..5,
+        // N = SaOrders) into the SA loop body. See SaRecurrenceEmitter.
+        //
+        // The series is valid as long as the tail (Nth-order) term
+        // stays small relative to the linear one — i.e. while
+        // |S_N · ε^N| ≪ |S_1 · ε|. We find the largest n where that
+        // holds for the worst-case ε in the frame (the corner pixel),
+        // then per-pixel skip iters 0..n−1 by evaluating the
+        // polynomial at the pixel's ε. The remaining iters run
+        // through the regular perturbation loop.
+        //
+        // Per-pixel skip count varies with |ε| (interior pixels could
+        // skip further), but using one frame-wide n keeps the inner loop
+        // branchless. The win on a 1920×1080 deep-zoom frame is usually
+        // worth a few thousand iters per pixel saved.
+        int saStart = 0;
+        double[][]? saSr = null, saSi = null;
+        // SA cache: same centre + same maxIt + same scale → reuse the
+        // coefficient arrays AND the validity threshold. SA arrays
+        // depend only on Z_n (no scale dependence) but saStart depends
+        // on scale via the worst-case ε bound, so cache the pair
+        // together gated on scale equality.
+        bool saCacheHit = cacheHit
+                       && _cachedUseSa == UseSa
+                       && _cachedScale == scale
+                       && _cachedSaSr != null;
+        if (saCacheHit && SaEnabled && UseSa)
+        {
+            saSr = _cachedSaSr; saSi = _cachedSaSi;
+            saStart = _cachedSaStart;
+        }
+        else if (SaEnabled && UseSa && refOrbitLen > 8)
+        {
+            saSr = new double[SaOrders + 1][];
+            saSi = new double[SaOrders + 1][];
+            for (int k = 1; k <= SaOrders; k++)
+            {
+                saSr[k] = new double[refOrbitLen + 1];
+                saSi[k] = new double[refOrbitLen + 1];
+            }
+            // Worst-case |ε|² in the frame is at the corner — that's the
+            // largest input the series prelude has to remain accurate for.
+            double maxOffX = Width  * 0.5 * scale;
+            double maxOffY = Height * 0.5 * scale;
+            double maxEps2 = maxOffX * maxOffX + maxOffY * maxOffY;
+            double maxEps  = Math.Sqrt(maxEps2);
+            // |ε^(N-1)| relative scaling for the tail-vs-head tolerance
+            // check. Precomputed once per frame.
+            double maxEpsPowNm1 = Math.Pow(maxEps, SaOrders - 1);
+            double tol = SaTolerance;
+            int n;
+            // Unrolled coefficient state. Indices 1..SaOrders. Hard-
+            // coded at SaOrders=8 — if you change the const above,
+            // expand this declaration to match the new N.
+            double Sr1 = 0.0, Si1 = 0.0;
+            double Sr2 = 0.0, Si2 = 0.0;
+            double Sr3 = 0.0, Si3 = 0.0;
+            double Sr4 = 0.0, Si4 = 0.0;
+            double Sr5 = 0.0, Si5 = 0.0;
+            double Sr6 = 0.0, Si6 = 0.0;
+            double Sr7 = 0.0, Si7 = 0.0;
+            double Sr8 = 0.0, Si8 = 0.0;
+            for (n = 0; n < refOrbitLen; n++)
+            {
+                saSr[1][n] = Sr1; saSi[1][n] = Si1;
+                saSr[2][n] = Sr2; saSi[2][n] = Si2;
+                saSr[3][n] = Sr3; saSi[3][n] = Si3;
+                saSr[4][n] = Sr4; saSi[4][n] = Si4;
+                saSr[5][n] = Sr5; saSi[5][n] = Si5;
+                saSr[6][n] = Sr6; saSi[6][n] = Si6;
+                saSr[7][n] = Sr7; saSi[7][n] = Si7;
+                saSr[8][n] = Sr8; saSi[8][n] = Si8;
+
+                // Stop advancing n when SA is no longer safe. Multiple
+                // criteria — first to fire wins.
+                //
+                // (1) Stability guards (DEEP-ZOOM CORRECTNESS — DO NOT
+                // REMOVE): |S_k| grows roughly |2Z|^(k·n), so for the
+                // top-order coefficient S_N the magnitude can hit ~10^150
+                // within a few hundred iters of a chaotic ref orbit.
+                // Without the IsFinite + abs-cap break, S_N overflows to
+                // Inf and subsequent recurrence steps generate NaN via
+                // Inf−Inf in the polynomial-mult terms. NaN slips past
+                // the relative-tolerance comparison (NaN > x is false),
+                // so SA keeps building garbage all the way to refOrbitLen.
+                //
+                // (2) δ-magnitude bound: SA-skipped δ must stay inside
+                // the perturbation linearisation radius. Without this
+                // check, δ can grow to ~|Z| as |S_1| explodes, breaking
+                // the |δ| ≪ |Z| premise; pixels escape immediately on
+                // iter saStart → solid-colour blob over the frame
+                // centre. Bound matches BlaRelative (1e-3) so the
+                // SA-skipped δ lands in the same regime BLA expects.
+                //
+                // (3) Per-order divergence check: legacy SeriesApprox-
+                // imation tracks this explicitly (see the "deep-k
+                // overskip" comment in Math/SeriesApproximation.cs).
+                // The tail-only check (criterion 4) misses the failure
+                // mode where a higher-order term grows faster than its
+                // predecessor — the tail term may be small in absolute
+                // size while the polynomial diverges between consecutive
+                // orders. Catch it by requiring |S_{k+1}·ε^{k+1}| ≤
+                // tol·|S_k·ε^k| for every consecutive pair, equivalently
+                // |S_{k+1}|·maxEps ≤ tol·|S_k|.
+                //
+                // (4) Tail-vs-head — original criterion, retained as a
+                // belt-and-suspenders bound on the final truncation.
+                double m1 = Math.Sqrt(Sr1 * Sr1 + Si1 * Si1);
+                double m2 = Math.Sqrt(Sr2 * Sr2 + Si2 * Si2);
+                double m3 = Math.Sqrt(Sr3 * Sr3 + Si3 * Si3);
+                double m4 = Math.Sqrt(Sr4 * Sr4 + Si4 * Si4);
+                double m5 = Math.Sqrt(Sr5 * Sr5 + Si5 * Si5);
+                double m6 = Math.Sqrt(Sr6 * Sr6 + Si6 * Si6);
+                double m7 = Math.Sqrt(Sr7 * Sr7 + Si7 * Si7);
+                double m8 = Math.Sqrt(Sr8 * Sr8 + Si8 * Si8);
+                if (n > 0)
+                {
+                    if (!double.IsFinite(m8) || !double.IsFinite(m1)
+                        || m8 > 1.0e150 || m1 > 1.0e150) break;
+                    if (m1 * maxEps > 1.0e-3) break;
+                    double tolEps = tol;
+                    if (m2 * maxEps > tolEps * m1) break;
+                    if (m3 * maxEps > tolEps * m2) break;
+                    if (m4 * maxEps > tolEps * m3) break;
+                    if (m5 * maxEps > tolEps * m4) break;
+                    if (m6 * maxEps > tolEps * m5) break;
+                    if (m7 * maxEps > tolEps * m6) break;
+                    if (m8 * maxEps > tolEps * m7) break;
+                    if (m8 * maxEpsPowNm1 > tol * m1) break;
+                }
+
+                double Zr2 = refZr[n], Zi2 = refZi[n];
+                double Zp1Re = Zr2, Zp1Im = Zi2;
+                double dPow2_2_Re = (Sr1*Sr1 - Si1*Si1);
+                double dPow2_2_Im = (Sr1*Si1 + Si1*Sr1);
+                double dPow2_3_Re = (Sr1*Sr2 - Si1*Si2) + (Sr2*Sr1 - Si2*Si1);
+                double dPow2_3_Im = (Sr1*Si2 + Si1*Sr2) + (Sr2*Si1 + Si2*Sr1);
+                double dPow2_4_Re = (Sr1*Sr3 - Si1*Si3) + (Sr2*Sr2 - Si2*Si2) + (Sr3*Sr1 - Si3*Si1);
+                double dPow2_4_Im = (Sr1*Si3 + Si1*Sr3) + (Sr2*Si2 + Si2*Sr2) + (Sr3*Si1 + Si3*Sr1);
+                double dPow2_5_Re = (Sr1*Sr4 - Si1*Si4) + (Sr2*Sr3 - Si2*Si3) + (Sr3*Sr2 - Si3*Si2) + (Sr4*Sr1 - Si4*Si1);
+                double dPow2_5_Im = (Sr1*Si4 + Si1*Sr4) + (Sr2*Si3 + Si2*Sr3) + (Sr3*Si2 + Si3*Sr2) + (Sr4*Si1 + Si4*Sr1);
+                double dPow2_6_Re = (Sr1*Sr5 - Si1*Si5) + (Sr2*Sr4 - Si2*Si4) + (Sr3*Sr3 - Si3*Si3) + (Sr4*Sr2 - Si4*Si2) + (Sr5*Sr1 - Si5*Si1);
+                double dPow2_6_Im = (Sr1*Si5 + Si1*Sr5) + (Sr2*Si4 + Si2*Sr4) + (Sr3*Si3 + Si3*Sr3) + (Sr4*Si2 + Si4*Sr2) + (Sr5*Si1 + Si5*Sr1);
+                double dPow2_7_Re = (Sr1*Sr6 - Si1*Si6) + (Sr2*Sr5 - Si2*Si5) + (Sr3*Sr4 - Si3*Si4) + (Sr4*Sr3 - Si4*Si3) + (Sr5*Sr2 - Si5*Si2) + (Sr6*Sr1 - Si6*Si1);
+                double dPow2_7_Im = (Sr1*Si6 + Si1*Sr6) + (Sr2*Si5 + Si2*Sr5) + (Sr3*Si4 + Si3*Sr4) + (Sr4*Si3 + Si4*Sr3) + (Sr5*Si2 + Si5*Sr2) + (Sr6*Si1 + Si6*Sr1);
+                double dPow2_8_Re = (Sr1*Sr7 - Si1*Si7) + (Sr2*Sr6 - Si2*Si6) + (Sr3*Sr5 - Si3*Si5) + (Sr4*Sr4 - Si4*Si4) + (Sr5*Sr3 - Si5*Si3) + (Sr6*Sr2 - Si6*Si2) + (Sr7*Sr1 - Si7*Si1);
+                double dPow2_8_Im = (Sr1*Si7 + Si1*Sr7) + (Sr2*Si6 + Si2*Sr6) + (Sr3*Si5 + Si3*Sr5) + (Sr4*Si4 + Si4*Sr4) + (Sr5*Si3 + Si5*Sr3) + (Sr6*Si2 + Si6*Sr2) + (Sr7*Si1 + Si7*Sr1);
+                double SrNew1 = 2.0 * (Zp1Re * Sr1 - Zp1Im * Si1) + 1.0;
+                double SiNew1 = 2.0 * (Zp1Re * Si1 + Zp1Im * Sr1);
+                double SrNew2 = 2.0 * (Zp1Re * Sr2 - Zp1Im * Si2) + dPow2_2_Re;
+                double SiNew2 = 2.0 * (Zp1Re * Si2 + Zp1Im * Sr2) + dPow2_2_Im;
+                double SrNew3 = 2.0 * (Zp1Re * Sr3 - Zp1Im * Si3) + dPow2_3_Re;
+                double SiNew3 = 2.0 * (Zp1Re * Si3 + Zp1Im * Sr3) + dPow2_3_Im;
+                double SrNew4 = 2.0 * (Zp1Re * Sr4 - Zp1Im * Si4) + dPow2_4_Re;
+                double SiNew4 = 2.0 * (Zp1Re * Si4 + Zp1Im * Sr4) + dPow2_4_Im;
+                double SrNew5 = 2.0 * (Zp1Re * Sr5 - Zp1Im * Si5) + dPow2_5_Re;
+                double SiNew5 = 2.0 * (Zp1Re * Si5 + Zp1Im * Sr5) + dPow2_5_Im;
+                double SrNew6 = 2.0 * (Zp1Re * Sr6 - Zp1Im * Si6) + dPow2_6_Re;
+                double SiNew6 = 2.0 * (Zp1Re * Si6 + Zp1Im * Sr6) + dPow2_6_Im;
+                double SrNew7 = 2.0 * (Zp1Re * Sr7 - Zp1Im * Si7) + dPow2_7_Re;
+                double SiNew7 = 2.0 * (Zp1Re * Si7 + Zp1Im * Sr7) + dPow2_7_Im;
+                double SrNew8 = 2.0 * (Zp1Re * Sr8 - Zp1Im * Si8) + dPow2_8_Re;
+                double SiNew8 = 2.0 * (Zp1Re * Si8 + Zp1Im * Sr8) + dPow2_8_Im;
+                Sr1 = SrNew1; Si1 = SiNew1;
+                Sr2 = SrNew2; Si2 = SiNew2;
+                Sr3 = SrNew3; Si3 = SiNew3;
+                Sr4 = SrNew4; Si4 = SiNew4;
+                Sr5 = SrNew5; Si5 = SiNew5;
+                Sr6 = SrNew6; Si6 = SiNew6;
+                Sr7 = SrNew7; Si7 = SiNew7;
+                Sr8 = SrNew8; Si8 = SiNew8;
+            }
+            saSr[1][n] = Sr1; saSi[1][n] = Si1;
+            saSr[2][n] = Sr2; saSi[2][n] = Si2;
+            saSr[3][n] = Sr3; saSi[3][n] = Si3;
+            saSr[4][n] = Sr4; saSi[4][n] = Si4;
+            saSr[5][n] = Sr5; saSi[5][n] = Si5;
+            saSr[6][n] = Sr6; saSi[6][n] = Si6;
+            saSr[7][n] = Sr7; saSi[7][n] = Si7;
+            saSr[8][n] = Sr8; saSi[8][n] = Si8;
+            // Don't skip the last couple of iters — gives the per-pixel
+            // δ recurrence a small ramp-in before the BLA / glitch logic
+            // sees per-pixel offsets, keeping rounding clean.
+            saStart = Math.Max(0, n - 2);
+            // Stash SA tables in the cache so a follow-up frame with
+            // unchanged centre + scale (e.g. theme switch, resize) skips
+            // this build.
+            _cachedSaSr = saSr; _cachedSaSi = saSi;
+            _cachedSaStart = saStart;
+            _cachedUseSa = true;
+            _cachedScale = scale;
         }
 
         // Label reflects the perturbation tier actually chosen. Set AFTER
         // the ref orbit succeeds so a failure can't lie to the status bar.
         // QD-PT = QD reference orbit + double δ (per-pixel HP-direct on
-        // glitch). PT = plain-double everything.
-        LastPrecisionLabel = useExtendedRef ? "QD-PT" : "PT";
+        // glitch). PT = plain-double everything. -SA suffix when the SA
+        // prelude actually skipped any iterations this frame.
+        LastPrecisionLabel = (useExtendedRef ? "QD-PT" : "PT") + (saStart > 0 ? "-SA" : "");
 
         bool useBlaLocal = UseBla;
+        // AVX-512 perturbation lane: 8 pixels per SIMD step. Active only
+        // when the hardware supports AVX-512F, the row is at least 8
+        // pixels wide, and BLA is OFF (BLA's per-lane branching would
+        // need predicated execution that's clean only with mask
+        // registers — keeping it scalar avoids the complexity). Glitched
+        // lanes and lanes still active when ref orbit ends both fall
+        // back to per-pixel HP-direct after the SIMD inner loop.
+        // SA prelude is a scalar-path optimisation; the AVX-512 lane
+        // starts at iter 0. When SA skipped several thousand iters
+        // already, redoing them 8-wide is still a loss. Disable SIMD
+        // when saStart > 0 — the scalar path with SA wins.
+        bool useSimdLane = Avx512F.IsSupported && !UseBla && Width >= 8 && saStart == 0;
         Parallel.For(0, Height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -662,11 +1067,174 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
             // centre, so ε never needs to round-trip through cx.
             double ei = (y - Height * 0.5) * scale;
             int rowBase = y * Width;
-            for (int x = 0; x < Width; x++)
+            int x = 0;
+
+            // ── SIMD lane (8 pixels per step) ────────────────────────────
+            if (useSimdLane)
+            {
+                Vector512<double> halfW_v   = Vector512.Create(Width * 0.5);
+                Vector512<double> scale_v   = Vector512.Create(scale);
+                Vector512<double> ei_v      = Vector512.Create(ei);
+                Vector512<double> bailout_v = Vector512.Create(Bailout2);
+                Vector512<long>   oneL      = Vector512.Create(1L);
+                Vector512<long>   allActive = Vector512<long>.AllBitsSet;
+                Vector512<double> dZero     = Vector512<double>.Zero;
+                Vector512<long>   lZero     = Vector512<long>.Zero;
+
+                for (; x + 8 <= Width; x += 8)
+                {
+                    Vector512<double> idx_v = Vector512.Create(
+                        (double)x, x + 1, x + 2, x + 3,
+                        x + 4, x + 5, x + 6, x + 7);
+                    Vector512<double> er_v = Avx512F.Multiply(
+                        Avx512F.Subtract(idx_v, halfW_v), scale_v);
+
+                    Vector512<double> dr  = dZero, di  = dZero;
+                    Vector512<double> drv = dZero, div = dZero;
+                    Vector512<long>   activeMask = allActive;
+                    Vector512<long>   escapeIter = lZero;
+                    Vector512<double> finalZrVec = dZero, finalZiVec = dZero;
+                    Vector512<double> finalDrvVec = dZero, finalDivVec = dZero;
+                    Vector512<long>   glitchMask = lZero;
+
+                    for (int it = 0; it < refOrbitLen; it++)
+                    {
+                        Vector512<double> Zr_v = Vector512.Create(refZr[it]);
+                        Vector512<double> Zi_v = Vector512.Create(refZi[it]);
+                        Vector512<double> zr_v = Avx512F.Add(Zr_v, dr);
+                        Vector512<double> zi_v = Avx512F.Add(Zi_v, di);
+
+                        // Bailout: r2 < Bailout2 → lane stays active.
+                        Vector512<double> r2 = Avx512F.FusedMultiplyAdd(
+                            zr_v, zr_v, Avx512F.Multiply(zi_v, zi_v));
+                        Vector512<double> activeD = Avx512F.Compare(r2, bailout_v,
+                            FloatComparisonMode.OrderedLessThanNonSignaling);
+                        Vector512<long> activeL = activeD.AsInt64();
+                        Vector512<long> newlyEscaped = Avx512F.AndNot(activeL, activeMask);
+                        Vector512<double> newlyEscapedD = newlyEscaped.AsDouble();
+                        finalZrVec = Avx512F.BlendVariable(finalZrVec, zr_v, newlyEscapedD);
+                        finalZiVec = Avx512F.BlendVariable(finalZiVec, zi_v, newlyEscapedD);
+                        finalDrvVec = Avx512F.BlendVariable(finalDrvVec, drv, newlyEscapedD);
+                        finalDivVec = Avx512F.BlendVariable(finalDivVec, div, newlyEscapedD);
+                        activeMask = Avx512F.And(activeMask, activeL);
+                        if (activeMask.Equals(lZero)) break;
+                        escapeIter = Avx512F.Add(escapeIter, Avx512F.And(oneL, activeMask));
+
+                        // Glitch detect: zr==Zr & zi==Zi & (dr!=0 | di!=0)
+                        Vector512<long> zrEq = Avx512F.Compare(zr_v, Zr_v,
+                            FloatComparisonMode.OrderedEqualNonSignaling).AsInt64();
+                        Vector512<long> ziEq = Avx512F.Compare(zi_v, Zi_v,
+                            FloatComparisonMode.OrderedEqualNonSignaling).AsInt64();
+                        Vector512<long> drNz = Avx512F.Compare(dr, dZero,
+                            FloatComparisonMode.OrderedNotEqualNonSignaling).AsInt64();
+                        Vector512<long> diNz = Avx512F.Compare(di, dZero,
+                            FloatComparisonMode.OrderedNotEqualNonSignaling).AsInt64();
+                        Vector512<long> g = Avx512F.And(zrEq,
+                            Avx512F.And(ziEq, Avx512F.Or(drNz, diNz)));
+                        glitchMask = Avx512F.Or(glitchMask, Avx512F.And(g, activeMask));
+
+                        // Derivative
+                        {
+                    Vector512<double> dvre1 = Avx512F.Add(zr_v, zr_v);
+                    Vector512<double> dvim2 = Avx512F.Add(zi_v, zi_v);
+                    Vector512<double> dvre3 = Avx512F.FusedMultiplyAddNegated(dvim2, div, Avx512F.Multiply(dvre1, drv));
+                    Vector512<double> dvim4 = Avx512F.FusedMultiplyAdd(dvre1, div, Avx512F.Multiply(dvim2, drv));
+                    Vector512<double> dvre5 = Vector512.Create(1.0);
+                    Vector512<double> dvre6 = Avx512F.Add(dvre3, dvre5);
+                    Vector512<double> drv_new = dvre6;
+                    Vector512<double> div_new = dvim4;
+                            Vector512<double> keep = activeMask.AsDouble();
+                            drv = Avx512F.BlendVariable(drv, drv_new, keep);
+                            div = Avx512F.BlendVariable(div, div_new, keep);
+                        }
+
+                        // δ
+                        {
+                    Vector512<double> pre1 = Avx512F.Add(Zr_v, Zr_v);
+                    Vector512<double> pim2 = Avx512F.Add(Zi_v, Zi_v);
+                    Vector512<double> pre3 = Avx512F.FusedMultiplyAddNegated(pim2, di, Avx512F.Multiply(pre1, dr));
+                    Vector512<double> pim4 = Avx512F.FusedMultiplyAdd(pre1, di, Avx512F.Multiply(pim2, dr));
+                    Vector512<double> pre5 = Avx512F.Add(er_v, pre3);
+                    Vector512<double> pim6 = Avx512F.Add(ei_v, pim4);
+                    Vector512<double> pre7 = Avx512F.FusedMultiplyAddNegated(di, di, Avx512F.Multiply(dr, dr));
+                    Vector512<double> pim8 = Avx512F.FusedMultiplyAdd(dr, di, Avx512F.Multiply(di, dr));
+                    Vector512<double> pre9 = Avx512F.Add(pre5, pre7);
+                    Vector512<double> pim10 = Avx512F.Add(pim6, pim8);
+                    Vector512<double> dr_new = pre9;
+                    Vector512<double> di_new = pim10;
+                            Vector512<double> keep = activeMask.AsDouble();
+                            dr = Avx512F.BlendVariable(dr, dr_new, keep);
+                            di = Avx512F.BlendVariable(di, di_new, keep);
+                        }
+                    }
+
+                    // Unpack + colour. Lanes that escaped → ColorFor.
+                    // Lanes that didn't escape (still active or glitched) →
+                    // per-pixel HP-direct fallback.
+                    Span<long>   itersS  = stackalloc long[8];
+                    Span<double> finZrS  = stackalloc double[8];
+                    Span<double> finZiS  = stackalloc double[8];
+                    Span<double> finDrvS = stackalloc double[8];
+                    Span<double> finDivS = stackalloc double[8];
+                    Span<long>   actS    = stackalloc long[8];
+                    Span<long>   glS     = stackalloc long[8];
+                    escapeIter.CopyTo(itersS);
+                    finalZrVec.CopyTo(finZrS); finalZiVec.CopyTo(finZiS);
+                    finalDrvVec.CopyTo(finDrvS); finalDivVec.CopyTo(finDivS);
+                    activeMask.CopyTo(actS); glitchMask.CopyTo(glS);
+
+                    for (int k = 0; k < 8; k++)
+                    {
+                        bool needsHp = glS[k] != 0
+                                    || (actS[k] != 0 && refOrbitLen < maxIt);
+                        if (needsHp)
+                        {
+                            if (Zoom >= QdDirectZoomThreshold)
+                            {
+                                QD cxq = QD.FromCenterOffset(
+                                    new QD(CenterX, CenterXLo, CenterX2, CenterX3),
+                                    x + k - Width * 0.5, scale);
+                                QD cyq = QD.FromCenterOffset(
+                                    new QD(CenterY, CenterYLo, CenterY2, CenterY3),
+                                    y - Height * 0.5, scale);
+                                ColorBuffer[rowBase + x + k] = ComputePixelQdDirect(cxq, cyq, maxIt, rowBase + x + k);
+                            }
+                            else
+                            {
+                                DD cxd = DD.FromCenterOffset(
+                                    new DD(CenterX, CenterXLo),
+                                    x + k - Width * 0.5, scale);
+                                DD cyd = DD.FromCenterOffset(
+                                    new DD(CenterY, CenterYLo),
+                                    y - Height * 0.5, scale);
+                                ColorBuffer[rowBase + x + k] = ComputePixelDdDirect(cxd, cyd, maxIt, rowBase + x + k);
+                            }
+                            continue;
+                        }
+                        // Active lanes that finished refOrbitLen without
+                        // escaping (only possible when refOrbitLen == maxIt
+                        // — caught above otherwise) are in-set; ColorFor
+                        // returns the in-set entry when it >= maxIt.
+                        int it = actS[k] != 0 ? maxIt : (int)itersS[k];
+                        ColorBuffer[rowBase + x + k] = ColorFor(
+                            it, finZrS[k], finZiS[k], finDrvS[k], finDivS[k], maxIt, rowBase + x + k);
+                    }
+                }
+            }
+
+            for (; x < Width; x++)
             {
                 double er = (x - Width * 0.5) * scale;
                 int finalIt = maxIt;
                 double finalZr = 0.0, finalZi = 0.0;
+                // DD-precision |z|² at escape — preserves per-pixel
+                // signal through the log-log smooth-count cast at deep
+                // zoom. Computed from QD refZr/refZi (Hi+Lo limbs) plus
+                // double δ promoted to DD. Without this, perturbation
+                // smooth count locks to ~5x fewer unique values per
+                // decade past zoom 1e12 vs HP-direct (legacy uses plain
+                // double here too, but is masked by its DD ref orbit).
+                FracturingFog.FFMath.DD finalZMag2 = FracturingFog.FFMath.DD.Zero;
 
                 // dz/dc derivative carries the per-pixel signal at deep
                 // zoom — its magnitude grows exponentially with iteration,
@@ -683,7 +1251,62 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                 {
                     bool glitched = false;
                     int it = 0;
-                    for (; it < maxIt; it++)
+                    // Series Approximation prelude: skip iters 0..saStart−1
+                    // by evaluating the cached series at this pixel's ε.
+                    //   δ ≈ Σ_{k=1..SaOrders} S_k · ε^k
+                    // Each coefficient is complex; per-pixel cost is one
+                    // polynomial evaluation regardless of how many iters
+                    // we skip. saStart==0 means no SA (loop runs from 0).
+                    if (saStart > 0)
+                    {
+                        double Sr1 = saSr![1][saStart], Si1 = saSi![1][saStart];
+                        double Sr2 = saSr![2][saStart], Si2 = saSi![2][saStart];
+                        double Sr3 = saSr![3][saStart], Si3 = saSi![3][saStart];
+                        double Sr4 = saSr![4][saStart], Si4 = saSi![4][saStart];
+                        double Sr5 = saSr![5][saStart], Si5 = saSi![5][saStart];
+                        double Sr6 = saSr![6][saStart], Si6 = saSi![6][saStart];
+                        double Sr7 = saSr![7][saStart], Si7 = saSi![7][saStart];
+                        double Sr8 = saSr![8][saStart], Si8 = saSi![8][saStart];
+                        // ε^k in real/imag form, k=1..SaOrders (chained
+                        // off the previous power to avoid recomputation).
+                        double e1r = er,                 e1i = ei;
+                        double e2r = e1r*e1r - e1i*e1i,  e2i = 2.0*e1r*e1i;
+                        double e3r = e2r*e1r - e2i*e1i,  e3i = e2r*e1i + e2i*e1r;
+                        double e4r = e3r*e1r - e3i*e1i,  e4i = e3r*e1i + e3i*e1r;
+                        double e5r = e4r*e1r - e4i*e1i,  e5i = e4r*e1i + e4i*e1r;
+                        double e6r = e5r*e1r - e5i*e1i,  e6i = e5r*e1i + e5i*e1r;
+                        double e7r = e6r*e1r - e6i*e1i,  e7i = e6r*e1i + e6i*e1r;
+                        double e8r = e7r*e1r - e7i*e1i,  e8i = e7r*e1i + e7i*e1r;
+                        // δ = Σ S_k · ε^k (complex).
+                        dr = (Sr1*e1r - Si1*e1i) + (Sr2*e2r - Si2*e2i)
+                           + (Sr3*e3r - Si3*e3i) + (Sr4*e4r - Si4*e4i)
+                           + (Sr5*e5r - Si5*e5i) + (Sr6*e6r - Si6*e6i)
+                           + (Sr7*e7r - Si7*e7i) + (Sr8*e8r - Si8*e8i);
+                        di = (Sr1*e1i + Si1*e1r) + (Sr2*e2i + Si2*e2r)
+                           + (Sr3*e3i + Si3*e3r) + (Sr4*e4i + Si4*e4r)
+                           + (Sr5*e5i + Si5*e5r) + (Sr6*e6i + Si6*e6r)
+                           + (Sr7*e7i + Si7*e7r) + (Sr8*e8i + Si8*e8r);
+                        // dz/dc seed at saStart. Since z = Z_ref + δ and
+                        // d(Z_ref)/dc = 0 for the pixel's c, dz/dc = dδ/dc.
+                        // With ε = c_pixel − c_center (so dε/dc = 1):
+                        //   dδ/dc = Σ_{k=1..N} k · S_k · ε^(k-1)
+                        // Without this seed, drv/div restart at 0 at
+                        // saStart and the distance estimate + surface
+                        // normals across the SA-skipped band are wrong
+                        // (typically: DE collapses to zero, ridges flatten).
+                        drv = Sr1
+                            + 2.0 * (Sr2*e1r - Si2*e1i) + 3.0 * (Sr3*e2r - Si3*e2i)
+                            + 4.0 * (Sr4*e3r - Si4*e3i) + 5.0 * (Sr5*e4r - Si5*e4i)
+                            + 6.0 * (Sr6*e5r - Si6*e5i) + 7.0 * (Sr7*e6r - Si7*e6i)
+                            + 8.0 * (Sr8*e7r - Si8*e7i);
+                        div = Si1
+                            + 2.0 * (Sr2*e1i + Si2*e1r) + 3.0 * (Sr3*e2i + Si3*e2r)
+                            + 4.0 * (Sr4*e3i + Si4*e3r) + 5.0 * (Sr5*e4i + Si5*e4r)
+                            + 6.0 * (Sr6*e5i + Si6*e5r) + 7.0 * (Sr7*e6i + Si7*e6r)
+                            + 8.0 * (Sr8*e7i + Si8*e7r);
+                        it = saStart;
+                    }
+                    for (; it < refOrbitLen; it++)
                     {
                         double Zr = refZr[it], Zi = refZi[it];
                         double zr = Zr + dr, zi = Zi + di;
@@ -699,6 +1322,17 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                         {
                             finalIt = it; finalZr = zr; finalZi = zi;
                             finalDrv = drv; finalDiv = div;
+                            // DD-precision |z|² for the smooth count.
+                            // refZrLo/refZiLo populated by the QD ref
+                            // orbit (useExtendedRef path); perturbation
+                            // path engages only at Zoom >= 1e12 > 1e9 =
+                            // ExtendedRefZoomThreshold so these arrays
+                            // are always live here.
+                            var zr_dd = new FracturingFog.FFMath.DD(refZr[it], refZrLo[it])
+                                      + new FracturingFog.FFMath.DD(dr, 0.0);
+                            var zi_dd = new FracturingFog.FFMath.DD(refZi[it], refZiLo[it])
+                                      + new FracturingFog.FFMath.DD(di, 0.0);
+                            finalZMag2 = zr_dd.Square() + zi_dd.Square();
                             goto done;
                         }
                         {
@@ -706,59 +1340,101 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     double div_new = ((zr + zr) * div + (zi + zi) * drv);
                             drv = drv_new; div = div_new;
                         }
-                        if (useBlaLocal)
+                        if (useBlaLocal && bla != null)
                         {
-                            // BLA: try linear step. Valid when |δ| stays well
-                            // below BlaRelative · |Z_n|. Otherwise fall through
-                            // to the full perturbation step.
+                            // Hierarchical BLA: largest valid level wins,
+                            // skips 2^level perturbation iters in one
+                            // step. Lookup is O(log refLen) but fast in
+                            // practice — early levels rejected by
+                            // dMag2 < r² test on a fixed entry.
                             double dMag2 = dr * dr + di * di;
-                            double rn = blaR![it];
-                            if (dMag2 < rn * rn)
+                            int blaIdx = bla.Lookup(it, dMag2, maxIt);
+                            if (blaIdx >= 0)
                             {
-                                double Ar = blaAr![it], Ai = blaAi![it];
-                                double Br = blaBr![it], Bi = blaBi![it];
-                                double drBla = Ar * dr - Ai * di + Br * er - Bi * ei;
-                                double diBla = Ar * di + Ai * dr + Br * ei + Bi * er;
-                                dr = drBla; di = diBla;
-                                continue;
+                                ref readonly var bEntry = ref bla.Data[blaIdx];
+                                if (bEntry.L >= 2)
+                                {
+                                    double Ar = bEntry.ARe, Ai = bEntry.AIm;
+                                    double Br = bEntry.BRe, Bi = bEntry.BIm;
+                                    double drBla = Ar * dr - Ai * di + Br * er - Bi * ei;
+                                    double diBla = Ar * di + Ai * dr + Br * ei + Bi * er;
+                                    // Derivative skip: dz/dc through L
+                                    // linear iters is just A·drv (the +1
+                                    // per step folds into B's ε path).
+                                    double drvBla = Ar * drv - Ai * div;
+                                    double divBla = Ar * div + Ai * drv;
+                                    dr = drBla; di = diBla;
+                                    drv = drvBla; div = divBla;
+                                    it += bEntry.L - 1;  // loop's it++ adds 1
+                                    continue;
+                                }
+                                // Level-1 single-step BLA — fall through
+                                // to the regular perturbation step. Same
+                                // outcome, fewer branches.
                             }
                         }
                     double dr_new = ((er + ((Zr + Zr) * dr - (Zi + Zi) * di)) + (dr * dr - di * di));
                     double di_new = ((ei + ((Zr + Zr) * di + (Zi + Zi) * dr)) + (dr * di + di * dr));
                         dr = dr_new; di = di_new;
                     }
-                    if (glitched)
+                    // Two reasons to fall to per-pixel HP-direct:
+                    //   1. Glitch — δ absorbed by Z in double, so further
+                    //      iteration tracks the wrong orbit.
+                    //   2. Ref exhausted — orbit centre escaped before this
+                    //      pixel did, so refZr ran out of valid iterates.
+                    // Either way, finish this pixel in DD or QD precision.
+                    //
+                    // Per-pixel rebase optimisation: when we know the
+                    // current z and the pixel's c at full QD precision,
+                    // continue iterating in QD from where we are instead
+                    // of restarting from iter 0. Saves the `it` iters
+                    // already taken — typically thousands at deep zoom.
+                    bool refExhausted = it == refOrbitLen && refOrbitLen < maxIt;
+                    if (glitched || refExhausted)
                     {
-                        // Per-pixel HP-direct fallback. QD past the QD
-                        // threshold; DD below. Cheap because glitches are
-                        // rare in typical deep-zoom regions.
-                        if (Zoom >= QdDirectZoomThreshold)
-                        {
-                            QD cxq = QD.FromCenterOffset(
-                                new QD(CenterX, CenterXLo, CenterX2, CenterX3),
-                                x - Width * 0.5, scale);
-                            QD cyq = QD.FromCenterOffset(
-                                new QD(CenterY, CenterYLo, CenterY2, CenterY3),
-                                y - Height * 0.5, scale);
-                            ColorBuffer[rowBase + x] = ComputePixelQdDirect(cxq, cyq, maxIt);
-                        }
-                        else
-                        {
-                            DD cxd = DD.FromCenterOffset(
-                                new DD(CenterX, CenterXLo), x - Width * 0.5, scale);
-                            DD cyd = DD.FromCenterOffset(
-                                new DD(CenterY, CenterYLo), y - Height * 0.5, scale);
-                            ColorBuffer[rowBase + x] = ComputePixelDdDirect(cxd, cyd, maxIt);
-                        }
+                        QD cxq = QD.FromCenterOffset(
+                            new QD(CenterX, CenterXLo, CenterX2, CenterX3),
+                            x - Width * 0.5, scale);
+                        QD cyq = QD.FromCenterOffset(
+                            new QD(CenterY, CenterYLo, CenterY2, CenterY3),
+                            y - Height * 0.5, scale);
+                        // Best QD-precision estimate of current z is the
+                        // QD reference (refZr/refZrLo + zeros for X2/X3,
+                        // since DD = first two QD limbs) plus the
+                        // double-precision δ promoted to QD. The two
+                        // limbs of Z's QD aren't stored beyond DD, so a
+                        // tiny ULP drift relative to a fresh restart is
+                        // possible — acceptable for the rare glitch
+                        // case.
+                        int seedIdx = Math.Min(it, refOrbitLen);
+                        QD Zr_q = new QD(refZr[seedIdx], refZrLo[seedIdx], 0.0, 0.0);
+                        QD Zi_q = new QD(refZi[seedIdx], refZiLo[seedIdx], 0.0, 0.0);
+                        QD dr_q = new QD(dr, 0.0, 0.0, 0.0);
+                        QD di_q = new QD(di, 0.0, 0.0, 0.0);
+                        QD zr_q = Zr_q + dr_q;
+                        QD zi_q = Zi_q + di_q;
+                        ColorBuffer[rowBase + x] = ComputePixelQdContinue(
+                            cxq, cyq, zr_q, zi_q, drv, div, seedIdx, maxIt, rowBase + x);
                         continue;
                     }
                     {
                         double Zr = refZr[maxIt], Zi = refZi[maxIt];
                         finalZr = Zr + dr; finalZi = Zi + di;
                         finalDrv = drv; finalDiv = div;
+                        // Capture DD |z|² for in-set pixels too — the
+                        // colour map's in-set branch ignores it, but
+                        // emitting unconditionally keeps the ColorForDd
+                        // call uniform and avoids a stray Mag of 0.
+                        var zr_dd = new FracturingFog.FFMath.DD(refZr[maxIt], refZrLo[maxIt])
+                                  + new FracturingFog.FFMath.DD(dr, 0.0);
+                        var zi_dd = new FracturingFog.FFMath.DD(refZi[maxIt], refZiLo[maxIt])
+                                  + new FracturingFog.FFMath.DD(di, 0.0);
+                        finalZMag2 = zr_dd.Square() + zi_dd.Square();
                     }
                     done:
-                    ColorBuffer[rowBase + x] = ColorFor(finalIt, finalZr, finalZi, finalDrv, finalDiv, maxIt);
+                    ColorBuffer[rowBase + x] = ColorForDd(
+                        finalIt, finalZr, finalZi, finalZMag2,
+                        finalDrv, finalDiv, maxIt, rowBase + x);
                 }
             }
         });
@@ -783,10 +1459,17 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     // whose `c` value is given as a DD. Also called from the perturbation
     // path's glitch branch — one slow pixel is much cheaper than one
     // wrong pixel, and the glitch population is typically a few percent.
-    private uint ComputePixelDdDirect(DD cr_dd, DD ci_dd, int maxIt)
+    //
+    // At escape, |z|² is captured as a DD so the smooth count can read
+    // through to the Lo limb's per-pixel signal. At zoom past ~1e15 the
+    // double formula `log2(log2(|z|))` loses adjacent pixel diffs in the
+    // float cast; the DD path preserves them by computing the inner log
+    // as `log(Hi) + Lo/Hi` (first-order Taylor — exact relative to DD).
+    private uint ComputePixelDdDirect(DD cr_dd, DD ci_dd, int maxIt, int bufIdx = -1)
     {
         DD zr_dd = DD.Zero, zi_dd = DD.Zero;
         double drv = 0.0, div = 0.0;
+        DD finalZMag2 = DD.Zero;
         double finalZr = 0.0, finalZi = 0.0;
         int it = 0;
         for (; it < maxIt; it++)
@@ -795,6 +1478,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
             if (zrHi * zrHi + ziHi * ziHi >= Bailout2)
             {
                 finalZr = zrHi; finalZi = ziHi;
+                finalZMag2 = zr_dd.Square() + zi_dd.Square();
                 break;
             }
             {
@@ -809,22 +1493,32 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     DD zi_dd_new = ((zr_dd * zi_dd + zi_dd * zr_dd) + ci_dd);
             zr_dd = zr_dd_new; zi_dd = zi_dd_new;
         }
-        return ColorFor(it, finalZr, finalZi, drv, div, maxIt);
+        return ColorForDd(it, finalZr, finalZi, finalZMag2, drv, div, maxIt, bufIdx);
     }
 
-    // Per-pixel QD direct iteration — engaged above QdDirectZoomThreshold.
-    private uint ComputePixelQdDirect(QD cr_q, QD ci_q, int maxIt)
+    // Per-pixel QD continuation from a mid-iter state. Used by the
+    // per-pixel rebase path: when the perturbation loop glitches at
+    // iter `itStart`, we hand the current z (= ref + δ) over to this
+    // helper to finish the orbit in QD precision. Saves the
+    // already-iterated `itStart` steps vs the full HP-direct restart.
+    private uint ComputePixelQdContinue(QD cr_q, QD ci_q,
+        QD zrStart, QD ziStart, double drvStart, double divStart,
+        int itStart, int maxIt, int bufIdx = -1)
     {
-        QD zr_q = QD.Zero, zi_q = QD.Zero;
-        double drv = 0.0, div = 0.0;
+        QD zr_q = zrStart, zi_q = ziStart;
+        double drv = drvStart, div = divStart;
+        DD finalZMag2 = DD.Zero;
         double finalZr = 0.0, finalZi = 0.0;
-        int it = 0;
+        int it = itStart;
         for (; it < maxIt; it++)
         {
             double zrHi = zr_q.X0, ziHi = zi_q.X0;
             if (zrHi * zrHi + ziHi * ziHi >= Bailout2)
             {
                 finalZr = zrHi; finalZi = ziHi;
+                DD zrDd = new DD(zr_q.X0, zr_q.X1);
+                DD ziDd = new DD(zi_q.X0, zi_q.X1);
+                finalZMag2 = zrDd.Square() + ziDd.Square();
                 break;
             }
             {
@@ -839,7 +1533,43 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     QD zi_q_new = ((zr_q * zi_q + zi_q * zr_q) + ci_q);
             zr_q = zr_q_new; zi_q = zi_q_new;
         }
-        return ColorFor(it, finalZr, finalZi, drv, div, maxIt);
+        return ColorForDd(it, finalZr, finalZi, finalZMag2, drv, div, maxIt, bufIdx);
+    }
+
+    // Per-pixel QD direct iteration — engaged above QdDirectZoomThreshold.
+    // Same DD-residual smooth count as DdDirect: |z|² is captured as a
+    // DD (high two QD limbs) so the float cast retains per-pixel signal.
+    private uint ComputePixelQdDirect(QD cr_q, QD ci_q, int maxIt, int bufIdx = -1)
+    {
+        QD zr_q = QD.Zero, zi_q = QD.Zero;
+        double drv = 0.0, div = 0.0;
+        DD finalZMag2 = DD.Zero;
+        double finalZr = 0.0, finalZi = 0.0;
+        int it = 0;
+        for (; it < maxIt; it++)
+        {
+            double zrHi = zr_q.X0, ziHi = zi_q.X0;
+            if (zrHi * zrHi + ziHi * ziHi >= Bailout2)
+            {
+                finalZr = zrHi; finalZi = ziHi;
+                DD zrDd = new DD(zr_q.X0, zr_q.X1);
+                DD ziDd = new DD(zi_q.X0, zi_q.X1);
+                finalZMag2 = zrDd.Square() + ziDd.Square();
+                break;
+            }
+            {
+                double zr = zrHi, zi = ziHi;
+                double Cr = 0.0, Ci = 0.0;
+                double cr = Cr, ci = Ci;
+                    double drv_new = (((zr + zr) * drv - (zi + zi) * div) + 1.0);
+                    double div_new = ((zr + zr) * div + (zi + zi) * drv);
+                drv = drv_new; div = div_new;
+            }
+                    QD zr_q_new = ((zr_q * zr_q - zi_q * zi_q) + cr_q);
+                    QD zi_q_new = ((zr_q * zi_q + zi_q * zr_q) + ci_q);
+            zr_q = zr_q_new; zi_q = zi_q_new;
+        }
+        return ColorForDd(it, finalZr, finalZi, finalZMag2, drv, div, maxIt, bufIdx);
     }
 
     private void TryRenderHpDirect(double scale, CancellationToken ct)
@@ -866,7 +1596,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                 for (int x = 0; x < Width; x++)
                 {
                     QD cr_q = QD.FromCenterOffset(centerXQd, x - halfW, scale);
-                    ColorBuffer[rowBase + x] = ComputePixelQdDirect(cr_q, ci_q, maxIt);
+                    ColorBuffer[rowBase + x] = ComputePixelQdDirect(cr_q, ci_q, maxIt, rowBase + x);
                 }
             }
             else
@@ -875,7 +1605,7 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                 for (int x = 0; x < Width; x++)
                 {
                     DD cr_dd = DD.FromCenterOffset(centerXDd, x - halfW, scale);
-                    ColorBuffer[rowBase + x] = ComputePixelDdDirect(cr_dd, ci_dd, maxIt);
+                    ColorBuffer[rowBase + x] = ComputePixelDdDirect(cr_dd, ci_dd, maxIt, rowBase + x);
                 }
             }
         });
@@ -888,31 +1618,107 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     // Themes that ignore these inherit the default 3-arg fallback via the
     // interface's default implementations.
 
-    private uint ColorFor(int it, double zr, double zi, double dr, double di, int maxIt)
+    private uint ColorFor(int it, double zr, double zi, double dr, double di, int maxIt, int bufIdx = -1)
     {
-        if (it >= maxIt) return ColorMap.InSetColor;
+        if (it >= maxIt)
+        {
+            if (bufIdx >= 0)
+            {
+                IterationBuffer[bufIdx] = maxIt;
+                SmoothBuffer[bufIdx] = 0f;
+            }
+            return ColorMap.InSetColor;
+        }
 
         double zMag2 = zr * zr + zi * zi;
         double zMag  = Math.Sqrt(zMag2);
-        double dMag2 = dr * dr + di * di;
-        double dMag  = Math.Sqrt(dMag2);
 
         // Smooth iteration count: standard log-log normalisation.
         float smooth = (float)(it + 1.0
             - Math.Log2(Math.Max(1e-10, Math.Log2(Math.Max(zMag, 1.0 + 1e-10)))));
 
-        // Surface normal (Inigo Quilez): u + v·i  ∝  z · conj(dz/dc)
-        //   u = zr·dr + zi·di
-        //   v = zi·dr − zr·di
+        if (bufIdx >= 0)
+        {
+            IterationBuffer[bufIdx] = it;
+            SmoothBuffer[bufIdx] = smooth;
+        }
+
+        // Surface normal (Inigo Quilez) + exterior distance estimate
+        // (Milnor / Hubbard) — both require the holomorphic dz/dc chain
+        // rule. For anti-holomorphic equations (Conj / Folded) the
+        // derivative is identically zero in the Wirtinger sense, so we
+        // skip the calculation and feed the colour map a zero distance
+        // / zero normal. Themes that use these channels degrade
+        // gracefully to smooth-count-only.
+        float distance = 0f;
+        float nx = 0f, ny = 0f;
+        if (SupportsDe)
+        {
+            double dMag2 = dr * dr + di * di;
+            double dMag  = Math.Sqrt(dMag2);
+
+            double u = zr * dr + zi * di;
+            double v = zi * dr - zr * di;
+            double m = Math.Sqrt(u * u + v * v);
+            if (m > 1e-30) { nx = (float)(u / m); ny = (float)(v / m); }
+
+            if (dMag > 1e-30 && zMag > 1.0)
+                distance = (float)(0.5 * zMag * Math.Log(zMag) / dMag);
+        }
+
+        return (uint)ColorMap.Map(
+            smooth, distance, maxIt, nx, ny,
+            (float)zr, (float)zi, (float)dr, (float)di);
+    }
+
+    // Deep-zoom variant: |z|² already computed in DoubleDouble by the
+    // caller. The standard smooth count
+    //     ν = it + 1 − log2(log2(|z|))
+    // loses per-pixel variation in the final float cast at zoom past
+    // ~1e15 — at that depth the dominant `|z| ≈ √Bailout` looks the same
+    // to every adjacent pixel in plain double. Computing log(|z|²) via
+    // first-order Taylor on the DD pair preserves the Lo limb's
+    // per-pixel signal through one level of `log`, which is enough to
+    // keep it above the float ULP at the end.
+    private uint ColorForDd(int it, double zr, double zi, DD zMag2_dd,
+                             double dr, double di, int maxIt, int bufIdx = -1)
+    {
+        if (it >= maxIt)
+        {
+            if (bufIdx >= 0)
+            {
+                IterationBuffer[bufIdx] = maxIt;
+                SmoothBuffer[bufIdx] = 0f;
+            }
+            return ColorMap.InSetColor;
+        }
+
+        // log(zMag²) = log(Hi · (1 + Lo/Hi)) ≈ log(Hi) + Lo/Hi.
+        // The Lo/Hi term is the per-pixel correction; adding it to
+        // log(Hi) in plain double preserves it because log(Hi) ≈ a few
+        // and Lo/Hi ≈ 1e-31..1e-15 — the sum's LSBs carry the signal.
+        double zMag2Hi = Math.Max(zMag2_dd.Hi, 1e-300);
+        double logZ2 = Math.Log(zMag2Hi) + zMag2_dd.Lo / zMag2Hi;
+        double logZ  = 0.5 * logZ2;                            // log(|z|)
+        double zMag  = Math.Exp(logZ);                          // for distance/normal
+        double logLogZ = Math.Log(Math.Max(1e-10, logZ));
+        float smooth = (float)(it + 1.0 - logLogZ / Math.Log(2.0));
+
+        if (bufIdx >= 0)
+        {
+            IterationBuffer[bufIdx] = it;
+            SmoothBuffer[bufIdx] = smooth;
+        }
+
+        double dMag2 = dr * dr + di * di;
+        double dMag  = Math.Sqrt(dMag2);
+
         double u = zr * dr + zi * di;
         double v = zi * dr - zr * di;
         double m = Math.Sqrt(u * u + v * v);
         float nx = 0f, ny = 0f;
         if (m > 1e-30) { nx = (float)(u / m); ny = (float)(v / m); }
 
-        // Exterior distance estimate (Milnor / Hubbard):
-        //   d ≈ 0.5 · |z| · log|z| / |dz/dc|
-        // Returned in complex-plane units; themes scale by _lastPixelScale.
         float distance = 0f;
         if (dMag > 1e-30 && zMag > 1.0)
             distance = (float)(0.5 * zMag * Math.Log(zMag) / dMag);
@@ -920,5 +1726,121 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
         return (uint)ColorMap.Map(
             smooth, distance, maxIt, nx, ny,
             (float)zr, (float)zi, (float)dr, (float)di);
+    }
+
+    // ── Histogram equalization ──────────────────────────────────────────────
+    //
+    // Adaptive-contrast pass over the iteration / smooth buffers. Mirrors
+    // legacy `MandelbrotCalculator.ApplyHistogramEqualization`. Bins
+    // escaped pixels by smooth count, builds the CDF, then remaps each
+    // pixel's smooth count to its CDF position blended at <paramref
+    // name="strength"/> against the linear fallback. Result: bands packed
+    // into the iter region where pixels actually live, rather than spread
+    // uniformly across [0, MaxIterations].
+    //
+    // Distance / normal / final-z auxiliary channels are NOT plumbed
+    // through the generated calculator (only ColorBuffer + SmoothBuffer +
+    // IterationBuffer are). The colour map gets zero for those channels
+    // — themes that rely on them (3D shading) degrade gracefully to the
+    // smooth-count-only fallback baked into IColorMap's default
+    // implementation.
+
+    /// <summary>Recolour the frame using histogram-equalised smooth counts.
+    /// <paramref name="strength"/> in [0,1]: 0 = no change, 1 = full
+    /// equalisation. Has no effect when every pixel is in-set.</summary>
+    public void ApplyHistogramEqualization(double strength)
+    {
+        if (!BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter))
+            return;
+        ApplyHistogramEqualizationWithCdf(cdf!, bins, sourceMaxIter, strength);
+    }
+
+    /// <summary>Build the equalisation CDF for the current buffers without
+    /// applying it. Returns false when no pixels escaped.</summary>
+    public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
+    {
+        cdf = null;
+        bins = 0;
+        sourceMaxIter = MaxIterations;
+        int n = Width * Height;
+        int maxIt = MaxIterations;
+        if (n == 0 || maxIt <= 0) return false;
+
+        bins = Math.Min(2048, Math.Max(256, maxIt));
+        int[] hist = new int[bins];
+        int totalEscaped = 0;
+        float invMax = 1.0f / maxIt;
+        for (int i = 0; i < n; i++)
+        {
+            if (IterationBuffer[i] >= maxIt) continue;
+            float t = SmoothBuffer[i] * invMax;
+            if (t < 0f) t = 0f; else if (t > 0.9999999f) t = 0.9999999f;
+            hist[(int)(t * bins)]++;
+            totalEscaped++;
+        }
+        if (totalEscaped == 0) return false;
+
+        cdf = new double[bins];
+        long cum = 0;
+        double invTotal = 1.0 / totalEscaped;
+        for (int i = 0; i < bins; i++)
+        {
+            cum += hist[i];
+            cdf[i] = cum * invTotal;
+        }
+        return true;
+    }
+
+    /// <summary>Apply a previously-built CDF to the current buffers. The
+    /// smooth-iter → bin lookup is normalised against
+    /// <paramref name="sourceMaxIter"/> so a locked CDF stays valid across
+    /// frames with different MaxIterations.</summary>
+    public void ApplyHistogramEqualizationWithCdf(
+        double[] cdf, int bins, int sourceMaxIter, double strength)
+    {
+        if (cdf == null || bins <= 0 || sourceMaxIter <= 0) return;
+        if (strength < 0.0) strength = 0.0;
+        if (strength > 1.0) strength = 1.0;
+        int w = Width, h = Height;
+        int maxIt = MaxIterations;
+        if (w == 0 || h == 0 || maxIt <= 0) return;
+
+        ColorMap.MaxIterations = maxIt;
+        float invMax = 1.0f / maxIt;
+        float invMaxSrc = 1.0f / sourceMaxIter;
+        int lastBin = bins - 1;
+        var capturedCdf = cdf;
+        var capturedBins = bins;
+        var capturedStrength = strength;
+
+        Parallel.For(0, h, y =>
+        {
+            int rowBase = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                int idx = rowBase + x;
+                int iters = IterationBuffer[idx];
+                if (iters >= maxIt)
+                {
+                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    continue;
+                }
+                float s = SmoothBuffer[idx];
+                float tLin = s * invMax;
+                if (tLin < 0f) tLin = 0f; else if (tLin > 0.9999999f) tLin = 0.9999999f;
+                float tLookup = s * invMaxSrc;
+                if (tLookup < 0f) tLookup = 0f;
+                else if (tLookup > 0.9999999f) tLookup = 0.9999999f;
+                int b = (int)(tLookup * capturedBins);
+                if (b > lastBin) b = lastBin;
+                double tBlend = tLin + (capturedCdf[b] - tLin) * capturedStrength;
+                float smoothEq = (float)(tBlend * maxIt);
+                // Distance / normal / final-z extras not plumbed through
+                // generated calc — pass zeros and let the colour map's
+                // default fallback handle them.
+                ColorBuffer[idx] = (uint)ColorMap.Map(
+                    smoothEq, 0f, maxIt, 0f, 0f, 0f, 0f, 0f, 0f);
+            }
+        });
     }
 }

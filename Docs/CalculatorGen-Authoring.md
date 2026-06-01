@@ -31,6 +31,15 @@ This document covers all the above plus the new `FractalType
 calculator in the Avalonia toolbar alongside the hand-tuned
 `MandelbrotCalculator`.
 
+**Developers extending the generator itself** — adding new operators,
+new emitters, new precision tiers, new GPU backends — should read
+[CalculatorGen-Architecture.md](CalculatorGen-Architecture.md) for the
+internals: the AST pipeline, emitter contracts, template substitution,
+the deep-zoom path order (perturbation / glitch detection / HP-direct
+fallback), status labels, and debugging tips. This file is for
+*authors* invoking the existing CLI; the architecture file is for
+*modifiers* of CalculatorGen itself.
+
 ## Quick start
 
 From the repo root:
@@ -73,8 +82,16 @@ MandelbrotZ2CalculatorSelfTest — scalar ↔ AVX2 ↔ GPU agreement
   gpu in-set:     cpu=523  gpu=523  diff=0  → PASS
   perturbation:   cpu=523  pt=523  diff=0  → PASS
   bla:            cpu=523  bla=523  diff=0  → PASS
+  qd ref orbit:   in-set=523  out=3573  → PASS
   result:         PASS
 ```
+
+The self-test runs at Zoom = 1, so it does NOT exercise the deep-zoom
+paths (DD/QD per-pixel HP-direct, per-pixel glitch detection). To
+validate those, run the app and zoom past 1e12 — the status bar shows
+the active path (`PT`, `QD-PT`, `DD-HP`, `QD-HP`). See
+[CalculatorGen-Architecture.md §6](CalculatorGen-Architecture.md) for
+the full label scheme.
 
 Select the generated calc in the Avalonia toolbar:
 **Type → "Mandelbrot Z² (Generated)"**.

@@ -67,6 +67,12 @@
     -->
     <ProjectReference Include="..\Server\FracturingFog.Server.csproj" />
     <ProjectReference Include="..\Client\FracturingFog.Client.csproj" />
+    <!--
+      CalculatorGen library — the UserEquation dialog's
+      "Generate via CalcGen" button calls CalculatorGenApi.Generate()
+      to render a calculator from the user's equation source.
+    -->
+    <ProjectReference Include="..\CalculatorGen\CalculatorGen.csproj" />
   </ItemGroup>
 
 </Project>
