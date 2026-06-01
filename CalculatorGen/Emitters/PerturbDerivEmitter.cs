@@ -133,6 +133,62 @@ public sealed class PerturbDerivEmitter : EmitterBase
             $"Math.Atan2({a.Im}, {a.Re})", ImZero: false);
     }
 
+    // Piecewise — appears in derivative trees because dz/dc chain rule
+    // preserves the source's If node: d(If(c, t, e))/dz = If(c, dt/dz,
+    // de/dz). Scope: perturbation loop where z = Z + δ aliases into
+    // (zr, zi); cond compares scalars on those.
+    protected override ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV)
+    {
+        string c = RenderCond(cond);
+        bool bothZero = thenV.ImZero && elseV.ImZero;
+        string re = $"({c} ? ({thenV.Re}) : ({elseV.Re}))";
+        string im = bothZero ? "0.0"
+                  : thenV.ImZero ? $"({c} ? 0.0 : ({elseV.Im}))"
+                  : elseV.ImZero ? $"({c} ? ({thenV.Im}) : 0.0)"
+                  : $"({c} ? ({thenV.Im}) : ({elseV.Im}))";
+        return new ComplexExpr(re, im, bothZero);
+    }
+
+    private string RenderCond(CondNode c) => c switch
+    {
+        Cmp cmp => $"({RenderCondTerm(cmp.Left)} {CmpOpString(cmp.Op)} {RenderCondTerm(cmp.Right)})",
+        _ => throw new InvalidOperationException($"PerturbDerivEmitter: unhandled CondNode {c.GetType().Name}"),
+    };
+
+    private static string CmpOpString(CmpOp op) => op switch
+    {
+        CmpOp.Gt => ">",
+        CmpOp.Lt => "<",
+        CmpOp.Ge => ">=",
+        CmpOp.Le => "<=",
+        CmpOp.Eq => "==",
+        CmpOp.Ne => "!=",
+        _ => throw new InvalidOperationException($"Unknown CmpOp {op}"),
+    };
+
+    private string RenderCondTerm(CondTerm t)
+    {
+        switch (t)
+        {
+            case CondRe r:
+                return Emit(r.Of).Re;
+            case CondIm im:
+                var ev = Emit(im.Of);
+                return ev.ImZero ? "0.0" : ev.Im;
+            case CondAbs2 a:
+                var av = Emit(a.Of);
+                string reSq = $"({av.Re} * {av.Re})";
+                if (av.ImZero) return reSq;
+                return $"({reSq} + {av.Im} * {av.Im})";
+            case CondConst k:
+                string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
+                if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
+                return lit;
+            default:
+                throw new InvalidOperationException($"PerturbDerivEmitter: unhandled CondTerm {t.GetType().Name}");
+        }
+    }
+
     public string EmitDerivBody(AstNode root, string indent)
     {
         var e = Emit(root);

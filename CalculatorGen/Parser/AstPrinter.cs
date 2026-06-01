@@ -28,6 +28,8 @@ public static class AstPrinter
             case DRef:        sb.Append('D'); break;     // shows up in derivative trees only
             case DeltaRef:    sb.Append('δ'); break;     // shows up in perturbation trees only
             case EpsRef:      sb.Append('ε'); break;     // shows up in perturbation trees only
+            case PrevRef:     sb.Append("prev"); break;
+            case IterRef:     sb.Append('n'); break;
             case RealConst k: sb.Append(k.Value.ToString("R", CultureInfo.InvariantCulture)); break;
             case Neg n:
                 Wrap(sb, parentPrec, 2, () => { sb.Append('-'); WriteExpr(sb, n.Operand, 2); });
@@ -65,8 +67,55 @@ public static class AstPrinter
             case Log lg:
                 sb.Append("log("); WriteExpr(sb, lg.Operand, 0); sb.Append(')');
                 break;
+            case If i:
+                Wrap(sb, parentPrec, 0, () =>
+                {
+                    sb.Append("if ");
+                    WriteCond(sb, i.Cond);
+                    sb.Append(" then ");
+                    WriteExpr(sb, i.Then, 0);
+                    sb.Append(" else ");
+                    WriteExpr(sb, i.Else, 0);
+                });
+                break;
             default:
                 throw new InvalidOperationException($"AstPrinter: unhandled {node.GetType().Name}");
+        }
+    }
+
+    private static void WriteCond(StringBuilder sb, CondNode c)
+    {
+        switch (c)
+        {
+            case Cmp cmp:
+                WriteCondTerm(sb, cmp.Left);
+                sb.Append(cmp.Op switch
+                {
+                    CmpOp.Gt => " > ",
+                    CmpOp.Lt => " < ",
+                    CmpOp.Ge => " >= ",
+                    CmpOp.Le => " <= ",
+                    CmpOp.Eq => " == ",
+                    CmpOp.Ne => " != ",
+                    _ => " ?? ",
+                });
+                WriteCondTerm(sb, cmp.Right);
+                break;
+            default:
+                throw new InvalidOperationException($"AstPrinter: unhandled CondNode {c.GetType().Name}");
+        }
+    }
+
+    private static void WriteCondTerm(StringBuilder sb, CondTerm t)
+    {
+        switch (t)
+        {
+            case CondRe r:    sb.Append("re("); WriteExpr(sb, r.Of, 0); sb.Append(')'); break;
+            case CondIm im:   sb.Append("im("); WriteExpr(sb, im.Of, 0); sb.Append(')'); break;
+            case CondAbs2 a:  sb.Append("abs("); WriteExpr(sb, a.Of, 0); sb.Append(')'); break;
+            case CondConst k: sb.Append(k.Value.ToString("R", CultureInfo.InvariantCulture)); break;
+            default:
+                throw new InvalidOperationException($"AstPrinter: unhandled CondTerm {t.GetType().Name}");
         }
     }
 

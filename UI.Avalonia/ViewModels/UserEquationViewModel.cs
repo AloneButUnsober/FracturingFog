@@ -236,10 +236,17 @@ public sealed class UserEquationViewModel : ViewModelBase
     private void OnGenerateViaCalcGen()
     {
         string source = _source ?? string.Empty;
-        // Strip `return ` prefix and trailing `;` so a user pasting the
-        // editor's default "return z*z + c;" works without re-formatting.
-        string equation = Regex.Replace(source.Trim(), @"^\s*return\s+", "");
-        equation = equation.TrimEnd(';').Trim();
+        // Pre-translate C# `Complex.*` syntax → CalcGen DSL. Also strips
+        // `return ` prefix and trailing `;`. Surfaces a crisp error on
+        // unsupported constructs (Complex.ImaginaryOne, new Complex(...),
+        // Complex.Abs) instead of letting them fall through to the
+        // lexer with a vague "Unknown identifier" diagnostic.
+        string equation = EquationPreprocessor.Preprocess(source, out string? preErr);
+        if (preErr != null)
+        {
+            ShowError(preErr);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(equation))
         {
             ShowError("Equation is empty.");
@@ -287,8 +294,14 @@ public sealed class UserEquationViewModel : ViewModelBase
     private void OnHotLoadViaCalcGen()
     {
         string source = _source ?? string.Empty;
-        string equation = Regex.Replace(source.Trim(), @"^\s*return\s+", "");
-        equation = equation.TrimEnd(';').Trim();
+        // Pre-translate C# `Complex.*` syntax → CalcGen DSL. See
+        // OnGenerateViaCalcGen for the translation table + reject list.
+        string equation = EquationPreprocessor.Preprocess(source, out string? preErr);
+        if (preErr != null)
+        {
+            ShowError(preErr);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(equation))
         {
             ShowError("Equation is empty.");

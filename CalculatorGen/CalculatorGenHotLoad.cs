@@ -130,6 +130,17 @@ public static class CalculatorGenHotLoad
 
     private static List<MetadataReference> GatherReferences()
     {
+        // Force-load runtime dependencies the generated calculator imports
+        // unconditionally. Without this, ILGPU is missing from AppDomain
+        // until the host actually exercises the GPU path — which means
+        // Roslyn compile fails on the `using ILGPU;` lines with CS0246.
+        // The assemblies live next to FracturingFogCLD.exe (host project
+        // references the ILGPU NuGet); load by simple name and let the
+        // default probing path find them.
+        TryLoadByName("ILGPU");
+        TryLoadByName("ILGPU.Runtime");          // some versions split the runtime
+        TryLoadByName("ILGPU.Algorithms");       // optional but cheap to attempt
+
         var refs = new List<MetadataReference>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -143,5 +154,16 @@ public static class CalculatorGenHotLoad
             catch { /* best-effort — skip refs we can't materialise */ }
         }
         return refs;
+    }
+
+    private static void TryLoadByName(string simpleName)
+    {
+        // Already loaded? Skip — Assembly.Load throws on duplicate in
+        // some runtimes, and we want this to be cheap on repeat compiles.
+        foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            if (string.Equals(a.GetName().Name, simpleName, StringComparison.OrdinalIgnoreCase))
+                return;
+        try { Assembly.Load(simpleName); }
+        catch { /* optional dependency — generated calc may not actually use it */ }
     }
 }

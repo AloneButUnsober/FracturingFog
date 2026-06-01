@@ -14,7 +14,7 @@
 //                  =  5*z^4*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 18:15:35 UTC
+// Generated: 2026-06-01 23:01:09 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce

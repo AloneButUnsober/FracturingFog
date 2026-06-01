@@ -73,6 +73,9 @@ public static class Program
                              || AstHelpers.Contains<Cos>(root)
                              || AstHelpers.Contains<Exp>(root)
                              || AstHelpers.Contains<Log>(root);
+                bool hasCond = AstHelpers.Contains<If>(root);
+                bool hasPrev = AstHelpers.Contains<PrevRef>(root);
+                bool hasIter = AstHelpers.Contains<IterRef>(root);
                 int saDegree = AstSaDetector.DetectZdPlusC(root);
                 Console.Out.WriteLine($"Equation:    {equation}");
                 Console.Out.WriteLine($"Parsed AST:  {AstPrinter.Print(root)}");
@@ -83,8 +86,11 @@ public static class Program
                 Console.Out.WriteLine($"Has Folded:  {hasFolded}");
                 Console.Out.WriteLine($"Has Div:     {hasDiv}");
                 Console.Out.WriteLine($"Has Trans:   {hasTrans}");
-                Console.Out.WriteLine($"SupportsDe:  {!(hasConj || hasFolded)}");
-                Console.Out.WriteLine($"SupportsPT:  {!(hasConj || hasFolded || hasDiv || hasTrans)}");
+                Console.Out.WriteLine($"Has Cond:    {hasCond}");
+                Console.Out.WriteLine($"Has Prev:    {hasPrev}");
+                Console.Out.WriteLine($"Has Iter:    {hasIter}");
+                Console.Out.WriteLine($"SupportsDe:  {!(hasConj || hasFolded || hasPrev)}");
+                Console.Out.WriteLine($"SupportsPT:  {!(hasConj || hasFolded || hasDiv || hasTrans || hasCond || hasPrev || hasIter)}");
                 Console.Out.WriteLine($"SA degree:   {(saDegree >= 2 ? saDegree.ToString() : "(not z^d+c)")}");
                 var (genPoly, genDeg) = AstSaDetector.DetectPolyInZPlusC(root);
                 if (genPoly != null && saDegree < 2)

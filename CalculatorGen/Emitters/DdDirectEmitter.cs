@@ -29,6 +29,10 @@ public sealed class DdDirectEmitter : EmitterBase
     protected override string CIm => "ci_dd";
     protected override string DRe => throw new InvalidOperationException("DRef unsupported in DD-direct path");
     protected override string DIm => throw new InvalidOperationException("DRef unsupported in DD-direct path");
+    protected override string PrevRe => "pr_dd";
+    protected override string PrevIm => "pi_dd";
+    protected override string IterRe => "iter_dd";
+    protected override string IterImLiteral => "(DD)0.0";
 
     protected override ComplexExpr Const(double v)
     {
@@ -136,6 +140,64 @@ public sealed class DdDirectEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => ScalarComplex(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => ScalarComplex(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => ScalarComplex(a, "log");
+
+    // Piecewise: condition compares DD values via .Hi (high-double).
+    // Sufficient for typical Mandelbrot-style thresholds — the
+    // boundary locus is itself measure-zero, so the low-double
+    // contribution to the comparison rarely matters. Branches are
+    // selected by C# ternary on a DD expression; both branches were
+    // eager-evaluated so any Math.Sin/etc work already ran.
+    protected override ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV)
+    {
+        string c = RenderCond(cond);
+        bool bothZero = thenV.ImZero && elseV.ImZero;
+        string re = $"({c} ? ({thenV.Re}) : ({elseV.Re}))";
+        string im = bothZero ? "0.0"
+                  : thenV.ImZero ? $"({c} ? (DD)0.0 : ({elseV.Im}))"
+                  : elseV.ImZero ? $"({c} ? ({thenV.Im}) : (DD)0.0)"
+                  : $"({c} ? ({thenV.Im}) : ({elseV.Im}))";
+        return new ComplexExpr(re, im, bothZero);
+    }
+
+    private string RenderCond(CondNode c) => c switch
+    {
+        Cmp cmp => $"({RenderCondTerm(cmp.Left)} {CmpOpString(cmp.Op)} {RenderCondTerm(cmp.Right)})",
+        _ => throw new InvalidOperationException($"DdDirectEmitter: unhandled CondNode {c.GetType().Name}"),
+    };
+
+    private static string CmpOpString(CmpOp op) => op switch
+    {
+        CmpOp.Gt => ">",
+        CmpOp.Lt => "<",
+        CmpOp.Ge => ">=",
+        CmpOp.Le => "<=",
+        CmpOp.Eq => "==",
+        CmpOp.Ne => "!=",
+        _ => throw new InvalidOperationException($"Unknown CmpOp {op}"),
+    };
+
+    private string RenderCondTerm(CondTerm t)
+    {
+        switch (t)
+        {
+            case CondRe r:
+                return $"({Emit(r.Of).Re}).Hi";
+            case CondIm im:
+                var ev = Emit(im.Of);
+                return ev.ImZero ? "0.0" : $"({ev.Im}).Hi";
+            case CondAbs2 a:
+                var av = Emit(a.Of);
+                string reSq = $"(({av.Re}).Hi * ({av.Re}).Hi)";
+                if (av.ImZero) return reSq;
+                return $"({reSq} + ({av.Im}).Hi * ({av.Im}).Hi)";
+            case CondConst k:
+                string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
+                if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
+                return lit;
+            default:
+                throw new InvalidOperationException($"DdDirectEmitter: unhandled CondTerm {t.GetType().Name}");
+        }
+    }
 
     public string EmitDdDirectBody(AstNode root, string indent)
     {

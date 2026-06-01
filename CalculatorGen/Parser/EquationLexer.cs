@@ -37,6 +37,20 @@ public enum TokenKind
     Cos,
     Exp,
     Log,
+    If,
+    Then,
+    Else,
+    Re,
+    Im,
+    Abs,
+    Gt,
+    Lt,
+    Ge,
+    Le,
+    EqEq,
+    NotEq,
+    Prev,
+    Iter,
     End,
 }
 
@@ -120,10 +134,28 @@ public static class EquationLexer
                     tokens.Add(new Token(TokenKind.Exp, name, start, startLine, startCol));
                 else if (name.Equals("log", StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.Log, name, start, startLine, startCol));
+                else if (name.Equals("if", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.If, name, start, startLine, startCol));
+                else if (name.Equals("then", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Then, name, start, startLine, startCol));
+                else if (name.Equals("else", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Else, name, start, startLine, startCol));
+                else if (name.Equals("re", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Re, name, start, startLine, startCol));
+                else if (name.Equals("im", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Im, name, start, startLine, startCol));
+                else if (name.Equals("abs", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Abs, name, start, startLine, startCol));
+                else if (name.Equals("prev", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Prev, name, start, startLine, startCol));
+                else if (name.Equals("iter", StringComparison.OrdinalIgnoreCase)
+                      || name.Equals("n",    StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Iter, name, start, startLine, startCol));
                 else
                 {
                     // Suggest the closest valid keyword via Levenshtein-≤2.
-                    string[] keywords = { "z", "c", "conj", "fold", "sqr", "sin", "cos", "exp", "log" };
+                    string[] keywords = { "z", "c", "conj", "fold", "sqr", "sin", "cos", "exp", "log",
+                                          "if", "then", "else", "re", "im", "abs", "prev", "iter", "n" };
                     string? best = null;
                     int bestD = int.MaxValue;
                     foreach (var kw in keywords)
@@ -138,7 +170,8 @@ public static class EquationLexer
                         : $"col {startCol}";
                     throw new FormatException(
                         $"Unknown identifier '{name}' at {where}.{suggestion} " +
-                        "Allowed: z, c, conj, fold, sqr, sin, cos, exp, log.");
+                        "Allowed: z, c, conj, fold, sqr, sin, cos, exp, log, " +
+                        "if, then, else, re, im, abs, prev, iter (or n).");
                 }
                 continue;
             }
@@ -153,6 +186,28 @@ public static class EquationLexer
                 case '^': tokens.Add(new Token(TokenKind.Caret,  "^", i, chLine, chCol)); Bump(ch); i++; continue;
                 case '(': tokens.Add(new Token(TokenKind.LParen, "(", i, chLine, chCol)); Bump(ch); i++; continue;
                 case ')': tokens.Add(new Token(TokenKind.RParen, ")", i, chLine, chCol)); Bump(ch); i++; continue;
+                case '>':
+                    if (i + 1 < source.Length && source[i + 1] == '=')
+                    { tokens.Add(new Token(TokenKind.Ge, ">=", i, chLine, chCol)); Bump(ch); Bump(source[i+1]); i += 2; continue; }
+                    tokens.Add(new Token(TokenKind.Gt, ">", i, chLine, chCol)); Bump(ch); i++; continue;
+                case '<':
+                    if (i + 1 < source.Length && source[i + 1] == '=')
+                    { tokens.Add(new Token(TokenKind.Le, "<=", i, chLine, chCol)); Bump(ch); Bump(source[i+1]); i += 2; continue; }
+                    tokens.Add(new Token(TokenKind.Lt, "<", i, chLine, chCol)); Bump(ch); i++; continue;
+                case '=':
+                    if (i + 1 < source.Length && source[i + 1] == '=')
+                    { tokens.Add(new Token(TokenKind.EqEq, "==", i, chLine, chCol)); Bump(ch); Bump(source[i+1]); i += 2; continue; }
+                    {
+                        string whereEq = chLine > 1 ? $"line {chLine}, col {chCol}" : $"col {chCol}";
+                        throw new FormatException($"Unexpected '=' at {whereEq}. Did you mean '=='?");
+                    }
+                case '!':
+                    if (i + 1 < source.Length && source[i + 1] == '=')
+                    { tokens.Add(new Token(TokenKind.NotEq, "!=", i, chLine, chCol)); Bump(ch); Bump(source[i+1]); i += 2; continue; }
+                    {
+                        string whereBang = chLine > 1 ? $"line {chLine}, col {chCol}" : $"col {chCol}";
+                        throw new FormatException($"Unexpected '!' at {whereBang}. Did you mean '!='?");
+                    }
                 default:
                     string whereCh = chLine > 1
                         ? $"line {chLine}, col {chCol}"

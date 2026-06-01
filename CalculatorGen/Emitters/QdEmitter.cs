@@ -39,6 +39,10 @@ public sealed class QdEmitter : EmitterBase
     protected override string CIm => "CiQd";
     protected override string DRe => throw new InvalidOperationException("DRef unsupported in QD reference orbit");
     protected override string DIm => throw new InvalidOperationException("DRef unsupported in QD reference orbit");
+    protected override string PrevRe => "pr_q";
+    protected override string PrevIm => "pi_q";
+    protected override string IterRe => "iter_q";
+    protected override string IterImLiteral => "(QD)0.0";
 
     protected override ComplexExpr Const(double v)
     {
@@ -153,6 +157,60 @@ public sealed class QdEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => ScalarComplex(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => ScalarComplex(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => ScalarComplex(a, "log");
+
+    // Piecewise — compare on QD .X0 (high limb), select via C# ternary.
+    // Eager-evaluated branches.
+    protected override ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV)
+    {
+        string c = RenderCond(cond);
+        bool bothZero = thenV.ImZero && elseV.ImZero;
+        string re = $"({c} ? ({thenV.Re}) : ({elseV.Re}))";
+        string im = bothZero ? "0.0"
+                  : thenV.ImZero ? $"({c} ? (QD)0.0 : ({elseV.Im}))"
+                  : elseV.ImZero ? $"({c} ? ({thenV.Im}) : (QD)0.0)"
+                  : $"({c} ? ({thenV.Im}) : ({elseV.Im}))";
+        return new ComplexExpr(re, im, bothZero);
+    }
+
+    private string RenderCond(CondNode c) => c switch
+    {
+        Cmp cmp => $"({RenderCondTerm(cmp.Left)} {CmpOpString(cmp.Op)} {RenderCondTerm(cmp.Right)})",
+        _ => throw new InvalidOperationException($"QdEmitter: unhandled CondNode {c.GetType().Name}"),
+    };
+
+    private static string CmpOpString(CmpOp op) => op switch
+    {
+        CmpOp.Gt => ">",
+        CmpOp.Lt => "<",
+        CmpOp.Ge => ">=",
+        CmpOp.Le => "<=",
+        CmpOp.Eq => "==",
+        CmpOp.Ne => "!=",
+        _ => throw new InvalidOperationException($"Unknown CmpOp {op}"),
+    };
+
+    private string RenderCondTerm(CondTerm t)
+    {
+        switch (t)
+        {
+            case CondRe r:
+                return $"({Emit(r.Of).Re}).X0";
+            case CondIm im:
+                var ev = Emit(im.Of);
+                return ev.ImZero ? "0.0" : $"({ev.Im}).X0";
+            case CondAbs2 a:
+                var av = Emit(a.Of);
+                string reSq = $"(({av.Re}).X0 * ({av.Re}).X0)";
+                if (av.ImZero) return reSq;
+                return $"({reSq} + ({av.Im}).X0 * ({av.Im}).X0)";
+            case CondConst k:
+                string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
+                if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
+                return lit;
+            default:
+                throw new InvalidOperationException($"QdEmitter: unhandled CondTerm {t.GetType().Name}");
+        }
+    }
 
     /// <summary>Emit `QD zr_q_new = …; QD zi_q_new = …;`.</summary>
     public string EmitQdBody(AstNode root, string indent)

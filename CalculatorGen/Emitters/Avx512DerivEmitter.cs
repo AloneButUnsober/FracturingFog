@@ -202,6 +202,65 @@ public sealed class Avx512DerivEmitter : EmitterBase
     protected override ComplexExpr OpExp(ComplexExpr a) => EmitPerLaneTranscendental(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => EmitPerLaneTranscendental(a, "log");
 
+    // Piecewise — mask blend across 8 Vector512 lanes via Avx512F.Compare
+    // → Vector512.ConditionalSelect. Both branches eager-evaluated by
+    // EmitterBase; prelude expansion runs unconditionally so every lane
+    // has both values, blend picks one per lane on the mask.
+    protected override ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV)
+    {
+        string mask = EmitMask(cond);
+        string thenIm = thenV.ImZero ? "Vector512<double>.Zero" : thenV.Im;
+        string elseIm = elseV.ImZero ? "Vector512<double>.Zero" : elseV.Im;
+        return Bind(
+            $"Vector512.ConditionalSelect({mask}, {thenV.Re}, {elseV.Re})",
+            $"Vector512.ConditionalSelect({mask}, {thenIm}, {elseIm})");
+    }
+
+    private string EmitMask(CondNode c)
+    {
+        if (c is not Cmp cmp)
+            throw new InvalidOperationException($"Avx512DerivEmitter: unhandled CondNode {c.GetType().Name}");
+        string l = EmitCondTermVec(cmp.Left);
+        string r = EmitCondTermVec(cmp.Right);
+        // Vector512 compare returns Vector512<double> mask (NaN/zero
+        // payload). Ordered → NaN operands compare false (matches C#).
+        string mode = cmp.Op switch
+        {
+            CmpOp.Gt => "FloatComparisonMode.OrderedGreaterThanNonSignaling",
+            CmpOp.Lt => "FloatComparisonMode.OrderedLessThanNonSignaling",
+            CmpOp.Ge => "FloatComparisonMode.OrderedGreaterThanOrEqualNonSignaling",
+            CmpOp.Le => "FloatComparisonMode.OrderedLessThanOrEqualNonSignaling",
+            CmpOp.Eq => "FloatComparisonMode.OrderedEqualNonSignaling",
+            CmpOp.Ne => "FloatComparisonMode.OrderedNotEqualNonSignaling",
+            _ => throw new InvalidOperationException($"Unknown CmpOp {cmp.Op}"),
+        };
+        return NewBoundRe($"Avx512F.Compare({l}, {r}, {mode})");
+    }
+
+    private string EmitCondTermVec(CondTerm t)
+    {
+        switch (t)
+        {
+            case CondRe r:
+                return Emit(r.Of).Re;
+            case CondIm im:
+                var ev = Emit(im.Of);
+                return ev.ImZero ? "Vector512<double>.Zero" : ev.Im;
+            case CondAbs2 a:
+                var av = Emit(a.Of);
+                if (av.ImZero)
+                    return NewBoundRe($"Avx512F.Multiply({av.Re}, {av.Re})");
+                return NewBoundRe(
+                    $"Avx512F.FusedMultiplyAdd({av.Re}, {av.Re}, Avx512F.Multiply({av.Im}, {av.Im}))");
+            case CondConst k:
+                string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
+                if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
+                return NewBoundRe($"Vector512.Create({lit})");
+            default:
+                throw new InvalidOperationException($"Avx512DerivEmitter: unhandled CondTerm {t.GetType().Name}");
+        }
+    }
+
     public string EmitDerivBody(AstNode root)
     {
         var final = Emit(root);

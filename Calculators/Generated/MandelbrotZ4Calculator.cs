@@ -14,7 +14,7 @@
 //                  =  4*z^3*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 18:15:20 UTC
+// Generated: 2026-06-01 23:01:08 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
