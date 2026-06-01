@@ -145,6 +145,71 @@ flips priority.
 
 ### Completed
 
+- [x] **Iteration index (`n` / `iter`) keyword** — user-equation
+      bug: legacy C# `Step(Complex z, Complex c, int n)` signature uses
+      `n` for iter count; pasting `z*z + c + 0.001*n` into Compile &
+      Load hit CalcGen lexer with "Unknown identifier 'n'". Added
+      `IterRef` AST node (real-valued scalar leaf), `iter` keyword
+      with `n` as alias (both lex to TokenKind.Iter → IterRef).
+      Differentiator: `IterRef → 0` (opaque, like PrevRef/DeltaRef).
+      SaDetector rejects. CalculatorGenApi: `hasIter` flag gates
+      `supportsPerturbation = false` (δ-Taylor can't linearise iter-
+      dependent step — δ doesn't change n across ref orbit vs pixel);
+      `supportsDe` stays true (iter is real scalar, no holomorphic
+      chain participation). EmitterBase: new `IterRe` virtual binding
+      plus `IterImLiteral` for the zero literal in each emitter's
+      complex type ("0.0" / "Vector256<double>.Zero" / "(DD)0.0" /
+      "(QD)0.0"); dispatcher routes IterRef → (IterRe, IterImLiteral)
+      with ImZero=true so downstream Add/Mul elide dead-zero terms.
+      Per-emitter binding: ScalarEmitter `iter`; Avx2Emitter `iter_v`
+      (Vector256<double> broadcast); QdEmitter / QdDirectEmitter
+      `iter_q` (QD); DdDirectEmitter `iter_dd` (DD). Template:
+      `{{ITER_DECL_*}}` substitution pairs injected at every loop body
+      site (8 sites: scalar fast × 3 incl GPU kernel, AVX2 × 2, QD
+      ref orbit, scalar ref orbit, DD/QD direct + continue) — pulls
+      from whatever loop counter is in scope (`it` or `n`) and casts
+      to the per-emitter complex type. Empty when !hasIter so non-iter
+      calcs generate byte-identical bodies. Tests: 90/90 PASS (5 new
+      — both keyword forms, flag, diff, SA reject). All 6 stock
+      calcs regenerate identically; `--gentest MandelbrotZ2` 0-diff.
+      Sample equation `z*z + c + 0.001*n` produces clean bodies:
+      scalar `double iter = (double)it; ... (0.001 * iter)`; AVX2
+      `Vector256<double> iter_v = Vector256.Create((double)n); ...
+      Avx.Multiply(z_re5, iter_v)`; QD `QD iter_q = (QD)(double)n;
+      ... (0.001 * iter_q)`.
+- [x] **Hot-load ILGPU ref + C# Complex preprocessor** — two UserEquation
+      Compile-&-Load fixes landed together:
+        1. `CalculatorGenHotLoad.GatherReferences()` walks AppDomain
+           assemblies for Roslyn refs. ILGPU loads lazily (only on first
+           GPU render attempt) — if user clicks Compile & Load before
+           GPU runs, ILGPU is absent → generated `using ILGPU;` fails
+           with CS0246. Fix: `TryLoadByName("ILGPU")` +
+           `"ILGPU.Runtime"` + `"ILGPU.Algorithms"` before
+           GatherReferences. Assembly probing path finds DLLs alongside
+           host EXE.
+        2. UserEquation textbox historically held C# `Complex.*`
+           expressions (legacy `UserEquationCalculator` Roslyn-compiles
+           them); CalcGen DSL is a restricted grammar (z, c, sin, cos,
+           exp, log, +, -, *, /, ^Int, sqr, conj, fold, if/then/else,
+           prev, abs). Same textbox, two grammars → CalcGen lexer
+           rejected `Complex` as unknown identifier. New
+           `EquationPreprocessor.Preprocess(string, out string?)` in
+           CalculatorGen project translates:
+             return X; → X      Complex.Zero → 0    Complex.One → 1
+             Complex.Sin/Cos/Exp/Log/Conjugate(x) → sin/cos/exp/log/conj(x)
+             Complex.Pow(x, k_int) → x^k (k>=2), x (k==1), 1 (k==0),
+                                     1/x^|k| (k<0)
+             Complex.Pow(x, expr)  → exp(expr*log(x))
+           Hard-rejects `Complex.ImaginaryOne`, `new Complex(a, b)`,
+           `Complex.Abs(x)` (DSL `abs` is squared-mag, not sqrt) with
+           crisp error messages. Unknown `Complex.X` flagged with full
+           supported list. Fixed-point loop handles nested calls
+           (`Complex.Pow(Complex.Pow(z, 2), 3)`). Wired into both
+           `OnHotLoadViaCalcGen` and `OnGenerateViaCalcGen` in
+           `UserEquationViewModel`. Tests: 85/85 PASS (17 new
+           preprocessor tests covering all translations + reject paths
+           + the user's actual reported equation
+           `return z * Complex.Pow(z,-3) + c * Complex.Pow(c,-2);`).
 - [x] **1.** `--analyze` flag — `Program.cs` in CalculatorGen.
 - [x] **2.** Better parse errors — line/col positions, "expected X, got Y"
       friendly token names in `Describe()`, Levenshtein keyword suggestion.
@@ -243,6 +308,89 @@ flips priority.
       orbit isn't). Self-test PASS 36/36, `--gentest MandelbrotZ2` 0
       diff. Note: tested as potential fix for task #14 detail gap —
       ineffective; gap roots elsewhere.
+- [x] **16.** Phoenix / multi-var two-step recurrence — new `PrevRef`
+      AST node referencing z_{n-1}. Lexer keyword `prev` (Levenshtein
+      suggestion list updated; `prv → prev` test). Parser atom case.
+      Differentiator treats `prev` as opaque (∂prev/∂z = 0) — produces
+      a WRONG dz/dc for Phoenix equations, but the value is never
+      consumed because `hasPrev` gates `supportsDe = false` in
+      `CalculatorGenApi` (proper Phoenix DE needs a parallel
+      `dprev/dc` derivative-state vector updated as `dprev := dz` each
+      iter — deferred). `supportsPerturbation` also gated off: Taylor
+      δ-expansion needs a δ_prev companion to δ_z, also deferred.
+      Printer prints `prev`. SaDetector + IsPureZPolynomial reject.
+      EmitterBase: new abstract `PrevRe`/`PrevIm` bindings (default
+      throw) + `Emit` dispatcher case routes PrevRef to them.
+      Per-emitter bindings:
+        - ScalarEmitter: `pr`/`pi`
+        - Avx2Emitter: `pr`/`pi` (Vector256<double>)
+        - QdEmitter: `pr_q`/`pi_q`
+        - DdDirectEmitter: `pr_dd`/`pi_dd`
+        - QdDirectEmitter: `pr_q`/`pi_q`
+      Template carries state via new `{{PREV_DECL_*}}` / `{{PREV_UPDATE_*}}`
+      substitution pairs — empty strings when `hasPrev=false` so non-
+      Phoenix calcs generate byte-identical bodies vs pre-Item-16. Per
+      iter, update sequence is `compute z_new from (zr, zi, pr, pi); pr
+      := zr; pi := zi; zr := zr_new; zi := zi_new` — must save old
+      `(zr, zi)` to `(pr, pi)` BEFORE the new-z commit. AVX2 prev
+      update is masked by `activeMaskL` (BlendVariable) so escaped
+      lanes keep their pre-escape prev. Wired into every loop that
+      uses `{{SCALAR_Z_BODY}}` or `{{AVX2_Z_BODY}}` or `{{QD_Z_BODY}}`
+      or `{{QD_DIRECT_BODY}}` / `{{DD_DIRECT_BODY}}` — scalar fast
+      path (3 variants: IteratePixelScalar, IteratePixelScalarRaw, GPU
+      kernel), AVX2 lane (2 variants), DD direct, QD direct, QD
+      continue, QD ref orbit, scalar ref orbit. Generated Phoenix
+      stock calc: `z*z + c + 0.5*prev` → `MandelbrotPhoenixCalculator`.
+      Compiles, runs, no DE / no perturbation (HpDirect path active
+      for any zoom > QdDirectZoomThreshold; otherwise scalar/AVX2
+      double-only). Tests: 68/68 PASS (5 new — round-trip, flag, diff,
+      SA, lexer suggestion). All 6 prior stock calcs regenerated;
+      `--gentest MandelbrotZ2` 0-diff (substitutions empty on
+      non-Phoenix calcs so byte-identical output).
+- [x] **15.** Conditional / piecewise equations — `if cond then a else
+      b` grammar. AST: new `If(Cond, Then, Else)` node (complex-valued)
+      plus a separate `CondNode` / `CondTerm` mini-hierarchy used only
+      inside conditions (`Cmp(op, l, r)`, `CondRe`, `CondIm`, `CondAbs2`,
+      `CondConst`). Keeping cond terms in a separate type means the
+      differentiator never has to differentiate non-holomorphic
+      Re/Im/Abs2 nodes — they live exclusively on the boolean side.
+      Lexer: `if`/`then`/`else`/`re`/`im`/`abs` keywords; `>`, `<`, `>=`,
+      `<=`, `==`, `!=` operators with `=` and `!` alone rejected with
+      hints to `==` / `!=`. Parser: `if` consumed at `ParseExpr` top so
+      it binds loosest (whole then/else branches greedy); `re(...)` /
+      `im(...)` extract scalars, `abs(...)` is sugar for |x|² (squared
+      magnitude — saves the sqrt and matches typical bailout-style
+      thresholds users think in). Differentiator: `d(If(c,t,e))/dz =
+      If(c, dt/dz, de/dz)` — branches differentiate independently, cond
+      stays untouched. Simplifier + printer + AstHelpers.Contains<T>
+      recurse into branches and through CondTerms' embedded AstNodes.
+      AstSaDetector + IsPureZPolynomial reject (piecewise is
+      non-polynomial). CalculatorGenApi: new `hasCond` flag drives
+      `supportsPerturbation = !(hasConj || hasFolded || hasDiv ||
+      hasTrans || hasCond)`; `supportsDe` stays true (each branch is
+      holomorphic on its own — the boundary locus is the only
+      discontinuity and is measure-zero). Emitters: eager-evaluate
+      both branches (matches SIMD lane semantics — every lane evaluates
+      every branch), select on the rendered cond at the end.
+        - **Scalar / Dd*Direct / Qd* / PerturbDeriv**: C# ternary on a
+          rendered cond expression. DD/QD compare via `.Hi` / `.X0`
+          high-limb access (sufficient for the threshold use cases —
+          the low limbs only matter on a measure-zero locus).
+        - **Avx2Emitter**: `Avx.Compare(left, right, FloatComparisonMode
+          .Ordered{Gt,Lt,Ge,Le,Eq,Ne}NonSignaling)` → Vector256<double>
+          mask → `Vector256.ConditionalSelect(mask, then, else)`.
+          Ordered chosen so NaN operands compare false (matches C#).
+        - **Avx512DerivEmitter**: same approach, 8 Vector512 lanes,
+          `Avx512F.Compare` + `Vector512.ConditionalSelect`.
+      Generation pipeline first attempt revealed PerturbDerivEmitter and
+      QdEmitter also see `If` (PerturbDeriv via dz/dc chain even when
+      perturbation is disabled, Qd because the QD reference orbit always
+      runs the source equation); both gained `OpIf` accordingly. Tests:
+      63/63 PASS (9 new — round-trip × 4, diff × 1, SA × 1, flag × 1,
+      lexer × 2). All 6 stock calcs regenerated; `--gentest MandelbrotZ2`
+      0-diff. Sample equation `if abs(z) > 4 then z else z*z + c`
+      generates clean bodies in every path; `if re(z) > 0 then z*z + c
+      else z*z*z + c` produces correct branched derivatives end-to-end.
 - [x] **14.** Trig + transcendental ops — `Sin`, `Cos`, `Exp`, `Log`
       AST nodes. Lexer keywords + parser atoms. Differentiator chain
       rules: d/dz sin(u)=cos(u)·u', cos→-sin·u', exp→exp(u)·u',

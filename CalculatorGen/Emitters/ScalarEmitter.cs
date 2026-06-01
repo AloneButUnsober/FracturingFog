@@ -33,6 +33,9 @@ public sealed class ScalarEmitter : EmitterBase
     protected override string CIm => "ci";
     protected override string DRe => "dr";
     protected override string DIm => "di";
+    protected override string PrevRe => "pr";
+    protected override string PrevIm => "pi";
+    protected override string IterRe => "iter";
 
     protected override ComplexExpr Const(double v)
     {
@@ -166,6 +169,64 @@ public sealed class ScalarEmitter : EmitterBase
             $"(0.5 * Math.Log({a.Re} * {a.Re} + {a.Im} * {a.Im}))",
             $"Math.Atan2({a.Im}, {a.Re})",
             ImZero: false);
+    }
+
+    // Piecewise selection — scalar C# ternary on the rendered cond
+    // expression. Both branches were eager-evaluated by EmitterBase so
+    // any Sin/Cos/etc work has been folded into the ComplexExpr inline
+    // strings; the runtime ternary picks one. ImZero requires BOTH
+    // branches to be ImZero — otherwise the imaginary part might be
+    // non-zero on the unselected branch.
+    protected override ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV)
+    {
+        string c = RenderCond(cond);
+        string re = $"({c} ? {thenV.Re} : {elseV.Re})";
+        bool bothZero = thenV.ImZero && elseV.ImZero;
+        string im = bothZero ? "0.0"
+                  : thenV.ImZero ? $"({c} ? 0.0 : {elseV.Im})"
+                  : elseV.ImZero ? $"({c} ? {thenV.Im} : 0.0)"
+                  : $"({c} ? {thenV.Im} : {elseV.Im})";
+        return new ComplexExpr(re, im, bothZero);
+    }
+
+    private string RenderCond(CondNode c) => c switch
+    {
+        Cmp cmp => $"({RenderCondTerm(cmp.Left)} {CmpOpString(cmp.Op)} {RenderCondTerm(cmp.Right)})",
+        _ => throw new InvalidOperationException($"ScalarEmitter: unhandled CondNode {c.GetType().Name}"),
+    };
+
+    private static string CmpOpString(CmpOp op) => op switch
+    {
+        CmpOp.Gt => ">",
+        CmpOp.Lt => "<",
+        CmpOp.Ge => ">=",
+        CmpOp.Le => "<=",
+        CmpOp.Eq => "==",
+        CmpOp.Ne => "!=",
+        _ => throw new InvalidOperationException($"Unknown CmpOp {op}"),
+    };
+
+    private string RenderCondTerm(CondTerm t)
+    {
+        switch (t)
+        {
+            case CondRe r:
+                return Emit(r.Of).Re;
+            case CondIm im:
+                var ev = Emit(im.Of);
+                return ev.ImZero ? "0.0" : ev.Im;
+            case CondAbs2 a:
+                var av = Emit(a.Of);
+                string reSq = $"({av.Re} * {av.Re})";
+                if (av.ImZero) return reSq;
+                return $"({reSq} + {av.Im} * {av.Im})";
+            case CondConst k:
+                string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
+                if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
+                return lit;
+            default:
+                throw new InvalidOperationException($"ScalarEmitter: unhandled CondTerm {t.GetType().Name}");
+        }
     }
 
     /// <summary>Render `double <prefix>r_new = …; double <prefix>i_new = …;`.</summary>

@@ -89,6 +89,9 @@ public static class AstSaDetector
             case Cos:
             case Exp:
             case Log:
+            case If:
+            case PrevRef:
+            case IterRef:
                 return false;
             case Neg ng:
                 return IsPureZPolynomial(ng.Operand, out degree);

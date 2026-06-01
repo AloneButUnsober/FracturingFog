@@ -49,6 +49,12 @@ public static class AstSimplifier
         Cos c2  => new Cos(Simplify(c2.Operand)),
         Exp ex  => new Exp(Simplify(ex.Operand)),
         Log lg  => new Log(Simplify(lg.Operand)),
+        // Recurse into both branches; cond is left untouched since
+        // CondTerm operands are AstNodes and could carry sub-trees we
+        // could in theory simplify, but the emitter handles unsimplified
+        // cond trees fine and skipping it keeps the simplifier from
+        // having to mirror the entire grammar inside CondNode/CondTerm.
+        If i    => new If(i.Cond, Simplify(i.Then), Simplify(i.Else)),
         _ => node,
     };
 

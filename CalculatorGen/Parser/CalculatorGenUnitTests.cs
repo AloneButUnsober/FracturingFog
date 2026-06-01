@@ -182,6 +182,124 @@ public static class CalculatorGenUnitTests
             () => TryParseError("sine(z) + c", out var msg)
                   && msg.Contains("Did you mean 'sin'?"));
 
+        // ── conditional / piecewise ───────────────────────────────────
+        Check("parser: if re(z)>0 then z*z+c else z*z*z+c round-trips",
+            () => PrintSimplified("if re(z) > 0 then z*z + c else z*z*z + c")
+                == "if re(z) > 0 then z*z + c else z*z*z + c");
+        Check("parser: if abs(z)>4 supports abs (squared mag)",
+            () => PrintSimplified("if abs(z) > 4 then z else z*z + c")
+                == "if abs(z) > 4 then z else z*z + c");
+        Check("parser: if im(z) <= 0 then ... else",
+            () => PrintSimplified("if im(z) <= 0 then z + c else z*z + c")
+                == "if im(z) <= 0 then z + c else z*z + c");
+        Check("parser: all six cmp ops accepted",
+            () =>
+            {
+                foreach (var op in new[] { ">", "<", ">=", "<=", "==", "!=" })
+                    EquationParser.Parse($"if re(z) {op} 0 then z else c");
+                return true;
+            });
+        Check("diff: if-branches differentiate independently",
+            () =>
+            {
+                var dz = DpDzOf("if re(z) > 0 then z*z + c else z*z*z + c");
+                // ∂(z*z+c)/∂z = z+z; ∂(z*z*z+c)/∂z = (z+z)*z + z*z
+                return dz.Contains("if re(z) > 0 then z + z else")
+                    && dz.Contains("(z + z)*z + z*z");
+            });
+        Check("flags: If detected via Contains<If>",
+            () => AstHelpers.Contains<If>(
+                EquationParser.Parse("if re(z) > 0 then z*z + c else c")));
+        Check("SA: if-branches → 0 (piecewise rejected)",
+            () => AstSaDetector.DetectZdPlusC(
+                EquationParser.Parse("if re(z) > 0 then z*z + c else z*z*z + c")) == 0
+               && AstSaDetector.DetectPolyInZPlusC(
+                    EquationParser.Parse("if re(z) > 0 then z*z + c else z*z*z + c")).polyZ == null);
+        Check("lexer: '=' alone errors with '==' hint",
+            () => TryParseError("if re(z) = 0 then z else c", out var msg)
+                  && msg.Contains("'=='"));
+        Check("lexer: '!' alone errors with '!=' hint",
+            () => TryParseError("if re(z) ! 0 then z else c", out var msg)
+                  && msg.Contains("'!='"));
+
+        // ── Phoenix prev ──────────────────────────────────────────────
+        Check("parser: z*z + c + 0.5*prev round-trips",
+            () => PrintSimplified("z*z + c + 0.5*prev") == "z*z + c + 0.5*prev");
+        Check("flags: PrevRef detected via Contains<PrevRef>",
+            () => AstHelpers.Contains<PrevRef>(
+                EquationParser.Parse("z*z + c + 0.3*prev")));
+        Check("diff: prev opaque — ∂(z*z+0.5*prev)/∂z = z+z",
+            () => DpDzOf("z*z + 0.5*prev + c") == "z + z");
+        Check("SA: z*z + 0.5*prev + c → 0 (Phoenix rejected)",
+            () => AstSaDetector.DetectZdPlusC(
+                EquationParser.Parse("z*z + 0.5*prev + c")) == 0
+               && AstSaDetector.DetectPolyInZPlusC(
+                    EquationParser.Parse("z*z + 0.5*prev + c")).polyZ == null);
+        Check("lexer: 'prv' suggests 'prev'",
+            () => TryParseError("z*z + prv + c", out var msg)
+                  && msg.Contains("Did you mean 'prev'?"));
+
+        // ── EquationPreprocessor: C# Complex.* → DSL ──────────────────
+        string Pre(string src) => EquationPreprocessor.Preprocess(src, out _);
+        bool PreErr(string src, string contains)
+        {
+            EquationPreprocessor.Preprocess(src, out string? err);
+            return err != null && err.Contains(contains);
+        }
+
+        Check("preproc: strips 'return' + trailing ';'",
+            () => Pre("return z * z + c;") == "z * z + c");
+        Check("preproc: Complex.Pow(z, 2) → z^2",
+            () => Pre("Complex.Pow(z, 2)") == "(z)^2");
+        Check("preproc: Complex.Pow(z, -3) → 1/z^3",
+            () => Pre("Complex.Pow(z, -3)") == "(1/(z)^3)");
+        Check("preproc: Complex.Pow(z, 1) collapses to z",
+            () => Pre("Complex.Pow(z, 1)") == "(z)");
+        Check("preproc: Complex.Pow(z, 0) → 1",
+            () => Pre("Complex.Pow(z, 0)") == "1");
+        Check("preproc: Complex.Sin(z) → sin(z)",
+            () => Pre("Complex.Sin(z)") == "sin(z)");
+        Check("preproc: Complex.Cos(z*z + c) → cos(z*z + c)",
+            () => Pre("Complex.Cos(z*z + c)") == "cos(z*z + c)");
+        Check("preproc: Complex.Exp + Complex.Log + Complex.Conjugate",
+            () => Pre("Complex.Exp(z) + Complex.Log(c) + Complex.Conjugate(z)")
+                == "exp(z) + log(c) + conj(z)");
+        Check("preproc: Complex.Zero / Complex.One literals",
+            () => Pre("z + Complex.Zero + Complex.One*c") == "z + 0 + 1*c");
+        Check("preproc: nested Pow translates outer-first",
+            () => Pre("Complex.Pow(Complex.Pow(z, 2), 3)") == "((z)^2)^3");
+        Check("preproc: user's actual reported equation translates",
+            () => Pre("return z * Complex.Pow(z,-3) + c * Complex.Pow(c,-2);")
+                == "z * (1/(z)^3) + c * (1/(c)^2)");
+        Check("preproc: Complex.Pow with non-int exponent → exp/log",
+            () => Pre("Complex.Pow(z, c)") == "exp((c)*log(z))");
+
+        // Reject paths
+        Check("preproc: rejects Complex.ImaginaryOne",
+            () => PreErr("z + Complex.ImaginaryOne", "ImaginaryOne"));
+        Check("preproc: rejects new Complex(a, b)",
+            () => PreErr("z + new Complex(0.1, 0.2)", "no 'i' literal"));
+        Check("preproc: rejects Complex.Abs",
+            () => PreErr("Complex.Abs(z) + c", "abs(x)"));
+        Check("preproc: rejects unknown Complex member",
+            () => PreErr("Complex.Sinh(z) + c", "Complex.Sinh"));
+        Check("preproc: leaves DSL syntax untouched",
+            () => Pre("sin(z) + c") == "sin(z) + c");
+
+        // ── IterRef (n / iter keyword) ────────────────────────────────
+        Check("parser: 'n' lexes as iter keyword",
+            () => PrintSimplified("z*z + c + 0.001*n") == "z*z + c + 0.001*n");
+        Check("parser: 'iter' lexes as iter keyword",
+            () => PrintSimplified("z*z + c + 0.001*iter") == "z*z + c + 0.001*n");
+        Check("flags: IterRef detected",
+            () => AstHelpers.Contains<IterRef>(
+                EquationParser.Parse("z*z + c + 0.001*n")));
+        Check("diff: ∂(z*z+0.001*n)/∂z = z+z (n opaque)",
+            () => DpDzOf("z*z + 0.001*n + c") == "z + z");
+        Check("SA: iter-dependent → 0 (rejected)",
+            () => AstSaDetector.DetectZdPlusC(
+                EquationParser.Parse("z*z + c + 0.001*n")) == 0);
+
         // ── feature detection ────────────────────────────────────────
         Check("flags: conj(c) → hasConj true",
             () => AstHelpers.Contains<Conj>(EquationParser.Parse("z*z + conj(c)")));

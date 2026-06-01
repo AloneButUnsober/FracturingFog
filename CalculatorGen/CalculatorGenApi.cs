@@ -90,8 +90,24 @@ public static class CalculatorGenApi
                       || AstHelpers.Contains<Cos>(root)
                       || AstHelpers.Contains<Exp>(root)
                       || AstHelpers.Contains<Log>(root);
-        bool supportsDe = !(hasConj || hasFolded);
-        bool supportsPerturbation = !(hasConj || hasFolded || hasDiv || hasTrans);
+        // Conditional / piecewise (If): branches are individually
+        // holomorphic so DE survives inside each side (a discontinuity
+        // along the boundary locus is the only cost), but the δ-Taylor
+        // expansion has no closed form across the branch — perturbation
+        // / BLA / SA all stay off.
+        bool hasCond  = AstHelpers.Contains<If>(root);
+        // Phoenix prev (z_{n-1}): differentiator treats prev as opaque so
+        // ∂step/∂z misses the prev coupling — distance estimate would be
+        // wrong. Perturbation Taylor expansion would need a parallel δ
+        // companion for prev. Both deferred — gate off when present.
+        bool hasPrev  = AstHelpers.Contains<PrevRef>(root);
+        // Iteration index `n`/`iter`: real scalar, differentiator returns
+        // 0 → no impact on DE chain. But δ-Taylor doesn't change n
+        // across ref orbit vs pixel → perturbation can't linearise an
+        // iter-dependent step. Gate perturbation off; keep DE on.
+        bool hasIter  = AstHelpers.Contains<IterRef>(root);
+        bool supportsDe = !(hasConj || hasFolded || hasPrev);
+        bool supportsPerturbation = !(hasConj || hasFolded || hasDiv || hasTrans || hasCond || hasPrev || hasIter);
 
         string perturbBody, perturbDdBody, perturbAvx512Body,
                perturbDerivBody, perturbDerivAvx512Body;
@@ -194,6 +210,67 @@ public static class CalculatorGenApi
             .Replace("{{SA_RECURRENCE_BODY}}", saRecurrenceBody)
             .Replace("{{SUPPORTS_PERTURBATION}}", supportsPerturbation ? "true" : "false")
             .Replace("{{SUPPORTS_DE}}", supportsDe ? "true" : "false")
+            .Replace("{{HAS_PREV}}", hasPrev ? "true" : "false")
+            // Phoenix prev-state injection. When `prev` appears in the
+            // equation, scalar and AVX2 loops carry an extra (pr, pi)
+            // state vector initialised to zero and assigned from the
+            // pre-step (zr, zi) before each new-z commit. When prev
+            // isn't used, every substitution below is empty so the
+            // generated body matches the non-Phoenix layout byte-for-
+            // byte (no perf cost on the common path). For QD/DD direct
+            // the extra state lives in (pr_q, pi_q) / (pr_dd, pi_dd).
+            .Replace("{{PREV_DECL_SCALAR}}", hasPrev
+                ? "        double pr = 0.0, pi = 0.0;\n" : "")
+            .Replace("{{PREV_UPDATE_SCALAR}}", hasPrev
+                ? "            pr = zr; pi = zi;\n" : "")
+            .Replace("{{PREV_DECL_AVX2}}", hasPrev
+                ? "        Vector256<double> pr = Vector256<double>.Zero;\n" +
+                  "        Vector256<double> pi = Vector256<double>.Zero;\n"
+                : "")
+            // AVX2 prev update must respect the per-lane active mask so
+            // escaped lanes keep their pre-escape prev (matches the
+            // BlendVariable freeze applied to zr/zi on the next line).
+            .Replace("{{PREV_UPDATE_AVX2}}", hasPrev
+                ? "            pr = Avx.BlendVariable(pr, zr, keepD);\n" +
+                  "            pi = Avx.BlendVariable(pi, zi, keepD);\n"
+                : "")
+            .Replace("{{PREV_UPDATE_AVX2_RAW}}", hasPrev
+                ? "            pr = Avx.BlendVariable(pr, zr, activeMaskL.AsDouble());\n" +
+                  "            pi = Avx.BlendVariable(pi, zi, activeMaskL.AsDouble());\n"
+                : "")
+            .Replace("{{PREV_DECL_DD_DIRECT}}", hasPrev
+                ? "        DD pr_dd = DD.Zero, pi_dd = DD.Zero;\n" : "")
+            .Replace("{{PREV_UPDATE_DD_DIRECT}}", hasPrev
+                ? "            pr_dd = zr_dd; pi_dd = zi_dd;\n" : "")
+            .Replace("{{PREV_DECL_QD_DIRECT}}", hasPrev
+                ? "        QD pr_q = QD.Zero, pi_q = QD.Zero;\n" : "")
+            .Replace("{{PREV_UPDATE_QD_DIRECT}}", hasPrev
+                ? "            pr_q = zr_q; pi_q = zi_q;\n" : "")
+            .Replace("{{PREV_DECL_QD_REF}}", hasPrev
+                ? "            QD pr_q = QD.Zero, pi_q = QD.Zero;\n" : "")
+            .Replace("{{PREV_UPDATE_QD_REF}}", hasPrev
+                ? "                    pr_q = zr_q; pi_q = zi_q;\n" : "")
+            .Replace("{{PREV_DECL_SCALAR_REF}}", hasPrev
+                ? "            double pr = 0.0, pi = 0.0;\n" : "")
+            .Replace("{{PREV_UPDATE_SCALAR_REF}}", hasPrev
+                ? "                pr = zr; pi = zi;\n" : "")
+            // Iteration-index injection. Pulled from whatever loop
+            // counter is in scope at each site (`it` in scalar/HpDirect
+            // loops, `n` in AVX2 lane + QD/scalar ref orbit). Per-emitter
+            // IterRe binding resolves to the locally-injected name.
+            // Empty when !hasIter so non-iter calcs are byte-identical.
+            .Replace("{{ITER_DECL_SCALAR}}", hasIter
+                ? "            double iter = (double)it;\n" : "")
+            .Replace("{{ITER_DECL_AVX2}}", hasIter
+                ? "            Vector256<double> iter_v = Vector256.Create((double)n);\n" : "")
+            .Replace("{{ITER_DECL_SCALAR_REF}}", hasIter
+                ? "                double iter = (double)n;\n" : "")
+            .Replace("{{ITER_DECL_QD_REF}}", hasIter
+                ? "                    QD iter_q = (QD)(double)n;\n" : "")
+            .Replace("{{ITER_DECL_DD_DIRECT}}", hasIter
+                ? "            DD iter_dd = (DD)(double)it;\n" : "")
+            .Replace("{{ITER_DECL_QD_DIRECT}}", hasIter
+                ? "            QD iter_q = (QD)(double)it;\n" : "")
             .Replace("{{BAILOUT_RADIUS_SQ}}",
                 (bailoutRadius * bailoutRadius).ToString("R", System.Globalization.CultureInfo.InvariantCulture));
 

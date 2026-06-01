@@ -48,6 +48,28 @@ public abstract class EmitterBase
     protected virtual string EpsRe   => throw new InvalidOperationException("EpsRef not bound in this emitter");
     protected virtual string EpsIm   => throw new InvalidOperationException("EpsRef not bound in this emitter");
 
+    /// <summary>Bindings for the Phoenix previous-iterate (z_{n-1})
+    /// register. The surrounding template declares (pr, pi) initialised
+    /// to zero and reassigns `pr := zr; pi := zi` BEFORE applying the
+    /// new-z assignment so the emitted step reads pre-step prev.
+    /// Perturbation emitters don't see PrevRef (SupportsPerturbation=
+    /// false when prev is present); they keep the default throw.</summary>
+    protected virtual string PrevRe => throw new InvalidOperationException("PrevRef not bound in this emitter");
+    protected virtual string PrevIm => throw new InvalidOperationException("PrevRef not bound in this emitter");
+
+    /// <summary>Binding for the loop iteration index (real scalar). The
+    /// surrounding template injects a per-loop `iter` / `iter_v` /
+    /// `iter_q` / `iter_dd` local pulled from whichever loop-counter
+    /// variable is in scope at that site. Perturbation emitters
+    /// don't see IterRef (SupportsPerturbation=false when iter is
+    /// present); they keep the default throw.</summary>
+    protected virtual string IterRe => throw new InvalidOperationException("IterRef not bound in this emitter");
+
+    /// <summary>Zero literal in the emitter's complex type — used for the
+    /// IterRef Im part (which is always 0). Scalar: "0.0"; AVX2:
+    /// "Vector256&lt;double&gt;.Zero"; DD/QD: "(DD)0.0" / "(QD)0.0".</summary>
+    protected virtual string IterImLiteral => "0.0";
+
     /// <summary>Emit a real-valued constant as a complex (k, 0). Must
     /// return <c>ImZero = true</c>.</summary>
     protected abstract ComplexExpr Const(double value);
@@ -86,6 +108,14 @@ public abstract class EmitterBase
     protected virtual ComplexExpr OpLog(ComplexExpr a) =>
         throw new InvalidOperationException("OpLog not implemented in this emitter");
 
+    /// <summary>Piecewise selection: given a boolean expression and two
+    /// pre-evaluated complex branches, return the selected complex value.
+    /// Subclasses choose the strategy — scalar uses a C# ternary on the
+    /// rendered cond expression, SIMD targets produce a mask vector and
+    /// blend the two branches per lane.</summary>
+    protected virtual ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV) =>
+        throw new InvalidOperationException("OpIf not implemented in this emitter");
+
     public ComplexExpr Emit(AstNode node) => node switch
     {
         ZRef        => new ComplexExpr(ZRe,     ZIm,     ImZero: false),
@@ -93,6 +123,10 @@ public abstract class EmitterBase
         DRef        => new ComplexExpr(DRe,     DIm,     ImZero: false),
         DeltaRef    => new ComplexExpr(DeltaRe, DeltaIm, ImZero: false),
         EpsRef      => new ComplexExpr(EpsRe,   EpsIm,   ImZero: false),
+        PrevRef     => new ComplexExpr(PrevRe,  PrevIm,  ImZero: false),
+        // IterRef is real-valued — ImZero=true lets downstream Add/Mul
+        // elide dead-zero terms exactly like RealConst inputs do.
+        IterRef     => new ComplexExpr(IterRe,  IterImLiteral, ImZero: true),
         RealConst k => Const(k.Value),
         Neg n       => OpNeg(Emit(n.Operand)),
         Add a       => OpAdd(Emit(a.Left), Emit(a.Right)),
@@ -106,6 +140,12 @@ public abstract class EmitterBase
         Cos c2      => OpCos(Emit(c2.Operand)),
         Exp ex      => OpExp(Emit(ex.Operand)),
         Log lg      => OpLog(Emit(lg.Operand)),
+        // Eager-evaluate both branches so any SSA prelude they emit
+        // runs unconditionally — matches SIMD lane semantics where
+        // every lane evaluates every branch. The cost is paid in
+        // intermediate Math.Sin/etc calls; the win is no branch-
+        // dependent control flow and uniform width across lanes.
+        If i        => OpIf(i.Cond, Emit(i.Then), Emit(i.Else)),
         _ => throw new InvalidOperationException($"Unhandled AST node: {node.GetType().Name}"),
     };
 

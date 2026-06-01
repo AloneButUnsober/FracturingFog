@@ -29,6 +29,15 @@ public static class AstDifferentiator
         DRef       => new RealConst(0.0),               // opaque under both vars
         DeltaRef   => new RealConst(0.0),               // perturbation: opaque
         EpsRef     => new RealConst(0.0),               // perturbation: opaque
+        // Phoenix prev (z_{n-1}): opaque to symbolic diff. Tracking
+        // dprev/dc properly needs a parallel derivative state vector
+        // updated as `dprev := dz; dz := step_derivative`. Until that
+        // ships, treating prev as opaque produces a WRONG dz/dc for
+        // Phoenix equations — gated off via SupportsDe=false in
+        // CalculatorGenApi so the wrong value is never consumed.
+        PrevRef    => new RealConst(0.0),
+        // Iteration index: real scalar, derivative w.r.t. z or c is 0.
+        IterRef    => new RealConst(0.0),
         RealConst  => new RealConst(0.0),
         Neg n      => new Neg(Diff(n.Operand, v)),
         Add a      => new Add(Diff(a.Left, v), Diff(a.Right, v)),
@@ -63,6 +72,14 @@ public static class AstDifferentiator
         Cos c2     => new Mul(new Neg(new Sin(c2.Operand)), Diff(c2.Operand, v)),
         Exp ex     => new Mul(new Exp(ex.Operand), Diff(ex.Operand, v)),
         Log lg     => new Div(Diff(lg.Operand, v), lg.Operand),
+        // Piecewise: differentiate each branch independently — the
+        // condition itself is real-valued and never feeds the complex
+        // chain. The boundary locus where Cond changes truth value is a
+        // measure-zero set; distance estimate is meaningful on either
+        // side but undefined exactly on it. We don't attempt to detect
+        // boundary pixels here; the renderer can flag them later if it
+        // wants Hausdorff-correct DE.
+        If i       => new If(i.Cond, Diff(i.Then, v), Diff(i.Else, v)),
         _ => throw new InvalidOperationException($"Cannot differentiate {node.GetType().Name}"),
     };
 

@@ -55,6 +55,10 @@ public sealed class Avx2Emitter : EmitterBase
     protected override string CIm => "ci";
     protected override string DRe => "dr";
     protected override string DIm => "di";
+    protected override string PrevRe => "pr";
+    protected override string PrevIm => "pi";
+    protected override string IterRe => "iter_v";
+    protected override string IterImLiteral => "Vector256<double>.Zero";
 
     private string NewTemp(string kind)
     {
@@ -254,6 +258,65 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => EmitPerLaneTranscendental(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => EmitPerLaneTranscendental(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => EmitPerLaneTranscendental(a, "log");
+
+    // Piecewise — mask blend via Avx.Compare → Vector256.ConditionalSelect.
+    // Compare returns the per-lane mask as Vector256<double> (all-1 bits
+    // set, NaN payload) in matching lanes. Both branches were eager-
+    // evaluated by EmitterBase so any SSA prelude they emit ran
+    // unconditionally; every lane has both branch values available.
+    protected override ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV)
+    {
+        string mask = EmitMask(cond);
+        string thenIm = thenV.ImZero ? "Vector256<double>.Zero" : thenV.Im;
+        string elseIm = elseV.ImZero ? "Vector256<double>.Zero" : elseV.Im;
+        return Bind(
+            $"Vector256.ConditionalSelect({mask}, {thenV.Re}, {elseV.Re})",
+            $"Vector256.ConditionalSelect({mask}, {thenIm}, {elseIm})");
+    }
+
+    private string EmitMask(CondNode c)
+    {
+        if (c is not Cmp cmp)
+            throw new InvalidOperationException($"Avx2Emitter: unhandled CondNode {c.GetType().Name}");
+        string l = EmitCondTermVec(cmp.Left);
+        string r = EmitCondTermVec(cmp.Right);
+        // FloatComparisonMode.OrderedXxxNonSignaling — Ordered = NaN
+        // operands compare false (matches C# `>` semantics).
+        string mode = cmp.Op switch
+        {
+            CmpOp.Gt => "FloatComparisonMode.OrderedGreaterThanNonSignaling",
+            CmpOp.Lt => "FloatComparisonMode.OrderedLessThanNonSignaling",
+            CmpOp.Ge => "FloatComparisonMode.OrderedGreaterThanOrEqualNonSignaling",
+            CmpOp.Le => "FloatComparisonMode.OrderedLessThanOrEqualNonSignaling",
+            CmpOp.Eq => "FloatComparisonMode.OrderedEqualNonSignaling",
+            CmpOp.Ne => "FloatComparisonMode.OrderedNotEqualNonSignaling",
+            _ => throw new InvalidOperationException($"Unknown CmpOp {cmp.Op}"),
+        };
+        return NewBoundRe($"Avx.Compare({l}, {r}, {mode})");
+    }
+
+    private string EmitCondTermVec(CondTerm t)
+    {
+        switch (t)
+        {
+            case CondRe r:
+                return Emit(r.Of).Re;
+            case CondIm im:
+                var ev = Emit(im.Of);
+                return ev.ImZero ? "Vector256<double>.Zero" : ev.Im;
+            case CondAbs2 a:
+                var av = Emit(a.Of);
+                if (av.ImZero)
+                    return NewBoundRe($"Avx.Multiply({av.Re}, {av.Re})");
+                return NewBoundRe($"Fma.MultiplyAdd({av.Re}, {av.Re}, Avx.Multiply({av.Im}, {av.Im}))");
+            case CondConst k:
+                string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
+                if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
+                return NewBoundRe($"Vector256.Create({lit})");
+            default:
+                throw new InvalidOperationException($"Avx2Emitter: unhandled CondTerm {t.GetType().Name}");
+        }
+    }
 
     /// <summary>Bind a single Re temp without claiming ImZero. Used when
     /// Add/Sub need to bind the Re temp but the Im part is reused

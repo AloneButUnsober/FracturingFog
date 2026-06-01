@@ -34,6 +34,24 @@ public static class AstHelpers
         Cos co => Contains<T>(co.Operand),
         Exp e  => Contains<T>(e.Operand),
         Log lg => Contains<T>(lg.Operand),
+        // Piecewise — recurse into both branches and into any AstNodes
+        // embedded inside the condition's CondTerms (re(...)/im(...)/abs(...)
+        // each carry a complex sub-expression).
+        If i   => Contains<T>(i.Then) || Contains<T>(i.Else) || CondContains<T>(i.Cond),
+        _ => false,
+    };
+
+    private static bool CondContains<T>(CondNode c) where T : AstNode => c switch
+    {
+        Cmp cmp => CondTermContains<T>(cmp.Left) || CondTermContains<T>(cmp.Right),
+        _ => false,
+    };
+
+    private static bool CondTermContains<T>(CondTerm t) where T : AstNode => t switch
+    {
+        CondRe r  => Contains<T>(r.Of),
+        CondIm im => Contains<T>(im.Of),
+        CondAbs2 a => Contains<T>(a.Of),
         _ => false,
     };
 }
