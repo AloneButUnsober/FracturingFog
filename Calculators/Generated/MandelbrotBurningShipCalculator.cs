@@ -14,7 +14,7 @@
 //                  =  (if abs(z) > 4 then 1 else z + z)*D + if abs(z) > 4 then 0 else 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 23:11:22 UTC
+// Generated: 2026-06-01 23:56:19 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce

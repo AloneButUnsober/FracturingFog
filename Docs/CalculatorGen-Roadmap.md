@@ -435,26 +435,46 @@ flips priority.
   |center| ~ 1). Update accumulates to zero. Fix lives in the
   Avalonia/WinForms pan-zoom command pipeline, not in CalcGen.
 
-- [x] **Generated perturbation loses detail past zoom 1e12** — FIXED.
-  Root cause: AVX-512 SIMD lane in the perturbation path called
-  `ColorFor` (plain-double smooth count) while the scalar tail
-  called `ColorForDd` (DD-precision smooth count via QD ref
-  orbit's Lo limbs). Past zoom 1e12 every escaped pixel has
-  `|z| ≈ √Bailout` whose plain-double `log(|z|)` is constant across
-  many adjacent pixels — only LSBs vary, which die in the
-  `Math.Log` → `Math.Log2` chain → `(float)` cast. Per-decade
-  unique-value count drops ~5×. Legacy `MandelbrotCalculator` is
-  masked because its ref orbit is DD throughout, so the SIMD lane's
-  per-lane `(zr, zi)` are DD-precision additions and the smooth
-  count never collapses. Fix: SIMD lane now captures per-lane δ at
-  moment of escape into `finalDrVec / finalDiVec`; the scatter
-  loop reconstructs `|z|²` as DD via
-  `DD(refZr[it], refZrLo[it]) + DD(dr, 0)` and routes to
-  `ColorForDd`. In-set lanes skip the DD math (short-circuited).
-  Touches: `Calculator.template.cs` AVX-512 lane block only — 3
-  blend additions + 1 span pair + 1 ColorFor→ColorForDd swap with
-  inline DD promote. All 6 stock calcs regenerated; `--gentest
-  MandelbrotZ2` 0 diff; `--calcgen-test` 90/90 PASS.
-  `FractalRenderHost.Trigger` GZ2 branch re-enables
-  `UsePerturbation = true; UseBla = true; UseSa = true`. User-side
-  verification needed at coords (-1.1727, -0.2968) zoom 1e12-1e16.
+- [x] **Generated perturbation loses detail past zoom 1e12** — FIXED
+  (two-part). User-visible symptoms: high-detail regions render as
+  solid-colour blobs at zoom 1e12+, worsens with zoom; small solid-
+  colour dot at exact frame centre; double-clicking eventually
+  resolves both (each click re-centres → new ref orbit, sometimes
+  lucky). Reported on AVX-2-only hardware (no AVX-512).
+    1. **Scalar perturbation δ-update term order (PRIMARY FIX).**
+       `AstPerturbation.BuildDeltaUpdate` builds the Taylor δ-step by
+       summing partial-derivative terms with outer loop `k` (δ
+       powers), inner `m` (ε powers). For z²+c this emitted terms in
+       order `(k=0,m=1) ε, (k=1,m=0) 2Z·δ, (k=2,m=0) δ²` → AST
+       `((0+ε)+2Z·δ)+δ²`. At deep zoom |2Z·δ| ≫ |ε|, so the middle
+       step `(ε + 2Z·δ)` is `tiny + big` → ε is rounded to ULP of
+       2Z·δ → **per-pixel signal is lost** → adjacent pixels
+       compute identical δ → high-detail regions collapse to solid
+       colour. Legacy `MandelbrotCalculator` hand-codes `(2Z+δ)·δ +
+       dc` which adds dc LAST as a fresh, ε-scale addition. Fix:
+       swap outer/inner loops to `m` outer, `k` inner — pure-δ
+       terms (m=0) accumulate first at their |Z|·|δ| scale, then ε
+       terms (m≥1) added last at their own scale. AST becomes
+       `((0+2Z·δ)+δ²)+ε`. Algebraically identical, numerically
+       correct at deep zoom. Single 1-line code change in
+       `AstPerturbation.BuildDeltaUpdate`. Fixes both scalar tail
+       and AVX-512 lane (both consume the same AST). Generates for
+       all polynomials — Z3 becomes `3Z²δ + 3Z·δ² + δ³ + ε`, Z4/Z5
+       similar. `--calcgen-test` 90/90 PASS; `--gentest
+       MandelbrotZ2` 0-diff (low zoom unaffected; the fix only
+       changes ULP-level rounding behaviour at deep zoom).
+    2. **AVX-512 lane DD-promoted smooth count (secondary).** SIMD
+       lane was calling `ColorFor` (plain double `log(|z|)`) instead
+       of `ColorForDd` (DD via QD ref orbit Lo limbs). Plain-double
+       `log(|z|)` collapses past zoom 1e12 because `|z|≈√Bailout` is
+       constant across adjacent pixels at single-precision. SIMD
+       lane now captures per-lane δ at escape (`finalDrVec /
+       finalDiVec`), reconstructs `|z|²` as DD via `DD(refZr[it],
+       refZrLo[it]) + DD(dr, 0)`, routes to `ColorForDd`. In-set
+       lanes short-circuit. Affects AVX-512 hardware only — the
+       user's machine (AVX-2 only) never enters this lane, but the
+       fix lands for correctness on AVX-512 systems.
+  `FractalRenderHost.Trigger` GZ2 branch: `UsePerturbation = true;
+  UseBla = true; UseSa = true` (workaround removed). User-side
+  verification at coords (-1.1727, -0.2968) zoom 1e12-1e16 still
+  needed.

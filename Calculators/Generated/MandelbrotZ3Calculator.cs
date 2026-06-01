@@ -14,7 +14,7 @@
 //                  =  ((z + z)*z + z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 23:11:11 UTC
+// Generated: 2026-06-01 23:56:01 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -620,7 +620,7 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
     // per-pixel δ iteration using the symbolic expansion of
     //
     //     δ_{n+1}  =  p(Z+δ, C+ε)  −  p(Z, C)
-    //                 =  ε + ((z + z)*z + z*z)*δ + 0.5*(2*z + z + z + z + z)*δ*δ + δ*δ*δ
+    //                 =  ((z + z)*z + z*z)*δ + 0.5*(2*z + z + z + z + z)*δ*δ + δ*δ*δ + ε
     //
     // For polynomial step functions the expansion is exact — no
     // truncation error beyond the round-off of the reference orbit's
@@ -1206,34 +1206,34 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                     Vector512<double> pim8 = Avx512F.Add(pim4, pim6);
                     Vector512<double> pre9 = Avx512F.FusedMultiplyAddNegated(pim8, di, Avx512F.Multiply(pre7, dr));
                     Vector512<double> pim10 = Avx512F.FusedMultiplyAdd(pre7, di, Avx512F.Multiply(pim8, dr));
-                    Vector512<double> pre11 = Avx512F.Add(er_v, pre9);
-                    Vector512<double> pim12 = Avx512F.Add(ei_v, pim10);
-                    Vector512<double> pre13 = Vector512.Create(0.5);
-                    Vector512<double> pre14 = Vector512.Create(2.0);
-                    Vector512<double> pre15 = Avx512F.Multiply(pre14, Zr_v);
-                    Vector512<double> pim16 = Avx512F.Multiply(pre14, Zi_v);
-                    Vector512<double> pre17 = Avx512F.Add(Zr_v, Zr_v);
-                    Vector512<double> pim18 = Avx512F.Add(Zi_v, Zi_v);
-                    Vector512<double> pre19 = Avx512F.Add(pre15, pre17);
-                    Vector512<double> pim20 = Avx512F.Add(pim16, pim18);
-                    Vector512<double> pre21 = Avx512F.Add(Zr_v, Zr_v);
-                    Vector512<double> pim22 = Avx512F.Add(Zi_v, Zi_v);
-                    Vector512<double> pre23 = Avx512F.Add(pre19, pre21);
-                    Vector512<double> pim24 = Avx512F.Add(pim20, pim22);
-                    Vector512<double> pre25 = Avx512F.Multiply(pre13, pre23);
-                    Vector512<double> pim26 = Avx512F.Multiply(pre13, pim24);
+                    Vector512<double> pre11 = Vector512.Create(0.5);
+                    Vector512<double> pre12 = Vector512.Create(2.0);
+                    Vector512<double> pre13 = Avx512F.Multiply(pre12, Zr_v);
+                    Vector512<double> pim14 = Avx512F.Multiply(pre12, Zi_v);
+                    Vector512<double> pre15 = Avx512F.Add(Zr_v, Zr_v);
+                    Vector512<double> pim16 = Avx512F.Add(Zi_v, Zi_v);
+                    Vector512<double> pre17 = Avx512F.Add(pre13, pre15);
+                    Vector512<double> pim18 = Avx512F.Add(pim14, pim16);
+                    Vector512<double> pre19 = Avx512F.Add(Zr_v, Zr_v);
+                    Vector512<double> pim20 = Avx512F.Add(Zi_v, Zi_v);
+                    Vector512<double> pre21 = Avx512F.Add(pre17, pre19);
+                    Vector512<double> pim22 = Avx512F.Add(pim18, pim20);
+                    Vector512<double> pre23 = Avx512F.Multiply(pre11, pre21);
+                    Vector512<double> pim24 = Avx512F.Multiply(pre11, pim22);
+                    Vector512<double> pre25 = Avx512F.FusedMultiplyAddNegated(pim24, di, Avx512F.Multiply(pre23, dr));
+                    Vector512<double> pim26 = Avx512F.FusedMultiplyAdd(pre23, di, Avx512F.Multiply(pim24, dr));
                     Vector512<double> pre27 = Avx512F.FusedMultiplyAddNegated(pim26, di, Avx512F.Multiply(pre25, dr));
                     Vector512<double> pim28 = Avx512F.FusedMultiplyAdd(pre25, di, Avx512F.Multiply(pim26, dr));
-                    Vector512<double> pre29 = Avx512F.FusedMultiplyAddNegated(pim28, di, Avx512F.Multiply(pre27, dr));
-                    Vector512<double> pim30 = Avx512F.FusedMultiplyAdd(pre27, di, Avx512F.Multiply(pim28, dr));
-                    Vector512<double> pre31 = Avx512F.Add(pre11, pre29);
-                    Vector512<double> pim32 = Avx512F.Add(pim12, pim30);
-                    Vector512<double> pre33 = Avx512F.FusedMultiplyAddNegated(di, di, Avx512F.Multiply(dr, dr));
-                    Vector512<double> pim34 = Avx512F.FusedMultiplyAdd(dr, di, Avx512F.Multiply(di, dr));
-                    Vector512<double> pre35 = Avx512F.FusedMultiplyAddNegated(pim34, di, Avx512F.Multiply(pre33, dr));
-                    Vector512<double> pim36 = Avx512F.FusedMultiplyAdd(pre33, di, Avx512F.Multiply(pim34, dr));
-                    Vector512<double> pre37 = Avx512F.Add(pre31, pre35);
-                    Vector512<double> pim38 = Avx512F.Add(pim32, pim36);
+                    Vector512<double> pre29 = Avx512F.Add(pre9, pre27);
+                    Vector512<double> pim30 = Avx512F.Add(pim10, pim28);
+                    Vector512<double> pre31 = Avx512F.FusedMultiplyAddNegated(di, di, Avx512F.Multiply(dr, dr));
+                    Vector512<double> pim32 = Avx512F.FusedMultiplyAdd(dr, di, Avx512F.Multiply(di, dr));
+                    Vector512<double> pre33 = Avx512F.FusedMultiplyAddNegated(pim32, di, Avx512F.Multiply(pre31, dr));
+                    Vector512<double> pim34 = Avx512F.FusedMultiplyAdd(pre31, di, Avx512F.Multiply(pim32, dr));
+                    Vector512<double> pre35 = Avx512F.Add(pre29, pre33);
+                    Vector512<double> pim36 = Avx512F.Add(pim30, pim34);
+                    Vector512<double> pre37 = Avx512F.Add(pre35, er_v);
+                    Vector512<double> pim38 = Avx512F.Add(pim36, ei_v);
                     Vector512<double> dr_new = pre37;
                     Vector512<double> di_new = pim38;
                             Vector512<double> keep = activeMask.AsDouble();
@@ -1466,8 +1466,8 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                                 // outcome, fewer branches.
                             }
                         }
-                    double dr_new = (((er + ((((Zr + Zr) * Zr - (Zi + Zi) * Zi) + (Zr * Zr - Zi * Zi)) * dr - (((Zr + Zr) * Zi + (Zi + Zi) * Zr) + (Zr * Zi + Zi * Zr)) * di)) + (((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * dr - (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * di) * dr - ((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * di + (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * dr) * di)) + ((dr * dr - di * di) * dr - (dr * di + di * dr) * di));
-                    double di_new = (((ei + ((((Zr + Zr) * Zr - (Zi + Zi) * Zi) + (Zr * Zr - Zi * Zi)) * di + (((Zr + Zr) * Zi + (Zi + Zi) * Zr) + (Zr * Zi + Zi * Zr)) * dr)) + (((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * dr - (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * di) * di + ((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * di + (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * dr) * dr)) + ((dr * dr - di * di) * di + (dr * di + di * dr) * dr));
+                    double dr_new = (((((((Zr + Zr) * Zr - (Zi + Zi) * Zi) + (Zr * Zr - Zi * Zi)) * dr - (((Zr + Zr) * Zi + (Zi + Zi) * Zr) + (Zr * Zi + Zi * Zr)) * di) + (((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * dr - (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * di) * dr - ((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * di + (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * dr) * di)) + ((dr * dr - di * di) * dr - (dr * di + di * dr) * di)) + er);
+                    double di_new = (((((((Zr + Zr) * Zr - (Zi + Zi) * Zi) + (Zr * Zr - Zi * Zi)) * di + (((Zr + Zr) * Zi + (Zi + Zi) * Zr) + (Zr * Zi + Zi * Zr)) * dr) + (((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * dr - (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * di) * di + ((0.5 * (((2.0 * Zr) + (Zr + Zr)) + (Zr + Zr))) * di + (0.5 * (((2.0 * Zi) + (Zi + Zi)) + (Zi + Zi))) * dr) * dr)) + ((dr * dr - di * di) * di + (dr * di + di * dr) * dr)) + ei);
                         dr = dr_new; di = di_new;
                     }
                     // Two reasons to fall to per-pixel HP-direct:
