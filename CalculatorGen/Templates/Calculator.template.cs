@@ -189,15 +189,20 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
     /// re-runs perturbation for the cluster against that rebase orbit.
     /// Pixels that glitch again on the rebase orbit fall to per-pixel
     /// HP-direct as before.
-    /// Default true. Spatial partitioning splits scattered glitches
-    /// into independent clusters via grid bucketing + connected
-    /// components, so each cluster gets its own rebase orbit instead
-    /// of one centroid orbit that fits none of them. Three early-exit
-    /// guards (zoom gate, bbox cohesion, sample-probe) skip rebase
-    /// for cases where straight per-pixel HP-direct is cheaper.
-    /// Set false to revert to per-pixel HP-direct for every glitched
-    /// pixel (the pre-rebase behaviour).</summary>
-    public bool UseClusterRebase { get; set; } = true;
+    /// Default false pending AVX-2 perturbation lane parity with legacy.
+    /// At deep zoom on scattered-mini-Julia scenes the rebase orbit
+    /// build cost (one QD orbit per spatial cluster) plus the rebase
+    /// pass overhead can dominate the per-pixel HP-direct cost the path
+    /// is meant to amortise. Three early-exit guards (zoom gate, bbox
+    /// cohesion, sample-probe) and cross-frame cache (E) reduce the
+    /// wasted work but don't fully eliminate it. Enable opt-in for
+    /// cohesive deep-zoom mini-Julia scenes where many adjacent pixels
+    /// glitch together.
+    /// Spatial partitioning (D) splits scattered glitches into
+    /// independent clusters via grid bucketing + connected components,
+    /// so each cluster gets its own rebase orbit instead of one
+    /// centroid orbit that fits none of them.</summary>
+    public bool UseClusterRebase { get; set; } = false;
 
     /// <summary>Minimum number of glitched pixels for the cluster-rebase
     /// pass to engage. Below this, the rebase orbit's QD build cost
