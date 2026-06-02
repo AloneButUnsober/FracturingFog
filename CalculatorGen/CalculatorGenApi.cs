@@ -109,8 +109,8 @@ public static class CalculatorGenApi
         bool supportsDe = !(hasConj || hasFolded || hasPrev);
         bool supportsPerturbation = !(hasConj || hasFolded || hasDiv || hasTrans || hasCond || hasPrev || hasIter);
 
-        string perturbBody, perturbDdBody, perturbAvx512Body,
-               perturbDerivBody, perturbDerivAvx512Body;
+        string perturbBody, perturbDdBody, perturbAvx2Body, perturbAvx512Body,
+               perturbDerivBody, perturbDerivAvx2Body, perturbDerivAvx512Body;
         if (supportsPerturbation)
         {
             var perturbDelta = AstPerturbation.BuildDeltaUpdate(root);
@@ -118,6 +118,7 @@ public static class CalculatorGenApi
                 .EmitDeltaBody(perturbDelta, indent: "                    ");
             perturbDdBody = new DdEmitter()
                 .EmitDdDeltaBody(perturbDelta, indent: "                    ");
+            perturbAvx2Body   = new Avx2PerturbationEmitter().EmitDeltaBody(perturbDelta);
             perturbAvx512Body = new Avx512PerturbationEmitter().EmitDeltaBody(perturbDelta);
         }
         else
@@ -126,17 +127,20 @@ public static class CalculatorGenApi
             // paths are skipped by SupportsPerturbation = false.
             perturbBody       = "                    double dr_new = 0.0; double di_new = 0.0;";
             perturbDdBody     = "                    DD dr_dd_new = DD.Zero; DD di_dd_new = DD.Zero;";
+            perturbAvx2Body   = "                    Vector256<double> dr_new = Vector256<double>.Zero; Vector256<double> di_new = Vector256<double>.Zero;";
             perturbAvx512Body = "                    Vector512<double> dr_new = Vector512<double>.Zero; Vector512<double> di_new = Vector512<double>.Zero;";
         }
         if (supportsDe)
         {
             perturbDerivBody = new PerturbDerivEmitter()
                 .EmitDerivBody(derivUpdate, indent: "                    ");
+            perturbDerivAvx2Body   = new Avx2DerivEmitter().EmitDerivBody(derivUpdate);
             perturbDerivAvx512Body = new Avx512DerivEmitter().EmitDerivBody(derivUpdate);
         }
         else
         {
             perturbDerivBody       = "                    double drv_new = 0.0; double div_new = 0.0;";
+            perturbDerivAvx2Body   = "                    Vector256<double> drv_new = Vector256<double>.Zero; Vector256<double> div_new = Vector256<double>.Zero;";
             perturbDerivAvx512Body = "                    Vector512<double> drv_new = Vector512<double>.Zero; Vector512<double> div_new = Vector512<double>.Zero;";
         }
 
@@ -230,6 +234,8 @@ public static class CalculatorGenApi
             .Replace("{{AVX2_D_BODY}}",     avxDBody)
             .Replace("{{PERTURB_DELTA_BODY}}", perturbBody)
             .Replace("{{PERTURB_DELTA_DD_BODY}}", perturbDdBody)
+            .Replace("{{PERTURB_DELTA_AVX2_BODY}}", perturbAvx2Body)
+            .Replace("{{PERTURB_DERIV_AVX2_BODY}}", perturbDerivAvx2Body)
             .Replace("{{PERTURB_DELTA_AVX512_BODY}}", perturbAvx512Body)
             .Replace("{{PERTURB_DERIV_AVX512_BODY}}", perturbDerivAvx512Body)
             .Replace("{{PERTURB_DERIV_BODY}}", perturbDerivBody)
