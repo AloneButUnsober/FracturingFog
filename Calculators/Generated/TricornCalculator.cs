@@ -14,7 +14,7 @@
 //                  =  1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 08:49:15 UTC
+// Generated: 2026-06-02 08:52:54 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -189,14 +189,15 @@ public sealed class TricornCalculator : IFractalCalculator, IDisposable
     /// re-runs perturbation for the cluster against that rebase orbit.
     /// Pixels that glitch again on the rebase orbit fall to per-pixel
     /// HP-direct as before.
-    /// Default false — MVP uses ONE centroid for ALL glitches, which
-    /// wastes work when glitches span multiple incoherent clusters
-    /// (a common deep-zoom case: many small mini-Julia minis scattered
-    /// across the frame). Re-enable per render-host policy when the
-    /// glitch population is known to be cohesive (e.g. one big mini-
-    /// Julia in the centre). Multi-cluster spatial partitioning is
-    /// the proper fix and unblocks default-on.</summary>
-    public bool UseClusterRebase { get; set; } = false;
+    /// Default true. Spatial partitioning splits scattered glitches
+    /// into independent clusters via grid bucketing + connected
+    /// components, so each cluster gets its own rebase orbit instead
+    /// of one centroid orbit that fits none of them. Three early-exit
+    /// guards (zoom gate, bbox cohesion, sample-probe) skip rebase
+    /// for cases where straight per-pixel HP-direct is cheaper.
+    /// Set false to revert to per-pixel HP-direct for every glitched
+    /// pixel (the pre-rebase behaviour).</summary>
+    public bool UseClusterRebase { get; set; } = true;
 
     /// <summary>Minimum number of glitched pixels for the cluster-rebase
     /// pass to engage. Below this, the rebase orbit's QD build cost
@@ -1681,27 +1682,12 @@ public sealed class TricornCalculator : IFractalCalculator, IDisposable
     }
 
     /// <summary>Process the deferred glitched-pixel bag from the main
-    /// perturbation pass. Three early-exit guards run before the
-    /// expensive rebase orbit build — they cover the cases where
-    /// the cluster-rebase MVP's single-centroid strategy would
-    /// regress vs straight per-pixel HP-direct:
-    ///   A. Zoom gate — below QdDirectZoomThreshold the per-pixel
-    ///      HP-direct path is DD-direct (~50 µs/pixel). Rebase
-    ///      orbit build + per-pixel rebase pass would cost roughly
-    ///      the same per pixel without a meaningful margin, so
-    ///      skip rebase entirely.
-    ///   B. Bounding-box cohesion — when glitched pixels are
-    ///      scattered (low density inside their bounding box), a
-    ///      single centroid orbit won't fit the local dynamics of
-    ///      multiple distinct mini-Julias. Skip without paying the
-    ///      QD orbit build.
-    ///   C. Sample-probe — build the rebase orbit, then test it
-    ///      against the first 8 glitched pixels serially. If at
-    ///      least half succeed, commit to the full parallel
-    ///      rebase pass over the remaining pixels. Otherwise the
-    ///      probed-success pixels are kept (they're correctly
-    ///      coloured) and the rest fall to HP-direct.
-    /// All three guards are cheap relative to the work they avoid.</summary>
+    /// perturbation pass. Spatial-partition glitches into clusters
+    /// via grid bucketing + 8-connectivity flood-fill, then dispatch
+    /// each cluster to <see cref="ProcessSingleCluster"/>.
+    /// Multi-cluster fix for the MVP single-centroid wasted-work
+    /// regression: scattered mini-Julias each get their own rebase
+    /// orbit instead of one centroid orbit that fits none of them.</summary>
     private void ProcessClusterRebase(
         ConcurrentBag<(int x, int y)> glitches,
         double scale, int maxIt,
@@ -1713,34 +1699,141 @@ public sealed class TricornCalculator : IFractalCalculator, IDisposable
         int n = glitchArr.Length;
         if (n == 0) return;
 
-        // Local helper: HP-direct every glitched pixel via Parallel.ForEach.
-        void HpDirectAll() => Parallel.ForEach(glitchArr,
+        // ── Guard A: zoom gate ───────────────────────────────────
+        // Below QdDirectZoomThreshold (~1e25), HpDirectGlitchPixel
+        // runs DD-direct per pixel (~50 µs). Rebase orbit build +
+        // per-pixel rebase pass doesn't beat that consistently —
+        // the savings only materialise at the much-more-expensive
+        // QD-continue path above the threshold. Skip rebase below.
+        if (Zoom < QdDirectZoomThreshold)
+        {
+            Parallel.ForEach(glitchArr,
+                new ParallelOptions { CancellationToken = ct },
+                g => HpDirectGlitchPixel(g.x, g.y, scale, maxIt));
+            return;
+        }
+
+        // ── D: Spatial partitioning into clusters ────────────────
+        //
+        // Bucket glitched pixels into a coarse spatial grid (cell =
+        // 16×16 pixels), then find connected components via 8-conn
+        // BFS on occupied cells. Each connected component becomes
+        // one cluster; per-cluster rebase orbit is then built only
+        // for clusters whose pixel count clears MinClusterSizeForRebase.
+        // Cell size 16 trades cohesion (smaller = tighter clusters)
+        // against label-pass cost (smaller = more cells). 16 gives
+        // ~120 × 67 = 8K cells for a 1920×1080 frame — fast to walk.
+        const int CellSize = 16;
+        int cellsW = (Width + CellSize - 1) / CellSize;
+        int cellsH = (Height + CellSize - 1) / CellSize;
+        int totalCells = cellsW * cellsH;
+
+        // First pass: count pixels per cell so we can allocate jagged
+        // per-cell arrays without List<T> per cell (saves heap churn).
+        int[] cellCounts = new int[totalCells];
+        foreach (var g in glitchArr)
+            cellCounts[(g.y / CellSize) * cellsW + (g.x / CellSize)]++;
+
+        // Second pass: fill per-cell arrays.
+        (int x, int y)[]?[] cellPixels = new (int, int)[totalCells][];
+        for (int i = 0; i < totalCells; i++)
+            if (cellCounts[i] > 0) cellPixels[i] = new (int, int)[cellCounts[i]];
+        int[] cellFill = new int[totalCells];
+        foreach (var g in glitchArr)
+        {
+            int ci = (g.y / CellSize) * cellsW + (g.x / CellSize);
+            cellPixels[ci]![cellFill[ci]++] = g;
+        }
+
+        // Connected-components via BFS on occupied cells, 8-connectivity.
+        // Labels start at 1 (0 = unassigned).
+        int[] cellLabel = new int[totalCells];
+        int nextLabel = 1;
+        var queue = new Queue<int>();
+        for (int ci0 = 0; ci0 < totalCells; ci0++)
+        {
+            if (cellPixels[ci0] == null || cellLabel[ci0] != 0) continue;
+            int label = nextLabel++;
+            cellLabel[ci0] = label;
+            queue.Enqueue(ci0);
+            while (queue.Count > 0)
+            {
+                int q = queue.Dequeue();
+                int qx = q % cellsW, qy = q / cellsW;
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    int ny = qy + dy;
+                    if ((uint)ny >= (uint)cellsH) continue;
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        int nx = qx + dx;
+                        if ((uint)nx >= (uint)cellsW) continue;
+                        int ni = ny * cellsW + nx;
+                        if (cellPixels[ni] == null || cellLabel[ni] != 0) continue;
+                        cellLabel[ni] = label;
+                        queue.Enqueue(ni);
+                    }
+                }
+            }
+        }
+
+        // Aggregate cell pixels into per-cluster arrays. Cluster count
+        // is small (typically 1-20 for a deep-zoom frame) so a
+        // Dictionary is fine; for hot-path scenes we could switch to a
+        // counted-allocation pattern like the cells above.
+        var clusters = new Dictionary<int, List<(int x, int y)>>(nextLabel - 1);
+        for (int ci = 0; ci < totalCells; ci++)
+        {
+            if (cellPixels[ci] == null) continue;
+            int label = cellLabel[ci];
+            if (!clusters.TryGetValue(label, out var list))
+            {
+                list = new List<(int x, int y)>();
+                clusters[label] = list;
+            }
+            list.AddRange(cellPixels[ci]!);
+        }
+
+        // Dispatch each cluster. Process sequentially across clusters —
+        // each cluster's inner rebase pass is itself Parallel.For so
+        // nesting would oversubscribe the threadpool.
+        foreach (var (_, pixels) in clusters)
+        {
+            if (ct.IsCancellationRequested) return;
+            ProcessSingleCluster(pixels.ToArray(), scale, maxIt,
+                CrQd_orig, CiQd_orig, primaryRefOffsetX, primaryRefOffsetY, ct);
+        }
+    }
+
+    /// <summary>Rebase one spatial cluster. Per-cluster guards B+C
+    /// apply here:
+    ///   B. Bounding-box cohesion — even within a spatial cluster
+    ///      the pixels may be sparse inside their bbox (long thin
+    ///      tendril). Below 2% density, skip the rebase build.
+    ///   C. Sample-probe — verify the centroid orbit actually fits
+    ///      this cluster before committing to a full per-pixel pass.
+    /// </summary>
+    private void ProcessSingleCluster(
+        (int x, int y)[] pixels,
+        double scale, int maxIt,
+        QD CrQd_orig, QD CiQd_orig,
+        double primaryRefOffsetX, double primaryRefOffsetY,
+        CancellationToken ct)
+    {
+        int n = pixels.Length;
+        if (n == 0) return;
+
+        void HpDirectAll() => Parallel.ForEach(pixels,
             new ParallelOptions { CancellationToken = ct },
             g => HpDirectGlitchPixel(g.x, g.y, scale, maxIt));
 
-        // ── Guard A: zoom gate ───────────────────────────────────
-        // Below QdDirectZoomThreshold (~1e25), HpDirectGlitchPixel
-        // runs DD-direct per pixel. ~50 µs per pixel. Rebase orbit
-        // build (~50-200 µs QD iteration) + per-pixel rebase pass
-        // (~30-50 µs/pixel) doesn't beat that consistently — the
-        // savings only show up at the much-more-expensive QD-continue
-        // path that engages above the threshold.
-        if (Zoom < QdDirectZoomThreshold) { HpDirectAll(); return; }
-
-        // Below the floor, the rebase orbit's QD build cost outweighs
-        // per-pixel HP-direct savings even at the QD-continue zoom.
         if (n < MinClusterSizeForRebase) { HpDirectAll(); return; }
 
-        // ── Guard B: bounding-box cohesion ───────────────────────
-        // Glitches scattered across the frame (low density inside
-        // their bbox) are likely from multiple distinct mini-Julias
-        // — one centroid orbit can't fit them all. Skip rebase
-        // before paying the QD build. Threshold 0.02 = 2% of bbox
-        // pixels are glitched — below that, scattered. (For a
-        // single tight cluster, density is typically 0.1-0.5.)
+        // Guard B: bounding-box cohesion.
         int minX = int.MaxValue, maxX = int.MinValue;
         int minY = int.MaxValue, maxY = int.MinValue;
-        foreach (var g in glitchArr)
+        foreach (var g in pixels)
         {
             if (g.x < minX) minX = g.x;
             if (g.x > maxX) maxX = g.x;
@@ -1751,49 +1844,37 @@ public sealed class TricornCalculator : IFractalCalculator, IDisposable
         double bboxDensity = (double)n / bboxArea;
         if (bboxDensity < 0.02) { HpDirectAll(); return; }
 
-        // Centroid in the per-pixel-offset coordinate system (offset
-        // from the *primary* ref point). Average is in double for
-        // speed; the QD centre is reconstructed exactly via QD add.
+        // Centroid in the per-pixel-offset coordinate system.
         double sumOffX = 0.0, sumOffY = 0.0;
         double halfW = Width * 0.5, halfH = Height * 0.5;
-        foreach (var g in glitchArr)
+        foreach (var g in pixels)
         {
             sumOffX += (g.x - halfW) * scale - primaryRefOffsetX;
             sumOffY += (g.y - halfH) * scale - primaryRefOffsetY;
         }
         double avgOffX = sumOffX / n;
         double avgOffY = sumOffY / n;
-        // Rebase centre = view centre + (primaryRefOffsetX + avgOffX, …).
         double rebaseAbsOffsetX = primaryRefOffsetX + avgOffX;
         double rebaseAbsOffsetY = primaryRefOffsetY + avgOffY;
         QD rebaseCrQd = CrQd_orig + rebaseAbsOffsetX;
         QD rebaseCiQd = CiQd_orig + rebaseAbsOffsetY;
 
-        // Build the rebase QD orbit. Allocates fresh arrays — the
-        // primary ref orbit cache is unaffected.
+        // Build rebase QD orbit.
         double[] rZr  = new double[maxIt + 1];
         double[] rZi  = new double[maxIt + 1];
         double[] rZrLo = new double[maxIt + 1];
         double[] rZiLo = new double[maxIt + 1];
         int rebaseLen = BuildRebaseRefOrbitQd(rebaseCrQd, rebaseCiQd, maxIt, rZr, rZi, rZrLo, rZiLo);
-
-        // Rebase orbit also escapes early → not viable. HP-direct all.
         if (rebaseLen < 64) { HpDirectAll(); return; }
 
-        // ── Guard C: sample-probe ────────────────────────────────
-        // Run rebase on the first 8 pixels serially. TryIterateRebasePixel
-        // writes ColorBuffer on success — those probed-success pixels
-        // are correctly coloured regardless of the probe verdict. If
-        // fewer than half of the sample succeeds, abandon the full
-        // pass and HP-direct the remaining pixels (skip the probed
-        // successes — they're done).
+        // Guard C: sample-probe (first 8 serially).
         const int ProbeSize = 8;
         int sampleN = Math.Min(ProbeSize, n);
         Span<bool> probedHit = stackalloc bool[ProbeSize];
         int hits = 0;
         for (int i = 0; i < sampleN; i++)
         {
-            var g = glitchArr[i];
+            var g = pixels[i];
             double er = (g.x - halfW) * scale - rebaseAbsOffsetX;
             double ei = (g.y - halfH) * scale - rebaseAbsOffsetY;
             int bufIdx = g.y * Width + g.x;
@@ -1805,24 +1886,22 @@ public sealed class TricornCalculator : IFractalCalculator, IDisposable
         }
         if (hits * 2 < sampleN)
         {
-            // Abandon. HP-direct everything that didn't already render.
             for (int i = 0; i < n; i++)
             {
                 if (i < sampleN && probedHit[i]) continue;
-                var g = glitchArr[i];
+                var g = pixels[i];
                 HpDirectGlitchPixel(g.x, g.y, scale, maxIt);
             }
             return;
         }
 
-        // Commit. Full parallel rebase pass over the remaining
-        // glitched pixels (skip the probed prefix — already done).
+        // Commit: parallel rebase over remaining.
         Parallel.For(sampleN, n,
             new ParallelOptions { CancellationToken = ct },
             idx =>
             {
                 if (ct.IsCancellationRequested) return;
-                var g = glitchArr[idx];
+                var g = pixels[idx];
                 double er = (g.x - halfW) * scale - rebaseAbsOffsetX;
                 double ei = (g.y - halfH) * scale - rebaseAbsOffsetY;
                 int bufIdx = g.y * Width + g.x;
@@ -1831,13 +1910,12 @@ public sealed class TricornCalculator : IFractalCalculator, IDisposable
                     HpDirectGlitchPixel(g.x, g.y, scale, maxIt);
                 }
             });
-        // Probed-failed pixels (those in the sample that returned false)
-        // also need HP-direct since they weren't coloured by the probe.
+        // Probed-failed pixels need HP-direct (probed-success already coloured).
         for (int i = 0; i < sampleN; i++)
         {
             if (!probedHit[i])
             {
-                var g = glitchArr[i];
+                var g = pixels[i];
                 HpDirectGlitchPixel(g.x, g.y, scale, maxIt);
             }
         }
