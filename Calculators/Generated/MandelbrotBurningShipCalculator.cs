@@ -14,7 +14,7 @@
 //                  =  (if abs(z) > 4 then 1 else z + z)*D + if abs(z) > 4 then 0 else 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-01 23:56:19 UTC
+// Generated: 2026-06-02 00:17:56 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -159,6 +159,25 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
     /// runs in DD (~31 digits); above it, QD (~62 digits). Matches the
     /// legacy MandelbrotCalculator's QDZoomThreshold. Defaults to 1e25.</summary>
     public double QdDirectZoomThreshold { get; set; } = 1.0e25;
+
+    /// <summary>Pauldelbrot-style relative-magnitude glitch tolerance.
+    /// Pixel flagged glitched when |δ|² &lt; tolerance · |z|² (i.e. δ has
+    /// become too small relative to z to carry meaningful per-pixel
+    /// signal). Strict-equality `zr==Zr` (the only check used by legacy
+    /// MandelbrotCalculator) misses the "soft glitch" mode where δ is
+    /// tiny-but-nonzero — symptom: high-detail mini-Julias far from the
+    /// reference orbit centre render as solid-colour blobs because every
+    /// pixel in the mini converges to the same δ magnitude (per-pixel
+    /// signal lost) but no individual pixel triggers strict equality.
+    /// Glitched pixels fall to per-pixel HP-direct via
+    /// ComputePixelQdContinue. Tolerance 1e-6 is Pauldelbrot's classic
+    /// value — fires when δ is &gt;1000× smaller than z relative-
+    /// magnitude-wise. Tighten (smaller value) → fewer pixels routed to
+    /// HP-direct → faster but more blobs. Loosen (larger value) → more
+    /// HP-direct → slower but cleaner. Set 0.0 to disable (revert to
+    /// strict-equality only). Skipped for it ≤ 4 so early iters where
+    /// both z and δ are naturally small don't false-positive.</summary>
+    public double PerturbGlitchTolerance { get; set; } = 1.0e-6;
 
     // Bailout radius². CalcGen substitutes the value at generation time
     // via the --bailout flag (default 512 → 262144, matching legacy
@@ -1143,7 +1162,13 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
                         if (activeMask.Equals(lZero)) break;
                         escapeIter = Avx512F.Add(escapeIter, Avx512F.And(oneL, activeMask));
 
-                        // Glitch detect: zr==Zr & zi==Zi & (dr!=0 | di!=0)
+                        // Glitch detect:
+                        // (1) strict equality: zr==Zr & zi==Zi & δ != 0
+                        // (2) Pauldelbrot relative-magnitude: |δ|² <
+                        //     tol·|z|² & it > 4 — catches mini-Julias
+                        //     where δ is tiny-but-nonzero and per-pixel
+                        //     signal is lost. See PerturbGlitchTolerance
+                        //     property comment for details.
                         Vector512<long> zrEq = Avx512F.Compare(zr_v, Zr_v,
                             FloatComparisonMode.OrderedEqualNonSignaling).AsInt64();
                         Vector512<long> ziEq = Avx512F.Compare(zi_v, Zi_v,
@@ -1154,6 +1179,21 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
                             FloatComparisonMode.OrderedNotEqualNonSignaling).AsInt64();
                         Vector512<long> g = Avx512F.And(zrEq,
                             Avx512F.And(ziEq, Avx512F.Or(drNz, diNz)));
+                        if (PerturbGlitchTolerance > 0.0 && it > 4)
+                        {
+                            Vector512<double> dMag2v = Avx512F.FusedMultiplyAdd(
+                                dr, dr, Avx512F.Multiply(di, di));
+                            Vector512<double> zMag2v = Avx512F.FusedMultiplyAdd(
+                                zr_v, zr_v, Avx512F.Multiply(zi_v, zi_v));
+                            Vector512<double> tolV = Vector512.Create(PerturbGlitchTolerance);
+                            Vector512<double> threshV = Avx512F.Multiply(zMag2v, tolV);
+                            Vector512<long> small = Avx512F.Compare(dMag2v, threshV,
+                                FloatComparisonMode.OrderedLessThanNonSignaling).AsInt64();
+                            Vector512<long> nonzero = Avx512F.Compare(dMag2v, dZero,
+                                FloatComparisonMode.OrderedGreaterThanNonSignaling).AsInt64();
+                            Vector512<long> soft = Avx512F.And(small, nonzero);
+                            g = Avx512F.Or(g, soft);
+                        }
                         glitchMask = Avx512F.Or(glitchMask, Avx512F.And(g, activeMask));
 
                         // Derivative
@@ -1350,16 +1390,33 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
                             + 8.0 * (Sr8*e7i + Si8*e7r);
                         it = saStart;
                     }
+                    double glitchTolLocal = PerturbGlitchTolerance;
                     for (; it < refOrbitLen; it++)
                     {
                         double Zr = refZr[it], Zi = refZi[it];
                         double zr = Zr + dr, zi = Zi + di;
                         // Glitch: δ absorbed by Z. Pixel falls to per-pixel
                         // DD-direct after the loop.
+                        // (1) Strict equality — extreme case where δ
+                        //     entirely lost to ULP in the Zr+dr addition.
+                        // (2) Pauldelbrot relative-magnitude — δ is
+                        //     tiny-but-nonzero, per-pixel signal lost.
+                        //     Skip first few iters where small δ is
+                        //     legitimate (δ starts at 0 / SA-evaluated).
                         if (zr == Zr && zi == Zi && (dr != 0.0 || di != 0.0))
                         {
                             glitched = true;
                             break;
+                        }
+                        if (glitchTolLocal > 0.0 && it > 4)
+                        {
+                            double dMag2g = dr * dr + di * di;
+                            double zMag2g = zr * zr + zi * zi;
+                            if (dMag2g > 0.0 && dMag2g < glitchTolLocal * zMag2g)
+                            {
+                                glitched = true;
+                                break;
+                            }
                         }
                         double r2 = zr * zr + zi * zi;
                         if (r2 >= Bailout2)

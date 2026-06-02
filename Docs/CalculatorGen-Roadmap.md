@@ -478,3 +478,37 @@ flips priority.
   UseBla = true; UseSa = true` (workaround removed). User-side
   verification at coords (-1.1727, -0.2968) zoom 1e12-1e16 still
   needed.
+    3. **Pauldelbrot relative-magnitude glitch detection (third fix).**
+       After parts 1+2 user reported the same blob pattern still
+       present on AVX-2-only hardware at coords (-1.7687788...,
+       0.001738...) zoom 3.4e19 — large centre formation renders
+       perfectly but smaller Julia formations have solid-colour
+       centres. Double-clicking on a mini eventually resolves it
+       (recentres ref orbit onto that mini). Classic cluster-
+       glitch pattern: single reference orbit at the view centre
+       can't represent the local dynamics of every mini-Julia in
+       the frame. Pixels in off-centre minis converge to similar
+       δ values → per-pixel signal lost → all pixels in the mini
+       bail at the same iter → solid colour. Legacy
+       MandelbrotCalculator's strict-equality glitch check
+       (`zr == Zr`) misses this "soft glitch" because δ is tiny-
+       but-nonzero. New `PerturbGlitchTolerance` property (default
+       1e-6, Pauldelbrot's classic value): pixel flagged glitched
+       when `|δ|² < tolerance · |z|²` AND `it > 4` (skip early
+       iters where small δ is legitimate). Glitched pixels fall
+       to per-pixel HP-direct via `ComputePixelQdContinue` (or
+       `ComputePixelDdDirect` at zoom &lt; QdDirectZoomThreshold).
+       Added to both scalar tail and AVX-512 SIMD lane. Cost:
+       more HP-direct calls in mini-Julia regions → slower but
+       correct. Tighten (smaller tolerance) for perf, loosen for
+       cleaner images. Set 0.0 to disable (revert to strict-
+       equality only — matches legacy behaviour). Note legacy
+       MandelbrotCalculator also lacks this check but renders
+       these views correctly via a separate mechanism we haven't
+       fully isolated (possibly the AVX-2 SIMD path's `glitched`
+       flag escalating an entire 4-pixel group to QD when ANY
+       lane glitches — see line 1989 in MandelbrotCalculator.cs;
+       gen's per-pixel scalar path can't aggregate this way).
+       True fix is cluster rebase (Item 7) — shared ref orbit per
+       cluster instead of per-pixel HP-direct — but Pauldelbrot
+       detection is the correctness floor that unblocks it.
