@@ -14,7 +14,7 @@
 //                  =  (((z + z)*z + z*z)*z + z*z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 00:29:58 UTC
+// Generated: 2026-06-02 00:49:40 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -265,6 +265,13 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
     private double _cachedCenterY, _cachedCenterYLo, _cachedCenterY2, _cachedCenterY3;
     private bool _cachedUseExtendedRef, _cachedUseBla, _cachedUseSa;
     private double _cachedScale;
+    // Ref-point offset chosen by the smarter ref-orbit search when the
+    // view centre itself escapes early. (0,0) when ref point IS the view
+    // centre (the common case). Non-zero means perturbation ran against
+    // a point that survived to maxIt instead of bailing the whole frame
+    // to DD-HP. Cached alongside the orbit because changing the chosen
+    // ref breaks the orbit + BLA + SA arrays.
+    private double _cachedRefOffsetX, _cachedRefOffsetY;
 
     public MandelbrotZ4Calculator(int width, int height) => Resize(width, height);
 
@@ -684,10 +691,22 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
         // controller round-trip that doesn't happen when the user just
         // crosses the threshold from below.
         bool useExtendedRef = Zoom >= ExtendedRefZoomThreshold;
-        QD CrQd = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
-        QD CiQd = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
+        // Preserve the view-centre QD values — the alternate-ref search
+        // (engaged when the centre's own orbit escapes early) needs them
+        // as the origin for candidate offsets, and the per-pixel ε shift
+        // is computed as (chosen ref − view centre) post-search.
+        QD CrQd_orig = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
+        QD CiQd_orig = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
+        QD CrQd = CrQd_orig;
+        QD CiQd = CiQd_orig;
         double Cr = useExtendedRef ? (double)CrQd : CenterX;
         double Ci = useExtendedRef ? (double)CiQd : CenterY;
+        // Ref-point offset from the view centre. (0,0) when the centre's
+        // own orbit was viable (the common case). Non-zero means the
+        // alternate-ref search picked a point inside the visible frame
+        // whose orbit survives — perturbation runs against that point
+        // and the per-pixel ε is shifted by these values to compensate.
+        double refOffsetX = 0.0, refOffsetY = 0.0;
 
         // Cache hit: centre + precision tier + maxIt cap unchanged since
         // the last full computation. Skip the ref orbit + BLA build and
@@ -725,6 +744,19 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
             refZrLo = _cachedRefZrLo!;
             refZiLo = _cachedRefZiLo!;
             refOrbitLen = Math.Min(_cachedRefOrbitLen, maxIt);
+            // Restore the alternate ref point the previous build picked
+            // (so per-pixel ε uses the same shift the cached orbit was
+            // computed against). Skip the CrQd recomputation when there
+            // was no shift — saves the QD add.
+            refOffsetX = _cachedRefOffsetX;
+            refOffsetY = _cachedRefOffsetY;
+            if (refOffsetX != 0.0 || refOffsetY != 0.0)
+            {
+                CrQd = CrQd_orig + new QD(refOffsetX);
+                CiQd = CiQd_orig + new QD(refOffsetY);
+                Cr = (double)CrQd;
+                Ci = (double)CiQd;
+            }
             goto refOrbitReady;
         }
 
@@ -748,54 +780,85 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
             // are suffixed `_q` so the inner BLA scope can re-bind the
             // (zr, zi, Cr, Ci) names that the BLA-A and BLA-B emitted
             // bodies reference by literal name.
-            QD zr_q = QD.Zero, zi_q = QD.Zero;
-            int n;
-            for (n = 0; n < maxIt; n++)
+            //
+            // Wrapped in a single-retry do-while so that an iter-0 escape
+            // can trigger an alternate-ref search and re-run the build
+            // with the chosen alternate. Without the retry, an early
+            // escape bails the whole frame to whole-frame DD/QD-direct
+            // (seconds per render at deep zoom); with it, perturbation
+            // stays viable whenever any point in the visible frame has a
+            // long-enough orbit.
+            bool needRetry;
+            bool alreadyRetried = false;
+            do
             {
-                double zrHi = zr_q.X0, ziHi = zi_q.X0;
-                double r2 = zrHi * zrHi + ziHi * ziHi;
-                // Orbit escape: cap refOrbitLen at iter 0 → bail whole
-                // frame (centre is exterior, no perturbation possible).
-                // Cap at iter > 0 → truncate; per-pixel iter past the cap
-                // falls to HP-direct per-pixel, leaving the bulk of the
-                // frame on the fast perturbation path.
-                if (r2 >= Bailout2)
+                needRetry = false;
+                QD zr_q = QD.Zero, zi_q = QD.Zero;
+                int n;
+                for (n = 0; n < maxIt; n++)
                 {
-                    if (n == 0) return false;
-                    refOrbitLen = n;
-                    break;
-                }
-                refZr[n] = zrHi;
-                refZi[n] = ziHi;
-                refZrLo[n] = zr_q.X1;
-                refZiLo[n] = zi_q.X1;
-                if (UseBla)
-                {
-                    // BLA level-0 coefficients evaluated at the high-limb
-                    // Z. The linear δ-step uses double math; pulling lower
-                    // QD limbs into it would slow it without improving
-                    // the answer at the accuracy a |δ| ≪ |Z| step
-                    // requires.
-                    double zr = zrHi, zi = ziHi;
-                    double cr = Cr, ci = Ci;
+                    double zrHi = zr_q.X0, ziHi = zi_q.X0;
+                    double r2 = zrHi * zrHi + ziHi * ziHi;
+                    // Orbit escape: cap refOrbitLen at iter 0 → try the
+                    // alternate-ref search before bailing whole-frame.
+                    // Cap at iter > 0 → truncate; per-pixel iter past the
+                    // cap falls to HP-direct per-pixel, leaving the bulk
+                    // of the frame on the fast perturbation path.
+                    if (r2 >= Bailout2)
+                    {
+                        if (n == 0)
+                        {
+                            if (!alreadyRetried
+                                && TryFindAlternateRefQd(
+                                    CrQd_orig, CiQd_orig,
+                                    halfWScale, halfHScale, maxIt,
+                                    out QD altCrQd, out QD altCiQd))
+                            {
+                                CrQd = altCrQd; CiQd = altCiQd;
+                                Cr = (double)CrQd; Ci = (double)CiQd;
+                                refOffsetX = (double)(CrQd - CrQd_orig);
+                                refOffsetY = (double)(CiQd - CiQd_orig);
+                                alreadyRetried = true;
+                                needRetry = true;
+                                break;
+                            }
+                            return false;
+                        }
+                        refOrbitLen = n;
+                        break;
+                    }
+                    refZr[n] = zrHi;
+                    refZi[n] = ziHi;
+                    refZrLo[n] = zr_q.X1;
+                    refZiLo[n] = zi_q.X1;
+                    if (UseBla)
+                    {
+                        // BLA level-0 coefficients evaluated at the high-limb
+                        // Z. The linear δ-step uses double math; pulling lower
+                        // QD limbs into it would slow it without improving
+                        // the answer at the accuracy a |δ| ≪ |Z| step
+                        // requires.
+                        double zr = zrHi, zi = ziHi;
+                        double cr = Cr, ci = Ci;
                     double Ar_new = (((((zr + zr) * zr - (zi + zi) * zi) + (zr * zr - zi * zi)) * zr - (((zr + zr) * zi + (zi + zi) * zr) + (zr * zi + zi * zr)) * zi) + ((zr * zr - zi * zi) * zr - (zr * zi + zi * zr) * zi));
                     double Ai_new = (((((zr + zr) * zr - (zi + zi) * zi) + (zr * zr - zi * zi)) * zi + (((zr + zr) * zi + (zi + zi) * zr) + (zr * zi + zi * zr)) * zr) + ((zr * zr - zi * zi) * zi + (zr * zi + zi * zr) * zr));
                     double Br_new = 1.0;
                     double Bi_new = 0.0;
-                    double rN = BlaRelative * Math.Sqrt(r2);
-                    blaLevel0![n] = new Bla(Ar_new, Ai_new, Br_new, Bi_new, rN * rN, 1);
-                }
-                {
+                        double rN = BlaRelative * Math.Sqrt(r2);
+                        blaLevel0![n] = new Bla(Ar_new, Ai_new, Br_new, Bi_new, rN * rN, 1);
+                    }
+                    {
                 QD zr_q_new = ((((zr_q * zr_q - zi_q * zi_q) * zr_q - (zr_q * zi_q + zi_q * zr_q) * zi_q) * zr_q - ((zr_q * zr_q - zi_q * zi_q) * zi_q + (zr_q * zi_q + zi_q * zr_q) * zr_q) * zi_q) + CrQd);
                 QD zi_q_new = ((((zr_q * zr_q - zi_q * zi_q) * zr_q - (zr_q * zi_q + zi_q * zr_q) * zi_q) * zi_q + ((zr_q * zr_q - zi_q * zi_q) * zi_q + (zr_q * zi_q + zi_q * zr_q) * zr_q) * zr_q) + CiQd);
-                    zr_q = zr_q_new; zi_q = zi_q_new;
+                        zr_q = zr_q_new; zi_q = zi_q_new;
+                    }
                 }
-            }
-            if (refOrbitLen == maxIt)
-            {
-                refZr[maxIt] = zr_q.X0; refZi[maxIt] = zi_q.X0;
-                refZrLo[maxIt] = zr_q.X1; refZiLo[maxIt] = zi_q.X1;
-            }
+                if (!needRetry && refOrbitLen == maxIt)
+                {
+                    refZr[maxIt] = zr_q.X0; refZi[maxIt] = zi_q.X0;
+                    refZrLo[maxIt] = zr_q.X1; refZiLo[maxIt] = zi_q.X1;
+                }
+            } while (needRetry);
         }
         else
         {
@@ -849,8 +912,21 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
         _cachedCenterX2 = CenterX2; _cachedCenterX3 = CenterX3;
         _cachedCenterY = CenterY; _cachedCenterYLo = CenterYLo;
         _cachedCenterY2 = CenterY2; _cachedCenterY3 = CenterY3;
+        _cachedRefOffsetX = refOffsetX; _cachedRefOffsetY = refOffsetY;
 
         refOrbitReady:
+
+        // Worst-case |ε| from the chosen ref point. When the ref is the
+        // view centre (the common case), it's the frame diagonal/2. When
+        // the alternate-ref search shifted the ref to a point inside the
+        // frame, the worst corner is now further away — extend the bound
+        // so BLA merge radii + SA tolerance stay conservative.
+        if (refOffsetX != 0.0 || refOffsetY != 0.0)
+        {
+            double maxExtX = halfWScale + Math.Abs(refOffsetX);
+            double maxExtY = halfHScale + Math.Abs(refOffsetY);
+            dcMaxAbs = Math.Sqrt(maxExtX * maxExtX + maxExtY * maxExtY);
+        }
 
         // ── BLA hierarchy build / cache ──────────────────────────────────
         //
@@ -938,8 +1014,11 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
             }
             // Worst-case |ε|² in the frame is at the corner — that's the
             // largest input the series prelude has to remain accurate for.
-            double maxOffX = Width  * 0.5 * scale;
-            double maxOffY = Height * 0.5 * scale;
+            // refOffsetX/Y are non-zero when the alternate-ref search
+            // shifted the ref off the view centre; the worst corner is
+            // then halfFrame + |refOffset| in each axis.
+            double maxOffX = Width  * 0.5 * scale + Math.Abs(refOffsetX);
+            double maxOffY = Height * 0.5 * scale + Math.Abs(refOffsetY);
             double maxEps2 = maxOffX * maxOffX + maxOffY * maxOffY;
             double maxEps  = Math.Sqrt(maxEps2);
             // |ε^(N-1)| relative scaling for the tail-vs-head tolerance
@@ -1146,7 +1225,12 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
             // to a handful of bits before the subtraction recovers it.
             // The reference orbit is already iterated relative to the view
             // centre, so ε never needs to round-trip through cx.
-            double ei = (y - Height * 0.5) * scale;
+            // ε per pixel relative to the *ref point*, not the view centre.
+            // refOffsetY=0 when the centre IS the ref point (common case)
+            // → subtract is a no-op. When the alternate-ref search shifted
+            // the ref off-centre at deep zoom, the subtract keeps every
+            // pixel's ε computed against the orbit's actual origin.
+            double ei = (y - Height * 0.5) * scale - refOffsetY;
             int rowBase = y * Width;
             int x = 0;
 
@@ -1161,14 +1245,20 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
                 Vector512<long>   allActive = Vector512<long>.AllBitsSet;
                 Vector512<double> dZero     = Vector512<double>.Zero;
                 Vector512<long>   lZero     = Vector512<long>.Zero;
+                // Broadcast the ref-point offset once per row. Zero when
+                // the ref IS the view centre; non-zero when the alternate-
+                // ref search engaged at deep zoom.
+                Vector512<double> refOffX_v = Vector512.Create(refOffsetX);
 
                 for (; x + 8 <= Width; x += 8)
                 {
                     Vector512<double> idx_v = Vector512.Create(
                         (double)x, x + 1, x + 2, x + 3,
                         x + 4, x + 5, x + 6, x + 7);
-                    Vector512<double> er_v = Avx512F.Multiply(
-                        Avx512F.Subtract(idx_v, halfW_v), scale_v);
+                    Vector512<double> er_v = Avx512F.Subtract(
+                        Avx512F.Multiply(
+                            Avx512F.Subtract(idx_v, halfW_v), scale_v),
+                        refOffX_v);
 
                     Vector512<double> dr  = dZero, di  = dZero;
                     Vector512<double> drv = dZero, div = dZero;
@@ -1482,7 +1572,9 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
 
             for (; x < Width; x++)
             {
-                double er = (x - Width * 0.5) * scale;
+                // ε per pixel relative to the ref point (= view centre when
+                // the alternate-ref search did not engage).
+                double er = (x - Width * 0.5) * scale - refOffsetX;
                 int finalIt = maxIt;
                 double finalZr = 0.0, finalZi = 0.0;
                 // DD-precision |z|² at escape — preserves per-pixel
@@ -1738,6 +1830,107 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
             }
         });
         return true;
+    }
+
+    // ── Smarter ref-orbit selection ──────────────────────────────────────────
+    //
+    // When the view centre's own orbit escapes immediately (iter 0), the
+    // perturbation path is useless and we'd otherwise bail the whole
+    // frame to whole-frame DD/QD-direct — seconds per render at deep
+    // zoom on an AVX-2 CPU. Search a small fixed set of candidate ref
+    // points inside the visible frame for one whose orbit survives.
+    // Each probe is cheap (QD iteration, no BLA, no array writes) and
+    // we stop at the first candidate that reaches maxIt. Typical hit:
+    // a tendril near the frame edge has the centre exterior but a
+    // corner survives.
+    //
+    // Trade-off: the per-pixel ε is shifted (orbit is now relative to
+    // the alternate ref, not the view centre). The shift is bounded by
+    // the frame extent, so |ε|_max grows from ~halfDiag to ~1.4×halfDiag
+    // worst case — SA validity tolerance and BLA merge radii absorb it
+    // because dcMaxAbs is recomputed against the chosen ref. When the
+    // search fails (every candidate also escapes early), we still fall
+    // back to whole-frame HP-direct — same behaviour as before, plus
+    // 12 fast probes.
+
+    // Probe offsets as (dx, dy) fractions of (halfWScale, halfHScale).
+    // 0.45 corners give 90% of the frame radius — far enough to escape
+    // exterior regions near the centre, not so far that |ε| bounds blow
+    // up the BLA merge thresholds. 12 candidates: 4 corners, 4 mid-
+    // edges, 4 inner-ring — covers the visible frame uniformly enough
+    // to catch a surviving point in nearly every "centre escapes" case.
+    private static readonly double[] AlternateRefOffsets = new double[]
+    {
+        -0.45, -0.45,   0.45, -0.45,   0.45,  0.45,  -0.45,  0.45,
+        -0.45,  0.00,   0.45,  0.00,   0.00, -0.45,   0.00,  0.45,
+        -0.22, -0.22,   0.22, -0.22,   0.22,  0.22,  -0.22,  0.22,
+    };
+
+    /// <summary>Probe a candidate ref centre's orbit length. Returns the
+    /// iter count at escape, or maxIt if it didn't escape. No array
+    /// writes; no BLA computation — pure iteration count, suitable for
+    /// running 12× per frame on the alternate-ref-search hot path.</summary>
+    private int ProbeRefOrbitLengthQd(QD CrQd, QD CiQd, int maxIt)
+    {
+        QD zr_q = QD.Zero, zi_q = QD.Zero;
+        for (int n = 0; n < maxIt; n++)
+        {
+            double zrHi = zr_q.X0, ziHi = zi_q.X0;
+            if (zrHi * zrHi + ziHi * ziHi >= Bailout2) return n;
+            {
+                QD zr_q_new = ((((zr_q * zr_q - zi_q * zi_q) * zr_q - (zr_q * zi_q + zi_q * zr_q) * zi_q) * zr_q - ((zr_q * zr_q - zi_q * zi_q) * zi_q + (zr_q * zi_q + zi_q * zr_q) * zr_q) * zi_q) + CrQd);
+                QD zi_q_new = ((((zr_q * zr_q - zi_q * zi_q) * zr_q - (zr_q * zi_q + zi_q * zr_q) * zi_q) * zi_q + ((zr_q * zr_q - zi_q * zi_q) * zi_q + (zr_q * zi_q + zi_q * zr_q) * zr_q) * zr_q) + CiQd);
+                zr_q = zr_q_new; zi_q = zi_q_new;
+            }
+        }
+        return maxIt;
+    }
+
+    /// <summary>Search the visible frame for an alternate ref point with
+    /// a long-surviving orbit. Returns true and writes bestCr/bestCi when
+    /// a candidate is found whose orbit lasts at least <c>MinAcceptLen</c>
+    /// iterations — short of that, the per-pixel HP-direct path is
+    /// likely cheaper than building a barely-useful ref orbit and
+    /// running perturbation pixels off it. Stops at the first candidate
+    /// that survives all the way to maxIt.</summary>
+    private bool TryFindAlternateRefQd(
+        QD origCrQd, QD origCiQd,
+        double halfWScale, double halfHScale, int maxIt,
+        out QD bestCr, out QD bestCi)
+    {
+        // Below this orbit length, falling back to per-pixel HP-direct
+        // is cheaper than running perturbation against a near-useless
+        // ref. 64 ≈ break-even point at maxIt=10000 — below it the
+        // per-pixel slow path on the small fraction of bailout pixels
+        // costs less than rebuilding BLA + SA + per-pixel iteration off
+        // a truncated orbit.
+        const int MinAcceptLen = 64;
+
+        bestCr = origCrQd; bestCi = origCiQd;
+        int bestLen = 0;
+        double[] offsets = AlternateRefOffsets;
+        for (int i = 0; i < offsets.Length; i += 2)
+        {
+            // QD-precision candidate centre. The dx,dy fractions are
+            // exact doubles; their product with halfWScale is an exact
+            // double too (at the zooms this engages, halfWScale ~ 1e-13
+            // or smaller, so plenty of double headroom). The QD add then
+            // preserves the orig centre's lower QD limbs.
+            QD candCr = origCrQd + (offsets[i]     * halfWScale);
+            QD candCi = origCiQd + (offsets[i + 1] * halfHScale);
+            int len = ProbeRefOrbitLengthQd(candCr, candCi, maxIt);
+            if (len >= maxIt)
+            {
+                bestCr = candCr; bestCi = candCi;
+                return true;
+            }
+            if (len > bestLen)
+            {
+                bestLen = len;
+                bestCr = candCr; bestCi = candCi;
+            }
+        }
+        return bestLen >= MinAcceptLen;
     }
 
     // ── HP-direct per-pixel fallback ─────────────────────────────────────────
