@@ -14,7 +14,7 @@
 //                  =  (z + z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 09:17:37 UTC
+// Generated: 2026-06-02 09:27:34 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -330,6 +330,42 @@ public sealed class MandelbrotPhoenixCalculator : IFractalCalculator, IDisposabl
     private CachedRebaseOrbit[]? _rebaseCache;
     private long _rebaseCacheTick;
     private readonly object _rebaseCacheLock = new();
+
+    // ── SIMD lane helpers (per-lane BLA support) ─────────────────────────
+    //
+    // BLA's per-lane skip path mirrors legacy MandelbrotCalculator's
+    // approach: derive a horizontal-max of |δ|² over ACTIVE lanes only
+    // (escaped lanes have frozen δ that would otherwise block the skip),
+    // do a scalar bla.Lookup with that value, then blend the linear
+    // step's δ/drv update so escaped lanes stay put.
+
+    [System.Runtime.CompilerServices.MethodImpl(
+        System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static double HMaxMasked4(Vector256<double> v, int activeMask)
+    {
+        double max = 0.0;
+        if ((activeMask & 1) != 0) { double d = v.GetElement(0); if (d > max) max = d; }
+        if ((activeMask & 2) != 0) { double d = v.GetElement(1); if (d > max) max = d; }
+        if ((activeMask & 4) != 0) { double d = v.GetElement(2); if (d > max) max = d; }
+        if ((activeMask & 8) != 0) { double d = v.GetElement(3); if (d > max) max = d; }
+        return max;
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(
+        System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static double HMaxMasked8(Vector512<double> v, int activeMask)
+    {
+        double max = 0.0;
+        if ((activeMask & 0x01) != 0) { double d = v.GetElement(0); if (d > max) max = d; }
+        if ((activeMask & 0x02) != 0) { double d = v.GetElement(1); if (d > max) max = d; }
+        if ((activeMask & 0x04) != 0) { double d = v.GetElement(2); if (d > max) max = d; }
+        if ((activeMask & 0x08) != 0) { double d = v.GetElement(3); if (d > max) max = d; }
+        if ((activeMask & 0x10) != 0) { double d = v.GetElement(4); if (d > max) max = d; }
+        if ((activeMask & 0x20) != 0) { double d = v.GetElement(5); if (d > max) max = d; }
+        if ((activeMask & 0x40) != 0) { double d = v.GetElement(6); if (d > max) max = d; }
+        if ((activeMask & 0x80) != 0) { double d = v.GetElement(7); if (d > max) max = d; }
+        return max;
+    }
 
     public MandelbrotPhoenixCalculator(int width, int height) => Resize(width, height);
 
@@ -1203,27 +1239,22 @@ public sealed class MandelbrotPhoenixCalculator : IFractalCalculator, IDisposabl
         LastPrecisionLabel = (useExtendedRef ? "QD-PT" : "PT") + (saStart > 0 ? "-SA" : "");
 
         bool useBlaLocal = UseBla;
-        // AVX-512 perturbation lane: 8 pixels per SIMD step. Active only
-        // when the hardware supports AVX-512F, the row is at least 8
-        // pixels wide, and BLA is OFF (BLA's per-lane branching would
-        // need predicated execution that's clean only with mask
-        // registers — keeping it scalar avoids the complexity). Glitched
-        // lanes and lanes still active when ref orbit ends both fall
-        // back to per-pixel HP-direct after the SIMD inner loop.
-        // SA prelude is a scalar-path optimisation; the AVX-512 lane
-        // starts at iter 0. When SA skipped several thousand iters
-        // already, redoing them 8-wide is still a loss. Disable SIMD
-        // when saStart > 0 — the scalar path with SA wins.
-        bool useSimd512Lane = Avx512F.IsSupported && !UseBla && Width >= 8 && saStart == 0;
-        // AVX-2 perturbation lane: 4 pixels per SIMD step. Same gating as
-        // AVX-512 (no BLA, no SA prelude active) but with the lower
-        // hardware bar. Only engages when AVX-512 isn't available — on
-        // AVX-512-capable CPUs the 8-wide path wins. Provides the
-        // 4×-ish SIMD win on AVX-2-only hardware, closing most of the
-        // gap vs the hand-tuned legacy ComputeRowPT4.
+        // AVX-512 perturbation lane: 8 pixels per SIMD step. Engaged
+        // when AVX-512F is available, the row is at least 8 pixels
+        // wide, and SA didn't already skip the bulk of the iter range
+        // (SA-skipped rows favour the scalar tail since the remaining
+        // iter count is small and scalar+BLA already nails it). BLA
+        // works inside the lane via per-lane HMaxMasked drive + active-
+        // mask blend (same pattern legacy MandelbrotCalculator uses).
+        bool useSimd512Lane = Avx512F.IsSupported && Width >= 8 && saStart == 0;
+        // AVX-2 perturbation lane: 4 pixels per SIMD step. Engages when
+        // AVX-512 isn't available (or row width < 8). Same gating as
+        // the 8-wide lane otherwise. Per-lane BLA mirrors legacy
+        // ComputeRowPT4 — without that the lane gets disabled on every
+        // BLA-on frame and the scalar tail does all the work.
         bool useSimd2Lane   = !useSimd512Lane
                             && Avx2.IsSupported && Fma.IsSupported
-                            && !UseBla && Width >= 4 && saStart == 0;
+                            && Width >= 4 && saStart == 0;
         // Cluster-rebase glitch collection (Item 7). When enabled, the
         // glitch handlers append (x, y) here instead of immediately
         // calling per-pixel HP-direct. After the main Parallel.For
@@ -1354,6 +1385,63 @@ public sealed class MandelbrotPhoenixCalculator : IFractalCalculator, IDisposabl
                             g = Avx512F.Or(g, soft);
                         }
                         glitchMask = Avx512F.Or(glitchMask, Avx512F.And(g, activeMask));
+
+                        // BLA skip attempt (per-lane via active-mask blend).
+                        // HMaxMasked8 picks the worst-case |δ|² across only
+                        // the lanes that haven't escaped — escaped lanes have
+                        // frozen (large) δ that would otherwise force the
+                        // lookup to return -1.  blaIdx >= 0 → linear A·δ+B·ε
+                        // step replaces L iters; active-mask blend keeps the
+                        // escaped lanes frozen.
+                        if (useBlaLocal && bla != null)
+                        {
+                            int activeBits8 = (int)activeMask.ExtractMostSignificantBits();
+                            if (activeBits8 != 0)
+                            {
+                                Vector512<double> dmag2v8 = Avx512F.FusedMultiplyAdd(
+                                    dr, dr, Avx512F.Multiply(di, di));
+                                double maxActiveDmag28 = HMaxMasked8(dmag2v8, activeBits8);
+                                int blaIdx8 = bla.Lookup(it, maxActiveDmag28, maxIt);
+                                if (blaIdx8 >= 0)
+                                {
+                                    ref readonly var bEntry8 = ref bla.Data[blaIdx8];
+                                    if (bEntry8.L >= 2)
+                                    {
+                                        Vector512<double> aRev8 = Vector512.Create(bEntry8.ARe);
+                                        Vector512<double> aImv8 = Vector512.Create(bEntry8.AIm);
+                                        Vector512<double> bRev8 = Vector512.Create(bEntry8.BRe);
+                                        Vector512<double> bImv8 = Vector512.Create(bEntry8.BIm);
+                                        Vector512<double> aDr8 = Avx512F.Subtract(
+                                            Avx512F.Multiply(aRev8, dr), Avx512F.Multiply(aImv8, di));
+                                        Vector512<double> aDi8 = Avx512F.Add(
+                                            Avx512F.Multiply(aRev8, di), Avx512F.Multiply(aImv8, dr));
+                                        Vector512<double> bDcR8 = Avx512F.Subtract(
+                                            Avx512F.Multiply(bRev8, er_v), Avx512F.Multiply(bImv8, ei_v));
+                                        Vector512<double> bDcI8 = Avx512F.Add(
+                                            Avx512F.Multiply(bRev8, ei_v), Avx512F.Multiply(bImv8, er_v));
+                                        Vector512<double> newDrBla8 = Avx512F.Add(aDr8, bDcR8);
+                                        Vector512<double> newDiBla8 = Avx512F.Add(aDi8, bDcI8);
+                                        Vector512<double> keepBla8 = activeMask.AsDouble();
+                                        dr = Avx512F.BlendVariable(dr, newDrBla8, keepBla8);
+                                        di = Avx512F.BlendVariable(di, newDiBla8, keepBla8);
+                                        Vector512<double> aDrv8 = Avx512F.Subtract(
+                                            Avx512F.Multiply(aRev8, drv), Avx512F.Multiply(aImv8, div));
+                                        Vector512<double> aDiv8 = Avx512F.Add(
+                                            Avx512F.Multiply(aRev8, div), Avx512F.Multiply(aImv8, drv));
+                                        drv = Avx512F.BlendVariable(drv, aDrv8, keepBla8);
+                                        div = Avx512F.BlendVariable(div, aDiv8, keepBla8);
+                                        // Add L-1 extra iters to escapeIter on
+                                        // active lanes (the loop's own ++it adds
+                                        // the remaining 1).
+                                        escapeIter = Avx512F.Add(escapeIter,
+                                            Avx512F.And(Vector512.Create((long)(bEntry8.L - 1)),
+                                                        activeMask));
+                                        it += bEntry8.L - 1;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
 
                         // Derivative
                         {
@@ -1537,6 +1625,55 @@ public sealed class MandelbrotPhoenixCalculator : IFractalCalculator, IDisposabl
                             g = Avx2.Or(g, soft);
                         }
                         glitchMask = Avx2.Or(glitchMask, Avx2.And(g, activeMask));
+
+                        // BLA skip attempt (per-lane via active-mask blend).
+                        // Mirrors legacy ComputeRowPT4 lines 1865-1917.
+                        if (useBlaLocal && bla != null)
+                        {
+                            int activeBits4 = Avx.MoveMask(activeMask.AsDouble());
+                            if (activeBits4 != 0)
+                            {
+                                Vector256<double> dmag2v4 = Fma.MultiplyAdd(
+                                    dr, dr, Avx.Multiply(di, di));
+                                double maxActiveDmag24 = HMaxMasked4(dmag2v4, activeBits4);
+                                int blaIdx4 = bla.Lookup(it, maxActiveDmag24, maxIt);
+                                if (blaIdx4 >= 0)
+                                {
+                                    ref readonly var bEntry4 = ref bla.Data[blaIdx4];
+                                    if (bEntry4.L >= 2)
+                                    {
+                                        Vector256<double> aRev4 = Vector256.Create(bEntry4.ARe);
+                                        Vector256<double> aImv4 = Vector256.Create(bEntry4.AIm);
+                                        Vector256<double> bRev4 = Vector256.Create(bEntry4.BRe);
+                                        Vector256<double> bImv4 = Vector256.Create(bEntry4.BIm);
+                                        Vector256<double> aDr4 = Avx.Subtract(
+                                            Avx.Multiply(aRev4, dr), Avx.Multiply(aImv4, di));
+                                        Vector256<double> aDi4 = Avx.Add(
+                                            Avx.Multiply(aRev4, di), Avx.Multiply(aImv4, dr));
+                                        Vector256<double> bDcR4 = Avx.Subtract(
+                                            Avx.Multiply(bRev4, er_v), Avx.Multiply(bImv4, ei_v));
+                                        Vector256<double> bDcI4 = Avx.Add(
+                                            Avx.Multiply(bRev4, ei_v), Avx.Multiply(bImv4, er_v));
+                                        Vector256<double> newDrBla4 = Avx.Add(aDr4, bDcR4);
+                                        Vector256<double> newDiBla4 = Avx.Add(aDi4, bDcI4);
+                                        Vector256<double> keepBla4 = activeMask.AsDouble();
+                                        dr = Avx.BlendVariable(dr, newDrBla4, keepBla4);
+                                        di = Avx.BlendVariable(di, newDiBla4, keepBla4);
+                                        Vector256<double> aDrv4 = Avx.Subtract(
+                                            Avx.Multiply(aRev4, drv), Avx.Multiply(aImv4, div));
+                                        Vector256<double> aDiv4 = Avx.Add(
+                                            Avx.Multiply(aRev4, div), Avx.Multiply(aImv4, drv));
+                                        drv = Avx.BlendVariable(drv, aDrv4, keepBla4);
+                                        div = Avx.BlendVariable(div, aDiv4, keepBla4);
+                                        escapeIter = Avx2.Add(escapeIter,
+                                            Avx2.And(Vector256.Create((long)(bEntry4.L - 1)),
+                                                     activeMask));
+                                        it += bEntry4.L - 1;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
 
                         // Derivative
                         {
