@@ -14,7 +14,7 @@
 //                  =  (if abs(z) > 4 then 1 else z + z)*D + if abs(z) > 4 then 0 else 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 08:52:56 UTC
+// Generated: 2026-06-02 09:12:52 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -189,15 +189,20 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
     /// re-runs perturbation for the cluster against that rebase orbit.
     /// Pixels that glitch again on the rebase orbit fall to per-pixel
     /// HP-direct as before.
-    /// Default true. Spatial partitioning splits scattered glitches
-    /// into independent clusters via grid bucketing + connected
-    /// components, so each cluster gets its own rebase orbit instead
-    /// of one centroid orbit that fits none of them. Three early-exit
-    /// guards (zoom gate, bbox cohesion, sample-probe) skip rebase
-    /// for cases where straight per-pixel HP-direct is cheaper.
-    /// Set false to revert to per-pixel HP-direct for every glitched
-    /// pixel (the pre-rebase behaviour).</summary>
-    public bool UseClusterRebase { get; set; } = true;
+    /// Default false pending AVX-2 perturbation lane parity with legacy.
+    /// At deep zoom on scattered-mini-Julia scenes the rebase orbit
+    /// build cost (one QD orbit per spatial cluster) plus the rebase
+    /// pass overhead can dominate the per-pixel HP-direct cost the path
+    /// is meant to amortise. Three early-exit guards (zoom gate, bbox
+    /// cohesion, sample-probe) and cross-frame cache (E) reduce the
+    /// wasted work but don't fully eliminate it. Enable opt-in for
+    /// cohesive deep-zoom mini-Julia scenes where many adjacent pixels
+    /// glitch together.
+    /// Spatial partitioning (D) splits scattered glitches into
+    /// independent clusters via grid bucketing + connected components,
+    /// so each cluster gets its own rebase orbit instead of one
+    /// centroid orbit that fits none of them.</summary>
+    public bool UseClusterRebase { get; set; } = false;
 
     /// <summary>Minimum number of glitched pixels for the cluster-rebase
     /// pass to engage. Below this, the rebase orbit's QD build cost
@@ -307,6 +312,24 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
     // to DD-HP. Cached alongside the orbit because changing the chosen
     // ref breaks the orbit + BLA + SA arrays.
     private double _cachedRefOffsetX, _cachedRefOffsetY;
+
+    // Cross-frame cache for rebase orbits (Item 7 / E). Cluster rebase
+    // builds a QD orbit per mini-Julia cluster; pan/zoom-only frames
+    // often hit the same minis again. N=4 LRU cache keyed by the QD
+    // centre point — match within scale*16 pixel tolerance, cached
+    // maxIt must be >= requested. Cache hit saves the ~50-200 µs QD
+    // orbit build per cluster.
+    private struct CachedRebaseOrbit
+    {
+        public QD CenterX, CenterY;
+        public int Len;
+        public int MaxIt;
+        public double[] Zr, Zi, ZrLo, ZiLo;
+        public long LastUsedTick;
+    }
+    private CachedRebaseOrbit[]? _rebaseCache;
+    private long _rebaseCacheTick;
+    private readonly object _rebaseCacheLock = new();
 
     public MandelbrotBurningShipCalculator(int width, int height) => Resize(width, height);
 
@@ -1922,13 +1945,26 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
         QD rebaseCrQd = CrQd_orig + rebaseAbsOffsetX;
         QD rebaseCiQd = CiQd_orig + rebaseAbsOffsetY;
 
-        // Build rebase QD orbit.
-        double[] rZr  = new double[maxIt + 1];
-        double[] rZi  = new double[maxIt + 1];
-        double[] rZrLo = new double[maxIt + 1];
-        double[] rZiLo = new double[maxIt + 1];
-        int rebaseLen = BuildRebaseRefOrbitQd(rebaseCrQd, rebaseCiQd, maxIt, rZr, rZi, rZrLo, rZiLo);
-        if (rebaseLen < 64) { HpDirectAll(); return; }
+        // Build rebase QD orbit (or load from cross-frame cache).
+        // Cache hit when same cluster centroid (within scale*16-pixel
+        // tolerance) and cached maxIt >= current maxIt — typical on
+        // pan/zoom-only frames where the same mini-Julias remain in
+        // view. Saves the ~50-200 µs QD orbit build per cluster.
+        double[] rZr, rZi, rZrLo, rZiLo;
+        int rebaseLen;
+        double cacheTol = scale * 16.0;
+        if (!TryGetCachedRebaseOrbit(rebaseCrQd, rebaseCiQd, maxIt, cacheTol,
+                out rZr, out rZi, out rZrLo, out rZiLo, out rebaseLen))
+        {
+            rZr   = new double[maxIt + 1];
+            rZi   = new double[maxIt + 1];
+            rZrLo = new double[maxIt + 1];
+            rZiLo = new double[maxIt + 1];
+            rebaseLen = BuildRebaseRefOrbitQd(rebaseCrQd, rebaseCiQd, maxIt, rZr, rZi, rZrLo, rZiLo);
+            if (rebaseLen < 64) { HpDirectAll(); return; }
+            InsertCachedRebaseOrbit(rebaseCrQd, rebaseCiQd, maxIt, rebaseLen,
+                rZr, rZi, rZrLo, rZiLo);
+        }
 
         // Guard C: sample-probe (first 8 serially).
         const int ProbeSize = 8;
@@ -2126,6 +2162,69 @@ public sealed class MandelbrotBurningShipCalculator : IFractalCalculator, IDispo
             finalIt, finalZr, finalZi, finalZMag2,
             finalDrv, finalDiv, maxIt, bufIdx);
         return true;
+    }
+
+    /// <summary>Look up a rebase orbit in the cross-frame cache. Match
+    /// when QD centre is within <paramref name="tolerance"/> on both
+    /// axes AND cached maxIt is at least the requested maxIt. Bumps
+    /// LastUsedTick on hit so LRU eviction keeps the warm orbits.</summary>
+    private bool TryGetCachedRebaseOrbit(QD cx, QD cy, int maxIt, double tolerance,
+        out double[] zr, out double[] zi, out double[] zrLo, out double[] ziLo, out int len)
+    {
+        lock (_rebaseCacheLock)
+        {
+            if (_rebaseCache != null)
+            {
+                for (int i = 0; i < _rebaseCache.Length; i++)
+                {
+                    ref var e = ref _rebaseCache[i];
+                    if (e.Zr == null) continue;
+                    if (e.MaxIt < maxIt) continue;
+                    double dx = (double)(e.CenterX - cx);
+                    double dy = (double)(e.CenterY - cy);
+                    if (Math.Abs(dx) > tolerance || Math.Abs(dy) > tolerance) continue;
+                    zr = e.Zr; zi = e.Zi; zrLo = e.ZrLo; ziLo = e.ZiLo;
+                    len = Math.Min(e.Len, maxIt);
+                    e.LastUsedTick = ++_rebaseCacheTick;
+                    return true;
+                }
+            }
+        }
+        zr = null!; zi = null!; zrLo = null!; ziLo = null!; len = 0;
+        return false;
+    }
+
+    /// <summary>Insert a freshly-built rebase orbit into the cross-frame
+    /// cache. Evicts the entry with the oldest LastUsedTick when all
+    /// slots are full. Cache is sized at N=4 — small enough that the
+    /// per-cluster lookup stays O(N) without a hash structure, large
+    /// enough that a few minis can stay warm across pan/zoom-only
+    /// frames.</summary>
+    private void InsertCachedRebaseOrbit(QD cx, QD cy, int maxIt, int len,
+        double[] zr, double[] zi, double[] zrLo, double[] ziLo)
+    {
+        lock (_rebaseCacheLock)
+        {
+            _rebaseCache ??= new CachedRebaseOrbit[4];
+            int evictIdx = 0;
+            long oldest = long.MaxValue;
+            for (int i = 0; i < _rebaseCache.Length; i++)
+            {
+                if (_rebaseCache[i].Zr == null) { evictIdx = i; break; }
+                if (_rebaseCache[i].LastUsedTick < oldest)
+                {
+                    oldest = _rebaseCache[i].LastUsedTick;
+                    evictIdx = i;
+                }
+            }
+            _rebaseCache[evictIdx] = new CachedRebaseOrbit
+            {
+                CenterX = cx, CenterY = cy,
+                MaxIt = maxIt, Len = len,
+                Zr = zr, Zi = zi, ZrLo = zrLo, ZiLo = ziLo,
+                LastUsedTick = ++_rebaseCacheTick,
+            };
+        }
     }
 
     // ── Smarter ref-orbit selection ──────────────────────────────────────────
