@@ -14,7 +14,7 @@
 //                  =  1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 00:17:54 UTC
+// Generated: 2026-06-02 00:30:04 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -1429,29 +1429,53 @@ public sealed class TricornCalculator : IFractalCalculator, IDisposable
                     bool refExhausted = it == refOrbitLen && refOrbitLen < maxIt;
                     if (glitched || refExhausted)
                     {
-                        QD cxq = QD.FromCenterOffset(
-                            new QD(CenterX, CenterXLo, CenterX2, CenterX3),
-                            x - Width * 0.5, scale);
-                        QD cyq = QD.FromCenterOffset(
-                            new QD(CenterY, CenterYLo, CenterY2, CenterY3),
-                            y - Height * 0.5, scale);
-                        // Best QD-precision estimate of current z is the
-                        // QD reference (refZr/refZrLo + zeros for X2/X3,
-                        // since DD = first two QD limbs) plus the
-                        // double-precision δ promoted to QD. The two
-                        // limbs of Z's QD aren't stored beyond DD, so a
-                        // tiny ULP drift relative to a fresh restart is
-                        // possible — acceptable for the rare glitch
-                        // case.
-                        int seedIdx = Math.Min(it, refOrbitLen);
-                        QD Zr_q = new QD(refZr[seedIdx], refZrLo[seedIdx], 0.0, 0.0);
-                        QD Zi_q = new QD(refZi[seedIdx], refZiLo[seedIdx], 0.0, 0.0);
-                        QD dr_q = new QD(dr, 0.0, 0.0, 0.0);
-                        QD di_q = new QD(di, 0.0, 0.0, 0.0);
-                        QD zr_q = Zr_q + dr_q;
-                        QD zi_q = Zi_q + di_q;
-                        ColorBuffer[rowBase + x] = ComputePixelQdContinue(
-                            cxq, cyq, zr_q, zi_q, drv, div, seedIdx, maxIt, rowBase + x);
+                        if (Zoom >= QdDirectZoomThreshold)
+                        {
+                            // QD-precision fallback — needed only above
+                            // ~1e25 where DD pixel-spacing collapses
+                            // below DD ULP. Continues from the current
+                            // (Zr+δ, Zi+δ) seed in QD to save the iters
+                            // already done in the perturbation loop.
+                            QD cxq = QD.FromCenterOffset(
+                                new QD(CenterX, CenterXLo, CenterX2, CenterX3),
+                                x - Width * 0.5, scale);
+                            QD cyq = QD.FromCenterOffset(
+                                new QD(CenterY, CenterYLo, CenterY2, CenterY3),
+                                y - Height * 0.5, scale);
+                            int seedIdx = Math.Min(it, refOrbitLen);
+                            QD Zr_q = new QD(refZr[seedIdx], refZrLo[seedIdx], 0.0, 0.0);
+                            QD Zi_q = new QD(refZi[seedIdx], refZiLo[seedIdx], 0.0, 0.0);
+                            QD dr_q = new QD(dr, 0.0, 0.0, 0.0);
+                            QD di_q = new QD(di, 0.0, 0.0, 0.0);
+                            QD zr_q = Zr_q + dr_q;
+                            QD zi_q = Zi_q + di_q;
+                            ColorBuffer[rowBase + x] = ComputePixelQdContinue(
+                                cxq, cyq, zr_q, zi_q, drv, div, seedIdx, maxIt, rowBase + x);
+                        }
+                        else
+                        {
+                            // DD-precision fallback — sufficient for
+                            // zoom &lt; 1e25 (DD precision ~1e-31 vs
+                            // pixel spacing ~scale = 1e-22 at zoom 1e19).
+                            // ~5× faster than QD: each iter is one DD
+                            // multiply (~10 FLOPs) vs QD multiply
+                            // (~50 FLOPs). Without this gate the
+                            // Pauldelbrot soft-glitch path drowned in
+                            // QD math, dropping deep-zoom renders from
+                            // sub-second to seconds per frame.
+                            // Matches the AVX-512 SIMD lane's
+                            // glitch-fallback gate (`if (Zoom >=
+                            // QdDirectZoomThreshold)`) so scalar and
+                            // SIMD paths produce the same colours.
+                            DD cxd = DD.FromCenterOffset(
+                                new DD(CenterX, CenterXLo),
+                                x - Width * 0.5, scale);
+                            DD cyd = DD.FromCenterOffset(
+                                new DD(CenterY, CenterYLo),
+                                y - Height * 0.5, scale);
+                            ColorBuffer[rowBase + x] = ComputePixelDdDirect(
+                                cxd, cyd, maxIt, rowBase + x);
+                        }
                         continue;
                     }
                     {
