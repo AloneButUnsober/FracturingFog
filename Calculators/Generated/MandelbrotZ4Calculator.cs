@@ -14,7 +14,7 @@
 //                  =  (((z + z)*z + z*z)*z + z*z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 08:44:20 UTC
+// Generated: 2026-06-02 08:49:12 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -1919,9 +1919,27 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
     }
 
     /// <summary>Process the deferred glitched-pixel bag from the main
-    /// perturbation pass. Build a rebase ref orbit at the cluster's
-    /// centroid (in QD precision), re-run perturbation for each pixel
-    /// against it, and fall to per-pixel HP-direct for stragglers.</summary>
+    /// perturbation pass. Three early-exit guards run before the
+    /// expensive rebase orbit build — they cover the cases where
+    /// the cluster-rebase MVP's single-centroid strategy would
+    /// regress vs straight per-pixel HP-direct:
+    ///   A. Zoom gate — below QdDirectZoomThreshold the per-pixel
+    ///      HP-direct path is DD-direct (~50 µs/pixel). Rebase
+    ///      orbit build + per-pixel rebase pass would cost roughly
+    ///      the same per pixel without a meaningful margin, so
+    ///      skip rebase entirely.
+    ///   B. Bounding-box cohesion — when glitched pixels are
+    ///      scattered (low density inside their bounding box), a
+    ///      single centroid orbit won't fit the local dynamics of
+    ///      multiple distinct mini-Julias. Skip without paying the
+    ///      QD orbit build.
+    ///   C. Sample-probe — build the rebase orbit, then test it
+    ///      against the first 8 glitched pixels serially. If at
+    ///      least half succeed, commit to the full parallel
+    ///      rebase pass over the remaining pixels. Otherwise the
+    ///      probed-success pixels are kept (they're correctly
+    ///      coloured) and the rest fall to HP-direct.
+    /// All three guards are cheap relative to the work they avoid.</summary>
     private void ProcessClusterRebase(
         ConcurrentBag<(int x, int y)> glitches,
         double scale, int maxIt,
@@ -1933,16 +1951,43 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
         int n = glitchArr.Length;
         if (n == 0) return;
 
-        // Below the floor, the rebase orbit's QD build cost (one full
-        // QD iteration loop to maxIt) outweighs per-pixel HP-direct
-        // savings. Drop straight to per-pixel HP-direct.
-        if (n < MinClusterSizeForRebase)
+        // Local helper: HP-direct every glitched pixel via Parallel.ForEach.
+        void HpDirectAll() => Parallel.ForEach(glitchArr,
+            new ParallelOptions { CancellationToken = ct },
+            g => HpDirectGlitchPixel(g.x, g.y, scale, maxIt));
+
+        // ── Guard A: zoom gate ───────────────────────────────────
+        // Below QdDirectZoomThreshold (~1e25), HpDirectGlitchPixel
+        // runs DD-direct per pixel. ~50 µs per pixel. Rebase orbit
+        // build (~50-200 µs QD iteration) + per-pixel rebase pass
+        // (~30-50 µs/pixel) doesn't beat that consistently — the
+        // savings only show up at the much-more-expensive QD-continue
+        // path that engages above the threshold.
+        if (Zoom < QdDirectZoomThreshold) { HpDirectAll(); return; }
+
+        // Below the floor, the rebase orbit's QD build cost outweighs
+        // per-pixel HP-direct savings even at the QD-continue zoom.
+        if (n < MinClusterSizeForRebase) { HpDirectAll(); return; }
+
+        // ── Guard B: bounding-box cohesion ───────────────────────
+        // Glitches scattered across the frame (low density inside
+        // their bbox) are likely from multiple distinct mini-Julias
+        // — one centroid orbit can't fit them all. Skip rebase
+        // before paying the QD build. Threshold 0.02 = 2% of bbox
+        // pixels are glitched — below that, scattered. (For a
+        // single tight cluster, density is typically 0.1-0.5.)
+        int minX = int.MaxValue, maxX = int.MinValue;
+        int minY = int.MaxValue, maxY = int.MinValue;
+        foreach (var g in glitchArr)
         {
-            Parallel.ForEach(glitchArr,
-                new ParallelOptions { CancellationToken = ct },
-                g => HpDirectGlitchPixel(g.x, g.y, scale, maxIt));
-            return;
+            if (g.x < minX) minX = g.x;
+            if (g.x > maxX) maxX = g.x;
+            if (g.y < minY) minY = g.y;
+            if (g.y > maxY) maxY = g.y;
         }
+        long bboxArea = (long)(maxX - minX + 1) * (maxY - minY + 1);
+        double bboxDensity = (double)n / bboxArea;
+        if (bboxDensity < 0.02) { HpDirectAll(); return; }
 
         // Centroid in the per-pixel-offset coordinate system (offset
         // from the *primary* ref point). Average is in double for
@@ -1956,10 +2001,7 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
         }
         double avgOffX = sumOffX / n;
         double avgOffY = sumOffY / n;
-        // Rebase centre relative to primary ref, then back to absolute.
-        // primary ref = view centre + (primaryRefOffsetX, primaryRefOffsetY)
-        // rebase centre = primary ref + (avgOffX, avgOffY)
-        //              = view centre + (primaryRefOffsetX + avgOffX, ...)
+        // Rebase centre = view centre + (primaryRefOffsetX + avgOffX, …).
         double rebaseAbsOffsetX = primaryRefOffsetX + avgOffX;
         double rebaseAbsOffsetY = primaryRefOffsetY + avgOffY;
         QD rebaseCrQd = CrQd_orig + rebaseAbsOffsetX;
@@ -1973,26 +2015,52 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
         double[] rZiLo = new double[maxIt + 1];
         int rebaseLen = BuildRebaseRefOrbitQd(rebaseCrQd, rebaseCiQd, maxIt, rZr, rZi, rZrLo, rZiLo);
 
-        // Rebase orbit also escapes early → it's not actually a viable
-        // shared orbit for the cluster. Fall back to per-pixel HP-direct.
-        if (rebaseLen < 64)
+        // Rebase orbit also escapes early → not viable. HP-direct all.
+        if (rebaseLen < 64) { HpDirectAll(); return; }
+
+        // ── Guard C: sample-probe ────────────────────────────────
+        // Run rebase on the first 8 pixels serially. TryIterateRebasePixel
+        // writes ColorBuffer on success — those probed-success pixels
+        // are correctly coloured regardless of the probe verdict. If
+        // fewer than half of the sample succeeds, abandon the full
+        // pass and HP-direct the remaining pixels (skip the probed
+        // successes — they're done).
+        const int ProbeSize = 8;
+        int sampleN = Math.Min(ProbeSize, n);
+        Span<bool> probedHit = stackalloc bool[ProbeSize];
+        int hits = 0;
+        for (int i = 0; i < sampleN; i++)
         {
-            Parallel.ForEach(glitchArr,
-                new ParallelOptions { CancellationToken = ct },
-                g => HpDirectGlitchPixel(g.x, g.y, scale, maxIt));
+            var g = glitchArr[i];
+            double er = (g.x - halfW) * scale - rebaseAbsOffsetX;
+            double ei = (g.y - halfH) * scale - rebaseAbsOffsetY;
+            int bufIdx = g.y * Width + g.x;
+            if (TryIterateRebasePixel(er, ei, rZr, rZi, rZrLo, rZiLo, rebaseLen, maxIt, bufIdx))
+            {
+                probedHit[i] = true;
+                hits++;
+            }
+        }
+        if (hits * 2 < sampleN)
+        {
+            // Abandon. HP-direct everything that didn't already render.
+            for (int i = 0; i < n; i++)
+            {
+                if (i < sampleN && probedHit[i]) continue;
+                var g = glitchArr[i];
+                HpDirectGlitchPixel(g.x, g.y, scale, maxIt);
+            }
             return;
         }
 
-        // Per-pixel rebase perturbation. δ starts at 0 (this pixel's
-        // z₀ matches the rebase orbit's z₀ = 0); ε is the per-pixel
-        // offset from the rebase ref centre. Stragglers (pixels that
-        // glitch again on the rebase orbit, or whose orbit exhausts
-        // before escape) fall to per-pixel HP-direct.
-        Parallel.ForEach(glitchArr,
+        // Commit. Full parallel rebase pass over the remaining
+        // glitched pixels (skip the probed prefix — already done).
+        Parallel.For(sampleN, n,
             new ParallelOptions { CancellationToken = ct },
-            g =>
+            idx =>
             {
                 if (ct.IsCancellationRequested) return;
+                var g = glitchArr[idx];
                 double er = (g.x - halfW) * scale - rebaseAbsOffsetX;
                 double ei = (g.y - halfH) * scale - rebaseAbsOffsetY;
                 int bufIdx = g.y * Width + g.x;
@@ -2001,6 +2069,16 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
                     HpDirectGlitchPixel(g.x, g.y, scale, maxIt);
                 }
             });
+        // Probed-failed pixels (those in the sample that returned false)
+        // also need HP-direct since they weren't coloured by the probe.
+        for (int i = 0; i < sampleN; i++)
+        {
+            if (!probedHit[i])
+            {
+                var g = glitchArr[i];
+                HpDirectGlitchPixel(g.x, g.y, scale, maxIt);
+            }
+        }
     }
 
     /// <summary>Per-pixel HP-direct fallback for a single glitched pixel.
