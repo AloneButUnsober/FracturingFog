@@ -72,6 +72,12 @@ namespace FracturingFog.Render
         /// calculation — used by the slider live-tune path.</summary>
         void RepaintWithPostFx();
 
+        /// <summary>Re-apply the Adaptive histogram-equalization pass at the
+        /// current strength using cached escape buffers, then re-upload. No
+        /// recompute — used by the live Adaptive slider so it updates with
+        /// the same latency as Brightness/Contrast.</summary>
+        void RepaintWithAdaptive();
+
         /// <summary>
         /// Copy the currently-displayed BGRA frame (the last buffer uploaded to
         /// the renderer). Returns an empty array with zeroed dimensions when no

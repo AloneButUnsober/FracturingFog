@@ -136,6 +136,15 @@ public sealed partial class MainWindow : Window
         AddItem(menu, "Span Monitors",      () => shell.ToggleSpanCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
         AddItem(menu, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
+        // Slideshow-specific items. Header text + enable state updated each
+        // time the menu opens (see Opening handler in BuildContextMenu's
+        // caller path) to reflect current SlideshowEngine state.
+        var lockRegionItem = new MenuItem { Header = "Slideshow: Lock Region" };
+        lockRegionItem.Click += (_, _) => shell.ToggleSlideshowLockRegionCommand.Execute().Subscribe();
+        menu.Items.Add(lockRegionItem);
+        var focusItem = new MenuItem { Header = "Slideshow: More Regions" };
+        focusItem.Click += (_, _) => shell.ToggleSlideshowFocusCommand.Execute().Subscribe();
+        menu.Items.Add(focusItem);
         AddItem(menu, "Watermark",          () => shell.Main.ShowWatermark = !shell.Main.ShowWatermark);
         menu.Items.Add(new Separator());
         AddItem(menu, "Video",              () => shell.ToggleVideoCommand.Execute().Subscribe());
@@ -147,6 +156,26 @@ public sealed partial class MainWindow : Window
         AddItem(menu, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
+
+        // Refresh slideshow item state every time the menu opens. Avalonia's
+        // MenuItem doesn't have a built-in checked indicator, so we encode
+        // toggle state via the header prefix ("✓ ") + enable state via
+        // IsEnabled. Mirrors legacy MainForm's slideshowLockRegionItem.Text /
+        // slideshowFocusItem.Text logic.
+        menu.Opening += (_, _) =>
+        {
+            bool running = shell.IsSlideshowRunning;
+            lockRegionItem.IsEnabled = running;
+            lockRegionItem.Header = (shell.SlideshowLockRegion ? "✓ " : "")
+                                  + "Slideshow: Lock Region";
+            focusItem.IsEnabled = running;
+            // Toggle text reads like legacy: shows what the next click WILL
+            // switch to. SlideshowFocusRegion == true means we're already in
+            // "More Regions" mode, so the click switches to "More Colors".
+            focusItem.Header = shell.SlideshowFocusRegion
+                ? "Slideshow: More Colors"
+                : "Slideshow: More Regions";
+        };
         return menu;
     }
 

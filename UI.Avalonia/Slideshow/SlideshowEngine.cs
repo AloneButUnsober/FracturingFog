@@ -53,6 +53,19 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         public event EventHandler<string>? StatusChanged;
         public event EventHandler? Stopped;
 
+        /// <summary>Fires after the engine applies a region (which may have
+        /// overwritten ViewState.Quality with its own QualityPreset). The
+        /// shell listens so it can mirror the new quality into the toolbar
+        /// combo — otherwise the combo displays a stale value while the
+        /// rendered view + saves use the region's quality.</summary>
+        public event EventHandler<string>? RegionApplied;
+
+        /// <summary>Fires after the engine applies a theme (region-jump leg
+        /// or theme-only transition). Shell listens to mirror the new name
+        /// into the toolbar + FloatingMenu Theme combos so the user sees
+        /// which theme is currently rendering.</summary>
+        public event EventHandler<string>? ThemeApplied;
+
         public void Start()
         {
             if (IsRunning) return;
@@ -70,6 +83,16 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         public void SkipRegion() => _skipRegion = true;
         public void SkipTheme() => _skipTheme = true;
 
+        /// <summary>When true, region-advance is suppressed: the cycler keeps
+        /// the current region pinned and only rotates themes. Mirrors legacy
+        /// MainForm._slideShowLockRegion (Shift+click on Slideshow button).</summary>
+        public bool LockRegion { get; set; }
+
+        /// <summary>True = "More Regions" cycling cadence (fewer themes per
+        /// region); false = "More Colors" (more themes per region). Mirrors
+        /// legacy MainForm._slideshowFocusRegion.</summary>
+        public bool FocusRegion { get; set; }
+
         private async Task LoopAsync(CancellationToken ct)
         {
             try
@@ -77,26 +100,42 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 var regions = _service.EnumerateSlideshowRegionNames();
                 if (regions == null || regions.Count == 0) return;
 
-                const int themesPerRegion = 3;
-                int totalRegionMs = Math.Max(3_000, _settings.TotalDisplayMsPerRegion);
-                int themeMs = Math.Max(800, totalRegionMs / themesPerRegion);
                 int fadeSteps = Math.Clamp(_settings.FadeSteps, 2, 200);
                 int regionStepMs = Math.Max(8, Math.Max(50, _settings.RegionFadeMs) / fadeSteps);
                 int themeStepMs = Math.Max(8, Math.Max(50, _settings.ColorThemeFadeMs) / fadeSteps);
 
                 int lastRegion = -1;
+                string? heldRegion = null;
 
                 while (!ct.IsCancellationRequested)
                 {
-                    int ri;
-                    do { ri = _rng.Next(regions.Count); }
-                    while (regions.Count > 1 && ri == lastRegion);
-                    lastRegion = ri;
-                    string regionName = regions[ri];
+                    string regionName;
+                    if (LockRegion && heldRegion != null)
+                    {
+                        regionName = heldRegion;
+                    }
+                    else
+                    {
+                        int ri;
+                        do { ri = _rng.Next(regions.Count); }
+                        while (regions.Count > 1 && ri == lastRegion);
+                        lastRegion = ri;
+                        regionName = regions[ri];
+                        heldRegion = regionName;
+                    }
 
                     double zoom = _service.GetRegionZoom(regionName);
                     var themes = _service.EnumerateThemeNamesForZoom(zoom);
                     int lastTheme = -1;
+
+                    // FocusRegion = "More Regions" cadence (1 theme/region);
+                    // !FocusRegion = "More Colors" cadence (default 3 themes/region).
+                    // LockRegion pins the region so the inner loop never exits to
+                    // the outer region picker — themesPerRegion is effectively
+                    // infinite (rotated through the available theme pool).
+                    int themesPerRegion = FocusRegion ? 1 : 3;
+                    int totalRegionMs = Math.Max(3_000, _settings.TotalDisplayMsPerRegion);
+                    int themeMs = Math.Max(800, totalRegionMs / Math.Max(1, themesPerRegion));
 
                     for (int t = 0; t < themesPerRegion && !ct.IsCancellationRequested; t++)
                     {
@@ -177,10 +216,21 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             {
                 if (themeName != null) _service.ApplyThemeSilent(themeName);
                 _service.ApplyRegion(regionName, _host.ViewState);
+                // Push the new labels onto the render host BEFORE Trigger so
+                // the very first composited frame already carries the right
+                // watermark — otherwise the user sees one stale-watermark
+                // frame before the shell's RegionApplied listener repaints.
+                _host.RegionName = regionName;
+                if (themeName != null) _host.ThemeName = themeName;
                 _host.AnimationFrameUploaded += handler;
                 _host.Trigger();
                 return 0;
             }, ct);
+
+            // Notify the shell so its combos can mirror whatever ApplyRegion
+            // pushed into ViewState (quality + fractal type both can change).
+            RegionApplied?.Invoke(this, regionName);
+            if (themeName != null) ThemeApplied?.Invoke(this, themeName);
 
             // Recompute presents from a background continuation → AnimationFrameUploaded.
             var timeout = Task.Delay(8_000, ct);
@@ -195,6 +245,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
             var (old, w, h) = await SnapshotAsync(ct);
 
+            // Stamp the new theme label onto the render host BEFORE the recolour
+            // so the next composited frame's watermark reflects the new theme.
+            await OnUiAsync(() => { _host.ThemeName = themeName; return 0; }, ct);
+
             // Recolour happens on the UI thread (mutates the live frame) and
             // returns the new buffer; null when the active fractal has no cheap
             // recolor → fall back to a plain apply.
@@ -203,6 +257,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             if (incoming == null)
             {
                 await OnUiAsync(() => { _service.ApplyTheme(themeName!); return 0; }, ct);
+                ThemeApplied?.Invoke(this, themeName);
                 return;
             }
 
@@ -210,6 +265,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 await FadeAsync(old, incoming, w, h, steps, stepMs, ct);
             else
                 await OnUiAsync(() => { _host.PresentBuffer(incoming, w, h); return 0; }, ct);
+
+            // PresentBuffer / FadeAsync upload the recoloured buffer without
+            // the watermark+grid overlay composite. Re-upload via
+            // RepaintWithPostFx so the next visible frame carries the
+            // updated theme name in the watermark.
+            await OnUiAsync(() => { _host.RepaintWithPostFx(); return 0; }, ct);
+
+            ThemeApplied?.Invoke(this, themeName);
         }
 
         /// <summary>Per-pixel CPU lerp from <paramref name="from"/> to

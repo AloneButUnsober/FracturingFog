@@ -470,25 +470,62 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         ? new ImmutableSolidColorBrush(Color.FromRgb(InSetR, InSetG, InSetB))
         : new ImmutableSolidColorBrush(Colors.Black);
 
+    /// <summary>Composite RGB binding target for the ColorPicker control.</summary>
+    public Color InSetColor
+    {
+        get => Color.FromRgb(InSetR, InSetG, InSetB);
+        set { InSetR = value.R; InSetG = value.G; InSetB = value.B; this.RaisePropertyChanged(nameof(InSetColor)); }
+    }
+
     // ── Post-FX defaults ──────────────────────────────────────────────────
 
     private bool _useBrightness;
     public bool UseBrightness { get => _useBrightness; set { this.RaiseAndSetIfChanged(ref _useBrightness, value); FieldChanged(); } }
 
     private int _brightness;
-    public int Brightness { get => _brightness; set { this.RaiseAndSetIfChanged(ref _brightness, Math.Clamp(value, -100, 100)); FieldChanged(); } }
+    public int Brightness
+    {
+        get => _brightness;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _brightness, Math.Clamp(value, -100, 100)))
+                LivePostFxChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     private bool _useContrast;
     public bool UseContrast { get => _useContrast; set { this.RaiseAndSetIfChanged(ref _useContrast, value); FieldChanged(); } }
 
     private int _contrast;
-    public int Contrast { get => _contrast; set { this.RaiseAndSetIfChanged(ref _contrast, Math.Clamp(value, -100, 100)); FieldChanged(); } }
+    public int Contrast
+    {
+        get => _contrast;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _contrast, Math.Clamp(value, -100, 100)))
+                LivePostFxChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     private bool _useAdaptive;
     public bool UseAdaptive { get => _useAdaptive; set { this.RaiseAndSetIfChanged(ref _useAdaptive, value); FieldChanged(); } }
 
     private int _adaptive;
-    public int Adaptive { get => _adaptive; set { this.RaiseAndSetIfChanged(ref _adaptive, Math.Clamp(value, 0, 100)); FieldChanged(); } }
+    public int Adaptive
+    {
+        get => _adaptive;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _adaptive, Math.Clamp(value, 0, 100)))
+                LivePostFxChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Fires immediately when Brightness/Contrast/Adaptive change
+    /// (bypassing the 150ms preview debounce). Shell pushes the values into
+    /// MainViewModel directly so the rendered image responds in real time
+    /// like the FloatingMenu sliders do.</summary>
+    public event EventHandler? LivePostFxChanged;
 
     // ── Header / status ───────────────────────────────────────────────────
 
@@ -928,6 +965,13 @@ public sealed class ColorStopRowVm : ReactiveObject
 
     public IBrush SwatchBrush => new ImmutableSolidColorBrush(Color.FromRgb(R, G, B));
 
+    /// <summary>Composite RGB binding target for the ColorPicker control.</summary>
+    public Color StopColor
+    {
+        get => Color.FromRgb(R, G, B);
+        set { R = value.R; G = value.G; B = value.B; this.RaisePropertyChanged(nameof(StopColor)); }
+    }
+
     public ColorStopDef ToDef() => new() { Position = Position, R = R, G = G, B = B };
 }
 
@@ -1042,6 +1086,21 @@ public sealed class LightSourceRowVm : ReactiveObject
 
     public IBrush DiffSwatchBrush => new ImmutableSolidColorBrush(Color.FromRgb(DiffR, DiffG, DiffB));
     public IBrush SpecSwatchBrush => new ImmutableSolidColorBrush(Color.FromRgb(SpecR, SpecG, SpecB));
+
+    // Composite RGB binding targets for the ColorPicker control. Setting the
+    // composite property updates the three byte channels in one shot; each
+    // channel setter still raises its own PropertyChanged + NotifyRowChanged
+    // (debounced into a single PushPreview by FieldChanged).
+    public Color DiffColor
+    {
+        get => Color.FromRgb(DiffR, DiffG, DiffB);
+        set { DiffR = value.R; DiffG = value.G; DiffB = value.B; this.RaisePropertyChanged(nameof(DiffColor)); }
+    }
+    public Color SpecColor
+    {
+        get => Color.FromRgb(SpecR, SpecG, SpecB);
+        set { SpecR = value.R; SpecG = value.G; SpecB = value.B; this.RaisePropertyChanged(nameof(SpecColor)); }
+    }
 
     public LightSourceDef ToDef() => new()
     {

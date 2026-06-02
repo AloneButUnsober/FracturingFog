@@ -203,6 +203,13 @@ namespace FracturingFog.Hosting
             var themeService = s_themeService;
             var helpProvider = new HostHelpContentProvider();
 
+            // Stamp program name + version onto the render host so the watermark
+            // overlay (FractalOverlayCompositor) renders "Fracturing Fog v0.6.1
+            // 2026" instead of "Fracturing Fog v? 2026". Source: assembly
+            // version via HostHelpContentProvider — same value FloatingHelp uses.
+            s_renderHost.ProgramName = helpProvider.ProgramName;
+            s_renderHost.ProgramVersion = helpProvider.ProgramVersion;
+
             // Hand the render host its theme service so the video slideshow
             // engine can cycle regions/themes per leg (legacy VideoZoom parity).
             s_renderHost.AttachThemeService(themeService);
@@ -219,6 +226,37 @@ namespace FracturingFog.Hosting
 
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
+
+            // Window title: "{ProgramName} v{Version}  —  {renderer description}"
+            // (legacy MainForm parity, MainForm.cs:917). RebuildWindowTitle()
+            // fires after each setter assignment.
+            s_shell.ProgramName = helpProvider.ProgramName;
+            s_shell.ProgramVersion = helpProvider.ProgramVersion;
+            s_shell.RendererDescription = s_renderer?.RendererDescription ?? "";
+
+            // Dimensions combo: feed the resolution table + handle resize.
+            // Lives here (not in ShellViewModel) because the main-project
+            // ResolutionDimensions table isn't referenced from UI.Avalonia.
+            s_shell.FloatingMenu.SetResolutions(
+                System.Linq.Enumerable.Select(
+                    System.Linq.Enumerable.Where(
+                        FracturingFog.Models.ResolutionDimensions.Resolutions,
+                        r => !string.IsNullOrEmpty(r.Name)),
+                    r => r.Name!));
+            s_shell.FloatingMenu.ResolutionChanged += (_, name) =>
+            {
+                var res = System.Linq.Enumerable.FirstOrDefault(
+                    FracturingFog.Models.ResolutionDimensions.Resolutions,
+                    r => string.Equals(r.Name, name, StringComparison.Ordinal));
+                if (res == null || res.Width <= 0 || res.Height <= 0) return;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    var win = AvaloniaDialogs.ActiveMainWindow;
+                    if (win == null) return;
+                    win.Width = res.Width;
+                    win.Height = res.Height;
+                });
+            };
 
             WireShellHostEvents(s_shell);
 
@@ -412,7 +450,7 @@ namespace FracturingFog.Hosting
                 try
                 {
                     string? name = await AvaloniaDialogs.PromptForTextAsync(
-                        "Save Region", "Region name:", suggested: Main.SelectedTheme ?? "");
+                        "Save Region", "Region name:", suggested: BuildRegionNameDefault(shell));
                     if (!string.IsNullOrWhiteSpace(name) && s_renderHost != null)
                     {
                         bool ok = ((IColorThemeService)s_themeService!)
@@ -984,6 +1022,37 @@ namespace FracturingFog.Hosting
             else win.Show();
         }
 
+        // ── Region save-default name ─────────────────────────────────────────
+        // Spec: prefill the Save-Region prompt with "{FractalType} - " by
+        // default. When the current fractal type is UserEquation, Sandbox, or
+        // UserBulb AND the active parameters carry a named equation, prefill
+        // "{FractalType} - {EquationName} - " instead so the user just appends
+        // a region-specific suffix. Promoted (RegisteredFractal) entries
+        // already carry the equation name as their toolbar label, so the
+        // params-side name is dropped to avoid duplicating it.
+        private static string BuildRegionNameDefault(ShellViewModel shell)
+        {
+            string typeLabel = shell.Main.SelectedFractalEntry?.Label
+                ?? shell.Main.SelectedFractalType.ToString();
+
+            string? eqName = null;
+            if (shell.Main.SelectedFractalEntry?.Promoted == null && s_renderHost != null)
+            {
+                var p = s_renderHost.ViewState.FractalParameters;
+                eqName = shell.Main.SelectedFractalType switch
+                {
+                    FractalType.UserEquation => p.UserEquationName,
+                    FractalType.Sandbox      => p.SandboxName,
+                    FractalType.UserBulb     => p.UserBulbName,
+                    _                        => null,
+                };
+            }
+
+            return !string.IsNullOrWhiteSpace(eqName)
+                ? $"{typeLabel} - {eqName} - "
+                : $"{typeLabel} - ";
+        }
+
         // ── Synchronous host prompts ─────────────────────────────────────────
         //
         // The source-editor VMs expect synchronous-return prompt callbacks
@@ -994,7 +1063,67 @@ namespace FracturingFog.Hosting
 
         private static string? PromptName(string title, string prompt, string defaultValue)
         {
-            string r = Microsoft.VisualBasic.Interaction.InputBox(prompt, title, defaultValue ?? string.Empty);
+            // Sync prompt for the source-editor VMs (Func<string,string?>).
+            // Use a Windows Forms modal — visual styles are enabled at startup
+            // so it renders with the system theme (no VB6 InputBox legacy
+            // look), and its own message loop runs without recursing the
+            // Avalonia dispatcher (the earlier RunJobs-spin approach
+            // crashed on Cancel/X). Centred on the active Avalonia window
+            // so the dialog appears over the editor that requested it.
+            using var dlg = new System.Windows.Forms.Form
+            {
+                Text = string.IsNullOrEmpty(title) ? "Enter Name" : title,
+                FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
+                StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                ShowInTaskbar = false,
+                ClientSize = new System.Drawing.Size(420, 124),
+                AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi,
+            };
+
+            var lbl = new System.Windows.Forms.Label
+            {
+                Text = prompt ?? "Enter a name:",
+                Location = new System.Drawing.Point(12, 12),
+                Size = new System.Drawing.Size(396, 24),
+                AutoEllipsis = true,
+            };
+            var box = new System.Windows.Forms.TextBox
+            {
+                Text = defaultValue ?? string.Empty,
+                Location = new System.Drawing.Point(12, 40),
+                Size = new System.Drawing.Size(396, 24),
+                Anchor = System.Windows.Forms.AnchorStyles.Left
+                       | System.Windows.Forms.AnchorStyles.Right
+                       | System.Windows.Forms.AnchorStyles.Top,
+            };
+            var ok = new System.Windows.Forms.Button
+            {
+                Text = "OK",
+                DialogResult = System.Windows.Forms.DialogResult.OK,
+                Location = new System.Drawing.Point(252, 80),
+                Size = new System.Drawing.Size(76, 28),
+            };
+            var cancel = new System.Windows.Forms.Button
+            {
+                Text = "Cancel",
+                DialogResult = System.Windows.Forms.DialogResult.Cancel,
+                Location = new System.Drawing.Point(332, 80),
+                Size = new System.Drawing.Size(76, 28),
+            };
+
+            dlg.Controls.Add(lbl);
+            dlg.Controls.Add(box);
+            dlg.Controls.Add(ok);
+            dlg.Controls.Add(cancel);
+            dlg.AcceptButton = ok;
+            dlg.CancelButton = cancel;
+            dlg.Shown += (_, _) => { box.SelectAll(); box.Focus(); };
+
+            var result = dlg.ShowDialog();
+            if (result != System.Windows.Forms.DialogResult.OK) return null;
+            string r = box.Text;
             return string.IsNullOrWhiteSpace(r) ? null : r;
         }
 

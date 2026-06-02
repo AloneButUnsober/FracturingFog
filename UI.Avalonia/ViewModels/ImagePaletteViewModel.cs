@@ -280,7 +280,7 @@ public sealed class ImagePaletteViewModel : ViewModelBase
         foreach (var r in all)
         {
             if (r.Palette.Count == 0) continue;
-            Results.Add(new PaletteResultViewModel(r, exclusiveSelect: true));
+            Results.Add(new PaletteResultViewModel(r, exclusiveSelect: true, parent: this));
             any = true;
         }
         StatusMessage = any ? null : "No pixels left after filters.";
@@ -312,12 +312,18 @@ public sealed class ImagePaletteViewModel : ViewModelBase
 /// </summary>
 public sealed class PaletteResultViewModel : ViewModelBase
 {
+    private readonly ImagePaletteViewModel? _parent;
+
     public PaletteResultViewModel(PaletteExtractionResult result, bool exclusiveSelect)
+        : this(result, exclusiveSelect, parent: null) { }
+
+    public PaletteResultViewModel(PaletteExtractionResult result, bool exclusiveSelect, ImagePaletteViewModel? parent)
     {
         Name = result.MethodName;
         Palette = result.Palette;
         Stops = result.Stops;
         ExclusiveSelect = exclusiveSelect;
+        _parent = parent;
     }
 
     public string Name { get; }
@@ -336,6 +342,13 @@ public sealed class PaletteResultViewModel : ViewModelBase
     public bool IsSelected
     {
         get => _isSelected;
-        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
+        set
+        {
+            if (!this.RaiseAndSetIfChangedReturnsChanged(ref _isSelected, value)) return;
+            // In Compare-All mode the radio binds IsChecked → IsSelected. Notify
+            // the parent so it can mirror the pick into SelectedResult (which
+            // gates the Apply button via CanApply).
+            if (value && ExclusiveSelect) _parent?.SelectResult(this);
+        }
     }
 }

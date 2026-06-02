@@ -387,9 +387,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (this.RaiseAndSetIfChangedReturnsChanged(ref _adaptive, v))
             {
                 ViewState.HistogramEq = v;
-                // Adaptive contrast lives on the calculator's escape buffer,
-                // so it requires a fresh calculation, not just a re-upload.
-                _renderHost.Trigger();
+                // Adaptive contrast re-runs only the histogram equalization
+                // pass against the cached escape buffers — no fresh
+                // Calculate() — so the slider feels live (parity with
+                // Brightness / Contrast). Mandelbrot only; alt calculators
+                // fall back to a post-FX repaint inside RepaintWithAdaptive.
+                _renderHost.RepaintWithAdaptive();
             }
         }
     }
@@ -519,6 +522,29 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public void SetRegionName(string? name) => SelectedRegion = name;
 
     public void SetThemeName(string? name) => SelectedTheme = name;
+
+    /// <summary>Mirror an externally-applied <see cref="QualityPreset"/>
+    /// into the toolbar combo without re-pushing it to ViewState or
+    /// re-triggering. Called after a region jump that carries its own
+    /// QualityPreset — without this the combo would drift out of sync with
+    /// ViewState.Quality, and saves (poster / region) would silently use the
+    /// region's quality instead of whatever the combo displayed.</summary>
+    public void SetQualitySilent(QualityPreset? preset)
+    {
+        if (preset == null) return;
+        // Region-loaded QualityPreset is a JSON-deserialized instance; the
+        // toolbar combo's SelectedItem must reference the QualityPreset.All
+        // entry by name so SelectedItem equality holds and the combo paints.
+        QualityPreset? match = null;
+        foreach (var p in QualityPresets)
+        {
+            if (string.Equals(p.Name, preset.Name, StringComparison.Ordinal)) { match = p; break; }
+        }
+        if (match == null) return;
+        if (ReferenceEquals(_selectedQuality, match)) return;
+        _selectedQuality = match;
+        this.RaisePropertyChanged(nameof(SelectedQuality));
+    }
 
     // ── Input plumbing ────────────────────────────────────────────────────
 

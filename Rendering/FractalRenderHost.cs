@@ -86,6 +86,11 @@ namespace FracturingFog.Rendering
         private uint[]? _lastUploadedBuffer;
         private int _lastUploadedWidth;
         private int _lastUploadedHeight;
+        // Pre-overlay snapshot. Mirrors _lastUploadedBuffer but is captured
+        // before grid+watermark composite, so file-save paths can paint a
+        // fresh watermark (via ImageExport.AddWaterMark) without double-
+        // compositing onto a buffer that already has one baked in.
+        private uint[]? _lastPreOverlayBuffer;
 
         private bool _disposed;
 
@@ -615,6 +620,27 @@ namespace FracturingFog.Rendering
         }
 
         /// <summary>
+        /// Re-apply Adaptive (histogram equalization) at the current
+        /// <see cref="FractalViewState.HistogramEq"/> strength using the
+        /// cached SmoothBuffer/IterationBuffer — no recompute — then upload.
+        /// Mandelbrot only; alt calculators fall through to
+        /// <see cref="RepaintWithPostFx"/>. Used by the live Adaptive slider
+        /// so it updates the image with the same latency as Brightness /
+        /// Contrast instead of triggering a full Calculate().
+        /// </summary>
+        public void RepaintWithAdaptive()
+        {
+            if (_disposed) return;
+            IFractalCalculator? alt = SelectAltCalculator(ViewState.FractalType);
+            if (alt != null) { RepaintWithPostFx(); return; }
+
+            double strength = Math.Clamp(ViewState.HistogramEq / 100.0, 0.0, 1.0);
+            if (strength > 0.0) _calculator.ApplyHistogramEqualization(strength);
+            else                _calculator.ApplyBandDitherRecolor(0.0);
+            UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
+        }
+
+        /// <summary>
         /// Replace the active colour map and re-colourise the CURRENT frame so the
         /// change is visible immediately. Mandelbrot takes the cheap path
         /// (RecolorFromBuffers via <c>ApplyBandDitherRecolor(0)</c> — no recompute);
@@ -756,6 +782,13 @@ namespace FracturingFog.Rendering
                 Array.Copy(src, dst, n);
             }
 
+            // Snapshot pre-overlay buffer so SaveLastFrameToPng can render a
+            // fresh watermark via ImageExport (instead of relying on whatever
+            // the on-screen ShowWatermark toggle was at upload time).
+            var pre = new uint[n];
+            Array.Copy(dst, pre, n);
+            _lastPreOverlayBuffer = pre;
+
             // Composite grid + watermark on top of the post-FX buffer so the
             // overlay survives every backend (Windows HWND swap-chain
             // included, where Avalonia.Media overlays are occluded). Only
@@ -825,33 +858,38 @@ namespace FracturingFog.Rendering
 
         /// <summary>
         /// Encode the most-recently-uploaded BGRA buffer to a PNG file at the
-        /// given path. No-op when no frame has been rendered yet. Windows
-        /// only — depends on System.Drawing.
+        /// given path. The saved image always carries the program watermark
+        /// (region/theme + program-name sub-line) regardless of the on-screen
+        /// <see cref="ShowWatermark"/> toggle — parity with the legacy
+        /// WinForms screenshot flow in ImageCapture.cs. No-op when no frame
+        /// has been rendered yet. Windows only — depends on System.Drawing.
         /// </summary>
         public void SaveLastFrameToPng(string path)
         {
             if (_disposed) return;
             if (string.IsNullOrEmpty(path)) return;
             if (!OperatingSystem.IsWindows()) return;
-            uint[]? buf = _lastUploadedBuffer;
+
+            // Prefer the pre-overlay snapshot so a fresh watermark renders at
+            // file resolution instead of double-stamping the buffer's already-
+            // composited one. Fall back to the post-upload buffer if no
+            // pre-snapshot was captured (e.g. an externally-presented frame).
+            uint[]? buf = _lastPreOverlayBuffer ?? _lastUploadedBuffer;
             int w = _lastUploadedWidth, h = _lastUploadedHeight;
             if (buf == null || w <= 0 || h <= 0) return;
-            SaveBgraToPngWindows(buf, w, h, path);
-        }
 
-        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-        private static void SaveBgraToPngWindows(uint[] bgra, int w, int h, string path)
-        {
-            var handle = System.Runtime.InteropServices.GCHandle.Alloc(bgra,
-                System.Runtime.InteropServices.GCHandleType.Pinned);
-            try
-            {
-                using var bmp = new System.Drawing.Bitmap(w, h, w * 4,
-                    System.Drawing.Imaging.PixelFormat.Format32bppArgb,
-                    handle.AddrOfPinnedObject());
-                bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            }
-            finally { handle.Free(); }
+            string watermark = !string.IsNullOrEmpty(RegionName)
+                ? RegionName!
+                : (ProgramName ?? "Fracturing Fog");
+            if (!string.IsNullOrEmpty(ThemeName))
+                watermark += " - " + ThemeName;
+            string subText = $"{ProgramName ?? "Fracturing Fog"} v{ProgramVersion ?? "?"} {DateTime.Now.Year}";
+
+            var fontColor = FracturingFog.Imaging.ImageExport.ComputeContrastColor(
+                System.Drawing.Color.White, watermark: true, pixels: buf, imgW: w, imgH: h);
+            FracturingFog.Imaging.ImageExport.SavePixelsToFile(
+                buf, w, h, path, System.Drawing.Imaging.ImageFormat.Png,
+                watermark, fontColor, subText);
         }
 
         public void Dispose()

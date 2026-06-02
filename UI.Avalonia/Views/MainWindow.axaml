@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         x:Class="FracturingFog.UI.Avalonia.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
-        Title="Fracturing Fog"
+        Title="{Binding WindowTitle}"
         Width="1280" Height="800"
         MinWidth="640" MinHeight="400"
         Background="Black">

@@ -81,6 +81,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // QualityPreset.All — the same list MainViewModel already exposes.
         FloatingMenu.SetQualities(QualityPreset.All.Select(q => q.Name));
         FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+        // Dimensions combo population + ResolutionChanged → ResizeRequested
+        // is handled by the host bootstrap (UI.Avalonia has no reference to
+        // the main project's ResolutionDimensions table).
 
         // ── Wire FloatingMenu → MainViewModel / ShellViewModel ───────────
         // Region/Theme picks: forward the name into MainViewModel so the
@@ -328,6 +331,18 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         SaveRegionCommand      = ReactiveCommand.Create(TriggerSaveView);
         ScreenshotCommand      = ReactiveCommand.Create(
             () => ScreenshotRequested?.Invoke(this, EventArgs.Empty));
+
+        // Slideshow control commands (right-click context menu). The
+        // checkbox/text state for the items is read off SlideshowLockRegion
+        // + SlideshowFocusRegion at menu-open time.
+        ToggleSlideshowLockRegionCommand = ReactiveCommand.Create(() =>
+        {
+            SlideshowLockRegion = !SlideshowLockRegion;
+        });
+        ToggleSlideshowFocusCommand = ReactiveCommand.Create(() =>
+        {
+            SlideshowFocusRegion = !SlideshowFocusRegion;
+        });
     }
 
     private static string FormatCoords(FracturingFog.ViewState.FractalViewState s)
@@ -416,13 +431,38 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         if (_slideshow == null)
         {
-            _slideshow = new SlideshowEngine(Main.RenderHost, _themeService, new SlideshowSettings());
-            _slideshow.Stopped += (_, _) => IsSlideshowVcrVisible = false;
+            _slideshow = new SlideshowEngine(Main.RenderHost, _themeService, new SlideshowSettings())
+            {
+                LockRegion = _slideshowLockRegion,
+                FocusRegion = _slideshowFocusRegion,
+            };
+            _slideshow.Stopped += (_, _) =>
+            {
+                IsSlideshowVcrVisible = false;
+                this.RaisePropertyChanged(nameof(IsSlideshowRunning));
+            };
+            // Mirror engine-driven region jumps into the toolbar combos so the
+            // displayed region name + quality preset match what's actually
+            // being rendered (and what future region saves will capture).
+            _slideshow.RegionApplied += (_, regionName) => Dispatcher.UIThread.Post(() =>
+            {
+                Main.SetRegionName(regionName);
+                Main.SetFractalTypeSilent(Main.ViewState.FractalType);
+                Main.SetQualitySilent(Main.ViewState.Quality);
+                FloatingMenu.SetRegionSilent(regionName);
+                FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+            });
+            _slideshow.ThemeApplied += (_, themeName) => Dispatcher.UIThread.Post(() =>
+            {
+                Main.SetThemeName(themeName);
+                FloatingMenu.SetThemeSilent(themeName);
+            });
         }
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
         _slideshow.Start();
+        this.RaisePropertyChanged(nameof(IsSlideshowRunning));
     }
 
     private void ApplyCoordsFromMenu()
@@ -463,16 +503,42 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (changed) Main.RenderHost.Trigger();
     }
 
-    // Format DD/QD limbs as "Hi" when only Hi is set, "Hi|Lo" when Lo is
-    // non-zero, and so on up to four limbs. Matches the parse format of
-    // TryParseLimbs so display / input round-trip cleanly.
+    // Display DD/QD limbs as a single high-precision decimal string by
+    // default (UI-gap #16) — far more readable than the pipe-delimited limb
+    // format, and round-trips through `TryParseLimbs` because that parser
+    // still accepts long decimals. Pipe-delimited input remains supported on
+    // paste / manual entry, so external tools that emit "Hi|Lo|Lo2|Lo3" keep
+    // working.
+    //
+    // Sum limbs in `decimal` (~28-29 sig digits, exact double conversion).
+    // This covers a full DD limb pair (Hi+Lo, ~31 digits) reliably; the L2/L3
+    // tail is still summed but precision past 28 digits is lost — the same
+    // limit that bounds the pipe-format paste path. Falls back to the limb
+    // string when any limb is outside decimal range (e.g. denormals beyond
+    // ±7.9e28) so we never lose information silently.
     private static string FormatLimbs(double hi, double lo, double l2, double l3)
     {
-        // Pick the highest non-zero limb and print everything up to it.
+        // Pick the highest non-zero limb so the format never carries trailing
+        // zero limbs (avoids surfacing meaningless precision for shallow zooms).
         int n = 1;
         if (l3 != 0.0) n = 4;
         else if (l2 != 0.0) n = 3;
         else if (lo != 0.0) n = 2;
+
+        try
+        {
+            decimal acc = (decimal)hi;
+            if (n >= 2) acc += (decimal)lo;
+            if (n >= 3) acc += (decimal)l2;
+            if (n >= 4) acc += (decimal)l3;
+            // "G29" prints up to decimal's full 29-digit precision without
+            // scientific notation for everyday Mandelbrot coords.
+            return acc.ToString("G29", CultureInfo.InvariantCulture);
+        }
+        catch (OverflowException)
+        {
+            // Fall through to the pipe-delimited path so no precision is lost.
+        }
 
         string h = hi.ToString("G17", CultureInfo.InvariantCulture);
         if (n == 1) return h;
@@ -484,20 +550,52 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         return $"{h}|{p1}|{p2}|{p3}";
     }
 
-    // Parse "Hi", "Hi|Lo", "Hi|Lo|Lo2", or "Hi|Lo|Lo2|Lo3" into four
-    // double limbs. Missing limbs default to zero. Returns true when at
-    // least the Hi limb parsed.
+    // Parse a coordinate field. Accepts three input shapes (UI-gap #16):
+    //   1. Pipe-delimited limbs:  "Hi|Lo|Lo2|Lo3"  (any 1–4 segments)
+    //   2. Plain numeric:         "-1.99181512969"  → Hi only
+    //   3. Long decimal string:   "-1.9918151296901943521..." (> ~17 sig digits)
+    //      decoded into Hi/Lo (and Lo2/Lo3 when input is precise enough) so
+    //      pasting an external high-precision coordinate doesn't truncate to
+    //      double precision. .NET `decimal` carries ~28 sig digits, which
+    //      covers a full DD limb pair (Hi+Lo, ~31 digits) reliably; Lo2/Lo3
+    //      capture whatever precision is still in the decimal residual.
+    // Missing limbs default to zero. Returns true when at least Hi parsed.
     private static bool TryParseLimbs(string? s, out double hi, out double lo, out double l2, out double l3)
     {
         hi = lo = l2 = l3 = 0.0;
         if (string.IsNullOrWhiteSpace(s)) return false;
         var parts = s.Split('|');
-        if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out hi))
-            return false;
-        if (parts.Length > 1) double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lo);
-        if (parts.Length > 2) double.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l2);
-        if (parts.Length > 3) double.TryParse(parts[3].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l3);
-        return true;
+        if (parts.Length > 1)
+        {
+            // Pipe-delimited (legacy) — each segment is a plain double.
+            if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out hi))
+                return false;
+            if (parts.Length > 1) double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lo);
+            if (parts.Length > 2) double.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l2);
+            if (parts.Length > 3) double.TryParse(parts[3].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l3);
+            return true;
+        }
+
+        string single = parts[0].Trim();
+
+        // Long high-precision string path: peel into limbs via `decimal`.
+        // `decimal` parsing rounds at ~28-29 sig digits rather than failing,
+        // so even strings longer than that produce a sensible Hi/Lo split.
+        if (decimal.TryParse(single, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal m))
+        {
+            hi = (double)m;
+            try { m -= (decimal)hi; } catch (OverflowException) { return true; }
+            lo = (double)m;
+            try { m -= (decimal)lo; } catch (OverflowException) { return true; }
+            l2 = (double)m;
+            try { m -= (decimal)l2; } catch (OverflowException) { return true; }
+            l3 = (double)m;
+            return true;
+        }
+
+        // Fallback: plain double for inputs outside `decimal` range
+        // (NaN, infinity, magnitudes above 7.9e28, etc.).
+        return double.TryParse(single, NumberStyles.Float, CultureInfo.InvariantCulture, out hi);
     }
 
     public MainViewModel Main { get; }
@@ -601,6 +699,47 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isServerAdminVisible, value);
     }
 
+    // ── Window title (program name + version + renderer description) ────
+    // Mirrors legacy MainForm: "{ProgramName} v{ProgramVersion} — {renderer}".
+    // Bootstrap sets ProgramName/ProgramVersion from HostHelpContentProvider
+    // (which reads assembly version), then composes the renderer suffix once
+    // the IFractalRenderer is up.
+
+    private string _programName = "Fracturing Fog";
+    public string ProgramName
+    {
+        get => _programName;
+        set { this.RaiseAndSetIfChanged(ref _programName, value); RebuildWindowTitle(); }
+    }
+
+    private string _programVersion = "";
+    public string ProgramVersion
+    {
+        get => _programVersion;
+        set { this.RaiseAndSetIfChanged(ref _programVersion, value); RebuildWindowTitle(); }
+    }
+
+    private string _rendererDescription = "";
+    public string RendererDescription
+    {
+        get => _rendererDescription;
+        set { this.RaiseAndSetIfChanged(ref _rendererDescription, value); RebuildWindowTitle(); }
+    }
+
+    private string _windowTitle = "Fracturing Fog";
+    public string WindowTitle
+    {
+        get => _windowTitle;
+        private set => this.RaiseAndSetIfChanged(ref _windowTitle, value);
+    }
+
+    private void RebuildWindowTitle()
+    {
+        string ver = string.IsNullOrEmpty(_programVersion) ? "" : $" v{_programVersion}";
+        string ren = string.IsNullOrEmpty(_rendererDescription) ? "" : $"  —  {_rendererDescription}";
+        WindowTitle = $"{_programName}{ver}{ren}";
+    }
+
     // ── Local server indicator (status bar dot) ──────────────────────────
 
     private string _localServerIndicator = "● Server: off";
@@ -660,6 +799,39 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleVideoCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSlideshowLockRegionCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSlideshowFocusCommand { get; }
+
+    private bool _slideshowLockRegion;
+    /// <summary>Mirror of SlideshowEngine.LockRegion — when true the cycler
+    /// pins the current region and rotates only themes. Setter forwards to
+    /// the engine when running so toggles take effect mid-slideshow.</summary>
+    public bool SlideshowLockRegion
+    {
+        get => _slideshowLockRegion;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _slideshowLockRegion, value);
+            if (_slideshow != null) _slideshow.LockRegion = value;
+        }
+    }
+
+    private bool _slideshowFocusRegion;
+    /// <summary>Mirror of SlideshowEngine.FocusRegion — true = "More Regions"
+    /// (1 theme/region), false = "More Colors" (default 3 themes/region).</summary>
+    public bool SlideshowFocusRegion
+    {
+        get => _slideshowFocusRegion;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _slideshowFocusRegion, value);
+            if (_slideshow != null) _slideshow.FocusRegion = value;
+        }
+    }
+
+    /// <summary>True while the Avalonia slideshow cycler is running. Drives
+    /// enable state for the slideshow-specific context-menu items.</summary>
+    public bool IsSlideshowRunning => _slideshow is { IsRunning: true };
 
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar
@@ -677,6 +849,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // setter which would SnapToFractalDefault and clobber them).
             // Mirror the type into the toolbar combo without snapping.
             Main.SetFractalTypeSilent(Main.ViewState.FractalType);
+            // Regions with a saved QualityPreset overwrite ViewState.Quality
+            // in ApplyRegion. Mirror that into the toolbar + FloatingMenu
+            // Quality combos so the UI doesn't drift out of sync with the
+            // value future saves (poster / region) will actually use.
+            Main.SetQualitySilent(Main.ViewState.Quality);
+            FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
             Main.RenderHost.Trigger();
         }
     }
@@ -713,6 +891,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 if (!Main.BrightnessLocked) Main.Brightness = def.Brightness ?? 0;
                 if (!Main.ContrastLocked)   Main.Contrast   = def.Contrast   ?? 0;
                 if (!Main.AdaptiveLocked)   Main.Adaptive   = def.Adaptive   ?? 0;
+            };
+            // Real-time Post-FX (UI-gap #18 follow-up): the editor's
+            // Brightness/Contrast/Adaptive sliders raise LivePostFxChanged
+            // immediately, bypassing the 150ms preview debounce. Push the
+            // current values straight into MainViewModel so the rendered
+            // image responds while the user is still dragging.
+            vm.LivePostFxChanged += (_, _) =>
+            {
+                if (!Main.BrightnessLocked && vm.UseBrightness) Main.Brightness = vm.Brightness;
+                if (!Main.ContrastLocked   && vm.UseContrast)   Main.Contrast   = vm.Contrast;
+                if (!Main.AdaptiveLocked   && vm.UseAdaptive)   Main.Adaptive   = vm.Adaptive;
             };
             // From-image flow currently raised by the editor when "From
             // Image…" is clicked. The host implements IPaletteExtractionService
@@ -833,6 +1022,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// is true to enter span mode, false to restore the prior window geometry.
     /// Host owns the Avalonia Window manipulation.</summary>
     public event EventHandler<bool>? SpanToggleRequested;
+
+    /// <summary>FloatingMenu's Dimensions combo picked a new render size.
+    /// Host resizes the MainWindow to (Width, Height). No-op when the
+    /// requested size exceeds the working area — host clamps as needed.</summary>
+    public event EventHandler<(int Width, int Height)>? ResizeRequested;
 
     /// <summary>Render a high-resolution poster. Host pops the poster-size
     /// dialog + a SaveFilePicker, then runs the shared PosterRenderer.</summary>
