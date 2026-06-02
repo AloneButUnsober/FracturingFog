@@ -339,6 +339,27 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             SlideshowLockRegion = !SlideshowLockRegion;
         });
+        ToggleMiniMapCommand = ReactiveCommand.Create(() => IsMiniMapVisible = !IsMiniMapVisible);
+        ToggleMiniDepthCommand = ReactiveCommand.Create(() => IsMiniDepthVisible = !IsMiniDepthVisible);
+        ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
+
+        // Push live view-state into the MiniMap VM on every frame so the
+        // indicator tracks the user's pan/zoom. Mirrors legacy MainForm's
+        // _miniMapPanel.RefreshIndicator() call sites.
+        Main.RenderHost.FrameCompleted += (_, info) =>
+        {
+            MiniMap.ActiveType = Main.ViewState.FractalType;
+            MiniMap.CenterX = info.CenterX;
+            MiniMap.CenterY = info.CenterY;
+            MiniMap.HostZoom = info.Zoom;
+        };
+        MiniMap.NavigationRequested += (_, pt) =>
+        {
+            var s = Main.ViewState;
+            s.CenterX = pt.X; s.CenterXLo = 0; s.CenterX2 = 0; s.CenterX3 = 0;
+            s.CenterY = pt.Y; s.CenterYLo = 0; s.CenterY2 = 0; s.CenterY3 = 0;
+            Main.RenderHost.Trigger();
+        };
         ToggleSlideshowFocusCommand = ReactiveCommand.Create(() =>
         {
             SlideshowFocusRegion = !SlideshowFocusRegion;
@@ -832,6 +853,77 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>True while the Avalonia slideshow cycler is running. Drives
     /// enable state for the slideshow-specific context-menu items.</summary>
     public bool IsSlideshowRunning => _slideshow is { IsRunning: true };
+
+    // ── MiniMap overlay (UI-gap #10) ─────────────────────────────────────
+    // The MiniMap VM holds the thumbnail bitmap + the current view centre/
+    // zoom so the indicator paints over the right pixel. The host renders
+    // the thumbnail offscreen (see AvaloniaShellBootstrap.RenderMiniMap)
+    // and pushes it in via SetThumbnail.
+    public MiniMapViewModel MiniMap { get; } = new();
+
+    private bool _isMiniMapVisible;
+    public bool IsMiniMapVisible
+    {
+        get => _isMiniMapVisible;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isMiniMapVisible, value);
+            if (value) MiniMapVisibilityChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Fires when MiniMap is shown so the host can kick a thumbnail
+    /// render. Host watches via FrameCompleted for ongoing centre/zoom
+    /// updates after the initial render.</summary>
+    public event EventHandler? MiniMapVisibilityChanged;
+
+    public ReactiveCommand<Unit, bool> ToggleMiniMapCommand { get; private set; } = null!;
+
+    // ── MiniDepth overlay (UI-gap #11) ──────────────────────────────────
+    private bool _isMiniDepthVisible;
+    public bool IsMiniDepthVisible
+    {
+        get => _isMiniDepthVisible;
+        set => this.RaiseAndSetIfChanged(ref _isMiniDepthVisible, value);
+    }
+
+    public ReactiveCommand<Unit, bool> ToggleMiniDepthCommand { get; private set; } = null!;
+
+    /// <summary>Host-supplied palette sampler. Returns the packed ARGB color
+    /// for a smooth-iteration index against the active IColorMap. Used by
+    /// MiniDepthControl to draw a theme-coloured gradient strip. Bootstrap
+    /// sets this once at startup; null means MiniDepth falls back to the
+    /// built-in HSV ramp.</summary>
+    public Func<int, uint>? SamplePaletteColor { get; set; }
+
+    /// <summary>Host-supplied current swatch colour (packed ARGB). MiniDepth
+    /// uses it to pick a high-contrast indicator colour over the gradient.</summary>
+    public Func<uint>? GetCurrentSwatchArgb { get; set; }
+
+    // ── Mini Mode (UI-gap #12) ──────────────────────────────────────────
+    // Mini Mode shrinks the host window to a small borderless always-on-top
+    // panel that keeps the fractal visible while the user works elsewhere.
+    // Toolbar + status bar are hidden; prior window geometry restores on
+    // exit. The host (MainWindow code-behind) owns the actual Window
+    // mutation — ShellViewModel just signals via MiniModeToggleRequested
+    // so UI.Avalonia stays free of Window.WindowState/Decorations APIs.
+    private bool _isMiniMode;
+    public bool IsMiniMode
+    {
+        get => _isMiniMode;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _isMiniMode, value))
+                MiniModeToggleRequested?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>Fires when the user toggles Mini Mode. Bool payload is the
+    /// target state — true to enter mini mode (shrink + borderless +
+    /// topmost), false to restore the prior geometry.</summary>
+    public event EventHandler<bool>? MiniModeToggleRequested;
+
+    public ReactiveCommand<Unit, bool> ToggleMiniModeCommand { get; private set; } = null!;
 
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar

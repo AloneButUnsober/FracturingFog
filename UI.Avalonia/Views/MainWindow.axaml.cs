@@ -39,6 +39,19 @@ public sealed partial class MainWindow : Window
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
+    private MiniMapWindow? _miniMapWin;
+    private MiniDepthWindow? _miniDepthWin;
+
+    // Mini Mode (#12) — saved geometry restored on exit.
+    private bool _miniModeActive;
+    private global::Avalonia.Controls.WindowState _preMiniState;
+    private global::Avalonia.Controls.SystemDecorations _preMiniDecorations;
+    private global::Avalonia.PixelPoint _preMiniPosition;
+    private double _preMiniWidth;
+    private double _preMiniHeight;
+    private bool _preMiniTopmost;
+    private bool _preMiniToolbar;
+    private bool _preMiniStatus;
 
     // Set true in OnClosed so per-window Closing handlers stop cancelling
     // the close (otherwise app shutdown leaves child windows orphaned).
@@ -83,6 +96,33 @@ public sealed partial class MainWindow : Window
     {
         _sponge ??= this.FindControl<Border>("InputSponge");
         _sponge?.Focus();
+        AttachStatusBarDrag();
+    }
+
+    // #12 follow-up: status bar acts as a drag handle so the user can move
+    // the borderless mini-mode window. Wired once on first Opened; safe to
+    // leave attached in normal mode (clicks on the status bar elsewhere
+    // hand off to children first, so it's not intrusive).
+    private bool _statusDragAttached;
+    private void AttachStatusBarDrag()
+    {
+        if (_statusDragAttached) return;
+        var status = this.FindControl<Border>("StatusBar");
+        if (status == null) return;
+        status.PointerPressed += OnStatusBarPointerPressed;
+        _statusDragAttached = true;
+    }
+
+    private void OnStatusBarPointerPressed(object? sender, global::Avalonia.Input.PointerPressedEventArgs e)
+    {
+        // Only start a window drag on a primary-button click directly on the
+        // status bar background. Lets child controls (e.g. server indicator
+        // tooltip) still receive normal events.
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            try { BeginMoveDrag(e); }
+            catch { /* not all platforms support move-drag; ignore */ }
+        }
     }
 
     // Right-click menu on the render surface. Built in code-behind because
@@ -135,6 +175,9 @@ public sealed partial class MainWindow : Window
         menu.Items.Add(new Separator());
         AddItem(menu, "Span Monitors",      () => shell.ToggleSpanCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
+        AddItem(menu, "Mini Map",           () => shell.ToggleMiniMapCommand.Execute().Subscribe());
+        AddItem(menu, "Mini Depth",         () => shell.ToggleMiniDepthCommand.Execute().Subscribe());
+        AddItem(menu, "Mini Mode",          () => shell.ToggleMiniModeCommand.Execute().Subscribe());
         AddItem(menu, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
         // Slideshow-specific items. Header text + enable state updated each
         // time the menu opens (see Opening handler in BuildContextMenu's
@@ -275,6 +318,7 @@ public sealed partial class MainWindow : Window
 
         shell.PropertyChanged += OnShellPropertyChanged;
         shell.Main.PropertyChanged += OnMainPropertyChanged;
+        shell.MiniModeToggleRequested += OnMiniModeToggleRequested;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
@@ -331,7 +375,168 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.ServerAdmin):
                 SyncServerAdmin();
                 break;
+            case nameof(ShellViewModel.IsMiniMapVisible):
+                SyncMiniMap();
+                break;
+            case nameof(ShellViewModel.IsMiniDepthVisible):
+                SyncMiniDepth();
+                break;
         }
+    }
+
+    private void SyncMiniDepth()
+    {
+        if (_shell == null) return;
+        if (_shell.IsMiniDepthVisible)
+        {
+            if (_miniDepthWin == null)
+            {
+                _miniDepthWin = new MiniDepthWindow();
+                ConfigureMiniDepth(_miniDepthWin);
+                _miniDepthWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsMiniDepthVisible = false;
+                };
+            }
+            if (!_miniDepthWin.IsVisible)
+            {
+                _miniDepthWin.Show(this);
+                PositionMiniDepth();
+            }
+        }
+        else
+        {
+            _miniDepthWin?.Hide();
+        }
+    }
+
+    private void ConfigureMiniDepth(MiniDepthWindow win)
+    {
+        if (_shell == null) return;
+        var shell = _shell;
+        win.Inner.Configure(
+            getZoom:           () => shell.Main.ViewState.Zoom,
+            getZoomMax:        () => shell.Main.ViewState.Quality?.ZoomMax ?? 1e13,
+            getMaxIterations:  () =>
+            {
+                var s = shell.Main.ViewState;
+                return s.IterLocked
+                    ? s.LockedIterations
+                    : (s.Quality?.ComputeIterations(s.Zoom) ?? 256);
+            },
+            sampleColor:       smoothIter => shell.SamplePaletteColor?.Invoke(smoothIter) ?? 0xFF808080u,
+            getSwatchArgb:     () => shell.GetCurrentSwatchArgb?.Invoke() ?? 0xFF808080u);
+
+        // Initial gradient build using the active theme.
+        win.Inner.RequestRedraw();
+
+        // Theme/region/type change → rebuild gradient.
+        shell.Main.RenderHost.ColorMapChanged += (_, _) =>
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => win.Inner.RequestRedraw());
+        // Refresh indicator each frame to track pan/zoom.
+        shell.Main.RenderHost.FrameCompleted += (_, _) =>
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => win.Inner.RefreshIndicator());
+    }
+
+    private void OnMiniModeToggleRequested(object? sender, bool enter)
+    {
+        if (enter == _miniModeActive) return;
+        if (enter) EnterMiniMode();
+        else        ExitMiniMode();
+    }
+
+    private void EnterMiniMode()
+    {
+        if (_miniModeActive || _shell == null) return;
+
+        _preMiniState       = WindowState;
+        _preMiniDecorations = SystemDecorations;
+        _preMiniPosition    = Position;
+        _preMiniWidth       = Width;
+        _preMiniHeight      = Height;
+        _preMiniTopmost     = Topmost;
+        _preMiniToolbar     = _shell.IsToolbarVisible;
+        _preMiniStatus      = _shell.IsStatusBarVisible;
+
+        WindowState        = global::Avalonia.Controls.WindowState.Normal;
+        SystemDecorations  = global::Avalonia.Controls.SystemDecorations.None;
+        Topmost            = true;
+        Width              = 320;
+        Height             = 240;
+        _shell.IsToolbarVisible   = false;
+        // Status bar stays visible (per #12 follow-up): it's the user's
+        // drag handle for moving the borderless window. Drag is wired on
+        // the status Border via OnStatusBarPointerPressed.
+        _shell.IsStatusBarVisible = true;
+
+        _miniModeActive = true;
+    }
+
+    private void ExitMiniMode()
+    {
+        if (!_miniModeActive || _shell == null) return;
+
+        WindowState        = _preMiniState;
+        SystemDecorations  = _preMiniDecorations;
+        Topmost            = _preMiniTopmost;
+        Width              = _preMiniWidth;
+        Height             = _preMiniHeight;
+        Position           = _preMiniPosition;
+        _shell.IsToolbarVisible   = _preMiniToolbar;
+        _shell.IsStatusBarVisible = _preMiniStatus;
+
+        _miniModeActive = false;
+    }
+
+    private void PositionMiniDepth()
+    {
+        if (_miniDepthWin == null) return;
+        // Bottom-left of main window (mirrors legacy WinForms placement).
+        double scale = DesktopScaling;
+        int x = Position.X + (int)(12 * scale);
+        int y = Position.Y + (int)((Bounds.Height - _miniDepthWin.Height - 12) * scale);
+        _miniDepthWin.Position = new global::Avalonia.PixelPoint(x, y);
+    }
+
+    private void SyncMiniMap()
+    {
+        if (_shell == null) return;
+        if (_shell.IsMiniMapVisible)
+        {
+            if (_miniMapWin == null)
+            {
+                _miniMapWin = new MiniMapWindow { DataContext = _shell.MiniMap };
+                _miniMapWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsMiniMapVisible = false;
+                };
+            }
+            if (!_miniMapWin.IsVisible)
+            {
+                _miniMapWin.Show(this);
+                PositionMiniMap();
+            }
+        }
+        else
+        {
+            _miniMapWin?.Hide();
+        }
+    }
+
+    private void PositionMiniMap()
+    {
+        if (_miniMapWin == null) return;
+        // Anchor to bottom-right of main window (matches legacy WinForms
+        // MiniMapPanel placement). PixelPoint conversion uses the main
+        // window's PixelPoint origin + DIP→pixel via DesktopScaling.
+        double scale = DesktopScaling;
+        int x = Position.X + (int)((Bounds.Width  - _miniMapWin.Width  - 12) * scale);
+        int y = Position.Y + (int)((Bounds.Height - _miniMapWin.Height - 12) * scale);
+        _miniMapWin.Position = new global::Avalonia.PixelPoint(x, y);
     }
 
     // ── Child window sync (lazy create, Show / Hide) ──────────────────────

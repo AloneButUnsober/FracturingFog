@@ -258,6 +258,58 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Palette samplers for MiniDepth (#11 — theme-styled gradient).
+            // Uses the host's MandelbrotCalculator.ColorMap so the strip
+            // colours stay in lock-step with whatever theme is active.
+            s_shell.SamplePaletteColor = smoothIter =>
+            {
+                var map = s_renderHost?.Mandelbrot.ColorMap;
+                if (map == null) return 0xFF808080u;
+                int maxIter = Math.Max(1, s_renderHost?.Mandelbrot.MaxIterations ?? 256);
+                try
+                {
+                    int packed = map.Map((float)smoothIter, 0f, maxIter);
+                    return unchecked((uint)packed) | 0xFF000000u;
+                }
+                catch
+                {
+                    return 0xFF808080u;
+                }
+            };
+            s_shell.GetCurrentSwatchArgb = () =>
+            {
+                var map = s_renderHost?.Mandelbrot.ColorMap;
+                if (map == null) return 0xFF808080u;
+                try
+                {
+                    int packed = map.SwatchSample;
+                    return unchecked((uint)packed) | 0xFF000000u;
+                }
+                catch
+                {
+                    return 0xFF808080u;
+                }
+            };
+
+            // MiniMap thumbnail render (UI-gap #10). Each time the user
+            // toggles MiniMap on, regenerate the thumbnail for the active
+            // fractal type / theme. Indicator state is driven separately by
+            // FrameCompleted in ShellViewModel — no re-render needed for
+            // pan/zoom.
+            s_shell.MiniMapVisibilityChanged += (_, _) => RenderMiniMapAsync(s_shell);
+            // Also regenerate when the user picks a new fractal type or
+            // colour theme — both invalidate the thumbnail.
+            s_shell.Main.PropertyChanged += (_, e) =>
+            {
+                if (s_shell == null || !s_shell.IsMiniMapVisible) return;
+                if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)
+                 || e.PropertyName == nameof(MainViewModel.SelectedFractalEntry)
+                 || e.PropertyName == nameof(MainViewModel.SelectedTheme))
+                {
+                    RenderMiniMapAsync(s_shell);
+                }
+            };
+
             WireShellHostEvents(s_shell);
 
             // Phase 3: start the 5-second probe that drives the status-bar
@@ -1295,6 +1347,122 @@ namespace FracturingFog.Hosting
                 await AvaloniaDialogs.ShowMessageAsync(
                     "Save Lossless", $"ffmpeg encode exception:\n{ex.Message}", expectsConfirmation: false);
             }
+        }
+
+        // ── MiniMap thumbnail ────────────────────────────────────────────────
+        //
+        // Renders a 220×180 thumbnail of the active fractal at its
+        // MiniMapDefaults framing on a background task, then pushes the
+        // resulting Avalonia Bitmap into the ShellViewModel's MiniMap VM.
+        // Mandelbrot only for now; other types render a placeholder via the
+        // MiniMapViewModel.IsSupported path.
+        private static void RenderMiniMapAsync(ShellViewModel shell)
+        {
+            if (shell == null) return;
+            var type = shell.Main.ViewState.FractalType;
+            if (!FracturingFog.Models.MiniMapDefaults.IsSupported(type)) return;
+            if (s_renderHost == null) return;
+
+            var bounds = FracturingFog.Models.MiniMapDefaults.For(type);
+            var map = s_renderHost.Mandelbrot.ColorMap;
+            int iters = FracturingFog.Models.MiniMapDefaults.IterationsFor(type);
+            const int W = 220, H = 180;
+            var fractalParams = shell.Main.ViewState.FractalParameters;
+
+            _ = System.Threading.Tasks.Task.Run(() =>
+            {
+                uint[]? bgra = null;
+                try
+                {
+                    // Use PosterRenderer's capture-calculator factory so the
+                    // thumbnail reflects the active fractal type (Burning Ship,
+                    // Julia, etc.) instead of always showing Mandelbrot.
+                    var altReq = new FracturingFog.Imaging.PosterRequest
+                    {
+                        FractalType = type,
+                        Width = W,
+                        Height = H,
+                        CenterX = bounds.CenterX,
+                        CenterY = bounds.CenterY,
+                        Zoom = bounds.Zoom,
+                        MaxIterations = iters,
+                        ColorMap = map,
+                        Quality = QualityPreset.Standard,
+                        FractalParameters = fractalParams ?? new FractalParameters(),
+                    };
+
+                    var alt = FracturingFog.Imaging.PosterRenderer.BuildCaptureCalculator(altReq);
+                    if (alt != null)
+                    {
+                        alt.Calculate(System.Threading.CancellationToken.None);
+                        bgra = alt.ColorBuffer;
+                    }
+                    else
+                    {
+                        // Mandelbrot path.
+                        var calc = new MandelbrotCalculator(W, H)
+                        {
+                            CenterX = bounds.CenterX,
+                            CenterY = bounds.CenterY,
+                            Zoom = bounds.Zoom,
+                            MaxIterations = iters,
+                            ColorMap = map,
+                            Quality = QualityPreset.Standard,
+                        };
+                        calc.Calculate(System.Threading.CancellationToken.None);
+                        bgra = calc.ColorBuffer;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] MiniMap render failed: {ex.Message}");
+                    return;
+                }
+
+                if (bgra == null) return;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        var bmp = BgraToBitmap(bgra, W, H);
+                        shell.MiniMap.SetThumbnail(bmp);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] MiniMap upload failed: {ex.Message}");
+                    }
+                });
+            });
+        }
+
+        private static global::Avalonia.Media.Imaging.Bitmap BgraToBitmap(uint[] bgra, int w, int h)
+        {
+            // WriteableBitmap fully owns its pixel storage — no dangling-
+            // pointer risk that arises with the IntPtr Bitmap ctor when the
+            // backend defers the copy.
+            var bmp = new global::Avalonia.Media.Imaging.WriteableBitmap(
+                new global::Avalonia.PixelSize(w, h),
+                new global::Avalonia.Vector(96, 96),
+                global::Avalonia.Platform.PixelFormat.Bgra8888,
+                global::Avalonia.Platform.AlphaFormat.Premul);
+            byte[] bytes = new byte[w * h * 4];
+            Buffer.BlockCopy(bgra, 0, bytes, 0, bytes.Length);
+            using (var fb = bmp.Lock())
+            {
+                if (fb.RowBytes == w * 4)
+                {
+                    System.Runtime.InteropServices.Marshal.Copy(bytes, 0, fb.Address, bytes.Length);
+                }
+                else
+                {
+                    for (int y = 0; y < h; y++)
+                    {
+                        System.Runtime.InteropServices.Marshal.Copy(
+                            bytes, y * w * 4, fb.Address + y * fb.RowBytes, w * 4);
+                    }
+                }
+            }
+            return bmp;
         }
 
         // ── Span-mode helpers ────────────────────────────────────────────────

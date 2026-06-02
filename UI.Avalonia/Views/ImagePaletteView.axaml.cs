@@ -23,15 +23,10 @@ public sealed partial class ImagePaletteView : Window
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
         DragDrop.SetAllowDrop(this, true);
-
-        DataContextChanged += (_, _) =>
-        {
-            if (DataContext is ImagePaletteViewModel vm)
-            {
-                vm.Cancelled += (_, _) => Close();
-                vm.ResultAccepted += (_, _) => Close();
-            }
-        };
+        // Cancelled / ResultAccepted close handlers live in AvaloniaDialogs
+        // so the host can capture the picked stops BEFORE Close() triggers
+        // Window.Closing → tcs.SetResult(false). Closing here raced ahead of
+        // the host's accepted = stops assignment and zeroed the result.
     }
 
     /// <summary>
