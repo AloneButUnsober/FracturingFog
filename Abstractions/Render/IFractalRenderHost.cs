@@ -28,7 +28,8 @@ namespace FracturingFog.Render
         int Height,
         bool HighPrecisionActive,
         bool IterLocked,
-        FractalType FractalType);
+        FractalType FractalType,
+        string? PrecisionLabel = null);
 
     /// <summary>
     /// Orchestrates the renderer + per-fractal-type calculators. The input

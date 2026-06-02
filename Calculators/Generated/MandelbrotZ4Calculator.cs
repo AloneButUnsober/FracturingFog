@@ -14,7 +14,7 @@
 //                  =  (((z + z)*z + z*z)*z + z*z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 08:03:06 UTC
+// Generated: 2026-06-02 08:27:50 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
