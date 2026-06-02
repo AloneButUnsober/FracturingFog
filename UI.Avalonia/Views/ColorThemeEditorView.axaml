@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         xmlns:m="using:FracturingFog.Models"
+        xmlns:cp="using:Avalonia.Controls"
         x:Class="FracturingFog.UI.Avalonia.Views.ColorThemeEditorView"
         x:DataType="vm:ColorThemeEditorViewModel"
         Title="Color Theme Editor"
@@ -164,7 +165,7 @@
                                     <ItemsControl ItemsSource="{Binding Stops}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="vm:ColorStopRowVm">
-                                                <Grid ColumnDefinitions="92,40,Auto,Auto,Auto,Auto" Margin="4,2">
+                                                <Grid ColumnDefinitions="92,Auto,*,Auto" Margin="4,2">
                                                     <NumericUpDown Grid.Column="0"
                                                                    Value="{Binding Position}"
                                                                    Minimum="0" Maximum="1"
@@ -173,10 +174,8 @@
                                                     <Border Grid.Column="1" Width="32" Height="22" Margin="6,0"
                                                             Background="{Binding SwatchBrush}"
                                                             BorderBrush="#444" BorderThickness="1" />
-                                                    <NumericUpDown Grid.Column="2" Value="{Binding R}" Minimum="0" Maximum="255" Width="92" Margin="4,0,2,0" />
-                                                    <NumericUpDown Grid.Column="3" Value="{Binding G}" Minimum="0" Maximum="255" Width="92" Margin="2,0" />
-                                                    <NumericUpDown Grid.Column="4" Value="{Binding B}" Minimum="0" Maximum="255" Width="92" Margin="2,0,4,0" />
-                                                    <Button Grid.Column="5" Classes="action danger" Content="X" Width="28"
+                                                    <ColorPicker Grid.Column="2" Color="{Binding StopColor, Mode=TwoWay}" Margin="4,0" HorizontalAlignment="Left" />
+                                                    <Button Grid.Column="3" Classes="action danger" Content="X" Width="28"
                                                             Command="{Binding $parent[ItemsControl].((vm:ColorThemeEditorViewModel)DataContext).RemoveStopCommand}"
                                                             CommandParameter="{Binding}" />
                                                 </Grid>
@@ -210,9 +209,7 @@
                                 <Border Width="40" Height="22"
                                         Background="{Binding InSetSwatchBrush}"
                                         BorderBrush="#444" BorderThickness="1" />
-                                <NumericUpDown Value="{Binding InSetR}" Minimum="0" Maximum="255" Width="92" IsEnabled="{Binding UseInSet}" />
-                                <NumericUpDown Value="{Binding InSetG}" Minimum="0" Maximum="255" Width="92" IsEnabled="{Binding UseInSet}" />
-                                <NumericUpDown Value="{Binding InSetB}" Minimum="0" Maximum="255" Width="92" IsEnabled="{Binding UseInSet}" />
+                                <ColorPicker Color="{Binding InSetColor, Mode=TwoWay}" IsEnabled="{Binding UseInSet}" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -221,13 +218,16 @@
                     <Border Classes="group">
                         <StackPanel Spacing="4">
                             <TextBlock Classes="section" Text="Post-FX defaults" />
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
-                                <CheckBox Grid.Row="0" Grid.Column="0" Content="Brightness" IsChecked="{Binding UseBrightness}" Foreground="#B4B4B4" Margin="0,0,12,4" />
-                                <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" Width="100" HorizontalAlignment="Left" IsEnabled="{Binding UseBrightness}" Margin="0,0,0,4" />
-                                <CheckBox Grid.Row="1" Grid.Column="0" Content="Contrast" IsChecked="{Binding UseContrast}" Foreground="#B4B4B4" Margin="0,0,12,4" />
-                                <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding Contrast}" Minimum="-100" Maximum="100" Width="100" HorizontalAlignment="Left" IsEnabled="{Binding UseContrast}" Margin="0,0,0,4" />
-                                <CheckBox Grid.Row="2" Grid.Column="0" Content="Adaptive" IsChecked="{Binding UseAdaptive}" Foreground="#B4B4B4" Margin="0,0,12,0" />
-                                <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding Adaptive}" Minimum="0" Maximum="100" Width="100" HorizontalAlignment="Left" IsEnabled="{Binding UseAdaptive}" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                                <CheckBox Grid.Row="0" Grid.Column="0" Content="Brightness" IsChecked="{Binding UseBrightness}" Foreground="#B4B4B4" Margin="0,0,12,4" VerticalAlignment="Center" />
+                                <Slider Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseBrightness}" Margin="0,0,0,4" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Brightness}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,4" />
+                                <CheckBox Grid.Row="1" Grid.Column="0" Content="Contrast" IsChecked="{Binding UseContrast}" Foreground="#B4B4B4" Margin="0,0,12,4" VerticalAlignment="Center" />
+                                <Slider Grid.Row="1" Grid.Column="1" Value="{Binding Contrast}" Minimum="-100" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseContrast}" Margin="0,0,0,4" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Contrast}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,4" />
+                                <CheckBox Grid.Row="2" Grid.Column="0" Content="Adaptive" IsChecked="{Binding UseAdaptive}" Foreground="#B4B4B4" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                <Slider Grid.Row="2" Grid.Column="1" Value="{Binding Adaptive}" Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseAdaptive}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Adaptive}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,0" />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -262,16 +262,12 @@
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Diffuse" Width="60" />
                                         <Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <NumericUpDown Value="{Binding DiffR}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding DiffG}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding DiffB}" Minimum="0" Maximum="255" Width="92" />
+                                        <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Specular" Width="60" />
                                         <Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <NumericUpDown Value="{Binding SpecR}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding SpecG}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding SpecB}" Minimum="0" Maximum="255" Width="92" />
+                                        <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Shininess" Width="60" />
@@ -295,16 +291,12 @@
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Diffuse" Width="60" />
                                         <Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <NumericUpDown Value="{Binding DiffR}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding DiffG}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding DiffB}" Minimum="0" Maximum="255" Width="92" />
+                                        <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Specular" Width="60" />
                                         <Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <NumericUpDown Value="{Binding SpecR}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding SpecG}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding SpecB}" Minimum="0" Maximum="255" Width="92" />
+                                        <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Shininess" Width="60" />
@@ -329,16 +321,12 @@
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Diffuse" Width="60" />
                                         <Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <NumericUpDown Value="{Binding DiffR}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding DiffG}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding DiffB}" Minimum="0" Maximum="255" Width="92" />
+                                        <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Specular" Width="60" />
                                         <Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <NumericUpDown Value="{Binding SpecR}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding SpecG}" Minimum="0" Maximum="255" Width="92" />
-                                        <NumericUpDown Value="{Binding SpecB}" Minimum="0" Maximum="255" Width="92" />
+                                        <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Classes="label" Text="Shininess" Width="60" />

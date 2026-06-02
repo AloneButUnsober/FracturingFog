@@ -1048,11 +1048,17 @@ namespace FracturingFog.Hosting
             {
                 accepted = stops;
                 if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
+                // Close the modal so the caller (FromImageRequested) actually
+                // returns; without this the dialog lingered behind the editor
+                // and the user perceived Apply as a no-op even though stops
+                // were forwarded through args.Stops.
+                try { win.Close(); } catch { /* already closing */ }
             };
 
             vm.Cancelled += (_, _) =>
             {
                 if (!tcs.Task.IsCompleted) tcs.TrySetResult(false);
+                try { win.Close(); } catch { /* already closing */ }
             };
 
             win.FileDropped += (_, path) => TryLoadIntoVm(vm, path);
