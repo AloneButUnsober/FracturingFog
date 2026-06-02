@@ -546,8 +546,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void OnFrameCompleted(object? sender, RenderFrameInfo info)
     {
-        // Mirrors the legacy status string in MainForm.TriggerCalculation.
-        string precTag = info.HighPrecisionActive ? "[DD]" : "[SP]";
+        // Prefer the calculator's actual precision label (PT, QD-PT,
+        // DD-HP4, etc.) when available — collapses to [DD]/[SP] only for
+        // legacy calculators that expose just the bool. Lets the user
+        // see exactly which deep-zoom path engaged (perturbation, BLA,
+        // HP-direct, vectorised DD4, etc.).
+        string precTag = !string.IsNullOrEmpty(info.PrecisionLabel)
+            ? $"[{info.PrecisionLabel}]"
+            : (info.HighPrecisionActive ? "[DD]" : "[SP]");
         string typeTag = $"[{info.FractalType}]";
         StatusText =
             $"{typeTag}  cx={info.CenterX:G12}  cy={info.CenterY:G12}  " +

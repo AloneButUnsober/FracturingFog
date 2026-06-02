@@ -527,14 +527,14 @@ namespace FracturingFog.Rendering
                 else
                     UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
 
-                // hp == true → status bar shows [DD]/[QD]. For alt calcs the
-                // legacy flag is meaningless (only MandelbrotCalculator wires
-                // it), so query the calculator's own label if it exposes one
-                // — currently only the generated GZ calc does.
-                bool hp = !useAlt && calc.IsHighPrecisionActive;
-                if (useAlt)
-                {
-                    string? lbl = altCalc switch
+                // Pull the richer LastPrecisionLabel from the generated calcs
+                // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
+                // path actually ran — essential for diagnosing perf at
+                // deep zoom. Legacy MandelbrotCalculator exposes only a
+                // boolean (IsHighPrecisionActive); collapse to "DD"/"SP"
+                // for the status string in that case.
+                string? lbl = useAlt
+                    ? altCalc switch
                     {
                         FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g2 => g2.LastPrecisionLabel,
                         FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g3 => g3.LastPrecisionLabel,
@@ -543,9 +543,11 @@ namespace FracturingFog.Rendering
                         FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
                         FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
                         _ => null
-                    };
-                    hp = lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD"));
-                }
+                    }
+                    : (calc.IsHighPrecisionActive ? "DD" : "SP");
+                bool hp = useAlt
+                    ? (lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD")))
+                    : calc.IsHighPrecisionActive;
                 int curW = useAlt ? altCalc!.Width : calc.Width;
                 int curH = useAlt ? altCalc!.Height : calc.Height;
                 int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
@@ -555,7 +557,7 @@ namespace FracturingFog.Rendering
 
                 FrameCompleted?.Invoke(this, new RenderFrameInfo(
                     curCx, curCy, curZoom, curIter, ms, curW, curH,
-                    hp, ViewState.IterLocked, ViewState.FractalType));
+                    hp, ViewState.IterLocked, ViewState.FractalType, lbl));
 
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
             }, TaskScheduler.Default);
