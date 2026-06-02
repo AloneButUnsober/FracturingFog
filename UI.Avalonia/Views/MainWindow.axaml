@@ -135,6 +135,9 @@
                     Background="Transparent"
                     IsHitTestVisible="True"
                     Focusable="True" />
+            <!-- MiniMap is hoisted into a separate top-level Avalonia Window
+                 by MainWindow code-behind (the GPU swap-chain HWND would
+                 occlude any in-window overlay on Windows). -->
         </Grid>
 
         <!-- Slideshow VCR transport ───────────────────────────────────────
@@ -146,7 +149,8 @@
         </Border>
 
         <!-- Status bar ─────────────────────────────────────────────────── -->
-        <Border Grid.Row="3"
+        <Border x:Name="StatusBar"
+                Grid.Row="3"
                 Padding="8,4"
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="0,1,0,0"

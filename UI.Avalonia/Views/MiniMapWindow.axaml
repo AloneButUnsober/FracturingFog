@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
+        x:Class="FracturingFog.UI.Avalonia.Views.MiniMapWindow"
+        x:DataType="vm:MiniMapViewModel"
+        Title="MiniMap"
+        Width="228" Height="188"
+        SystemDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="#121212">
+    <ctrl:MiniMapControl />
+</Window>

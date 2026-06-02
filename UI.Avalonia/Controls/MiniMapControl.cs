@@ -15,6 +15,7 @@
 // drawing primitives use Avalonia's vector pipeline (DrawingContext).
 
 using System;
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -28,6 +29,8 @@ namespace FracturingFog.UI.Avalonia.Controls;
 
 public sealed class MiniMapControl : Control
 {
+    private MiniMapViewModel? _attachedVm;
+
     public MiniMapControl()
     {
         // Default DIP size — host can override via XAML / parent.
@@ -41,7 +44,26 @@ public sealed class MiniMapControl : Control
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        // Hook the VM's PropertyChanged so Thumbnail / CenterX / CenterY /
+        // HostZoom updates trigger a repaint. Without this the control draws
+        // its initial state and never refreshes when the host pushes new
+        // values in via SetThumbnail / FrameCompleted.
+        if (_attachedVm != null) _attachedVm.PropertyChanged -= OnVmPropertyChanged;
+        _attachedVm = Vm;
+        if (_attachedVm != null) _attachedVm.PropertyChanged += OnVmPropertyChanged;
         InvalidateVisual();
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MiniMapViewModel.Thumbnail)
+         || e.PropertyName == nameof(MiniMapViewModel.CenterX)
+         || e.PropertyName == nameof(MiniMapViewModel.CenterY)
+         || e.PropertyName == nameof(MiniMapViewModel.HostZoom)
+         || e.PropertyName == nameof(MiniMapViewModel.ActiveType))
+        {
+            InvalidateVisual();
+        }
     }
 
     private void OnDoubleTapped(object? sender, TappedEventArgs e)
