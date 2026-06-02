@@ -147,6 +147,41 @@ public static class CalculatorGenApi
         string ddDirectBody = new DdDirectEmitter().EmitDdDirectBody(root, indent: "                    ");
         string qdDirectBody = new QdDirectEmitter().EmitQdDirectBody(root, indent: "                    ");
 
+        // ── AVX-2 DD4 vectorised body for whole-frame DD-direct ──────────
+        //
+        // The DD direct body uses only +/-/* operators and FromCenterOffset
+        // — all of which exist with identical signatures on DD4. So the
+        // SAME expression compiles for either type. Build the DD4 body by
+        // textual substitution of the DD body:
+        //   zr_dd  → zr_dd4   (variable rename)
+        //   zi_dd  → zi_dd4
+        //   cr_dd  → cr_dd4
+        //   ci_dd  → ci_dd4
+        //   "DD "  → "DD4 "   (declaration type rewrite; doesn't touch
+        //                       "(DD)" casts the emitter never emits for
+        //                       plain-polynomial bodies)
+        // The DD4 path is gated on AstSaDetector.DetectZdPlusC >= 2 —
+        // pure z^d+c only — because non-polynomial emitter outputs
+        // (Conj/Fold/transcendental/piecewise) use type-specific .Hi
+        // accesses and (DD) casts that DD4 doesn't support.
+        int polyDegree = AstSaDetector.DetectZdPlusC(root);
+        bool supportsDd4 = polyDegree >= 2;
+        // For supported (polynomial) equations, substitute the DD body
+        // into DD4 form. For non-polynomial equations (Conj / Fold /
+        // transcendental / piecewise / prev) the DD4 method is gated
+        // off at runtime by SupportsDd4Direct=false, but the body
+        // placeholder still needs to substitute into compilable C# so
+        // the dead method JITs without errors. Emit a no-op stub in
+        // that case — the JIT DCEs the whole method body.
+        string dd4DirectBody = supportsDd4
+            ? ddDirectBody
+                .Replace("zr_dd", "zr_dd4")
+                .Replace("zi_dd", "zi_dd4")
+                .Replace("cr_dd", "cr_dd4")
+                .Replace("ci_dd", "ci_dd4")
+                .Replace("DD ", "DD4 ")
+            : "                DD4 zr_dd4_new = zr_dd4; DD4 zi_dd4_new = zi_dd4;";
+
         // Series Approximation gating. Two detector tiers:
         //   1. DetectZdPlusC — pure z^d+c (d in 2..5). Fast path: the
         //      original hardcoded emitter inlines binomial coefficients
@@ -205,6 +240,8 @@ public static class CalculatorGenApi
             .Replace("{{BLA_B_BODY}}", blaBBody)
             .Replace("{{QD_Z_BODY}}", qdZBody)
             .Replace("{{DD_DIRECT_BODY}}", ddDirectBody)
+            .Replace("{{DD4_DIRECT_BODY}}", dd4DirectBody)
+            .Replace("{{SUPPORTS_DD4_DIRECT}}", supportsDd4 ? "true" : "false")
             .Replace("{{QD_DIRECT_BODY}}", qdDirectBody)
             .Replace("{{SA_Z2C_ENABLED}}", saEnabledLit)
             .Replace("{{SA_RECURRENCE_BODY}}", saRecurrenceBody)

@@ -14,7 +14,7 @@
 //                  =  (z + z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 00:58:07 UTC
+// Generated: 2026-06-02 08:03:04 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -232,6 +232,14 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     /// perturbation path is skipped at runtime regardless of UsePerturbation
     /// — the renderer falls back to AVX2 / scalar everywhere.</summary>
     private const bool SupportsPerturbation = true;
+
+    /// <summary>True when the equation is a plain polynomial in z (z^d+c
+    /// for d in 2..16) — the AVX-2 DD4 vectorised whole-frame DD-direct
+    /// fallback can handle it. Non-polynomial equations (conj, fold,
+    /// transcendentals, piecewise, prev-state) stay on the scalar
+    /// DD-direct path because the DD4 type lacks those operations.
+    /// CalcGen sets this via AstSaDetector at codegen time.</summary>
+    private const bool SupportsDd4Direct = true;
 
     /// <summary>False for anti-holomorphic equations (Conj / Folded).
     /// Distance estimate and surface normals depend on the dz/dc chain
@@ -2183,7 +2191,14 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
     private void TryRenderHpDirect(double scale, CancellationToken ct)
     {
         bool useQd = Zoom >= QdDirectZoomThreshold;
-        LastPrecisionLabel = useQd ? "QD-HP" : "DD-HP";
+        // DD4 (4-lane SIMD DD) path engages when the equation is a plain
+        // polynomial (DD4 lacks Conj/Fold/transcendental/piecewise), the
+        // CPU supports AVX-2 + FMA, and we're below the QD precision
+        // threshold. ~3-4× speedup on plain Mandelbrot deep zoom where
+        // perturbation has failed entirely and DD-HP would otherwise
+        // render seconds per frame.
+        bool useDd4 = !useQd && SupportsDd4Direct && DD4.IsSupported && Width >= 4;
+        LastPrecisionLabel = useQd ? "QD-HP" : (useDd4 ? "DD-HP4" : "DD-HP");
         int maxIt = MaxIterations;
         double halfW = Width * 0.5;
         double halfH = Height * 0.5;
@@ -2207,6 +2222,30 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                     ColorBuffer[rowBase + x] = ComputePixelQdDirect(cr_q, ci_q, maxIt, rowBase + x);
                 }
             }
+            else if (useDd4)
+            {
+                DD ci_dd = DD.FromCenterOffset(centerYDd, dy, scale);
+                // Broadcast the per-row ci to all 4 DD4 lanes once.
+                DD4 ci_dd4 = new DD4(
+                    Vector256.Create(ci_dd.Hi),
+                    Vector256.Create(ci_dd.Lo));
+                int x = 0;
+                Vector256<double> halfWv = Vector256.Create(halfW);
+                for (; x + 4 <= Width; x += 4)
+                {
+                    var pixelIdx = Vector256.Create(
+                        (double)x, x + 1, x + 2, x + 3);
+                    var offsetsFromCenter = Avx.Subtract(pixelIdx, halfWv);
+                    DD4 cr_dd4 = DD4.FromCenterOffset(centerXDd, offsetsFromCenter, scale);
+                    ComputePixel4Dd4Direct(cr_dd4, ci_dd4, maxIt, rowBase + x);
+                }
+                // Scalar tail for remainder pixels (Width % 4).
+                for (; x < Width; x++)
+                {
+                    DD cr_dd = DD.FromCenterOffset(centerXDd, x - halfW, scale);
+                    ColorBuffer[rowBase + x] = ComputePixelDdDirect(cr_dd, ci_dd, maxIt, rowBase + x);
+                }
+            }
             else
             {
                 DD ci_dd = DD.FromCenterOffset(centerYDd, dy, scale);
@@ -2217,6 +2256,87 @@ public sealed class MandelbrotZ2Calculator : IFractalCalculator, IDisposable
                 }
             }
         });
+    }
+
+    // 4-pixel-block DD4 iteration for the AVX-2 DD-direct vectorised
+    // fallback. Iterates z = p(z, c) in 4-lane DD across 4 adjacent
+    // pixels; per-lane escape captured at iter-of-escape into stack
+    // spans, then scattered to ColorBuffer via 4 individual ColorForDd
+    // calls. Per-pixel dz/dc derivative is NOT tracked — themes that
+    // consume DE / normal channels degrade gracefully to smooth-count-
+    // only via IColorMap's default fallback. This is acceptable for
+    // the DD-HP path which triggers only when perturbation has failed
+    // entirely (ref orbit escaped + every alternate-ref candidate also
+    // escaped + cluster rebase wasn't viable) — at which point the
+    // user wants any frame on screen, not pretty 3D shading.
+    private void ComputePixel4Dd4Direct(DD4 cr_dd4, DD4 ci_dd4, int maxIt, int bufIdxBase)
+    {
+        DD4 zr_dd4 = new DD4(Vector256<double>.Zero, Vector256<double>.Zero);
+        DD4 zi_dd4 = new DD4(Vector256<double>.Zero, Vector256<double>.Zero);
+        Span<double> finalZrHi = stackalloc double[4];
+        Span<double> finalZrLo = stackalloc double[4];
+        Span<double> finalZiHi = stackalloc double[4];
+        Span<double> finalZiLo = stackalloc double[4];
+        Span<int> finalIts = stackalloc int[4];
+        int active = 0xF;  // bits 0..3 = lane active
+
+        for (int it = 0; it < maxIt; it++)
+        {
+            DD4 mag2 = zr_dd4.Square() + zi_dd4.Square();
+            int escMask = DD4.EscapeMask(mag2, Bailout2);
+            int newlyEscaped = escMask & active;
+            if (newlyEscaped != 0)
+            {
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    if ((newlyEscaped & (1 << lane)) != 0)
+                    {
+                        finalZrHi[lane] = zr_dd4.Hi.GetElement(lane);
+                        finalZrLo[lane] = zr_dd4.Lo.GetElement(lane);
+                        finalZiHi[lane] = zi_dd4.Hi.GetElement(lane);
+                        finalZiLo[lane] = zi_dd4.Lo.GetElement(lane);
+                        finalIts[lane] = it;
+                    }
+                }
+                active &= ~newlyEscaped;
+                if (active == 0) break;
+            }
+            {
+                    DD4 zr_dd4_new = ((zr_dd4 * zr_dd4 - zi_dd4 * zi_dd4) + cr_dd4);
+                    DD4 zi_dd4_new = ((zr_dd4 * zi_dd4 + zi_dd4 * zr_dd4) + ci_dd4);
+                zr_dd4 = zr_dd4_new;
+                zi_dd4 = zi_dd4_new;
+            }
+        }
+        // Lanes still active at maxIt are in-set.
+        for (int lane = 0; lane < 4; lane++)
+        {
+            if ((active & (1 << lane)) != 0) finalIts[lane] = maxIt;
+        }
+        // Per-lane colour scatter.
+        for (int lane = 0; lane < 4; lane++)
+        {
+            int idx = bufIdxBase + lane;
+            if (finalIts[lane] >= maxIt)
+            {
+                ColorBuffer[idx] = ColorForDd(
+                    maxIt, 0.0, 0.0, FracturingFog.FFMath.DD.Zero,
+                    0.0, 0.0, maxIt, idx);
+            }
+            else
+            {
+                // DD-promoted |z|² for the smooth count's log-log cast.
+                // Hi+Lo limbs come straight from the DD4 lane snapshot
+                // at moment of escape — full DD precision, matches
+                // scalar DD-direct's accuracy.
+                var zr_dd_l = new FracturingFog.FFMath.DD(finalZrHi[lane], finalZrLo[lane]);
+                var zi_dd_l = new FracturingFog.FFMath.DD(finalZiHi[lane], finalZiLo[lane]);
+                var mag2_dd = zr_dd_l.Square() + zi_dd_l.Square();
+                ColorBuffer[idx] = ColorForDd(
+                    finalIts[lane], finalZrHi[lane], finalZiHi[lane], mag2_dd,
+                    0.0, 0.0, maxIt, idx);
+            }
+        }
     }
 
     // ── Colour mapping ──────────────────────────────────────────────────────

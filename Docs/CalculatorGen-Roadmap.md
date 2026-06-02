@@ -526,6 +526,39 @@ flips priority.
        use. Status bar showing `[DD]` instead of `[QD-PT]` confirms
        gate engaged.
 
+- [x] **AVX-2 SIMD DD-direct fallback (DD4)** — IMPLEMENTED.
+  Whole-frame `TryRenderHpDirect` DD path now vectorises 4 pixels at
+  a time using the existing `DD4` type (4-lane SIMD double-double
+  via AVX-2 + FMA). New private method `ComputePixel4Dd4Direct`
+  iterates `z = p(z, c)` in DD4 across 4 adjacent pixels per row,
+  tracks per-lane escape via `DD4.EscapeMask`, snapshots per-lane
+  Hi/Lo limbs at moment of escape into stack spans, then scatters
+  to ColorBuffer via 4 `ColorForDd` calls.
+  Gating: only engages for plain polynomial equations (`z^d + c`,
+  d ∈ 2..16) — `DD4` lacks Conj/Fold/transcendental/piecewise/prev
+  operations the scalar `DdDirectEmitter` emits for those equations.
+  Detection via `AstSaDetector.DetectZdPlusC(root) >= 2`. For
+  non-polynomial equations, the const `SupportsDd4Direct = false`
+  DCEs the DD4 path at JIT time; the body placeholder substitutes
+  to a no-op stub so the dead method still compiles.
+  DD4 body generation: CalcGen takes the scalar `DdDirectEmitter`
+  output and does textual substitution (`zr_dd` → `zr_dd4`, etc.;
+  `DD ` → `DD4 `). Same expression compiles against DD4 because
+  the operators (+, -, *, FromCenterOffset) have identical
+  signatures.
+  Trade-off: `dz/dc` derivative NOT tracked in DD4 path (would
+  double per-iter work without a Vector256-typed derivative
+  rewrite). Themes that consume DE / normal channels degrade
+  gracefully to smooth-count-only via `IColorMap` defaults.
+  Acceptable because DD-HP triggers only when perturbation has
+  failed entirely (ref escaped + alternate-ref search + cluster
+  rebase all unviable) — user wants any frame, not pretty 3D.
+  Status bar: `DD-HP4` (was `DD-HP`) when DD4 path engaged. 4
+  pixels per row's hot inner loop expected speedup: ~3-4×.
+  `--calcgen-test` 90/90 PASS; `--gentest MandelbrotZ2` 0-diff
+  (gentest's centres don't trigger HP-direct so the DD4 path
+  isn't exercised there).
+
 - [x] **Cluster rebase on perturbation glitch (Item 7)** — IMPLEMENTED.
   Glitched pixels deferred during the main perturbation pass into a
   `ConcurrentBag<(int x, int y)>`. After Parallel.For completes, the
