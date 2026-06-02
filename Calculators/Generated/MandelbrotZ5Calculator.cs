@@ -14,7 +14,7 @@
 //                  =  ((((z + z)*z + z*z)*z + z*z*z)*z + z*z*z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 09:12:27 UTC
+// Generated: 2026-06-02 09:17:29 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -1305,7 +1305,16 @@ public sealed class MandelbrotZ5Calculator : IFractalCalculator, IDisposable
         // starts at iter 0. When SA skipped several thousand iters
         // already, redoing them 8-wide is still a loss. Disable SIMD
         // when saStart > 0 — the scalar path with SA wins.
-        bool useSimdLane = Avx512F.IsSupported && !UseBla && Width >= 8 && saStart == 0;
+        bool useSimd512Lane = Avx512F.IsSupported && !UseBla && Width >= 8 && saStart == 0;
+        // AVX-2 perturbation lane: 4 pixels per SIMD step. Same gating as
+        // AVX-512 (no BLA, no SA prelude active) but with the lower
+        // hardware bar. Only engages when AVX-512 isn't available — on
+        // AVX-512-capable CPUs the 8-wide path wins. Provides the
+        // 4×-ish SIMD win on AVX-2-only hardware, closing most of the
+        // gap vs the hand-tuned legacy ComputeRowPT4.
+        bool useSimd2Lane   = !useSimd512Lane
+                            && Avx2.IsSupported && Fma.IsSupported
+                            && !UseBla && Width >= 4 && saStart == 0;
         // Cluster-rebase glitch collection (Item 7). When enabled, the
         // glitch handlers append (x, y) here instead of immediately
         // calling per-pixel HP-direct. After the main Parallel.For
@@ -1337,7 +1346,7 @@ public sealed class MandelbrotZ5Calculator : IFractalCalculator, IDisposable
             int x = 0;
 
             // ── SIMD lane (8 pixels per step) ────────────────────────────
-            if (useSimdLane)
+            if (useSimd512Lane)
             {
                 Vector512<double> halfW_v   = Vector512.Create(Width * 0.5);
                 Vector512<double> scale_v   = Vector512.Create(scale);
@@ -2021,6 +2030,679 @@ public sealed class MandelbrotZ5Calculator : IFractalCalculator, IDisposable
                         // so smooth count survives the log-log cast past
                         // zoom 1e12. In-set lanes skip the math; ColorForDd
                         // short-circuits on it >= maxIt.
+                        FracturingFog.FFMath.DD lzMag2 = FracturingFog.FFMath.DD.Zero;
+                        if (it < maxIt)
+                        {
+                            int itIdx = it;
+                            var lzr_dd = new FracturingFog.FFMath.DD(refZr[itIdx], refZrLo[itIdx])
+                                       + new FracturingFog.FFMath.DD(finDrS[k], 0.0);
+                            var lzi_dd = new FracturingFog.FFMath.DD(refZi[itIdx], refZiLo[itIdx])
+                                       + new FracturingFog.FFMath.DD(finDiS[k], 0.0);
+                            lzMag2 = lzr_dd.Square() + lzi_dd.Square();
+                        }
+                        ColorBuffer[rowBase + x + k] = ColorForDd(
+                            it, finZrS[k], finZiS[k], lzMag2,
+                            finDrvS[k], finDivS[k], maxIt, rowBase + x + k);
+                    }
+                }
+            }
+            // ── SIMD lane (4 pixels per step, AVX-2 + FMA) ──────────────
+            else if (useSimd2Lane)
+            {
+                Vector256<double> halfW_v   = Vector256.Create(Width * 0.5);
+                Vector256<double> scale_v   = Vector256.Create(scale);
+                Vector256<double> ei_v      = Vector256.Create(ei);
+                Vector256<double> bailout_v = Vector256.Create(Bailout2);
+                Vector256<long>   oneL      = Vector256.Create(1L);
+                Vector256<long>   allActive = Vector256<long>.AllBitsSet;
+                Vector256<double> dZero     = Vector256<double>.Zero;
+                Vector256<long>   lZero     = Vector256<long>.Zero;
+                Vector256<double> refOffX_v = Vector256.Create(refOffsetX);
+
+                for (; x + 4 <= Width; x += 4)
+                {
+                    Vector256<double> idx_v = Vector256.Create(
+                        (double)x, x + 1, x + 2, x + 3);
+                    Vector256<double> er_v = Avx.Subtract(
+                        Avx.Multiply(
+                            Avx.Subtract(idx_v, halfW_v), scale_v),
+                        refOffX_v);
+
+                    Vector256<double> dr  = dZero, di  = dZero;
+                    Vector256<double> drv = dZero, div = dZero;
+                    Vector256<long>   activeMask = allActive;
+                    Vector256<long>   escapeIter = lZero;
+                    Vector256<double> finalZrVec = dZero, finalZiVec = dZero;
+                    Vector256<double> finalDrvVec = dZero, finalDivVec = dZero;
+                    // Captured pre-escape δ per lane → DD-promoted smooth count
+                    // post-loop (same DD-promote scheme as AVX-512 path so the
+                    // smooth count survives the log-log cast past zoom 1e12).
+                    Vector256<double> finalDrVec = dZero, finalDiVec = dZero;
+                    Vector256<long>   glitchMask = lZero;
+
+                    for (int it = 0; it < refOrbitLen; it++)
+                    {
+                        Vector256<double> Zr_v = Vector256.Create(refZr[it]);
+                        Vector256<double> Zi_v = Vector256.Create(refZi[it]);
+                        Vector256<double> zr_v = Avx.Add(Zr_v, dr);
+                        Vector256<double> zi_v = Avx.Add(Zi_v, di);
+
+                        // Bailout: r2 < Bailout2 → lane stays active.
+                        Vector256<double> r2 = Fma.MultiplyAdd(
+                            zr_v, zr_v, Avx.Multiply(zi_v, zi_v));
+                        Vector256<double> activeD = Avx.Compare(r2, bailout_v,
+                            FloatComparisonMode.OrderedLessThanNonSignaling);
+                        Vector256<long> activeL = activeD.AsInt64();
+                        Vector256<long> newlyEscaped = Avx2.AndNot(activeL, activeMask);
+                        Vector256<double> newlyEscapedD = newlyEscaped.AsDouble();
+                        finalZrVec = Avx.BlendVariable(finalZrVec, zr_v, newlyEscapedD);
+                        finalZiVec = Avx.BlendVariable(finalZiVec, zi_v, newlyEscapedD);
+                        finalDrvVec = Avx.BlendVariable(finalDrvVec, drv, newlyEscapedD);
+                        finalDivVec = Avx.BlendVariable(finalDivVec, div, newlyEscapedD);
+                        finalDrVec = Avx.BlendVariable(finalDrVec, dr, newlyEscapedD);
+                        finalDiVec = Avx.BlendVariable(finalDiVec, di, newlyEscapedD);
+                        activeMask = Avx2.And(activeMask, activeL);
+                        if (activeMask.Equals(lZero)) break;
+                        escapeIter = Avx2.Add(escapeIter, Avx2.And(oneL, activeMask));
+
+                        // Glitch detect (same scheme as AVX-512 lane).
+                        Vector256<long> zrEq = Avx.Compare(zr_v, Zr_v,
+                            FloatComparisonMode.OrderedEqualNonSignaling).AsInt64();
+                        Vector256<long> ziEq = Avx.Compare(zi_v, Zi_v,
+                            FloatComparisonMode.OrderedEqualNonSignaling).AsInt64();
+                        Vector256<long> drNz = Avx.Compare(dr, dZero,
+                            FloatComparisonMode.OrderedNotEqualNonSignaling).AsInt64();
+                        Vector256<long> diNz = Avx.Compare(di, dZero,
+                            FloatComparisonMode.OrderedNotEqualNonSignaling).AsInt64();
+                        Vector256<long> g = Avx2.And(zrEq,
+                            Avx2.And(ziEq, Avx2.Or(drNz, diNz)));
+                        if (PerturbGlitchTolerance > 0.0 && it > 4)
+                        {
+                            Vector256<double> dMag2v = Fma.MultiplyAdd(
+                                dr, dr, Avx.Multiply(di, di));
+                            Vector256<double> zMag2v = Fma.MultiplyAdd(
+                                zr_v, zr_v, Avx.Multiply(zi_v, zi_v));
+                            Vector256<double> tolV = Vector256.Create(PerturbGlitchTolerance);
+                            Vector256<double> threshV = Avx.Multiply(zMag2v, tolV);
+                            Vector256<long> small = Avx.Compare(dMag2v, threshV,
+                                FloatComparisonMode.OrderedLessThanNonSignaling).AsInt64();
+                            Vector256<long> nonzero = Avx.Compare(dMag2v, dZero,
+                                FloatComparisonMode.OrderedGreaterThanNonSignaling).AsInt64();
+                            Vector256<long> soft = Avx2.And(small, nonzero);
+                            g = Avx2.Or(g, soft);
+                        }
+                        glitchMask = Avx2.Or(glitchMask, Avx2.And(g, activeMask));
+
+                        // Derivative
+                        {
+                    Vector256<double> dv2re1 = Avx.Add(zr_v, zr_v);
+                    Vector256<double> dv2im2 = Avx.Add(zi_v, zi_v);
+                    Vector256<double> dv2re3 = Fma.MultiplyAddNegated(dv2im2, zi_v, Avx.Multiply(dv2re1, zr_v));
+                    Vector256<double> dv2im4 = Fma.MultiplyAdd(dv2re1, zi_v, Avx.Multiply(dv2im2, zr_v));
+                    Vector256<double> dv2re5 = Fma.MultiplyAddNegated(zi_v, zi_v, Avx.Multiply(zr_v, zr_v));
+                    Vector256<double> dv2im6 = Fma.MultiplyAdd(zr_v, zi_v, Avx.Multiply(zi_v, zr_v));
+                    Vector256<double> dv2re7 = Avx.Add(dv2re3, dv2re5);
+                    Vector256<double> dv2im8 = Avx.Add(dv2im4, dv2im6);
+                    Vector256<double> dv2re9 = Fma.MultiplyAddNegated(dv2im8, zi_v, Avx.Multiply(dv2re7, zr_v));
+                    Vector256<double> dv2im10 = Fma.MultiplyAdd(dv2re7, zi_v, Avx.Multiply(dv2im8, zr_v));
+                    Vector256<double> dv2re11 = Fma.MultiplyAddNegated(zi_v, zi_v, Avx.Multiply(zr_v, zr_v));
+                    Vector256<double> dv2im12 = Fma.MultiplyAdd(zr_v, zi_v, Avx.Multiply(zi_v, zr_v));
+                    Vector256<double> dv2re13 = Fma.MultiplyAddNegated(dv2im12, zi_v, Avx.Multiply(dv2re11, zr_v));
+                    Vector256<double> dv2im14 = Fma.MultiplyAdd(dv2re11, zi_v, Avx.Multiply(dv2im12, zr_v));
+                    Vector256<double> dv2re15 = Avx.Add(dv2re9, dv2re13);
+                    Vector256<double> dv2im16 = Avx.Add(dv2im10, dv2im14);
+                    Vector256<double> dv2re17 = Fma.MultiplyAddNegated(dv2im16, zi_v, Avx.Multiply(dv2re15, zr_v));
+                    Vector256<double> dv2im18 = Fma.MultiplyAdd(dv2re15, zi_v, Avx.Multiply(dv2im16, zr_v));
+                    Vector256<double> dv2re19 = Fma.MultiplyAddNegated(zi_v, zi_v, Avx.Multiply(zr_v, zr_v));
+                    Vector256<double> dv2im20 = Fma.MultiplyAdd(zr_v, zi_v, Avx.Multiply(zi_v, zr_v));
+                    Vector256<double> dv2re21 = Fma.MultiplyAddNegated(dv2im20, zi_v, Avx.Multiply(dv2re19, zr_v));
+                    Vector256<double> dv2im22 = Fma.MultiplyAdd(dv2re19, zi_v, Avx.Multiply(dv2im20, zr_v));
+                    Vector256<double> dv2re23 = Fma.MultiplyAddNegated(dv2im22, zi_v, Avx.Multiply(dv2re21, zr_v));
+                    Vector256<double> dv2im24 = Fma.MultiplyAdd(dv2re21, zi_v, Avx.Multiply(dv2im22, zr_v));
+                    Vector256<double> dv2re25 = Avx.Add(dv2re17, dv2re23);
+                    Vector256<double> dv2im26 = Avx.Add(dv2im18, dv2im24);
+                    Vector256<double> dv2re27 = Fma.MultiplyAddNegated(dv2im26, div, Avx.Multiply(dv2re25, drv));
+                    Vector256<double> dv2im28 = Fma.MultiplyAdd(dv2re25, div, Avx.Multiply(dv2im26, drv));
+                    Vector256<double> dv2re29 = Vector256.Create(1.0);
+                    Vector256<double> dv2re30 = Avx.Add(dv2re27, dv2re29);
+                    Vector256<double> drv_new = dv2re30;
+                    Vector256<double> div_new = dv2im28;
+                            Vector256<double> keep = activeMask.AsDouble();
+                            drv = Avx.BlendVariable(drv, drv_new, keep);
+                            div = Avx.BlendVariable(div, div_new, keep);
+                        }
+
+                        // δ
+                        {
+                    Vector256<double> p2re1 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im2 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re3 = Fma.MultiplyAddNegated(p2im2, Zi_v, Avx.Multiply(p2re1, Zr_v));
+                    Vector256<double> p2im4 = Fma.MultiplyAdd(p2re1, Zi_v, Avx.Multiply(p2im2, Zr_v));
+                    Vector256<double> p2re5 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im6 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re7 = Avx.Add(p2re3, p2re5);
+                    Vector256<double> p2im8 = Avx.Add(p2im4, p2im6);
+                    Vector256<double> p2re9 = Fma.MultiplyAddNegated(p2im8, Zi_v, Avx.Multiply(p2re7, Zr_v));
+                    Vector256<double> p2im10 = Fma.MultiplyAdd(p2re7, Zi_v, Avx.Multiply(p2im8, Zr_v));
+                    Vector256<double> p2re11 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im12 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re13 = Fma.MultiplyAddNegated(p2im12, Zi_v, Avx.Multiply(p2re11, Zr_v));
+                    Vector256<double> p2im14 = Fma.MultiplyAdd(p2re11, Zi_v, Avx.Multiply(p2im12, Zr_v));
+                    Vector256<double> p2re15 = Avx.Add(p2re9, p2re13);
+                    Vector256<double> p2im16 = Avx.Add(p2im10, p2im14);
+                    Vector256<double> p2re17 = Fma.MultiplyAddNegated(p2im16, Zi_v, Avx.Multiply(p2re15, Zr_v));
+                    Vector256<double> p2im18 = Fma.MultiplyAdd(p2re15, Zi_v, Avx.Multiply(p2im16, Zr_v));
+                    Vector256<double> p2re19 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im20 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re21 = Fma.MultiplyAddNegated(p2im20, Zi_v, Avx.Multiply(p2re19, Zr_v));
+                    Vector256<double> p2im22 = Fma.MultiplyAdd(p2re19, Zi_v, Avx.Multiply(p2im20, Zr_v));
+                    Vector256<double> p2re23 = Fma.MultiplyAddNegated(p2im22, Zi_v, Avx.Multiply(p2re21, Zr_v));
+                    Vector256<double> p2im24 = Fma.MultiplyAdd(p2re21, Zi_v, Avx.Multiply(p2im22, Zr_v));
+                    Vector256<double> p2re25 = Avx.Add(p2re17, p2re23);
+                    Vector256<double> p2im26 = Avx.Add(p2im18, p2im24);
+                    Vector256<double> p2re27 = Fma.MultiplyAddNegated(p2im26, di, Avx.Multiply(p2re25, dr));
+                    Vector256<double> p2im28 = Fma.MultiplyAdd(p2re25, di, Avx.Multiply(p2im26, dr));
+                    Vector256<double> p2re29 = Vector256.Create(0.5);
+                    Vector256<double> p2re30 = Vector256.Create(2.0);
+                    Vector256<double> p2re31 = Avx.Multiply(p2re30, Zr_v);
+                    Vector256<double> p2im32 = Avx.Multiply(p2re30, Zi_v);
+                    Vector256<double> p2re33 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im34 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re35 = Avx.Add(p2re31, p2re33);
+                    Vector256<double> p2im36 = Avx.Add(p2im32, p2im34);
+                    Vector256<double> p2re37 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im38 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re39 = Avx.Add(p2re35, p2re37);
+                    Vector256<double> p2im40 = Avx.Add(p2im36, p2im38);
+                    Vector256<double> p2re41 = Fma.MultiplyAddNegated(p2im40, Zi_v, Avx.Multiply(p2re39, Zr_v));
+                    Vector256<double> p2im42 = Fma.MultiplyAdd(p2re39, Zi_v, Avx.Multiply(p2im40, Zr_v));
+                    Vector256<double> p2re43 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im44 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re45 = Fma.MultiplyAddNegated(p2im44, Zi_v, Avx.Multiply(p2re43, Zr_v));
+                    Vector256<double> p2im46 = Fma.MultiplyAdd(p2re43, Zi_v, Avx.Multiply(p2im44, Zr_v));
+                    Vector256<double> p2re47 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im48 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re49 = Avx.Add(p2re45, p2re47);
+                    Vector256<double> p2im50 = Avx.Add(p2im46, p2im48);
+                    Vector256<double> p2re51 = Avx.Add(p2re41, p2re49);
+                    Vector256<double> p2im52 = Avx.Add(p2im42, p2im50);
+                    Vector256<double> p2re53 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im54 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re55 = Fma.MultiplyAddNegated(p2im54, Zi_v, Avx.Multiply(p2re53, Zr_v));
+                    Vector256<double> p2im56 = Fma.MultiplyAdd(p2re53, Zi_v, Avx.Multiply(p2im54, Zr_v));
+                    Vector256<double> p2re57 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im58 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re59 = Avx.Add(p2re55, p2re57);
+                    Vector256<double> p2im60 = Avx.Add(p2im56, p2im58);
+                    Vector256<double> p2re61 = Avx.Add(p2re51, p2re59);
+                    Vector256<double> p2im62 = Avx.Add(p2im52, p2im60);
+                    Vector256<double> p2re63 = Fma.MultiplyAddNegated(p2im62, Zi_v, Avx.Multiply(p2re61, Zr_v));
+                    Vector256<double> p2im64 = Fma.MultiplyAdd(p2re61, Zi_v, Avx.Multiply(p2im62, Zr_v));
+                    Vector256<double> p2re65 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im66 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re67 = Fma.MultiplyAddNegated(p2im66, Zi_v, Avx.Multiply(p2re65, Zr_v));
+                    Vector256<double> p2im68 = Fma.MultiplyAdd(p2re65, Zi_v, Avx.Multiply(p2im66, Zr_v));
+                    Vector256<double> p2re69 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im70 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re71 = Avx.Add(p2re67, p2re69);
+                    Vector256<double> p2im72 = Avx.Add(p2im68, p2im70);
+                    Vector256<double> p2re73 = Fma.MultiplyAddNegated(p2im72, Zi_v, Avx.Multiply(p2re71, Zr_v));
+                    Vector256<double> p2im74 = Fma.MultiplyAdd(p2re71, Zi_v, Avx.Multiply(p2im72, Zr_v));
+                    Vector256<double> p2re75 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im76 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re77 = Fma.MultiplyAddNegated(p2im76, Zi_v, Avx.Multiply(p2re75, Zr_v));
+                    Vector256<double> p2im78 = Fma.MultiplyAdd(p2re75, Zi_v, Avx.Multiply(p2im76, Zr_v));
+                    Vector256<double> p2re79 = Avx.Add(p2re73, p2re77);
+                    Vector256<double> p2im80 = Avx.Add(p2im74, p2im78);
+                    Vector256<double> p2re81 = Avx.Add(p2re63, p2re79);
+                    Vector256<double> p2im82 = Avx.Add(p2im64, p2im80);
+                    Vector256<double> p2re83 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im84 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re85 = Fma.MultiplyAddNegated(p2im84, Zi_v, Avx.Multiply(p2re83, Zr_v));
+                    Vector256<double> p2im86 = Fma.MultiplyAdd(p2re83, Zi_v, Avx.Multiply(p2im84, Zr_v));
+                    Vector256<double> p2re87 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im88 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re89 = Avx.Add(p2re85, p2re87);
+                    Vector256<double> p2im90 = Avx.Add(p2im86, p2im88);
+                    Vector256<double> p2re91 = Fma.MultiplyAddNegated(p2im90, Zi_v, Avx.Multiply(p2re89, Zr_v));
+                    Vector256<double> p2im92 = Fma.MultiplyAdd(p2re89, Zi_v, Avx.Multiply(p2im90, Zr_v));
+                    Vector256<double> p2re93 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im94 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re95 = Fma.MultiplyAddNegated(p2im94, Zi_v, Avx.Multiply(p2re93, Zr_v));
+                    Vector256<double> p2im96 = Fma.MultiplyAdd(p2re93, Zi_v, Avx.Multiply(p2im94, Zr_v));
+                    Vector256<double> p2re97 = Avx.Add(p2re91, p2re95);
+                    Vector256<double> p2im98 = Avx.Add(p2im92, p2im96);
+                    Vector256<double> p2re99 = Avx.Add(p2re81, p2re97);
+                    Vector256<double> p2im100 = Avx.Add(p2im82, p2im98);
+                    Vector256<double> p2re101 = Avx.Multiply(p2re29, p2re99);
+                    Vector256<double> p2im102 = Avx.Multiply(p2re29, p2im100);
+                    Vector256<double> p2re103 = Fma.MultiplyAddNegated(p2im102, di, Avx.Multiply(p2re101, dr));
+                    Vector256<double> p2im104 = Fma.MultiplyAdd(p2re101, di, Avx.Multiply(p2im102, dr));
+                    Vector256<double> p2re105 = Fma.MultiplyAddNegated(p2im104, di, Avx.Multiply(p2re103, dr));
+                    Vector256<double> p2im106 = Fma.MultiplyAdd(p2re103, di, Avx.Multiply(p2im104, dr));
+                    Vector256<double> p2re107 = Avx.Add(p2re27, p2re105);
+                    Vector256<double> p2im108 = Avx.Add(p2im28, p2im106);
+                    Vector256<double> p2re109 = Vector256.Create(0.16666666666666666);
+                    Vector256<double> p2re110 = Vector256.Create(6.0);
+                    Vector256<double> p2re111 = Avx.Multiply(p2re110, Zr_v);
+                    Vector256<double> p2im112 = Avx.Multiply(p2re110, Zi_v);
+                    Vector256<double> p2re113 = Vector256.Create(2.0);
+                    Vector256<double> p2re114 = Avx.Multiply(p2re113, Zr_v);
+                    Vector256<double> p2im115 = Avx.Multiply(p2re113, Zi_v);
+                    Vector256<double> p2re116 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im117 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re118 = Avx.Add(p2re114, p2re116);
+                    Vector256<double> p2im119 = Avx.Add(p2im115, p2im117);
+                    Vector256<double> p2re120 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im121 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re122 = Avx.Add(p2re118, p2re120);
+                    Vector256<double> p2im123 = Avx.Add(p2im119, p2im121);
+                    Vector256<double> p2re124 = Avx.Add(p2re111, p2re122);
+                    Vector256<double> p2im125 = Avx.Add(p2im112, p2im123);
+                    Vector256<double> p2re126 = Vector256.Create(2.0);
+                    Vector256<double> p2re127 = Avx.Multiply(p2re126, Zr_v);
+                    Vector256<double> p2im128 = Avx.Multiply(p2re126, Zi_v);
+                    Vector256<double> p2re129 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im130 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re131 = Avx.Add(p2re127, p2re129);
+                    Vector256<double> p2im132 = Avx.Add(p2im128, p2im130);
+                    Vector256<double> p2re133 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im134 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re135 = Avx.Add(p2re131, p2re133);
+                    Vector256<double> p2im136 = Avx.Add(p2im132, p2im134);
+                    Vector256<double> p2re137 = Avx.Add(p2re124, p2re135);
+                    Vector256<double> p2im138 = Avx.Add(p2im125, p2im136);
+                    Vector256<double> p2re139 = Vector256.Create(2.0);
+                    Vector256<double> p2re140 = Avx.Multiply(p2re139, Zr_v);
+                    Vector256<double> p2im141 = Avx.Multiply(p2re139, Zi_v);
+                    Vector256<double> p2re142 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im143 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re144 = Avx.Add(p2re140, p2re142);
+                    Vector256<double> p2im145 = Avx.Add(p2im141, p2im143);
+                    Vector256<double> p2re146 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im147 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re148 = Avx.Add(p2re144, p2re146);
+                    Vector256<double> p2im149 = Avx.Add(p2im145, p2im147);
+                    Vector256<double> p2re150 = Avx.Add(p2re137, p2re148);
+                    Vector256<double> p2im151 = Avx.Add(p2im138, p2im149);
+                    Vector256<double> p2re152 = Fma.MultiplyAddNegated(p2im151, Zi_v, Avx.Multiply(p2re150, Zr_v));
+                    Vector256<double> p2im153 = Fma.MultiplyAdd(p2re150, Zi_v, Avx.Multiply(p2im151, Zr_v));
+                    Vector256<double> p2re154 = Vector256.Create(2.0);
+                    Vector256<double> p2re155 = Avx.Multiply(p2re154, Zr_v);
+                    Vector256<double> p2im156 = Avx.Multiply(p2re154, Zi_v);
+                    Vector256<double> p2re157 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im158 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re159 = Avx.Add(p2re155, p2re157);
+                    Vector256<double> p2im160 = Avx.Add(p2im156, p2im158);
+                    Vector256<double> p2re161 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im162 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re163 = Avx.Add(p2re159, p2re161);
+                    Vector256<double> p2im164 = Avx.Add(p2im160, p2im162);
+                    Vector256<double> p2re165 = Fma.MultiplyAddNegated(p2im164, Zi_v, Avx.Multiply(p2re163, Zr_v));
+                    Vector256<double> p2im166 = Fma.MultiplyAdd(p2re163, Zi_v, Avx.Multiply(p2im164, Zr_v));
+                    Vector256<double> p2re167 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im168 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re169 = Fma.MultiplyAddNegated(p2im168, Zi_v, Avx.Multiply(p2re167, Zr_v));
+                    Vector256<double> p2im170 = Fma.MultiplyAdd(p2re167, Zi_v, Avx.Multiply(p2im168, Zr_v));
+                    Vector256<double> p2re171 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im172 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re173 = Avx.Add(p2re169, p2re171);
+                    Vector256<double> p2im174 = Avx.Add(p2im170, p2im172);
+                    Vector256<double> p2re175 = Avx.Add(p2re165, p2re173);
+                    Vector256<double> p2im176 = Avx.Add(p2im166, p2im174);
+                    Vector256<double> p2re177 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im178 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re179 = Fma.MultiplyAddNegated(p2im178, Zi_v, Avx.Multiply(p2re177, Zr_v));
+                    Vector256<double> p2im180 = Fma.MultiplyAdd(p2re177, Zi_v, Avx.Multiply(p2im178, Zr_v));
+                    Vector256<double> p2re181 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im182 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re183 = Avx.Add(p2re179, p2re181);
+                    Vector256<double> p2im184 = Avx.Add(p2im180, p2im182);
+                    Vector256<double> p2re185 = Avx.Add(p2re175, p2re183);
+                    Vector256<double> p2im186 = Avx.Add(p2im176, p2im184);
+                    Vector256<double> p2re187 = Avx.Add(p2re152, p2re185);
+                    Vector256<double> p2im188 = Avx.Add(p2im153, p2im186);
+                    Vector256<double> p2re189 = Vector256.Create(2.0);
+                    Vector256<double> p2re190 = Avx.Multiply(p2re189, Zr_v);
+                    Vector256<double> p2im191 = Avx.Multiply(p2re189, Zi_v);
+                    Vector256<double> p2re192 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im193 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re194 = Avx.Add(p2re190, p2re192);
+                    Vector256<double> p2im195 = Avx.Add(p2im191, p2im193);
+                    Vector256<double> p2re196 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im197 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re198 = Avx.Add(p2re194, p2re196);
+                    Vector256<double> p2im199 = Avx.Add(p2im195, p2im197);
+                    Vector256<double> p2re200 = Fma.MultiplyAddNegated(p2im199, Zi_v, Avx.Multiply(p2re198, Zr_v));
+                    Vector256<double> p2im201 = Fma.MultiplyAdd(p2re198, Zi_v, Avx.Multiply(p2im199, Zr_v));
+                    Vector256<double> p2re202 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im203 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re204 = Fma.MultiplyAddNegated(p2im203, Zi_v, Avx.Multiply(p2re202, Zr_v));
+                    Vector256<double> p2im205 = Fma.MultiplyAdd(p2re202, Zi_v, Avx.Multiply(p2im203, Zr_v));
+                    Vector256<double> p2re206 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im207 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re208 = Avx.Add(p2re204, p2re206);
+                    Vector256<double> p2im209 = Avx.Add(p2im205, p2im207);
+                    Vector256<double> p2re210 = Avx.Add(p2re200, p2re208);
+                    Vector256<double> p2im211 = Avx.Add(p2im201, p2im209);
+                    Vector256<double> p2re212 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im213 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re214 = Fma.MultiplyAddNegated(p2im213, Zi_v, Avx.Multiply(p2re212, Zr_v));
+                    Vector256<double> p2im215 = Fma.MultiplyAdd(p2re212, Zi_v, Avx.Multiply(p2im213, Zr_v));
+                    Vector256<double> p2re216 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im217 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re218 = Avx.Add(p2re214, p2re216);
+                    Vector256<double> p2im219 = Avx.Add(p2im215, p2im217);
+                    Vector256<double> p2re220 = Avx.Add(p2re210, p2re218);
+                    Vector256<double> p2im221 = Avx.Add(p2im211, p2im219);
+                    Vector256<double> p2re222 = Avx.Add(p2re187, p2re220);
+                    Vector256<double> p2im223 = Avx.Add(p2im188, p2im221);
+                    Vector256<double> p2re224 = Vector256.Create(2.0);
+                    Vector256<double> p2re225 = Avx.Multiply(p2re224, Zr_v);
+                    Vector256<double> p2im226 = Avx.Multiply(p2re224, Zi_v);
+                    Vector256<double> p2re227 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im228 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re229 = Avx.Add(p2re225, p2re227);
+                    Vector256<double> p2im230 = Avx.Add(p2im226, p2im228);
+                    Vector256<double> p2re231 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im232 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re233 = Avx.Add(p2re229, p2re231);
+                    Vector256<double> p2im234 = Avx.Add(p2im230, p2im232);
+                    Vector256<double> p2re235 = Fma.MultiplyAddNegated(p2im234, Zi_v, Avx.Multiply(p2re233, Zr_v));
+                    Vector256<double> p2im236 = Fma.MultiplyAdd(p2re233, Zi_v, Avx.Multiply(p2im234, Zr_v));
+                    Vector256<double> p2re237 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im238 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re239 = Fma.MultiplyAddNegated(p2im238, Zi_v, Avx.Multiply(p2re237, Zr_v));
+                    Vector256<double> p2im240 = Fma.MultiplyAdd(p2re237, Zi_v, Avx.Multiply(p2im238, Zr_v));
+                    Vector256<double> p2re241 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im242 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re243 = Avx.Add(p2re239, p2re241);
+                    Vector256<double> p2im244 = Avx.Add(p2im240, p2im242);
+                    Vector256<double> p2re245 = Avx.Add(p2re235, p2re243);
+                    Vector256<double> p2im246 = Avx.Add(p2im236, p2im244);
+                    Vector256<double> p2re247 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im248 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re249 = Fma.MultiplyAddNegated(p2im248, Zi_v, Avx.Multiply(p2re247, Zr_v));
+                    Vector256<double> p2im250 = Fma.MultiplyAdd(p2re247, Zi_v, Avx.Multiply(p2im248, Zr_v));
+                    Vector256<double> p2re251 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im252 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re253 = Avx.Add(p2re249, p2re251);
+                    Vector256<double> p2im254 = Avx.Add(p2im250, p2im252);
+                    Vector256<double> p2re255 = Avx.Add(p2re245, p2re253);
+                    Vector256<double> p2im256 = Avx.Add(p2im246, p2im254);
+                    Vector256<double> p2re257 = Avx.Add(p2re222, p2re255);
+                    Vector256<double> p2im258 = Avx.Add(p2im223, p2im256);
+                    Vector256<double> p2re259 = Avx.Multiply(p2re109, p2re257);
+                    Vector256<double> p2im260 = Avx.Multiply(p2re109, p2im258);
+                    Vector256<double> p2re261 = Fma.MultiplyAddNegated(p2im260, di, Avx.Multiply(p2re259, dr));
+                    Vector256<double> p2im262 = Fma.MultiplyAdd(p2re259, di, Avx.Multiply(p2im260, dr));
+                    Vector256<double> p2re263 = Fma.MultiplyAddNegated(p2im262, di, Avx.Multiply(p2re261, dr));
+                    Vector256<double> p2im264 = Fma.MultiplyAdd(p2re261, di, Avx.Multiply(p2im262, dr));
+                    Vector256<double> p2re265 = Fma.MultiplyAddNegated(p2im264, di, Avx.Multiply(p2re263, dr));
+                    Vector256<double> p2im266 = Fma.MultiplyAdd(p2re263, di, Avx.Multiply(p2im264, dr));
+                    Vector256<double> p2re267 = Avx.Add(p2re107, p2re265);
+                    Vector256<double> p2im268 = Avx.Add(p2im108, p2im266);
+                    Vector256<double> p2re269 = Vector256.Create(0.041666666666666664);
+                    Vector256<double> p2re270 = Vector256.Create(24.0);
+                    Vector256<double> p2re271 = Avx.Multiply(p2re270, Zr_v);
+                    Vector256<double> p2im272 = Avx.Multiply(p2re270, Zi_v);
+                    Vector256<double> p2re273 = Vector256.Create(6.0);
+                    Vector256<double> p2re274 = Avx.Multiply(p2re273, Zr_v);
+                    Vector256<double> p2im275 = Avx.Multiply(p2re273, Zi_v);
+                    Vector256<double> p2re276 = Vector256.Create(2.0);
+                    Vector256<double> p2re277 = Avx.Multiply(p2re276, Zr_v);
+                    Vector256<double> p2im278 = Avx.Multiply(p2re276, Zi_v);
+                    Vector256<double> p2re279 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im280 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re281 = Avx.Add(p2re277, p2re279);
+                    Vector256<double> p2im282 = Avx.Add(p2im278, p2im280);
+                    Vector256<double> p2re283 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im284 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re285 = Avx.Add(p2re281, p2re283);
+                    Vector256<double> p2im286 = Avx.Add(p2im282, p2im284);
+                    Vector256<double> p2re287 = Avx.Add(p2re274, p2re285);
+                    Vector256<double> p2im288 = Avx.Add(p2im275, p2im286);
+                    Vector256<double> p2re289 = Vector256.Create(2.0);
+                    Vector256<double> p2re290 = Avx.Multiply(p2re289, Zr_v);
+                    Vector256<double> p2im291 = Avx.Multiply(p2re289, Zi_v);
+                    Vector256<double> p2re292 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im293 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re294 = Avx.Add(p2re290, p2re292);
+                    Vector256<double> p2im295 = Avx.Add(p2im291, p2im293);
+                    Vector256<double> p2re296 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im297 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re298 = Avx.Add(p2re294, p2re296);
+                    Vector256<double> p2im299 = Avx.Add(p2im295, p2im297);
+                    Vector256<double> p2re300 = Avx.Add(p2re287, p2re298);
+                    Vector256<double> p2im301 = Avx.Add(p2im288, p2im299);
+                    Vector256<double> p2re302 = Vector256.Create(2.0);
+                    Vector256<double> p2re303 = Avx.Multiply(p2re302, Zr_v);
+                    Vector256<double> p2im304 = Avx.Multiply(p2re302, Zi_v);
+                    Vector256<double> p2re305 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im306 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re307 = Avx.Add(p2re303, p2re305);
+                    Vector256<double> p2im308 = Avx.Add(p2im304, p2im306);
+                    Vector256<double> p2re309 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im310 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re311 = Avx.Add(p2re307, p2re309);
+                    Vector256<double> p2im312 = Avx.Add(p2im308, p2im310);
+                    Vector256<double> p2re313 = Avx.Add(p2re300, p2re311);
+                    Vector256<double> p2im314 = Avx.Add(p2im301, p2im312);
+                    Vector256<double> p2re315 = Avx.Add(p2re271, p2re313);
+                    Vector256<double> p2im316 = Avx.Add(p2im272, p2im314);
+                    Vector256<double> p2re317 = Vector256.Create(6.0);
+                    Vector256<double> p2re318 = Avx.Multiply(p2re317, Zr_v);
+                    Vector256<double> p2im319 = Avx.Multiply(p2re317, Zi_v);
+                    Vector256<double> p2re320 = Vector256.Create(2.0);
+                    Vector256<double> p2re321 = Avx.Multiply(p2re320, Zr_v);
+                    Vector256<double> p2im322 = Avx.Multiply(p2re320, Zi_v);
+                    Vector256<double> p2re323 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im324 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re325 = Avx.Add(p2re321, p2re323);
+                    Vector256<double> p2im326 = Avx.Add(p2im322, p2im324);
+                    Vector256<double> p2re327 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im328 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re329 = Avx.Add(p2re325, p2re327);
+                    Vector256<double> p2im330 = Avx.Add(p2im326, p2im328);
+                    Vector256<double> p2re331 = Avx.Add(p2re318, p2re329);
+                    Vector256<double> p2im332 = Avx.Add(p2im319, p2im330);
+                    Vector256<double> p2re333 = Vector256.Create(2.0);
+                    Vector256<double> p2re334 = Avx.Multiply(p2re333, Zr_v);
+                    Vector256<double> p2im335 = Avx.Multiply(p2re333, Zi_v);
+                    Vector256<double> p2re336 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im337 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re338 = Avx.Add(p2re334, p2re336);
+                    Vector256<double> p2im339 = Avx.Add(p2im335, p2im337);
+                    Vector256<double> p2re340 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im341 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re342 = Avx.Add(p2re338, p2re340);
+                    Vector256<double> p2im343 = Avx.Add(p2im339, p2im341);
+                    Vector256<double> p2re344 = Avx.Add(p2re331, p2re342);
+                    Vector256<double> p2im345 = Avx.Add(p2im332, p2im343);
+                    Vector256<double> p2re346 = Vector256.Create(2.0);
+                    Vector256<double> p2re347 = Avx.Multiply(p2re346, Zr_v);
+                    Vector256<double> p2im348 = Avx.Multiply(p2re346, Zi_v);
+                    Vector256<double> p2re349 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im350 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re351 = Avx.Add(p2re347, p2re349);
+                    Vector256<double> p2im352 = Avx.Add(p2im348, p2im350);
+                    Vector256<double> p2re353 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im354 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re355 = Avx.Add(p2re351, p2re353);
+                    Vector256<double> p2im356 = Avx.Add(p2im352, p2im354);
+                    Vector256<double> p2re357 = Avx.Add(p2re344, p2re355);
+                    Vector256<double> p2im358 = Avx.Add(p2im345, p2im356);
+                    Vector256<double> p2re359 = Avx.Add(p2re315, p2re357);
+                    Vector256<double> p2im360 = Avx.Add(p2im316, p2im358);
+                    Vector256<double> p2re361 = Vector256.Create(6.0);
+                    Vector256<double> p2re362 = Avx.Multiply(p2re361, Zr_v);
+                    Vector256<double> p2im363 = Avx.Multiply(p2re361, Zi_v);
+                    Vector256<double> p2re364 = Vector256.Create(2.0);
+                    Vector256<double> p2re365 = Avx.Multiply(p2re364, Zr_v);
+                    Vector256<double> p2im366 = Avx.Multiply(p2re364, Zi_v);
+                    Vector256<double> p2re367 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im368 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re369 = Avx.Add(p2re365, p2re367);
+                    Vector256<double> p2im370 = Avx.Add(p2im366, p2im368);
+                    Vector256<double> p2re371 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im372 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re373 = Avx.Add(p2re369, p2re371);
+                    Vector256<double> p2im374 = Avx.Add(p2im370, p2im372);
+                    Vector256<double> p2re375 = Avx.Add(p2re362, p2re373);
+                    Vector256<double> p2im376 = Avx.Add(p2im363, p2im374);
+                    Vector256<double> p2re377 = Vector256.Create(2.0);
+                    Vector256<double> p2re378 = Avx.Multiply(p2re377, Zr_v);
+                    Vector256<double> p2im379 = Avx.Multiply(p2re377, Zi_v);
+                    Vector256<double> p2re380 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im381 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re382 = Avx.Add(p2re378, p2re380);
+                    Vector256<double> p2im383 = Avx.Add(p2im379, p2im381);
+                    Vector256<double> p2re384 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im385 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re386 = Avx.Add(p2re382, p2re384);
+                    Vector256<double> p2im387 = Avx.Add(p2im383, p2im385);
+                    Vector256<double> p2re388 = Avx.Add(p2re375, p2re386);
+                    Vector256<double> p2im389 = Avx.Add(p2im376, p2im387);
+                    Vector256<double> p2re390 = Vector256.Create(2.0);
+                    Vector256<double> p2re391 = Avx.Multiply(p2re390, Zr_v);
+                    Vector256<double> p2im392 = Avx.Multiply(p2re390, Zi_v);
+                    Vector256<double> p2re393 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im394 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re395 = Avx.Add(p2re391, p2re393);
+                    Vector256<double> p2im396 = Avx.Add(p2im392, p2im394);
+                    Vector256<double> p2re397 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im398 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re399 = Avx.Add(p2re395, p2re397);
+                    Vector256<double> p2im400 = Avx.Add(p2im396, p2im398);
+                    Vector256<double> p2re401 = Avx.Add(p2re388, p2re399);
+                    Vector256<double> p2im402 = Avx.Add(p2im389, p2im400);
+                    Vector256<double> p2re403 = Avx.Add(p2re359, p2re401);
+                    Vector256<double> p2im404 = Avx.Add(p2im360, p2im402);
+                    Vector256<double> p2re405 = Vector256.Create(6.0);
+                    Vector256<double> p2re406 = Avx.Multiply(p2re405, Zr_v);
+                    Vector256<double> p2im407 = Avx.Multiply(p2re405, Zi_v);
+                    Vector256<double> p2re408 = Vector256.Create(2.0);
+                    Vector256<double> p2re409 = Avx.Multiply(p2re408, Zr_v);
+                    Vector256<double> p2im410 = Avx.Multiply(p2re408, Zi_v);
+                    Vector256<double> p2re411 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im412 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re413 = Avx.Add(p2re409, p2re411);
+                    Vector256<double> p2im414 = Avx.Add(p2im410, p2im412);
+                    Vector256<double> p2re415 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im416 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re417 = Avx.Add(p2re413, p2re415);
+                    Vector256<double> p2im418 = Avx.Add(p2im414, p2im416);
+                    Vector256<double> p2re419 = Avx.Add(p2re406, p2re417);
+                    Vector256<double> p2im420 = Avx.Add(p2im407, p2im418);
+                    Vector256<double> p2re421 = Vector256.Create(2.0);
+                    Vector256<double> p2re422 = Avx.Multiply(p2re421, Zr_v);
+                    Vector256<double> p2im423 = Avx.Multiply(p2re421, Zi_v);
+                    Vector256<double> p2re424 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im425 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re426 = Avx.Add(p2re422, p2re424);
+                    Vector256<double> p2im427 = Avx.Add(p2im423, p2im425);
+                    Vector256<double> p2re428 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im429 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re430 = Avx.Add(p2re426, p2re428);
+                    Vector256<double> p2im431 = Avx.Add(p2im427, p2im429);
+                    Vector256<double> p2re432 = Avx.Add(p2re419, p2re430);
+                    Vector256<double> p2im433 = Avx.Add(p2im420, p2im431);
+                    Vector256<double> p2re434 = Vector256.Create(2.0);
+                    Vector256<double> p2re435 = Avx.Multiply(p2re434, Zr_v);
+                    Vector256<double> p2im436 = Avx.Multiply(p2re434, Zi_v);
+                    Vector256<double> p2re437 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im438 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re439 = Avx.Add(p2re435, p2re437);
+                    Vector256<double> p2im440 = Avx.Add(p2im436, p2im438);
+                    Vector256<double> p2re441 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im442 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re443 = Avx.Add(p2re439, p2re441);
+                    Vector256<double> p2im444 = Avx.Add(p2im440, p2im442);
+                    Vector256<double> p2re445 = Avx.Add(p2re432, p2re443);
+                    Vector256<double> p2im446 = Avx.Add(p2im433, p2im444);
+                    Vector256<double> p2re447 = Avx.Add(p2re403, p2re445);
+                    Vector256<double> p2im448 = Avx.Add(p2im404, p2im446);
+                    Vector256<double> p2re449 = Avx.Multiply(p2re269, p2re447);
+                    Vector256<double> p2im450 = Avx.Multiply(p2re269, p2im448);
+                    Vector256<double> p2re451 = Fma.MultiplyAddNegated(p2im450, di, Avx.Multiply(p2re449, dr));
+                    Vector256<double> p2im452 = Fma.MultiplyAdd(p2re449, di, Avx.Multiply(p2im450, dr));
+                    Vector256<double> p2re453 = Fma.MultiplyAddNegated(p2im452, di, Avx.Multiply(p2re451, dr));
+                    Vector256<double> p2im454 = Fma.MultiplyAdd(p2re451, di, Avx.Multiply(p2im452, dr));
+                    Vector256<double> p2re455 = Fma.MultiplyAddNegated(p2im454, di, Avx.Multiply(p2re453, dr));
+                    Vector256<double> p2im456 = Fma.MultiplyAdd(p2re453, di, Avx.Multiply(p2im454, dr));
+                    Vector256<double> p2re457 = Fma.MultiplyAddNegated(p2im456, di, Avx.Multiply(p2re455, dr));
+                    Vector256<double> p2im458 = Fma.MultiplyAdd(p2re455, di, Avx.Multiply(p2im456, dr));
+                    Vector256<double> p2re459 = Avx.Add(p2re267, p2re457);
+                    Vector256<double> p2im460 = Avx.Add(p2im268, p2im458);
+                    Vector256<double> p2re461 = Fma.MultiplyAddNegated(di, di, Avx.Multiply(dr, dr));
+                    Vector256<double> p2im462 = Fma.MultiplyAdd(dr, di, Avx.Multiply(di, dr));
+                    Vector256<double> p2re463 = Fma.MultiplyAddNegated(p2im462, di, Avx.Multiply(p2re461, dr));
+                    Vector256<double> p2im464 = Fma.MultiplyAdd(p2re461, di, Avx.Multiply(p2im462, dr));
+                    Vector256<double> p2re465 = Fma.MultiplyAddNegated(p2im464, di, Avx.Multiply(p2re463, dr));
+                    Vector256<double> p2im466 = Fma.MultiplyAdd(p2re463, di, Avx.Multiply(p2im464, dr));
+                    Vector256<double> p2re467 = Fma.MultiplyAddNegated(p2im466, di, Avx.Multiply(p2re465, dr));
+                    Vector256<double> p2im468 = Fma.MultiplyAdd(p2re465, di, Avx.Multiply(p2im466, dr));
+                    Vector256<double> p2re469 = Avx.Add(p2re459, p2re467);
+                    Vector256<double> p2im470 = Avx.Add(p2im460, p2im468);
+                    Vector256<double> p2re471 = Avx.Add(p2re469, er_v);
+                    Vector256<double> p2im472 = Avx.Add(p2im470, ei_v);
+                    Vector256<double> dr_new = p2re471;
+                    Vector256<double> di_new = p2im472;
+                            Vector256<double> keep = activeMask.AsDouble();
+                            dr = Avx.BlendVariable(dr, dr_new, keep);
+                            di = Avx.BlendVariable(di, di_new, keep);
+                        }
+                    }
+
+                    Span<long>   itersS  = stackalloc long[4];
+                    Span<double> finZrS  = stackalloc double[4];
+                    Span<double> finZiS  = stackalloc double[4];
+                    Span<double> finDrvS = stackalloc double[4];
+                    Span<double> finDivS = stackalloc double[4];
+                    Span<double> finDrS  = stackalloc double[4];
+                    Span<double> finDiS  = stackalloc double[4];
+                    Span<long>   actS    = stackalloc long[4];
+                    Span<long>   glS     = stackalloc long[4];
+                    escapeIter.CopyTo(itersS);
+                    finalZrVec.CopyTo(finZrS); finalZiVec.CopyTo(finZiS);
+                    finalDrvVec.CopyTo(finDrvS); finalDivVec.CopyTo(finDivS);
+                    finalDrVec.CopyTo(finDrS); finalDiVec.CopyTo(finDiS);
+                    activeMask.CopyTo(actS); glitchMask.CopyTo(glS);
+
+                    for (int k = 0; k < 4; k++)
+                    {
+                        bool needsHp = glS[k] != 0
+                                    || (actS[k] != 0 && refOrbitLen < maxIt);
+                        if (needsHp)
+                        {
+                            if (pendingGlitches != null)
+                            {
+                                pendingGlitches.Add((x + k, y));
+                                continue;
+                            }
+                            if (Zoom >= QdDirectZoomThreshold)
+                            {
+                                QD cxq = QD.FromCenterOffset(
+                                    new QD(CenterX, CenterXLo, CenterX2, CenterX3),
+                                    x + k - Width * 0.5, scale);
+                                QD cyq = QD.FromCenterOffset(
+                                    new QD(CenterY, CenterYLo, CenterY2, CenterY3),
+                                    y - Height * 0.5, scale);
+                                ColorBuffer[rowBase + x + k] = ComputePixelQdDirect(cxq, cyq, maxIt, rowBase + x + k);
+                            }
+                            else
+                            {
+                                DD cxd = DD.FromCenterOffset(
+                                    new DD(CenterX, CenterXLo),
+                                    x + k - Width * 0.5, scale);
+                                DD cyd = DD.FromCenterOffset(
+                                    new DD(CenterY, CenterYLo),
+                                    y - Height * 0.5, scale);
+                                ColorBuffer[rowBase + x + k] = ComputePixelDdDirect(cxd, cyd, maxIt, rowBase + x + k);
+                            }
+                            continue;
+                        }
+                        int it = actS[k] != 0 ? maxIt : (int)itersS[k];
                         FracturingFog.FFMath.DD lzMag2 = FracturingFog.FFMath.DD.Zero;
                         if (it < maxIt)
                         {

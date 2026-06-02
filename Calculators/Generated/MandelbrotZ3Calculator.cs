@@ -14,7 +14,7 @@
 //                  =  ((z + z)*z + z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 09:12:25 UTC
+// Generated: 2026-06-02 09:17:28 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -1239,7 +1239,16 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
         // starts at iter 0. When SA skipped several thousand iters
         // already, redoing them 8-wide is still a loss. Disable SIMD
         // when saStart > 0 — the scalar path with SA wins.
-        bool useSimdLane = Avx512F.IsSupported && !UseBla && Width >= 8 && saStart == 0;
+        bool useSimd512Lane = Avx512F.IsSupported && !UseBla && Width >= 8 && saStart == 0;
+        // AVX-2 perturbation lane: 4 pixels per SIMD step. Same gating as
+        // AVX-512 (no BLA, no SA prelude active) but with the lower
+        // hardware bar. Only engages when AVX-512 isn't available — on
+        // AVX-512-capable CPUs the 8-wide path wins. Provides the
+        // 4×-ish SIMD win on AVX-2-only hardware, closing most of the
+        // gap vs the hand-tuned legacy ComputeRowPT4.
+        bool useSimd2Lane   = !useSimd512Lane
+                            && Avx2.IsSupported && Fma.IsSupported
+                            && !UseBla && Width >= 4 && saStart == 0;
         // Cluster-rebase glitch collection (Item 7). When enabled, the
         // glitch handlers append (x, y) here instead of immediately
         // calling per-pixel HP-direct. After the main Parallel.For
@@ -1271,7 +1280,7 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
             int x = 0;
 
             // ── SIMD lane (8 pixels per step) ────────────────────────────
-            if (useSimdLane)
+            if (useSimd512Lane)
             {
                 Vector512<double> halfW_v   = Vector512.Create(Width * 0.5);
                 Vector512<double> scale_v   = Vector512.Create(scale);
@@ -1503,6 +1512,227 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                         // so smooth count survives the log-log cast past
                         // zoom 1e12. In-set lanes skip the math; ColorForDd
                         // short-circuits on it >= maxIt.
+                        FracturingFog.FFMath.DD lzMag2 = FracturingFog.FFMath.DD.Zero;
+                        if (it < maxIt)
+                        {
+                            int itIdx = it;
+                            var lzr_dd = new FracturingFog.FFMath.DD(refZr[itIdx], refZrLo[itIdx])
+                                       + new FracturingFog.FFMath.DD(finDrS[k], 0.0);
+                            var lzi_dd = new FracturingFog.FFMath.DD(refZi[itIdx], refZiLo[itIdx])
+                                       + new FracturingFog.FFMath.DD(finDiS[k], 0.0);
+                            lzMag2 = lzr_dd.Square() + lzi_dd.Square();
+                        }
+                        ColorBuffer[rowBase + x + k] = ColorForDd(
+                            it, finZrS[k], finZiS[k], lzMag2,
+                            finDrvS[k], finDivS[k], maxIt, rowBase + x + k);
+                    }
+                }
+            }
+            // ── SIMD lane (4 pixels per step, AVX-2 + FMA) ──────────────
+            else if (useSimd2Lane)
+            {
+                Vector256<double> halfW_v   = Vector256.Create(Width * 0.5);
+                Vector256<double> scale_v   = Vector256.Create(scale);
+                Vector256<double> ei_v      = Vector256.Create(ei);
+                Vector256<double> bailout_v = Vector256.Create(Bailout2);
+                Vector256<long>   oneL      = Vector256.Create(1L);
+                Vector256<long>   allActive = Vector256<long>.AllBitsSet;
+                Vector256<double> dZero     = Vector256<double>.Zero;
+                Vector256<long>   lZero     = Vector256<long>.Zero;
+                Vector256<double> refOffX_v = Vector256.Create(refOffsetX);
+
+                for (; x + 4 <= Width; x += 4)
+                {
+                    Vector256<double> idx_v = Vector256.Create(
+                        (double)x, x + 1, x + 2, x + 3);
+                    Vector256<double> er_v = Avx.Subtract(
+                        Avx.Multiply(
+                            Avx.Subtract(idx_v, halfW_v), scale_v),
+                        refOffX_v);
+
+                    Vector256<double> dr  = dZero, di  = dZero;
+                    Vector256<double> drv = dZero, div = dZero;
+                    Vector256<long>   activeMask = allActive;
+                    Vector256<long>   escapeIter = lZero;
+                    Vector256<double> finalZrVec = dZero, finalZiVec = dZero;
+                    Vector256<double> finalDrvVec = dZero, finalDivVec = dZero;
+                    // Captured pre-escape δ per lane → DD-promoted smooth count
+                    // post-loop (same DD-promote scheme as AVX-512 path so the
+                    // smooth count survives the log-log cast past zoom 1e12).
+                    Vector256<double> finalDrVec = dZero, finalDiVec = dZero;
+                    Vector256<long>   glitchMask = lZero;
+
+                    for (int it = 0; it < refOrbitLen; it++)
+                    {
+                        Vector256<double> Zr_v = Vector256.Create(refZr[it]);
+                        Vector256<double> Zi_v = Vector256.Create(refZi[it]);
+                        Vector256<double> zr_v = Avx.Add(Zr_v, dr);
+                        Vector256<double> zi_v = Avx.Add(Zi_v, di);
+
+                        // Bailout: r2 < Bailout2 → lane stays active.
+                        Vector256<double> r2 = Fma.MultiplyAdd(
+                            zr_v, zr_v, Avx.Multiply(zi_v, zi_v));
+                        Vector256<double> activeD = Avx.Compare(r2, bailout_v,
+                            FloatComparisonMode.OrderedLessThanNonSignaling);
+                        Vector256<long> activeL = activeD.AsInt64();
+                        Vector256<long> newlyEscaped = Avx2.AndNot(activeL, activeMask);
+                        Vector256<double> newlyEscapedD = newlyEscaped.AsDouble();
+                        finalZrVec = Avx.BlendVariable(finalZrVec, zr_v, newlyEscapedD);
+                        finalZiVec = Avx.BlendVariable(finalZiVec, zi_v, newlyEscapedD);
+                        finalDrvVec = Avx.BlendVariable(finalDrvVec, drv, newlyEscapedD);
+                        finalDivVec = Avx.BlendVariable(finalDivVec, div, newlyEscapedD);
+                        finalDrVec = Avx.BlendVariable(finalDrVec, dr, newlyEscapedD);
+                        finalDiVec = Avx.BlendVariable(finalDiVec, di, newlyEscapedD);
+                        activeMask = Avx2.And(activeMask, activeL);
+                        if (activeMask.Equals(lZero)) break;
+                        escapeIter = Avx2.Add(escapeIter, Avx2.And(oneL, activeMask));
+
+                        // Glitch detect (same scheme as AVX-512 lane).
+                        Vector256<long> zrEq = Avx.Compare(zr_v, Zr_v,
+                            FloatComparisonMode.OrderedEqualNonSignaling).AsInt64();
+                        Vector256<long> ziEq = Avx.Compare(zi_v, Zi_v,
+                            FloatComparisonMode.OrderedEqualNonSignaling).AsInt64();
+                        Vector256<long> drNz = Avx.Compare(dr, dZero,
+                            FloatComparisonMode.OrderedNotEqualNonSignaling).AsInt64();
+                        Vector256<long> diNz = Avx.Compare(di, dZero,
+                            FloatComparisonMode.OrderedNotEqualNonSignaling).AsInt64();
+                        Vector256<long> g = Avx2.And(zrEq,
+                            Avx2.And(ziEq, Avx2.Or(drNz, diNz)));
+                        if (PerturbGlitchTolerance > 0.0 && it > 4)
+                        {
+                            Vector256<double> dMag2v = Fma.MultiplyAdd(
+                                dr, dr, Avx.Multiply(di, di));
+                            Vector256<double> zMag2v = Fma.MultiplyAdd(
+                                zr_v, zr_v, Avx.Multiply(zi_v, zi_v));
+                            Vector256<double> tolV = Vector256.Create(PerturbGlitchTolerance);
+                            Vector256<double> threshV = Avx.Multiply(zMag2v, tolV);
+                            Vector256<long> small = Avx.Compare(dMag2v, threshV,
+                                FloatComparisonMode.OrderedLessThanNonSignaling).AsInt64();
+                            Vector256<long> nonzero = Avx.Compare(dMag2v, dZero,
+                                FloatComparisonMode.OrderedGreaterThanNonSignaling).AsInt64();
+                            Vector256<long> soft = Avx2.And(small, nonzero);
+                            g = Avx2.Or(g, soft);
+                        }
+                        glitchMask = Avx2.Or(glitchMask, Avx2.And(g, activeMask));
+
+                        // Derivative
+                        {
+                    Vector256<double> dv2re1 = Avx.Add(zr_v, zr_v);
+                    Vector256<double> dv2im2 = Avx.Add(zi_v, zi_v);
+                    Vector256<double> dv2re3 = Fma.MultiplyAddNegated(dv2im2, zi_v, Avx.Multiply(dv2re1, zr_v));
+                    Vector256<double> dv2im4 = Fma.MultiplyAdd(dv2re1, zi_v, Avx.Multiply(dv2im2, zr_v));
+                    Vector256<double> dv2re5 = Fma.MultiplyAddNegated(zi_v, zi_v, Avx.Multiply(zr_v, zr_v));
+                    Vector256<double> dv2im6 = Fma.MultiplyAdd(zr_v, zi_v, Avx.Multiply(zi_v, zr_v));
+                    Vector256<double> dv2re7 = Avx.Add(dv2re3, dv2re5);
+                    Vector256<double> dv2im8 = Avx.Add(dv2im4, dv2im6);
+                    Vector256<double> dv2re9 = Fma.MultiplyAddNegated(dv2im8, div, Avx.Multiply(dv2re7, drv));
+                    Vector256<double> dv2im10 = Fma.MultiplyAdd(dv2re7, div, Avx.Multiply(dv2im8, drv));
+                    Vector256<double> dv2re11 = Vector256.Create(1.0);
+                    Vector256<double> dv2re12 = Avx.Add(dv2re9, dv2re11);
+                    Vector256<double> drv_new = dv2re12;
+                    Vector256<double> div_new = dv2im10;
+                            Vector256<double> keep = activeMask.AsDouble();
+                            drv = Avx.BlendVariable(drv, drv_new, keep);
+                            div = Avx.BlendVariable(div, div_new, keep);
+                        }
+
+                        // δ
+                        {
+                    Vector256<double> p2re1 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im2 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re3 = Fma.MultiplyAddNegated(p2im2, Zi_v, Avx.Multiply(p2re1, Zr_v));
+                    Vector256<double> p2im4 = Fma.MultiplyAdd(p2re1, Zi_v, Avx.Multiply(p2im2, Zr_v));
+                    Vector256<double> p2re5 = Fma.MultiplyAddNegated(Zi_v, Zi_v, Avx.Multiply(Zr_v, Zr_v));
+                    Vector256<double> p2im6 = Fma.MultiplyAdd(Zr_v, Zi_v, Avx.Multiply(Zi_v, Zr_v));
+                    Vector256<double> p2re7 = Avx.Add(p2re3, p2re5);
+                    Vector256<double> p2im8 = Avx.Add(p2im4, p2im6);
+                    Vector256<double> p2re9 = Fma.MultiplyAddNegated(p2im8, di, Avx.Multiply(p2re7, dr));
+                    Vector256<double> p2im10 = Fma.MultiplyAdd(p2re7, di, Avx.Multiply(p2im8, dr));
+                    Vector256<double> p2re11 = Vector256.Create(0.5);
+                    Vector256<double> p2re12 = Vector256.Create(2.0);
+                    Vector256<double> p2re13 = Avx.Multiply(p2re12, Zr_v);
+                    Vector256<double> p2im14 = Avx.Multiply(p2re12, Zi_v);
+                    Vector256<double> p2re15 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im16 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re17 = Avx.Add(p2re13, p2re15);
+                    Vector256<double> p2im18 = Avx.Add(p2im14, p2im16);
+                    Vector256<double> p2re19 = Avx.Add(Zr_v, Zr_v);
+                    Vector256<double> p2im20 = Avx.Add(Zi_v, Zi_v);
+                    Vector256<double> p2re21 = Avx.Add(p2re17, p2re19);
+                    Vector256<double> p2im22 = Avx.Add(p2im18, p2im20);
+                    Vector256<double> p2re23 = Avx.Multiply(p2re11, p2re21);
+                    Vector256<double> p2im24 = Avx.Multiply(p2re11, p2im22);
+                    Vector256<double> p2re25 = Fma.MultiplyAddNegated(p2im24, di, Avx.Multiply(p2re23, dr));
+                    Vector256<double> p2im26 = Fma.MultiplyAdd(p2re23, di, Avx.Multiply(p2im24, dr));
+                    Vector256<double> p2re27 = Fma.MultiplyAddNegated(p2im26, di, Avx.Multiply(p2re25, dr));
+                    Vector256<double> p2im28 = Fma.MultiplyAdd(p2re25, di, Avx.Multiply(p2im26, dr));
+                    Vector256<double> p2re29 = Avx.Add(p2re9, p2re27);
+                    Vector256<double> p2im30 = Avx.Add(p2im10, p2im28);
+                    Vector256<double> p2re31 = Fma.MultiplyAddNegated(di, di, Avx.Multiply(dr, dr));
+                    Vector256<double> p2im32 = Fma.MultiplyAdd(dr, di, Avx.Multiply(di, dr));
+                    Vector256<double> p2re33 = Fma.MultiplyAddNegated(p2im32, di, Avx.Multiply(p2re31, dr));
+                    Vector256<double> p2im34 = Fma.MultiplyAdd(p2re31, di, Avx.Multiply(p2im32, dr));
+                    Vector256<double> p2re35 = Avx.Add(p2re29, p2re33);
+                    Vector256<double> p2im36 = Avx.Add(p2im30, p2im34);
+                    Vector256<double> p2re37 = Avx.Add(p2re35, er_v);
+                    Vector256<double> p2im38 = Avx.Add(p2im36, ei_v);
+                    Vector256<double> dr_new = p2re37;
+                    Vector256<double> di_new = p2im38;
+                            Vector256<double> keep = activeMask.AsDouble();
+                            dr = Avx.BlendVariable(dr, dr_new, keep);
+                            di = Avx.BlendVariable(di, di_new, keep);
+                        }
+                    }
+
+                    Span<long>   itersS  = stackalloc long[4];
+                    Span<double> finZrS  = stackalloc double[4];
+                    Span<double> finZiS  = stackalloc double[4];
+                    Span<double> finDrvS = stackalloc double[4];
+                    Span<double> finDivS = stackalloc double[4];
+                    Span<double> finDrS  = stackalloc double[4];
+                    Span<double> finDiS  = stackalloc double[4];
+                    Span<long>   actS    = stackalloc long[4];
+                    Span<long>   glS     = stackalloc long[4];
+                    escapeIter.CopyTo(itersS);
+                    finalZrVec.CopyTo(finZrS); finalZiVec.CopyTo(finZiS);
+                    finalDrvVec.CopyTo(finDrvS); finalDivVec.CopyTo(finDivS);
+                    finalDrVec.CopyTo(finDrS); finalDiVec.CopyTo(finDiS);
+                    activeMask.CopyTo(actS); glitchMask.CopyTo(glS);
+
+                    for (int k = 0; k < 4; k++)
+                    {
+                        bool needsHp = glS[k] != 0
+                                    || (actS[k] != 0 && refOrbitLen < maxIt);
+                        if (needsHp)
+                        {
+                            if (pendingGlitches != null)
+                            {
+                                pendingGlitches.Add((x + k, y));
+                                continue;
+                            }
+                            if (Zoom >= QdDirectZoomThreshold)
+                            {
+                                QD cxq = QD.FromCenterOffset(
+                                    new QD(CenterX, CenterXLo, CenterX2, CenterX3),
+                                    x + k - Width * 0.5, scale);
+                                QD cyq = QD.FromCenterOffset(
+                                    new QD(CenterY, CenterYLo, CenterY2, CenterY3),
+                                    y - Height * 0.5, scale);
+                                ColorBuffer[rowBase + x + k] = ComputePixelQdDirect(cxq, cyq, maxIt, rowBase + x + k);
+                            }
+                            else
+                            {
+                                DD cxd = DD.FromCenterOffset(
+                                    new DD(CenterX, CenterXLo),
+                                    x + k - Width * 0.5, scale);
+                                DD cyd = DD.FromCenterOffset(
+                                    new DD(CenterY, CenterYLo),
+                                    y - Height * 0.5, scale);
+                                ColorBuffer[rowBase + x + k] = ComputePixelDdDirect(cxd, cyd, maxIt, rowBase + x + k);
+                            }
+                            continue;
+                        }
+                        int it = actS[k] != 0 ? maxIt : (int)itersS[k];
                         FracturingFog.FFMath.DD lzMag2 = FracturingFog.FFMath.DD.Zero;
                         if (it < maxIt)
                         {
