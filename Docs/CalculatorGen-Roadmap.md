@@ -512,3 +512,40 @@ flips priority.
        True fix is cluster rebase (Item 7) — shared ref orbit per
        cluster instead of per-pixel HP-direct — but Pauldelbrot
        detection is the correctness floor that unblocks it.
+    4. **Gate scalar-tail glitch fallback by zoom (perf).** After
+       parts 1-3 the soft-glitch detection promoted slow zoom-in to
+       per-pixel `ComputePixelQdContinue` at the moment status flipped
+       from `PT` to mention `QD-PT`. QD-continue does ~50 FLOPs/iter,
+       ~5× the cost of DD-direct. AVX-512 SIMD lane already had a
+       zoom gate (`Zoom >= QdDirectZoomThreshold` ? QD-continue :
+       DD-direct); scalar tail's glitch fallback didn't. Added the
+       same gate. Result: deep-zoom-but-not-extreme renders stay on
+       the DD-direct slow path which is fast enough for interactive
+       use. Status bar showing `[DD]` instead of `[QD-PT]` confirms
+       gate engaged.
+
+- [x] **Smarter ref-orbit selection at iter-0 escape** — FIXED.
+  When the view centre's own orbit escapes at iter 0 at deep zoom
+  + high maxIt, `TryRenderPerturbation` used to `return false` →
+  whole-frame `TryRenderHpDirect` (DD per pixel, seconds per render
+  on the user's AVX-2 hardware). Now searches a fixed pattern of 12
+  candidate ref points within the visible frame (4 corners, 4 mid-
+  edges, 4 inner-ring at 0.45 / 0.45 / 0.22 fractions of half-frame
+  extent), picks the one with the longest-surviving orbit (early-
+  exits at the first that reaches maxIt). Per-pixel ε is shifted by
+  the chosen ref offset (subtracted from the view-centre-relative
+  ε in scalar tail, SIMD lane, and SA prelude — `refOffsetX/Y`).
+  BLA `dcMaxAbs` and SA `maxOffX/Y` extended to bound the worst-
+  corner |ε| against the shifted ref. Cache: `_cachedRefOffsetX/Y`
+  alongside the orbit so subsequent frames at the same centre reuse
+  the chosen alternate. Probe is cheap (QD iteration, no BLA, no
+  array writes); 12 probes at maxIt=10000 add ~5-30 ms to the first
+  frame at a centre, free on subsequent frames. When no candidate
+  meets the `MinAcceptLen=64` floor, falls back to the existing
+  whole-frame HP-direct path — same behaviour as before, plus 12
+  fast probes. Status bar still shows `PT` / `QD-PT` (perturbation
+  active) instead of `DD-HP` / `QD-HP` when an alternate is found.
+  Helpers: `TryFindAlternateRefQd`, `ProbeRefOrbitLengthQd` in the
+  template. `--calcgen-test` 90/90 PASS; `--gentest MandelbrotZ2`
+  0-diff (alternate search only engages when the centre escapes;
+  the gentest's centres are inside the set).
