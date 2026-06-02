@@ -14,7 +14,7 @@
 //                  =  (((z + z)*z + z*z)*z + z*z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-02 08:27:50 UTC
+// Generated: 2026-06-02 08:44:20 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -188,12 +188,15 @@ public sealed class MandelbrotZ4Calculator : IFractalCalculator, IDisposable
     /// new reference orbit at the cluster's centroid (in QD), and
     /// re-runs perturbation for the cluster against that rebase orbit.
     /// Pixels that glitch again on the rebase orbit fall to per-pixel
-    /// HP-direct as before. This shared orbit per cluster replaces
-    /// hundreds/thousands of individual DD-direct calls with one orbit
-    /// build + cheap perturbation per pixel — typically 5-20× faster
-    /// on mini-Julia clusters at deep zoom. Set false to revert to
-    /// the pre-rebase behaviour (each glitched pixel HP-direct).</summary>
-    public bool UseClusterRebase { get; set; } = true;
+    /// HP-direct as before.
+    /// Default false — MVP uses ONE centroid for ALL glitches, which
+    /// wastes work when glitches span multiple incoherent clusters
+    /// (a common deep-zoom case: many small mini-Julia minis scattered
+    /// across the frame). Re-enable per render-host policy when the
+    /// glitch population is known to be cohesive (e.g. one big mini-
+    /// Julia in the centre). Multi-cluster spatial partitioning is
+    /// the proper fix and unblocks default-on.</summary>
+    public bool UseClusterRebase { get; set; } = false;
 
     /// <summary>Minimum number of glitched pixels for the cluster-rebase
     /// pass to engage. Below this, the rebase orbit's QD build cost
