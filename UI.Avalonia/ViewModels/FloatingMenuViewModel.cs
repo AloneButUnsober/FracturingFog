@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
+using Avalonia.Threading;
 using FracturingFog.Models;
 using ReactiveUI;
 
@@ -59,6 +60,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         SlideshowSettingsCommand= MakeCmd(() => SlideshowSettingsClick?.Invoke(this, EventArgs.Empty));
         ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
+        ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
     }
 
     private static ReactiveCommand<Unit, Unit> MakeCmd(Action a) => ReactiveCommand.Create(a);
@@ -397,6 +399,89 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private bool _adaptiveEnabled = true;
     public bool AdaptiveEnabled { get => _adaptiveEnabled; set => this.RaiseAndSetIfChanged(ref _adaptiveEnabled, value); }
 
+    // ── Adaptive sweep ────────────────────────────────────────────────────
+    //
+    // Animates Adaptive 0 → 100 over AdaptiveSweepDurationSeconds using a
+    // sine ease-in/out curve, then stops automatically. Each tick writes
+    // through the Adaptive property so the slider UI and Main.Adaptive both
+    // stay in sync — the throttled RepaintWithAdaptive in MainViewModel
+    // coalesces ticks into a steady render cadence.
+    //
+    // Tick interval is held slightly above the render debounce window so
+    // the trailing-edge debounce gets a chance to fire between writes
+    // (otherwise each tick would reset the debounce and stall the render).
+
+    private const int AdaptiveSweepTickMs = 50;
+
+    private double _adaptiveSweepDurationSeconds = 5.0;
+    public double AdaptiveSweepDurationSeconds
+    {
+        get => _adaptiveSweepDurationSeconds;
+        set => this.RaiseAndSetIfChanged(
+            ref _adaptiveSweepDurationSeconds,
+            Math.Clamp(value, 0.25, 600.0));
+    }
+
+    private bool _isAdaptiveSweeping;
+    public bool IsAdaptiveSweeping
+    {
+        get => _isAdaptiveSweeping;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isAdaptiveSweeping, value);
+            this.RaisePropertyChanged(nameof(AdaptiveSweepButtonLabel));
+        }
+    }
+
+    public string AdaptiveSweepButtonLabel => IsAdaptiveSweeping ? "Stop Sweep" : "Sweep";
+
+    private DispatcherTimer? _adaptiveSweepTimer;
+    private DateTime _adaptiveSweepStartedUtc;
+    private double _adaptiveSweepDurationMsSnapshot;
+
+    private void ToggleAdaptiveSweep()
+    {
+        if (IsAdaptiveSweeping) StopAdaptiveSweep();
+        else                    StartAdaptiveSweep();
+    }
+
+    private void StartAdaptiveSweep()
+    {
+        if (IsAdaptiveSweeping) return;
+        _adaptiveSweepDurationMsSnapshot = Math.Max(250.0, AdaptiveSweepDurationSeconds * 1000.0);
+        _adaptiveSweepStartedUtc = DateTime.UtcNow;
+        Adaptive = 0;
+        IsAdaptiveSweeping = true;
+
+        _adaptiveSweepTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(AdaptiveSweepTickMs),
+            DispatcherPriority.Background,
+            OnAdaptiveSweepTick);
+        _adaptiveSweepTimer.Start();
+    }
+
+    private void StopAdaptiveSweep()
+    {
+        _adaptiveSweepTimer?.Stop();
+        _adaptiveSweepTimer = null;
+        IsAdaptiveSweeping = false;
+    }
+
+    private void OnAdaptiveSweepTick(object? sender, EventArgs e)
+    {
+        double elapsedMs = (DateTime.UtcNow - _adaptiveSweepStartedUtc).TotalMilliseconds;
+        double t = elapsedMs / _adaptiveSweepDurationMsSnapshot;
+        if (t >= 1.0)
+        {
+            Adaptive = 100;
+            StopAdaptiveSweep();
+            return;
+        }
+        // Sine ease-in/out: 0 → 1 with zero derivative at both endpoints.
+        double eased = (1.0 - Math.Cos(Math.PI * t)) * 0.5;
+        Adaptive = (int)Math.Round(eased * 100.0);
+    }
+
     /// <summary>Programmatic setter that does NOT raise the BrightnessSlide
     /// event. Used by theme-switch snap so the slider mirrors the theme's
     /// default without round-tripping back to the renderer.</summary>
@@ -477,6 +562,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> SlideshowSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ServerCommand { get; }
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
 

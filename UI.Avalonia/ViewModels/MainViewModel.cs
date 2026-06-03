@@ -44,6 +44,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private const int PanStopDebounceMs = 300;
     private bool _renderHintFastInFlight;
 
+    // Adaptive slider fires RepaintWithAdaptive on every tick, which runs a
+    // full histogram-equalization pass against the cached escape buffers.
+    // Coalesce rapid drags into one render at ~30 Hz to stop the pipeline
+    // thrashing while the user is still moving the slider.
+    private readonly System.Threading.Timer _adaptiveRepaintDebounce;
+    private const int AdaptiveRepaintDebounceMs = 33;
+
     public MainViewModel(IFractalRenderHost renderHost, IFractalInputController input)
     {
         _renderHost = renderHost ?? throw new ArgumentNullException(nameof(renderHost));
@@ -82,6 +89,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _renderHintFastInFlight = false;
                 _renderHost.Trigger();
             }
+        }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+
+        _adaptiveRepaintDebounce = new System.Threading.Timer(_ =>
+        {
+            _renderHost.RepaintWithAdaptive();
         }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
     }
 
@@ -392,7 +404,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // Calculate() — so the slider feels live (parity with
                 // Brightness / Contrast). Mandelbrot only; alt calculators
                 // fall back to a post-FX repaint inside RepaintWithAdaptive.
-                _renderHost.RepaintWithAdaptive();
+                // Debounced: slider ticks at >30 Hz coalesce into a single
+                // RepaintWithAdaptive so the histogram-eq pass doesn't
+                // thrash mid-drag.
+                _adaptiveRepaintDebounce.Change(AdaptiveRepaintDebounceMs, System.Threading.Timeout.Infinite);
             }
         }
     }
@@ -594,5 +609,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _renderHost.FrameCompleted -= OnFrameCompleted;
         _renderHost.ColorMapChanged -= OnRenderHostColorMapChanged;
         _panStopDebounce.Dispose();
+        _adaptiveRepaintDebounce.Dispose();
     }
 }
