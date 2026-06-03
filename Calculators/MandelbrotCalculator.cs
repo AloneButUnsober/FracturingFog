@@ -202,6 +202,11 @@ public sealed class MandelbrotCalculator
     private double[] _refZrX3 = Array.Empty<double>();
     private double[] _refZiX3 = Array.Empty<double>();
     private int _refOrbitLen;
+    // Bumped on every reference-orbit rebuild. BLA/SA cache derived
+    // coefficients from a specific orbit snapshot; recentre that keeps
+    // orbit length identical would otherwise reuse stale coefficients
+    // (visible as geometric distortion after small double-click recentres).
+    private int _refOrbitGen;
 
     // Reference-orbit cache: zoom-only / theme-only / pan-stable redraws skip
     // recomputation entirely. Key = (center limbs, maxIter at compute time).
@@ -218,6 +223,7 @@ public sealed class MandelbrotCalculator
     private double _blaDcMaxAbs;
     private int _blaForRefMaxIter = -1;
     private int _blaForRefOrbitLen = -1;
+    private int _blaForRefOrbitGen = -1;
     // Diagnostic counters — reset per Calculate, totalled after Parallel.For
     private long _blaSkipsTotal;
     private long _blaIterSkippedTotal;
@@ -228,6 +234,7 @@ public sealed class MandelbrotCalculator
     private SeriesApproximation? _sa;
     private int _saForRefOrbitLen = -1;
     private int _saForRefMaxIter = -1;
+    private int _saForRefOrbitGen = -1;
     // Tolerance for truncation bound. 1e-3 is the classical Zhuoran / KF
     // default. Tested visually stable when paired with BLA Epsilon=1e-6.
     // (Was preemptively tightened to 1e-9 during banding investigation;
@@ -1249,13 +1256,15 @@ public sealed class MandelbrotCalculator
     {
         if (_sa != null
             && _saForRefOrbitLen == _refOrbitLen
-            && _saForRefMaxIter == _refCachedMaxIter)
+            && _saForRefMaxIter == _refCachedMaxIter
+            && _saForRefOrbitGen == _refOrbitGen)
             return;
 
         if (_refOrbitLen < 4) { _sa = null; return; }
         _sa = new SeriesApproximation(_refZr, _refZi, _refOrbitLen);
         _saForRefOrbitLen = _refOrbitLen;
         _saForRefMaxIter = _refCachedMaxIter;
+        _saForRefOrbitGen = _refOrbitGen;
     }
 
     /// <summary>
@@ -1266,7 +1275,8 @@ public sealed class MandelbrotCalculator
     private void EnsureBlaTable(double dcMaxAbs)
     {
         bool refChanged = _blaForRefMaxIter != _refCachedMaxIter
-                       || _blaForRefOrbitLen != _refOrbitLen;
+                       || _blaForRefOrbitLen != _refOrbitLen
+                       || _blaForRefOrbitGen != _refOrbitGen;
         // Relative tolerance: BLA merge uses dcMaxAbs in its validity bound,
         // so a 5% drift is safely within the linearisation margin (Epsilon=1e-6).
         double dcDrift = _blaDcMaxAbs <= 0 ? double.PositiveInfinity
@@ -1278,6 +1288,7 @@ public sealed class MandelbrotCalculator
         _blaDcMaxAbs = dcMaxAbs;
         _blaForRefMaxIter = _refCachedMaxIter;
         _blaForRefOrbitLen = _refOrbitLen;
+        _blaForRefOrbitGen = _refOrbitGen;
     }
 
     // ── Blend helpers (replaces VBLENDVPD masking) ────────────────────────────
@@ -1663,6 +1674,7 @@ public sealed class MandelbrotCalculator
         _refZrX2[n] = 0;    _refZrX3[n] = 0;
         _refZiX2[n] = 0;    _refZiX3[n] = 0;
         _refOrbitLen = n;  // == maxIter when centre is interior
+        _refOrbitGen++;
 
         _refCxHi = cx.Hi; _refCxLo = cx.Lo; _refCx2 = 0; _refCx3 = 0;
         _refCyHi = cy.Hi; _refCyLo = cy.Lo; _refCy2 = 0; _refCy3 = 0;
@@ -1710,6 +1722,7 @@ public sealed class MandelbrotCalculator
         _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
         _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
         _refOrbitLen = n;
+        _refOrbitGen++;
 
         _refCxHi = cx.X0; _refCxLo = cx.X1; _refCx2 = cx.X2; _refCx3 = cx.X3;
         _refCyHi = cy.X0; _refCyLo = cy.X1; _refCy2 = cy.X2; _refCy3 = cy.X3;
