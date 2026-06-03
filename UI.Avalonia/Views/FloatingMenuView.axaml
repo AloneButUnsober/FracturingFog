@@ -210,6 +210,30 @@
                                        ToolTip.Tip="Adaptive contrast (histogram equalization, 0 = off, 100 = full)" />
                             <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding AdaptiveLocked}" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Lock adaptive — ignore theme defaults" />
                         </Grid>
+                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,6,0,0">
+                            <Button Grid.Column="0"
+                                    Classes="action neutral"
+                                    Content="{Binding AdaptiveSweepButtonLabel}"
+                                    Command="{Binding ToggleAdaptiveSweepCommand}"
+                                    IsEnabled="{Binding AdaptiveEnabled}"
+                                    HorizontalAlignment="Stretch"
+                                    Margin="0,0,6,0"
+                                    ToolTip.Tip="Sweep Adaptive 0 → 100 over the given duration with a sine ease" />
+                            <NumericUpDown Grid.Column="1"
+                                           Value="{Binding AdaptiveSweepDurationSeconds}"
+                                           Minimum="0.25"
+                                           Maximum="600"
+                                           Increment="0.5"
+                                           FormatString="0.##"
+                                           Width="86"
+                                           IsEnabled="{Binding AdaptiveEnabled}"
+                                           ToolTip.Tip="Sweep duration in seconds (default 5)" />
+                            <TextBlock Grid.Column="2"
+                                       Classes="fxLabel"
+                                       Text="s"
+                                       VerticalAlignment="Center"
+                                       Margin="4,0,0,0" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 
