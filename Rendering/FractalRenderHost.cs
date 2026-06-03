@@ -92,6 +92,11 @@ namespace FracturingFog.Rendering
         // compositing onto a buffer that already has one baked in.
         private uint[]? _lastPreOverlayBuffer;
 
+        // Right-drag rubber-band rectangle (pixel space). Set by the shell via
+        // SetSelectionBox while the user box-zooms; cleared on release. Drawn
+        // on top of grid + watermark by FractalOverlayCompositor.
+        private (int X, int Y, int W, int H)? _selectionBox;
+
         private bool _disposed;
 
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
@@ -619,6 +624,21 @@ namespace FracturingFog.Rendering
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
         }
 
+        /// <summary>Set (or clear with null) the rubber-band rectangle drawn
+        /// on top of the current frame while the user is right-drag-selecting
+        /// a zoom region in 2D. Re-uploads the most recently completed frame
+        /// with the rect composited on top — no recompute, so the preview
+        /// stays smooth during the drag.</summary>
+        public void SetSelectionBox(int? x, int? y, int? w, int? h)
+        {
+            if (_disposed) return;
+            if (x is null || y is null || w is null || h is null)
+                _selectionBox = null;
+            else
+                _selectionBox = (x.Value, y.Value, w.Value, h.Value);
+            RepaintWithPostFx();
+        }
+
         /// <summary>
         /// Re-apply Adaptive (histogram equalization) at the current
         /// <see cref="FractalViewState.HistogramEq"/> strength using the
@@ -793,13 +813,14 @@ namespace FracturingFog.Rendering
             // overlay survives every backend (Windows HWND swap-chain
             // included, where Avalonia.Media overlays are occluded). Only
             // runs when at least one toggle is on.
-            if ((ShowGrid || ShowWatermark) && OperatingSystem.IsWindows())
+            if ((ShowGrid || ShowWatermark || _selectionBox.HasValue) && OperatingSystem.IsWindows())
             {
                 try
                 {
                     _overlay.Composite(dst, w, h, ViewState,
                         ShowGrid, ShowWatermark, OverlayContrastLuma,
-                        RegionName, ThemeName, ProgramName, ProgramVersion);
+                        RegionName, ThemeName, ProgramName, ProgramVersion,
+                        _selectionBox);
                 }
                 catch (Exception ex)
                 {

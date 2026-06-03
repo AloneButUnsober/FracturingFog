@@ -59,11 +59,12 @@ namespace FracturingFog.Rendering
             string? regionName,
             string? themeName,
             string? programName,
-            string? programVersion)
+            string? programVersion,
+            (int X, int Y, int W, int H)? selectionRect = null)
         {
             if (bgra == null || bgra.Length < width * height) return;
             if (width <= 1 || height <= 1) return;
-            if (!showGrid && !showWatermark) return;
+            if (!showGrid && !showWatermark && selectionRect == null) return;
 
             // Pick contrast colour from pre-sampled luma. Dark image → white
             // ink + black halo; light image → near-black ink + white halo.
@@ -92,6 +93,9 @@ namespace FracturingFog.Rendering
                     DrawWatermark(g, width, height,
                         regionName, themeName, programName, programVersion,
                         ink, halo);
+
+                if (selectionRect is { } r && r.W > 0 && r.H > 0)
+                    DrawSelectionRect(g, width, height, r.X, r.Y, r.W, r.H, ink, halo);
 
                 g.Flush();
             }
@@ -180,6 +184,34 @@ namespace FracturingFog.Rendering
             int mag = (int)Math.Floor(Math.Log10(abs));
             int decimals = Math.Clamp(6 - mag, 0, 15);
             return v.ToString("F" + decimals, CultureInfo.InvariantCulture);
+        }
+
+        // ── Selection rectangle (right-drag zoom rubber band) ────────────
+
+        private static void DrawSelectionRect(Graphics g, int w, int h,
+            int rx, int ry, int rw, int rh, Color ink, Color halo)
+        {
+            // Clamp to surface so a partly off-screen drag still draws.
+            int x0 = Math.Clamp(rx, 0, w - 1);
+            int y0 = Math.Clamp(ry, 0, h - 1);
+            int x1 = Math.Clamp(rx + rw, 0, w - 1);
+            int y1 = Math.Clamp(ry + rh, 0, h - 1);
+            int clW = x1 - x0;
+            int clH = y1 - y0;
+            if (clW <= 0 || clH <= 0) return;
+
+            // Halo (1px outset) then ink — keeps the outline legible against
+            // both bright and dark fractal regions.
+            using var haloPen = new Pen(halo, 3.0f);
+            using var inkPen  = new Pen(Color.FromArgb(230, ink), 1.4f);
+            var rect = new RectangleF(x0, y0, clW, clH);
+            g.DrawRectangle(haloPen, rect.X, rect.Y, rect.Width, rect.Height);
+            g.DrawRectangle(inkPen,  rect.X, rect.Y, rect.Width, rect.Height);
+
+            // Faint interior tint so the selected area reads as "selected"
+            // rather than just "outlined". 32-alpha keeps the fractal visible.
+            using var fillBrush = new SolidBrush(Color.FromArgb(40, ink));
+            g.FillRectangle(fillBrush, rect);
         }
 
         // ── Watermark ─────────────────────────────────────────────────────

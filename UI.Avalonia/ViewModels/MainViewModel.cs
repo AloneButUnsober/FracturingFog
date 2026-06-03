@@ -77,6 +77,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _input.ViewChanged += OnInputViewChanged;
         _input.StatusRequested += (_, msg) => StatusText = msg.Text;
         _input.CursorRequested += (_, req) => CursorRequest = req;
+        _input.SelectionBoxChanged += (_, box) =>
+        {
+            if (box is { } b)
+                _renderHost.SetSelectionBox(b.X, b.Y, b.Width, b.Height);
+            else
+                _renderHost.SetSelectionBox(null, null, null, null);
+        };
         _renderHost.FrameCompleted += OnFrameCompleted;
         _renderHost.StatusRequested += (_, txt) => StatusText = txt;
         _renderHost.ColorMapChanged += OnRenderHostColorMapChanged;

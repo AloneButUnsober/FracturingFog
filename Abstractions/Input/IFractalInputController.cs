@@ -71,6 +71,13 @@ namespace FracturingFog.Input
         /// <summary>Raised when the input layer wants the status bar to show
         /// a message (e.g. quality auto-promotion).</summary>
         event EventHandler<InputStatusMessage>? StatusRequested;
+
+        /// <summary>Raised while the user is right-drag-selecting a zoom
+        /// region in 2D, and once more with <c>null</c> when the drag ends
+        /// (release or cancel). The host renders the preview rectangle on top
+        /// of the current frame; the controller applies the zoom itself when
+        /// the drag completes.</summary>
+        event EventHandler<SelectionBoxChange?>? SelectionBoxChanged;
     }
 
     /// <summary>Canonical cursor names the input layer can request. The

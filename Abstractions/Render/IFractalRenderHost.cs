@@ -159,6 +159,13 @@ namespace FracturingFog.Render
         /// <summary>Theme label rendered in the watermark.</summary>
         string? ThemeName { get; set; }
 
+        /// <summary>Set (or clear with all-null) the rubber-band rectangle
+        /// drawn on top of the current frame while the user is right-drag
+        /// selecting a zoom region in 2D. The host re-uploads the most-recent
+        /// frame with the rect composited on top — no recompute, so the
+        /// preview stays smooth during the drag.</summary>
+        void SetSelectionBox(int? x, int? y, int? w, int? h);
+
         /// <summary>Compile the Roslyn-backed UserEquation source. Returns
         /// (true, null) on success; (false, error) when the compiler rejects
         /// it. Used by promoted registered-equation pickers in the shell.</summary>
