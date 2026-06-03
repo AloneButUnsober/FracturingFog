@@ -39,6 +39,8 @@ namespace FracturingFog.Hosting
         public string EditorText   => HelpTextBundle.EditorText;
         public string BioText      => HelpTextBundle.BioText;
         public string ClientServerText => HelpTextBundle.ClientServerText;
+        public string CalcGenText      => HelpTextBundle.CalcGenText;
+        public string ColorGenText     => HelpTextBundle.ColorGenText;
 
         // Order mirrors the legacy WinForms FloatingHelp Math tab so users
         // moving between the two shells see the same layout.

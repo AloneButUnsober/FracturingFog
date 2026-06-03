@@ -77,6 +77,11 @@
       to render a calculator from the user's equation source.
     -->
     <ProjectReference Include="..\CalculatorGen\CalculatorGen.csproj" />
+    <!--
+      ColorGen library — the ColorGenEditor view-model calls
+      ColorGenApi.Generate() to render a colour theme from the user's DSL.
+    -->
+    <ProjectReference Include="..\ColorGen\ColorGen.csproj" />
   </ItemGroup>
 
 </Project>

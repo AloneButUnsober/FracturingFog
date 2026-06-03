@@ -173,7 +173,10 @@ namespace FracturingFog.Models
         private static List<ColorStopData> StopsToData(IReadOnlyList<ColorStop> stops)
         {
             var list = new List<ColorStopData>(stops.Count);
-            foreach (var s in stops) list.Add(new ColorStopData(s));
+            // FromColorStop replaces the old `new ColorStopData(stop)` ctor;
+            // the DTO moved to FracturingFog.Abstractions and the ColorStop
+            // interop helpers now live as extension methods.
+            foreach (var s in stops) list.Add(ColorStopDataExtensions.FromColorStop(s));
             return list;
         }
 

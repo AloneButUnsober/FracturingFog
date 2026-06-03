@@ -40,6 +40,15 @@ namespace FracturingFog.Help
         /// <see cref="HelpTextBundle.ClientServerText"/>.</summary>
         string ClientServerText { get; }
 
+        /// <summary>CalcGen (User Equation editor) authoring reference —
+        /// grammar, gating rules, example gallery, troubleshooting.</summary>
+        string CalcGenText { get; }
+
+        /// <summary>ColorGen (algorithmic colour theme editor) authoring
+        /// reference — DSL syntax, inputs, functions, example gallery,
+        /// troubleshooting.</summary>
+        string ColorGenText { get; }
+
         /// <summary>Math tab is itself a TabControl — each entry becomes one
         /// sub-tab. Order is preserved.</summary>
         IReadOnlyList<HelpSubTab> MathSubTabs { get; }

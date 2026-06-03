@@ -1,0 +1,113 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PaletteBuilder.exe — thin WinExe wrapper around PaletteBuilder.Lib.
+    Owns only the standalone entry point (Program.cs), the Application
+    class (App.axaml + App.axaml.cs), and the app manifest. All UI/VM/
+    service/extractor sources live in PaletteBuilder.Lib.csproj sitting
+    alongside this file.
+
+    This split lets the main FracturingFog WinExe ProjectRef the lib and
+    instantiate PaletteBuilder.Views.MainWindow as the "From Image…" picker
+    dialog without dragging in a second WinExe entry point.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>PaletteBuilder</RootNamespace>
+    <AssemblyName>PaletteBuilder</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <UseWindowsForms>false</UseWindowsForms>
+    <UseWPF>false</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!--
+    Strip every source tree that now belongs to PaletteBuilder.Lib from
+    the WinExe's SDK default globs. Otherwise the same files compile into
+    both assemblies and CS0436 ambiguity fires.
+
+    obj.lib\** and bin.lib\** are PaletteBuilder.Lib's intermediate +
+    output paths (this csproj sits in the same folder; Lib's BaseIntermediateOutputPath
+    is "obj.lib\" to keep its scratch state out of ours). The default SDK
+    DefaultItemExcludes only excludes THIS project's obj/bin, so we add
+    the peer's explicitly — without this, the WinExe's source glob pulls
+    in Lib's generated PaletteBuilder.Lib.AssemblyInfo.cs and produces
+    CS0579 duplicate-attribute errors.
+  -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj.lib\**;bin.lib\**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Models\**" />
+    <Compile Remove="Services\**" />
+    <Compile Remove="ViewModels\**" />
+    <Compile Remove="Views\**" />
+    <Compile Remove="obj.lib\**" />
+    <Compile Remove="bin.lib\**" />
+    <None Remove="Models\**" />
+    <None Remove="Services\**" />
+    <None Remove="ViewModels\**" />
+    <None Remove="Views\**" />
+    <None Remove="Resources\**" />
+    <None Remove="obj.lib\**" />
+    <None Remove="bin.lib\**" />
+    <AvaloniaResource Remove="Views\**" />
+    <AvaloniaResource Remove="Resources\**" />
+    <AvaloniaResource Remove="obj.lib\**" />
+    <AvaloniaResource Remove="bin.lib\**" />
+    <AvaloniaXaml Remove="Views\**" />
+    <AvaloniaXaml Remove="obj.lib\**" />
+    <Page Remove="Views\**" />
+    <AdditionalFiles Remove="Views\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      SetPlatform pins the lib build to x64 so VS design-time builds (which
+      can run without a Platform parameter) resolve the lib's ref dll at
+      its x64 obj path. Same workaround as inside the lib itself. See the
+      ProjectReference comment in PaletteBuilder.Lib.csproj for the full
+      reason; this is the matching half on the consumer side.
+    -->
+    <ProjectReference Include="PaletteBuilder.Lib.csproj"
+                      SetPlatform="Platform=x64" />
+  </ItemGroup>
+
+  <!--
+    Same Avalonia analyzer strip workaround as the sibling lib. Belt and
+    braces — the analyzer leaks transitively even with PrivateAssets on
+    the direct PackageReferences.
+  -->
+  <Target Name="StripAvaloniaAnalyzers" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="$([System.String]::Copy('%(Analyzer.Identity)').Contains('Avalonia'))" />
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PaletteBuilder.Views.PdfSettingsDialog"
+        Title="PDF Export Settings"
+        Width="420"
+        Height="460"
+        WindowStartupLocation="CenterOwner"
+        Background="#161616"
+        Foreground="#DCDCDC"
+        CanResize="False">
+    <Grid Margin="14" RowDefinitions="*,Auto">
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Page size:" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="0" Grid.Column="1" Name="PageSizeCombo">
+                        <ComboBoxItem Content="Letter" />
+                        <ComboBoxItem Content="Legal" />
+                        <ComboBoxItem Content="Tabloid" />
+                        <ComboBoxItem Content="A4" />
+                        <ComboBoxItem Content="A3" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Orientation:" VerticalAlignment="Center" Margin="0,6,0,0" />
+                    <ComboBox Grid.Row="1" Grid.Column="1" Name="OrientationCombo" Margin="0,6,0,0">
+                        <ComboBoxItem Content="Portrait" />
+                        <ComboBoxItem Content="Landscape" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Columns:" VerticalAlignment="Center" Margin="0,6,0,0" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1" Name="ColumnsSpinner"
+                                   Minimum="1" Maximum="6" Increment="1" Value="2"
+                                   FormatString="0" Margin="0,6,0,0" />
+                </Grid>
+
+                <Separator />
+
+                <CheckBox Name="CoverChk" Content="Include cover page (source + settings)" />
+                <CheckBox Name="ThumbChk" Content="Source image thumbnail on first page" />
+                <CheckBox Name="GradientChk" Content="Gradient strip below swatch grid" />
+                <CheckBox Name="MetaChk" Content="Per-swatch metadata (HSL / Lab / CMYK / contrast)" />
+                <CheckBox Name="CvdChk" Content="Color-blindness rows per swatch" />
+                <CheckBox Name="CompareChk"
+                          Content="Comparison page (runs all extractors)"
+                          ToolTip.Tip="Adds one page showing every extractor's output on the same source. Slower." />
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+            <Button Name="OkBtn" Content="Export…" Padding="14,4" IsDefault="True" />
+            <Button Name="CancelBtn" Content="Cancel" Padding="14,4" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

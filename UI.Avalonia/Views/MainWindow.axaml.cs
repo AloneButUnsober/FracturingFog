@@ -197,6 +197,7 @@ public sealed partial class MainWindow : Window
         menu.Items.Add(new Separator());
         AddItem(menu, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
         AddItem(menu, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
+        AddItem(menu, "ColorGen Editor…",   () => shell.ShowColorGenEditorCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
 

@@ -1005,64 +1005,44 @@ namespace FracturingFog.Hosting
         // ── Image-palette picker ─────────────────────────────────────────────
 
         /// <summary>
-        /// Opens the Avalonia <see cref="ImagePaletteView"/> bound to a
-        /// <see cref="ImagePaletteViewModel"/> backed by the supplied service.
-        /// Wires Browse / Drop / Apply / Cancel / Message events. Resolves
-        /// to the chosen stops on Apply, or null on Cancel / close.
+        /// Opens the standalone <c>PaletteBuilder.Views.MainWindow</c> in
+        /// picker mode, bound to a <see cref="ImagePaletteViewModel"/>
+        /// subclass backed by the supplied service. PaletteBuilder's
+        /// MainWindow owns its own Browse / drag-drop / message dialogs,
+        /// so this host wrapper only needs to bridge the two terminal
+        /// events: <c>ResultAccepted</c> resolves the task with the chosen
+        /// stops, anything else (Cancel, X-close) resolves with null.
+        ///
+        /// Replaces the previous <c>ImagePaletteView</c> dialog. Same
+        /// public signature so call-sites in AvaloniaShellBootstrap stay
+        /// untouched.
         /// </summary>
         public static async Task<IReadOnlyList<PaletteStop>?> ShowImagePalettePickerAsync(
             IPaletteExtractionService service)
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
 
-            var vm = new ImagePaletteViewModel(service);
-            var win = new ImagePaletteView { DataContext = vm };
+            var win = new global::PaletteBuilder.Views.MainWindow(service, pickerMode: true);
+            // MainWindow constructs its own PaletteBuilderViewModel (a
+            // subclass of ImagePaletteViewModel) and assigns it as the
+            // DataContext. The cast is safe by construction.
+            var vm = (ImagePaletteViewModel)win.DataContext!;
 
             IReadOnlyList<PaletteStop>? accepted = null;
             var tcs = new TaskCompletionSource<bool>();
-
-            vm.BrowseRequested += async (_, _) =>
-            {
-                try
-                {
-                    string? picked = await PickImageFileAsync(win);
-                    if (!string.IsNullOrEmpty(picked))
-                        TryLoadIntoVm(vm, picked);
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[AvaloniaDialogs] Browse failed: {ex.Message}");
-                }
-            };
-
-            vm.MessageRequested += async (_, msg) =>
-            {
-                try { await ShowMessageAsync("Palette", msg, expectsConfirmation: false); }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[AvaloniaDialogs] Palette message failed: {ex.Message}");
-                }
-            };
 
             vm.ResultAccepted += (_, stops) =>
             {
                 accepted = stops;
                 if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
-                // Close the modal so the caller (FromImageRequested) actually
-                // returns; without this the dialog lingered behind the editor
-                // and the user perceived Apply as a no-op even though stops
-                // were forwarded through args.Stops.
-                try { win.Close(); } catch { /* already closing */ }
+                // MainWindow itself listens for ResultAccepted in picker
+                // mode and closes the window; no Close() call needed here.
             };
 
-            vm.Cancelled += (_, _) =>
-            {
-                if (!tcs.Task.IsCompleted) tcs.TrySetResult(false);
-                try { win.Close(); } catch { /* already closing */ }
-            };
-
-            win.FileDropped += (_, path) => TryLoadIntoVm(vm, path);
-
+            // Cancel + X-close both resolve as "no palette". Cancel raises
+            // vm.Cancelled which MainWindow also subscribes to (it calls
+            // Close()), but listening on Closing alone is enough for the
+            // null-resolve path because Close() always fires Closing.
             win.Closing += (_, _) =>
             {
                 if (!tcs.Task.IsCompleted) tcs.TrySetResult(false);
@@ -1074,35 +1054,6 @@ namespace FracturingFog.Hosting
 
             await tcs.Task;
             return accepted;
-        }
-
-        private static async Task<string?> PickImageFileAsync(Window owner)
-        {
-            var top = TopLevel.GetTopLevel(owner);
-            if (top == null) return null;
-            var opts = new FilePickerOpenOptions
-            {
-                Title = "Choose Image",
-                AllowMultiple = false,
-                FileTypeFilter = new[]
-                {
-                    new FilePickerFileType("Images")
-                    {
-                        Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.webp" },
-                    },
-                    new FilePickerFileType("All files") { Patterns = new[] { "*" } },
-                },
-            };
-            var files = await top.StorageProvider.OpenFilePickerAsync(opts);
-            return files.Count > 0 ? files[0].TryGetLocalPath() : null;
-        }
-
-        private static void TryLoadIntoVm(ImagePaletteViewModel vm, string path)
-        {
-            Bitmap? preview = null;
-            try { preview = new Bitmap(path); }
-            catch { /* fall through — service will surface the real error */ }
-            vm.SetImage(path, preview);
         }
     }
 }

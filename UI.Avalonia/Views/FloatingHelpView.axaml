@@ -98,6 +98,14 @@
                 <TextBox Classes="helpBody" Text="{Binding ClientServerText}" />
             </TabItem>
 
+            <TabItem Header="CalcGen">
+                <TextBox Classes="helpBody" Text="{Binding CalcGenText}" />
+            </TabItem>
+
+            <TabItem Header="ColorGen">
+                <TextBox Classes="helpBody" Text="{Binding ColorGenText}" />
+            </TabItem>
+
             <TabItem Header="Audio">
                 <TextBox Classes="helpBody" Text="{Binding AudioText}" />
             </TabItem>

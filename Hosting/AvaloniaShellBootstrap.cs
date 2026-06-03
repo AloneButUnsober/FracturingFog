@@ -68,6 +68,7 @@ namespace FracturingFog.Hosting
         private static UserEquationView? s_userEqWin;
         private static SandboxView? s_sandboxWin;
         private static UserBulbView? s_userBulbWin;
+        private static ColorGenEditorView? s_colorGenWin;
         private static DispatcherTimer? s_userBulbAnimTimer;
 
         private static readonly object s_gate = new();
@@ -456,6 +457,13 @@ namespace FracturingFog.Hosting
                 {
                     args.Completion.TrySetResult(true);
                 }
+            };
+
+            // ColorGen editor: shell raises this when the "ColorGen Editor"
+            // menu/toolbar entry is invoked. Open the dialog (single instance).
+            shell.OpenColorGenEditorRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(OpenColorGenEditor);
             };
 
             // ── New #53 wires ────────────────────────────────────────────
@@ -1065,6 +1073,90 @@ namespace FracturingFog.Hosting
 
             ShowEditor(win);
             vm.TriggerCompile();
+        }
+
+        // ── ColorGen editor ─────────────────────────────────────────────────
+        //
+        // Roslyn-compile an algorithmic colour theme from the DSL the user
+        // types into the editor, then either:
+        //   • HotLoad: register the IColorMap into ColorPalette.HotLoadedPalettes
+        //     and push it onto the active calculator immediately, no rebuild.
+        //   • Generate: write the rendered C# under
+        //     Models/ColorSchemes/Generated/{Name}.cs so it ships with the
+        //     next build (and the user keeps a long-lived diffable file).
+        // Single-instance window; second click re-focuses the existing one.
+        private static void OpenColorGenEditor()
+        {
+            if (s_renderHost == null) return;
+            if (s_colorGenWin != null) { s_colorGenWin.Activate(); return; }
+
+            var vm = new ColorGenEditorViewModel();
+            vm.NamePromptRequested += def => PromptName("Save ColorGen Theme", "Enter a name:", def);
+            vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved theme \"{name}\"?", "Delete Theme");
+            vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
+
+            vm.HotLoadRequested += (source, className, themeName, description) =>
+            {
+                try
+                {
+                    var opts = new FracturingFog.ColorGen.GenerateOptions
+                    {
+                        ThemeName = themeName,
+                        Category = "User",
+                        Description = description ?? "",
+                    };
+                    var result = FracturingFog.ColorGen.ColorGenHotLoad
+                        .TryCompileAndLoad(source, className, opts);
+                    if (!result.Ok) return result.Error;
+                    var map = (FracturingFog.Interefaces.IColorMap?)
+                        Activator.CreateInstance(result.ColorMapType!);
+                    if (map == null) return "Activator returned null.";
+                    FracturingFog.Models.ColorPalette.RegisterHotLoaded(map);
+                    s_renderHost!.ApplyColorMap(map);
+                    // Refresh the FloatingMenu theme combo so the freshly
+                    // registered entry appears in the dropdown without
+                    // requiring the user to close and reopen the picker.
+                    s_shell?.RefreshThemeListsFromService();
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    return $"Hot-load failed: {ex.GetType().Name}: {ex.Message}";
+                }
+            };
+
+            vm.GenerateRequested += (source, className, themeName, description) =>
+            {
+                try
+                {
+                    var opts = new FracturingFog.ColorGen.GenerateOptions
+                    {
+                        ThemeName = themeName,
+                        Category = "User",
+                        Description = description ?? "",
+                    };
+                    var gen = FracturingFog.ColorGen.ColorGenApi.Generate(source, className, opts);
+                    if (!gen.Ok) return gen.Error;
+
+                    string outDir = System.IO.Path.Combine(
+                        AppContext.BaseDirectory, "..", "..", "..", "Models", "ColorSchemes", "Generated");
+                    outDir = System.IO.Path.GetFullPath(outDir);
+                    System.IO.Directory.CreateDirectory(outDir);
+                    string outPath = System.IO.Path.Combine(outDir, $"{gen.ClassName}.cs");
+                    System.IO.File.WriteAllText(outPath, gen.Source, new System.Text.UTF8Encoding(false));
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    return $"Generate failed: {ex.GetType().Name}: {ex.Message}";
+                }
+            };
+
+            var win = new ColorGenEditorView { DataContext = vm };
+            win.Closed += (_, _) => s_colorGenWin = null;
+            s_colorGenWin = win;
+
+            ShowEditor(win);
         }
 
         private static void ShowEditor(Window win)

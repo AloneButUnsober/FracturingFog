@@ -37,6 +37,8 @@ public sealed class FloatingHelpViewModel : ViewModelBase
         EditorText   = content.EditorText;
         BioText      = content.BioText;
         ClientServerText = content.ClientServerText;
+        CalcGenText  = content.CalcGenText;
+        ColorGenText = content.ColorGenText;
         MathSubTabs  = content.MathSubTabs;
         AboutLinks   = content.AboutLinks;
         _hardwareText = content.GetSystemInfoText();
@@ -58,6 +60,8 @@ public sealed class FloatingHelpViewModel : ViewModelBase
     public string EditorText { get; }
     public string BioText { get; }
     public string ClientServerText { get; }
+    public string CalcGenText { get; }
+    public string ColorGenText { get; }
     public IReadOnlyList<HelpSubTab> MathSubTabs { get; }
     public IReadOnlyList<HelpLink> AboutLinks { get; }
 

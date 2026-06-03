@@ -2999,5 +2999,343 @@ Includes complete coverage of the AST node types, simplifier rules,
 imag-zero optimisation, perturbation Taylor builder, BLA validity
 criterion, the ILGPU lifecycle, and trade-offs / future work.
 ";
+
+        // ── CalcGen (User Equation editor) ────────────────────────────────
+        public const string CalcGenText =
+@"=== CalcGen — User Equation editor ===
+
+CalcGen turns one line of fractal math into a fully validated
+calculator with five execution paths (scalar, AVX2, perturbation, BLA,
+ILGPU GPU). Open via:
+
+  Toolbar → Type → User Equation
+  Then:    Params  (or the per-region default)
+
+The editor's two action buttons:
+
+  Compile & Load        Roslyn-compile, swap onto the live render.
+                        Lives until app close.
+  Generate via CalcGen  Write Calculators\Generated\{Name}Calculator.cs.
+                        Rebuild the app to pick it up.
+
+=== Grammar ===
+
+  z_{n+1} = <expression>
+
+  Construct        Example                      Notes
+  ---------------  ---------------------------  ------------------------
+  Variable z       z                            Current iterate
+  Variable c       c                            Pixel coordinate
+  Real literal     2, 0.5, 1e-3                 Lifted to (n, 0)
+  Add / Sub        z + c   z - c
+  Multiply         z*z   2*c
+  Divide           z / (z + 1)                  Disables PT / BLA
+  Power            z^2   z^3                    Integer exponent 0..16
+  Parens           (z + c) * (z - c)
+  Unary minus      -z
+  Conjugate        conj(z)                      Disables PT / BLA / DE
+  Component fold   fold(z) = (|zr|, |zi|)       Burning Ship
+  Square shortcut  sqr(z)                       = z*z
+  Real / imag      re(z), im(z)                 Lifts real scalar
+  Magnitude        abs(z)                       Lifts |z|
+  Trig / exp / log sin cos exp log              Holomorphic; DE kept
+  Previous iter    prev                         z_{n-1} (Phoenix)
+  Iter index       iter (or n)                  Real scalar
+  Conditional      if cond then a else b
+  Comparisons      < <= > >= == !=
+
+=== Execution-path gating ===
+
+  Construct used         Scalar AVX2 PT  BLA DE  DD/QD GPU
+  ---------------------  ------ ---- --  --- --  ----- ---
+  Polynomial in z (+ c)    Y     Y   Y   Y   Y    Y    Y
+  Division                 Y     Y   .   .   Y    .    Y
+  conj / fold              Y     Y   .   .   .    .    Y
+  Transcendentals          Y     Y   .   .   Y    deg  Y
+  if / else                Y     Y   .   .   Y    .    Y
+  prev                     Y     Y   .   .   .    Y    Y
+  iter / n                 Y     Y   .   Y   Y    Y    Y
+
+The status bar shows the live path label: SP / AVX2 / PT / BLA / DD-HP
+/ QD-PT etc.
+
+=== Examples ===
+
+Mandelbrot family
+    z*z + c                              Classic
+    z^3 + c                              Multibrot cubic
+    z^4 + c                              Quartic
+    z^3 - z + c                          Two-term cubic
+    (z^4 + z^2)/2 + c                    Mixed-degree
+    (z*z - 1)/(z + 1) + c                Rational (Mandelbrot-shell)
+
+Burning Ship / Tricorn
+    fold(z)*fold(z) + c                  Burning Ship
+    conj(z)*conj(z) + c                  Tricorn
+    conj(fold(z))^2 + c                  Hybrid
+
+Phoenix
+    z*z + c + 0.5*prev                   Classic Phoenix
+    z*z - 0.5*prev + c                   Negative feedback
+    z^3 + 0.4*prev + c                   Cubic Phoenix
+    z*z + 0.3*prev - 0.1*prev*prev + c   Two-tap
+
+Transcendental
+    exp(z) + c
+    sin(z) + c
+    log(z*z) + c
+    0.5*z + sin(z) + c                   Damped oscillator
+
+Conditional / iteration aware
+    if abs(z) < 1 then z*z + c else z*z - c
+    if re(z) > 0 then z*z + c else conj(z)*conj(z) + c
+    if (iter % 4) < 2 then z*z + c else z*z - c
+    sin(z + 0.01*iter) + c               Iter-driven phase
+
+=== Editor workflow ===
+
+  Save…       Name + persist (%APPDATA%\FracturingFog\userequations.json).
+  Delete      Remove the selected saved entry only.
+  Promote to fractal list
+              Surface the saved entry as a first-class dropdown item.
+  Rotation°   Visual post-rotation of the iteration plane.
+              +90 / -90 / Reset for quick adjustments.
+
+Status line shows ""✓ Compiled"" (green) or the parse / Roslyn error
+with line + col (red). Auto-recompile debounces 500 ms after typing
+stops.
+
+=== CLI ===
+
+  dotnet build CalculatorGen\CalculatorGen.csproj -c Release
+  dotnet run --project CalculatorGen -c Release -- ^
+      --equation ""z*z + c"" --name MandelbrotZ2 ^
+      --out Calculators\Generated --selftest
+
+Flags: --equation ""..."", --name <Name>, --out <dir>, --selftest,
+       --bailout <R>.
+
+=== Troubleshooting ===
+
+  Unknown identifier 'X'    Typo. Allowed: z, c, conj, fold, sqr, sin,
+                            cos, exp, log, if/then/else, re, im, abs,
+                            prev, iter/n.
+  Exponent must be 0..16    Factor manually or use z*z*…
+  Deep zoom drops to scalar Construct disables PT/BLA — see gating table.
+  Black past 1e13           Conj/Fold/Prev gate DD/QD HpDirect off.
+                            Switch to a polynomial form.
+  Hot-load error            Roslyn diagnostic with line + col follows.
+
+=== Full guide ===
+
+  Docs\CalcGen-UserGuide.md    User-facing reference + 30 examples.
+  Docs\CalculatorGen-Architecture.md
+                               Generator internals (for modifiers).
+";
+
+        // ── ColorGen (algorithmic colour theme editor) ────────────────────
+        public const string ColorGenText =
+@"=== ColorGen — algorithmic colour theme editor ===
+
+ColorGen turns a short DSL into a sealed IColorMap class. Each pixel's
+escape data is exposed as named inputs; the program evaluates to a
+Vec3 in [0,1]^3 and the runtime packs that into ARGB.
+
+Open via: right-click on the render surface → ColorGen Editor…
+
+Buttons:
+  Compile & Load        Roslyn-compile, register, swap onto the live
+                        palette. Session lifetime.
+  Save…                 Persist DSL source to
+                        %APPDATA%\FracturingFog\colorgen.json.
+  Generate via ColorGen Write Models\ColorSchemes\Generated\{Name}Theme.cs.
+                        Rebuild to ship.
+
+=== Statements ===
+
+  let <name> = <expr>;      // Scalar or Vec3 local
+  return <vec3-expr>;       // last statement; must be Vec3
+
+  // line comments and /* block comments */ supported.
+
+=== Types ===
+
+  Scalar  double
+  Vec3    RGB triple (channels in [0,1]); access via .r .g .b
+
+Binary + - * / % ^ auto-broadcast scalar↔vec3 (result Vec3 if either
+side Vec3). Comparisons and logical ops require scalars; yield 1.0/0.0.
+
+=== Built-in inputs ===
+
+  Scalars: smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
+
+  Constants: pi  tau (=2π)  e  phi (golden ratio)
+
+=== Operators (high → low) ===
+
+  Postfix    .r .g .b
+  Unary      - + !
+  Power      ^                       (right-assoc)
+  Mul / Div  * / %                   (% = GLSL-style mod)
+  Add / Sub  + -
+  Compare    < <= > >= == !=
+  Logical    && ||
+  Ternary    ?:                      (branches same type)
+
+=== Functions ===
+
+  Scalar → Scalar
+    sin cos tan asin acos atan sinh cosh tanh
+    exp log log2 log10 sqrt abs sign floor ceil round fract
+    saturate radians degrees
+
+  Two-arg scalar
+    atan2 hypot min max mod pow step
+
+  Three-arg scalar
+    clamp(x, lo, hi)   smoothstep(e0, e1, x)
+
+  mix    polymorphic: (S,S,S) → Scalar, (Vec3,Vec3,Scalar) → Vec3
+
+  Hash   hash(x), hash2(x, y)
+
+  Vec3 constructors
+    rgb(r, g, b)
+    hsv(h, s, v)        hue is cyclic (fract applied automatically)
+    hsl(h, s, l)
+
+  Vec3 ops
+    palette(t, c0, c1, c2, …)         cyclic n-stop palette
+    brightness(v, s)                  add s to each channel
+    contrast(v, s)                    s in [-1, 1] around 0.5
+    gamma(v, g)                       channel pow(c, 1/g)
+
+=== Example gallery ===
+
+HSV cycler
+    return hsv(smooth * 0.04, 0.9, 1.0);
+
+HSV with in-set override
+    let v = isInSet > 0.5 ? 0.3 : 1.0;
+    return hsv(smooth * 0.05, 0.85, v);
+
+Sinusoidal RGB
+    let k = smooth * 0.1;
+    return rgb(
+      0.5 + 0.5 * sin(k),
+      0.5 + 0.5 * sin(k + tau / 3),
+      0.5 + 0.5 * sin(k + 2 * tau / 3));
+
+Cyclic palette
+    return palette(smooth * 0.02,
+      rgb(0.05, 0.02, 0.10),
+      rgb(0.40, 0.10, 0.55),
+      rgb(0.95, 0.55, 0.10),
+      rgb(1.00, 0.95, 0.70));
+
+Banded gradient
+    let k = fract(t * 8.0);
+    return palette(k,
+      rgb(0, 0, 0), rgb(1, 0.4, 0),
+      rgb(1, 1, 0.7), rgb(0.2, 0.6, 1));
+
+Distance-field glow
+    let d = tanh(dist / pxScale * 0.5);
+    let core = rgb(1.0, 0.95, 0.6);
+    let halo = rgb(0.1, 0.3, 0.9);
+    return mix(halo, core, smoothstep(0.0, 1.0, d));
+
+Lambert shading
+    let lit = clamp(nx*0.4 + ny*-0.4 + 0.8, 0.0, 1.0);
+    let base = hsv(smooth * 0.03, 0.6, 1.0);
+    return base * lit;
+
+Argument (domain) coloring
+    return hsv(arg / tau, 1.0, isInSet > 0.5 ? 0.3 : 1.0);
+
+|z| chrome bands
+    let band = fract(log(mag) * 4.0);
+    let v = 0.4 + 0.6 * band;
+    return rgb(v, v, v);
+
+Two-tone toon
+    let lit = nx*0.5 + ny*0.5 + 0.5;
+    return lit > 0.6 ? rgb(1, 1, 1) : rgb(0.05, 0.05, 0.20);
+
+Procedural noise
+    let n = hash2(floor(smooth), floor(t * 50.0));
+    return hsv(fract(t * 3 + 0.1*n), 0.85, 0.9);
+
+Heatmap
+    let t01 = saturate(smooth * 0.003);
+    return palette(t01,
+      rgb(0.00, 0.00, 0.10), rgb(0.30, 0.00, 0.50),
+      rgb(0.90, 0.20, 0.00), rgb(1.00, 0.90, 0.20),
+      rgb(1.00, 1.00, 1.00));
+
+Aurora
+    let mixT = 0.5
+        + 0.25 * sin(t * tau * 4 + nx * 6)
+        + 0.25 * sin(t * tau * 7 + ny * 9);
+    return mix(rgb(0.05, 0.10, 0.20),
+               rgb(0.10, 1.00, 0.40),
+               saturate(mixT));
+
+Plasma
+    let p = sin(smooth*0.05) + sin(arg*4) + sin(mag*3);
+    let q = fract((p + 3.0) * 0.16667);
+    return palette(q,
+      rgb(0.05, 0.00, 0.30), rgb(0.80, 0.10, 0.50),
+      rgb(1.00, 0.85, 0.40), rgb(0.95, 1.00, 0.95));
+
+Power-law gamma
+    let base = palette(smooth*0.02, rgb(0,0,0), rgb(1,0.3,0.1), rgb(1,1,1));
+    return gamma(base, 1.8);
+
+Vintage sepia
+    let g = saturate(smooth * 0.005);
+    return gamma(rgb(g*1.1, g*0.95, g*0.7), 1.4);
+
+|dz/dc| highlight
+    let mag2 = sqrt(dzr*dzr + dzi*dzi);
+    let glow = saturate(log(1 + mag2) * 0.2);
+    let base = palette(smooth*0.02,
+      rgb(0.05, 0.05, 0.10), rgb(0.4, 0.2, 0.8), rgb(1, 0.95, 0.4));
+    return brightness(base, 0.3 * glow);
+
+Phong-ish three-light blend
+    let lit1 = clamp(nx*0.5 + ny*-0.5 + 0.7, 0.0, 1.0);
+    let lit2 = clamp(nx*-0.4 + ny*0.4 + 0.3, 0.0, 1.0);
+    let key  = rgb(1, 0.95, 0.85);
+    let fill = rgb(0.2, 0.35, 0.7);
+    let base = palette(t * 2,
+      rgb(0.02, 0.02, 0.08), rgb(0.8, 0.6, 0.3), rgb(1, 1, 1));
+    return base * 0.5 + key * lit1 + fill * lit2 * 0.5;
+
+=== Workflow notes ===
+
+  Save…     Persists the DSL source (not the generated class).
+  Compile & Load    Adds map to ColorPalette.HotLoadedPalettes; lives
+                    until app close. Re-compile replaces in place.
+  Generate via ColorGen    Writes a permanent .cs file under
+                    Models\ColorSchemes\Generated\. Theme name + class
+                    name auto-sanitised. Rebuild to include.
+
+=== Troubleshooting ===
+
+  'return' must yield a Vec3        Wrap final expr with rgb / hsv /
+                                    hsl / palette.
+  Stray tokens after 'return'       'return' must be last statement.
+  Unknown identifier 'foo'          Typo or unsupported name.
+  Ternary branches must match       Both ?: arms same type.
+  palette() arg 1 must be scalar    First arg is t; stops follow.
+  palette() stops must be Vec3      Wrap each stop with rgb / hsv / hsl.
+  Channel access requires a Vec3    .r/.g/.b only on Vec3 values.
+
+=== Full guide ===
+
+  Docs\ColorGen-UserGuide.md      User-facing reference + 30 examples.
+";
     }
 }
