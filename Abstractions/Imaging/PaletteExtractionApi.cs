@@ -21,6 +21,14 @@ namespace FracturingFog.Imaging
         Rgb,
         Lab,
         Hsl,
+        OkLab,
+    }
+
+    /// <summary>Mirrors PaletteExtraction.DeltaEMetric without referencing it.</summary>
+    public enum DeltaEMetricKind
+    {
+        DeltaE76,
+        DeltaE2000,
     }
 
     /// <summary>Mirrors PaletteExtraction.StopSortMode without referencing it.</summary>
@@ -58,6 +66,50 @@ namespace FracturingFog.Imaging
         public StopSortKind Sort { get; init; } = StopSortKind.NearestNeighborChain;
         public float DedupDeltaE { get; init; } = 2f;
         public bool WeightedPositions { get; init; }
+
+        /// <summary>
+        /// ΔE formula used by PaletteStopBuilder dedup. DeltaE76 = legacy
+        /// behaviour; DeltaE2000 = perceptually accurate.
+        /// </summary>
+        public DeltaEMetricKind DedupMetric { get; init; } = DeltaEMetricKind.DeltaE76;
+
+        /// <summary>
+        /// When true and <see cref="Space"/> is <see cref="PaletteColorSpaceKind.Rgb"/>,
+        /// pixels are linearised before clustering. No effect on Lab / OkLab / HSL.
+        /// </summary>
+        public bool GammaCorrect { get; init; }
+
+        // ── Algorithm-specific knobs ──────────────────────────────────────
+
+        /// <summary>Mean-Shift bandwidth (Lab units). Default 25.</summary>
+        public float Bandwidth { get; init; } = 25f;
+
+        /// <summary>DBSCAN ε (Lab units). Default 8.</summary>
+        public float DbscanEpsilon { get; init; } = 8f;
+
+        /// <summary>DBSCAN MinPts. Default 20.</summary>
+        public int DbscanMinPts { get; init; } = 20;
+
+        /// <summary>Spatial-K-Means colour/position mix. 0 = colour only, 1 = equal weight.</summary>
+        public float SpatialWeight { get; init; } = 0.5f;
+
+        // ── Preprocessing (Phase 3) ───────────────────────────────────────
+
+        public bool ExcludeTransparent { get; init; }
+        public int AlphaThreshold { get; init; } = 16;
+
+        public float MinSaturation { get; init; } = 0f;
+        public float MaxSaturation { get; init; } = 1f;
+        public float MinLightness { get; init; } = 0f;
+        public float MaxLightness { get; init; } = 1f;
+
+        public float RoiX { get; init; }
+        public float RoiY { get; init; }
+        public float RoiWidth { get; init; }
+        public float RoiHeight { get; init; }
+
+        public bool UseSaliency { get; init; }
+        public float SaliencyThreshold { get; init; } = 0.3f;
     }
 
     /// <summary>One method's output: name + raw palette + built stops.</summary>

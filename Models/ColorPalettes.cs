@@ -11,6 +11,7 @@ using FracturingFog.Interefaces;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using FracturingFog.Models.Generated;
 
 namespace FracturingFog.Models
 {
@@ -381,6 +382,9 @@ namespace FracturingFog.Models
             new EntropyContrastMap(),
             new EntropyEdgeMap(),
             new EntropyHeatmap(),
+
+            // ColorGen
+            new TwoToneMoonTheme()
         };
 
         /// <summary>
@@ -391,8 +395,17 @@ namespace FracturingFog.Models
         public static readonly List<IColorMap> UserPalettes = new();
 
         /// <summary>
+        /// Session-lifetime palettes hot-loaded via ColorGen (Roslyn-compiled
+        /// algorithmic themes). Replaced when the user re-compiles. Persist
+        /// across UserPalettes rebuilds because RebuildUserPalettes only
+        /// touches <see cref="UserPalettes"/>.
+        /// </summary>
+        public static readonly List<IColorMap> HotLoadedPalettes = new();
+
+        /// <summary>
         /// Back-compat alias for the original combined list.  Concatenates
-        /// built-in themes with any user-defined themes that have been loaded.
+        /// built-in themes with any user-defined themes that have been loaded
+        /// plus any ColorGen-hot-loaded session palettes.
         /// </summary>
         public static IEnumerable<IColorMap> Palettes
         {
@@ -400,7 +413,30 @@ namespace FracturingFog.Models
             {
                 foreach (var p in BuiltIns) yield return p;
                 foreach (var p in UserPalettes) yield return p;
+                foreach (var p in HotLoadedPalettes) yield return p;
             }
+        }
+
+        /// <summary>
+        /// Insert or replace a hot-loaded IColorMap by its display name. Used
+        /// by ColorGenHotLoad's host bridge to swap a freshly-compiled theme
+        /// into the live palette list without touching disk. Returns the
+        /// inserted instance so the caller can immediately set it as active.
+        /// </summary>
+        public static IColorMap RegisterHotLoaded(IColorMap map)
+        {
+            if (map == null) throw new ArgumentNullException(nameof(map));
+            string newName = GetStaticName(map);
+            for (int i = 0; i < HotLoadedPalettes.Count; i++)
+            {
+                if (string.Equals(GetStaticName(HotLoadedPalettes[i]), newName, StringComparison.Ordinal))
+                {
+                    HotLoadedPalettes[i] = map;
+                    return map;
+                }
+            }
+            HotLoadedPalettes.Add(map);
+            return map;
         }
 
         // ── User-theme integration ────────────────────────────────────────────

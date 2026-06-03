@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ffvm="using:FracturingFog.UI.Avalonia.ViewModels"
+             x:Class="PaletteBuilder.Views.StopEditorPanel"
+             x:DataType="ffvm:PaletteResultViewModel">
+    <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Column="0" Text="Stops" Foreground="#C8C864" FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Content="Normalize positions" Click="OnNormalize" Padding="8,2" Margin="0,0,6,0"
+                    ToolTip.Tip="Spread positions evenly across [0,1]" />
+        </Grid>
+
+        <ItemsControl ItemsSource="{Binding EditableStops}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="ffvm:EditableStopViewModel">
+                    <Grid ColumnDefinitions="36,Auto,Auto,140,Auto,Auto,Auto,Auto,Auto,Auto"
+                          Margin="0,3"
+                          VerticalAlignment="Center">
+                        <Border Grid.Column="0"
+                                Background="{Binding PreviewBrush}"
+                                BorderBrush="Black"
+                                BorderThickness="1"
+                                Width="32" Height="20" />
+                        <TextBlock Grid.Column="1" Text="{Binding Hex}"
+                                   Foreground="#D8D8D8" FontFamily="Consolas" FontWeight="Bold"
+                                   VerticalAlignment="Center" Margin="6,0" />
+
+                        <TextBlock Grid.Column="2" Text="pos:" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="6,0,4,0" />
+                        <NumericUpDown Grid.Column="3"
+                                       Minimum="0" Maximum="1" Increment="0.01"
+                                       FormatString="0.000"
+                                       Value="{Binding Position}"
+                                       MinWidth="140" />
+
+                        <TextBlock Grid.Column="4" Text="color:" Foreground="#A0A0A0" VerticalAlignment="Center" Margin="12,0,4,0" />
+                        <ColorPicker Grid.Column="5"
+                                     Color="{Binding Color, Mode=TwoWay}"
+                                     ToolTip.Tip="Pick stop colour (HSV wheel / RGB / hex)" />
+
+                        <ToggleButton Grid.Column="6"
+                                      Content="🔒"
+                                      IsChecked="{Binding IsLocked, Mode=TwoWay}"
+                                      Padding="6,2" Margin="10,0,0,0"
+                                      ToolTip.Tip="Lock (visual marker)" />
+                        <Button Grid.Column="7" Content="↑" Padding="6,2" Margin="6,0,0,0"
+                                Click="OnMoveUp" Tag="{Binding}"
+                                ToolTip.Tip="Move stop up" />
+                        <Button Grid.Column="8" Content="↓" Padding="6,2" Margin="2,0,0,0"
+                                Click="OnMoveDown" Tag="{Binding}"
+                                ToolTip.Tip="Move stop down" />
+                        <Button Grid.Column="9" Content="✕" Padding="6,2" Margin="6,0,0,0"
+                                Click="OnRemove" Tag="{Binding}"
+                                ToolTip.Tip="Remove stop"
+                                Background="#503028" Foreground="White" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

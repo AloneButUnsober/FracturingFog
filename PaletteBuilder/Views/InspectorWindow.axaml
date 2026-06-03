@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PaletteBuilder.Views.InspectorWindow"
+        Title="Palette Inspector"
+        Width="900"
+        Height="640"
+        Background="#161616"
+        Foreground="#DCDCDC"
+        WindowStartupLocation="CenterOwner">
+    <TabControl Margin="8" Name="InspectorTabs">
+        <TabItem Header="Names" Name="NamesTab" />
+        <TabItem Header="WCAG Contrast" Name="ContrastTab" />
+        <TabItem Header="Color Blindness" Name="CvdTab" />
+    </TabControl>
+</Window>

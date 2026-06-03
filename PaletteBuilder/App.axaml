@@ -1,0 +1,15 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="PaletteBuilder.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.Styles>
+        <FluentTheme />
+        <!-- ColorPicker theme — Avalonia.Controls.ColorPicker ships its
+             styles in a separate axaml that must be merged into the app
+             styles, or every ColorPicker instance renders as a blank box.
+             Stop editor relies on this. -->
+        <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+    </Application.Styles>
+
+</Application>

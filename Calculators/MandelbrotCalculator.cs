@@ -284,6 +284,7 @@ public sealed class MandelbrotCalculator
         // Update pixel scale so DE-style themes can normalise raw distance
         // (complex-plane units) into pixel units for stable rendering at any zoom.
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
 
         // ── Orbit-aware dispatch ─────────────────────────────────────────────
         // Orbit traps, stripe average and triangle-inequality average themes
@@ -972,8 +973,12 @@ public sealed class MandelbrotCalculator
             FinalDiBuffer[idx] = fdi;
 
             // HIGH IMPACT 3: color computed HERE, no second pass
+            // Themes that implement IColorMapHandlesInSet get the true escape
+            // iteration count so their `isInSet` / `iter` inputs are accurate;
+            // every other theme keeps the documented maxIter contract.
+            int iterArg = colorMap is IColorMapHandlesInSet ? iters : maxIter;
             ColorBuffer[idx] = (uint)colorMap.Map(
-                smooth, dist, maxIter,
+                smooth, dist, iterArg,
                 NormalXBuffer[idx], NormalYBuffer[idx],
                 fzr, fzi, fdr, fdi);
         }
@@ -987,7 +992,18 @@ public sealed class MandelbrotCalculator
             FinalZiBuffer[idx] = 0f;
             FinalDrBuffer[idx] = 0f;
             FinalDiBuffer[idx] = 0f;
-            ColorBuffer[idx] = colorMap.InSetColor; // theme-defined interior, default opaque black
+            if (colorMap is IColorMapHandlesInSet)
+            {
+                // Route interior through Map() so the theme can colour the
+                // inside of the set; iters = maxIter triggers isInSet = 1.0.
+                ColorBuffer[idx] = (uint)colorMap.Map(
+                    0f, 0f, maxIter,
+                    0f, 0f, 0f, 0f, 0f, 0f);
+            }
+            else
+            {
+                ColorBuffer[idx] = colorMap.InSetColor; // theme-defined interior, default opaque black
+            }
         }
     }
 
@@ -1387,8 +1403,9 @@ public sealed class MandelbrotCalculator
             FinalDrBuffer[idx] = fdr;
             FinalDiBuffer[idx] = fdi;
 
+            int iterArg = colorMap is IColorMapHandlesInSet ? iters : maxIter;
             ColorBuffer[idx] = (uint)colorMap.Map(
-                smooth, dist, maxIter,
+                smooth, dist, iterArg,
                 NormalXBuffer[idx], NormalYBuffer[idx],
                 fzr, fzi, fdr, fdi);
         }
@@ -1402,7 +1419,16 @@ public sealed class MandelbrotCalculator
             FinalZiBuffer[idx] = 0f;
             FinalDrBuffer[idx] = 0f;
             FinalDiBuffer[idx] = 0f;
-            ColorBuffer[idx] = colorMap.InSetColor;
+            if (colorMap is IColorMapHandlesInSet)
+            {
+                ColorBuffer[idx] = (uint)colorMap.Map(
+                    0f, 0f, maxIter,
+                    0f, 0f, 0f, 0f, 0f, 0f);
+            }
+            else
+            {
+                ColorBuffer[idx] = colorMap.InSetColor;
+            }
         }
     }
 
@@ -2421,6 +2447,8 @@ public sealed class MandelbrotCalculator
         if (w == 0 || h == 0 || maxIter <= 0) return;
 
         ColorMap.MaxIterations = maxIter;
+        if (ColorMap is IColorMapWithPixelScale pxsEq) pxsEq.PixelScale = LastPixelScale;
+        bool handlesInSet = ColorMap is IColorMapHandlesInSet;
 
         float invMax = 1.0f / maxIter;             // for current-frame coloring
         float invMaxSrc = 1.0f / sourceMaxIter;    // for CDF bin lookup
@@ -2444,7 +2472,16 @@ public sealed class MandelbrotCalculator
                 int iters = IterationBuffer[idx];
                 if (iters >= maxIter)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    if (handlesInSet)
+                    {
+                        ColorBuffer[idx] = (uint)ColorMap.Map(
+                            0f, 0f, maxIter,
+                            0f, 0f, 0f, 0f, 0f, 0f);
+                    }
+                    else
+                    {
+                        ColorBuffer[idx] = ColorMap.InSetColor;
+                    }
                     continue;
                 }
                 esc++;
@@ -2468,8 +2505,9 @@ public sealed class MandelbrotCalculator
                 float smoothEq = (float)(tBlend * maxIter);
                 if (ditherIter > 0f)
                     smoothEq += SpatialDither(x, y) * ditherIter;
+                int iterArgEq = handlesInSet ? iters : maxIter;
                 ColorBuffer[idx] = (uint)ColorMap.Map(
-                    smoothEq, DistanceBuffer[idx], maxIter,
+                    smoothEq, DistanceBuffer[idx], iterArgEq,
                     NormalXBuffer[idx], NormalYBuffer[idx],
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
                     FinalDrBuffer[idx], FinalDiBuffer[idx]);
@@ -2500,6 +2538,8 @@ public sealed class MandelbrotCalculator
         if (w == 0 || h == 0 || maxIter <= 0) return;
 
         ColorMap.MaxIterations = maxIter;
+        if (ColorMap is IColorMapWithPixelScale pxs0) pxs0.PixelScale = LastPixelScale;
+        bool handlesInSet = ColorMap is IColorMapHandlesInSet;
         float ditherIter = (float)ditherIterStrength;
 
         var po = new ParallelOptions();
@@ -2512,12 +2552,22 @@ public sealed class MandelbrotCalculator
                 int iters = IterationBuffer[idx];
                 if (iters >= maxIter)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    if (handlesInSet)
+                    {
+                        ColorBuffer[idx] = (uint)ColorMap.Map(
+                            0f, 0f, maxIter,
+                            0f, 0f, 0f, 0f, 0f, 0f);
+                    }
+                    else
+                    {
+                        ColorBuffer[idx] = ColorMap.InSetColor;
+                    }
                     continue;
                 }
                 float s = SmoothBuffer[idx] + SpatialDither(x, y) * ditherIter;
+                int iterArg = handlesInSet ? iters : maxIter;
                 ColorBuffer[idx] = (uint)ColorMap.Map(
-                    s, DistanceBuffer[idx], maxIter,
+                    s, DistanceBuffer[idx], iterArg,
                     NormalXBuffer[idx], NormalYBuffer[idx],
                     FinalZrBuffer[idx], FinalZiBuffer[idx],
                     FinalDrBuffer[idx], FinalDiBuffer[idx]);
@@ -2544,6 +2594,8 @@ public sealed class MandelbrotCalculator
         int w = Width, h = Height;
         int maxIter = MaxIterations;
         ColorMap.MaxIterations = maxIter;
+        if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
+        bool handlesInSet = ColorMap is IColorMapHandlesInSet;
         var po = new ParallelOptions();
         Parallel.For(0, h, po, y =>
         {
@@ -2554,12 +2606,22 @@ public sealed class MandelbrotCalculator
                 int iters = IterationBuffer[idx];
                 if (iters >= maxIter)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    if (handlesInSet)
+                    {
+                        ColorBuffer[idx] = (uint)ColorMap.Map(
+                            0f, 0f, maxIter,
+                            0f, 0f, 0f, 0f, 0f, 0f);
+                    }
+                    else
+                    {
+                        ColorBuffer[idx] = ColorMap.InSetColor;
+                    }
                 }
                 else
                 {
+                    int iterArg = handlesInSet ? iters : maxIter;
                     ColorBuffer[idx] = (uint)ColorMap.Map(
-                        SmoothBuffer[idx], DistanceBuffer[idx], maxIter,
+                        SmoothBuffer[idx], DistanceBuffer[idx], iterArg,
                         NormalXBuffer[idx], NormalYBuffer[idx],
                         FinalZrBuffer[idx], FinalZiBuffer[idx],
                         FinalDrBuffer[idx], FinalDiBuffer[idx]);

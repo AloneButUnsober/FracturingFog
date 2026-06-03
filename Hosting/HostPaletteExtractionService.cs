@@ -32,6 +32,13 @@ namespace FracturingFog.Hosting
             new MedianCutExtractor(),
             new OctreeExtractor(),
             new HistogramExtractor(),
+            new WuExtractor(),
+            new MiniBatchKMeansExtractor(),
+            new MaterialPaletteExtractor(),
+            new MeanShiftExtractor(),
+            new DbscanExtractor(),
+            new GmmExtractor(),
+            new SpatialKMeansExtractor(),
         };
 
         private readonly object _gate = new();
@@ -43,6 +50,8 @@ namespace FracturingFog.Hosting
         // redo decode + downsample work.
         private byte[]? _cachedPixels;
         private int _cachedCount;
+        private int _cachedWidth;
+        private int _cachedHeight;
         private string? _cacheKey;
 
         public IReadOnlyList<string> MethodNames
@@ -72,6 +81,7 @@ namespace FracturingFog.Hosting
                 // the file locked for the bitmap's lifetime).
                 using var decoded = (Bitmap)Image.FromFile(path);
                 var copy = new Bitmap(decoded);
+                BitmapSampler.ApplyExifOrientation(copy);
 
                 lock (_gate)
                 {
@@ -103,9 +113,11 @@ namespace FracturingFog.Hosting
                 var extractor = s_extractors[idx];
 
                 var opts = ToOptions(request);
-                var (pixels, count) = GetPixelsNoLock(opts);
+                var (pixels, count, w, h) = GetPixelsNoLock(opts);
                 if (count == 0)
                     return Empty(extractor.Name);
+                opts.SourceWidth = w;
+                opts.SourceHeight = h;
 
                 var palette = extractor.Extract(pixels, count, opts);
                 var stops = ToStops(BuildStopBuilder(request), palette);
@@ -130,7 +142,9 @@ namespace FracturingFog.Hosting
                     return Array.Empty<PaletteExtractionResult>();
 
                 var opts = ToOptions(request);
-                var (pixels, count) = GetPixelsNoLock(opts);
+                var (pixels, count, w, h) = GetPixelsNoLock(opts);
+                opts.SourceWidth = w;
+                opts.SourceHeight = h;
                 var results = new List<PaletteExtractionResult>(s_extractors.Length);
                 if (count == 0)
                 {
@@ -183,24 +197,36 @@ namespace FracturingFog.Hosting
             TryLoadImage(requestedPath, out _);
         }
 
-        private (byte[] pixels, int count) GetPixelsNoLock(PaletteExtractionOptions opts)
+        private (byte[] pixels, int count, int width, int height) GetPixelsNoLock(PaletteExtractionOptions opts)
         {
             string key = $"{_sourcePath}|{opts.DownsampleMaxDim}|{opts.ExcludeNearBlack}|{opts.ExcludeNearWhite}";
             if (_cachedPixels != null && _cacheKey == key)
-                return (_cachedPixels, _cachedCount);
+                return (_cachedPixels, _cachedCount, _cachedWidth, _cachedHeight);
 
-            using var down = BitmapSampler.Downsample(_source!, opts.DownsampleMaxDim);
+            using var cropped = opts.HasRoi
+                ? BitmapSampler.CropNormalised(_source!, opts.RoiX, opts.RoiY, opts.RoiWidth, opts.RoiHeight)
+                : new Bitmap(_source!);
+            using var down = BitmapSampler.Downsample(cropped, opts.DownsampleMaxDim);
+            _cachedWidth = down.Width;
+            _cachedHeight = down.Height;
             _cachedPixels = BitmapSampler.ExtractPixels(down,
-                opts.ExcludeNearBlack, opts.ExcludeNearWhite,
-                out _cachedCount);
+                opts.ExcludeNearBlack, opts.ExcludeNearWhite, out _cachedCount,
+                excludeTransparent: opts.ExcludeTransparent,
+                alphaThreshold: opts.AlphaThreshold,
+                minSaturation: opts.MinSaturation,
+                maxSaturation: opts.MaxSaturation,
+                minLightness: opts.MinLightness,
+                maxLightness: opts.MaxLightness);
             _cacheKey = key;
-            return (_cachedPixels, _cachedCount);
+            return (_cachedPixels, _cachedCount, _cachedWidth, _cachedHeight);
         }
 
         private void InvalidatePixelCacheNoLock()
         {
             _cachedPixels = null;
             _cachedCount = 0;
+            _cachedWidth = 0;
+            _cachedHeight = 0;
             _cacheKey = null;
         }
 
@@ -217,11 +243,29 @@ namespace FracturingFog.Hosting
             {
                 PaletteColorSpaceKind.Rgb => PaletteColorSpace.Rgb,
                 PaletteColorSpaceKind.Hsl => PaletteColorSpace.Hsl,
+                PaletteColorSpaceKind.OkLab => PaletteColorSpace.OkLab,
                 _ => PaletteColorSpace.Lab,
             },
             DownsampleMaxDim = Math.Max(32, r.DownsampleMaxDim),
             ExcludeNearBlack = r.ExcludeNearBlack,
             ExcludeNearWhite = r.ExcludeNearWhite,
+            GammaCorrect = r.GammaCorrect,
+            Bandwidth = r.Bandwidth,
+            DbscanEpsilon = r.DbscanEpsilon,
+            DbscanMinPts = r.DbscanMinPts,
+            SpatialWeight = r.SpatialWeight,
+            ExcludeTransparent = r.ExcludeTransparent,
+            AlphaThreshold = r.AlphaThreshold,
+            MinSaturation = r.MinSaturation,
+            MaxSaturation = r.MaxSaturation,
+            MinLightness = r.MinLightness,
+            MaxLightness = r.MaxLightness,
+            RoiX = r.RoiX,
+            RoiY = r.RoiY,
+            RoiWidth = r.RoiWidth,
+            RoiHeight = r.RoiHeight,
+            UseSaliency = r.UseSaliency,
+            SaliencyThreshold = r.SaliencyThreshold,
         };
 
         private static PaletteStopBuilder BuildStopBuilder(PaletteExtractionRequest r)
@@ -236,6 +280,9 @@ namespace FracturingFog.Hosting
                 },
                 DedupDeltaE = r.DedupDeltaE,
                 WeightedPositions = r.WeightedPositions,
+                DedupMetric = r.DedupMetric == DeltaEMetricKind.DeltaE2000
+                    ? DeltaEMetric.DeltaE2000
+                    : DeltaEMetric.DeltaE76,
             };
 
         private static IReadOnlyList<PaletteSwatch> ToSwatches(IReadOnlyList<ExtractedColor> palette)

@@ -305,6 +305,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
+        ShowColorGenEditorCommand = ReactiveCommand.Create(
+            () => OpenColorGenEditorRequested?.Invoke(this, EventArgs.Empty));
         ShowFractalParamsCommand  = ReactiveCommand.Create(
             () => FractalParamsRequested?.Invoke(this, EventArgs.Empty));
 
@@ -808,6 +810,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, bool> ShowFloatingMenuCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowColorGenEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
     // Context-menu commands (right-click on render surface).
@@ -1045,6 +1048,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Color theme editor produced a new ColorThemeDef preview.
     /// Host translates into IColorMap and pushes onto the render host.</summary>
     public event EventHandler<ColorThemeDef>? ColorThemePreviewRequested;
+
+    /// <summary>ColorGen menu/toolbar entry was invoked. Host opens the
+    /// dedicated ColorGenEditorView (single-instance modeless window).</summary>
+    public event EventHandler? OpenColorGenEditorRequested;
 
     /// <summary>Editor wants to open the ImagePalette dialog. Host owns the
     /// extraction pipeline + the System.Drawing bridge; it pops the view,
