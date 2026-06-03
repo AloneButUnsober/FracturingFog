@@ -24,7 +24,7 @@ public partial class FFClientView : Window
     {
         if (DataContext is FFClientViewModel vm)
         {
-            vm.BrowseFileRequested  += async (_, t) => await BrowseAsync(t.kind, t.assign);
+            vm.BrowseFileRequested  += async (_, t) => await BrowseAsync(t.kind, t.suggestedName, t.assign);
             vm.SaveBytesRequested   += async (_, args) => await SaveBytesAsync(args);
             // Use Close() so MainWindow.SyncFFClient's Closing handler
             // intercepts, cancels the close, and flips the shell flag false
@@ -35,7 +35,7 @@ public partial class FFClientView : Window
         }
     }
 
-    private async Task BrowseAsync(string kind, Action<string> assign)
+    private async Task BrowseAsync(string kind, string? suggestedName, Action<string> assign)
     {
         var top = TopLevel.GetTopLevel(this);
         if (top == null) return;
@@ -45,7 +45,7 @@ public partial class FFClientView : Window
             var save = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Save rendered output as…",
-                SuggestedFileName = "render.png",
+                SuggestedFileName = !string.IsNullOrEmpty(suggestedName) ? suggestedName : "render.png",
             });
             if (save != null) assign(save.Path.LocalPath);
             return;
@@ -73,7 +73,9 @@ public partial class FFClientView : Window
             var save = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Save server response…",
-                SuggestedFileName = "ff-render." + args.DefaultExtension,
+                SuggestedFileName = !string.IsNullOrEmpty(args.SuggestedName)
+                    ? args.SuggestedName
+                    : "ff-render." + args.DefaultExtension,
             });
             if (save == null) { args.Completion.SetResult(); return; }
             string path = save.Path.LocalPath;

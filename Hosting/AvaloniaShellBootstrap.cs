@@ -73,6 +73,11 @@ namespace FracturingFog.Hosting
 
         private static readonly object s_gate = new();
 
+        // Cached latest RenderFrameInfo — populated from FractalRenderHost
+        // FrameCompleted. Used to build the suggested save-file name with
+        // current CX/CY/Zoom/Iter/W/H without reaching back into the host.
+        private static RenderFrameInfo? s_lastFrame;
+
         // ── Span-mode (borderless multi-monitor fullscreen) saved state ──────
         private static bool s_spanning;
         private static WindowState s_preSpanState;
@@ -175,6 +180,7 @@ namespace FracturingFog.Hosting
             var viewState = new FractalViewState();
             var initialMap = ColorPalette.GetPaletteByName("HSV");
             s_renderHost = new FractalRenderHost(s_renderer, viewState, w, h, initialMap);
+            s_renderHost.FrameCompleted += (_, info) => s_lastFrame = info;
             s_input = new FractalInputController(viewState);
 
             // The swap-chain HWND composites on top of all Avalonia content, so
@@ -585,7 +591,7 @@ namespace FracturingFog.Hosting
                     if (s_renderHost == null) return;
                     string? path = await AvaloniaDialogs.PickSaveFileAsync(
                         "Save Screenshot",
-                        suggestedName: $"fracturing-fog-{DateTime.Now:yyyyMMdd-HHmmss}.png",
+                        suggestedName: BuildSuggestedFileName("png", isSpanning: s_spanning),
                         filter: "PNG image (*.png)|*.png");
                     if (string.IsNullOrEmpty(path)) return;
                     s_renderHost.SaveLastFrameToPng(path);
@@ -795,9 +801,17 @@ namespace FracturingFog.Hosting
                     var dims = await AvaloniaDialogs.ShowPosterAsync();
                     if (dims == null) return;
 
+                    int savedW = dims.Value.Portrait ? dims.Value.Height : dims.Value.Width;
+                    int savedH = dims.Value.Portrait ? dims.Value.Width  : dims.Value.Height;
+
                     string? path = await AvaloniaDialogs.PickSaveFileAsync(
                         "Save Poster Image",
-                        suggestedName: $"fracturing-fog-poster-{DateTime.Now:yyyyMMdd-HHmmss}.png",
+                        suggestedName: BuildSuggestedFileName(
+                            "png",
+                            imageWidth: savedW,
+                            imageHeight: savedH,
+                            isPoster: true,
+                            isPortrait: dims.Value.Portrait),
                         filter: "PNG image (*.png)|*.png|TIFF image (*.tiff;*.tif)|*.tiff;*.tif|BMP image (*.bmp)|*.bmp");
                     if (string.IsNullOrEmpty(path)) return;
 
@@ -1638,6 +1652,75 @@ namespace FracturingFog.Hosting
             win.Height = s_preSpanHeight;
             win.WindowState = s_preSpanState;
             s_spanning = false;
+        }
+
+        // Build the default save-file name for Screenshot / Poster. Format:
+        //   {ProgramName}[_{RegionName}][_{ColorThemeName}]_x{CX}_y{CY}_z{Zoom}
+        //     _i{Iterations}_{W}x{H}[_wallpaper|_poster[_portrait]].{ext}
+        // Spaces and characters invalid on Windows or Linux pathnames are
+        // stripped. Region / theme tokens are omitted when empty.
+        private static string BuildSuggestedFileName(
+            string defaultExt,
+            int? imageWidth = null,
+            int? imageHeight = null,
+            bool isSpanning = false,
+            bool isPoster = false,
+            bool isPortrait = false)
+        {
+            static string Sanitize(string? s)
+            {
+                if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+                var invalid = System.IO.Path.GetInvalidFileNameChars();
+                var sb = new System.Text.StringBuilder(s!.Length);
+                foreach (char c in s)
+                {
+                    if (c == ' ') continue;
+                    if (Array.IndexOf(invalid, c) >= 0) continue;
+                    if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?'
+                        || c == '"' || c == '<' || c == '>' || c == '|' || c < 0x20) continue;
+                    sb.Append(c);
+                }
+                return sb.ToString();
+            }
+
+            static string FmtNum(double v)
+                => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+                    .Replace(".", string.Empty);
+
+            var info = s_lastFrame;
+            string program = Sanitize(s_renderHost?.ProgramName);
+            if (string.IsNullOrEmpty(program)) program = "FracturingFog";
+            string region = Sanitize(s_renderHost?.RegionName);
+            string theme  = Sanitize(s_renderHost?.ThemeName);
+
+            double cx   = info?.CenterX    ?? 0d;
+            double cy   = info?.CenterY    ?? 0d;
+            double zoom = info?.Zoom       ?? 0d;
+            int    iter = info?.Iterations ?? 0;
+            int    width  = imageWidth  ?? info?.Width  ?? 0;
+            int    height = imageHeight ?? info?.Height ?? 0;
+
+            var sb2 = new System.Text.StringBuilder();
+            sb2.Append(program);
+            if (!string.IsNullOrEmpty(region)) sb2.Append('_').Append(region);
+            if (!string.IsNullOrEmpty(theme))  sb2.Append('_').Append(theme);
+            sb2.Append("_x").Append(FmtNum(cx));
+            sb2.Append("_y").Append(FmtNum(cy));
+            sb2.Append("_z").Append(FmtNum(zoom));
+            sb2.Append("_i").Append(iter.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            sb2.Append('_').Append(width).Append('x').Append(height);
+
+            if (isSpanning) sb2.Append("_wallpaper");
+            else if (isPoster)
+            {
+                sb2.Append("_poster");
+                if (isPortrait) sb2.Append("_portrait");
+            }
+
+            string ext = (defaultExt ?? "png").TrimStart('.');
+            if (string.IsNullOrEmpty(ext)) ext = "png";
+            sb2.Append('.').Append(ext);
+            return sb2.ToString();
         }
 
         // Convenience helper for the SaveRegion handler — pulls MainViewModel
