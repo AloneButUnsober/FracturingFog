@@ -8,6 +8,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -34,8 +35,35 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         FractalRegion? region = !string.IsNullOrWhiteSpace(req.RegionName)
             ? FractalRegionLibrary.Instance.FindByName(req.RegionName!)
             : null;
+
+        // Fall back to a client-supplied region payload when the named lookup
+        // misses but the client carried an inline FractalRegion JSON blob.
+        // The blob has already passed RegionPayloadValidator in FFServer
+        // (size, FractalType allowlist, forbidden-fields scrub) — this is
+        // just the typed deserialize. Strip the user-authored-code fields
+        // belt-and-braces in case the validator missed an alias.
+        if (region == null && !string.IsNullOrEmpty(req.RegionJson))
+        {
+            try
+            {
+                region = JsonSerializer.Deserialize<FractalRegion>(req.RegionJson, RegionJsonOpts)
+                    ?? throw new ServerProtocolException("bad-region-payload",
+                            "regionJson deserialised to null");
+            }
+            catch (JsonException ex)
+            {
+                throw new ServerProtocolException("bad-region-payload",
+                    $"regionJson deserialise failed: {ex.Message}");
+            }
+            region.UserBulbSource = null;
+            region.UserBulbName = null;
+            region.UserEquationName = null;
+            region.SandboxName = null;
+        }
+
         if (!string.IsNullOrWhiteSpace(req.RegionName) && region == null)
-            throw new ServerProtocolException("unknown-region", $"unknown region '{req.RegionName}'");
+            throw new ServerProtocolException("unknown-region",
+                $"unknown region '{req.RegionName}' and no inline regionJson supplied");
 
         double cx, cy, zoom;
         // Quad-precision lower limbs (CenterX = Hi, plus 3 lo words). Only the
@@ -115,8 +143,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                 $"fractal type '{ftype}' is not permitted for remote rendering" +
                 (region != null ? $" (resolved via region '{region.Name}')" : ""));
 
-        IColorMap theme = FracturingFog.Models.ColorPalette.GetPaletteByName(req.ThemeName)
-            ?? throw new ServerProtocolException("unknown-theme", $"unknown theme '{req.ThemeName}'");
+        IColorMap theme = ResolveTheme(req, log);
 
         bool isVideo = string.Equals(req.Mode, "video", StringComparison.OrdinalIgnoreCase);
         bool hasQuadLimbs = cxLo != 0 || cx2 != 0 || cx3 != 0 || cyLo != 0 || cy2 != 0 || cy3 != 0;
@@ -127,6 +154,65 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         return isVideo
             ? RenderVideoArtifactAsync(req, ftype, cx, cxLo, cx2, cx3, cy, cyLo, cy2, cy3, zoom, iter, theme, quality, region, workDir, log, ct)
             : RenderImageArtifactAsync(req, ftype, cx, cxLo, cx2, cx3, cy, cyLo, cy2, cy3, zoom, iter, theme, quality, region, workDir, log, ct);
+    }
+
+    /// <summary>JSON options for inline theme / region payloads. Mirrors the
+    /// wire convention used by JsonRpcFraming (camelCase) so a client that
+    /// serialised via System.Text.Json defaults round-trips into the typed
+    /// Models DTOs. <see cref="JsonStringEnumConverter"/> wired up so
+    /// FractalType / ColorThemeKind enum-name strings deserialise to the
+    /// correct enum values without an explicit converter on every property.</summary>
+    private static readonly JsonSerializerOptions RegionJsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+
+    /// <summary>Resolve the theme name first against the host's combined
+    /// built-in + user theme library; if that misses but the client carried
+    /// inline ColorThemeData JSON, instantiate a transient data-driven theme
+    /// for this render only. Built-in algorithmic themes always win when the
+    /// name matches — the inline payload is the fallback, not an override.</summary>
+    private static IColorMap ResolveTheme(RenderRequestDto req, ISessionLog log)
+    {
+        // GetPaletteByName silently returns HsvPalette as a fallback when the
+        // name is unknown, so we cannot use it as a hit-test. Check the name
+        // list explicitly first.
+        var known = FracturingFog.Models.ColorPalette.GetPaletteNames();
+        bool isKnown = false;
+        foreach (var n in known)
+        {
+            if (string.Equals(n, req.ThemeName, StringComparison.OrdinalIgnoreCase))
+            { isKnown = true; break; }
+        }
+
+        if (isKnown)
+            return FracturingFog.Models.ColorPalette.GetPaletteByName(req.ThemeName);
+
+        if (!string.IsNullOrEmpty(req.ThemeJson))
+        {
+            ColorThemeData? data;
+            try { data = JsonSerializer.Deserialize<ColorThemeData>(req.ThemeJson, RegionJsonOpts); }
+            catch (JsonException ex)
+            {
+                throw new ServerProtocolException("bad-theme-payload",
+                    $"themeJson deserialise failed: {ex.Message}");
+            }
+            if (data == null)
+                throw new ServerProtocolException("bad-theme-payload",
+                    "themeJson deserialised to null");
+            IColorMap? map = DataDrivenColorThemes.Create(data);
+            if (map == null)
+                throw new ServerProtocolException("bad-theme-payload",
+                    "themeJson missing required fields (needs at least 2 stops)");
+            log.Info($"using transient inline theme '{data.Name}' kind={data.Kind} stops={data.Stops.Count}");
+            return map;
+        }
+
+        throw new ServerProtocolException("unknown-theme",
+            $"unknown theme '{req.ThemeName}' and no inline themeJson supplied");
     }
 
     private static Task<RenderArtifact> RenderImageArtifactAsync(

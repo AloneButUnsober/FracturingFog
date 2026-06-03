@@ -1,26 +1,17 @@
 // Abstractions/Help/HelpTextBundle.cs
 //
-// Shared static help-text repository. The legacy WinForms FloatingHelp.cs
-// historically held ~2,500 lines of verbatim help text as private inline
-// @"..." string literals; the Avalonia HostHelpContentProvider used to
-// surface short placeholders because the text could not be reached from
-// the cross-platform abstractions assembly.
+// Single source of truth for the Avalonia FloatingHelp window's static
+// help text. HostHelpContentProvider reads directly from these properties
+// and the FloatingHelp view renders each tab body verbatim.
 //
-// This bundle is the new single source of truth for *cross-shell* help
-// text. The Avalonia HostHelpContentProvider reads directly from these
-// properties so the Avalonia FloatingHelp window renders the same long-
-// form text the WinForms FloatingHelp has shipped for years.
-//
-// SCOPE: covers every tab IHelpContentProvider exposes — AboutText /
-// FeaturesText / AudioText / EditorText / BioText + the full set of 17
-// math sub-tabs the legacy WinForms FloatingHelp surfaces (Overview,
+// SCOPE: covers every tab IHelpContentProvider exposes — AboutText,
+// FeaturesText, BatchText, ClientServerText, CalcGenText, ColorGenText,
+// AudioText, EditorText, BioText — plus 18 math sub-tabs (Overview,
 // Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton,
 // Nova, Buddhabrot, IFS, L-System, Attractor, Mandelbulb, User Equation,
-// User Bulb 3D, Sandbox). The legacy FloatingHelp.cs retains its own
-// inline copies for now because step G (legacy shell deletion) is
-// deferred per migration plan; once that lands, the legacy Math*Text()
-// helpers can be deleted and FloatingHelp.cs can read from this bundle
-// the same way HostHelpContentProvider does today.
+// User Bulb 3D, Sandbox, Mandelbrot Z² Generated) and the supplementary
+// Toolbar / Regions / Server Admin / Slideshow / Poster / Architecture
+// reference tabs.
 
 namespace FracturingFog.Help
 {
@@ -31,111 +22,239 @@ namespace FracturingFog.Help
 
 Built for deep zoom: double → double-double (DD) → quad-double (QD)
 auto-promotion with perturbation, series approximation, and bilinear
-approximation past zoom 1e25. Twelve fractal families share the same
-view-state and color pipeline.
+approximation past zoom 1e25. 20+ fractal families share the same
+view-state, color pipeline, and capture suite.
 
-• Renderer:  DirectX 11 / 12 via Vortice on Windows. The Avalonia shell
-             hosts the swap chain inside a NativeControlHost so the
-             same DXGI code path runs unchanged; Skia / Vulkan / Metal
-             back-ends slot in for macOS and Linux as Phase 2 lands.
-• UI:        Cross-platform Avalonia 12 — formerly WinForms-only.
-• Audio:     Beat-synced slideshow + closed-loop fractal-synth source.
-• Themes:    JSON-import-able gradient / cycling / Phong3D / PBR3D maps,
-             editable in a modeless live-preview editor.
+• UI:         Avalonia 12 MVVM shell. Cross-platform foundation;
+              Windows ships first, macOS / Linux follow Skia / Metal /
+              Vulkan renderer back-ends.
+• Renderer:   DirectX 11 / 12 via Vortice on Windows. The render
+              surface is hosted in a NativeControlHost so the DXGI
+              swap-chain code path stays unchanged across UI shells.
+• Calculator: SIMD-vectorized scalar / DD / QD CPU paths + perturbation
+              + series approximation + BLA. ILGPU GPU path for the
+              generated Mandelbrot family and User Bulb 3D.
+• Themes:     200+ built-in palettes (gradient, cycling, Phong3D, PBR,
+              distance estimation, orbit traps, domain coloring, …)
+              plus an algorithmic ColorGen DSL and a live-preview
+              theme editor. JSON import / export for sharing.
+• Equations:  Roslyn-compiled User Equation (per-pixel C#) + sandboxed
+              DSL for untrusted sources + CalcGen for code-generated
+              calculators with full scalar / AVX2 / GPU / perturbation
+              parity.
+• 3D:         Mandelbulb plus User Bulb 3D — Vec3 / Quat raymarched
+              escape-time engine with analytic + numerical DE,
+              animated time parameter, OBJ mesh export.
+• Audio:      Audio-reactive slideshow (loopback / file / microphone /
+              fractal-synth) with on-beat region + theme transitions.
+• Capture:    Single-frame PNG, multi-tile Poster, MP4 / lossless
+              FFV1 / lossless H.264 video, PNG sequence.
+• Client/Svr: Mutual-TLS render server + sealed-vault client. Render
+              on a workstation, drive from a laptop.
 ";
 
         public const string FeaturesText =
-@"=== Navigation ===
+@"=== Navigation — Mouse ===
 
-  Mouse wheel        Zoom in / out at cursor
-  Left-click drag    Pan the view
-  Double-click       Center on point + zoom in
-  Right-click        Context menu (toolbar, mini-map, etc.)
-  Reset (R)          Restore default view (-0.5, 0, zoom 0.3)
+  Wheel              Zoom in / out anchored at the cursor.
+  Left-click drag    Pan. While dragging, the renderer runs a Fast
+                     pass; a 300 ms debounce after release fires a
+                     full-quality re-render.
+  Double-click       Center on the clicked point + zoom in one step.
+  Right-click drag   Highlight-to-zoom. Draws a marquee on the canvas;
+                     releasing centers the view on the box and snaps
+                     zoom so the marquee fills the panel. Mid-drag the
+                     status bar shows the live target rectangle.
+  Right-click (3D)   In Mandelbulb / User Bulb 3D, drag rotates the
+                     camera — X = theta, Y = phi (inverted for natural
+                     ""tilt up"" mapping).
 
-=== Keyboard ===
+=== Navigation — Keyboard ===
 
   Commands (any fractal)
-    M      Toggle the floating coordinate / control menu
-    T      Open the colour-theme editor
-    R      Reset the view to the default for the current fractal
-    V      Save the current view as a named region
-    Esc    Exit monitor-span, or stop a running video / slideshow
+    M       Toggle the Floating Menu.
+    T       Toggle the Color Theme Editor.
+    R       Reset the view to the default for the current fractal.
+    V       Save the current view as a named region.
+    Esc     Exit borderless multi-monitor Span; stop a running
+            slideshow / video zoom; close a modal sub-dialog.
 
   2-D pan & zoom
-    W / S  Zoom in / out (centered)
-    A / D  Pan left / right
-    Q / E  Pan up / down
-    Shift  Hold with a pan key for a precise quarter-step
+    W / S   Zoom in / out (centred).
+    A / D   Pan left / right.
+    Q / E   Pan up / down.
+    Shift   Hold with a pan key for a precise quarter-step.
 
-  3-D  (Mandelbulb / User Bulb 3D)
-    W / S          Move the camera closer / farther
-    A / D / Q / E  Pan
-    Arrow keys     Orbit the camera (azimuth / elevation)
-    PgUp / PgDn    Rotate the light azimuth
-    Home / End     Rotate the light elevation
+  3-D (Mandelbulb / User Bulb 3D)
+    W / S   Move the camera closer / farther.
+    A D Q E Pan in screen space.
+    Arrows  Orbit the camera (↑↓ = phi, ←→ = theta).
+    PgUp / PgDn   Rotate the key-light azimuth.
+    Home / End    Rotate the key-light elevation.
 
-  (Pan / zoom / camera keys are ignored while a text box has focus
-   and while a slideshow is running.)
+  Focus behaviour
+    Pan / zoom / camera keys are ignored while a text box (CX, CY,
+    Zoom, Iter, equation editor, …) has keyboard focus. Clicking
+    the render surface restores focus to the canvas — including
+    after a toolbar click — so the canvas accepts keystrokes again
+    without further intervention.
 
-=== Toolbar / Floating Menu ===
+  Slideshow capture
+    All keys (except Esc) are passed to the slideshow VCR transport
+    while the slideshow is running.
 
-  Span        Span the window across all monitors
-  Image       Save a high-resolution PNG screenshot
-  Poster      Generate a multi-tile poster-size render
-  Slideshow   Auto-cycle regions (30 s) and color themes (10 s)
-  Video       Smooth animated zoom from current view to a target
-  Menu        Toggle the floating coordinate/control window
+=== Toolbar (top of MainWindow) ===
 
-  Quality     Standard / DeepHP / Extreme arithmetic presets
-              (auto-promotes from double → DD → QD as zoom deepens)
-  Theme       Color map selector — many built-in palettes
-              plus user-imported JSON themes
-  Region      Named bookmarks — built-in tour + your saved views
+  Type        Active fractal family. The combo lists 17 built-ins
+              plus a ""— Registered —"" divider followed by every
+              promoted User Equation / Sandbox entry.
+  Quality     Draft / Standard / High / Ultra / Extreme. Drives
+              iteration count, wheel step, and DD / QD promotion
+              thresholds. See Quality Presets below.
+  Region      Named view bookmarks — built-in tour plus your saved
+              regions. Right-click sorts by Default / FractalType.
+  Theme       Active color map. Right-click sorts by Default / All /
+              per-kind (Cycling / Phong3D / PBR3D / …).
+  Grid        Toggle the Cartesian complex-plane overlay.
+  Watermark   Toggle the region + theme + program watermark drawn
+              into the BGRA buffer (CPU-composited so it survives
+              into screenshots).
+  Params      Open the per-type parameters dialog (Julia c, Newton
+              degree, Phoenix p, IFS preset, etc.).
+  Reset       Restore the view to the current fractal's default.
+  Edit Theme  Open the modeless Color Theme Editor with the active
+              theme loaded.
+  Menu        Toggle the Floating Menu.
+  Help        Open this Help window.
 
-=== Coordinate / Region Panel ===
+=== Floating Menu (M) ===
 
-  CX, CY      Real / imaginary coordinates of the view center
-              (accepts pipe-separated DD/QD limb format for paste-back)
-  Zoom        Scalar zoom factor — paste large values like 1e48
-  Iterations  Max escape iterations (min 64, no upper cap)
-  Lock        Pin iterations during pan/zoom (no auto-recalc)
-  Go          Apply the typed coordinates / zoom / iter values
-  Flip Y      Mirror the view vertically (negate CY)
+  Sections (top → bottom):
 
-  Brightness  −100 … +100 post-process offset
-  Contrast    −100 … +100 post-process multiplier
-  Adaptive    0 … 100 histogram equalization (reveals flat detail)
+  View row 1     Reset · Span · Image · Poster
+  View row 2     Slideshow · Video (toggle) · Close Program
+  Toggles        Status · Grid + Resolution combo
+  Region Nav     Region combo + Save · Delete · Exp… · Imp… +
+                 CX / CY / Quality / Zoom / Iter textboxes + Lock
+                 Iterations checkbox + Go · Flip Y · Copy buttons
+  Color Themes   Theme combo + Exp… · Imp… · Delete · Reload +
+                 Edit Theme…
+  Post-FX        Brightness · Contrast · Adaptive sliders with
+                 per-slider Lock checkbox + Sweep button +
+                 sweep-duration NumericUpDown (seconds)
+  Slideshow      Slideshow Settings…
+  Remote         Server… · Client…
 
-  Save / Delete / Exp… / Imp…
-              Persist custom regions to JSON, share, reload
+  Span / Video / Adaptive-Sweep button labels flip while their
+  modes are active (""Back"" / ""Stop"" / ""Stop Sweep"").
+
+=== Coordinate Panel ===
+
+  CX, CY          Real / imaginary coordinates of the view center.
+                  Accepts the pipe-separated DD / QD limb format
+                  for high-precision paste-back (e.g.
+                  ""-0.7548...|1.2e-17|0|0"").
+  Zoom            Scalar zoom factor. Scientific notation accepted
+                  up to ~5e58 (Extreme tier).
+  Iterations      Max escape iterations. Minimum 64; no upper cap.
+  Lock            Pin iterations across pan / zoom so deep regions
+                  do not auto-recompute the iteration scaler.
+  Go              Apply the typed values.
+  Flip Y          Mirror the view vertically by negating every CY
+                  limb (Hi + 3 low limbs) — deep-zoom precision is
+                  preserved.
+  Copy            Copy CX / CY / Zoom / Iter to the system clipboard.
+
+=== Post-FX ===
+
+  Brightness    −100 … +100  Additive offset. 0 = neutral.
+  Contrast      −100 … +100  Multiplicative gain. 0 = neutral.
+  Adaptive       0 … 100     Histogram equalisation strength.
+                              Surfaces flat detail in deep zooms.
+  Per-slider Lock pins the value when a theme switch would
+  otherwise snap to that theme's authored default.
+  Sweep button animates Adaptive 0 → 100 over the configured
+  duration with a sine ease-in/out, then stops automatically.
+  Re-press to cancel mid-sweep.
 
 === Color Themes ===
 
   Categories  Escape-time, distance estimation, orbit traps,
               binary / argument decomposition, domain coloring,
               field lines, histograms, stripe averages, potentials,
-              lemniscate, lighting / Phong / PBR (3-D),
-              chromostereopsis, post-process, json-imported, etc.
-  Exp / Imp   Export / import individual themes as JSON
-  Delete      Remove a user-imported theme (built-ins protected)
-  Reload      Re-scan disk for edited theme JSON files
+              lemniscates, Phong3D + PBR3D lighting,
+              chromostereopsis, post-process, JSON-imported,
+              ColorGen DSL.
+  Exp / Imp   Export / import individual themes as JSON.
+  Delete      Remove a user-imported theme (built-ins protected).
+  Reload      Re-scan disk for edited theme JSON files.
+  Editor      ""Edit Theme…"" opens the modeless Color Theme Editor.
+              Saving an existing user-theme name prompts to confirm
+              overwrite.
 
 === Overlays / Mini Windows ===
 
-  Grid        Cartesian complex-plane overlay
-  Mini Map    Inset showing whole-set position of current view
-  Mini Depth  Per-pixel iteration depth heat-map indicator
-  Mini Mode   Shrink window to minimum size + on-top, borderless
-  On Top      Keep main window above all others
+  Grid        Cartesian complex-plane overlay (toolbar / menu).
+  Mini Map    Inset window of the whole set with a marker for the
+              current view. Click to jump.
+  Mini Depth  Per-pixel iteration-depth heat-map miniature.
+  Watermark   Region + theme + program label, CPU-composited into
+              the BGRA buffer so it survives screenshots.
+  Status bar  CX / CY / Zoom / Iter / active precision (SP/DD/QD)
+              / render time / last operation + a green / grey ●
+              Server indicator for the local render server.
 
 === Capture ===
 
-  Screenshot  Single-frame PNG at panel resolution or oversampled
-  Poster      Multi-tile composite render at print resolution
-  Video       Animated keyframe zoom rendered via ffmpeg
+  Image       Single-frame screenshot. Format chosen by file
+              extension (.png / .tif / .tiff / .bmp). Honours the
+              live brightness / contrast / adaptive sliders.
+  Poster      Multi-tile composite render at print resolution.
+              Tiles stitched into one large image; suitable for
+              wallpaper or printing. Also reachable from the
+              Client dialog for remote-host posters.
+  Video       Smooth animated zoom from the current view to the
+              active region. Lossless H.264 / FFV1 / H.264HQ via
+              ffmpeg, or browser-friendly Media Foundation MP4.
+              Optional PNG-sequence sidecar.
   Video Slideshow
-              Continuous zoom-out → next-region → zoom-in loop
+              Continuous zoom-out → next-region → zoom-in cycle.
+
+=== Slideshow ===
+
+  Region cycle    Default 30 s per region (configurable via
+                  Slideshow Settings…). Set to 0 to lock the
+                  current region.
+  Theme cycle     Default 10 s per theme.
+  Cross-fade      ~3 s linear blend between outgoing and incoming
+                  buffers; falls to ~0.75 × beat when audio-reactive
+                  is enabled.
+  Audio-reactive  Beat counter from system loopback / file / mic /
+                  fractal-synth — see the Audio tab.
+  VCR transport   ◀◀  ◀  ▮▮  ▶  ▶▶  bar at the bottom of the
+                  MainWindow lets you pause, skip backward /
+                  forward, or scrub through queued regions.
+
+=== Multi-Monitor & Window Modes ===
+
+  Span         Stretch the window across the entire virtual
+               desktop. Toolbar + status auto-hide; the Span
+               button reads ""Back"" while active.
+  Full Screen  Borderless single-monitor full-screen.
+  Mini Mode    Shrink + on-top + borderless companion view.
+  On Top       Keep MainWindow above other windows.
+
+=== Quality Presets ===
+
+  Tier        Zoom ceiling   Iter range       Wheel step  Precision
+  Draft       1e5            64 – 256          1.40       SP only
+  Standard    1e13           256 – 2 048       1.20       SP → DD @ 1e12
+  High        1e22           512 – 16 384      1.12       SP → DD @ 1e12
+  Ultra       5e27           1024 – 65 536     1.08       SP → DD @ 1e12
+  Extreme     5e58           2048 – 131 072    1.06       SP → DD → QD
+
+  Iter auto-scales: IterBase + ⌊log10(Zoom) × IterPerDecade⌋,
+  clamped to [IterBase, IterMax]. Lock Iterations pins the value.
 
 === Precision ===
 
@@ -143,7 +262,30 @@ view-state and color pipeline.
   Double-Double   ~31 digits  — zoom ≤ ~1e25
   Quad-Double     ~62 digits  — zoom ≤ ~1e50+
   Auto-promotion crosses thresholds based on the active view.
-  Perturbation theory (Series Approx. + BLA) accelerates deep zooms.
+  Perturbation + Series Approximation + BLA accelerate deep zooms;
+  the status bar shows the live path label (SP, AVX2, DD, QD, PT,
+  BLA, QD-PT).
+
+=== Persistence ===
+
+  All user data lives under %APPDATA%\FracturingFog\:
+
+    regions.json              User-defined coordinate bookmarks
+    colorthemes.json          User-imported / authored themes
+    colorgen.json             ColorGen DSL source library
+    userequations.json        User Equation source library
+    sandboxequations.json     Sandbox DSL source library
+    userbulbs.json            User Bulb 3D source + chain library
+    audio-settings.json       Audio-reactive slideshow config
+    client-connections.json   Sealed (AES-GCM) server connections
+    client-render-presets.json    Client render presets
+    server-config.json        Local server settings
+    server-certs\*.pfx        Self-signed mTLS bundle
+    server-logs\*.log         Server session logs
+    server-work\              Server scratch dir (auto-purged)
+
+  All JSON files are human-readable indented output. Theme + region
+  files round-trip with full DD / QD limb fidelity.
 ";
 
         public const string BatchText =
@@ -158,22 +300,13 @@ at the same coordinates and resolution.
 Launch from cmd or PowerShell. The executable attaches to the parent
 console so progress meters and final paths are visible inline.
 
-=== Default UI vs --winforms ===
-
-By default the program now opens the Avalonia shell. Pass --winforms
-to launch the legacy WinForms shell instead:
-
-    FracturingFog --winforms
-
-The two shells share all calculators, themes, and regions on disk.
-
 === Invoking batch mode ===
 
     FracturingFog --batch [options]
     FracturingFog -b     [options]
     FracturingFog --batch --help        (full flag reference)
 
-Batch mode is mutually exclusive with the interactive shells — when
+Batch mode is mutually exclusive with the interactive shell — when
 --batch is present no UI window opens; the process renders, writes
 the requested file(s), and exits.
 
@@ -350,9 +483,9 @@ cannot be located, batch mode exits 3 with a hint.
 
 === Notes ===
 
-  • Built-in regions and user-saved regions/themes are loaded from
-    %APPDATA%\FracturingFog\ at batch start, so anything authored
-    in the interactive shell is immediately accessible by name.
+  • Built-in regions and user-saved regions / themes / equations
+    load from %APPDATA%\FracturingFog\ at batch start, so anything
+    authored in the interactive shell is accessible by name.
 
   • Width/height are rounded down to the nearest even number in
     video mode (codec constraint).
@@ -461,84 +594,133 @@ All values commit to disk on OK as JSON at
         public const string EditorText =
 @"=== Color Theme Editor ===
 
-A floating window that lets you create new color themes from scratch
-or edit existing ones, with live preview into the main render window.
+A modeless floating window that lets you create new color themes from
+scratch or edit existing ones, with live preview into the main render
+window. Bound to ColorThemeEditorViewModel; runs entirely off the
+ShellViewModel's IColorThemeService bridge — no direct touches to the
+renderer or the on-disk theme store.
 
-Open from the Floating Menu: Color Themes → ""Edit Theme…"" button.
-The editor uses the currently-selected theme as its starting point.
+Open via:
+  • Toolbar → ""Edit Theme"" button
+  • Floating Menu → Color Themes → ""Edit Theme…""
+  • Hotkey ""T""
 
-=== Layout ===
+The editor seeds from the currently-selected theme. Cancel-without-Save
+restores the previously-active theme on close.
 
-  Left column   Target, Identity, Kind, Color Stops, Cycle,
-                In-Set, Post-FX Defaults, action buttons
-  Right column  3D Lighting (Phong/PBR), Phong3D Extras,
-                Pbr3D Extras  (visible only when relevant Kind chosen)
+=== Window Layout ===
 
-=== Kind (theme type) ===
+  Left column   Target (region + base theme), Identity (name, kind,
+                category, description, max-zoom), Kind selector,
+                Color Stops list, Cycle speed, In-Set color override,
+                Post-FX defaults, action buttons.
+  Right column  3D Lighting (Phong + PBR shared params: steepness /
+                ambient / direction / colours / specular / shininess),
+                Phong3D extras (key + fill + rim), Pbr3D extras
+                (lighting mode, glow exp / scale, material bands).
 
-  Gradient   Linear gradient stretched once across the iteration range.
-  Cycling    Gradient that wraps multiple times based on CycleSpeed.
-  Phong3D    Cycling gradient with Blinn-Phong directional lighting.
-  Pbr3D      Cycling gradient with Cook-Torrance PBR lighting.
+Sections collapse / expand depending on the selected Kind so unused
+controls are hidden.
+
+=== Theme Kinds ===
+
+  Gradient   Linear multi-stop interpolated palette stretched once
+             across the iteration range. Best for escape-time +
+             distance-estimation work.
+  Cycling    Same gradient repeated N times along the iteration axis.
+             CycleSpeed controls N (default 0.02 ≈ one cycle every
+             50 smoothed iter units).
+  Phong3D    Cycling gradient + Blinn-Phong directional lighting
+             from a synthesised surface normal (Z = iter-derivative).
+             Key + Fill + optional Rim lights.
+  Pbr3D      Cycling gradient + Cook-Torrance physically-based
+             lighting. Material bands let you switch metallic /
+             roughness per iter range. Optional glow.
 
 === Color Stops ===
 
-  Position   Normalized [0, 1]. 0 = start (low iterations), 1 = end.
-  Swatch     Click to open a color picker. RGB entry below also works.
-  Minimum 2 stops required. Linear interpolation between consecutive.
-
-=== Cycle (Cycling / Phong3D / Pbr3D) ===
-
-Speed = repetition rate of the gradient across the iteration range.
-Default 0.02 = roughly one full cycle every 50 smooth-units.
+  Position   Normalised [0, 1]. 0 = start (low iter), 1 = end.
+  Swatch     Click to open a colour picker. RGB / hex entry also OK.
+  Add / Del  Insert above, delete selected.
+  Drag       Reorder by dragging the position handle.
+  Minimum 2 stops required. Linear interpolation between consecutive
+  stops; outer stops clamp.
 
 === 3D Lighting (Phong3D + Pbr3D) ===
 
-Steepness = Z-scale on the surface normal (relief depth).
-Ambient   = base illumination before lighting.
+  Steepness   Z-scale on the synthetic surface normal. Higher =
+              more relief. Negative = inverted relief.
+  Ambient     Base illumination before lighting. 0 = pitch black
+              shadows; 0.15 is typical.
 
-  Key Light + Fill Light: each carries Dir(X,Y,Z), Diffuse RGB,
-  Specular RGB, Shininess. Key = bright/white, Fill = dim/cool.
-  Optional Rim Light for back-lighting silhouettes.
+  Key Light   Strong, often warm: Direction (X / Y / Z), Diffuse
+              RGB, Specular RGB, Shininess (exponent 1 – 256).
+  Fill Light  Dim, often cool: same fields. Sims sky / bounce.
+  Rim Light   Optional back-light for silhouette highlight.
 
 === Pbr3D Extras ===
 
-  Lighting mode:  PBRRealistic | PBRBright
-  Glow exp / scl: additive emission near escape t=1.
-  Material bands: piecewise (Metal, Roughness) over t.
+  Lighting mode    PBRRealistic | PBRBright. PBRBright pre-multiplies
+                   incoming radiance for a punchier sci-fi look.
+  Glow exp / scl   Additive emission curve near escape (t → 1).
+  Material bands   List of (start t, end t, metallic, roughness)
+                   tuples. Lets you make the cardioid look matte
+                   while filaments stay chromed, for example.
 
-=== In-Set (Interior) ===
+=== In-Set Color ===
 
-Override the in-set color (default opaque black). Useful for themes
-where black hides too much against a dark gradient.
+Override the in-set fill (default opaque black). Useful when the
+gradient's tail is dark and ""black holes"" would visually merge.
 
 === Post-FX Defaults ===
 
-Per-theme defaults for Brightness / Contrast / Adaptive sliders.
-Locked sliders ignore these defaults on theme switch.
+Per-theme defaults for Brightness / Contrast / Adaptive. Applied
+automatically when you switch to this theme — unless the relevant
+slider's Lock checkbox is ticked, in which case the current value
+is preserved.
 
 === Live Preview & Actions ===
 
   Live preview   When ticked, edits push to the main render via a
                  150 ms debounce. Drag freely; calculator re-runs once.
   Apply          Force a push regardless of live-preview state.
-  New Blank      Discard edits, start from a fresh Gradient (black→white).
+  New Blank      Discard edits, start from a fresh Gradient
+                 (black → white, two stops).
   Revert         Reload from the last source theme name.
   Save to Library
                  Validates Name / ≥ 2 stops, then adds or replaces a
                  user theme in %APPDATA%\FracturingFog\colorthemes.json.
+                 If the typed name already exists, a confirmation
+                 prompt appears before overwriting.
   Export JSON…   Writes a single-theme JSON array to disk.
   Save C#…       Writes a compilable C# class via the shared
                  ColorThemeCsExporter so the theme can ship built-in.
+  From Image…    Sample a user-supplied bitmap (PNG / JPG) and
+                 generate a 5-stop palette via KMeans clustering.
+                 Loads straight into the Color Stops list ready to
+                 tweak. (See Image Palette helper.)
+
+=== Image Palette Helper ===
+
+A small sibling dialog accessible from ""From Image…"" and from the
+toolbar's ColorGen Editor. Loads an image, samples N centroids via
+k-means in CIELAB space, returns them sorted by hue. Useful starting
+point for matching real-world references (album cover, photograph,
+product shot).
 
 === File Format ===
 
   Library file:  %APPDATA%\FracturingFog\colorthemes.json
   Source seed:   <install>\Resources\ColorThemes\colorthemes.json
 
-  Each entry is a single ColorThemeData object. Fields are emitted
-  with WhenWritingNull semantics — anything left null in the editor
-  is omitted from the JSON entirely.
+  Each entry is a single ColorThemeData object emitted via
+  WhenWritingNull semantics — anything left null in the editor is
+  omitted from the JSON entirely.
+
+=== See Also ===
+
+  Docs\ColorGen-UserGuide.md         Algorithmic DSL palette authoring
+  Docs\ColorThemeEditor-Guide.md     Full walkthrough + 20 worked examples
 ";
 
         public const string BioText =
@@ -2472,7 +2654,7 @@ lexical scope.
            recompiles immediately.
 
 Region recall:  the Region store records the SandboxName field
-on save.  On Region select, MainForm asks the SandboxEquationStore
+on save.  On Region select, the shell asks the SandboxEquationStore
 for the entry by name and loads its source.  If the saved entry
 has been deleted, the Region falls back to whatever source was
 last typed.
@@ -3336,6 +3518,540 @@ Phong-ish three-light blend
 === Full guide ===
 
   Docs\ColorGen-UserGuide.md      User-facing reference + 30 examples.
+";
+
+        // ── Toolbar reference ────────────────────────────────────────────
+        public const string ToolbarText =
+@"=== Top Toolbar ===
+
+The Avalonia MainWindow's top toolbar surfaces the controls you reach
+for most often. Anything not here lives in the Floating Menu (press M)
+or one of the modeless dialogs.
+
+  Type combo       Active fractal family.
+                   • 17 built-ins: Mandelbrot, Julia, Burning Ship,
+                     Tricorn, Multibrot, Phoenix, Newton, Buddhabrot,
+                     IFS, L-System, Strange Attractor, User Equation,
+                     Mandelbulb (3D), Sandbox, User Bulb (3D), Tear
+                     Drop, plus the four generated families
+                     (Mandelbrot Z², Z³, Z⁴, Z⁵).
+                   • A ""— Registered —"" divider follows, then every
+                     User Equation / Sandbox / User Bulb saved with
+                     ""Promote to fractal list"" ticked.
+                   Selection updates the calculator + view defaults.
+
+  Quality combo    Draft / Standard / High / Ultra / Extreme. Drives
+                   the iteration scaler and DD / QD promotion. See
+                   the Quality Presets section in Features.
+
+  Region combo     Built-in tour + your saved regions. Right-click for
+                   the sort menu (Default vs by-FractalType filter —
+                   handy when the list grows large).
+
+  Theme combo      Active color map. Right-click for sort menu
+                   (Default / All A–Z / per-kind: Cycling / Phong3D /
+                   PBR3D / Distance / Domain / …).
+
+  Grid toggle      Cartesian complex-plane overlay.
+
+  Watermark        Toggle the region + theme + program watermark
+                   drawn into the BGRA buffer (CPU-composited so it
+                   appears in screenshots / videos).
+
+  Params           Open the per-type parameters dialog. Content
+                   depends on the active fractal:
+                     Julia      → c constant
+                     Newton     → polynomial degree + relaxation
+                     Multibrot  → exponent
+                     Phoenix    → coupling p
+                     Buddhabrot → sample count + band cutoffs
+                     IFS        → preset + iteration count
+                     L-System   → preset + depth
+                     Attractor  → preset + (a, b, c, d)
+                     Mandelbulb → power, iter, max steps, ε, camera
+                     User Equation / Sandbox / User Bulb → editor
+
+  Reset            Restore default center / zoom / iter for the
+                   active fractal.
+
+  Edit Theme       Open the Color Theme Editor (T).
+
+  Menu             Toggle the Floating Menu (M).
+
+  Help             Open this Help window.
+
+=== Status bar (bottom) ===
+
+  • Live: CX, CY, Zoom, Iter, active precision (SP / DD / QD),
+    render-time / progress hint.
+  • Right edge: ● Server indicator (green = local server up,
+    grey = down, red = error). Click via Floating Menu → Server…
+    to open the admin dialog.
+
+=== Show / hide toggles ===
+
+  • Toolbar:    hidden by Span mode; otherwise always visible.
+  • Status bar: Floating Menu → ""Status"" checkbox.
+  • Grid:       Floating Menu / toolbar.
+  • Watermark:  Toolbar.
+
+The toolbar and status bar each occupy their own layout band — the
+GPU swap-chain HWND cannot occlude them.
+";
+
+        // ── Regions reference ────────────────────────────────────────────
+        public const string RegionsText =
+@"=== Regions — Coordinate Bookmarks ===
+
+A region captures a complete view: center coordinates (with full
+DD / QD limb fidelity), zoom factor, iteration count, fractal type
+tag, and an optional preferred color theme.
+
+=== Built-in vs User Regions ===
+
+  Built-in    A curated tour of classic Mandelbrot landmarks —
+              cardioid valley, period-bulbs, seahorse valley,
+              elephant valley, double-spirals, deep-zoom showpieces.
+              Read-only: applying them works; deleting does not.
+  User        Anything you save via the Floating Menu (Save button
+              or hotkey V). Write-able, delete-able, exportable.
+
+=== Saving a region ===
+
+  1. Pan / zoom / type to the view you want.
+  2. Press V (or Floating Menu → Region → Save).
+  3. Type a name. If the name already exists the prompt asks to
+     confirm overwrite (built-ins are still protected — the
+     overwrite UI lists only user regions).
+  4. The new region appears in both the toolbar combo and the
+     menu combo.
+
+=== Applying a region ===
+
+  • Toolbar combo / menu combo — select by name.
+  • Slideshow — auto-cycles through regions on the configured
+    interval (Slideshow Settings → Beats per Region).
+  • Client dialog — pick a remote-server region by name.
+
+Selection mutates the view state in-place: pan/zoom anchored at
+the saved coordinate, iteration count restored, fractal type
+re-selected if it differs, and the preferred color theme applied
+if one is recorded.
+
+=== Export / Import ===
+
+  Exp…   Write the user library to JSON (file picker on save).
+  Imp…   Merge a region JSON into your library. Name collisions
+         prompt per-region: Skip / Overwrite / Rename.
+
+Stored at %APPDATA%\FracturingFog\regions.json. Built-in regions
+live in <install>\Resources\Regions\ and are baked into the EXE —
+the on-disk file holds user regions only.
+
+=== Sort / filter ===
+
+Right-click the Region combo on the toolbar or in the Floating
+Menu:
+
+  Default         Built-ins first, then user regions, original order.
+  By Fractal Type Filter so only regions for the active family
+                  show. ""— select region —"" is a non-selectable
+                  header injected by the filter.
+
+=== Slideshow extreme-region filter ===
+
+A checkbox in Slideshow Settings decides whether very-deep-zoom
+regions are included in the auto-cycle. Useful when you want a
+calmer rotation that stays at shallower zooms.
+
+=== Region JSON schema ===
+
+Each entry is a single Region object with these fields:
+
+  name              user-visible name (unique within the file)
+  type              fractal family enum (mirrors FractalType)
+  centerXHi/Lo[3]   center.X DD/QD limbs
+  centerYHi/Lo[3]   center.Y DD/QD limbs
+  zoom              double
+  iterations        int
+  themeName         optional — preferred color theme
+  sandboxName       optional — bound Sandbox equation
+  userEquationName  optional — bound User Equation
+  userBulbName      optional — bound User Bulb 3D source
+  notes             optional — free-form description
+
+JSON is indented (System.Text.Json) — easy to diff and share.
+";
+
+        // ── Server admin reference ───────────────────────────────────────
+        public const string ServerAdminText =
+@"=== Server Admin Dialog ===
+
+The Server Admin dialog is the in-shell control surface for the
+LOCAL FracturingFog render server — the headless --server worker
+that accepts mTLS-protected render jobs from a client (this
+program in --batch --remote mode, or another shell's Client
+dialog).
+
+Open via:  Floating Menu → ""Server…"" button.
+
+The dialog manages only the local server. To control a server on
+a different host, run the admin tool on that host (or use SSH +
+the CLI flags below).
+
+=== Sections ===
+
+  Status            uptime · in-flight job count · completed count
+                    · last error · current bind / port · active
+                    queue depth.
+
+  Lifecycle         Start · Restart · Kill buttons spawn or
+                    terminate a local `FracturingFog --server`
+                    child process. Restart applies pending config
+                    edits and re-launches.
+
+  Bind / Port       Network interface to bind (default 127.0.0.1
+                    — loopback only). Set to 0.0.0.0 to accept
+                    LAN connections. Port defaults to 47823.
+
+  Limits            Max minutes / job (default 240) · Allow
+                    client to override timeout · Queue depth
+                    (default 1) · Max concurrent TLS sessions
+                    (default 32) · 64-megapixel pixel ceiling.
+
+  Rate limit        Per-IP accepted-connection rate (default
+                    off) + burst allowance. Closes flood attacks
+                    fast without harming legitimate retries.
+
+  TLS hardening     Require TLS 1.3 only · Revocation policy
+                    (none / online / offline) · Allowed client
+                    cert thumbprints (pinning — empty = chain
+                    trust alone).
+
+  Paths             Server cert PFX path · Client CA PFX path ·
+                    Cert directory override · Log dir · Work dir.
+
+  Stale sweep       Work-dir auto-purge age (default 1 h);
+                    leftover job-* dirs from a crash get deleted
+                    on next startup.
+
+Apply rewrites %APPDATA%\FracturingFog\server-config.json and
+signals the running server to soft-restart on the next idle
+window. Cancel discards edits in memory only.
+
+=== Status-bar indicator ===
+
+The main window's status bar shows a coloured ● Server pill on
+the right edge:
+
+  ● Server  (green)   Local server is up + listening on the
+                      configured port.
+  ● Server  (grey)    Local server is down.
+  ● Server  (red)     Local server reported an error or is
+                      unreachable through the management socket.
+
+Hover for the last error string.
+
+=== Self-signed cert bundle ===
+
+The first `--server` run with no explicit cert paths generates a
+fresh bundle in the configured cert directory:
+
+  ca.pfx       Trust root (give the same one to every client).
+  server.pfx   Server identity cert.
+  client.pfx   Default client identity cert (copy to each client).
+
+Dev certs are convenient for loopback and small LAN deployments.
+For production:
+
+  1. Issue per-user client certs from your own CA / corporate PKI.
+  2. Drop the server.pfx + ca.pfx into a folder.
+  3. Set Cert dir override OR Server cert PFX path + Client CA
+     PFX path explicitly.
+  4. Optionally enable cert pinning via Allowed client thumbprints.
+  5. Optionally require TLS 1.3.
+  6. Optionally set Revocation policy to ""online"".
+
+See Docs\ServerAdmin-Guide.md for a deployment walkthrough.
+
+=== Client dialog ===
+
+The Client dialog (Floating Menu → ""Client…"") drives a remote
+server. See the Client / Server tab for the full walkthrough.
+";
+
+        // ── Slideshow + video reference ──────────────────────────────────
+        public const string SlideshowText =
+@"=== Slideshow + Video ===
+
+The slideshow engine cycles regions and color themes hands-free.
+The same engine drives the optional video-slideshow recording mode.
+
+Open the slideshow:
+  Floating Menu → Slideshow button       (start / stop)
+  Floating Menu → ""Slideshow Settings…"" (configure timings + audio)
+  Shift+click Slideshow                  (lock current region — only
+                                          themes cycle)
+
+VCR transport bar (bottom of MainWindow):
+  ◀◀     Skip back to the previous region
+  ◀      Skip back one theme
+  ▮▮     Pause / Resume
+  ▶      Skip forward one theme
+  ▶▶     Skip forward to the next region
+
+The VCR row is only visible while the slideshow is running.
+
+=== Timing ===
+
+Default fixed-duration mode:
+  Region every    30 s     (Beats per Region in audio mode)
+  Theme every     10 s     (Beats per Theme in audio mode)
+  Cross-fade      ~3 s     (~0.75 × beat with audio-reactive)
+
+Set Beats per Region = 0 in Slideshow Settings to lock the active
+region (Shift+click shortcut does the same).
+
+=== Region filter ===
+
+A checkbox in Slideshow Settings controls whether very-deep-zoom
+regions are included. Off by default — gives a calmer tour.
+
+=== Watermark ===
+
+While the slideshow runs, region name + theme name are drawn into
+the live frame. Toggleable from the toolbar (Watermark) — the same
+toggle that controls the static watermark.
+
+=== Audio-reactive mode ===
+
+Enable from Slideshow Settings → ""Audio-reactive"" or from the
+floating Audio Settings dialog. When ON, transitions land on the
+detected beat instead of a fixed timer. See the Audio tab.
+
+=== Video Zoom (single shot) ===
+
+Floating Menu → Video button → currently-selected region.
+
+Two-phase animation:
+  1. Pan phase  (first 5 % of duration)  — pan to the target
+                center at the current zoom.
+  2. Zoom phase (remaining 95 %)         — log-zoom into the
+                target with center fixed.
+
+Both phases use smoothstep easing. Frame rate is calculation-
+bound, not wall-clock — total duration is honoured.
+
+Recording (Floating Menu → Slideshow Settings → Video tab):
+
+  None              Live playback only.
+  MP4 (built-in)    Media Foundation H.264 — no external deps.
+  Lossless H.264    libx264 -qp 0, MP4, yuv444p. Needs ffmpeg.
+  Lossless FFV1     FFV1 v3 in MKV. Needs ffmpeg.
+  H.264 HQ          libx264 -crf 18, MP4, yuv420p. Needs ffmpeg.
+  PNG sequence      Frame-by-frame lossless dump (any mode).
+
+MP4 and PNG-sequence can record simultaneously.
+
+ffmpeg.exe is discovered in:
+  1. The app folder.
+  2. <install>\Tools\ and <install>\Resources\.
+  3. PATH.
+
+=== Video Slideshow ===
+
+Continuous mode: zoom in → pause → zoom out → next region → repeat.
+Each leg defaults to 30 s with a 7 s pause between videos. Stops
+independently from the single-shot Video button (Esc or the
+Slideshow button toggles off).
+
+=== Per-region iteration override ===
+
+Regions can carry a stored iteration target; the video engine
+raises MaxIterations to at least that value during the leg so
+deep targets don't render as all-in-set black just because the
+quality preset's iter formula produced a smaller number.
+
+=== Live TAA tuning during video ===
+
+While a video zoom is rendering, the Floating Menu surfaces three
+extra sliders:
+
+  TAA Alpha    temporal blend strength between frames.
+  Fade Start   zoom at which the deep-zoom artifact fade begins.
+  Fade End     zoom at which the fade reaches full strength.
+
+Use them to dial back persistent ghost trails on busy regions.
+";
+
+        // ── Poster / large-format capture reference ──────────────────────
+        public const string PosterText =
+@"=== Poster — Print-Resolution Capture ===
+
+The Poster button renders a tiled composite image far larger than
+the on-screen panel. Each tile is calculated separately at full
+quality, then stitched into one PNG / TIFF / BMP. Ideal for
+wallpaper, prints, or archive-quality stills.
+
+Open via:
+  Toolbar Poster button (or Floating Menu → View → Poster).
+  Client dialog → Mode = poster (remote host).
+
+=== Dialog options ===
+
+  Width / Height    Output pixel size. Capped at 32 768 × 32 768
+                    (server cap; local cap matches). 64-megapixel
+                    soft ceiling.
+  Tile size         Per-tile pixel size. Default 1024. Smaller
+                    tiles = more parallelism, more seam risk;
+                    larger tiles = fewer seams, more memory.
+  Format            .png (default) / .tif / .tiff / .bmp.
+  Output path       File path or folder. Folder → filename is
+                    synthesised from region + theme + timestamp.
+  Tile previews     Live thumbnail strip while tiles render.
+
+=== Workflow ===
+
+  1. Pick a region (or use the current view).
+  2. Open Poster.
+  3. Set Width / Height (3840×2160 = 4K, 7680×4320 = 8K,
+     15360×8640 = 16K, …).
+  4. Pick tile size — leave default 1024 unless you have a
+     reason.
+  5. Browse to Output path.
+  6. Render. Progress bar shows tile-of-total + ETA.
+
+Cancel at any time — the partial frame buffer is dropped.
+
+=== Remote poster (Client dialog) ===
+
+  1. Pick a saved server connection.
+  2. Set Mode = ""image"" (poster is just a large image to the
+     server protocol).
+  3. Set Width / Height to your poster dimensions.
+  4. Pick fractal / region / theme / quality.
+  5. Output: a local file path on YOUR machine — the server
+     streams the bytes back via TLS.
+
+Larger posters benefit from saved-path return mode (server keeps
+the file on its own disk and replies with the path; read it later
+over file share).
+
+=== Notes ===
+
+  • Brightness / Contrast / Adaptive sliders apply to every tile.
+  • Watermark text scales with the output resolution.
+  • Multi-monitor Span mode is unrelated — Span affects the live
+    window only; Poster always renders at its own configured size.
+  • Posters honour the active quality preset's iter scaling. Use
+    Lock Iterations + a manually-set iter count if you want
+    consistency between local screen render and the poster.
+";
+
+        // ── Architecture / dev reference ─────────────────────────────────
+        public const string ArchitectureText =
+@"=== Architecture Overview ===
+
+Fracturing Fog is structured as a layered .NET 10 solution:
+
+  FracturingFog.Abstractions (cross-platform, UI-free)
+    • Models, ViewState, interfaces (IFractalRenderer / IGpuSurface /
+      IFractalCalculator / IColorMap / IFractalRenderHost /
+      IFractalInputController / IColorThemeService / IHelpContent-
+      Provider / IPaletteExtractionService / IVideoZoomController).
+    • HelpTextBundle (this file).
+    • POCO DTOs: ColorThemeDef, LightSourceDef, PbrMaterialBandDef,
+      FractalViewState, Region, etc.
+
+  FracturingFog.UI.Avalonia (cross-platform Avalonia 12 shell)
+    • App / Views (axaml) / ViewModels / Controls / Slideshow / Input.
+    • Pure MVVM — no System.Drawing, no Vortice, no Win32.
+    • GpuSurfaceControl is a NativeControlHost wrapping an
+      IGpuSurface (HWND on Windows; CAMetalLayer / VkSurface
+      placeholders for future ports).
+
+  FracturingFog.Rendering (DirectX 11) + Rendering.Skia / Silk
+    • Vortice DXGI swap-chain on Windows.
+    • Skia is a pure-managed cross-platform fallback (no GPU yet).
+    • Silk.NET shells reserved for Vulkan / OpenGL back-ends.
+
+  Rendering.Silk.Smoke + Rendering.Skia (smoke / portable paths)
+
+  Server + ServerHost (the headless --server worker)
+    • Mutual-TLS framed protocol.
+    • Per-job sandbox: 32 concurrent connections, per-IP rate limit,
+      configurable timeout, queue depth, work-dir auto-sweep.
+    • Forbidden fractals (UserEquation / Sandbox / UserBulb) blocked
+      at the protocol layer to prevent remote code execution.
+
+  Client (the in-shell remote driver)
+    • Sealed connection vault (AES-GCM under user master password,
+      PBKDF2-SHA256 200k iterations, per-entry salt).
+    • Render presets — image OR video — saved separately from
+      connections.
+
+  Calculators (per-family compute kernels)
+    • IFractalCalculator implementations: Mandelbrot, Julia, Burning
+      Ship, Tricorn, Multibrot, Phoenix, Newton, Buddhabrot, IFS,
+      L-System, Strange Attractor, Mandelbulb, User Equation
+      (Roslyn), Sandbox (DSL), User Bulb 3D (Roslyn + raymarch),
+      Tear Drop, plus the CalculatorGen-emitted Generated family.
+
+  CalculatorGen (compile-time code generator)
+    • AST + lexer + parser + symbolic differentiator + simplifier +
+      Taylor expander + scalar / AVX2 / perturbation emitters.
+    • Emits five execution paths per generated calculator: scalar
+      reference, AVX2+FMA, ILGPU GPU, perturbation, BLA.
+    • Self-test scaffolding for path agreement.
+
+  ColorGen (algorithmic palette generator)
+    • Tiny DSL parser + Roslyn emitter for IColorMap implementations.
+    • Live ""Compile & Load"" path keeps maps in memory; ""Generate
+      via ColorGen"" writes permanent .cs to the source tree.
+
+  Imaging / Audio / Export / Batch
+    • BMP / PNG / TIFF writers + multi-tile poster compositor.
+    • NAudio-based capture + spectral-flux beat detector.
+    • CLI parser (Batch.CommandLine) for headless renders.
+
+=== Build ===
+
+  dotnet build FracturingFogCLD.sln
+  dotnet run --project Server.Tests
+
+The solution targets .NET 10. The Avalonia shell uses ReactiveUI for
+property change notification and ReactiveCommand for commands.
+
+=== Entry points ===
+
+  • UI shell:        FracturingFog.exe
+  • Headless render: FracturingFog.exe --batch [opts]
+  • Render server:   FracturingFog.exe --server [opts]
+  • Remote batch:    FracturingFog.exe --batch --remote …
+
+=== Where things live ===
+
+  Abstractions\Models\          shared DTOs + view state
+  Abstractions\Help\            this Help bundle
+  UI.Avalonia\Views\            .axaml files
+  UI.Avalonia\ViewModels\       VM logic
+  Hosting\                      host services (IColorThemeService,
+                                IHelpContentProvider, palette etc.)
+  Calculators\                  every per-family kernel
+  Calculators\Generated\        CalcGen output
+  Models\ColorSchemes\          built-in IColorMap implementations
+  Models\ColorSchemes\Generated\ ColorGen output
+  Server\                       --server worker + protocol DTOs
+  Client\                       Client dialog + vault
+  Resources\                    bundled icons + JSON seeds + ffmpeg
+
+=== See also ===
+
+  PHASE2_AVALONIA_MIGRATION.md       Migration history
+  Docs\Avalonia-UserGuide.md         Full UX walkthrough
+  Docs\Architecture-Overview.md      Module-by-module deep dive
+  Docs\CalculatorGen-Architecture.md Generator internals
+  Docs\ServerAdmin-Guide.md          Deployment + cert PKI
 ";
     }
 }

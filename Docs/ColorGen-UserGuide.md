@@ -501,3 +501,13 @@ Stmts     let name = expr;     return vec3-expr;
 The DSL grammar is small enough to memorise; this card plus the example
 gallery in §3 covers virtually every "I want a theme that does X"
 scenario.
+
+---
+
+## 8. See Also
+
+- [ColorThemeEditor-Guide.md](ColorThemeEditor-Guide.md) — Stops / Phong / PBR3D editor for non-DSL theme authoring
+- [Avalonia-UserGuide.md](Avalonia-UserGuide.md) — UI walkthrough including the ColorGen editor
+- [CalcGen-UserGuide.md](CalcGen-UserGuide.md) — sibling DSL for algorithmic fractal equations
+- [Architecture-Overview.md](Architecture-Overview.md) — where ColorGen sits in the solution
+- [Capture-Guide.md](Capture-Guide.md) — using ColorGen output in posters / videos

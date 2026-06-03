@@ -50,7 +50,7 @@ public static class ServerEntry
         if (swept > 0)
             Console.WriteLine($"workdir sweep: removed {swept} stale job folder(s)");
 
-        string certDir = ServerConfig.DefaultCertDir();
+        string certDir = cfg.EffectiveCertsDir();
         string serverPfx;
         string caPfx;
 
@@ -65,6 +65,7 @@ public static class ServerEntry
             serverPfx = bundle.ServerPath;
             caPfx = bundle.CaPath;
             Console.WriteLine("self-signed dev bundle:");
+            Console.WriteLine($"  certs dir  : {certDir}");
             Console.WriteLine($"  ca         : {bundle.CaPath}");
             Console.WriteLine($"  server pfx : {bundle.ServerPath}");
             Console.WriteLine($"  client pfx : {bundle.ClientPath}");
@@ -178,6 +179,10 @@ public static class ServerEntry
                     if (!Next(args, ref i, a, out string ca, out err)) return false;
                     cfg.ClientCaCertPath = ca; break;
 
+                case "--certs-dir":
+                    if (!Next(args, ref i, a, out string cd, out err)) return false;
+                    cfg.ServerCertsDir = cd; break;
+
                 case "--log-dir":
                     if (!Next(args, ref i, a, out string ld, out err)) return false;
                     cfg.LogDir = ld; break;
@@ -245,6 +250,7 @@ public static class ServerEntry
         Console.WriteLine("                       Delete job-* subdirs older than N hours on startup (default 1, 0 disables)");
         Console.WriteLine("  --cert PATH          Server identity PFX (empty password)");
         Console.WriteLine("  --client-ca PATH     Trusted client CA bundle PFX (empty password)");
+        Console.WriteLine("  --certs-dir PATH     Override directory for self-signed dev bundle");
         Console.WriteLine("  --log-dir PATH       Per-session log directory");
         Console.WriteLine("  --work-dir PATH      Per-job scratch directory");
         Console.WriteLine();

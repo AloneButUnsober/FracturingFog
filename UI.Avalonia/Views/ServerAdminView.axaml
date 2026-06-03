@@ -7,8 +7,8 @@
         x:Class="FracturingFog.UI.Avalonia.Views.ServerAdminView"
         x:DataType="vm:ServerAdminViewModel"
         Title="FracturingFog — Server Admin"
-        Width="520" Height="520"
-        MinWidth="460" MinHeight="420"
+        Width="560" Height="680"
+        MinWidth="480" MinHeight="480"
         Background="#171717">
 
     <Window.Styles>
@@ -83,6 +83,33 @@
                     </Grid>
                     <Button Classes="primary" Content="Apply (saves config)" Command="{Binding ApplyCommand}"
                             HorizontalAlignment="Right" Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Custom Paths" />
+                    <TextBlock Foreground="#7E7E7E" FontSize="11"
+                               Text="Blank = use default under %APPDATA%\FracturingFog\." TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="120,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Server certs dir" />
+                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding CertsDir, Mode=TwoWay}"
+                                   ToolTip.Tip="Folder holding server.pfx + ca.pfx (or where the self-signed dev bundle is generated)." />
+                        <Button    Grid.Row="0" Grid.Column="2" Content="Browse…" Margin="6,0,0,0"
+                                   Command="{Binding BrowseCertsDirCommand}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Server logs dir" Margin="0,6,0,0" />
+                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding LogDir, Mode=TwoWay}" Margin="0,6,0,0"
+                                   ToolTip.Tip="Per-session render log files are written here." />
+                        <Button    Grid.Row="1" Grid.Column="2" Content="Browse…" Margin="6,6,0,0"
+                                   Command="{Binding BrowseLogDirCommand}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Server work dir" Margin="0,6,0,0" />
+                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding WorkDir, Mode=TwoWay}" Margin="0,6,0,0"
+                                   ToolTip.Tip="Per-job scratch directory (PNGs, intermediate MP4s)." />
+                        <Button    Grid.Row="2" Grid.Column="2" Content="Browse…" Margin="6,6,0,0"
+                                   Command="{Binding BrowseWorkDirCommand}" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

@@ -296,6 +296,34 @@ public sealed class FFServer
             return;
         }
 
+        // Inline theme / region payloads carried for transient use when the
+        // server's local registry does not have the named entry. Validate
+        // size + shape up-front so the engine never sees an oversize or
+        // malformed blob. The engine still performs the full deserialize
+        // (Models types are main-exe-only) — this is a defensive gate.
+        if (!string.IsNullOrEmpty(req.ThemeJson))
+        {
+            try { ThemePayloadValidator.Validate(req.ThemeJson); }
+            catch (ServerProtocolException ex)
+            {
+                log.Warn($"theme payload refused: [{ex.Code}] {ex.Message}");
+                Metrics.RecordFailure(ex.Code, ex.Message);
+                await ReplyErrorAsync(ssl, env.Id, ex.Code, ex.Message, ct).ConfigureAwait(false);
+                return;
+            }
+        }
+        if (!string.IsNullOrEmpty(req.RegionJson))
+        {
+            try { RegionPayloadValidator.Validate(req.RegionJson); }
+            catch (ServerProtocolException ex)
+            {
+                log.Warn($"region payload refused: [{ex.Code}] {ex.Message}");
+                Metrics.RecordFailure(ex.Code, ex.Message);
+                await ReplyErrorAsync(ssl, env.Id, ex.Code, ex.Message, ct).ConfigureAwait(false);
+                return;
+            }
+        }
+
         // Poster-mode resolution: when all three poster fields are positive
         // and this is an image request, recompute Width/Height from
         // inches×dpi *before* the limit checks below. Mirrors the local

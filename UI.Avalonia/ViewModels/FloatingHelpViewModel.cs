@@ -39,6 +39,12 @@ public sealed class FloatingHelpViewModel : ViewModelBase
         ClientServerText = content.ClientServerText;
         CalcGenText  = content.CalcGenText;
         ColorGenText = content.ColorGenText;
+        ToolbarText  = content.ToolbarText;
+        RegionsText  = content.RegionsText;
+        SlideshowText = content.SlideshowText;
+        ServerAdminText = content.ServerAdminText;
+        PosterText   = content.PosterText;
+        ArchitectureText = content.ArchitectureText;
         MathSubTabs  = content.MathSubTabs;
         AboutLinks   = content.AboutLinks;
         _hardwareText = content.GetSystemInfoText();
@@ -62,6 +68,12 @@ public sealed class FloatingHelpViewModel : ViewModelBase
     public string ClientServerText { get; }
     public string CalcGenText { get; }
     public string ColorGenText { get; }
+    public string ToolbarText { get; }
+    public string RegionsText { get; }
+    public string SlideshowText { get; }
+    public string ServerAdminText { get; }
+    public string PosterText { get; }
+    public string ArchitectureText { get; }
     public IReadOnlyList<HelpSubTab> MathSubTabs { get; }
     public IReadOnlyList<HelpLink> AboutLinks { get; }
 

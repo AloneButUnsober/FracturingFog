@@ -89,28 +89,53 @@
                 <TextBox Classes="helpBody" Text="{Binding FeaturesText}" />
             </TabItem>
 
+            <TabItem Header="Using">
+                <TabControl TabStripPlacement="Left">
+                    <TabItem Header="Toolbar">
+                        <TextBox Classes="helpBody" Text="{Binding ToolbarText}" />
+                    </TabItem>
+                    <TabItem Header="Regions">
+                        <TextBox Classes="helpBody" Text="{Binding RegionsText}" />
+                    </TabItem>
+                    <TabItem Header="Slideshow + Video">
+                        <TextBox Classes="helpBody" Text="{Binding SlideshowText}" />
+                    </TabItem>
+                    <TabItem Header="Poster">
+                        <TextBox Classes="helpBody" Text="{Binding PosterText}" />
+                    </TabItem>
+                    <TabItem Header="Theme Editor">
+                        <TextBox Classes="helpBody" Text="{Binding EditorText}" />
+                    </TabItem>
+                    <TabItem Header="Audio-Reactive">
+                        <TextBox Classes="helpBody" Text="{Binding AudioText}" />
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Authoring">
+                <TabControl TabStripPlacement="Left">
+                    <TabItem Header="CalcGen">
+                        <TextBox Classes="helpBody" Text="{Binding CalcGenText}" />
+                    </TabItem>
+                    <TabItem Header="ColorGen">
+                        <TextBox Classes="helpBody" Text="{Binding ColorGenText}" />
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
             <TabItem Header="Batch / CLI">
                 <TextBox Classes="helpBody" Text="{Binding BatchText}" />
             </TabItem>
 
             <TabItem Header="Client / Server">
-                <TextBox Classes="helpBody" Text="{Binding ClientServerText}" />
-            </TabItem>
-
-            <TabItem Header="CalcGen">
-                <TextBox Classes="helpBody" Text="{Binding CalcGenText}" />
-            </TabItem>
-
-            <TabItem Header="ColorGen">
-                <TextBox Classes="helpBody" Text="{Binding ColorGenText}" />
-            </TabItem>
-
-            <TabItem Header="Audio">
-                <TextBox Classes="helpBody" Text="{Binding AudioText}" />
-            </TabItem>
-
-            <TabItem Header="Editor">
-                <TextBox Classes="helpBody" Text="{Binding EditorText}" />
+                <TabControl TabStripPlacement="Left">
+                    <TabItem Header="Walkthrough">
+                        <TextBox Classes="helpBody" Text="{Binding ClientServerText}" />
+                    </TabItem>
+                    <TabItem Header="Server Admin">
+                        <TextBox Classes="helpBody" Text="{Binding ServerAdminText}" />
+                    </TabItem>
+                </TabControl>
             </TabItem>
 
             <TabItem Header="Mathematics">
@@ -130,6 +155,10 @@
 
             <TabItem Header="Bio">
                 <TextBox Classes="helpBody" Text="{Binding BioText}" />
+            </TabItem>
+
+            <TabItem Header="Architecture">
+                <TextBox Classes="helpBody" Text="{Binding ArchitectureText}" />
             </TabItem>
         </TabControl>
 

@@ -50,6 +50,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // thrashing while the user is still moving the slider.
     private readonly System.Threading.Timer _adaptiveRepaintDebounce;
     private const int AdaptiveRepaintDebounceMs = 33;
+    // Re-entrancy guard: when a repaint is still running on the threadpool, a
+    // newly-fired tick sets _adaptiveRepaintPending instead of starting a
+    // second concurrent RepaintWithAdaptive. The in-flight repaint reschedules
+    // itself once on completion if a newer value arrived mid-render. Keeps the
+    // adaptive sweep paced to actual render capacity instead of piling up.
+    private int _adaptiveRepaintBusy;    // 0 = idle, 1 = running
+    private int _adaptiveRepaintPending; // 0 = none, 1 = newer value arrived
 
     public MainViewModel(IFractalRenderHost renderHost, IFractalInputController input)
     {
@@ -100,7 +107,27 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         _adaptiveRepaintDebounce = new System.Threading.Timer(_ =>
         {
-            _renderHost.RepaintWithAdaptive();
+            // Re-entrancy guard: if a prior repaint is still running, just mark
+            // a pending tick and bail. The running repaint will reschedule us
+            // when it finishes. Prevents concurrent ApplyHistogramEqualization
+            // passes from clobbering each other during a fast adaptive sweep.
+            if (System.Threading.Interlocked.CompareExchange(ref _adaptiveRepaintBusy, 1, 0) != 0)
+            {
+                System.Threading.Volatile.Write(ref _adaptiveRepaintPending, 1);
+                return;
+            }
+            try
+            {
+                _renderHost.RepaintWithAdaptive();
+            }
+            finally
+            {
+                System.Threading.Volatile.Write(ref _adaptiveRepaintBusy, 0);
+                if (System.Threading.Interlocked.Exchange(ref _adaptiveRepaintPending, 0) == 1)
+                {
+                    _adaptiveRepaintDebounce.Change(AdaptiveRepaintDebounceMs, System.Threading.Timeout.Infinite);
+                }
+            }
         }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
     }
 

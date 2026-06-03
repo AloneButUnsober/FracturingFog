@@ -68,6 +68,14 @@ public sealed class ServerConfig
     [JsonPropertyName("serverCertPath")]  public string? ServerCertPath { get; set; }
     [JsonPropertyName("clientCaCertPath")] public string? ClientCaCertPath { get; set; }
 
+    /// <summary>Override directory for the self-signed dev bundle (and the
+    /// implicit lookup of <c>server.pfx</c> + <c>ca.pfx</c> when explicit
+    /// per-file paths are not set). Null = use <see cref="DefaultCertDir"/>.
+    /// Lower precedence than <see cref="ServerCertPath"/> /
+    /// <see cref="ClientCaCertPath"/>: when both per-file paths are set they
+    /// win and this directory is ignored.</summary>
+    [JsonPropertyName("serverCertsDir")]  public string? ServerCertsDir { get; set; }
+
     [JsonPropertyName("logDir")]          public string? LogDir         { get; set; }
     [JsonPropertyName("workDir")]         public string? WorkDir        { get; set; }
 
@@ -75,6 +83,10 @@ public sealed class ServerConfig
     public static string DefaultCertDir()    => Path.Combine(AppDataDir(), "server-certs");
     public static string DefaultLogDir()     => Path.Combine(AppDataDir(), "server-logs");
     public static string DefaultWorkDir()    => Path.Combine(AppDataDir(), "server-work");
+
+    /// <summary>Resolved certs directory honouring the optional override.</summary>
+    public string EffectiveCertsDir()
+        => string.IsNullOrWhiteSpace(ServerCertsDir) ? DefaultCertDir() : ServerCertsDir!;
 
     public static string AppDataDir() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

@@ -345,6 +345,16 @@ State           z   c   prev   iter (or n)
 ```
 
 Use this guide as the source of truth for the User Equation editor.
-The legacy Sandbox calculator accepts bare C# in place of the DSL but
-loses every path except scalar+AVX2 — prefer CalcGen for anything you
-plan to keep.
+The Sandbox calculator accepts a restricted DSL with no .NET BCL access
+(safe to share) but loses every execution path except the scalar
+interpreter — prefer CalcGen for anything you plan to keep.
+
+---
+
+## 9. See Also
+
+- [CalculatorGen-Architecture.md](CalculatorGen-Architecture.md) — generator internals (AST, simplifier, Taylor expander, BLA validity)
+- [Avalonia-UserGuide.md](Avalonia-UserGuide.md) — UI walkthrough including the User Equation editor
+- [ColorGen-UserGuide.md](ColorGen-UserGuide.md) — sibling DSL for algorithmic color themes
+- [UserBulb-Guide.md](UserBulb-Guide.md) — 3D analogue (Vec3 / Quat Roslyn-compiled raymarched calculator)
+- [Architecture-Overview.md](Architecture-Overview.md) — where the CalculatorGen project sits in the solution

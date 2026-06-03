@@ -33,6 +33,9 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         Port = Config.Port;
         MaxMinutes = Config.MaxMinutes;
         AllowOverride = Config.AllowOverride;
+        CertsDir = Config.ServerCertsDir ?? "";
+        LogDir = Config.LogDir ?? "";
+        WorkDir = Config.WorkDir ?? "";
 
         StartCommand   = ReactiveCommand.Create(Start);
         RestartCommand = ReactiveCommand.Create(Restart);
@@ -40,6 +43,12 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         ApplyCommand   = ReactiveCommand.Create(Apply);
         RefreshCommand = ReactiveCommand.CreateFromTask(PollOnceAsync);
         CloseCommand   = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        BrowseCertsDirCommand = ReactiveCommand.Create(() => BrowseFolderRequested?.Invoke(this,
+            ("certsDir", (Action<string>)(p => CertsDir = p))));
+        BrowseLogDirCommand   = ReactiveCommand.Create(() => BrowseFolderRequested?.Invoke(this,
+            ("logDir",   (Action<string>)(p => LogDir = p))));
+        BrowseWorkDirCommand  = ReactiveCommand.Create(() => BrowseFolderRequested?.Invoke(this,
+            ("workDir",  (Action<string>)(p => WorkDir = p))));
 
         // 5-second cadence: each poll opens a fresh mTLS handshake (no
         // pooling in v1), which costs ~50-100 ms server CPU. At 1 Hz the
@@ -62,6 +71,15 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
 
     private bool _allowOverride;
     public bool AllowOverride { get => _allowOverride; set => this.RaiseAndSetIfChanged(ref _allowOverride, value); }
+
+    private string _certsDir = "";
+    public string CertsDir { get => _certsDir; set => this.RaiseAndSetIfChanged(ref _certsDir, value); }
+
+    private string _logDir = "";
+    public string LogDir { get => _logDir; set => this.RaiseAndSetIfChanged(ref _logDir, value); }
+
+    private string _workDir = "";
+    public string WorkDir { get => _workDir; set => this.RaiseAndSetIfChanged(ref _workDir, value); }
 
     private string _status = "Unknown";
     public string Status { get => _status; set => this.RaiseAndSetIfChanged(ref _status, value); }
@@ -200,6 +218,13 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         Config.Port = Port;
         Config.MaxMinutes = MaxMinutes;
         Config.AllowOverride = AllowOverride;
+        // Empty string in any path TextBox means "go back to default". Null
+        // out on the config so EffectiveCertsDir() / LogDir resolve to the
+        // shipped %APPDATA% defaults rather than persisting an empty path
+        // that would later be Directory.CreateDirectory'd as the working dir.
+        Config.ServerCertsDir = string.IsNullOrWhiteSpace(CertsDir) ? null : CertsDir.Trim();
+        Config.LogDir         = string.IsNullOrWhiteSpace(LogDir)   ? null : LogDir.Trim();
+        Config.WorkDir        = string.IsNullOrWhiteSpace(WorkDir)  ? null : WorkDir.Trim();
         try { Config.Save(); }
         catch (Exception ex) { LastError = "save failed: " + ex.Message; return; }
 
@@ -243,8 +268,12 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<Unit, Unit> BrowseCertsDirCommand { get; }
+    public ReactiveCommand<Unit, Unit> BrowseLogDirCommand { get; }
+    public ReactiveCommand<Unit, Unit> BrowseWorkDirCommand { get; }
 
     public event EventHandler? CloseRequested;
+    public event EventHandler<(string kind, Action<string> assign)>? BrowseFolderRequested;
 
     public void Dispose()
     {

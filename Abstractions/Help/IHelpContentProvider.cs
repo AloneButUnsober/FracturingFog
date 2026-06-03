@@ -49,6 +49,30 @@ namespace FracturingFog.Help
         /// troubleshooting.</summary>
         string ColorGenText { get; }
 
+        /// <summary>Reference for the Avalonia MainWindow top toolbar — every
+        /// combo, toggle button, and status-bar element.</summary>
+        string ToolbarText { get; }
+
+        /// <summary>Regions (coordinate bookmarks) reference — built-in vs
+        /// user, save / apply, JSON schema, sort + filter.</summary>
+        string RegionsText { get; }
+
+        /// <summary>Slideshow + single-shot Video Zoom reference — timings,
+        /// audio-reactive mode, VCR controls, recording presets.</summary>
+        string SlideshowText { get; }
+
+        /// <summary>Server Admin dialog reference — limits, TLS hardening,
+        /// rate limit, cert paths, stale sweep, lifecycle controls.</summary>
+        string ServerAdminText { get; }
+
+        /// <summary>Poster (multi-tile print-resolution capture) reference —
+        /// dialog options, workflow, remote poster via Client dialog.</summary>
+        string PosterText { get; }
+
+        /// <summary>Module-by-module architecture overview for contributors —
+        /// solution layout, build, entry points, see-also doc list.</summary>
+        string ArchitectureText { get; }
+
         /// <summary>Math tab is itself a TabControl — each entry becomes one
         /// sub-tab. Order is preserved.</summary>
         IReadOnlyList<HelpSubTab> MathSubTabs { get; }

@@ -453,9 +453,15 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         Adaptive = 0;
         IsAdaptiveSweeping = true;
 
+        // Render priority (not Background): Background is the lowest dispatch
+        // tier and gets starved when the shell is busy with layout / status
+        // bar / binding updates at large window sizes — that's the visible
+        // sweep stutter at high resolutions. Render runs after input but
+        // ahead of idle work, so 50 ms tick fires reliably without
+        // monopolising the UI thread.
         _adaptiveSweepTimer = new DispatcherTimer(
             TimeSpan.FromMilliseconds(AdaptiveSweepTickMs),
-            DispatcherPriority.Background,
+            DispatcherPriority.Render,
             OnAdaptiveSweepTick);
         _adaptiveSweepTimer.Start();
     }
@@ -477,9 +483,14 @@ public sealed class FloatingMenuViewModel : ViewModelBase
             StopAdaptiveSweep();
             return;
         }
-        // Sine ease-in/out: 0 → 1 with zero derivative at both endpoints.
-        double eased = (1.0 - Math.Cos(Math.PI * t)) * 0.5;
-        Adaptive = (int)Math.Round(eased * 100.0);
+        // Linear ramp. The previous sine ease-in/out felt janky in practice:
+        // its derivative is ~0 at both endpoints, so the integer Adaptive
+        // value stays at 0 for the first ~225 ms (visible as "delay at the
+        // start") and stays at 99/100 for the last ~225 ms (visible as "slows
+        // at the end"). Mid-sweep the derivative peaked at ~π/2× the linear
+        // rate, so int values jumped 2 at a time — the "jumpy" mid-sweep.
+        // A flat linear ramp removes all three artifacts.
+        Adaptive = (int)Math.Round(t * 100.0);
     }
 
     /// <summary>Programmatic setter that does NOT raise the BrightnessSlide
