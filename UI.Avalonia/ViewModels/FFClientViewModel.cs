@@ -84,9 +84,16 @@ public sealed class FFClientViewModel : ViewModelBase
         DeleteConnectionCommand = ReactiveCommand.Create(DeleteConnection);
         SavePresetCommand       = ReactiveCommand.Create(SavePreset);
         DeletePresetCommand     = ReactiveCommand.Create(DeletePreset);
-        BrowseClientCertCommand = ReactiveCommand.Create(() => BrowseFileRequested?.Invoke(this, ("clientCert", (Action<string>)(p => ClientCertPath = p))));
-        BrowseServerCaCommand   = ReactiveCommand.Create(() => BrowseFileRequested?.Invoke(this, ("serverCa",   (Action<string>)(p => ServerCaCertPath = p))));
-        BrowseOutputCommand     = ReactiveCommand.Create(() => BrowseFileRequested?.Invoke(this, ("output",     (Action<string>)(p => OutputPath = p))));
+        BrowseClientCertCommand = ReactiveCommand.Create(() => BrowseFileRequested?.Invoke(this, ("clientCert", null, (Action<string>)(p => ClientCertPath = p))));
+        BrowseServerCaCommand   = ReactiveCommand.Create(() => BrowseFileRequested?.Invoke(this, ("serverCa",   null, (Action<string>)(p => ServerCaCertPath = p))));
+        BrowseOutputCommand     = ReactiveCommand.Create(() =>
+        {
+            string defaultExt = Mode == "video"
+                ? ((string.Equals(BuildRequest().Lossless, "ffv1", StringComparison.OrdinalIgnoreCase)) ? "mkv" : "mp4")
+                : "png";
+            string suggested = BuildSuggestedFileName(BuildRequest(), new RenderResponseDto(), defaultExt);
+            BrowseFileRequested?.Invoke(this, ("output", suggested, (Action<string>)(p => OutputPath = p)));
+        });
         RenderCommand           = ReactiveCommand.CreateFromTask(RenderAsync);
         CloseCommand            = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
     }
@@ -637,11 +644,13 @@ public sealed class FFClientViewModel : ViewModelBase
             string path = OutputPath;
             if (string.IsNullOrEmpty(path))
             {
+                string defaultExt = isVideo ? (req.Lossless == "ffv1" ? "mkv" : "mp4") : "png";
                 // Bubble up — host pops a SaveFileDialog and writes.
                 var args = new SaveBytesEventArgs
                 {
-                    DefaultExtension = isVideo ? (req.Lossless == "ffv1" ? "mkv" : "mp4") : "png",
+                    DefaultExtension = defaultExt,
                     Bytes = bytes,
+                    SuggestedName = BuildSuggestedFileName(req, resp, defaultExt),
                 };
                 SaveBytesRequested?.Invoke(this, args);
                 await args.Completion.Task.ConfigureAwait(false);
@@ -660,6 +669,73 @@ public sealed class FFClientViewModel : ViewModelBase
         }
     }
 
+    // Builds the suggested save-file name for a remote render. Matches the
+    // local Screenshot/Poster format owned by AvaloniaShellBootstrap:
+    //   {ProgramName}[_{RegionName}][_{ColorThemeName}]_x{CX}_y{CY}_z{Zoom}
+    //     _i{Iterations}_{W}x{H}[_wallpaper|_poster[_portrait]].{ext}
+    // For server renders, "spanning" never applies; the poster suffix is
+    // added when the request was issued as a poster (PosterInchesW/H/DPI set).
+    private static string BuildSuggestedFileName(
+        RenderRequestDto req, RenderResponseDto resp, string defaultExt)
+    {
+        static string Sanitize(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+            var invalid = System.IO.Path.GetInvalidFileNameChars();
+            var sb = new System.Text.StringBuilder(s!.Length);
+            foreach (char c in s)
+            {
+                if (c == ' ') continue;
+                if (Array.IndexOf(invalid, c) >= 0) continue;
+                if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?'
+                    || c == '"' || c == '<' || c == '>' || c == '|' || c < 0x20) continue;
+                sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        static string FmtNum(double v)
+            => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+                .Replace(".", string.Empty);
+
+        string program = "FracturingFog";
+        string region  = Sanitize(req.RegionName);
+        string theme   = Sanitize(req.ThemeName);
+
+        double cx   = req.CenterX    ?? 0d;
+        double cy   = req.CenterY    ?? 0d;
+        double zoom = req.Zoom       ?? 0d;
+        int    iter = req.Iterations ?? 0;
+        int    width  = resp.Width  > 0 ? resp.Width  : req.Width;
+        int    height = resp.Height > 0 ? resp.Height : req.Height;
+
+        bool isPoster = req.PosterInchesW.HasValue && req.PosterInchesH.HasValue
+                        && req.PosterDpi.HasValue
+                        && req.PosterInchesW.Value > 0 && req.PosterInchesH.Value > 0
+                        && req.PosterDpi.Value > 0;
+
+        var sb2 = new System.Text.StringBuilder();
+        sb2.Append(program);
+        if (!string.IsNullOrEmpty(region)) sb2.Append('_').Append(region);
+        if (!string.IsNullOrEmpty(theme))  sb2.Append('_').Append(theme);
+        sb2.Append("_x").Append(FmtNum(cx));
+        sb2.Append("_y").Append(FmtNum(cy));
+        sb2.Append("_z").Append(FmtNum(zoom));
+        sb2.Append("_i").Append(iter.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        sb2.Append('_').Append(width).Append('x').Append(height);
+
+        if (isPoster)
+        {
+            sb2.Append("_poster");
+            if (req.PosterPortrait) sb2.Append("_portrait");
+        }
+
+        string ext = (defaultExt ?? "png").TrimStart('.');
+        if (string.IsNullOrEmpty(ext)) ext = "png";
+        sb2.Append('.').Append(ext);
+        return sb2.ToString();
+    }
+
     // ── Commands + events ─────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, Unit>   UnlockCommand { get; }
@@ -674,7 +750,7 @@ public sealed class FFClientViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit>   CloseCommand { get; }
 
     public event EventHandler? CloseRequested;
-    public event EventHandler<(string kind, Action<string> assign)>? BrowseFileRequested;
+    public event EventHandler<(string kind, string? suggestedName, Action<string> assign)>? BrowseFileRequested;
     public event EventHandler<SaveBytesEventArgs>? SaveBytesRequested;
 }
 
@@ -682,6 +758,7 @@ public sealed class SaveBytesEventArgs : EventArgs
 {
     public required string DefaultExtension { get; init; }
     public required byte[] Bytes { get; init; }
+    public string? SuggestedName { get; init; }
     public string? WrittenPath { get; set; }
     public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
