@@ -351,6 +351,73 @@ public sealed class FFClientViewModel : ViewModelBase
     private int? _requestedMaxMinutes;
     public int? RequestedMaxMinutes { get => _requestedMaxMinutes; set => this.RaiseAndSetIfChanged(ref _requestedMaxMinutes, value); }
 
+    // ── Poster sub-form (image mode only) ────────────────────────────────
+    // When EnablePoster is true the Size fields above are ignored and the
+    // server computes pixel dims as inchesW × dpi and inchesH × dpi, stamps
+    // DPI metadata into the PNG, and rotates 90° CW when PosterPortrait is
+    // set. Mirrors the local poster dialog (AvaloniaDialogs.ShowPosterAsync).
+
+    public ObservableCollection<int> PosterDpiPresets { get; } = new(new[] { 150, 300, 600 });
+
+    private bool _enablePoster;
+    public bool EnablePoster
+    {
+        get => _enablePoster;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _enablePoster, value);
+            this.RaisePropertyChanged(nameof(PosterPixelPreview));
+        }
+    }
+
+    private double _posterInchesW = 24.0;
+    public double PosterInchesW
+    {
+        get => _posterInchesW;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _posterInchesW, value);
+            this.RaisePropertyChanged(nameof(PosterPixelPreview));
+        }
+    }
+
+    private double _posterInchesH = 36.0;
+    public double PosterInchesH
+    {
+        get => _posterInchesH;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _posterInchesH, value);
+            this.RaisePropertyChanged(nameof(PosterPixelPreview));
+        }
+    }
+
+    private int _posterDpi = 300;
+    public int PosterDpi
+    {
+        get => _posterDpi;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _posterDpi, value);
+            this.RaisePropertyChanged(nameof(PosterPixelPreview));
+        }
+    }
+
+    private bool _posterPortrait = true;
+    public bool PosterPortrait { get => _posterPortrait; set => this.RaiseAndSetIfChanged(ref _posterPortrait, value); }
+
+    public string PosterPixelPreview
+    {
+        get
+        {
+            if (!EnablePoster) return "Poster mode off — Size fields above drive pixel dims.";
+            long pw = (long)Math.Ceiling(PosterInchesW * PosterDpi);
+            long ph = (long)Math.Ceiling(PosterInchesH * PosterDpi);
+            long mp = pw * ph / 1_000_000;
+            return $"Output: {pw:N0} × {ph:N0} px  ({mp:N0} MP) @ {PosterDpi} dpi";
+        }
+    }
+
     public RenderRequestDto BuildRequest()
     {
         return new RenderRequestDto
@@ -374,6 +441,10 @@ public sealed class FFClientViewModel : ViewModelBase
             KeepFrames = KeepFrames ? true : null,
             ReturnMode = ReturnMode,
             RequestedMaxMinutes = RequestedMaxMinutes,
+            PosterInchesW = EnablePoster ? PosterInchesW : null,
+            PosterInchesH = EnablePoster ? PosterInchesH : null,
+            PosterDpi = EnablePoster ? PosterDpi : null,
+            PosterPortrait = EnablePoster && PosterPortrait,
         };
     }
 
@@ -403,6 +474,14 @@ public sealed class FFClientViewModel : ViewModelBase
         KeepFrames = r.KeepFrames ?? false;
         ReturnMode = r.ReturnMode;
         RequestedMaxMinutes = r.RequestedMaxMinutes;
+        EnablePoster = r.PosterInchesW is double && r.PosterInchesH is double && r.PosterDpi is int;
+        if (EnablePoster)
+        {
+            PosterInchesW = r.PosterInchesW!.Value;
+            PosterInchesH = r.PosterInchesH!.Value;
+            PosterDpi = r.PosterDpi!.Value;
+            PosterPortrait = r.PosterPortrait;
+        }
         OutputPath = p.SuggestedOutputPath ?? "";
     }
 

@@ -58,6 +58,13 @@ namespace FracturingFog.Imaging
         public ImageFormat Format { get; init; } = ImageFormat.Png;
         public string Watermark { get; init; } = "";
         public string SubText { get; init; } = "";
+
+        /// <summary>Pixels-per-inch metadata stamped into the saved file. 0 =
+        /// leave whatever the encoder defaults to (96 dpi). Set when the
+        /// caller wants the print pipeline to honour a poster size — print
+        /// drivers read this to scale the image to physical inches without
+        /// the user having to type a size at print time.</summary>
+        public float Dpi { get; init; }
     }
 
     /// <summary>Outcome of a poster render — the on-disk pixel dimensions
@@ -143,7 +150,7 @@ namespace FracturingFog.Imaging
                     Color.White, watermark: true, pixels: rotated, imgW: savedW, imgH: savedH);
                 ImageExport.SavePixelsToFile(
                     rotated, savedW, savedH, req.Path, req.Format,
-                    req.Watermark, fontColor, req.SubText, poster: true);
+                    req.Watermark, fontColor, req.SubText, poster: true, dpi: req.Dpi);
                 return new PosterResult(savedW, savedH, sw.ElapsedMilliseconds);
             }
             else
@@ -152,7 +159,7 @@ namespace FracturingFog.Imaging
                     Color.White, watermark: true, pixels: buffer, imgW: w, imgH: h);
                 ImageExport.SavePixelsToFile(
                     buffer, w, h, req.Path, req.Format,
-                    req.Watermark, fontColor, req.SubText, poster: true);
+                    req.Watermark, fontColor, req.SubText, poster: true, dpi: req.Dpi);
                 return new PosterResult(w, h, sw.ElapsedMilliseconds);
             }
         }

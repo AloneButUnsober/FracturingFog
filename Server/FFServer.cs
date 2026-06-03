@@ -296,6 +296,32 @@ public sealed class FFServer
             return;
         }
 
+        // Poster-mode resolution: when all three poster fields are positive
+        // and this is an image request, recompute Width/Height from
+        // inches×dpi *before* the limit checks below. Mirrors the local
+        // poster dialog (Hosting/AvaloniaDialogs.cs ShowPosterAsync) so the
+        // same inputs produce the same pixel dims locally and remotely.
+        // Portrait is consumed downstream as a 90° rotate flag — saved file
+        // dims still equal (width, height) post-rotate, so the limit gate
+        // can use the post-resolution Width/Height as-is.
+        bool isImageMethod = string.Equals(env.Method, "render.image", StringComparison.Ordinal);
+        if (isImageMethod
+            && req.PosterInchesW is double posterW && posterW > 0
+            && req.PosterInchesH is double posterH && posterH > 0
+            && req.PosterDpi is int posterDpi && posterDpi > 0)
+        {
+            long calcW = (long)Math.Ceiling(posterW * posterDpi);
+            long calcH = (long)Math.Ceiling(posterH * posterDpi);
+            if (calcW > int.MaxValue || calcH > int.MaxValue)
+            {
+                await ReplyErrorAsync(ssl, env.Id, "limit-exceeded",
+                    $"poster pixel dims overflow int32 ({calcW}×{calcH})", ct).ConfigureAwait(false);
+                return;
+            }
+            req.Width = (int)calcW;
+            req.Height = (int)calcH;
+        }
+
         if (req.Width < Limits.MinWidth || req.Width > Limits.MaxWidth ||
             req.Height < Limits.MinHeight || req.Height > Limits.MaxHeight)
         {

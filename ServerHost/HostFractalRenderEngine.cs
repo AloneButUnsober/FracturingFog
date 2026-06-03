@@ -140,6 +140,15 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         string baseName = BuildBaseName(req.OutputName, region?.Name, ftype, cx, cy, zoom, req.ThemeName);
         string outPath = Path.Combine(workDir, baseName + ".png");
 
+        // FFServer already rewrote req.Width/Height from inches×dpi when
+        // poster fields were set, so the dims here are post-resolution.
+        // Rotate + Dpi still need to flow into the PosterRequest so the
+        // saved PNG carries the right orientation and DPI metadata.
+        bool posterMode = req.PosterDpi is int pdpi0 && pdpi0 > 0
+                          && req.PosterInchesW is double piw0 && piw0 > 0
+                          && req.PosterInchesH is double pih0 && pih0 > 0;
+        float dpiStamp = posterMode ? req.PosterDpi!.Value : 0f;
+
         var poster = new PosterRequest
         {
             FractalType = ftype,
@@ -158,11 +167,12 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             ColorMap = theme,
             Quality = quality,
             FractalParameters = new FractalParameters(),
-            Rotate = false,
+            Rotate = posterMode && req.PosterPortrait,
             Path = outPath,
             Format = ImageFormat.Png,
             Watermark = region?.Name ?? "",
             SubText = "Fracturing Fog server render",
+            Dpi = dpiStamp,
         };
 
         // CPU-bound rasterization runs on a thread-pool worker. The outer

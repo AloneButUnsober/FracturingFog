@@ -163,6 +163,25 @@
                         </Grid>
                     </Grid>
 
+                    <TextBlock Classes="section" Text="Poster Print (image mode only)" Margin="0,8,0,2" />
+                    <TextBlock Foreground="#9B9B9B" TextWrapping="Wrap" Margin="0,0,0,4"
+                               Text="When enabled the Size fields above are ignored. Server renders at (inchesW × dpi) × (inchesH × dpi), stamps DPI metadata into the PNG, and rotates 90° CW when Portrait is checked." />
+                    <CheckBox Content="Enable poster mode" IsChecked="{Binding EnablePoster}" Foreground="#EEE" />
+                    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                          IsEnabled="{Binding EnablePoster}" Margin="0,4,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Width (in)" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding PosterInchesW}" Minimum="1" Maximum="200" Increment="1" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Height (in)" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding PosterInchesH}" Minimum="1" Maximum="200" Increment="1" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="DPI" Margin="0,4,0,0" />
+                        <ComboBox  Grid.Row="2" Grid.Column="1" ItemsSource="{Binding PosterDpiPresets}" SelectedItem="{Binding PosterDpi}" Margin="0,4,0,0"
+                                   ToolTip.Tip="150 = draft / 300 = standard print / 600 = fine art" />
+                        <CheckBox  Grid.Row="3" Grid.Column="1" Content="Portrait (rotate 90° CW after render)"
+                                   IsChecked="{Binding PosterPortrait}" Margin="0,4,0,0" Foreground="#EEE" />
+                        <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Classes="label"
+                                   Text="{Binding PosterPixelPreview}" Margin="0,6,0,0" Foreground="#9BC1FF" />
+                    </Grid>
+
                     <TextBlock Classes="section" Text="Manual coords (optional)" Margin="0,8,0,2" />
                     <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="centerX" />
