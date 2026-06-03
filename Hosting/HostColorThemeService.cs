@@ -714,5 +714,60 @@ namespace FracturingFog.Hosting
             public List<FractalRegion> Regions { get; set; } = new();
             public List<SandboxEquationEntry> SandboxEquations { get; set; } = new();
         }
+
+        /// <inheritdoc/>
+        public string? SerializeThemeJsonByName(string themeName)
+        {
+            if (string.IsNullOrWhiteSpace(themeName)) return null;
+            ColorPalette.LoadUserThemes();
+            IColorMap map = ColorPalette.GetPaletteByName(themeName);
+            // GetPaletteByName falls back to HsvPalette on miss — only emit
+            // the inline payload when the requested name actually matched
+            // something. Comparing the resolved map's name to the requested
+            // name (case-insensitive) catches that fallback so a client
+            // request for an unknown theme does not silently ship "HSV".
+            string resolved = ColorPalette.GetStaticName(map);
+            if (!string.Equals(resolved, themeName, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            ColorThemeData? data = DataDrivenColorThemes.Export(map);
+            if (data == null) return null; // algorithmic theme — server falls back to name lookup
+            var opts = new JsonSerializerOptions
+            {
+                WriteIndented = false,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                Converters = { new JsonStringEnumConverter() },
+            };
+            return JsonSerializer.Serialize(data, opts);
+        }
+
+        /// <inheritdoc/>
+        public string? SerializeRegionJsonByName(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            FractalRegion? region = FractalRegionLibrary.Instance.FindByName(regionName);
+            if (region == null) return null;
+
+            // Refuse to transport regions whose FractalType is on the server
+            // block list — the wire payload would be rejected anyway, and
+            // exporting the user's UserBulb source over the network is
+            // exactly what the FractalTypeAllowlist guard exists to prevent.
+            if (region.FractalType == FractalType.UserEquation ||
+                region.FractalType == FractalType.Sandbox ||
+                region.FractalType == FractalType.UserBulb)
+                return null;
+
+            var opts = new JsonSerializerOptions
+            {
+                WriteIndented = false,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                Converters = { new JsonStringEnumConverter() },
+            };
+            return JsonSerializer.Serialize(region, opts);
+        }
     }
 }

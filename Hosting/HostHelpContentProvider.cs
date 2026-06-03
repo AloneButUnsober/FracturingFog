@@ -41,6 +41,12 @@ namespace FracturingFog.Hosting
         public string ClientServerText => HelpTextBundle.ClientServerText;
         public string CalcGenText      => HelpTextBundle.CalcGenText;
         public string ColorGenText     => HelpTextBundle.ColorGenText;
+        public string ToolbarText      => HelpTextBundle.ToolbarText;
+        public string RegionsText      => HelpTextBundle.RegionsText;
+        public string SlideshowText    => HelpTextBundle.SlideshowText;
+        public string ServerAdminText  => HelpTextBundle.ServerAdminText;
+        public string PosterText       => HelpTextBundle.PosterText;
+        public string ArchitectureText => HelpTextBundle.ArchitectureText;
 
         // Order mirrors the legacy WinForms FloatingHelp Math tab so users
         // moving between the two shells see the same layout.
@@ -68,8 +74,24 @@ namespace FracturingFog.Hosting
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]
         {
-            new("Project repository",
-                "https://github.com/anthropics/anthropic-cookbook"),
+            new("Mandelbrot set (Wikipedia)",
+                "https://en.wikipedia.org/wiki/Mandelbrot_set"),
+            new("Benoit Mandelbrot (Wikipedia)",
+                "https://en.wikipedia.org/wiki/Benoit_Mandelbrot"),
+            new("Mandelbulb (skytopia)",
+                "https://www.skytopia.com/project/fractal/2mandelbulb.html"),
+            new("Perturbation theory (K.I. Martin)",
+                "https://www.fractalforums.com/announcements-and-news/superfractalthing-arbitrary-precision-mandelbrot-set-rendering-in-java/"),
+            new("Avalonia UI",
+                "https://avaloniaui.net"),
+            new("Vortice.Windows",
+                "https://github.com/amerkoleci/Vortice.Windows"),
+            new("ffmpeg",
+                "https://ffmpeg.org"),
+            new("ILGPU",
+                "https://www.ilgpu.net"),
+            new("FFV1 (Wikipedia)",
+                "https://en.wikipedia.org/wiki/FFV1"),
         };
 
         public string GetSystemInfoText()

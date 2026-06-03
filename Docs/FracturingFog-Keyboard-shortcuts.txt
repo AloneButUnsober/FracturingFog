@@ -1,34 +1,83 @@
-Fracturing Fog Keyboard shortcuts (as of v0.6.2)
-All Modes:
-M: Menu
-T: Theme Editor
-R: Reset
-V: Save Region
+Fracturing Fog Keyboard Shortcuts
+=================================
+v0.6.x — Avalonia shell
 
-Non-3D fractal Types:
-W: Zoom In
-A: Pan Left
-S: Zoom Out
-D: Pan Right
-Q: Pan Up
-E: Pan Down
+For a Markdown version with mouse + sub-dialog hotkeys see
+Keyboard-Shortcuts.md.
 
-3D Fractal Types (Userbulb 3D, Mandelbulb):
-W: Distance-
-A: Pan Left
-S: Distance+
-D: Pan Right
-Q: Pan Up
-E: Pan Down
-Arrow Up: Camera Phi+
-Arrow Down: Camera Phi-
-Arrow Left: Camera Theta-
-Arrow Right: Camera Theta+
-Mouse Right-click move up: Camera Phi+
-Mouse Right-click move Down: Camera Phi-
-Mouse Right-click move Left: Camera Theta-
-Mouse Right-click move Right: Camera Theta+
-Pg Up: Light Theta-
-Pg Down: Light Theta+
-Home: Light Phi-
-End: Light Phi+ 
+GLOBAL (any fractal, any mode)
+------------------------------
+M       Toggle Floating Menu
+T       Toggle Color Theme Editor
+R       Reset view to default for active fractal
+V       Save current view as a region
+Esc     Exit Span mode / stop slideshow / stop video zoom /
+        close active sub-dialog
+
+2-D NAVIGATION (Mandelbrot, Julia, Burning Ship, ...)
+-----------------------------------------------------
+W       Zoom in (centred)
+S       Zoom out (centred)
+A       Pan left
+D       Pan right
+Q       Pan up
+E       Pan down
+Shift   Hold with any pan key for a quarter-step nudge
+
+3-D NAVIGATION (Mandelbulb, User Bulb 3D)
+-----------------------------------------
+W       Camera closer (distance -)
+S       Camera farther (distance +)
+A D Q E Pan in screen space
+Arrow Up    Tilt camera up (phi +)
+Arrow Down  Tilt camera down (phi -)
+Arrow Left  Orbit theta -
+Arrow Right Orbit theta +
+PgUp    Light azimuth -
+PgDn    Light azimuth +
+Home    Light elevation -
+End     Light elevation +
+
+MOUSE — 2-D
+-----------
+Wheel up/down       Zoom in/out at cursor
+Left-click drag     Pan (fast pass mid-drag; 300 ms debounced full
+                    re-render after release)
+Double-click        Center on point + zoom in one step
+Right-click drag    Highlight-to-zoom — marquee box; release centers
+                    + zooms to fill rectangle (v0.6 feature)
+
+MOUSE — 3-D
+-----------
+Wheel up/down       Camera closer/farther
+Left-click drag     Pan in screen space
+Right-click drag X  Orbit theta (azimuth)
+Right-click drag Y  Orbit phi (elevation, inverted for natural feel)
+
+FOCUS BEHAVIOR
+--------------
+Keyboard pan/zoom/camera keys are IGNORED while any text box has
+keyboard focus (CX, CY, Zoom, Iter, equation editor, ...). Click
+the render surface to restore focus. v0.6.2 fixed a regression
+where toolbar clicks permanently stole focus.
+
+SLIDESHOW VCR (mouse only — visible while slideshow runs)
+---------------------------------------------------------
+<<      Previous region
+<       Previous theme within region
+||      Pause / Resume
+>       Next theme within region
+>>      Next region
+
+MODIFIER COMBINATIONS
+---------------------
+Shift + click Slideshow   Lock current region (only themes cycle)
+Shift + pan key            Quarter-step nudge
+
+SUB-DIALOG HOTKEYS
+------------------
+Ctrl+S        Save (Color Theme Editor, equation editors)
+Ctrl+Shift+S  Save As (equation editors)
+F5            Force recompile (equation editors)
+Esc           Close any sub-dialog
+Enter         Apply / Go (CX/CY/Zoom/Iter textboxes in Floating Menu)

@@ -227,6 +227,25 @@ namespace FracturingFog.Models
         /// non-Mandelbrot regions or unresolved names.
         /// </summary>
         uint[]? RenderRegionOffscreen(string regionName, string themeName, int width, int height);
+
+        /// <summary>
+        /// JSON-serialize the named theme into a string suitable for inline
+        /// transport over the client/server protocol. Returns null when the
+        /// theme is algorithmic / hand-coded with no <see cref="ColorThemeData"/>
+        /// equivalent — the FFClient request omits ThemeJson in that case so
+        /// the server falls back to name lookup against its own registry.
+        /// </summary>
+        string? SerializeThemeJsonByName(string themeName);
+
+        /// <summary>
+        /// JSON-serialize the named region into a string suitable for inline
+        /// transport over the client/server protocol. Returns null for regions
+        /// whose FractalType is on the server's block list (UserEquation,
+        /// Sandbox, UserBulb) so the FFClient never transports those. Built-in
+        /// regions serialize fine — the server may already have them locally
+        /// but the inline payload is harmless when the name also resolves.
+        /// </summary>
+        string? SerializeRegionJsonByName(string regionName);
     }
 
     /// <summary>Outcome of <see cref="IColorThemeService.ExportUserRegionsToFile"/>.</summary>

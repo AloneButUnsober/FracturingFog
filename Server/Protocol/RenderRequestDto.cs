@@ -44,6 +44,27 @@ public sealed class RenderRequestDto
     [JsonPropertyName("themeName")]   public string ThemeName   { get; set; } = "HSV";
     [JsonPropertyName("qualityName")] public string QualityName { get; set; } = "Standard";
 
+    /// <summary>Optional client-provided ColorThemeData JSON. The server first
+    /// resolves <see cref="ThemeName"/> against its own theme registry; if the
+    /// name is unknown AND this field is present, the engine parses the JSON
+    /// through <c>ThemePayloadValidator</c> and uses it as a transient theme
+    /// for this render. Refused if it exceeds the byte cap or contains
+    /// disallowed fields. Algorithmic themes cannot be transported this way —
+    /// only themes round-trippable through <c>ColorThemeData</c>.</summary>
+    [JsonPropertyName("themeJson")]
+    public string? ThemeJson { get; set; }
+
+    /// <summary>Optional client-provided FractalRegion JSON. The server first
+    /// resolves <see cref="RegionName"/> against its own region library; if the
+    /// name is unknown AND this field is present, the engine parses the JSON
+    /// through <c>RegionPayloadValidator</c> and uses it as a transient region
+    /// for this render. Refused if its FractalType is on the allowlist-block
+    /// list (UserEquation / Sandbox / UserBulb) or if it carries any
+    /// user-authored-code fields (UserBulbSource / UserEquationName /
+    /// SandboxName / UserBulbName).</summary>
+    [JsonPropertyName("regionJson")]
+    public string? RegionJson { get; set; }
+
     [JsonPropertyName("width")]  public int Width  { get; set; } = 1920;
     [JsonPropertyName("height")] public int Height { get; set; } = 1080;
 

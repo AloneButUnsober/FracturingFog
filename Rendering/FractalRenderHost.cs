@@ -97,6 +97,34 @@ namespace FracturingFog.Rendering
         // on top of grid + watermark by FractalOverlayCompositor.
         private (int X, int Y, int W, int H)? _selectionBox;
 
+        // Histogram CDF cache for the adaptive slider / sweep. Building the
+        // CDF is a serial pass over the full SmoothBuffer + an allocation of
+        // int[bins]/double[bins]; doing it on every slider tick is what made
+        // the adaptive sweep stutter at deep zoom, where calc is still
+        // hogging cores. The CDF only depends on the escape-time buffers, so
+        // we build it once after each Calculate completes and reuse it for
+        // every slider tick that follows. Invalidated by Trigger / Resize.
+        private double[]? _cachedAdaptiveCdf;
+        private int _cachedAdaptiveBins;
+        private int _cachedAdaptiveSourceMaxIter;
+        private bool _adaptiveCdfValid;
+        private readonly object _adaptiveCdfLock = new();
+
+        // Pooled BGRA scratch buffers for UploadProcessedBuffer. Re-allocated
+        // only when the frame size changes. Without this, every adaptive-
+        // slider / sweep tick burned two `new uint[w*h]` calls (~16 MB at
+        // 1080p) plus a full Array.Copy for the pre-overlay snapshot —
+        // 320 MB/s of GC pressure at 20 ticks/sec, which was the visible
+        // sweep stutter at larger window sizes.
+        //
+        // _uploadGate serialises every writer of these pools (calc-completion
+        // continuation, RepaintWithAdaptive, RepaintWithPostFx) so they can't
+        // produce torn frames on the shared buffers, and so that the stale-
+        // frame re-upload in Trigger sees a coherent _lastUploadedBuffer.
+        private uint[]? _uploadDstPool;
+        private uint[]? _uploadPrePool;
+        private readonly object _uploadGate = new();
+
         private bool _disposed;
 
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
@@ -394,9 +422,22 @@ namespace FracturingFog.Rendering
             _userBulbCalculator.LowResPreview = false;
         }
 
+        private void InvalidateAdaptiveCdf()
+        {
+            lock (_adaptiveCdfLock)
+            {
+                _adaptiveCdfValid = false;
+                _cachedAdaptiveCdf = null;
+            }
+        }
+
         public void Trigger(bool progressive = false)
         {
             if (_disposed) return;
+
+            // Buffers are about to be overwritten by Calculate — any cached
+            // CDF is stale until the next completion repopulates it.
+            InvalidateAdaptiveCdf();
 
             CancellationTokenSource cts;
             lock (_calcLock)
@@ -409,15 +450,20 @@ namespace FracturingFog.Rendering
             // Stale-frame re-upload so the screen shows a correct (if old)
             // image while the next frame computes. Locked + presented so the
             // user sees the prev frame immediately even if the next calc
-            // takes seconds.
-            if (_lastUploadedBuffer != null
-                && _lastUploadedWidth == _calculator.Width
-                && _lastUploadedHeight == _calculator.Height)
+            // takes seconds. Take _uploadGate around the read because
+            // _lastUploadedBuffer now points at a pooled scratch that an
+            // in-flight slider tick could be rewriting.
+            lock (_uploadGate)
             {
-                lock (_d3dGate)
+                if (_lastUploadedBuffer != null
+                    && _lastUploadedWidth == _calculator.Width
+                    && _lastUploadedHeight == _calculator.Height)
                 {
-                    _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
-                    _renderer.Render();
+                    lock (_d3dGate)
+                    {
+                        _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
+                        _renderer.Render();
+                    }
                 }
             }
 
@@ -528,9 +574,31 @@ namespace FracturingFog.Rendering
 
                 long ms = t.IsCompletedSuccessfully ? t.Result : -1;
 
-                // Adaptive contrast — Mandelbrot only.
-                if (!useAlt && ViewState.HistogramEq > 0)
-                    calc.ApplyHistogramEqualization(ViewState.HistogramEq / 100.0);
+                // Adaptive contrast — Mandelbrot only. Build the CDF and
+                // cache it so subsequent live-slider / sweep ticks can skip
+                // the (serial) histogram build and just re-apply with the new
+                // strength. Even at HistogramEq == 0 we build the CDF here so
+                // the first slider movement off zero is instant.
+                if (!useAlt)
+                {
+                    if (calc.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
+                    {
+                        lock (_adaptiveCdfLock)
+                        {
+                            _cachedAdaptiveCdf = cdf;
+                            _cachedAdaptiveBins = bins;
+                            _cachedAdaptiveSourceMaxIter = srcMaxIter;
+                            _adaptiveCdfValid = true;
+                        }
+                        if (ViewState.HistogramEq > 0)
+                            calc.ApplyHistogramEqualizationWithCdf(cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
+                    }
+                    else if (ViewState.HistogramEq > 0)
+                    {
+                        // No escaped pixels (e.g. fully in-set) — leave the
+                        // ColorBuffer alone; Calculate already coloured it.
+                    }
+                }
 
                 if (useAlt)
                     UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
@@ -581,6 +649,8 @@ namespace FracturingFog.Rendering
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
             _lastUploadedBuffer = null;
+            // Buffer dimensions changing → old CDF is sized for old buffers.
+            InvalidateAdaptiveCdf();
 
             lock (_d3dGate)
             {
@@ -655,8 +725,54 @@ namespace FracturingFog.Rendering
             if (alt != null) { RepaintWithPostFx(); return; }
 
             double strength = Math.Clamp(ViewState.HistogramEq / 100.0, 0.0, 1.0);
-            if (strength > 0.0) _calculator.ApplyHistogramEqualization(strength);
-            else                _calculator.ApplyBandDitherRecolor(0.0);
+            if (strength > 0.0)
+            {
+                // Fast path: a CDF was cached at the end of the last
+                // Calculate. Sweep / live-drag only changes `strength`, not
+                // the pixel data, so we skip the serial histogram build and
+                // the per-tick array allocations and just re-apply with the
+                // current strength. This is what makes the adaptive sweep
+                // smooth at deep zoom — previously every tick paid for a
+                // fresh build that competed with the calc threadpool.
+                double[]? cdfSnap;
+                int binsSnap, srcMaxIterSnap;
+                bool valid;
+                lock (_adaptiveCdfLock)
+                {
+                    valid = _adaptiveCdfValid;
+                    cdfSnap = _cachedAdaptiveCdf;
+                    binsSnap = _cachedAdaptiveBins;
+                    srcMaxIterSnap = _cachedAdaptiveSourceMaxIter;
+                }
+                if (valid && cdfSnap != null)
+                {
+                    _calculator.ApplyHistogramEqualizationWithCdf(cdfSnap, binsSnap, srcMaxIterSnap, strength);
+                }
+                else
+                {
+                    // First tick after Calculate (or buffers still fresh from
+                    // pre-cache codepaths): pay for one build, then cache it.
+                    if (_calculator.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
+                    {
+                        lock (_adaptiveCdfLock)
+                        {
+                            _cachedAdaptiveCdf = cdf;
+                            _cachedAdaptiveBins = bins;
+                            _cachedAdaptiveSourceMaxIter = srcMaxIter;
+                            _adaptiveCdfValid = true;
+                        }
+                        _calculator.ApplyHistogramEqualizationWithCdf(cdf!, bins, srcMaxIter, strength);
+                    }
+                    else
+                    {
+                        _calculator.ApplyBandDitherRecolor(0.0);
+                    }
+                }
+            }
+            else
+            {
+                _calculator.ApplyBandDitherRecolor(0.0);
+            }
             UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
         }
 
@@ -765,7 +881,15 @@ namespace FracturingFog.Rendering
         private void UploadProcessedBuffer(uint[] src, int w, int h)
         {
             int n = w * h;
-            var dst = new uint[n];
+            lock (_uploadGate)
+            {
+
+            // Reuse the pooled scratch buffer instead of allocating a fresh
+            // uint[n] every call. At 1080p this is an 8 MB allocation that
+            // used to happen on every adaptive-slider tick.
+            if (_uploadDstPool == null || _uploadDstPool.Length < n)
+                _uploadDstPool = new uint[n];
+            var dst = _uploadDstPool;
 
             int brightness = ViewState.Brightness;
             int contrast = ViewState.Contrast;
@@ -776,26 +900,36 @@ namespace FracturingFog.Rendering
                 float contrastFactor = 1.0f + contrast / 100.0f;
                 float brightnessOffset = brightness / 100.0f;
 
-                for (int i = 0; i < n; i++)
+                // Parallelise the brightness/contrast pass. At 2M pixels the
+                // serial loop was the dominant cost of an adaptive repaint
+                // (tens of ms on a single core) — it scaled with window area,
+                // which is why the sweep visibly stuttered at larger window
+                // sizes.
+                Parallel.For(0, h, y =>
                 {
-                    uint p = src[i];
-                    float r = ((p >> 16) & 0xFF) / 255f;
-                    float g = ((p >> 8) & 0xFF) / 255f;
-                    float b = (p & 0xFF) / 255f;
+                    int rowBase = y * w;
+                    int end = rowBase + w;
+                    for (int i = rowBase; i < end; i++)
+                    {
+                        uint p = src[i];
+                        float r = ((p >> 16) & 0xFF) / 255f;
+                        float g = ((p >> 8) & 0xFF) / 255f;
+                        float b = (p & 0xFF) / 255f;
 
-                    r = (r - 0.5f) * contrastFactor + 0.5f;
-                    g = (g - 0.5f) * contrastFactor + 0.5f;
-                    b = (b - 0.5f) * contrastFactor + 0.5f;
+                        r = (r - 0.5f) * contrastFactor + 0.5f;
+                        g = (g - 0.5f) * contrastFactor + 0.5f;
+                        b = (b - 0.5f) * contrastFactor + 0.5f;
 
-                    r += brightnessOffset;
-                    g += brightnessOffset;
-                    b += brightnessOffset;
+                        r += brightnessOffset;
+                        g += brightnessOffset;
+                        b += brightnessOffset;
 
-                    byte R = (byte)(Math.Clamp(r, 0f, 1f) * 255f);
-                    byte G = (byte)(Math.Clamp(g, 0f, 1f) * 255f);
-                    byte B = (byte)(Math.Clamp(b, 0f, 1f) * 255f);
-                    dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
-                }
+                        byte R = (byte)(Math.Clamp(r, 0f, 1f) * 255f);
+                        byte G = (byte)(Math.Clamp(g, 0f, 1f) * 255f);
+                        byte B = (byte)(Math.Clamp(b, 0f, 1f) * 255f);
+                        dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                    }
+                });
             }
             else
             {
@@ -804,8 +938,11 @@ namespace FracturingFog.Rendering
 
             // Snapshot pre-overlay buffer so SaveLastFrameToPng can render a
             // fresh watermark via ImageExport (instead of relying on whatever
-            // the on-screen ShowWatermark toggle was at upload time).
-            var pre = new uint[n];
+            // the on-screen ShowWatermark toggle was at upload time). Pooled
+            // so we pay one copy per upload instead of one alloc + one copy.
+            if (_uploadPrePool == null || _uploadPrePool.Length < n)
+                _uploadPrePool = new uint[n];
+            var pre = _uploadPrePool;
             Array.Copy(dst, pre, n);
             _lastPreOverlayBuffer = pre;
 
@@ -837,6 +974,7 @@ namespace FracturingFog.Rendering
             _lastUploadedBuffer = dst;
             _lastUploadedWidth = w;
             _lastUploadedHeight = h;
+            } // _uploadGate
         }
 
         /// <inheritdoc/>
@@ -849,17 +987,24 @@ namespace FracturingFog.Rendering
         /// <inheritdoc/>
         public uint[] SnapshotFrame(out int width, out int height)
         {
-            var buf = _lastUploadedBuffer;
-            if (buf == null)
+            // _lastUploadedBuffer is now a pooled scratch that gets overwritten
+            // by the next UploadProcessedBuffer — take _uploadGate so the copy
+            // is coherent.
+            lock (_uploadGate)
             {
-                width = 0; height = 0;
-                return Array.Empty<uint>();
+                var buf = _lastUploadedBuffer;
+                if (buf == null)
+                {
+                    width = 0; height = 0;
+                    return Array.Empty<uint>();
+                }
+                width = _lastUploadedWidth;
+                height = _lastUploadedHeight;
+                int n = width * height;
+                var copy = new uint[n];
+                Array.Copy(buf, copy, n);
+                return copy;
             }
-            width = _lastUploadedWidth;
-            height = _lastUploadedHeight;
-            var copy = new uint[buf.Length];
-            Array.Copy(buf, copy, buf.Length);
-            return copy;
         }
 
         /// <inheritdoc/>
@@ -895,9 +1040,19 @@ namespace FracturingFog.Rendering
             // file resolution instead of double-stamping the buffer's already-
             // composited one. Fall back to the post-upload buffer if no
             // pre-snapshot was captured (e.g. an externally-presented frame).
-            uint[]? buf = _lastPreOverlayBuffer ?? _lastUploadedBuffer;
-            int w = _lastUploadedWidth, h = _lastUploadedHeight;
-            if (buf == null || w <= 0 || h <= 0) return;
+            // Copy out under _uploadGate because the source is now pooled
+            // and will be overwritten by the next upload.
+            uint[]? buf;
+            int w, h;
+            lock (_uploadGate)
+            {
+                var src = _lastPreOverlayBuffer ?? _lastUploadedBuffer;
+                w = _lastUploadedWidth; h = _lastUploadedHeight;
+                if (src == null || w <= 0 || h <= 0) return;
+                int n = w * h;
+                buf = new uint[n];
+                Array.Copy(src, buf, n);
+            }
 
             string watermark = !string.IsNullOrEmpty(RegionName)
                 ? RegionName!

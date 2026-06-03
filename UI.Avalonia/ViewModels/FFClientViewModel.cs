@@ -62,10 +62,13 @@ public sealed class FFClientViewModel : ViewModelBase
         "none", "h264", "ffv1", "h264hq",
     });
 
+    private readonly IColorThemeService? _themeService;
+
     public FFClientViewModel() : this(null) { }
 
     public FFClientViewModel(IColorThemeService? themeService)
     {
+        _themeService = themeService;
         Connections = ClientConnectionStore.LoadOrCreate();
         Presets = RenderOptionsStore.LoadOrCreate();
         RefreshConnectionNames();
@@ -420,6 +423,27 @@ public sealed class FFClientViewModel : ViewModelBase
 
     public RenderRequestDto BuildRequest()
     {
+        // Inline the theme + region JSON when the host theme service can
+        // serialize them. The server tries name lookup first against its
+        // own registry, so built-ins still resolve cheaply; the inline
+        // payload is the fallback when the server has not seen this name
+        // before. SerializeThemeJsonByName returns null for algorithmic
+        // themes (no ColorThemeData equivalent) and SerializeRegionJsonByName
+        // returns null for regions whose FractalType is on the server's
+        // block list — both fall back silently to name-only resolution.
+        string? themeJson = null;
+        string? regionJson = null;
+        if (_themeService != null)
+        {
+            try { themeJson = _themeService.SerializeThemeJsonByName(ThemeName); }
+            catch { themeJson = null; }
+            if (!string.IsNullOrWhiteSpace(RegionName))
+            {
+                try { regionJson = _themeService.SerializeRegionJsonByName(RegionName); }
+                catch { regionJson = null; }
+            }
+        }
+
         return new RenderRequestDto
         {
             Mode = Mode,
@@ -445,6 +469,8 @@ public sealed class FFClientViewModel : ViewModelBase
             PosterInchesH = EnablePoster ? PosterInchesH : null,
             PosterDpi = EnablePoster ? PosterDpi : null,
             PosterPortrait = EnablePoster && PosterPortrait,
+            ThemeJson = themeJson,
+            RegionJson = regionJson,
         };
     }
 

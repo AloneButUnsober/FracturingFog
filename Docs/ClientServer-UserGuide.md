@@ -66,14 +66,38 @@ the **Server…** admin dialog in the UI edits the same file.
 
 When `FracturingFog.exe` starts in UI mode and detects the server already
 running on the configured port, the status bar shows a green `● Server`
-indicator. Floating Menu → **Server…** opens the admin dialog:
+indicator (grey = down, red = error — hover for the last error string).
+Floating Menu → **Server…** opens the admin dialog:
 
 * uptime / in-flight count / completed count / last error
 * edit max-minutes, allow-override, queue depth (Apply rewrites config)
+* edit rate-limit-per-minute + burst (per-IP throttle, 0 disables)
+* edit max concurrent TLS sessions (default 32)
+* TLS hardening: require TLS 1.3 only · revocation policy (none / online /
+  offline) · allowed client cert thumbprints (cert pinning)
+* edit cert paths (server cert PFX, client CA PFX, certs dir override)
+* edit log + work directory paths
+* stale work sweep age (default 1 h — leftover job-* dirs older than this
+  delete on startup)
 * Start / Restart / Kill — spawn or terminate a local `--server` child process
 
 The Server admin dialog only manages a *local* server; remote server lifecycle
 is the responsibility of whoever runs that host.
+
+For deployment + PKI walkthroughs see [ServerAdmin-Guide.md](ServerAdmin-Guide.md).
+
+### 1.4 Status-bar indicator
+
+The Avalonia MainWindow's status bar shows a coloured ● Server pill on the
+right edge:
+
+| Color | Meaning |
+|---|---|
+| Green | Local server is up + listening on the configured port |
+| Grey | Local server is down |
+| Red | Local server reported an error or management socket unreachable |
+
+Click the pill to open the Server Admin dialog.
 
 ---
 
@@ -323,3 +347,12 @@ Local batch (`--batch` without `--remote`) is unchanged.
 | `%APPDATA%\FracturingFog\server-work\` | Temp render output before streaming |
 | `%APPDATA%\FracturingFog\client-connections.json` | Saved server connections (AES-GCM sealed) |
 | `%APPDATA%\FracturingFog\client-render-presets.json` | Saved render presets (plain JSON) |
+
+---
+
+## 8. See Also
+
+- [ServerAdmin-Guide.md](ServerAdmin-Guide.md) — server deployment, PKI, TLS hardening, rate limiting, protocol-layer validators
+- [Avalonia-UserGuide.md](Avalonia-UserGuide.md) — UX walkthrough of the Client + Server admin dialogs
+- [Capture-Guide.md](Capture-Guide.md) — remote poster workflow + ffmpeg flag reference
+- [Architecture-Overview.md](Architecture-Overview.md) — module-by-module map (Server / ServerHost / Client / Guard layers)
