@@ -28,9 +28,11 @@ namespace FracturingFog.Imaging
         /// is supplied) re-save with the outlined watermark composited on top.</summary>
         public static unsafe void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFormat format,
-            string watermarkText, Color fontColor, string subText = "", bool poster = false)
+            string watermarkText, Color fontColor, string subText = "", bool poster = false,
+            float dpi = 0f)
         {
             using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+            if (dpi > 0f) bmp.SetResolution(dpi, dpi);
             var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
                                     ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
             try

@@ -77,4 +77,17 @@ public sealed class RenderRequestDto
     /// set and this exceeds the default.</summary>
     [JsonPropertyName("requestedMaxMinutes")]
     public int? RequestedMaxMinutes { get; set; }
+
+    // ── Poster mode (image only) ────────────────────────────────────────────
+    // When PosterInchesW / PosterInchesH / PosterDpi are all positive the
+    // server treats this as a poster-style render: pixel Width/Height are
+    // computed as inches × dpi (overriding the Width/Height fields above),
+    // the saved PNG carries that DPI in its metadata so print drivers honour
+    // the intended physical size, and PosterPortrait drives a 90° clockwise
+    // rotation of the final image. Ignored in video mode.
+
+    [JsonPropertyName("posterInchesW")] public double? PosterInchesW { get; set; }
+    [JsonPropertyName("posterInchesH")] public double? PosterInchesH { get; set; }
+    [JsonPropertyName("posterDpi")]     public int?    PosterDpi     { get; set; }
+    [JsonPropertyName("posterPortrait")] public bool   PosterPortrait { get; set; }
 }
