@@ -43,6 +43,19 @@ namespace FracturingFog.Input
         private double _rightDragStartTheta;
         private double _rightDragStartPhi;
 
+        // ── 2D right-drag box-zoom state ──────────────────────────────────────
+        private bool _boxSelecting;
+        private int _boxStartX;
+        private int _boxStartY;
+        private int _boxCurX;
+        private int _boxCurY;
+        private int _boxClientW;
+        private int _boxClientH;
+
+        // Drags smaller than this in either dimension are treated as a stray
+        // right-click and cancelled (no zoom, no menu suppression elsewhere).
+        private const int BoxMinPixels = 8;
+
         // ── Slideshow guard ───────────────────────────────────────────────────
         /// <summary>Set by the host while a slideshow / video zoom is running
         /// so user input is ignored. The legacy shell checked _slideshowRunning
@@ -59,6 +72,7 @@ namespace FracturingFog.Input
         public event EventHandler<InputCursorRequest>? CursorRequested;
         public event EventHandler<ViewChangedArgs>? ViewChanged;
         public event EventHandler<InputStatusMessage>? StatusRequested;
+        public event EventHandler<SelectionBoxChange?>? SelectionBoxChanged;
 
         // ── Pointer ───────────────────────────────────────────────────────────
 
@@ -82,6 +96,20 @@ namespace FracturingFog.Input
                 return;
             }
 
+            // Right-click drag in 2D = rubber-band zoom. Track the rect; the
+            // actual zoom is applied on release.
+            if ((e.Buttons & PointerButton.Right) != 0 && !ViewState.Is3D)
+            {
+                _boxSelecting = true;
+                _boxStartX = _boxCurX = e.X;
+                _boxStartY = _boxCurY = e.Y;
+                _boxClientW = Math.Max(1, e.ClientWidth);
+                _boxClientH = Math.Max(1, e.ClientHeight);
+                CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.Cross));
+                RaiseSelectionBox();
+                return;
+            }
+
             if ((e.Buttons & PointerButton.Left) == 0) return;
 
             _panning = true;
@@ -102,6 +130,16 @@ namespace FracturingFog.Input
         public void OnPointerMove(PointerInput e)
         {
             if (InputSuppressed) return;
+
+            if (_boxSelecting)
+            {
+                _boxCurX = e.X;
+                _boxCurY = e.Y;
+                _boxClientW = Math.Max(1, e.ClientWidth);
+                _boxClientH = Math.Max(1, e.ClientHeight);
+                RaiseSelectionBox();
+                return;
+            }
 
             if (_rightDragging && ViewState.Is3D)
             {
@@ -171,6 +209,21 @@ namespace FracturingFog.Input
 
         public void OnPointerUp(PointerInput e)
         {
+            if ((e.Buttons & PointerButton.Right) != 0 && _boxSelecting)
+            {
+                _boxSelecting = false;
+                _boxCurX = e.X;
+                _boxCurY = e.Y;
+                int rx = Math.Min(_boxStartX, _boxCurX);
+                int ry = Math.Min(_boxStartY, _boxCurY);
+                int rw = Math.Abs(_boxCurX - _boxStartX);
+                int rh = Math.Abs(_boxCurY - _boxStartY);
+                SelectionBoxChanged?.Invoke(this, null);
+                CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.Cross));
+                if (rw >= BoxMinPixels && rh >= BoxMinPixels)
+                    ApplyBoxZoom(rx, ry, rw, rh, _boxClientW, _boxClientH);
+                return;
+            }
             if ((e.Buttons & PointerButton.Right) != 0 && _rightDragging)
             {
                 _rightDragging = false;
@@ -180,6 +233,80 @@ namespace FracturingFog.Input
             if ((e.Buttons & PointerButton.Left) == 0) return;
             _panning = false;
             CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.Cross));
+        }
+
+        private void RaiseSelectionBox()
+        {
+            int rx = Math.Min(_boxStartX, _boxCurX);
+            int ry = Math.Min(_boxStartY, _boxCurY);
+            int rw = Math.Abs(_boxCurX - _boxStartX);
+            int rh = Math.Abs(_boxCurY - _boxStartY);
+            SelectionBoxChanged?.Invoke(this,
+                new SelectionBoxChange(rx, ry, rw, rh, _boxClientW, _boxClientH));
+        }
+
+        // Apply a box-zoom: recentre on the rect midpoint and scale zoom so
+        // the selected rect fills the view. Uses the same precision-tier
+        // anchor pattern as OnWheel — pixel-anchor in current scale, mutate
+        // zoom, then re-anchor in the new scale.
+        private void ApplyBoxZoom(int rx, int ry, int rw, int rh, int w, int h)
+        {
+            double midPxX = rx + rw * 0.5;
+            double midPxY = ry + rh * 0.5;
+            double ox = midPxX - w * 0.5;
+            double oy = midPxY - h * 0.5;
+
+            double scale = CurrentScale(w, h);
+
+            // Fit: shrink the smaller of width/height ratios so the whole rect
+            // remains visible after zoom (no clipping).
+            double factor = Math.Min((double)w / rw, (double)h / rh);
+
+            double targetZoom = Math.Clamp(
+                ViewState.Zoom * factor,
+                QualityPreset.Draft.ZoomMin,
+                QualityPreset.Extreme.ZoomMax);
+            if (AdaptQualityForWheel(ViewState.Zoom, targetZoom))
+                StatusRequested?.Invoke(this, new InputStatusMessage(
+                    $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
+                    InputStatusKind.Info));
+
+            // Box zoom uses center-anchor (box midpoint becomes screen
+            // center), not cursor-anchor: world coord at box midpoint =
+            // currentCenter + (ox, oy) * scale, and newCenter = that anchor.
+            // Y axis on screen grows downward but the fractal plane's
+            // CenterY is the world Y at screen-center pixel and pan code
+            // does CenterY -= dyPixels*scale, so a positive screen-y
+            // offset corresponds to a negative world-Y delta from the
+            // current centre. Mirror that sign here.
+            if (ViewState.RequiresQD)
+            {
+                var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
+                var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
+                var anchorX = qdCX + ox * scale;
+                var anchorY = qdCY + oy * scale;
+                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+                StoreQD(anchorX, anchorY);
+            }
+            else if (ViewState.RequiresDD)
+            {
+                var ddCX = new DD(ViewState.CenterX, ViewState.CenterXLo);
+                var ddCY = new DD(ViewState.CenterY, ViewState.CenterYLo);
+                var anchorX = ddCX + ox * scale;
+                var anchorY = ddCY + oy * scale;
+                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+                StoreDD(anchorX, anchorY);
+            }
+            else
+            {
+                double anchorX = ViewState.CenterX + ox * scale;
+                double anchorY = ViewState.CenterY + oy * scale;
+                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+                ViewState.CenterX = anchorX;
+                ViewState.CenterY = anchorY;
+                ClearLowLimbs();
+            }
+            RaiseViewChanged(RenderHint.Full);
         }
 
         public void OnPointerDoubleClick(PointerInput e)
@@ -318,6 +445,15 @@ namespace FracturingFog.Input
                     // Reset is a host concern (also resets brightness etc.) —
                     // the host can subscribe via ViewChanged after detecting
                     // the R key, but the input layer doesn't itself reset.
+                    return false;
+                case InputKey.Escape:
+                    if (_boxSelecting)
+                    {
+                        _boxSelecting = false;
+                        SelectionBoxChanged?.Invoke(this, null);
+                        CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.Cross));
+                        return true;
+                    }
                     return false;
             }
 

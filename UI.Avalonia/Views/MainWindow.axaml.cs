@@ -155,7 +155,10 @@ public sealed partial class MainWindow : Window
 
         AvaloniaShell.ContextMenuRequested = wasDrag =>
         {
-            if (shell.Main.ViewState.Is3D && wasDrag) return;
+            // Drag suppresses menu in both 2D + 3D: 3D drag = camera rotate;
+            // 2D drag = right-click rubber-band zoom (FractalInputController
+            // applies the zoom on release). Plain right-click still pops.
+            if (wasDrag) return;
             if (_contextMenu == null || _contextMenuTarget == null) return;
             // ContextMenu.Open(control) shows at the cursor by default
             // (Placement = Pointer is the framework default for ContextMenu).
