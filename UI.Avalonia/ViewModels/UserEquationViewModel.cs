@@ -142,6 +142,10 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// <summary>Host shows a yes/no confirm and returns true to proceed.</summary>
     public event Func<string, bool>? ConfirmDeleteRequested;
 
+    /// <summary>Host shows a yes/no overwrite confirm and returns true to proceed.
+    /// Fired only when Save would replace an existing equation with the same name.</summary>
+    public event Func<string, bool>? ConfirmOverwriteRequested;
+
     /// <summary>Host compiles + loads the equation via CalcGen and swaps
     /// the result onto the render pipeline. Args: (equation, className).
     /// Return value: null on success, error message on failure.</summary>
@@ -215,7 +219,14 @@ public sealed class UserEquationViewModel : ViewModelBase
         string? name = NamePromptRequested?.Invoke(defaultName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        var entry = UserEquationStore.Instance.SaveEquation(name.Trim(), _source);
+        string trimmed = name.Trim();
+        // Confirm before silently replacing an existing entry. Store match
+        // is case-insensitive — mirror that here.
+        if (UserEquationStore.Instance.GetByName(trimmed) is not null
+            && ConfirmOverwriteRequested?.Invoke(trimmed) == false)
+            return;
+
+        var entry = UserEquationStore.Instance.SaveEquation(trimmed, _source);
         if (entry is null) return;
 
         _params.UserEquationName = entry.Name;

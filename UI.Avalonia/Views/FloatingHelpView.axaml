@@ -46,16 +46,15 @@
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="10">
 
-        <!-- Header -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+        <!-- Header — window chrome already provides the close button. -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
             <TextBlock Grid.Column="0"
                        Text="{Binding TitleText}"
                        Foreground="#C8C864"
                        FontSize="14"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="1" Classes="action refresh" Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,6,0" ToolTip.Tip="Refresh hardware / system info" />
-            <Button Grid.Column="2" Classes="action close"   Content="X"       Command="{Binding CloseCommand}"   Width="36" ToolTip.Tip="Close help (Esc)" />
+            <Button Grid.Column="1" Classes="action refresh" Content="Refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh hardware / system info" />
         </Grid>
 
         <!-- Tab body -->

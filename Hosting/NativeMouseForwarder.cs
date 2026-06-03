@@ -39,6 +39,17 @@ namespace FracturingFog.Hosting
         // the UI uses to suppress the menu in 3D fractal modes where the
         // right button is overloaded for camera rotation.
         public static Action<bool>? ContextMenuRequested;
+
+        // ── Focus-pull callback ─────────────────────────────────────────────
+        // Fired on any mouse-button down over the native HWND. The Avalonia
+        // shell uses this to grab keyboard focus back onto its InputSponge
+        // so a toolbar ComboBox that still holds logical focus stops
+        // swallowing single-key shortcuts (R/M/T/V) intended for the render
+        // window. Without it, typing "R" after clicking the Theme combo and
+        // then clicking the render area selects a theme starting with "R"
+        // instead of resetting the view.
+        public static Action? FocusRequested;
+
         private static DateTime s_rightDownUtc;
         private static int s_rightDownX, s_rightDownY;
         private const int RightHoldSuppressMs = 1000;
@@ -108,16 +119,19 @@ namespace FracturingFog.Hosting
                 {
                     case WM_LBUTTONDOWN:
                         SetCapture(hWnd);
+                        try { FocusRequested?.Invoke(); } catch { /* UI errors must not crash native callback */ }
                         c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Left, wParam));
                         return IntPtr.Zero;
                     case WM_RBUTTONDOWN:
                         SetCapture(hWnd);
+                        try { FocusRequested?.Invoke(); } catch { /* UI errors must not crash native callback */ }
                         s_rightDownUtc = DateTime.UtcNow;
                         s_rightDownX = LoWordSigned(lParam);
                         s_rightDownY = HiWordSigned(lParam);
                         c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Right, wParam));
                         return IntPtr.Zero;
                     case WM_MBUTTONDOWN:
+                        try { FocusRequested?.Invoke(); } catch { /* UI errors must not crash native callback */ }
                         c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Middle, wParam));
                         return IntPtr.Zero;
                     case WM_MOUSEMOVE:
