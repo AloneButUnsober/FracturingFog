@@ -60,8 +60,8 @@
 
     <Grid RowDefinitions="Auto,*">
 
-        <!-- Title bar -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="10,8,10,4">
+        <!-- Title bar — window chrome already provides the close button. -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="10,8,10,4">
             <TextBlock Grid.Column="0"
                        Text="Main Menu"
                        Foreground="#C8C864"
@@ -74,12 +74,6 @@
                     Command="{Binding HelpCommand}"
                     Width="30"
                     ToolTip.Tip="Open help menu" />
-            <Button Grid.Column="2"
-                    Classes="action neutral"
-                    Content="X"
-                    Command="{Binding CloseCommand}"
-                    Width="30"
-                    ToolTip.Tip="Close Main Menu" />
         </Grid>
 
         <!-- Main body -->

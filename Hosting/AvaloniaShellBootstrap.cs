@@ -192,6 +192,24 @@ namespace FracturingFog.Hosting
                 try { FracturingFog.UI.Avalonia.AvaloniaShell.ContextMenuRequested?.Invoke(wasDrag); }
                 catch { /* swallow — must not crash the native subclass */ }
             };
+            // Bridge "mouse-down on render surface" to the shell so it can
+            // pull keyboard focus back onto the InputSponge. Otherwise a
+            // toolbar ComboBox keeps logical focus after the click and
+            // swallows R/M/T/V via its type-ahead. Posted onto the UI
+            // dispatcher so the Focus() call doesn't run inside the Win32
+            // message handler.
+            NativeMouseForwarder.FocusRequested = () =>
+            {
+                try
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        try { FracturingFog.UI.Avalonia.AvaloniaShell.RenderSurfaceFocusRequested?.Invoke(); }
+                        catch { /* swallow */ }
+                    });
+                }
+                catch { /* swallow — must not crash the native subclass */ }
+            };
 
             // ── Services ─────────────────────────────────────────────────
             // Theme service holds a reference to the render host so its
@@ -950,6 +968,9 @@ namespace FracturingFog.Hosting
             vm.RenderRequested += () => s_renderHost!.Trigger();
             vm.NamePromptRequested += def => PromptName("Save Equation", "Enter a name:", def);
             vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved equation \"{name}\"?", "Delete Equation");
+            vm.ConfirmOverwriteRequested += name => ConfirmYesNo(
+                $"A saved equation named \"{name}\" already exists.\n\nOverwrite it?",
+                "Overwrite Equation");
             vm.HotLoadRequested += (eq, baseName) =>
             {
                 try
@@ -993,6 +1014,9 @@ namespace FracturingFog.Hosting
             };
             vm.NamePromptRequested += def => PromptName("Save Sandbox Equation", "Enter a name:", def);
             vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved sandbox equation \"{name}\"?", "Delete");
+            vm.ConfirmOverwriteRequested += name => ConfirmYesNo(
+                $"A saved sandbox equation named \"{name}\" already exists.\n\nOverwrite it?",
+                "Overwrite Sandbox Equation");
             vm.SaveFilePromptRequested += defName =>
                 PickSaveSync("Export Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*", defName);
             vm.OpenFilePromptRequested += () =>
@@ -1022,6 +1046,7 @@ namespace FracturingFog.Hosting
             vm.RenderRequested += (_, _) => s_renderHost!.Trigger();
             vm.NamePromptRequested += (_, e) => e.Result = PromptName(e.Caption, "Enter a name:", e.DefaultValue);
             vm.ConfirmDeleteRequested += (_, e) => e.Result = ConfirmYesNo(e.Message, "Confirm");
+            vm.ConfirmOverwriteRequested += (_, e) => e.Result = ConfirmYesNo(e.Message, "Overwrite Bulb Equation");
             vm.OpenFilePromptRequested += (_, e) => e.Path = PickOpenSync(e.Title, e.Filter);
             vm.SaveFilePromptRequested += (_, e) => e.Path = PickSaveSync(e.Title, e.Filter, e.DefaultName);
             vm.MessageRequested += (_, msg) => ShowInfo("UserBulb", msg, false);

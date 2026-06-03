@@ -111,6 +111,10 @@ public sealed class SandboxViewModel : ViewModelBase
     /// <summary>Host shows a yes/no confirm and returns true to proceed.</summary>
     public event Func<string, bool>? ConfirmDeleteRequested;
 
+    /// <summary>Host shows a yes/no overwrite confirm and returns true to proceed.
+    /// Fired only when Save would replace an existing equation with the same name.</summary>
+    public event Func<string, bool>? ConfirmOverwriteRequested;
+
     /// <summary>Host shows SaveFile dialog; returns chosen path or null.</summary>
     public event Func<string, string?>? SaveFilePromptRequested;
 
@@ -185,7 +189,12 @@ public sealed class SandboxViewModel : ViewModelBase
         string? name = NamePromptRequested?.Invoke(defaultName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        var entry = SandboxEquationStore.Instance.SaveEquation(name.Trim(), _source);
+        string trimmed = name.Trim();
+        if (SandboxEquationStore.Instance.GetByName(trimmed) is not null
+            && ConfirmOverwriteRequested?.Invoke(trimmed) == false)
+            return;
+
+        var entry = SandboxEquationStore.Instance.SaveEquation(trimmed, _source);
         if (entry is null) return;
 
         _params.SandboxName = entry.Name;

@@ -97,6 +97,13 @@ public sealed partial class MainWindow : Window
         _sponge ??= this.FindControl<Border>("InputSponge");
         _sponge?.Focus();
         AttachStatusBarDrag();
+
+        // Pull keyboard focus back onto the sponge whenever the user clicks
+        // the GPU surface. The native HWND swallows WM_MOUSE* so the
+        // sponge's own PointerPressed → Focus() path never fires — without
+        // this hook, a focused toolbar ComboBox keeps capturing R/M/T/V
+        // type-ahead after the click.
+        AvaloniaShell.RenderSurfaceFocusRequested = FocusSponge;
     }
 
     // #12 follow-up: status bar acts as a drag handle so the user can move
@@ -681,6 +688,7 @@ public sealed partial class MainWindow : Window
     {
         _shuttingDown = true;
         AvaloniaShell.ContextMenuRequested = null;
+        AvaloniaShell.RenderSurfaceFocusRequested = null;
         _inputAdapter?.Dispose();
         _inputAdapter = null;
 

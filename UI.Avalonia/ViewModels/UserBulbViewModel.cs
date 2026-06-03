@@ -416,6 +416,12 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     public event EventHandler<NamePromptEventArgs>? NamePromptRequested;
     public event EventHandler<ConfirmEventArgs>? ConfirmDeleteRequested;
+    /// <summary>
+    /// Fires when Save is about to replace an existing entry with the same
+    /// name. Host shows a yes/no overwrite confirm and sets
+    /// <see cref="ConfirmEventArgs.Result"/> true to proceed.
+    /// </summary>
+    public event EventHandler<ConfirmEventArgs>? ConfirmOverwriteRequested;
     public event EventHandler<OpenFileEventArgs>? OpenFilePromptRequested;
     public event EventHandler<SaveFileEventArgs>? SaveFilePromptRequested;
     public event EventHandler<string>? MessageRequested;
@@ -513,7 +519,15 @@ public sealed class UserBulbViewModel : ViewModelBase
         NamePromptRequested?.Invoke(this, args);
         if (string.IsNullOrWhiteSpace(args.Result)) return;
 
-        var entry = UserBulbStore.Instance.SaveEquation(args.Result!.Trim(), _source);
+        string trimmed = args.Result!.Trim();
+        if (UserBulbStore.Instance.GetByName(trimmed) is not null)
+        {
+            var confirm = new ConfirmEventArgs($"A saved bulb equation named '{trimmed}' already exists. Overwrite?");
+            ConfirmOverwriteRequested?.Invoke(this, confirm);
+            if (!confirm.Result) return;
+        }
+
+        var entry = UserBulbStore.Instance.SaveEquation(trimmed, _source);
         if (entry is null) return;
 
         _params.UserBulbName = entry.Name;

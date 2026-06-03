@@ -36,6 +36,18 @@ public static class AvaloniaShell
     /// </summary>
     public static Action<bool>? ContextMenuRequested { get; set; }
 
+    /// <summary>
+    /// Invoked by the host bootstrap (from the native HWND mouse subclass)
+    /// when any mouse button goes down over the render surface. The
+    /// Avalonia <see cref="Views.MainWindow"/> uses this to pull keyboard
+    /// focus back onto the input sponge — otherwise a toolbar ComboBox
+    /// keeps logical focus after a click on the GPU surface (the native
+    /// HWND child composites over the InputSponge and intercepts every
+    /// WM_MOUSE*, so the sponge's PointerPressed → Focus() path never
+    /// fires).
+    /// </summary>
+    public static Action? RenderSurfaceFocusRequested { get; set; }
+
     public static int Run(string[] args)
     {
         return BuildAvaloniaApp()
