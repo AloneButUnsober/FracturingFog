@@ -32,7 +32,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
     {
         private readonly IFractalRenderHost _host;
         private readonly IColorThemeService _service;
-        private readonly SlideshowSettings _settings;
+        private SlideshowSettings _settings;
         private readonly Random _rng = new();
 
         private CancellationTokenSource? _cts;
@@ -49,6 +49,15 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
         public bool IsRunning { get; private set; }
         public bool IsPaused => _paused;
+
+        /// <summary>Replace the timing config used by the next iteration of
+        /// the slideshow loop. Called before <see cref="Start"/> so user-saved
+        /// SlideshowSettings (TotalDisplayMsPerRegion, FadeSteps, fade ms)
+        /// take effect on each run without rebuilding the engine.</summary>
+        public void ApplySettings(SlideshowSettings settings)
+        {
+            if (settings != null) _settings = settings;
+        }
 
         public event EventHandler<string>? StatusChanged;
         public event EventHandler? Stopped;
@@ -88,10 +97,11 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         /// MainForm._slideShowLockRegion (Shift+click on Slideshow button).</summary>
         public bool LockRegion { get; set; }
 
-        /// <summary>True = "More Regions" cycling cadence (fewer themes per
-        /// region); false = "More Colors" (more themes per region). Mirrors
-        /// legacy MainForm._slideshowFocusRegion.</summary>
-        public bool FocusRegion { get; set; }
+        /// <summary>Mirrors legacy MainForm._slideshowFocusRegion:
+        /// true = "Region Focus" (3 themes/region, default);
+        /// false = "Color Focus" (8 themes/region, shorter per-theme).
+        /// Menu label shows the *next* action (what a click switches to).</summary>
+        public bool FocusRegion { get; set; } = true;
 
         private async Task LoopAsync(CancellationToken ct)
         {
@@ -128,17 +138,21 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     var themes = _service.EnumerateThemeNamesForZoom(zoom);
                     int lastTheme = -1;
 
-                    // FocusRegion = "More Regions" cadence (1 theme/region);
-                    // !FocusRegion = "More Colors" cadence (default 3 themes/region).
-                    // LockRegion pins the region so the inner loop never exits to
-                    // the outer region picker — themesPerRegion is effectively
-                    // infinite (rotated through the available theme pool).
-                    int themesPerRegion = FocusRegion ? 1 : 3;
+                    // Matches legacy Slideshow.cs cadence:
+                    //   FocusRegion=true  (Region Focus) → 3 themes/region;
+                    //   FocusRegion=false (Color Focus)  → 8 themes/region,
+                    //                                      shorter per-theme duration.
+                    // Re-read FocusRegion each iteration so a context-menu toggle
+                    // mid-slideshow takes effect on the next theme step, not the
+                    // next region (matches legacy focusChangedFunc).
                     int totalRegionMs = Math.Max(3_000, _settings.TotalDisplayMsPerRegion);
-                    int themeMs = Math.Max(800, totalRegionMs / Math.Max(1, themesPerRegion));
 
-                    for (int t = 0; t < themesPerRegion && !ct.IsCancellationRequested; t++)
+                    int t = 0;
+                    while (!ct.IsCancellationRequested)
                     {
+                        int themesPerRegion = FocusRegion ? 3 : 8;
+                        if (t >= themesPerRegion) break;
+
                         string? themeName = PickTheme(themes, ref lastTheme);
 
                         if (t == 0)
@@ -149,8 +163,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         StatusChanged?.Invoke(this,
                             $"Slideshow: {regionName}{(themeName != null ? " / " + themeName : "")}");
 
-                        if (await WaitAsync(themeMs, ct)) break; // skip-region
+                        // themeMs is recomputed each WaitAsync tick so a
+                        // FocusRegion toggle mid-theme shortens (or extends)
+                        // the visible duration immediately.
+                        if (await WaitAsync(
+                            () => Math.Max(800, totalRegionMs / Math.Max(1, FocusRegion ? 3 : 8)),
+                            ct)) break; // skip-region
                         if (ct.IsCancellationRequested) break;
+                        t++;
                     }
                 }
             }
@@ -326,11 +346,21 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         /// Wait <paramref name="ms"/> while honouring pause / skip-theme /
         /// skip-region / cancel. Returns true when skip-region fired.
         /// </summary>
-        private async Task<bool> WaitAsync(int ms, CancellationToken ct)
+        private Task<bool> WaitAsync(int ms, CancellationToken ct)
+            => WaitAsync(() => ms, ct);
+
+        /// <summary>
+        /// Wait while honouring pause / skip-theme / skip-region / cancel.
+        /// The target duration is re-evaluated each tick via
+        /// <paramref name="msFunc"/> so a mid-wait FocusRegion toggle (which
+        /// shortens / lengthens themeMs) is honoured immediately. Returns true
+        /// when skip-region fired.
+        /// </summary>
+        private async Task<bool> WaitAsync(Func<int> msFunc, CancellationToken ct)
         {
             const int tick = 50;
             int elapsed = 0;
-            while (elapsed < ms)
+            while (elapsed < msFunc())
             {
                 if (ct.IsCancellationRequested) return false;
                 if (_skipRegion) { _skipRegion = false; return true; }

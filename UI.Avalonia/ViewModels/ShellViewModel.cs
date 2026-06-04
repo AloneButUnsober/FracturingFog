@@ -452,9 +452,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // Reload persisted user-tunable timings each toggle so changes made
+        // in the Slideshow Settings dialog take effect on the next run.
+        var settings = SlideshowSettingsStore.Load();
+
         if (_slideshow == null)
         {
-            _slideshow = new SlideshowEngine(Main.RenderHost, _themeService, new SlideshowSettings())
+            _slideshow = new SlideshowEngine(Main.RenderHost, _themeService, settings)
             {
                 LockRegion = _slideshowLockRegion,
                 FocusRegion = _slideshowFocusRegion,
@@ -481,6 +485,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FloatingMenu.SetThemeSilent(themeName);
             });
         }
+
+        // Push fresh settings onto an existing engine instance too — _slideshow
+        // is constructed once and reused across toggles, so without this any
+        // user changes to TotalDisplayMsPerRegion / FadeSteps / fade durations
+        // would never reach the running loop.
+        _slideshow.ApplySettings(settings);
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
@@ -840,9 +850,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private bool _slideshowFocusRegion;
-    /// <summary>Mirror of SlideshowEngine.FocusRegion — true = "More Regions"
-    /// (1 theme/region), false = "More Colors" (default 3 themes/region).</summary>
+    private bool _slideshowFocusRegion = true;
+    /// <summary>Mirror of SlideshowEngine.FocusRegion. Defaults true (Region
+    /// Focus, 3 themes/region) to match legacy MainForm._slideshowFocusRegion.
+    /// Menu label shows the *next* action: true → "More Colors", false →
+    /// "More Regions".</summary>
     public bool SlideshowFocusRegion
     {
         get => _slideshowFocusRegion;
