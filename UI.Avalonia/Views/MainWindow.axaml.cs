@@ -146,13 +146,14 @@ public sealed partial class MainWindow : Window
     private bool _contextMenuAttached;
     private ContextMenu? _contextMenu;
     private Border? _contextMenuTarget;
+    private Action? _contextMenuSync;
 
     private void AttachContextMenu(Border sponge, ShellViewModel shell)
     {
         if (_contextMenuAttached) return;
         _contextMenuAttached = true;
 
-        _contextMenu = BuildContextMenu(shell);
+        (_contextMenu, _contextMenuSync) = BuildContextMenu(shell);
         _contextMenuTarget = sponge;
         // Assign so the menu is parented to a control that's in the visual
         // tree (Open() needs a PlacementTarget that's attached); the assign
@@ -170,11 +171,15 @@ public sealed partial class MainWindow : Window
             // ContextMenu.Open(control) shows at the cursor by default
             // (Placement = Pointer is the framework default for ContextMenu).
             if (_contextMenu.IsOpen) _contextMenu.Close();
+            // Sync dynamic item state (slideshow labels/enable) before opening
+            // — ContextMenu.Opening isn't reliably raised on programmatic
+            // .Open() in Avalonia 11, so do it here.
+            _contextMenuSync?.Invoke();
             _contextMenu.Open(_contextMenuTarget);
         };
     }
 
-    private static ContextMenu BuildContextMenu(ShellViewModel shell)
+    private static (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
     {
         var menu = new ContextMenu();
         AddItem(menu, "Toolbar",            () => shell.IsToolbarVisible   = !shell.IsToolbarVisible);
@@ -195,7 +200,7 @@ public sealed partial class MainWindow : Window
         var lockRegionItem = new MenuItem { Header = "Slideshow: Lock Region" };
         lockRegionItem.Click += (_, _) => shell.ToggleSlideshowLockRegionCommand.Execute().Subscribe();
         menu.Items.Add(lockRegionItem);
-        var focusItem = new MenuItem { Header = "Slideshow: More Regions" };
+        var focusItem = new MenuItem { Header = "Slideshow: More Colors" };
         focusItem.Click += (_, _) => shell.ToggleSlideshowFocusCommand.Execute().Subscribe();
         menu.Items.Add(focusItem);
         AddItem(menu, "Watermark",          () => shell.Main.ShowWatermark = !shell.Main.ShowWatermark);
@@ -215,22 +220,26 @@ public sealed partial class MainWindow : Window
         // MenuItem doesn't have a built-in checked indicator, so we encode
         // toggle state via the header prefix ("✓ ") + enable state via
         // IsEnabled. Mirrors legacy MainForm's slideshowLockRegionItem.Text /
-        // slideshowFocusItem.Text logic.
-        menu.Opening += (_, _) =>
+        // slideshowFocusItem.Text logic. Invoked from the caller before
+        // ContextMenu.Open() — Avalonia 11's MenuBase.Opening doesn't reliably
+        // raise on programmatic Open(), so we drive sync directly.
+        Action sync = () =>
         {
             bool running = shell.IsSlideshowRunning;
             lockRegionItem.IsEnabled = running;
             lockRegionItem.Header = (shell.SlideshowLockRegion ? "✓ " : "")
                                   + "Slideshow: Lock Region";
             focusItem.IsEnabled = running;
-            // Toggle text reads like legacy: shows what the next click WILL
-            // switch to. SlideshowFocusRegion == true means we're already in
-            // "More Regions" mode, so the click switches to "More Colors".
+            // Label = next action (what a click will switch to), matching
+            // legacy MainForm:
+            //   FocusRegion=true  (3 themes/region)  → click → 8 themes  → "More Colors"
+            //   FocusRegion=false (8 themes/region)  → click → 3 themes  → "More Regions"
             focusItem.Header = shell.SlideshowFocusRegion
                 ? "Slideshow: More Colors"
                 : "Slideshow: More Regions";
         };
-        return menu;
+        menu.Opening += (_, _) => sync();
+        return (menu, sync);
     }
 
     private static void AddItem(ContextMenu menu, string header, Action invoke)
