@@ -180,12 +180,15 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private static (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
+    private (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
     {
         var menu = new ContextMenu();
         AddItem(menu, "Toolbar",            () => shell.IsToolbarVisible   = !shell.IsToolbarVisible);
         AddItem(menu, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
         AddItem(menu, "Status",             () => shell.IsStatusBarVisible = !shell.IsStatusBarVisible);
+        var onTopItem = new MenuItem { Header = "On Top" };
+        onTopItem.Click += (_, _) => Topmost = !Topmost;
+        menu.Items.Add(onTopItem);
         AddItem(menu, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
         AddItem(menu, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
         menu.Items.Add(new Separator());
@@ -240,6 +243,7 @@ public sealed partial class MainWindow : Window
             focusItem.Header = shell.SlideshowFocusRegion
                 ? "Slideshow: More Colors"
                 : "Slideshow: More Regions";
+            onTopItem.Header = (Topmost ? "✓ " : "") + "On Top";
         };
         menu.Opening += (_, _) => sync();
         return (menu, sync);

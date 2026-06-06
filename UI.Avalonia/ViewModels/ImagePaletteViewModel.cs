@@ -26,6 +26,13 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 
 public class ImagePaletteViewModel : ViewModelBase
 {
+    /// <summary>Hook for subclasses that apply a global colour adjustment
+    /// (e.g. PaletteBuilder's Temperature/Tint sliders) to the per-row
+    /// display. PaletteResultViewModel routes EffectivePalette / EffectiveStops
+    /// through here so live slider movement repaints the swatch + gradient
+    /// strips. Default = identity.</summary>
+    public virtual (byte R, byte G, byte B) AdjustForDisplay((byte R, byte G, byte B) c) => c;
+
     private readonly IPaletteExtractionService _service;
 
     public ImagePaletteViewModel(IPaletteExtractionService service)
@@ -402,7 +409,7 @@ public class ImagePaletteViewModel : ViewModelBase
         }
 
         StatusMessage = null;
-        var row = new PaletteResultViewModel(result, exclusiveSelect: false) { IsSelected = true };
+        var row = new PaletteResultViewModel(result, exclusiveSelect: false, parent: this) { IsSelected = true };
         Results.Add(row);
         SelectedResult = row;
     }
@@ -610,6 +617,11 @@ public sealed class PaletteResultViewModel : ViewModelBase
     /// </summary>
     public event Action? StopsChanged;
 
+    /// <summary>Public re-raise hook for the parent VM: PaletteBuilder calls
+    /// this on every result row when its Temperature/Tint sliders move, so
+    /// the swatch + gradient strips repaint with the new adjustment.</summary>
+    public void NotifyStopsChanged() => RaiseStopsChanged();
+
     private void RaiseStopsChanged()
     {
         this.RaisePropertyChanged(nameof(EffectiveStops));
@@ -640,12 +652,25 @@ public sealed class PaletteResultViewModel : ViewModelBase
     {
         get
         {
-            if (!_isEditing || _editableStops is null) return Palette;
+            if (!_isEditing || _editableStops is null)
+            {
+                if (_parent is null) return Palette;
+                var raw = Palette;
+                var outArr = new PaletteSwatch[raw.Count];
+                for (int i = 0; i < raw.Count; i++)
+                {
+                    var s = raw[i];
+                    var (r, g, b) = _parent.AdjustForDisplay((s.R, s.G, s.B));
+                    outArr[i] = new PaletteSwatch(r, g, b, s.Weight);
+                }
+                return outArr;
+            }
             var arr = new PaletteSwatch[_editableStops.Count];
             for (int i = 0; i < _editableStops.Count; i++)
             {
                 var e = _editableStops[i];
-                arr[i] = new PaletteSwatch(e.R, e.G, e.B, 1);
+                var (r, g, b) = _parent?.AdjustForDisplay((e.R, e.G, e.B)) ?? (e.R, e.G, e.B);
+                arr[i] = new PaletteSwatch(r, g, b, 1);
             }
             return arr;
         }
@@ -659,12 +684,25 @@ public sealed class PaletteResultViewModel : ViewModelBase
     {
         get
         {
-            if (!_isEditing || _editableStops is null) return Stops;
+            if (!_isEditing || _editableStops is null)
+            {
+                if (_parent is null) return Stops;
+                var raw = Stops;
+                var outArr = new PaletteStop[raw.Count];
+                for (int i = 0; i < raw.Count; i++)
+                {
+                    var s = raw[i];
+                    var (r, g, b) = _parent.AdjustForDisplay((s.R, s.G, s.B));
+                    outArr[i] = new PaletteStop(s.Position, r, g, b);
+                }
+                return outArr;
+            }
             var arr = new PaletteStop[_editableStops.Count];
             for (int i = 0; i < _editableStops.Count; i++)
             {
                 var e = _editableStops[i];
-                arr[i] = new PaletteStop((float)e.Position, e.R, e.G, e.B);
+                var (r, g, b) = _parent?.AdjustForDisplay((e.R, e.G, e.B)) ?? (e.R, e.G, e.B);
+                arr[i] = new PaletteStop((float)e.Position, r, g, b);
             }
             return arr;
         }
