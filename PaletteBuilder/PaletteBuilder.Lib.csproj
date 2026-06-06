@@ -113,10 +113,8 @@
     because the Abstractions assembly never gets loaded.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj"
-                      SetPlatform="Platform=x64" />
-    <ProjectReference Include="..\UI.Avalonia\FracturingFog.UI.Avalonia.csproj"
-                      SetPlatform="Platform=x64">
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" SetPlatform="Platform=x64" />
+    <ProjectReference Include="..\UI.Avalonia\FracturingFog.UI.Avalonia.csproj" SetPlatform="Platform=x64">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
   </ItemGroup>
@@ -131,6 +129,11 @@
   -->
   <ItemGroup>
     <Compile Include="..\Imaging\PaletteExtraction\*.cs" LinkBase="Imaging\PaletteExtraction" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Resources\PaletteBuilder_Logo.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <!--
