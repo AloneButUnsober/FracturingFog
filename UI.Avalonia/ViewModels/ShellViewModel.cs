@@ -324,7 +324,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3),
                 FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
-                info.Iterations.ToString(CultureInfo.InvariantCulture));
+                info.Iterations.ToString(CultureInfo.InvariantCulture),
+                FloatingMenu.ActiveCoordField);
 
             // Pan/zoom settle → nav history. Each completed frame resets a
             // ~700ms debounce; when the user stops moving, RecordNavChange
@@ -549,25 +550,36 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // (Hi, Lo, Lo2, Lo3 in DD/QD format) can be pasted in directly:
         //   "-1.9918151296901943|-7.821983681126658E-17"
         // A single value (no pipe) sets the Hi limb and zeros the rest.
-        if (TryParseLimbs(FloatingMenu.CX, out double cxHi, out double cxLo, out double cxL2, out double cxL3))
+        //
+        // Skip any field whose current text matches what the host last
+        // pushed via UpdateCoords — that means the user didn't touch it,
+        // and re-parsing the FormatLimbs G29 string round-trips through
+        // decimal sum / split which can't reconstruct the original Lo/Lo2/Lo3
+        // limbs exactly. At deep zoom that drifts the centre by a visible
+        // fraction of a pixel on Go.
+        if (FloatingMenu.CX != FloatingMenu.LastPushedCX
+            && TryParseLimbs(FloatingMenu.CX, out double cxHi, out double cxLo, out double cxL2, out double cxL3))
         {
             Main.ViewState.CenterX = cxHi;
             Main.ViewState.CenterXLo = cxLo; Main.ViewState.CenterX2 = cxL2; Main.ViewState.CenterX3 = cxL3;
             changed = true;
         }
-        if (TryParseLimbs(FloatingMenu.CY, out double cyHi, out double cyLo, out double cyL2, out double cyL3))
+        if (FloatingMenu.CY != FloatingMenu.LastPushedCY
+            && TryParseLimbs(FloatingMenu.CY, out double cyHi, out double cyLo, out double cyL2, out double cyL3))
         {
             Main.ViewState.CenterY = cyHi;
             Main.ViewState.CenterYLo = cyLo; Main.ViewState.CenterY2 = cyL2; Main.ViewState.CenterY3 = cyL3;
             changed = true;
         }
-        if (double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
+        if (FloatingMenu.Zoom != FloatingMenu.LastPushedZoom
+            && double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
             && zoom > 0)
         {
             Main.ViewState.Zoom = zoom;
             changed = true;
         }
-        if (int.TryParse(FloatingMenu.Iter, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iter)
+        if (FloatingMenu.Iter != FloatingMenu.LastPushedIter
+            && int.TryParse(FloatingMenu.Iter, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iter)
             && iter > 0 && Main.IterLocked)
         {
             // "Go" never enables the lock (parity with legacy OnGoClick); it

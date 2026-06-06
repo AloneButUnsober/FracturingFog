@@ -363,7 +363,7 @@ public class PaletteBuilderViewModel : ImagePaletteViewModel
         };
 
         Results.Clear();
-        var row = new FracturingFog.UI.Avalonia.ViewModels.PaletteResultViewModel(result, exclusiveSelect: false) { IsSelected = true };
+        var row = new FracturingFog.UI.Avalonia.ViewModels.PaletteResultViewModel(result, exclusiveSelect: false, parent: this) { IsSelected = true };
         Results.Add(row);
         SelectedResult = row;
         StatusBarText = $"Pasted {colors.Count} colors";
@@ -460,14 +460,30 @@ public class PaletteBuilderViewModel : ImagePaletteViewModel
     public double Temperature
     {
         get => _temperature;
-        set => this.RaiseAndSetIfChanged(ref _temperature, Math.Clamp(value, -1.0, 1.0));
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _temperature, Math.Clamp(value, -1.0, 1.0));
+            NotifyAdjustmentsChanged();
+        }
     }
 
     private double _tint;
     public double Tint
     {
         get => _tint;
-        set => this.RaiseAndSetIfChanged(ref _tint, Math.Clamp(value, -1.0, 1.0));
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _tint, Math.Clamp(value, -1.0, 1.0));
+            NotifyAdjustmentsChanged();
+        }
+    }
+
+    public override (byte R, byte G, byte B) AdjustForDisplay((byte R, byte G, byte B) c)
+        => PaletteBuilder.Services.PaletteAdjustments.Apply(c, _temperature, _tint);
+
+    private void NotifyAdjustmentsChanged()
+    {
+        foreach (var r in Results) r.NotifyStopsChanged();
     }
 
     // 0=sRGB 1=Lab 2=OkLab — gradient interpolation space for previews + PDF.
