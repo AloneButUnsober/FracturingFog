@@ -228,7 +228,8 @@ static class Program
             return ServerEntry.Run(args);
 
         // --winforms forces the legacy WinForms shell. Default path is the
-        // Avalonia shell.
+        // Avalonia shell. WinForms is DEPRECATED — see CLAUDE.md. New UI
+        // work must land in UI.Avalonia/, not MainForm.cs.
         bool forceWinForms = false;
         foreach (var a in args)
             if (string.Equals(a, "--winforms", StringComparison.OrdinalIgnoreCase))
