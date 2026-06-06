@@ -1103,9 +1103,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // Image…" is clicked. The host implements IPaletteExtractionService
             // and pops the ImagePaletteView; the editor consumes the returned
             // stops itself. UI.Avalonia stays free of System.Drawing.
-            vm.FromImageRequested     += (_, args) => FromImageRequested?.Invoke(this, args);
-            vm.SaveFileRequested      += (_, args) => SaveFileRequested?.Invoke(this, args);
-            vm.MessageRequested       += (_, args) => MessageRequested?.Invoke(this, args);
+            vm.FromImageRequested      += (_, args) => FromImageRequested?.Invoke(this, args);
+            vm.SaveFileRequested       += (_, args) => SaveFileRequested?.Invoke(this, args);
+            vm.MessageRequested        += (_, args) => MessageRequested?.Invoke(this, args);
+            vm.ImportPaletteRequested  += (_, args) => ImportPaletteRequested?.Invoke(this, args);
+            vm.ExportPaletteRequested  += (_, args) => ExportPaletteRequested?.Invoke(this, args);
+            vm.SampleColorRequested    += (_, args) => SampleColorRequested?.Invoke(this, args);
             ColorThemeEditor = vm;
         }
         IsColorThemeEditorVisible = true;
@@ -1213,6 +1216,21 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     /// <summary>Editor or other child VM wants to show a MessageBox.</summary>
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
+
+    /// <summary>Editor wants to import a palette file. Host pops an
+    /// OpenFilePicker, parses the file, shows the Add/Replace prompt, and
+    /// fills the args' Colors + Result before completing.</summary>
+    public event EventHandler<ThemeImportPaletteEventArgs>? ImportPaletteRequested;
+
+    /// <summary>Editor wants to export the current stops as a palette file.
+    /// Host pops a SaveFilePicker and writes the format keyed off the
+    /// chosen extension.</summary>
+    public event EventHandler<ThemeExportPaletteEventArgs>? ExportPaletteRequested;
+
+    /// <summary>Editor wants the user to pick a screen pixel (eyedropper).
+    /// Host installs the global mouse hook and fills PickedR/G/B before
+    /// completing. PickedR null indicates the user cancelled.</summary>
+    public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
 
     /// <summary>Help VM wants the host to open a URL in the system browser.</summary>
     public event EventHandler<string>? LinkRequested;

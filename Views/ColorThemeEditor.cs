@@ -95,6 +95,8 @@ namespace FracturingFog.Views
 
         // Stops
         private readonly ColorStopListControl _stopsList;
+        private readonly CheckBox _chkInspect;
+        private readonly Button _btnSampleToStop;
 
         // Cycle
         private readonly NumericUpDown _txCycleSpeed;
@@ -292,7 +294,12 @@ namespace FracturingFog.Views
 
             AddLabel(_identBox, "Name:", 8, 22);
             _txName = MakeText(85, 20, ColWidth - 100);
-            _txName.TextChanged += (s, e) => OnFieldChanged();
+            _txName.TextChanged += (s, e) =>
+            {
+                if (_stopsList != null)
+                    _stopsList.PaletteNameHint = _txName.Text;
+                OnFieldChanged();
+            };
             _identBox.Controls.Add(_txName);
 
             AddLabel(_identBox, "Category:", 8, 48);
@@ -356,16 +363,32 @@ namespace FracturingFog.Views
             _root.Controls.Add(_stopsBox);
 
             buttonWidth = (_stopsBox.Width - 16) / 2;
-            //var btnFromImage = MakeAction("From Image…", buttonWidth + 2, 12, buttonWidth, Color.FromArgb(60, 50, 90));
-            //btnFromImage.Click += (s, e) => OpenImagePaletteDialog();
-            //_stopsBox.Controls.Add(btnFromImage);
+
+            // Inspect / Sample-to-selected row above the stops list. Inspect
+            // routes single left-clicks on the main rendered image into
+            // HandleInspectColor() which highlights the closest stop.
+            _chkInspect = new CheckBox
+            {
+                Text = "Inspect",
+                Left = 8,
+                Top = 22,
+                AutoSize = true,
+                ForeColor = Color.FromArgb(200, 200, 120),
+                BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            };
+            _stopsBox.Controls.Add(_chkInspect);
+
+            _btnSampleToStop = MakeAction("Sample…", 90, 19, 120, Color.FromArgb(50, 75, 100));
+            _btnSampleToStop.Click += (s, e) => BeginSampleToSelected();
+            _stopsBox.Controls.Add(_btnSampleToStop);
 
             _stopsList = new ColorStopListControl
             {
                 Left = 6,
-                Top = 24,
+                Top = 50,
                 Width = ColWidth - 14,
-                Height = _stopsBox.Height - 30,
+                Height = _stopsBox.Height - 56,
             };
             _stopsList.OnStopsChanged += (s, e) => OnFieldChanged();
             _stopsList.OnFromFile += (s,e) => OpenImagePaletteDialog();
@@ -1243,6 +1266,48 @@ namespace FracturingFog.Views
             if (v < min) return min;
             if (v > max) return max;
             return v;
+        }
+
+        // ── Inspect / Sample hooks (used by MainForm) ──────────────────────
+
+        /// <summary>True while the user wants left-clicks on the rendered
+        /// fractal to be routed into <see cref="HandleInspectColor"/>
+        /// instead of triggering a pan.</summary>
+        public bool InspectActive => _chkInspect.Checked && !IsDisposed;
+
+        /// <summary>
+        /// Called by MainForm after sampling the pixel under the click.
+        /// Highlights the stop with the smallest RGB distance to (r,g,b).
+        /// </summary>
+        public void HandleInspectColor(byte r, byte g, byte b)
+        {
+            try { _stopsList.HighlightClosestStop(r, g, b); }
+            catch { }
+        }
+
+        private void BeginSampleToSelected()
+        {
+            if (Editors.DesktopEyedropper.IsActive) return;
+            try
+            {
+                Editors.DesktopEyedropper.Begin(
+                    c =>
+                    {
+                        if (IsDisposed) return;
+                        if (!_stopsList.ApplyColorToSelectedRow(c.R, c.G, c.B))
+                        {
+                            MessageBox.Show(this,
+                                "No stop is selected. Click a row first, then Sample.",
+                                "Sample", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    },
+                    null);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Failed to start eyedropper:\n" + ex.Message,
+                    "Sample", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }
