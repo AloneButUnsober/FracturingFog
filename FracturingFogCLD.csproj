@@ -141,7 +141,7 @@
     <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
     <PackageReference Include="Vortice.Mathematics" Version="2.1.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="ILGPU" Version="1.5.1" />
+    <PackageReference Include="ILGPU" Version="1.5.3" />
   </ItemGroup>
   <ItemGroup>
     <!-- Shared UI-free contracts (IGpuSurface and future siblings). -->
@@ -209,8 +209,7 @@
       this reference. ExcludeAssets=analyzers blocks the transitive
       Avalonia name-generator (same workaround as UI.Avalonia ref above).
     -->
-    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj"
-                      SetPlatform="Platform=x64">
+    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj" SetPlatform="Platform=x64">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
   </ItemGroup>
