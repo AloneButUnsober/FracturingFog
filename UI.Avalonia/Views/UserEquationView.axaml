@@ -1,0 +1,121 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.UserEquationView"
+        x:DataType="vm:UserEquationViewModel"
+        Title="User Equation"
+        Width="600"
+        Height="500"
+        MinWidth="420"
+        MinHeight="380"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#282828"
+        Foreground="White">
+
+    <!--
+      DIP layout. Editor expands to fill all available space (Grid * row +
+      ScrollViewer'ed multiline TextBox). Header rows use Auto sizing so they
+      stack cleanly at any DPI and a larger system font cannot crop labels.
+    -->
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+
+        <!-- Row 0: hint -->
+        <TextBlock Grid.Row="0"
+                   Text="Step(Complex z, Complex c, int n) → Complex. Example:  return z*z + c;"
+                   Foreground="#B4B4B4"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8" />
+
+        <!-- Row 1: saved equations row -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="Auto,*,Auto,Auto"
+              Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="Saved:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding SavedNames}"
+                      SelectedItem="{Binding SelectedSavedName, Mode=TwoWay}"
+                      HorizontalAlignment="Stretch"
+                      MinWidth="160" />
+            <Button Grid.Column="2"
+                    Content="Save…"
+                    Command="{Binding SaveCommand}"
+                    Margin="8,0,0,0"
+                    Padding="14,4" />
+            <Button Grid.Column="3"
+                    Content="Delete"
+                    Command="{Binding DeleteCommand}"
+                    Margin="6,0,0,0"
+                    Padding="14,4" />
+        </Grid>
+
+        <!-- Row 2: promote toggle + CalcGen export -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+            <CheckBox Grid.Column="0"
+                      Content="Promote to fractal list"
+                      IsChecked="{Binding Promote, Mode=TwoWay}"
+                      IsEnabled="{Binding PromoteEnabled}" />
+            <Button Grid.Column="1"
+                    Content="Compile &amp; Load"
+                    Command="{Binding HotLoadViaCalcGenCommand}"
+                    ToolTip.Tip="Generate, Roslyn-compile, and load the equation as a hot calculator. No rebuild required — replaces the active calc immediately."
+                    Margin="0,0,6,0"
+                    Padding="14,4" />
+            <Button Grid.Column="2"
+                    Content="Generate via CalcGen"
+                    Command="{Binding GenerateViaCalcGenCommand}"
+                    ToolTip.Tip="Run the equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
+                    Padding="14,4" />
+        </Grid>
+
+        <!-- Row 3: rotation row -->
+        <Grid Grid.Row="3"
+              ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
+              Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Text="Rotation°:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <NumericUpDown Grid.Column="1"
+                           Minimum="-360" Maximum="360" Increment="1" FormatString="F1"
+                           Value="{Binding RotationDegrees, Mode=TwoWay}"
+                           Width="100" />
+            <Button Grid.Column="2" Content="+90°" Command="{Binding RotPlus90Command}"  Margin="6,0,0,0" Padding="8,4" />
+            <Button Grid.Column="3" Content="-90°" Command="{Binding RotMinus90Command}" Margin="4,0,0,0" Padding="8,4" />
+            <Button Grid.Column="4" Content="Reset" Command="{Binding RotResetCommand}"  Margin="4,0,0,0" Padding="8,4" />
+        </Grid>
+
+        <!-- Row 4: editor (fills) -->
+        <Border Grid.Row="4"
+                BorderBrush="#505050"
+                BorderThickness="1"
+                Background="#1C1C1C">
+            <TextBox Text="{Binding Source, Mode=TwoWay}"
+                     AcceptsReturn="True"
+                     AcceptsTab="True"
+                     TextWrapping="NoWrap"
+                     FontFamily="Consolas, monospace"
+                     FontSize="14"
+                     Background="#1C1C1C"
+                     Foreground="White"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        </Border>
+
+        <!-- Row 5: status / error -->
+        <TextBlock Grid.Row="5"
+                   Text="{Binding StatusText}"
+                   FontFamily="Consolas, monospace"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Foreground="#64FF64"
+                   Classes.error="{Binding StatusIsError}"
+                   Margin="0,8,0,0">
+            <TextBlock.Styles>
+                <Style Selector="TextBlock.error">
+                    <Setter Property="Foreground" Value="#FF6464" />
+                </Style>
+            </TextBlock.Styles>
+        </TextBlock>
+
+    </Grid>
+
+</Window>

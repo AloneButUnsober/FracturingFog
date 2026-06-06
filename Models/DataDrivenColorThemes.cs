@@ -87,6 +87,7 @@ namespace FracturingFog.Models
                             Ambient = pbr.ExportAmbient,
                             KeyLight = new LightSourceData(pbr.ExportKeyLight),
                             FillLight = new LightSourceData(pbr.ExportFillLight),
+                            RimLight = pbr.ExportUseRimLight ? new LightSourceData(pbr.ExportRimLight) : null,
                             PbrLightingMode = pbr.ExportLightingMode,
                             MaterialBands = SampleMaterialBands(pbr),
                             Brightness = bright,
@@ -119,9 +120,12 @@ namespace FracturingFog.Models
                         Ambient = phong.ExportAmbient,
                         KeyLight = new LightSourceData(phong.ExportKeyLight),
                         FillLight = new LightSourceData(phong.ExportFillLight),
+                        RimLight = phong.ExportUseRimLight ? new LightSourceData(phong.ExportRimLight) : null,
                         KeySpecScale = phong.ExportKeySpecScale,
                         FillSpecScale = phong.ExportFillSpecScale,
                         FillDiffScale = phong.ExportFillDiffScale,
+                        RimSpecScale = phong.ExportRimSpecScale,
+                        RimDiffScale = phong.ExportRimDiffScale,
                         Brightness = bright,
                         Contrast = contrast,
                         Adaptive = adaptive,
@@ -169,7 +173,10 @@ namespace FracturingFog.Models
         private static List<ColorStopData> StopsToData(IReadOnlyList<ColorStop> stops)
         {
             var list = new List<ColorStopData>(stops.Count);
-            foreach (var s in stops) list.Add(new ColorStopData(s));
+            // FromColorStop replaces the old `new ColorStopData(stop)` ctor;
+            // the DTO moved to FracturingFog.Abstractions and the ColorStop
+            // interop helpers now live as extension methods.
+            foreach (var s in stops) list.Add(ColorStopDataExtensions.FromColorStop(s));
             return list;
         }
 

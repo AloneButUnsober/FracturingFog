@@ -29,7 +29,8 @@ namespace FracturingFog.Imaging.PaletteExtraction
                 byte r = rgb[i * 3];
                 byte g = rgb[i * 3 + 1];
                 byte b = rgb[i * 3 + 2];
-                ToSpace(r, g, b, opts.Space, out feat[i * 3], out feat[i * 3 + 1], out feat[i * 3 + 2]);
+                ToSpace(r, g, b, opts.Space, opts.GammaCorrect,
+                    out feat[i * 3], out feat[i * 3 + 1], out feat[i * 3 + 2]);
             }
 
             // k-means++ init
@@ -158,23 +159,46 @@ namespace FracturingFog.Imaging.PaletteExtraction
             return seeds;
         }
 
-        private static void ToSpace(byte r, byte g, byte b, PaletteColorSpace space, out float a, out float bb, out float c)
+        private static void ToSpace(byte r, byte g, byte b, PaletteColorSpace space, bool gammaCorrect,
+                                    out float a, out float bb, out float c)
         {
             switch (space)
             {
                 case PaletteColorSpace.Lab:
                     ColorSpaces.RgbToLab(r, g, b, out a, out bb, out c);
                     break;
+                case PaletteColorSpace.OkLab:
+                    // OkLab natively has L≈[0,1] a/b≈[-0.5,0.5]. Scale up so
+                    // ConvergenceEpsilon (0.5 in feature units) keeps similar
+                    // semantics across spaces — a 0.5 shift in raw OkLab L is
+                    // huge, while 50 units of scaled OkLab matches the rough
+                    // magnitude of Lab L.
+                    ColorSpaces.RgbToOkLab(r, g, b, out float oL, out float oA, out float oB);
+                    a = oL * 100f;
+                    bb = oA * 100f;
+                    c = oB * 100f;
+                    break;
                 case PaletteColorSpace.Hsl:
                     ColorSpaces.RgbToHsl(r, g, b, out float h, out float s, out float l);
-                    // Project hue to a 2D circle so distance stays meaningful.
                     float rad = h * MathF.PI / 180f;
                     a = MathF.Cos(rad) * s * 100f;
                     bb = MathF.Sin(rad) * s * 100f;
                     c = l * 100f;
                     break;
                 default:
-                    a = r; bb = g; c = b;
+                    if (gammaCorrect)
+                    {
+                        // Linearize so euclidean distance matches physical light
+                        // intensity. Scale back to [0,255] so feature magnitudes
+                        // stay compatible with the convergence epsilon.
+                        a = ColorSpaces.SrgbToLinear(r / 255f) * 255f;
+                        bb = ColorSpaces.SrgbToLinear(g / 255f) * 255f;
+                        c = ColorSpaces.SrgbToLinear(b / 255f) * 255f;
+                    }
+                    else
+                    {
+                        a = r; bb = g; c = b;
+                    }
                     break;
             }
         }

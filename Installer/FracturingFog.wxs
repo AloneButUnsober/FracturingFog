@@ -18,6 +18,7 @@
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="AppIcon.ico" SourceFile="Stage\Resources\FracturingFog.ico" />
+    <Icon Id="PBAppIcon.ico" SourceFile="Stage\Resources\PaletteBuilder_Logo.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
 
@@ -61,6 +62,8 @@
     <Feature Id="MainFeature" Title="Fracturing Fog" Level="1">
       <Files Include="Stage\**" Directory="INSTALLFOLDER" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="StartMenuShortcutLegacy" />
+      <ComponentRef Id="StartMenuShortcutPaletteBuilder" />
       <ComponentRef Id="DesktopShortcut" />
     </Feature>
 
@@ -76,6 +79,37 @@
         <RegistryValue Root="HKCU"
                        Key="Software\AloneButUnsober\FracturingFog"
                        Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+
+      <Component Id="StartMenuShortcutLegacy" Guid="71F06E9E-824E-4C22-AFF6-C539D5BDF754">
+        <Shortcut Id="StartMenuShortcutLegacyFile"
+                  Name="Fracturing Fog - Legacy"
+                  Description="Mandelbrot Explorer (WinForms UI)"
+                  Target="[INSTALLFOLDER]FracturingFog.exe"
+                  Arguments="--winforms"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\AloneButUnsober\FracturingFog"
+                       Name="StartMenuShortcutLegacy"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+
+      <Component Id="StartMenuShortcutPaletteBuilder" Guid="1891191F-29E6-407F-9054-E9DE5DE4CD31">
+        <Shortcut Id="StartMenuShortcutPaletteBuilderFile"
+                  Name="Palette Builder"
+                  Description="Fracturing Fog Palette Builder"
+                  Target="[INSTALLFOLDER]PaletteBuilder\PaletteBuilder.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="PBAppIcon.ico" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\AloneButUnsober\FracturingFog"
+                       Name="StartMenuShortcutPaletteBuilder"
                        Type="integer"
                        Value="1"
                        KeyPath="yes" />

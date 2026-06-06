@@ -1,0 +1,150 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PaletteBuilder.Lib — Library extract of the standalone Palette Builder
+    UI + services. Holds Models / Services / ViewModels / Views and the
+    linked palette-extraction sources so the same UI can be hosted either
+    by the PaletteBuilder.exe wrapper (standalone) or by the main
+    FracturingFog WinExe (as the "From Image…" picker).
+
+    AssemblyName is PaletteBuilder.Lib so it does not collide with the
+    sibling PaletteBuilder.csproj WinExe (AssemblyName=PaletteBuilder).
+    RootNamespace stays "PaletteBuilder" so existing namespaces (e.g.
+    PaletteBuilder.ViewModels.PaletteBuilderViewModel) keep their canonical
+    form across the lib + the WinExe wrapper.
+
+    The Avalonia source generators that this project's transitive Avalonia
+    package reference would normally inject are stripped (same workaround as
+    FracturingFogCLD / the old PaletteBuilder.csproj) — they re-emit XAML
+    partials into obj/ that break compilation when consumers also reference
+    the project.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>PaletteBuilder</RootNamespace>
+    <AssemblyName>PaletteBuilder.Lib</AssemblyName>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <UseWindowsForms>false</UseWindowsForms>
+    <UseWPF>false</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--
+      Strip the WinExe-only entry-point files from the default SDK globs.
+      These belong to the sibling PaletteBuilder.csproj (the standalone
+      app wrapper). The Lib must not compile them or it both duplicates
+      the Application class and turns into an exe-shaped library.
+    -->
+    <!--
+      Excludes:
+        * App.axaml / App.axaml.cs / Program.cs / app.manifest — belong to
+          the sibling WinExe wrapper (PaletteBuilder.csproj), not this lib.
+        * PaletteBuilder.csproj / .sln — auto-globbed by some tooling as
+          "None" items, kept out of this project's view.
+        * obj\** / bin\** — the SIBLING WinExe's intermediate + output
+          paths. Both csproj files sit in this folder; default SDK globs
+          only exclude THIS project's own paths, so we need to add the
+          peer's explicitly. Without this, Lib's source glob pulls in the
+          WinExe's generated PaletteBuilder.AssemblyInfo.cs and CS0579
+          duplicate-attribute errors fire under Release.
+    -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);App.axaml;App.axaml.cs;Program.cs;app.manifest;PaletteBuilder.csproj;PaletteBuilder.sln;obj\**;bin\**</DefaultItemExcludes>
+    <!--
+      Per-project obj/ and bin/ so the sibling PaletteBuilder.csproj
+      (same folder) does not share scratch state. With the default paths
+      both projects write to obj\x64\Release\net10.0-windows\ and stomp
+      each other's project.assets.json / *.AssemblyInfo.cs / ref\*.dll,
+      which surfaces as "Metadata file PaletteBuilder.Lib.dll could not
+      be found" and "ColorStopData could not be found" during a Release
+      build that runs both projects in parallel.
+    -->
+    <!--
+      BaseIntermediateOutputPath / BaseOutputPath / MSBuildProjectExtensionsPath
+      are all set in Directory.Build.props (next to this csproj) — MSBuild
+      rejects setting MSBuildProjectExtensionsPath inline after Microsoft.Common.props
+      is imported (MSB3540), so the per-project obj/bin redirect has to happen
+      in props that load BEFORE the SDK. See the comment in Directory.Build.props
+      for the why; this csproj just consumes the values.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.9">
+      <PrivateAssets>analyzers</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="PDFsharp-gdi" Version="6.1.1" />
+    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Resources\UserManual.md" />
+  </ItemGroup>
+
+  <!--
+    SetPlatform=Platform=x64 on each ProjectReference forces MSBuild to
+    build the referenced project with Platform=x64 even when the parent
+    build context has Platform unset / AnyCPU. Visual Studio's design-time
+    build runs Lib without a Platform parameter; Lib defaults to x64 (the
+    only Platforms value declared) but the referenced projects are asked
+    for their ref dll under AnyCPU, landing them at
+    obj\Debug\net10.0\ref\... which does not exist (these projects only
+    build under x64). The override pins each ProjectReference to the same
+    Platform=x64 path so the ref dll resolves to the correct location
+    (obj\x64\Debug\net10.0\ref\). Without this, CS0006 "metadata file
+    not found" fires inside VS for both Abstractions and UI.Avalonia
+    refs, which in turn produces CS0234 / CS0246 ColorStopData lookups
+    because the Abstractions assembly never gets loaded.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" SetPlatform="Platform=x64" />
+    <ProjectReference Include="..\UI.Avalonia\FracturingFog.UI.Avalonia.csproj" SetPlatform="Platform=x64">
+      <ExcludeAssets>analyzers</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!--
+    Link the palette-extraction engine (extractors + BitmapSampler + stop
+    builder + types) into this lib. The host (FracturingFogCLD.csproj) now
+    excludes its own copy of these sources and ProjectRefs this lib instead
+    so the FracturingFog.Imaging.PaletteExtraction.* types live in exactly
+    one assembly. Without that strip the host would compile them twice and
+    CS0436 ambiguous-reference would fire.
+  -->
+  <ItemGroup>
+    <Compile Include="..\Imaging\PaletteExtraction\*.cs" LinkBase="Imaging\PaletteExtraction" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Resources\PaletteBuilder_Logo.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Strip the Avalonia analyzer chain transitively imported via the
+    UI.Avalonia project reference. Same workaround as FracturingFogCLD.csproj
+    — the XAML name-generator otherwise emits broken partials into obj/.
+  -->
+  <Target Name="StripAvaloniaAnalyzers" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="$([System.String]::Copy('%(Analyzer.Identity)').Contains('Avalonia'))" />
+    </ItemGroup>
+  </Target>
+
+</Project>

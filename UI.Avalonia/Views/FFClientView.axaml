@@ -1,0 +1,252 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        mc:Ignorable="d"
+        x:Class="FracturingFog.UI.Avalonia.Views.FFClientView"
+        x:DataType="vm:FFClientViewModel"
+        Title="FracturingFog — Remote Client"
+        Width="720" Height="780"
+        MinWidth="600" MinHeight="600"
+        Background="#171717">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#DDD" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBox, ComboBox, NumericUpDown">
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="Foreground" Value="#EEE" />
+        </Style>
+        <Style Selector="AutoCompleteBox">
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="Foreground" Value="#EEE" />
+        </Style>
+        <Style Selector="AutoCompleteBox /template/ TextBox">
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="Foreground" Value="#EEE" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Background" Value="#1B1B1B" />
+            <Setter Property="BorderBrush" Value="#2E2E2E" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#2E6BC8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="14,6" />
+        </Style>
+    </Window.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="12" Spacing="2">
+
+            <!-- Vault unlock -->
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Master Password" />
+                    <TextBlock Foreground="#7E7E7E" TextWrapping="Wrap"
+                               Text="The first time you Save a connection that has a client-cert (.pfx) password, the password you enter here is used to encrypt it on disk. Every later session must enter the SAME master password to use the saved connection." />
+                    <Grid ColumnDefinitions="*,Auto" >
+                        <TextBox Grid.Column="0" PasswordChar="•" Text="{Binding MasterPassword}" />
+                        <Button Grid.Column="1" Margin="6,0,0,0" Content="Unlock" Command="{Binding UnlockCommand}" />
+                    </Grid>
+                    <TextBlock Foreground="#9B9B9B" Text="{Binding UnlockStatus}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- Connection picker + form -->
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Server Connection" />
+                    <Grid ColumnDefinitions="*,Auto,Auto" >
+                        <ComboBox Grid.Column="0" ItemsSource="{Binding ConnectionNames}" SelectedItem="{Binding SelectedConnection}"
+                                  HorizontalAlignment="Stretch" />
+                        <Button Grid.Column="1" Margin="6,0,0,0" Content="Save"   Command="{Binding SaveConnectionCommand}" />
+                        <Button Grid.Column="2" Margin="6,0,0,0" Content="Delete" Command="{Binding DeleteConnectionCommand}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,6,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Name" />
+                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding ConnectionName}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Host" Margin="0,4,0,0" />
+                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Host}" Margin="0,4,0,0" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Port" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding Port}" Minimum="1" Maximum="65535" Margin="0,4,0,0" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Client cert (.pfx)" Margin="0,4,0,0" />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <TextBox Grid.Column="0" Text="{Binding ClientCertPath}" />
+                            <Button  Grid.Column="1" Margin="4,0,0,0" Content="…" Command="{Binding BrowseClientCertCommand}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Cert password" Margin="0,4,0,0" />
+                        <TextBox   Grid.Row="4" Grid.Column="1" PasswordChar="•" Text="{Binding ClientCertPassword}" Margin="0,4,0,0" />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Server CA (.pfx)" Margin="0,4,0,0" />
+                        <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <TextBox Grid.Column="0" Text="{Binding ServerCaCertPath}" />
+                            <Button  Grid.Column="1" Margin="4,0,0,0" Content="…" Command="{Binding BrowseServerCaCommand}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Remark" Margin="0,4,0,0" />
+                        <TextBox   Grid.Row="6" Grid.Column="1" Text="{Binding ConnectionRemark}" Margin="0,4,0,0" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Render preset -->
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Render Preset" />
+                    <Grid ColumnDefinitions="*,Auto,Auto" >
+                        <ComboBox Grid.Column="0" ItemsSource="{Binding PresetNames}" SelectedItem="{Binding SelectedPreset}"
+                                  HorizontalAlignment="Stretch" />
+                        <Button Grid.Column="1" Margin="6,0,0,0" Content="Save"   Command="{Binding SavePresetCommand}" />
+                        <Button Grid.Column="2" Margin="6,0,0,0" Content="Delete" Command="{Binding DeletePresetCommand}" />
+                    </Grid>
+
+                    <!-- Mode banner: orange when video, blue-grey when image -->
+                    <Border Background="#D98C2A" Padding="8,4" Margin="0,4,0,0"
+                            IsVisible="{Binding IsVideoMode}">
+                        <TextBlock Foreground="White" FontWeight="Bold" Text="▶ VIDEO MODE — output will be an MP4/MKV" />
+                    </Border>
+                    <Border Background="#4A6480" Padding="8,4" Margin="0,4,0,0"
+                            IsVisible="{Binding !IsVideoMode}">
+                        <TextBlock Foreground="White" FontWeight="Bold" Text="■ IMAGE MODE — output will be a single PNG" />
+                    </Border>
+                    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,6,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Preset name" />
+                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding PresetName}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Mode" Margin="0,4,0,0" />
+                        <ComboBox  Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" Margin="0,4,0,0"
+                                   ToolTip.Tip="Pick 'image' for a single still PNG, or 'video' for an MP4/MKV zoom animation. The Render button label updates to match." />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Fractal" Margin="0,4,0,0" />
+                        <ComboBox  Grid.Row="2" Grid.Column="1" ItemsSource="{Binding FractalTypes}" SelectedItem="{Binding FractalType}" Margin="0,4,0,0" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Region" Margin="0,4,0,0" />
+                        <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,4,0,0"
+                                  IsEditable="True"
+                                  ItemsSource="{Binding RegionNames}"
+                                  Text="{Binding RegionName, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch"
+                                  ToolTip.Tip="Optional region name (resolved server-side). Leave blank to use manual coords below." />
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Theme" Margin="0,4,0,0" />
+                        <ComboBox Grid.Row="4" Grid.Column="1" Margin="0,4,0,0"
+                                  IsEditable="True"
+                                  ItemsSource="{Binding ThemeNames}"
+                                  Text="{Binding ThemeName, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch"
+                                  ToolTip.Tip="Theme/palette name. Pick from the dropdown or type a custom name." />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Quality" Margin="0,4,0,0" />
+                        <ComboBox  Grid.Row="5" Grid.Column="1" ItemsSource="{Binding QualityPresets}" SelectedItem="{Binding QualityName}" Margin="0,4,0,0" />
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Size" Margin="0,4,0,0" />
+                        <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,Auto,*" Margin="0,4,0,0">
+                            <NumericUpDown Grid.Column="0" Value="{Binding Width}"  Minimum="16" Maximum="32768" />
+                            <TextBlock     Grid.Column="1" Classes="label" Text=" × " Margin="6,0" />
+                            <NumericUpDown Grid.Column="2" Value="{Binding Height}" Minimum="16" Maximum="32768" />
+                        </Grid>
+                    </Grid>
+
+                    <TextBlock Classes="section" Text="Poster Print (image mode only)" Margin="0,8,0,2" />
+                    <TextBlock Foreground="#9B9B9B" TextWrapping="Wrap" Margin="0,0,0,4"
+                               Text="When enabled the Size fields above are ignored. Server renders at (inchesW × dpi) × (inchesH × dpi), stamps DPI metadata into the PNG, and rotates 90° CW when Portrait is checked." />
+                    <CheckBox Content="Enable poster mode" IsChecked="{Binding EnablePoster}" Foreground="#EEE" />
+                    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                          IsEnabled="{Binding EnablePoster}" Margin="0,4,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Width (in)" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding PosterInchesW}" Minimum="1" Maximum="200" Increment="1" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Height (in)" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding PosterInchesH}" Minimum="1" Maximum="200" Increment="1" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="DPI" Margin="0,4,0,0" />
+                        <ComboBox  Grid.Row="2" Grid.Column="1" ItemsSource="{Binding PosterDpiPresets}" SelectedItem="{Binding PosterDpi}" Margin="0,4,0,0"
+                                   ToolTip.Tip="150 = draft / 300 = standard print / 600 = fine art" />
+                        <CheckBox  Grid.Row="3" Grid.Column="1" Content="Portrait (rotate 90° CW after render)"
+                                   IsChecked="{Binding PosterPortrait}" Margin="0,4,0,0" Foreground="#EEE" />
+                        <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Classes="label"
+                                   Text="{Binding PosterPixelPreview}" Margin="0,6,0,0" Foreground="#9BC1FF" />
+                    </Grid>
+
+                    <TextBlock Classes="section" Text="Manual coords (optional)" Margin="0,8,0,2" />
+                    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="centerX" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding CenterX}" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="centerY" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding CenterY}" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="zoom" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding Zoom}" Minimum="0" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="iter" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding Iterations}" Minimum="0" Margin="0,4,0,0" />
+                    </Grid>
+
+                    <TextBlock Classes="section" Text="Video options (only used when Mode = video)" Margin="0,8,0,2" />
+                    <TextBlock Foreground="#9B9B9B" TextWrapping="Wrap" Margin="0,0,0,4"
+                               Text="To make a video: set Mode above to 'video', set seconds + fps + start zoom here, optionally pick a lossless preset, then click Render Video. The end zoom comes from the region (or the Manual coords 'zoom' field if no region is set)." />
+                    <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="seconds" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding VideoSeconds}" Minimum="0.5" Maximum="600" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="fps" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding VideoFps}" Minimum="1" Maximum="240" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="start zoom" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding VideoStartZoom}" Minimum="0" Margin="0,4,0,0" />
+                        <CheckBox Grid.Row="3" Grid.Column="1" Content="Reverse (zoom out)" IsChecked="{Binding VideoReverse}" Margin="0,4,0,0" Foreground="#EEE" />
+                        <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="lossless" Margin="0,4,0,0" />
+                        <ComboBox  Grid.Row="4" Grid.Column="1" ItemsSource="{Binding LosslessPresets}" SelectedItem="{Binding Lossless}" Margin="0,4,0,0" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Output -->
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Output" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0" Text="{Binding OutputPath}"
+                                 Watermark="(blank → server prompts for save path on response)" />
+                        <Button  Grid.Column="1" Margin="6,0,0,0" Content="…" Command="{Binding BrowseOutputCommand}" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                        <TextBlock Classes="label" Text="Return mode" />
+                        <ComboBox ItemsSource="{Binding ReturnModes}" SelectedItem="{Binding ReturnMode}" MinWidth="140" />
+                    </StackPanel>
+                    <CheckBox Content="Send custom watermark with request"
+                              IsChecked="{Binding SendClientWatermark, Mode=TwoWay}"
+                              IsEnabled="{Binding ActiveWatermark, Converter={x:Static ObjectConverters.IsNotNull}}"
+                              Margin="0,8,0,0"
+                              Foreground="#EEE"
+                              ToolTip.Tip="Pack the active custom watermark into the request. The server's watermark mode decides whether to honour it." />
+                </StackPanel>
+            </Border>
+
+            <!-- Render trigger -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Foreground="#9B9B9B" Text="{Binding RenderStatus}" />
+                        <Button Grid.Column="1" Classes="primary" Content="{Binding RenderButtonText}" Command="{Binding RenderCommand}"
+                                IsEnabled="{Binding !IsRendering}"
+                                ToolTip.Tip="Same button drives both image and video — the Mode combo above decides which. Label updates to match." />
+                    </Grid>
+                    <TextBlock Foreground="#E08C8C" Text="{Binding LastError}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
+        </StackPanel>
+    </ScrollViewer>
+</Window>

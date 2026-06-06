@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>FracturingFog.ColorGen</RootNamespace>
+    <AssemblyName>ColorGen</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Templates\**" />
+    <Compile Remove="SampleOutput\**" />
+    <None Include="Templates\ColorMap.template.cs" />
+    <EmbeddedResource Include="Templates\ColorMap.template.cs" />
+  </ItemGroup>
+
+  <!--
+    Roslyn compiler — ColorGenHotLoad uses Microsoft.CodeAnalysis.CSharp to
+    compile a freshly-rendered theme into an in-memory IColorMap so the
+    ColorGenEditor can preview / apply without rebuilding the host.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
+</Project>

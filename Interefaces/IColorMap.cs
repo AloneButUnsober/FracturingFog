@@ -221,6 +221,55 @@ namespace FracturingFog.Interefaces
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Pixel-scale extension
+    //
+    // DE-style colour maps (distance-field glow, edge highlighting) need to
+    // know the complex-plane size of one screen pixel so the raw distance
+    // estimate (in complex-plane units) can be normalised to pixel units —
+    // making the same theme look correct at every zoom level. The calculator
+    // assigns PixelScale once per frame before the per-pixel render loop.
+    // Themes that do NOT need pixel scale simply skip this interface.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Colour map that wants the complex-plane width of a single screen pixel
+    /// supplied each frame. Set once by the calculator before the render loop.
+    /// </summary>
+    public interface IColorMapWithPixelScale : IColorMap
+    {
+        /// <summary>
+        /// Complex-plane width of one screen pixel for the current frame.
+        /// Used to normalise raw distance estimates into pixel units.
+        /// </summary>
+        double PixelScale { set; }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // In-set delegation extension
+    //
+    // By default the calculator paints in-set (interior) pixels with the
+    // theme's <see cref="IColorMap.InSetColor"/> property without calling
+    // Map(), and passes <c>maxIter</c> as the iteration argument for escaped
+    // pixels. Themes that implement IColorMapHandlesInSet opt out of both:
+    //   • Interior pixels are routed through Map() with iters = maxIter so
+    //     the theme can colour the inside of the set procedurally.
+    //   • Escaped pixels receive their actual escape iteration as the third
+    //     argument, so the theme can distinguish exterior from interior via
+    //     iters >= maxIter.
+    // Required by ColorGen-generated themes so the DSL inputs `iter` and
+    // `isInSet` carry their documented semantics.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Marker interface: theme wants Map() invoked for in-set pixels and
+    /// wants the true escape iteration count (not maxIter) for exterior
+    /// pixels. Implementations must handle all of <c>smooth = 0</c>,
+    /// <c>distance = 0</c>, and <c>iterations = MaxIterations</c> as the
+    /// in-set sentinel.
+    /// </summary>
+    public interface IColorMapHandlesInSet : IColorMap { }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Post-process extension
     //
     // Some effects need to read NEIGHBOURING pixels — Sobel emboss, ambient

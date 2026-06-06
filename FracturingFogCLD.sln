@@ -1,9 +1,29 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.3.11505.172
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFogCLD", "FracturingFogCLD.csproj", "{A84ABCEA-E25A-1B0A-D758-FF6A5E7780A6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Abstractions", "Abstractions\FracturingFog.Abstractions.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.UI.Avalonia", "UI.Avalonia\FracturingFog.UI.Avalonia.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Rendering.Silk", "Rendering.Silk\FracturingFog.Rendering.Silk.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Rendering.Silk.Smoke", "Rendering.Silk.Smoke\FracturingFog.Rendering.Silk.Smoke.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Rendering.Skia", "Rendering.Skia\FracturingFog.Rendering.Skia.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Server", "Server\FracturingFog.Server.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Client", "Client\FracturingFog.Client.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FracturingFog.Server.Tests", "Server.Tests\FracturingFog.Server.Tests.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaletteBuilder.Lib", "PaletteBuilder\PaletteBuilder.Lib.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAA9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaletteBuilder", "PaletteBuilder\PaletteBuilder.csproj", "{B1C0DABC-1111-4222-9333-AAAAAAAAAAAA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,6 +38,65 @@ Global
 		{A84ABCEA-E25A-1B0A-D758-FF6A5E7780A6}.Publish|x64.Build.0 = Publish|x64
 		{A84ABCEA-E25A-1B0A-D758-FF6A5E7780A6}.Release|x64.ActiveCfg = Release|x64
 		{A84ABCEA-E25A-1B0A-D758-FF6A5E7780A6}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA1}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA1}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA1}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA1}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA1}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA1}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA2}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA2}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA2}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA2}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA2}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA2}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA3}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA3}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA3}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA3}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA3}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA3}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA4}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA4}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA4}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA4}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA4}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA4}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA5}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA6}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA7}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA8}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA8}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA8}.Publish|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA8}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA8}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA9}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA9}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA9}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA9}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA9}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAA9}.Release|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAAA}.Debug|x64.ActiveCfg = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAAA}.Debug|x64.Build.0 = Debug|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAAA}.Publish|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAAA}.Publish|x64.Build.0 = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAAA}.Release|x64.ActiveCfg = Release|x64
+		{B1C0DABC-1111-4222-9333-AAAAAAAAAAAA}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

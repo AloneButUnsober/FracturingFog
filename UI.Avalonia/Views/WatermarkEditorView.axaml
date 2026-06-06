@@ -1,0 +1,190 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:m="using:FracturingFog.Models"
+        x:Class="FracturingFog.UI.Avalonia.Views.WatermarkEditorView"
+        x:DataType="vm:WatermarkEditorViewModel"
+        Title="Watermark Editor"
+        Width="640"
+        Height="640"
+        MinWidth="520"
+        MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#161616"
+        Foreground="#DCDCDC">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#C8C864" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#B4B4B4" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="BorderBrush" Value="#3A3A3A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="Button.action">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+        </Style>
+        <Style Selector="Button.new">    <Setter Property="Background" Value="#37374B" /> </Style>
+        <Style Selector="Button.revert"> <Setter Property="Background" Value="#503C1E" /> </Style>
+        <Style Selector="Button.save">   <Setter Property="Background" Value="#283C64" /> </Style>
+        <Style Selector="Button.danger"> <Setter Property="Background" Value="#502323" /> </Style>
+        <Style Selector="Button.help">   <Setter Property="Background" Value="#283C64" /> </Style>
+        <Style Selector="Button.close">  <Setter Property="Background" Value="#3A3A3A" /> </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
+
+        <!-- Title row -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding TitleText}"
+                       Foreground="#C8C864"
+                       FontSize="14"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Classes="action help"
+                    Content="?"
+                    Command="{Binding HelpCommand}"
+                    Width="32" />
+        </Grid>
+
+        <!-- Action row -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,8" Spacing="0">
+            <CheckBox Content="Live preview"
+                      IsChecked="{Binding LivePreview}"
+                      Foreground="#C8C878"
+                      FontWeight="Bold"
+                      VerticalAlignment="Center"
+                      Margin="0,0,12,0" />
+            <Button Classes="action new"    Content="New"    Command="{Binding NewBlankCommand}" />
+            <Button Classes="action revert" Content="Revert" Command="{Binding RevertCommand}" />
+            <Button Classes="action save"   Content="Save"   Command="{Binding SaveCommand}" />
+            <Button Classes="action danger" Content="Delete" Command="{Binding DeleteCommand}" />
+        </StackPanel>
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Orientation="Vertical">
+
+                <!-- Target -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Saved watermark" />
+                        <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
+                            <TextBlock Classes="label" Grid.Column="0" Text="Load:" Margin="0,0,8,0" />
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding WatermarkNames}"
+                                      SelectedItem="{Binding SelectedWatermark}"
+                                      HorizontalAlignment="Stretch" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Identity -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Identity" />
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                            <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Name:" Margin="0,0,8,4" />
+                            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}" Margin="0,0,0,4" />
+                            <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Top text:" Margin="0,0,8,0" />
+                            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Text}" />
+                        </Grid>
+                        <TextBlock Foreground="#888888" FontSize="11"
+                                   Text="Program / version sub-line is always drawn beneath your top text and cannot be edited." />
+                    </StackPanel>
+                </Border>
+
+                <!-- Colours -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Colours" />
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                            <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Text:" Margin="0,0,8,4" />
+                            <ColorPicker Grid.Row="0" Grid.Column="1" Color="{Binding TextColor, Mode=TwoWay}" Margin="0,0,8,4" />
+                            <Border Grid.Row="0" Grid.Column="2" Width="32" Height="20"
+                                    Background="{Binding TextSwatchBrush}"
+                                    BorderBrush="#3A3A3A" BorderThickness="1" Margin="0,0,0,4" />
+
+                            <CheckBox Grid.Row="1" Grid.Column="0"
+                                      Content="Highlight"
+                                      IsChecked="{Binding UseHighlight, Mode=TwoWay}"
+                                      Foreground="#B4B4B4"
+                                      FontWeight="Bold"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,4" />
+                            <ColorPicker Grid.Row="1" Grid.Column="1"
+                                         Color="{Binding HighlightColor, Mode=TwoWay}"
+                                         IsEnabled="{Binding UseHighlight}"
+                                         Margin="0,0,8,4" />
+                            <Border Grid.Row="1" Grid.Column="2" Width="32" Height="20"
+                                    Background="{Binding HighlightSwatchBrush}"
+                                    BorderBrush="#3A3A3A" BorderThickness="1" Margin="0,0,0,4" />
+
+                            <CheckBox Grid.Row="2" Grid.Column="0"
+                                      Content="Background"
+                                      IsChecked="{Binding UseBackground, Mode=TwoWay}"
+                                      Foreground="#B4B4B4"
+                                      FontWeight="Bold"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0" />
+                            <ColorPicker Grid.Row="2" Grid.Column="1"
+                                         Color="{Binding BackgroundColor, Mode=TwoWay}"
+                                         IsEnabled="{Binding UseBackground}"
+                                         Margin="0,0,8,0" />
+                            <Border Grid.Row="2" Grid.Column="2" Width="32" Height="20"
+                                    Background="{Binding BackgroundSwatchBrush}"
+                                    BorderBrush="#3A3A3A" BorderThickness="1" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Placement -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Text placement on image" />
+                        <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">
+                            <RadioButton GroupName="Placement" Content="Left"   IsChecked="{Binding IsPlacementLeft,   Mode=TwoWay}" />
+                            <RadioButton GroupName="Placement" Content="Top"    IsChecked="{Binding IsPlacementTop,    Mode=TwoWay}" />
+                            <RadioButton GroupName="Placement" Content="Right"  IsChecked="{Binding IsPlacementRight,  Mode=TwoWay}" />
+                            <RadioButton GroupName="Placement" Content="Bottom" IsChecked="{Binding IsPlacementBottom, Mode=TwoWay}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Justify -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Justify text to image" />
+                        <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">
+                            <RadioButton GroupName="Justify" Content="Left"   IsChecked="{Binding IsJustifyLeft,   Mode=TwoWay}" />
+                            <RadioButton GroupName="Justify" Content="Center" IsChecked="{Binding IsJustifyCenter, Mode=TwoWay}" />
+                            <RadioButton GroupName="Justify" Content="Right"  IsChecked="{Binding IsJustifyRight,  Mode=TwoWay}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer close -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Classes="action close" Content="Close" Command="{Binding CloseCommand}" Width="100" />
+        </StackPanel>
+
+    </Grid>
+</Window>

@@ -1,0 +1,493 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PaletteBuilder.ViewModels"
+        xmlns:ffvm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:c="using:FracturingFog.UI.Avalonia.Controls"
+        xmlns:local="using:PaletteBuilder.Views"
+        x:Class="PaletteBuilder.Views.MainWindow"
+        x:DataType="vm:PaletteBuilderViewModel"
+        Title="Palette Builder"
+        Width="900"
+        Height="820"
+        MinWidth="640"
+        MinHeight="540"
+        WindowStartupLocation="CenterScreen"
+        Background="#161616"
+        Foreground="#DCDCDC">
+
+    <Window.Styles>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#285028" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="Background" Value="#3C3264" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Button.danger">
+            <Setter Property="Background" Value="#463232" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="14,6" />
+        </Style>
+        <Style Selector="Button.apply">
+            <Setter Property="Background" Value="#28643C" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#C8C864" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#B4B4B4" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="Foreground" Value="#C86464" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Border.resultRow">
+            <Setter Property="Background" Value="#232323" />
+        </Style>
+        <Style Selector="Border.resultRow.selected">
+            <Setter Property="Background" Value="#283C28" />
+        </Style>
+    </Window.Styles>
+
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Ctrl+O" Command="{Binding BrowseCommand}" />
+        <KeyBinding Gesture="Ctrl+E" Command="{Binding ExtractCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+E" Command="{Binding CompareAllCommand}" />
+        <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}" />
+        <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}" />
+    </Window.KeyBindings>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Menu bar — hidden when MainWindow is hosted as a picker dialog
+             by the main FracturingFog WinExe. File/Presets/Tools/Help are
+             standalone-app concerns; the host's "From Image…" flow only
+             wants the extract + Apply contract. -->
+        <Menu Grid.Row="0" Background="#1E1E1E"
+              IsVisible="{Binding StandaloneMode}">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open Image(s)…" Click="OnMenuOpen" />
+                <MenuItem Header="Open _Folder…" Click="OnMenuOpenFolder" />
+                <MenuItem Name="RecentMenu" Header="_Recent" />
+                <Separator />
+                <MenuItem Header="E_xit" Click="OnMenuExit" />
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Undo" InputGesture="Ctrl+Z" Click="OnUndoClick"
+                          IsEnabled="{Binding CanUndo}" />
+                <MenuItem Header="_Redo" InputGesture="Ctrl+Y" Click="OnRedoClick"
+                          IsEnabled="{Binding CanRedo}" />
+                <Separator />
+                <MenuItem Header="Paste _Hex List…" Click="OnPasteHexClick" />
+            </MenuItem>
+            <MenuItem Header="_Presets">
+                <MenuItem Header="_Save Current As…" Click="OnMenuSavePreset" />
+                <MenuItem Name="LoadPresetMenu" Header="_Load" />
+                <MenuItem Name="DeletePresetMenu" Header="_Delete" />
+            </MenuItem>
+            <MenuItem Header="_Tools">
+                <MenuItem Header="_Auto-extract on option change"
+                          ToggleType="CheckBox"
+                          IsChecked="{Binding AutoExtract, Mode=TwoWay}" />
+                <Separator />
+                <MenuItem Header="Clear _ROI" Click="OnMenuClearRoi" />
+                <MenuItem Header="Toggle Dark/Light _Theme" Click="OnThemeToggle" />
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_User Manual…" InputGesture="F1" Click="OnMenuHelp" />
+            </MenuItem>
+        </Menu>
+
+        <Grid Grid.Row="1" Margin="12,12,12,4" RowDefinitions="Auto,Auto,*,Auto">
+
+            <TextBlock Grid.Row="0"
+                       Classes="section"
+                       FontSize="14"
+                       Text="Palette Builder"
+                       Margin="0,0,0,10" />
+
+            <Grid Grid.Row="1" ColumnDefinitions="300,12,*" Margin="0,0,0,10">
+
+                <Border Grid.Column="0"
+                        Background="#1E1E1E"
+                        BorderBrush="#505050"
+                        BorderThickness="1"
+                        Height="280">
+                    <Grid RowDefinitions="*,Auto">
+                        <Grid Grid.Row="0" Margin="4">
+                            <Image Source="{Binding PreviewImage}"
+                                   Stretch="Uniform" />
+                            <TextBlock Text="Drop image here&#x0A;or click Browse…"
+                                       TextAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"
+                                       Foreground="#8C8C8C"
+                                       FontStyle="Italic"
+                                       IsVisible="{Binding ShowDropHint}" />
+                        </Grid>
+                        <Grid Grid.Row="1" Margin="4,2,4,4" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding FileLabel}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"
+                                       Foreground="#A0A0A0"
+                                       FontSize="11" />
+                            <Button Grid.Column="1"
+                                    Content="Browse…"
+                                    Command="{Binding BrowseCommand}"
+                                    Background="#2D4164"
+                                    Foreground="White"
+                                    Padding="10,2" />
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Column="2"
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                      ColumnDefinitions="140,*">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Method:" Margin="0,2" />
+                    <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2"
+                              ItemsSource="{Binding MethodNames}"
+                              SelectedIndex="{Binding MethodIndex}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Color count:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
+                                   Minimum="4" Maximum="32" Increment="1"
+                                   Value="{Binding ColorCount}"
+                                   FormatString="0" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Color space:" Margin="0,2" />
+                    <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,2"
+                              SelectedIndex="{Binding SpaceIndex}">
+                        <ComboBoxItem Content="RGB" />
+                        <ComboBoxItem Content="Lab (perceptual)" />
+                        <ComboBoxItem Content="HSL" />
+                        <ComboBoxItem Content="OkLab (perceptual)" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Downsample max:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
+                                   Minimum="64" Maximum="1024" Increment="64"
+                                   Value="{Binding DownsampleMax}"
+                                   FormatString="0" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Sort:" Margin="0,2" />
+                    <ComboBox Grid.Row="4" Grid.Column="1" Margin="0,2"
+                              SelectedIndex="{Binding SortIndex}">
+                        <ComboBoxItem Content="Nearest-Neighbor Chain" />
+                        <ComboBoxItem Content="Hue" />
+                        <ComboBoxItem Content="Luminance" />
+                        <ComboBoxItem Content="Cluster Size" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Dedup ΔE:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="5" Grid.Column="1" Margin="0,2"
+                                   Minimum="0" Maximum="30" Increment="0.5"
+                                   Value="{Binding DedupDeltaE}"
+                                   FormatString="0.0" />
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Dedup metric:" Margin="0,2" />
+                    <ComboBox Grid.Row="6" Grid.Column="1" Margin="0,2"
+                              SelectedIndex="{Binding DedupMetricIndex}">
+                        <ComboBoxItem Content="ΔE76 (fast)" />
+                        <ComboBoxItem Content="ΔE2000 (accurate)" />
+                    </ComboBox>
+
+                    <CheckBox Grid.Row="7" Grid.ColumnSpan="2"
+                              Content="Weight stop positions by cluster size"
+                              IsChecked="{Binding WeightedPositions}"
+                              Margin="0,4,0,0" />
+
+                    <CheckBox Grid.Row="8" Grid.ColumnSpan="2"
+                              Content="Exclude near-black pixels"
+                              IsChecked="{Binding ExcludeNearBlack}"
+                              Margin="0,2,0,0" />
+
+                    <CheckBox Grid.Row="9" Grid.ColumnSpan="2"
+                              Content="Exclude near-white pixels"
+                              IsChecked="{Binding ExcludeNearWhite}"
+                              Margin="0,2,0,0" />
+
+                    <CheckBox Grid.Row="10" Grid.ColumnSpan="2"
+                              Content="Gamma-correct (linearise RGB before clustering)"
+                              IsChecked="{Binding GammaCorrect}"
+                              Margin="0,2,0,0" />
+
+                    <Expander Grid.Row="11" Grid.ColumnSpan="2"
+                              Header="Preprocessing filters"
+                              Margin="0,6,0,0">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                              ColumnDefinitions="140,*">
+                            <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
+                                      Content="Exclude transparent pixels"
+                                      IsChecked="{Binding ExcludeTransparent}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                                       Text="Min saturation:" Margin="0,2" />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
+                                           Minimum="0" Maximum="1" Increment="0.05"
+                                           Value="{Binding MinSaturation}"
+                                           FormatString="0.00" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                                       Text="Max saturation:" Margin="0,2" />
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
+                                           Minimum="0" Maximum="1" Increment="0.05"
+                                           Value="{Binding MaxSaturation}"
+                                           FormatString="0.00" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
+                                       Text="Min lightness:" Margin="0,2" />
+                            <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
+                                           Minimum="0" Maximum="1" Increment="0.05"
+                                           Value="{Binding MinLightness}"
+                                           FormatString="0.00" />
+                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="label"
+                                       Text="Max lightness:" Margin="0,2" />
+                            <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
+                                           Minimum="0" Maximum="1" Increment="0.05"
+                                           Value="{Binding MaxLightness}"
+                                           FormatString="0.00" />
+                            <CheckBox Grid.Row="5" Grid.ColumnSpan="2"
+                                      Content="Use saliency (focus on subject)"
+                                      IsChecked="{Binding UseSaliency}"
+                                      ToolTip.Tip="Spectral-residual saliency. Drops pixels below threshold so palette is drawn from interesting regions, not background." />
+                            <TextBlock Grid.Row="6" Grid.Column="0" Classes="label"
+                                       Text="Saliency threshold:" Margin="0,2" />
+                            <NumericUpDown Grid.Row="6" Grid.Column="1" Margin="0,2"
+                                           Minimum="0" Maximum="1" Increment="0.05"
+                                           Value="{Binding SaliencyThreshold}"
+                                           FormatString="0.00" />
+
+                            <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
+                                       Text="ROI (normalised 0..1, all zero = full image):"
+                                       Classes="label" Margin="0,8,0,2" />
+                            <Grid Grid.Row="8" Grid.ColumnSpan="2"
+                                  ColumnDefinitions="Auto,*,Auto,*,Auto,*,Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="X:" Margin="0,0,4,0" />
+                                <NumericUpDown Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiX}" />
+                                <TextBlock Grid.Column="2" Classes="label" Text="Y:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="3" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiY}" />
+                                <TextBlock Grid.Column="4" Classes="label" Text="W:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="5" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiWidth}" />
+                                <TextBlock Grid.Column="6" Classes="label" Text="H:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="7" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiHeight}" />
+                                <Button Grid.Column="8" Content="Clear" Margin="6,0,0,0"
+                                        Click="OnMenuClearRoi" Padding="8,2" />
+                            </Grid>
+                        </Grid>
+                    </Expander>
+
+                    <Expander Grid.Row="12" Grid.ColumnSpan="2"
+                              Header="Algorithm-specific tuning"
+                              Margin="0,6,0,0">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                              ColumnDefinitions="140,*">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label"
+                                       Text="Bandwidth (MeanShift):" Margin="0,2" />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Margin="0,2"
+                                           Minimum="1" Maximum="100" Increment="1"
+                                           Value="{Binding Bandwidth}"
+                                           FormatString="0.0" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                                       Text="ε (DBSCAN):" Margin="0,2" />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
+                                           Minimum="0.5" Maximum="100" Increment="0.5"
+                                           Value="{Binding DbscanEpsilon}"
+                                           FormatString="0.0" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                                       Text="MinPts (DBSCAN):" Margin="0,2" />
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
+                                           Minimum="1" Maximum="5000" Increment="1"
+                                           Value="{Binding DbscanMinPts}"
+                                           FormatString="0" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
+                                       Text="Spatial weight (Spatial-K-Means):" Margin="0,2" />
+                            <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
+                                           Minimum="0" Maximum="1" Increment="0.05"
+                                           Value="{Binding SpatialWeight}"
+                                           FormatString="0.00" />
+                        </Grid>
+                    </Expander>
+
+                    <StackPanel Grid.Row="13" Grid.ColumnSpan="2"
+                                Orientation="Horizontal"
+                                Spacing="10"
+                                Margin="0,12,0,0">
+                        <Button Classes="primary"
+                                Content="Extract"
+                                Command="{Binding ExtractCommand}" />
+                        <Button Classes="secondary"
+                                Content="Compare All"
+                                Command="{Binding CompareAllCommand}" />
+                        <CheckBox Content="Auto"
+                                  ToolTip.Tip="Re-extract automatically when an option changes"
+                                  IsChecked="{Binding AutoExtract, Mode=TwoWay}"
+                                  VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <Border Grid.Row="2"
+                    Background="#1C1C1C"
+                    BorderBrush="#505050"
+                    BorderThickness="1">
+                <Grid>
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Results}" Margin="8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="ffvm:PaletteResultViewModel">
+                                    <Border Classes="resultRow"
+                                            Classes.selected="{Binding IsSelected}"
+                                            BorderBrush="#3C3C3C"
+                                            BorderThickness="1"
+                                            Margin="0,0,0,6"
+                                            Padding="6">
+                                        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+                                            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                                                <RadioButton Grid.Column="0"
+                                                             GroupName="PaletteResults"
+                                                             Content="{Binding Name}"
+                                                             IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                             IsVisible="{Binding ExclusiveSelect}"
+                                                             Foreground="White"
+                                                             FontWeight="Bold" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding SubtitleText}"
+                                                           Foreground="#DCDCA0"
+                                                           FontWeight="Bold"
+                                                           VerticalAlignment="Center"
+                                                           IsVisible="{Binding ShowTitleLabel}" />
+                                                <ToggleButton Grid.Column="2"
+                                                              Content="Edit"
+                                                              IsChecked="{Binding IsEditing, Mode=TwoWay}"
+                                                              Padding="8,2"
+                                                              ToolTip.Tip="Edit individual stops (reorder / lock / set position)" />
+                                            </Grid>
+
+                                            <c:SwatchStripControl Grid.Row="1" Margin="0,6,0,0" />
+
+                                            <c:GradientStripControl Grid.Row="2" Margin="0,6,0,0" />
+
+                                            <Border Grid.Row="3"
+                                                    IsVisible="{Binding IsEditing}"
+                                                    Background="#1A1A1A"
+                                                    BorderBrush="#3C3C3C"
+                                                    BorderThickness="1"
+                                                    Margin="0,8,0,0"
+                                                    Padding="6">
+                                                <local:StopEditorPanel />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Classes="error"
+                               Margin="12"
+                               VerticalAlignment="Top"
+                               IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="3" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+                <!-- Temp / tint sliders -->
+                <Grid Grid.Column="0" ColumnDefinitions="Auto,*,Auto,Auto,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="Temp:" Margin="0,0,6,0" />
+                    <Slider Grid.Column="1" Minimum="-1" Maximum="1" Value="{Binding Temperature}"
+                            TickFrequency="0.1" />
+                    <Button Grid.Column="2" Content="↺" Padding="6,2" Margin="4,0,0,0"
+                            Click="OnResetTemperature"
+                            ToolTip.Tip="Reset temperature" />
+                    <TextBlock Grid.Column="3" Classes="label" Text="Tint:" Margin="12,0,6,0" />
+                    <Slider Grid.Column="4" Minimum="-1" Maximum="1" Value="{Binding Tint}"
+                            TickFrequency="0.1" />
+                    <Button Grid.Column="5" Content="↺" Padding="6,2" Margin="4,0,0,0"
+                            Click="OnResetTint"
+                            ToolTip.Tip="Reset tint" />
+                </Grid>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Spacing="8"
+                            Margin="12,0,0,0">
+                    <!-- Common controls — visible in both modes. Gradient
+                         space + Inspect are useful whether the user wants
+                         to export or apply the palette to the host. -->
+                    <TextBlock Classes="label" Text="Gradient:" />
+                    <ComboBox Width="110"
+                              SelectedIndex="{Binding GradientInterpolationIndex}"
+                              ToolTip.Tip="Interpolation space for gradient preview + PDF strips">
+                        <ComboBoxItem Content="sRGB" />
+                        <ComboBoxItem Content="Lab" />
+                        <ComboBoxItem Content="OkLab" />
+                    </ComboBox>
+                    <Button Classes="secondary"
+                            Content="Inspect…"
+                            IsEnabled="{Binding CanApply}"
+                            Click="OnInspectClick" />
+
+                    <!-- Standalone-mode trailing controls: Export to file
+                         picker + Close. -->
+                    <TextBlock Classes="label" Text="Format:"
+                               IsVisible="{Binding StandaloneMode}" />
+                    <ComboBox Width="200"
+                              ItemsSource="{Binding ExportFormats}"
+                              SelectedItem="{Binding SelectedExportFormat}"
+                              DisplayMemberBinding="{Binding DisplayName}"
+                              IsVisible="{Binding StandaloneMode}" />
+                    <Button Classes="apply"
+                            Content="Export…"
+                            IsEnabled="{Binding CanApply}"
+                            Click="OnExportClick"
+                            IsVisible="{Binding StandaloneMode}" />
+                    <Button Classes="danger"
+                            Content="Close"
+                            Command="{Binding CancelCommand}"
+                            IsVisible="{Binding StandaloneMode}" />
+
+                    <!-- Picker-mode trailing controls: Apply returns the
+                         selected palette's stops to the host via the
+                         ResultAccepted event on ImagePaletteViewModel.
+                         Cancel closes the dialog and returns null. -->
+                    <Button Classes="apply"
+                            Content="Apply"
+                            IsEnabled="{Binding CanApply}"
+                            Command="{Binding ApplyCommand}"
+                            IsVisible="{Binding PickerMode}" />
+                    <Button Classes="danger"
+                            Content="Cancel"
+                            Command="{Binding CancelCommand}"
+                            IsVisible="{Binding PickerMode}" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- Status bar — standalone-only. The picker dialog has no need
+             for elapsed-extract telemetry; the host owns its own status
+             reporting. -->
+        <Border Grid.Row="2" Background="#1A1A1A" BorderBrush="#3C3C3C" BorderThickness="0,1,0,0" Padding="10,4"
+                IsVisible="{Binding StandaloneMode}">
+            <TextBlock Text="{Binding StatusBarText}" Foreground="#A8A8A8" FontSize="11" />
+        </Border>
+    </Grid>
+</Window>

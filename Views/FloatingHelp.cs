@@ -188,6 +188,7 @@ namespace FracturingFog.Views
             _tabs.TabPages.Add(BuildAboutTab());
             _tabs.TabPages.Add(BuildSystemInfoTab());
             _tabs.TabPages.Add(BuildFeaturesTab());
+            _tabs.TabPages.Add(BuildBatchTab());
             _tabs.TabPages.Add(BuildAudioTab());
             _tabs.TabPages.Add(BuildEditorTab());
             _tabs.TabPages.Add(BuildMathTab());
@@ -464,6 +465,14 @@ namespace FracturingFog.Views
   Perturbation theory (Series Approx. + BLA) accelerates deep zooms.
 ";
             rtb.Text = rtb.Text.Replace("{THEME_COUNT}", themeCount.ToString());
+            return page;
+        }
+
+        private TabPage BuildBatchTab()
+        {
+            var page = MakePage("Batch / CLI");
+            var rtb = MakeRichText(page);
+            rtb.Text = FracturingFog.Help.HelpTextBundle.BatchText;
             return page;
         }
 
@@ -1124,6 +1133,7 @@ unless the slider is locked.
             sub.TabPages.Add(BuildMathSubTab("User Equation",  MathUserEquationText()));
             sub.TabPages.Add(BuildMathSubTab("User Bulb 3D",   MathUserBulbText()));
             sub.TabPages.Add(BuildMathSubTab("Sandbox",        MathSandboxText()));
+            sub.TabPages.Add(BuildMathSubTab("Mandelbrot Z² (Generated)", FracturingFog.Help.HelpTextBundle.MathGeneratedZ2Text));
 
             page.Controls.Add(sub);
             return page;

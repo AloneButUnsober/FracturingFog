@@ -1,0 +1,312 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:m="using:FracturingFog.Models"
+        x:Class="FracturingFog.UI.Avalonia.Views.UserBulbView"
+        x:DataType="vm:UserBulbViewModel"
+        Title="User Bulb (3D)"
+        Width="1180"
+        Height="940"
+        MinWidth="900"
+        MinHeight="700"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#282828"
+        Foreground="White">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.header">
+            <Setter Property="Foreground" Value="#C8C8FF" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#DCDCDC" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+        </Style>
+        <Style Selector="Button.tool">
+            <Setter Property="Background" Value="#464646" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="10,3" />
+        </Style>
+        <Style Selector="TextBox.code">
+            <Setter Property="FontFamily" Value="Consolas, monospace" />
+            <Setter Property="Background" Value="#1C1C1C" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="TextBlock.error">
+            <Setter Property="Foreground" Value="#FF6464" />
+            <Setter Property="FontFamily" Value="Consolas, monospace" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <Style Selector="TextBlock.ok">
+            <Setter Property="Foreground" Value="#64FF64" />
+            <Setter Property="FontFamily" Value="Consolas, monospace" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="10" ColumnDefinitions="540,12,*">
+
+        <!-- ── LEFT COLUMN ──────────────────────────────────────────── -->
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="6">
+                <TextBlock Text="{Binding HintText}" Foreground="#B4B4B4" TextWrapping="Wrap" />
+
+                <!-- Saved row -->
+                <Grid ColumnDefinitions="50,*,Auto,Auto" Margin="0,4,0,0">
+                    <TextBlock Grid.Column="0" Classes="label" Text="Saved:" />
+                    <ComboBox  Grid.Column="1"
+                               ItemsSource="{Binding SavedNames}"
+                               SelectedItem="{Binding SelectedSavedName, Mode=TwoWay}" />
+                    <Button    Grid.Column="2" Classes="tool" Content="Save…"
+                               Command="{Binding SaveCommand}" Margin="6,0,4,0" />
+                    <Button    Grid.Column="3" Classes="tool" Content="Delete"
+                               Command="{Binding DeleteCommand}" />
+                </Grid>
+                <Grid ColumnDefinitions="50,*,Auto,Auto">
+                    <CheckBox  Grid.Column="1" Content="Promote to fractal list"
+                               IsChecked="{Binding Promote, Mode=TwoWay}"
+                               IsEnabled="{Binding PromoteEnabled}" />
+                    <Button    Grid.Column="2" Classes="tool" Content="Import…"
+                               Command="{Binding ImportCommand}" Margin="6,0,4,0" />
+                    <Button    Grid.Column="3" Classes="tool" Content="Export…"
+                               Command="{Binding ExportCommand}" />
+                </Grid>
+
+                <!-- Source editor -->
+                <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#1C1C1C">
+                    <TextBox Classes="code"
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             MinHeight="200"
+                             Text="{Binding Source, Mode=TwoWay}" />
+                </Border>
+                <TextBlock Classes="error"
+                           Text="{Binding StatusMessage}"
+                           IsVisible="{Binding StatusIsError}" />
+                <TextBlock Classes="ok"
+                           Text="{Binding StatusMessage}"
+                           IsVisible="{Binding !StatusIsError}" />
+
+                <!-- Camera -->
+                <TextBlock Classes="header" Text="Camera" />
+                <Grid ColumnDefinitions="Auto,80,Auto,80,Auto,80,Auto"
+                      RowDefinitions="Auto,Auto" Margin="0,0,0,4">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Distance:" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0.1" Maximum="50" Increment="0.1" FormatString="0.00"
+                                   Value="{Binding CamDistance}" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="label" Text="Theta°:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="3" Minimum="-360" Maximum="360" Increment="5" FormatString="0.0"
+                                   Value="{Binding CamThetaDeg}" />
+                    <TextBlock Grid.Row="0" Grid.Column="4" Classes="label" Text="Phi°:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="5" Minimum="1" Maximum="179" Increment="5" FormatString="0.0"
+                                   Value="{Binding CamPhiDeg}" />
+                    <Button        Grid.Row="0" Grid.Column="6" Classes="tool" Content="Reset cam"
+                                   Command="{Binding ResetCameraCommand}" Margin="10,0,0,0" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Light θ°:" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="-360" Maximum="360" Increment="5" FormatString="0.0"
+                                   Value="{Binding LightThetaDeg}" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Light φ°:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="3" Minimum="1" Maximum="179" Increment="5" FormatString="0.0"
+                                   Value="{Binding LightPhiDeg}" />
+                </Grid>
+
+                <!-- Render -->
+                <TextBlock Classes="header" Text="Render" />
+                <Grid ColumnDefinitions="Auto,80,Auto,80,Auto,80"
+                      RowDefinitions="Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Iterations:" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="64" Increment="1" FormatString="0"
+                                   Value="{Binding Iterations}" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="label" Text="Bailout:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="3" Minimum="1" Maximum="100" Increment="0.5" FormatString="0.0"
+                                   Value="{Binding Bailout}" />
+                    <TextBlock Grid.Row="0" Grid.Column="4" Classes="label" Text="Max steps:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="5" Minimum="16" Maximum="512" Increment="8" FormatString="0"
+                                   Value="{Binding MaxSteps}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Epsilon:" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0.00001" Maximum="0.1" Increment="0.0005" FormatString="0.00000"
+                                   Value="{Binding Epsilon}" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Jac h:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="3" Minimum="0.0000001" Maximum="0.01" Increment="0.00005" FormatString="0.0000000"
+                                   Value="{Binding JacobianH}" />
+                    <TextBlock Grid.Row="1" Grid.Column="4" Classes="label" Text="Cull r:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="5" Minimum="0.1" Maximum="50" Increment="0.25" FormatString="0.00"
+                                   Value="{Binding CullRadius}" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="DE mode:" />
+                    <ComboBox    Grid.Row="2" Grid.Column="1" SelectedIndex="{Binding DEModeIndex}">
+                        <ComboBoxItem Content="Auto" />
+                        <ComboBoxItem Content="Analytic" />
+                        <ComboBoxItem Content="Numerical" />
+                    </ComboBox>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Classes="label" Text="Backend:" Margin="10,0,6,0" />
+                    <ComboBox    Grid.Row="2" Grid.Column="3" Grid.ColumnSpan="3" SelectedIndex="{Binding BackendIndex}">
+                        <ComboBoxItem Content="CPU" />
+                        <ComboBoxItem Content="GPU (experimental)" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Algebra:" />
+                    <ComboBox    Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding AxisModeIndex}">
+                        <ComboBoxItem Content="Vec3 (3D)" />
+                        <ComboBoxItem Content="Quat (4D)" />
+                    </ComboBox>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Classes="label" Text="Slice W:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000"
+                                   IsEnabled="{Binding QuatEnabled}"
+                                   Value="{Binding QuatSliceW}" />
+                </Grid>
+
+                <!-- Params -->
+                <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                    <TextBlock Grid.Column="0" Classes="header" Text="Params" Margin="0,0,0,0" />
+                    <Button    Grid.Column="1" Classes="tool" Content="+ Add"
+                               Command="{Binding AddParamCommand}" />
+                </Grid>
+                <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323">
+                    <ItemsControl ItemsSource="{Binding Params}" MaxHeight="180">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="m:UserBulbParam">
+                                <Grid ColumnDefinitions="60,100,70,70,Auto" Margin="2">
+                                    <TextBox       Grid.Column="0" Text="{Binding Name, Mode=TwoWay}" />
+                                    <NumericUpDown Grid.Column="1" Value="{Binding Value, Mode=TwoWay}" FormatString="0.0000" />
+                                    <NumericUpDown Grid.Column="2" Value="{Binding Min,   Mode=TwoWay}" FormatString="0.000" />
+                                    <NumericUpDown Grid.Column="3" Value="{Binding Max,   Mode=TwoWay}" FormatString="0.000" />
+                                    <Button        Grid.Column="4" Content="X" Background="#5A3232" Foreground="White"
+                                                   Command="{Binding $parent[ItemsControl].((vm:UserBulbViewModel)DataContext).RemoveParamCommand}"
+                                                   CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <!-- Animation -->
+                <TextBlock Classes="header" Text="Animation (t)" />
+                <Grid ColumnDefinitions="Auto,Auto,80,Auto,120">
+                    <Button        Grid.Column="0" Classes="tool" Content="{Binding PlayPauseLabel}"
+                                   Command="{Binding TogglePlayCommand}" />
+                    <TextBlock     Grid.Column="1" Classes="label" Text="Speed:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="2" Minimum="-10" Maximum="10" Increment="0.1" FormatString="0.00"
+                                   Value="{Binding AnimSpeed}" />
+                    <TextBlock     Grid.Column="3" Classes="label" Text="t:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="4" Minimum="-1000000" Maximum="1000000" Increment="0.1" FormatString="0.000"
+                                   Value="{Binding AnimTime}" />
+                </Grid>
+
+                <!-- Julia -->
+                <TextBlock Classes="header" Text="Julia mode" />
+                <Grid ColumnDefinitions="Auto,Auto,70,Auto,70,Auto,70,Auto,70" Margin="0,0,0,8">
+                    <CheckBox      Grid.Column="0" Content="Enable (fix c)"
+                                   IsChecked="{Binding JuliaMode}" />
+                    <TextBlock     Grid.Column="1" Classes="label" Text="c.X:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="2" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                                   Value="{Binding JuliaCX}" />
+                    <TextBlock     Grid.Column="3" Classes="label" Text="c.Y:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="4" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                                   Value="{Binding JuliaCY}" />
+                    <TextBlock     Grid.Column="5" Classes="label" Text="c.Z:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="6" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                                   Value="{Binding JuliaCZ}" />
+                    <TextBlock     Grid.Column="7" Classes="label" Text="c.W:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="8" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                                   IsEnabled="{Binding QuatEnabled}"
+                                   Value="{Binding JuliaCW}" />
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── RIGHT COLUMN ─────────────────────────────────────────── -->
+        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="6">
+
+                <!-- Color driver -->
+                <TextBlock Classes="header" Text="Color driver" />
+                <Grid ColumnDefinitions="140,Auto,60,Auto,60,Auto,60,Auto,60">
+                    <ComboBox    Grid.Column="0" SelectedIndex="{Binding ColorDriverIndex}">
+                        <ComboBoxItem Content="StepDepth" />
+                        <ComboBoxItem Content="OrbitTrap" />
+                        <ComboBoxItem Content="EscapeAngle" />
+                        <ComboBoxItem Content="FinalMagnitude" />
+                        <ComboBoxItem Content="IterComponent" />
+                        <ComboBoxItem Content="Normal" />
+                    </ComboBox>
+                    <TextBlock     Grid.Column="1" Classes="label" Text="tx:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="2" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000" Value="{Binding TrapX}" />
+                    <TextBlock     Grid.Column="3" Classes="label" Text="ty:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="4" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000" Value="{Binding TrapY}" />
+                    <TextBlock     Grid.Column="5" Classes="label" Text="tz:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="6" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000" Value="{Binding TrapZ}" />
+                    <TextBlock     Grid.Column="7" Classes="label" Text="axis:" Margin="10,0,4,0" />
+                    <ComboBox      Grid.Column="8" SelectedIndex="{Binding IterAxis}">
+                        <ComboBoxItem Content="X" />
+                        <ComboBoxItem Content="Y" />
+                        <ComboBoxItem Content="Z" />
+                    </ComboBox>
+                </Grid>
+
+                <!-- Lighting -->
+                <TextBlock Classes="header" Text="Lighting (L1/L2/L3 intensity, AO, fog)" />
+                <Grid ColumnDefinitions="Auto,70,Auto,70,Auto,70,Auto,70,Auto,80">
+                    <TextBlock     Grid.Column="0" Classes="label" Text="L1:" />
+                    <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Value="{Binding Light1}" />
+                    <TextBlock     Grid.Column="2" Classes="label" Text="L2:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Value="{Binding Light2}" />
+                    <TextBlock     Grid.Column="4" Classes="label" Text="L3:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="5" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Value="{Binding Light3}" />
+                    <TextBlock     Grid.Column="6" Classes="label" Text="AO:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="7" Minimum="0" Maximum="16" Increment="1" FormatString="0" Value="{Binding AOSamples}" />
+                    <TextBlock     Grid.Column="8" Classes="label" Text="Fog:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="9" Minimum="0" Maximum="5" Increment="0.05" FormatString="0.000" Value="{Binding FogDensity}" />
+                </Grid>
+
+                <!-- View -->
+                <TextBlock Classes="header" Text="View (FOV / clip / SS)" />
+                <Grid ColumnDefinitions="Auto,70,Auto,Auto,60">
+                    <TextBlock     Grid.Column="0" Classes="label" Text="FOV°:" />
+                    <NumericUpDown Grid.Column="1" Minimum="5" Maximum="170" Increment="1" FormatString="0.0" Value="{Binding FovDegrees}" />
+                    <CheckBox      Grid.Column="2" Content="Clip+Y" Margin="14,0,0,0" IsChecked="{Binding ClipPlane}" />
+                    <TextBlock     Grid.Column="3" Classes="label" Text="SS:" Margin="14,0,4,0" />
+                    <ComboBox      Grid.Column="4" SelectedIndex="{Binding SSIndex}">
+                        <ComboBoxItem Content="1x" />
+                        <ComboBoxItem Content="2x" />
+                        <ComboBoxItem Content="4x" />
+                    </ComboBox>
+                </Grid>
+
+                <!-- Chain -->
+                <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                    <TextBlock Grid.Column="0" Classes="header" Text="Chain (when non-empty, overrides single source)" Margin="0,0,0,0" />
+                    <Button    Grid.Column="1" Classes="tool" Content="+ Step"
+                               Command="{Binding AddChainCommand}" />
+                </Grid>
+                <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323">
+                    <ItemsControl ItemsSource="{Binding Chain}" MaxHeight="220">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="m:UserBulbChainStep">
+                                <Grid ColumnDefinitions="70,*,Auto" Margin="2">
+                                    <TextBox Grid.Column="0" Text="{Binding OutputName, Mode=TwoWay}" />
+                                    <TextBox Grid.Column="1" Classes="code"
+                                             Text="{Binding Source, Mode=TwoWay}" Margin="4,0,4,0" />
+                                    <Button  Grid.Column="2" Content="X" Background="#5A3232" Foreground="White"
+                                             Command="{Binding $parent[ItemsControl].((vm:UserBulbViewModel)DataContext).RemoveChainCommand}"
+                                             CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <!-- Export -->
+                <Button Classes="tool"
+                        Content="Export mesh (OBJ)…"
+                        Command="{Binding ExportMeshCommand}"
+                        HorizontalAlignment="Left"
+                        Margin="0,12,0,0" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Cross-platform GPU backend for Phase 2.4. Targets net10.0 (no -windows
+      TFM suffix) so it builds on Linux/macOS CI runners. Renders a fractal
+      colour buffer through an OpenGL 3.3 core textured full-screen triangle
+      that mirrors the DirectXRenderer geometry — no behavioural difference
+      between backends for the calculator layer above.
+
+      OpenGL chosen over Vulkan for this first cross-platform backend because
+      the calculator output is a simple CPU-side BGRA buffer; a single
+      glTexSubImage2D + textured quad reaches Mesa/MoltenVK/WGL without
+      hand-rolling a Vulkan command buffer + swapchain per platform. Vulkan
+      can be added later as a sibling SilkVkRenderer when ray-traced or
+      compute paths actually need it.
+
+      Multi-RID: csproj declares no RID so consumers can publish for any.
+      Recommended RIDs are win-x64 / linux-x64 / osx-arm64 — see CI matrix.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64;arm64</Platforms>
+    <RootNamespace>FracturingFog.Rendering.Silk</RootNamespace>
+    <AssemblyName>FracturingFog.Rendering.Silk</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Silk.NET 2.21 is the current line as of 2026-05. Pull only the packages
+      the GL path needs; Vulkan/D3D bindings stay out of the closure so the
+      assembly is small enough to ship with Linux/Mac builds.
+
+        Silk.NET.OpenGL          - GL 3.3 core bindings used by SilkGLRenderer
+        Silk.NET.Core            - PFN / NativeAPIContext shared base
+        Silk.NET.Windowing       - IWindow + INativeWindow surface adoption
+        Silk.NET.OpenGL.Extensions.ARB - PBO + texture storage extensions
+    -->
+    <PackageReference Include="Silk.NET.Core" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.OpenGL.Extensions.ARB" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Windowing.Common" Version="2.21.0" />
+    <!--
+      Full Windowing meta-package pulls the GLFW backend natives so
+      SilkStandaloneRunner can open its own IWindow on win-x64 / linux-x64 /
+      osx-arm64. Input is required by IWindow.Input for non-blocking event
+      pumping in the render loop.
+    -->
+    <PackageReference Include="Silk.NET.Windowing" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Input" Version="2.21.0" />
+    <PackageReference Include="Silk.NET.Input.Glfw" Version="2.21.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
