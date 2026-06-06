@@ -155,30 +155,55 @@
                     <!-- Stops -->
                     <Border Classes="group">
                         <StackPanel Spacing="6">
-                            <Grid ColumnDefinitions="*,Auto,Auto">
+                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                 <TextBlock Grid.Column="0" Classes="section" Text="Color stops" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Classes="action add" Content="+ Add stop"   Command="{Binding AddStopCommand}" />
+                                <Button Grid.Column="1" Classes="action add"    Content="+ Add stop"   Command="{Binding AddStopCommand}" />
                                 <Button Grid.Column="2" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
+                                <Button Grid.Column="3" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
+                                <Button Grid.Column="4" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="Auto,Auto,*">
+                                <CheckBox  Grid.Column="0" Content="Inspect"  IsChecked="{Binding InspectActive}"
+                                           Foreground="#C8C878" FontWeight="Bold" VerticalAlignment="Center"
+                                           ToolTip.Tip="Single-click the rendered fractal to highlight the closest matching stop." />
+                                <Button    Grid.Column="1" Classes="action save" Content="Sample…"
+                                           Margin="12,0,0,0"
+                                           Command="{Binding SampleSelectedCommand}"
+                                           ToolTip.Tip="Eyedropper: click a stop row first, then sample any pixel on the desktop to replace its color." />
+                                <TextBlock Grid.Column="2" Text="(click a stop to select it)"
+                                           Foreground="#808080" FontStyle="Italic"
+                                           VerticalAlignment="Center" Margin="12,0,0,0" />
                             </Grid>
                             <Border BorderBrush="#2A2A2A" BorderThickness="1" Background="#1A1A1A" MaxHeight="260">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding Stops}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="vm:ColorStopRowVm">
-                                                <Grid ColumnDefinitions="92,Auto,*,Auto" Margin="4,2">
-                                                    <NumericUpDown Grid.Column="0"
-                                                                   Value="{Binding Position}"
-                                                                   Minimum="0" Maximum="1"
-                                                                   Increment="0.05"
-                                                                   FormatString="0.###" />
-                                                    <Border Grid.Column="1" Width="32" Height="22" Margin="6,0"
-                                                            Background="{Binding SwatchBrush}"
-                                                            BorderBrush="#444" BorderThickness="1" />
-                                                    <ColorPicker Grid.Column="2" Color="{Binding StopColor, Mode=TwoWay}" Margin="4,0" HorizontalAlignment="Left" />
-                                                    <Button Grid.Column="3" Classes="action danger" Content="X" Width="28"
-                                                            Command="{Binding $parent[ItemsControl].((vm:ColorThemeEditorViewModel)DataContext).RemoveStopCommand}"
-                                                            CommandParameter="{Binding}" />
-                                                </Grid>
+                                                <Border Background="{Binding RowBackground}" CornerRadius="2" Margin="2,1" Padding="2">
+                                                    <Grid ColumnDefinitions="92,Auto,*,Auto,Auto" Margin="2,1">
+                                                        <Grid.Styles>
+                                                            <Style Selector="Grid">
+                                                                <Setter Property="Background" Value="Transparent" />
+                                                            </Style>
+                                                        </Grid.Styles>
+                                                        <NumericUpDown Grid.Column="0"
+                                                                       Value="{Binding Position}"
+                                                                       Minimum="0" Maximum="1"
+                                                                       Increment="0.05"
+                                                                       FormatString="0.###" />
+                                                        <Border Grid.Column="1" Width="32" Height="22" Margin="6,0"
+                                                                Background="{Binding SwatchBrush}"
+                                                                BorderBrush="#444" BorderThickness="1" />
+                                                        <ColorPicker Grid.Column="2" Color="{Binding StopColor, Mode=TwoWay}" Margin="4,0" HorizontalAlignment="Left" />
+                                                        <Button Grid.Column="3" Content="◎" Width="28" Margin="2,0"
+                                                                Background="#325A6E" Foreground="White" FontWeight="Bold"
+                                                                Command="{Binding SampleCommand}"
+                                                                ToolTip.Tip="Sample a color from anywhere on the desktop and apply to this stop." />
+                                                        <Button Grid.Column="4" Classes="action danger" Content="X" Width="28"
+                                                                Command="{Binding $parent[ItemsControl].((vm:ColorThemeEditorViewModel)DataContext).RemoveStopCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
