@@ -25,6 +25,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using FracturingFog.Imaging;
+using FracturingFog.Models;
 using FracturingFog.ViewState;
 
 namespace FracturingFog.UI.Avalonia.Controls;
@@ -59,6 +61,14 @@ public sealed class FractalOverlayControl : Control
     /// main-project IColorMap type.</summary>
     public static readonly StyledProperty<byte> ContrastLumaProperty =
         AvaloniaProperty.Register<FractalOverlayControl, byte>(nameof(ContrastLuma), defaultValue: (byte)0);
+
+    /// <summary>Optional user-configured watermark override. Null = render the
+    /// legacy default (region/theme + auto-contrast colour, lower-right). When
+    /// set the control honours its TextColor / HighlightColor / BackgroundColor
+    /// / Placement / Justify. Subtext (program/version line) is mandatory and
+    /// always drawn — the StyledProperty does not need to carry it.</summary>
+    public static readonly StyledProperty<WatermarkDef?> CustomWatermarkProperty =
+        AvaloniaProperty.Register<FractalOverlayControl, WatermarkDef?>(nameof(CustomWatermark));
 
     public FractalViewState? ViewSource
     {
@@ -110,6 +120,12 @@ public sealed class FractalOverlayControl : Control
         set => SetValue(ContrastLumaProperty, value);
     }
 
+    public WatermarkDef? CustomWatermark
+    {
+        get => GetValue(CustomWatermarkProperty);
+        set => SetValue(CustomWatermarkProperty, value);
+    }
+
     private readonly DispatcherTimer _ticker;
 
     public FractalOverlayControl()
@@ -134,7 +150,8 @@ public sealed class FractalOverlayControl : Control
             ThemeNameProperty,
             ProgramNameProperty,
             ProgramVersionProperty,
-            ContrastLumaProperty);
+            ContrastLumaProperty,
+            CustomWatermarkProperty);
     }
 
     public override void Render(DrawingContext context)
@@ -261,47 +278,85 @@ public sealed class FractalOverlayControl : Control
 
     private void DrawWatermark(DrawingContext ctx, double w, double h, Color contrast)
     {
-        string main = "";
-        if (!string.IsNullOrEmpty(RegionName)) main = RegionName!;
-        if (!string.IsNullOrEmpty(ThemeName))
-            main = string.IsNullOrEmpty(main) ? ThemeName! : main + " - " + ThemeName;
-
-        string sub = $"{ProgramName} v{ProgramVersion ?? "?"} {DateTime.Now.Year}";
+        // Resolve top-line text + colour + placement. If CustomWatermark is set,
+        // honour its fields verbatim. Otherwise fall back to today's auto-contrast
+        // region/theme default (the contrast colour passed in by Render).
+        var defaultText = new RgbDef(contrast.R, contrast.G, contrast.B);
+        var render = WatermarkResolver.Resolve(
+            activeCustom: CustomWatermark,
+            regionEmbedded: null,                                  // overlay only sees the override-or-default; embedded resolution happens host-side
+            overrideRegionWatermark: CustomWatermark != null,      // a control bound to a non-null def is, by construction, the active choice
+            useCustomWatermark: CustomWatermark != null,
+            regionName: RegionName ?? string.Empty,
+            themeName: ThemeName ?? string.Empty,
+            programName: ProgramName ?? "Fracturing Fog",
+            programVersion: ProgramVersion ?? string.Empty,
+            defaultTextColor: defaultText);
 
         var mainTypeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold);
-        var subTypeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.SemiBold);
+        var subTypeface  = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.SemiBold);
 
-        var mainBrush = new SolidColorBrush(Color.FromArgb(205, contrast.R, contrast.G, contrast.B));
-        var subBrush = new SolidColorBrush(Color.FromArgb(180, contrast.R, contrast.G, contrast.B));
-        // Shadow direction flips with contrast so it always reads as a halo:
-        // dark ink → white halo, light ink → black halo.
-        bool darkInk = (contrast.R + contrast.G + contrast.B) < 384; // 128*3
-        byte hs = darkInk ? (byte)255 : (byte)0;
-        var shadowBrush = new SolidColorBrush(Color.FromArgb(160, hs, hs, hs));
+        var fillColor = Color.FromRgb(render.TextColor.R, render.TextColor.G, render.TextColor.B);
+        var mainBrush = new SolidColorBrush(Color.FromArgb(render.IsCustom ? (byte)255 : (byte)205,
+            fillColor.R, fillColor.G, fillColor.B));
+        var subBrush  = new SolidColorBrush(Color.FromArgb(render.IsCustom ? (byte)230 : (byte)180,
+            fillColor.R, fillColor.G, fillColor.B));
 
-        var mainText = new FormattedText(main, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+        // Halo / shadow — user HighlightColor wins; otherwise auto-pick by luminance.
+        SolidColorBrush shadowBrush;
+        if (render.HighlightColor != null)
+        {
+            shadowBrush = new SolidColorBrush(Color.FromArgb(
+                render.HighlightColor.A, render.HighlightColor.R, render.HighlightColor.G, render.HighlightColor.B));
+        }
+        else
+        {
+            bool darkInk = (fillColor.R + fillColor.G + fillColor.B) < 384; // 128*3
+            byte hs = darkInk ? (byte)255 : (byte)0;
+            shadowBrush = new SolidColorBrush(Color.FromArgb(160, hs, hs, hs));
+        }
+
+        var mainText = new FormattedText(render.TopText, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             mainTypeface, 18, mainBrush);
-        var subText = new FormattedText(sub, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+        var subText  = new FormattedText(render.SubText,  CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             subTypeface, 11, subBrush);
-
-        double pad = 6;
-        double bx = w - Math.Max(mainText.Width, subText.Width) - pad;
-        double by = h - mainText.Height - subText.Height - pad;
-
-        var mainShadow = new FormattedText(main, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+        var mainShadow = new FormattedText(render.TopText, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             mainTypeface, 18, shadowBrush);
-        var subShadow = new FormattedText(sub, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+        var subShadow  = new FormattedText(render.SubText,  CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             subTypeface, 11, shadowBrush);
 
-        if (!string.IsNullOrEmpty(main))
+        const int pad = 6;
+        int topW = (int)Math.Ceiling(mainText.Width);
+        int topH = (int)Math.Ceiling(mainText.Height);
+        int subW = (int)Math.Ceiling(subText.Width);
+        int subH = (int)Math.Ceiling(subText.Height);
+
+        var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
+            render, (int)w, (int)h, topW, topH, subW, subH, pad);
+
+        // Optional opaque background rect — drawn first so glyphs render on top.
+        if (render.BackgroundColor != null)
         {
-            ctx.DrawText(mainShadow, new Point(bx + 1, by + 1));
-            ctx.DrawText(mainText, new Point(bx, by));
+            var bg = new SolidColorBrush(Color.FromArgb(
+                render.BackgroundColor.A, render.BackgroundColor.R, render.BackgroundColor.G, render.BackgroundColor.B));
+            const int bgPad = 4;
+            ctx.FillRectangle(bg, new Rect(bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2));
         }
-        double subY = by + mainText.Height;
-        double subX = w - subText.Width - pad;
-        ctx.DrawText(subShadow, new Point(subX + 1, subY + 1));
-        ctx.DrawText(subText, new Point(subX, subY));
+
+        int topX = WatermarkResolver.AlignLineX(bx, bw, topW, render.Justify);
+        int subX = WatermarkResolver.AlignLineX(bx, bw, subW, render.Justify);
+
+        if (!string.IsNullOrEmpty(render.TopText))
+        {
+            ctx.DrawText(mainShadow, new Point(topX + 1, by + 1));
+            ctx.DrawText(mainText,   new Point(topX,     by));
+        }
+        if (!string.IsNullOrEmpty(render.SubText))
+        {
+            int subY = by + topH;
+            ctx.DrawText(subShadow, new Point(subX + 1, subY + 1));
+            ctx.DrawText(subText,   new Point(subX,     subY));
+        }
     }
 
 }

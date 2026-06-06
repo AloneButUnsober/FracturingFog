@@ -132,7 +132,14 @@ namespace FracturingFog.Models
         /// host's region library (built-in regions are never overwritten —
         /// the host should pop a friendly error and bail in that case).
         /// </summary>
-        bool SaveCurrentAsRegion(string regionName, FractalViewState state);
+        bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null);
+
+        /// <summary>Look up the watermark embedded into a saved region, if any.
+        /// Returns null when the region doesn't exist or has no embedded
+        /// watermark. Used by the shell on region-jump to push
+        /// MainViewModel.RegionEmbeddedWatermark so the precedence resolver
+        /// picks it up on the next render.</summary>
+        WatermarkDef? GetRegionEmbeddedWatermark(string regionName);
 
         /// <summary>
         /// Remove the named region from the user library. Returns true if a

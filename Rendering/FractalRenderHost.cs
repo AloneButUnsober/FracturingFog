@@ -197,6 +197,7 @@ namespace FracturingFog.Rendering
         public string? ThemeName { get; set; }
         public string? ProgramName { get; set; } = "Fracturing Fog";
         public string? ProgramVersion { get; set; }
+        public FracturingFog.Models.WatermarkDef? ActiveWatermark { get; set; }
 
         /// <summary>The renderer this host drives. Exposed so the shell can
         /// call Render() in its idle loop.</summary>
@@ -335,7 +336,8 @@ namespace FracturingFog.Rendering
         /// </summary>
         public PosterRequest CreatePosterRequest(
             int width, int height, bool rotate,
-            string path, ImageFormat format, string watermark, string subText)
+            string path, ImageFormat format, string watermark, string subText,
+            FracturingFog.Models.WatermarkDef? customWatermark = null)
         {
             var s = ViewState;
             int effIters = _calculator.MaxIterations > 0
@@ -359,6 +361,7 @@ namespace FracturingFog.Rendering
                 Format = format,
                 Watermark = watermark,
                 SubText = subText,
+                CustomWatermark = customWatermark,
             };
         }
 
@@ -957,6 +960,7 @@ namespace FracturingFog.Rendering
                     _overlay.Composite(dst, w, h, ViewState,
                         ShowGrid, ShowWatermark, OverlayContrastLuma,
                         RegionName, ThemeName, ProgramName, ProgramVersion,
+                        ActiveWatermark,
                         _selectionBox);
                 }
                 catch (Exception ex)
@@ -1054,18 +1058,26 @@ namespace FracturingFog.Rendering
                 Array.Copy(src, buf, n);
             }
 
-            string watermark = !string.IsNullOrEmpty(RegionName)
-                ? RegionName!
-                : (ProgramName ?? "Fracturing Fog");
-            if (!string.IsNullOrEmpty(ThemeName))
-                watermark += " - " + ThemeName;
-            string subText = $"{ProgramName ?? "Fracturing Fog"} v{ProgramVersion ?? "?"} {DateTime.Now.Year}";
-
-            var fontColor = FracturingFog.Imaging.ImageExport.ComputeContrastColor(
+            // Resolve through the shared chain. ActiveWatermark = non-null when
+            // the shell has pushed a custom watermark in via the precedence
+            // resolver; null = legacy default path (region/theme + auto contrast).
+            var auto = FracturingFog.Imaging.ImageExport.ComputeContrastColor(
                 System.Drawing.Color.White, watermark: true, pixels: buf, imgW: w, imgH: h);
+            var defaultText = new FracturingFog.Models.RgbDef(auto.R, auto.G, auto.B);
+            var wm = FracturingFog.Imaging.WatermarkResolver.Resolve(
+                activeCustom: ActiveWatermark,
+                regionEmbedded: null,
+                overrideRegionWatermark: ActiveWatermark != null,
+                useCustomWatermark: ActiveWatermark != null,
+                regionName: RegionName ?? string.Empty,
+                themeName: ThemeName ?? string.Empty,
+                programName: ProgramName ?? "Fracturing Fog",
+                programVersion: ProgramVersion ?? string.Empty,
+                defaultTextColor: defaultText);
+
             FracturingFog.Imaging.ImageExport.SavePixelsToFile(
                 buf, w, h, path, System.Drawing.Imaging.ImageFormat.Png,
-                watermark, fontColor, subText);
+                wm);
         }
 
         public void Dispose()

@@ -215,6 +215,46 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             $"unknown theme '{req.ThemeName}' and no inline themeJson supplied");
     }
 
+    /// <summary>Resolve which watermark the server should composite. Honours
+    /// the server's WatermarkMode + the region's EmbeddedWatermark + the
+    /// client's request payload, in that order:
+    ///   1. region.EmbeddedWatermark always wins (publisher's intent).
+    ///   2. WatermarkMode=Client + valid clientWatermarkJson → client's def.
+    ///   3. WatermarkMode=Custom + ServerCustomWatermarkName → server's def.
+    ///   4. → null (= legacy default).</summary>
+    private static WatermarkDef? ResolveServerWatermark(RenderRequestDto req, FractalRegion? region, ISessionLog log)
+    {
+        if (region?.EmbeddedWatermark != null)
+            return region.EmbeddedWatermark.Clone();
+
+        var cfg = ServerConfig.LoadOrDefault();
+        switch (cfg.WatermarkMode)
+        {
+            case ServerWatermarkMode.Client:
+                if (req.UseClientWatermark && !string.IsNullOrWhiteSpace(req.ClientWatermarkJson))
+                {
+                    try
+                    {
+                        WatermarkPayloadValidator.Validate(req.ClientWatermarkJson!);
+                        return UserWatermarkStore.DeserializeOne(req.ClientWatermarkJson!);
+                    }
+                    catch (ServerProtocolException ex)
+                    {
+                        log.Warn($"client watermark refused: {ex.Message}");
+                    }
+                }
+                return null;
+
+            case ServerWatermarkMode.Custom:
+                try { UserWatermarkStore.Instance.Load(); } catch { }
+                return UserWatermarkStore.Instance.GetByName(cfg.ServerCustomWatermarkName)?.Clone();
+
+            case ServerWatermarkMode.Default:
+            default:
+                return null;
+        }
+    }
+
     private static Task<RenderArtifact> RenderImageArtifactAsync(
         RenderRequestDto req, FractalType ftype,
         double cx, double cxLo, double cx2, double cx3,
@@ -259,6 +299,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             Watermark = region?.Name ?? "",
             SubText = "Fracturing Fog server render",
             Dpi = dpiStamp,
+            CustomWatermark = ResolveServerWatermark(req, region, log),
         };
 
         // CPU-bound rasterization runs on a thread-pool worker. The outer

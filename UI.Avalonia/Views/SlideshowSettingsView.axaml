@@ -18,7 +18,7 @@
       dimension and even that uses MinWidth so a larger system font (e.g. a
       4K display at 200% scaling with a 12pt UI font) cannot crop labels.
     -->
-    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="*,Auto">
 
         <!-- Row 0: Audio-Reactive toggle + Audio… button -->
@@ -96,8 +96,17 @@
                    Margin="0,6,0,4"
                    IsVisible="{Binding TimingNoteVisible}" />
 
-        <!-- Row 8: OK / Cancel buttons -->
-        <StackPanel Grid.Row="8" Grid.ColumnSpan="2"
+        <!-- Row 8: per-region watermark toggle -->
+        <CheckBox Grid.Row="8" Grid.ColumnSpan="2"
+                  Content="Use each region's embedded watermark"
+                  IsChecked="{Binding UseRegionWatermark, Mode=TwoWay}"
+                  Foreground="#B4DCB4"
+                  FontWeight="Bold"
+                  Margin="0,4,0,0"
+                  ToolTip.Tip="When on, each region that carries an embedded watermark drives its own branding during the slideshow." />
+
+        <!-- Row 9: OK / Cancel buttons -->
+        <StackPanel Grid.Row="9" Grid.ColumnSpan="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="8"

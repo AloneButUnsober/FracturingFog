@@ -490,6 +490,106 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // ── Custom watermark precedence chain ────────────────────────────────
+    //
+    // The render host gets one resolved WatermarkDef? — null means "use the
+    // default region/theme + auto-contrast". The precedence is:
+    //   1. OverrideRegionWatermark + ActiveCustomWatermark → ActiveCustomWatermark
+    //   2. RegionEmbeddedWatermark                          → that
+    //   3. UseCustomWatermark + ActiveCustomWatermark       → ActiveCustomWatermark
+    //   4. → null (default)
+    // The shell sets the inputs (toggles, selected name, region jump callback);
+    // PushActiveWatermark recomputes + writes to the render host.
+
+    private bool _useCustomWatermark;
+    /// <summary>Master toggle. When false, the saved-watermark library is
+    /// inert (image/poster/slideshow/video all render the default region/theme
+    /// watermark).</summary>
+    public bool UseCustomWatermark
+    {
+        get => _useCustomWatermark;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _useCustomWatermark, value))
+            {
+                PushActiveWatermark();
+                if (_showWatermark) _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
+    private string? _selectedCustomWatermarkName;
+    /// <summary>The library entry currently in scope. Looked up against
+    /// UserWatermarkStore on the fly so a fresh save through the editor
+    /// reaches the render path on the next repaint.</summary>
+    public string? SelectedCustomWatermarkName
+    {
+        get => _selectedCustomWatermarkName;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _selectedCustomWatermarkName, value))
+            {
+                PushActiveWatermark();
+                if (_showWatermark) _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
+    private bool _overrideRegionWatermark;
+    /// <summary>FloatingMenu "Override region watermark" — forces the active
+    /// custom watermark to win even when the current region carries an
+    /// embedded one. Mirrors the existing post-fx override flags.</summary>
+    public bool OverrideRegionWatermark
+    {
+        get => _overrideRegionWatermark;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _overrideRegionWatermark, value))
+            {
+                PushActiveWatermark();
+                if (_showWatermark) _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
+    private FracturingFog.Models.WatermarkDef? _regionEmbeddedWatermark;
+    /// <summary>Embedded watermark carried by the current region's JSON.
+    /// Set by the shell when a region with an EmbeddedWatermark is jumped to;
+    /// cleared on region change away from one.</summary>
+    public FracturingFog.Models.WatermarkDef? RegionEmbeddedWatermark
+    {
+        get => _regionEmbeddedWatermark;
+        set
+        {
+            if (!ReferenceEquals(_regionEmbeddedWatermark, value))
+            {
+                _regionEmbeddedWatermark = value;
+                this.RaisePropertyChanged(nameof(RegionEmbeddedWatermark));
+                PushActiveWatermark();
+                if (_showWatermark) _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
+    /// <summary>The library entry pointed at by SelectedCustomWatermarkName,
+    /// resolved fresh each call so the editor's Save round-trip is visible.
+    /// Null when the name is unset or no longer exists.</summary>
+    public FracturingFog.Models.WatermarkDef? ActiveCustomWatermark
+        => FracturingFog.Models.UserWatermarkStore.Instance.GetByName(_selectedCustomWatermarkName);
+
+    /// <summary>Push the resolved watermark def into the render host. The host
+    /// hands it to FractalOverlayCompositor + ImageExport on the next frame.</summary>
+    public void PushActiveWatermark()
+    {
+        var custom = ActiveCustomWatermark;
+        FracturingFog.Models.WatermarkDef? resolved =
+            (_overrideRegionWatermark && custom != null) ? custom :
+            _regionEmbeddedWatermark != null              ? _regionEmbeddedWatermark :
+            (_useCustomWatermark && custom != null)       ? custom :
+                                                            null;
+        _renderHost.ActiveWatermark = resolved;
+    }
+
     // ── Iter lock ─────────────────────────────────────────────────────────
 
     private bool _iterLocked;

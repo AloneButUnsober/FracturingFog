@@ -61,6 +61,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
+        EditWatermarkCommand    = MakeCmd(() => EditWatermarkClick?.Invoke(this, EventArgs.Empty));
     }
 
     private static ReactiveCommand<Unit, Unit> MakeCmd(Action a) => ReactiveCommand.Create(a);
@@ -71,6 +72,18 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ObservableCollection<string> ThemeNames { get; } = new();
     public ObservableCollection<string> ResolutionNames { get; } = new();
     public ObservableCollection<string> QualityNames { get; } = new();
+    public ObservableCollection<string> WatermarkNames { get; } = new();
+
+    private bool _suppressWatermarkChange;
+
+    /// <summary>Repopulate the watermark dropdown (host calls after startup load
+    /// + after the editor saves/deletes an entry).</summary>
+    public void SetWatermarks(IEnumerable<string> names)
+    {
+        _suppressWatermarkChange = true;
+        try { WatermarkNames.Clear(); foreach (var n in names) WatermarkNames.Add(n); }
+        finally { _suppressWatermarkChange = false; }
+    }
 
     public void SetRegions(IEnumerable<string> names)
     {
@@ -287,6 +300,68 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         _suppressQualityChange = true;
         try { SelectedQuality = name; }
         finally { _suppressQualityChange = false; }
+    }
+
+    // ── Custom watermark dropdown + override toggle ─────────────────────────
+
+    private string? _selectedWatermark;
+    /// <summary>Currently-selected watermark from the dropdown. Setter raises
+    /// <see cref="WatermarkChanged"/> so the host can push the name into
+    /// MainViewModel.SelectedCustomWatermarkName.</summary>
+    public string? SelectedWatermark
+    {
+        get => _selectedWatermark;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedWatermark, value);
+            if (!_suppressWatermarkChange)
+                WatermarkChanged?.Invoke(this, value);
+        }
+    }
+
+    public void SetWatermarkSilent(string? name)
+    {
+        _suppressWatermarkChange = true;
+        try { SelectedWatermark = name; }
+        finally { _suppressWatermarkChange = false; }
+    }
+
+    private bool _useCustomWatermark;
+    /// <summary>Mirrors MainViewModel.UseCustomWatermark — exposes the master
+    /// toggle on the menu surface alongside the watermark combo.</summary>
+    public bool UseCustomWatermark
+    {
+        get => _useCustomWatermark;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _useCustomWatermark, value))
+                UseCustomWatermarkChanged?.Invoke(this, value);
+        }
+    }
+    public void SetUseCustomWatermarkSilent(bool value)
+    {
+        if (_useCustomWatermark == value) return;
+        _useCustomWatermark = value;
+        this.RaisePropertyChanged(nameof(UseCustomWatermark));
+    }
+
+    private bool _overrideRegionWatermark;
+    /// <summary>Override checkbox in the watermark band: forces the active
+    /// custom watermark over any region-embedded watermark.</summary>
+    public bool OverrideRegionWatermark
+    {
+        get => _overrideRegionWatermark;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _overrideRegionWatermark, value))
+                OverrideRegionWatermarkChanged?.Invoke(this, value);
+        }
+    }
+    public void SetOverrideRegionWatermarkSilent(bool value)
+    {
+        if (_overrideRegionWatermark == value) return;
+        _overrideRegionWatermark = value;
+        this.RaisePropertyChanged(nameof(OverrideRegionWatermark));
     }
 
     // ── Coordinates / Zoom / Iter ─────────────────────────────────────────
@@ -574,6 +649,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ServerCommand { get; }
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
+    public ReactiveCommand<Unit, Unit> EditWatermarkCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
 
@@ -601,11 +677,15 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? SlideshowSettingsClick;
     public event EventHandler? ServerClick;
     public event EventHandler? ClientClick;
+    public event EventHandler? EditWatermarkClick;
 
     public event EventHandler<string>? RegionComboChanged;
     public event EventHandler<string>? ColorThemeChanged;
     public event EventHandler<string>? ResolutionChanged;
     public event EventHandler<string>? QualityChanged;
+    public event EventHandler<string?>? WatermarkChanged;
+    public event EventHandler<bool>? UseCustomWatermarkChanged;
+    public event EventHandler<bool>? OverrideRegionWatermarkChanged;
 
     public event EventHandler<int>? BrightnessSlide;
     public event EventHandler<int>? ContrastSlide;

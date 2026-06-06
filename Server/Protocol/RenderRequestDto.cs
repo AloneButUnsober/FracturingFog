@@ -111,4 +111,24 @@ public sealed class RenderRequestDto
     [JsonPropertyName("posterInchesH")] public double? PosterInchesH { get; set; }
     [JsonPropertyName("posterDpi")]     public int?    PosterDpi     { get; set; }
     [JsonPropertyName("posterPortrait")] public bool   PosterPortrait { get; set; }
+
+    // ── Custom watermark ────────────────────────────────────────────────────
+    //
+    // When UseClientWatermark is true AND ClientWatermarkJson is a valid
+    // WatermarkDef payload AND the server's WatermarkMode permits client
+    // overrides (Client mode), the engine composites the client's watermark
+    // onto the saved file in place of the default region/theme branding.
+    // Refused by WatermarkPayloadValidator if the JSON is malformed or
+    // exceeds the byte cap.
+
+    /// <summary>Master flag: the client wants its custom watermark applied to
+    /// the response image / video frames. Server still has the final say (see
+    /// <c>ServerConfig.WatermarkMode</c>).</summary>
+    [JsonPropertyName("useClientWatermark")]
+    public bool UseClientWatermark { get; set; }
+
+    /// <summary>JSON-serialised <c>WatermarkDef</c>. Null or empty disables the
+    /// client override even when <see cref="UseClientWatermark"/> is true.</summary>
+    [JsonPropertyName("clientWatermarkJson")]
+    public string? ClientWatermarkJson { get; set; }
 }

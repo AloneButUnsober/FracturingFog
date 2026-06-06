@@ -118,6 +118,16 @@ namespace FracturingFog.Models
         /// <summary>One-line description for the UI tooltip.</summary>
         public string Description { get; set; } = string.Empty;
 
+        /// <summary>Optional custom watermark embedded into this region's JSON.
+        /// Set when the user ticks "Include watermark" in the Save Region
+        /// dialog while a custom watermark is active. On recall the shell
+        /// pushes this into MainViewModel.RegionEmbeddedWatermark which the
+        /// precedence resolver then routes onto every render surface. Null on
+        /// legacy regions; omitted from JSON when null thanks to
+        /// JsonIgnoreCondition.WhenWritingNull on the library writer.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public WatermarkDef? EmbeddedWatermark { get; set; }
+
         /// <summary>
         /// Fractal type this region targets. Serialized as the enum name (e.g. "Mandelbrot") so
         /// the JSON stays human-readable and survives enum value reordering. Defaults to

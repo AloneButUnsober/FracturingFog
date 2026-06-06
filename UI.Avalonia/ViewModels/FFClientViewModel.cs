@@ -478,7 +478,34 @@ public sealed class FFClientViewModel : ViewModelBase
             PosterPortrait = EnablePoster && PosterPortrait,
             ThemeJson = themeJson,
             RegionJson = regionJson,
+            UseClientWatermark = SendClientWatermark && _activeWatermark != null,
+            ClientWatermarkJson = (SendClientWatermark && _activeWatermark != null)
+                ? UserWatermarkStore.SerializeOne(_activeWatermark)
+                : null,
         };
+    }
+
+    // ── Client-side watermark send ─────────────────────────────────────────
+    //
+    // The host (AvaloniaShellBootstrap) sets the active WatermarkDef on the
+    // VM whenever MainViewModel.ActiveCustomWatermark changes so the client
+    // form can send it without UI.Avalonia having to reach into the host
+    // project for the singleton. When SendClientWatermark is true and the
+    // active def is non-null, BuildRequest packs it into the wire payload —
+    // the server's WatermarkMode decides whether to honour it.
+
+    private WatermarkDef? _activeWatermark;
+    public WatermarkDef? ActiveWatermark
+    {
+        get => _activeWatermark;
+        set => this.RaiseAndSetIfChanged(ref _activeWatermark, value);
+    }
+
+    private bool _sendClientWatermark;
+    public bool SendClientWatermark
+    {
+        get => _sendClientWatermark;
+        set => this.RaiseAndSetIfChanged(ref _sendClientWatermark, value);
     }
 
     private void LoadPresetIntoForm(string? name)
