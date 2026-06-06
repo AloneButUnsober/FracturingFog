@@ -186,7 +186,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     {
         _debounce.Disposable = Observable
             .Timer(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 _params.UserEquationSource = _source;

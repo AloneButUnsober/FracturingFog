@@ -80,7 +80,7 @@ public class PaletteBuilderViewModel : ImagePaletteViewModel
         options
             .Skip(1)
             .Throttle(TimeSpan.FromMilliseconds(400))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => PushUndoSnapshot());
     }
 
@@ -571,7 +571,7 @@ public class PaletteBuilderViewModel : ImagePaletteViewModel
 
         optionChanges
             .Throttle(TimeSpan.FromMilliseconds(250))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 if (AutoExtract && HasImage)

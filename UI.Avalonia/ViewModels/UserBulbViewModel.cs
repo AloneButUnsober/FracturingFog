@@ -133,7 +133,7 @@ public sealed class UserBulbViewModel : ViewModelBase
     {
         _debounce.Disposable = Observable
             .Timer(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 _params.UserBulbSource = _source;

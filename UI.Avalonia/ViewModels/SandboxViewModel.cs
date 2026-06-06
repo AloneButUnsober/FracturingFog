@@ -156,7 +156,7 @@ public sealed class SandboxViewModel : ViewModelBase
     {
         _debounce.Disposable = Observable
             .Timer(TimeSpan.FromMilliseconds(500))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 _params.SandboxSource = _source;
