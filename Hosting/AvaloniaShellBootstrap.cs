@@ -329,12 +329,35 @@ namespace FracturingFog.Hosting
             // colour theme — both invalidate the thumbnail.
             s_shell.Main.PropertyChanged += (_, e) =>
             {
-                if (s_shell == null || !s_shell.IsMiniMapVisible) return;
+                if (s_shell == null) return;
                 if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)
                  || e.PropertyName == nameof(MainViewModel.SelectedFractalEntry)
                  || e.PropertyName == nameof(MainViewModel.SelectedTheme))
                 {
-                    RenderMiniMapAsync(s_shell);
+                    if (s_shell.IsMiniMapVisible) RenderMiniMapAsync(s_shell);
+
+                    // Re-route any open params editor to the new fractal type's
+                    // editor so the modal tracks the toolbar selection instead
+                    // of stranding the user on the old type's knobs. Close the
+                    // generic FractalParamsView and the source-compiled
+                    // editors (UserEquation / Sandbox / UserBulb), then
+                    // re-fire the request so the bootstrap picks the right
+                    // window for the active type.
+                    if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)
+                     || e.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
+                    {
+                        bool wasOpen = s_paramsWin != null || s_userEqWin != null
+                                    || s_sandboxWin != null || s_userBulbWin != null;
+                        if (wasOpen)
+                        {
+                            try { s_paramsWin?.Close(); }   catch { /* ignore */ } s_paramsWin = null;
+                            try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;
+                            try { s_sandboxWin?.Close(); }  catch { /* ignore */ } s_sandboxWin = null;
+                            try { s_userBulbWin?.Close(); } catch { /* ignore */ } s_userBulbWin = null;
+                            Dispatcher.UIThread.Post(() =>
+                                s_shell?.ShowFractalParamsCommand.Execute().Subscribe());
+                        }
+                    }
                 }
             };
 
