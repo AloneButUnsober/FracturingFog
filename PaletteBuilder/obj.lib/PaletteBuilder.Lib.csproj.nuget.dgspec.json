@@ -395,7 +395,7 @@
           "dependencies": {
             "Microsoft.CodeAnalysis.CSharp": {
               "target": "Package",
-              "version": "[4.11.0, )"
+              "version": "[5.3.0, )"
             }
           },
           "imports": [
@@ -1090,7 +1090,7 @@
           "dependencies": {
             "Microsoft.CodeAnalysis.CSharp": {
               "target": "Package",
-              "version": "[4.11.0, )"
+              "version": "[5.3.0, )"
             }
           },
           "imports": [
