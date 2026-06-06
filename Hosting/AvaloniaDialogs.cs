@@ -274,6 +274,119 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
+        // ── Add / Replace import prompt ──────────────────────────────────────
+
+        public enum AddOrReplaceResult { Cancel, Add, Replace }
+
+        /// <summary>
+        /// 3-button modal used by the Color Theme Editor's palette-import
+        /// flow. Asks whether to append the imported colors at position=1
+        /// (Add) or rebuild the stops list with positions redistributed 0…1
+        /// (Replace). Cancel discards the imported colors.
+        /// </summary>
+        public static Task<AddOrReplaceResult> ShowAddOrReplaceAsync(
+            int importedCount,
+            int currentCount,
+            string fileLabel)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<AddOrReplaceResult>();
+
+            void Run()
+            {
+                var win = new Window
+                {
+                    Title = "Import Palette",
+                    Width = 460,
+                    MinWidth = 380,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = new SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0x1C, 0x1C, 0x1C)),
+                };
+
+                var title = new TextBlock
+                {
+                    Text = $"Loaded {importedCount} color" + (importedCount == 1 ? "" : "s")
+                        + $" from {fileLabel}",
+                    Foreground = new SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0xC8, 0xC8, 0x64)),
+                    FontWeight = FontWeight.Bold,
+                    Margin = new Thickness(16, 16, 16, 4),
+                };
+
+                var body = new TextBlock
+                {
+                    Text = $"Current stops: {currentCount}.\n\n"
+                        + "Add — append imported colors at position 1.0 (existing stops untouched).\n"
+                        + "Replace — discard current stops and rebuild from imported colors (positions redistributed 0…1).",
+                    Foreground = Brushes.LightGray,
+                    Margin = new Thickness(16, 4, 16, 12),
+                    TextWrapping = TextWrapping.Wrap,
+                };
+
+                var add = new Button
+                {
+                    Content = "Add",
+                    MinWidth = 90,
+                    IsDefault = true,
+                    Background = new SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0x28, 0x50, 0x28)),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.Bold,
+                };
+                var replace = new Button
+                {
+                    Content = "Replace",
+                    MinWidth = 90,
+                    Background = new SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0x50, 0x32, 0x32)),
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.Bold,
+                };
+                var cancel = new Button
+                {
+                    Content = "Cancel",
+                    MinWidth = 90,
+                    IsCancel = true,
+                    Background = new SolidColorBrush(global::Avalonia.Media.Color.FromRgb(0x3C, 0x3C, 0x3C)),
+                    Foreground = Brushes.White,
+                };
+
+                AddOrReplaceResult pending = AddOrReplaceResult.Cancel;
+                add.Click     += (_, _) => { pending = AddOrReplaceResult.Add;     win.Close(); };
+                replace.Click += (_, _) => { pending = AddOrReplaceResult.Replace; win.Close(); };
+                cancel.Click  += (_, _) => { pending = AddOrReplaceResult.Cancel;  win.Close(); };
+
+                var row = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(16, 4, 16, 16),
+                    Spacing = 8,
+                };
+                row.Children.Add(cancel);
+                row.Children.Add(replace);
+                row.Children.Add(add);
+
+                var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto") };
+                Grid.SetRow(title, 0);
+                Grid.SetRow(body, 1);
+                Grid.SetRow(row, 2);
+                grid.Children.Add(title);
+                grid.Children.Add(body);
+                grid.Children.Add(row);
+                win.Content = grid;
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
+
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── Text prompt ──────────────────────────────────────────────────────
 
         /// <summary>

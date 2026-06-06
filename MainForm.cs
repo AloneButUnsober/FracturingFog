@@ -3458,6 +3458,21 @@ public sealed partial class MainForm : Form
     {
         if (_slideshowRunning) return;
 
+        // Color Theme Editor "Inspect" mode: left-click on the rendered
+        // image samples the pixel under the cursor and routes it back to
+        // the editor, which highlights the closest matching stop. Suppress
+        // the usual pan/right-drag behavior so the click is purely a probe.
+        if (e.Button == MouseButtons.Left
+            && _colorThemeEditor != null
+            && !_colorThemeEditor.IsDisposed
+            && _colorThemeEditor.InspectActive)
+        {
+            var sp = _renderPanel.PointToScreen(e.Location);
+            var c = FracturingFog.Views.Editors.DesktopEyedropper.SamplePixel(sp.X, sp.Y);
+            _colorThemeEditor.HandleInspectColor(c.R, c.G, c.B);
+            return;
+        }
+
         if (e.Button == MouseButtons.Right)
         {
             _rightDownTimeUtc = DateTime.UtcNow;

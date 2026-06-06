@@ -81,6 +81,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         CopyCurrentCommand = ReactiveCommand.Create(CopyCurrent);
         RevertCommand = ReactiveCommand.Create(Revert);
         ApplyCommand = ReactiveCommand.Create(PushPreview);
+        ImportPaletteCommand = ReactiveCommand.CreateFromTask(ImportPaletteAsync);
+        ExportPaletteCommand = ReactiveCommand.CreateFromTask(ExportPaletteAsync);
+        SampleSelectedCommand = ReactiveCommand.CreateFromTask(SampleSelectedAsync);
         // Save / Export / FromImage all round-trip through the host (modal
         // dialogs, file pickers, palette extractor). Created via
         // CreateFromTask so the command itself is async — the editor never
@@ -312,6 +315,22 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
 
     public ObservableCollection<ColorStopRowVm> Stops { get; } = new();
 
+    private ColorStopRowVm? _selectedStop;
+    public ColorStopRowVm? SelectedStop
+    {
+        get => _selectedStop;
+        set
+        {
+            if (_selectedStop != null && _selectedStop != value) _selectedStop.IsSelected = false;
+            this.RaiseAndSetIfChanged(ref _selectedStop, value);
+            if (value != null) value.IsSelected = true;
+        }
+    }
+
+    /// <summary>Select the row programmatically (used by row click handlers
+    /// and by the Inspect highlight path).</summary>
+    internal void SelectRow(ColorStopRowVm row) => SelectedStop = row;
+
     private void AddStop()
     {
         Stops.Add(new ColorStopRowVm(new ColorStopDef { Position = 1f, R = 255, G = 255, B = 255 }, this));
@@ -321,8 +340,146 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     private void RemoveStop(ColorStopRowVm row)
     {
         if (row == null) return;
+        if (_selectedStop == row) _selectedStop = null;
         Stops.Remove(row);
         FieldChanged();
+    }
+
+    // ── Inspect ───────────────────────────────────────────────────────────
+
+    private bool _inspectActive;
+    public bool InspectActive
+    {
+        get => _inspectActive;
+        set => this.RaiseAndSetIfChanged(ref _inspectActive, value);
+    }
+
+    /// <summary>
+    /// Called by the shell when Inspect is active and the user clicked the
+    /// main rendered image. Highlights (pulses + selects) the stop whose
+    /// RGB is closest to the sampled pixel.
+    /// </summary>
+    public void HandleInspectColor(byte r, byte g, byte b)
+    {
+        ColorStopRowVm? best = null;
+        int bestDist = int.MaxValue;
+        foreach (var row in Stops)
+        {
+            int dr = row.R - r, dg = row.G - g, db = row.B - b;
+            int d = dr * dr + dg * dg + db * db;
+            if (d < bestDist) { bestDist = d; best = row; }
+        }
+        if (best == null) return;
+        SelectedStop = best;
+        best.Pulse();
+    }
+
+    // ── Palette import / export ───────────────────────────────────────────
+
+    private async Task ImportPaletteAsync()
+    {
+        var args = new ThemeImportPaletteEventArgs { CurrentCount = Stops.Count };
+        var handler = ImportPaletteRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+
+        if (args.Result == ThemeImportPaletteEventArgs.Choice.Cancel) return;
+        if (args.Colors == null || args.Colors.Count == 0) return;
+
+        _suppressChange = true;
+        try
+        {
+            if (args.Result == ThemeImportPaletteEventArgs.Choice.Add)
+            {
+                // Spec: appended stops all sit at position=1.0; existing
+                // stops untouched. The list re-sorts by Position on next
+                // BuildDef() so the visible row order may shift then.
+                foreach (var c in args.Colors)
+                    Stops.Add(new ColorStopRowVm(
+                        new ColorStopDef { Position = 1f, R = c.R, G = c.G, B = c.B }, this));
+            }
+            else // Replace
+            {
+                Stops.Clear();
+                int n = args.Colors.Count;
+                if (n == 1)
+                {
+                    var c = args.Colors[0];
+                    Stops.Add(new ColorStopRowVm(
+                        new ColorStopDef { Position = 0.5f, R = c.R, G = c.G, B = c.B }, this));
+                }
+                else
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        float p = (float)i / (n - 1);
+                        var c = args.Colors[i];
+                        Stops.Add(new ColorStopRowVm(
+                            new ColorStopDef { Position = p, R = c.R, G = c.G, B = c.B }, this));
+                    }
+                }
+            }
+        }
+        finally { _suppressChange = false; }
+
+        FieldChanged();
+        PushPreview();
+    }
+
+    private async Task ExportPaletteAsync()
+    {
+        if (Stops.Count == 0)
+        {
+            await RaiseMessageAsync(new ThemeMessageEventArgs(
+                "Export Palette", "No stops to export.", MessageSeverity.Info));
+            return;
+        }
+        var args = new ThemeExportPaletteEventArgs
+        {
+            SuggestedName = SanitizeFileName(Name) + ".json",
+            PaletteName = string.IsNullOrWhiteSpace(Name) ? "Palette" : Name,
+            Stops = Stops.Select(r => r.ToDef()).OrderBy(s => s.Position).ToList(),
+        };
+        var handler = ExportPaletteRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+    }
+
+    // ── Eyedropper ────────────────────────────────────────────────────────
+
+    private async Task SampleSelectedAsync()
+    {
+        var args = new ThemeSampleColorEventArgs();
+        var handler = SampleColorRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+        if (args.PickedR == null) return;
+
+        var target = SelectedStop;
+        if (target == null)
+        {
+            await RaiseMessageAsync(new ThemeMessageEventArgs(
+                "Sample", "Click a stop row first, then Sample.", MessageSeverity.Info));
+            return;
+        }
+        target.SetColor(args.PickedR.Value, args.PickedG!.Value, args.PickedB!.Value);
+    }
+
+    /// <summary>Called by a row's per-row Sample button. Starts the
+    /// eyedropper and applies the picked color to <paramref name="row"/>.</summary>
+    internal async Task BeginSampleForRowAsync(ColorStopRowVm row)
+    {
+        SelectedStop = row;
+        var args = new ThemeSampleColorEventArgs();
+        var handler = SampleColorRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+        if (args.PickedR == null) return;
+        row.SetColor(args.PickedR.Value, args.PickedG!.Value, args.PickedB!.Value);
     }
 
     private async Task FromImageAsync()
@@ -555,6 +712,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> FromImageCommand { get; }
     public ReactiveCommand<Unit, Unit> AddStopCommand { get; }
     public ReactiveCommand<Unit, Unit> AddBandCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportPaletteCommand { get; }
+    public ReactiveCommand<Unit, Unit> ExportPaletteCommand { get; }
+    public ReactiveCommand<Unit, Unit> SampleSelectedCommand { get; }
     public ReactiveCommand<ColorStopRowVm, Unit> RemoveStopCommand { get; }
     public ReactiveCommand<MaterialBandRowVm, Unit> RemoveBandCommand { get; }
     public ReactiveCommand<string?, Unit> SelectThemeCommand { get; }
@@ -570,6 +730,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
     public event EventHandler<ThemeSaveFileEventArgs>? SaveFileRequested;
     public event EventHandler<ThemeFromImageEventArgs>? FromImageRequested;
+    public event EventHandler<ThemeImportPaletteEventArgs>? ImportPaletteRequested;
+    public event EventHandler<ThemeExportPaletteEventArgs>? ExportPaletteRequested;
+    public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
 
     // ── Internal: row-change notification ─────────────────────────────────
 
@@ -920,6 +1083,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
 public sealed class ColorStopRowVm : ReactiveObject
 {
     private readonly ColorThemeEditorViewModel _parent;
+    private System.Threading.Timer? _pulseTimer;
 
     public ColorStopRowVm(ColorStopDef seed, ColorThemeEditorViewModel parent)
     {
@@ -928,6 +1092,70 @@ public sealed class ColorStopRowVm : ReactiveObject
         _r = seed.R;
         _g = seed.G;
         _b = seed.B;
+
+        SelectCommand = ReactiveCommand.Create(() => _parent.SelectRow(this));
+        SampleCommand = ReactiveCommand.CreateFromTask(() => _parent.BeginSampleForRowAsync(this));
+    }
+
+    public ReactiveCommand<Unit, Unit> SelectCommand { get; }
+    public ReactiveCommand<Unit, Unit> SampleCommand { get; }
+
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set
+        {
+            this.RaiseAndSetIfChanged(ref _isSelected, value);
+            this.RaisePropertyChanged(nameof(RowBackground));
+        }
+    }
+
+    private bool _isPulsing;
+    public bool IsPulsing
+    {
+        get => _isPulsing;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isPulsing, value);
+            this.RaisePropertyChanged(nameof(RowBackground));
+        }
+    }
+
+    /// <summary>Background brush combining selection + pulse state. Bound
+    /// by the XAML row template.</summary>
+    public IBrush RowBackground
+    {
+        get
+        {
+            if (_isPulsing) return new ImmutableSolidColorBrush(Color.FromRgb(0x50, 0x6E, 0x3C));
+            if (_isSelected) return new ImmutableSolidColorBrush(Color.FromRgb(0x2D, 0x3C, 0x50));
+            return new ImmutableSolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A));
+        }
+    }
+
+    /// <summary>Update the RGB channels in one shot (used by Sample +
+    /// Inspect paths). Triggers a single FieldChanged via _parent.</summary>
+    internal void SetColor(byte r, byte g, byte b)
+    {
+        _r = r; _g = g; _b = b;
+        this.RaisePropertyChanged(nameof(R));
+        this.RaisePropertyChanged(nameof(G));
+        this.RaisePropertyChanged(nameof(B));
+        this.RaisePropertyChanged(nameof(StopColor));
+        this.RaisePropertyChanged(nameof(SwatchBrush));
+        _parent.NotifyRowChanged();
+    }
+
+    /// <summary>Flash the row background green for ~700ms.</summary>
+    public void Pulse()
+    {
+        IsPulsing = true;
+        _pulseTimer?.Dispose();
+        _pulseTimer = new System.Threading.Timer(_ =>
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPulsing = false);
+        }, null, 700, System.Threading.Timeout.Infinite);
     }
 
     private float _position;
@@ -1162,6 +1390,44 @@ public sealed class ThemeFromImageEventArgs : EventArgs
 
     /// <summary>Host signals here after the image-palette dialog closes.
     /// The editor awaits this before reading <see cref="Stops"/>.</summary>
+    public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
+public sealed class ThemeImportPaletteEventArgs : EventArgs
+{
+    public enum Choice { Cancel, Add, Replace }
+
+    /// <summary>VM-set: number of stops currently in the editor. Used by the
+    /// host's Add/Replace prompt to display "Current stops: N".</summary>
+    public int CurrentCount { get; init; }
+
+    /// <summary>Host fills with the parsed colors from the picked file.</summary>
+    public List<(byte R, byte G, byte B)>? Colors { get; set; }
+
+    /// <summary>Host fills with the user's Add/Replace/Cancel pick.</summary>
+    public Choice Result { get; set; } = Choice.Cancel;
+
+    /// <summary>Host signals here after the file picker + Add/Replace prompt
+    /// have both closed. VM awaits before reading Colors + Result.</summary>
+    public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
+public sealed class ThemeExportPaletteEventArgs : EventArgs
+{
+    public string SuggestedName { get; init; } = "palette.json";
+    public string PaletteName { get; init; } = "Palette";
+    public List<ColorStopDef> Stops { get; init; } = new();
+    public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
+public sealed class ThemeSampleColorEventArgs : EventArgs
+{
+    /// <summary>Host fills with the sampled pixel. Nullable channels so the
+    /// VM can detect "user cancelled" vs "got a real color".</summary>
+    public byte? PickedR { get; set; }
+    public byte? PickedG { get; set; }
+    public byte? PickedB { get; set; }
+
     public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 

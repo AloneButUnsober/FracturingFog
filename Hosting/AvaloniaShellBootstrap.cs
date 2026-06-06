@@ -56,6 +56,14 @@ namespace FracturingFog.Hosting
     /// </summary>
     public static class AvaloniaShellBootstrap
     {
+        // ── Win32 plumbing for Inspect click → screen pixel conversion ───────
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
         private static IFractalRenderer? s_renderer;
         private static FractalRenderHost? s_renderHost;
         private static FractalInputController? s_input;
@@ -468,6 +476,146 @@ namespace FracturingFog.Hosting
                 {
                     args.Completion.TrySetResult(true);
                 }
+            };
+
+            // ── Palette import / export / eyedropper ─────────────────────
+            //
+            // Editor sends ThemeImportPaletteEventArgs. Host pops an
+            // OpenFilePicker filtered for PaletteBuilder JSON, GIMP .gpl,
+            // CSS, hex/.txt. PaletteFileIO parses the file (kept in the
+            // WinExe so UI.Avalonia stays free of palette-format code), then
+            // a 3-button Add/Replace/Cancel dialog seals the operation.
+            shell.ImportPaletteRequested += async (_, args) =>
+            {
+                try
+                {
+                    string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                        "Import Palette",
+                        FracturingFog.Views.Editors.PaletteFileIO.ImportFilter);
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    List<FracturingFog.Views.Editors.PaletteFileIO.Rgb> parsed;
+                    try { parsed = FracturingFog.Views.Editors.PaletteFileIO.Load(path); }
+                    catch (Exception ex)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Palette",
+                            "Failed to read palette file:\n" + ex.Message,
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    if (parsed.Count == 0)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Palette",
+                            "No colors found in the file. Verify it is a PaletteBuilder JSON, GIMP .gpl, CSS, or hex list.",
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    var choice = await AvaloniaDialogs.ShowAddOrReplaceAsync(
+                        parsed.Count, args.CurrentCount, System.IO.Path.GetFileName(path));
+                    if (choice == AvaloniaDialogs.AddOrReplaceResult.Cancel) return;
+
+                    args.Colors = new List<(byte R, byte G, byte B)>(parsed.Count);
+                    foreach (var c in parsed) args.Colors.Add((c.R, c.G, c.B));
+                    args.Result = choice switch
+                    {
+                        AvaloniaDialogs.AddOrReplaceResult.Add     => ThemeImportPaletteEventArgs.Choice.Add,
+                        AvaloniaDialogs.AddOrReplaceResult.Replace => ThemeImportPaletteEventArgs.Choice.Replace,
+                        _                                          => ThemeImportPaletteEventArgs.Choice.Cancel,
+                    };
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ImportPalette failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            shell.ExportPaletteRequested += async (_, args) =>
+            {
+                try
+                {
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Export Palette",
+                        args.SuggestedName,
+                        FracturingFog.Views.Editors.PaletteFileIO.ExportFilter);
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    // PaletteFileIO eats ColorStopData (WinExe DTO); convert
+                    // from the abstraction-layer ColorStopDef the VM holds.
+                    var native = new List<FracturingFog.Models.ColorStopData>(args.Stops.Count);
+                    foreach (var s in args.Stops)
+                        native.Add(new FracturingFog.Models.ColorStopData
+                        {
+                            Position = s.Position, R = s.R, G = s.G, B = s.B,
+                        });
+
+                    FracturingFog.Views.Editors.PaletteFileIO.Save(path, native, args.PaletteName);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ExportPalette failed: {ex.Message}");
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "Export Palette",
+                        "Failed to write palette file:\n" + ex.Message,
+                        expectsConfirmation: false);
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            shell.SampleColorRequested += (_, args) =>
+            {
+                if (FracturingFog.Views.Editors.DesktopEyedropper.IsActive)
+                {
+                    args.Completion.TrySetResult(true);
+                    return;
+                }
+                try
+                {
+                    FracturingFog.Views.Editors.DesktopEyedropper.Begin(
+                        picked =>
+                        {
+                            args.PickedR = picked.R;
+                            args.PickedG = picked.G;
+                            args.PickedB = picked.B;
+                            args.Completion.TrySetResult(true);
+                        },
+                        () => args.Completion.TrySetResult(true));
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Sample failed: {ex.Message}");
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            // Inspect hook: while the editor's Inspect checkbox is on every
+            // left-click on the rendered fractal samples the pixel under the
+            // cursor and routes the colour into the editor instead of
+            // starting a pan. Hook stays installed for the program lifetime
+            // and is a no-op when no editor is open or Inspect is unchecked.
+            FracturingFog.Hosting.NativeMouseForwarder.InspectClickHook = (clientX, clientY) =>
+            {
+                var editor = s_shell?.ColorThemeEditor;
+                if (editor == null || !editor.InspectActive) return false;
+                if (s_surface == null) return false;
+                var pt = new POINT { X = clientX, Y = clientY };
+                if (!ClientToScreen(s_surface.Handle, ref pt)) return false;
+                var c = FracturingFog.Views.Editors.DesktopEyedropper.SamplePixel(pt.X, pt.Y);
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    try { editor.HandleInspectColor(c.R, c.G, c.B); } catch { }
+                });
+                return true;
             };
 
             // From-image flow: editor wants the host to extract a palette
