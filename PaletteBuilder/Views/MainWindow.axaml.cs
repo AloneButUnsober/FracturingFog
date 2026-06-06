@@ -575,7 +575,7 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(btnRow);
         dlg.Content = panel;
         dlg.Closed += (_, _) => tcs.TrySetResult(null);
-        _ = dlg.ShowDialog(this);
+        await dlg.ShowDialog(this);
         return await tcs.Task;
     }
 
