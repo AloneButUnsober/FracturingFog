@@ -176,10 +176,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.GoClick           += (_, _) => ApplyCoordsFromMenu();
 
         // Iteration lock toggle in the menu maps onto MainViewModel state.
+        // Set LockedIterations FIRST so the IterLocked setter sees the user-
+        // typed iter count and skips its capture-current-iter fallback —
+        // otherwise the first render after the tick would use the auto-calc
+        // iter and FrameCompleted would push that stale value back into the
+        // menu textbox, masking the lock.
         FloatingMenu.IterLockChanged   += (_, e) =>
         {
-            Main.IterLocked = e.Locked;
             if (e.Locked && e.CurrentIter > 0) Main.LockedIterations = e.CurrentIter;
+            Main.IterLocked = e.Locked;
         };
 
         // Screenshot — host saves the most-recent BGRA buffer to disk.
