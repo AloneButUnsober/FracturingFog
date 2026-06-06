@@ -6,7 +6,7 @@
         x:DataType="vm:MiniMapViewModel"
         Title="MiniMap"
         Width="228" Height="188"
-        SystemDecorations="None"
+        WindowDecorations="None"
         CanResize="False"
         ShowInTaskbar="False"
         Topmost="True"

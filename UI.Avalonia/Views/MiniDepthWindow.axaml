@@ -4,7 +4,7 @@
         x:Class="FracturingFog.UI.Avalonia.Views.MiniDepthWindow"
         Title="MiniDepth"
         Width="100" Height="228"
-        SystemDecorations="None"
+        WindowDecorations="None"
         CanResize="False"
         ShowInTaskbar="False"
         Topmost="True"

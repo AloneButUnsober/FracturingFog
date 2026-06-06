@@ -1,5 +1,5 @@
 using Avalonia;
-using Avalonia.ReactiveUI;
+using ReactiveUI.Avalonia;
 
 namespace PaletteBuilder;
 
@@ -13,6 +13,6 @@ internal static class Program
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
-            .UseReactiveUI()
+            .UseReactiveUI(rxui => { })
             .LogToTrace();
 }

@@ -18,6 +18,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
@@ -400,7 +401,7 @@ public sealed partial class MainWindow : Window
     {
         var top = TopLevel.GetTopLevel(this);
         string? clip = null;
-        try { clip = top?.Clipboard is null ? null : await top.Clipboard.GetTextAsync(); }
+        try { clip = top?.Clipboard is null ? null : await top.Clipboard.TryGetTextAsync(); }
         catch { }
         clip = await PromptForNameAsync("Paste Hex List", "Hex colors (#aabbcc, comma/space separated):", clip ?? "");
         if (string.IsNullOrWhiteSpace(clip)) return;

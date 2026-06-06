@@ -585,7 +585,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         // 150 ms debounce — matches the legacy timer interval.
         _previewDebounce.Disposable = Observable
             .Timer(TimeSpan.FromMilliseconds(150))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => PushPreview());
     }
 
