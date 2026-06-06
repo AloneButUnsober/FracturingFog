@@ -172,6 +172,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             catch { /* unknown quality name — ignore */ }
         };
 
+        // Mirror auto-quality changes from the input controller (wheel/key
+        // zoom past a tier's ZoomMax) into the menu's quality combo. The
+        // toolbar combo is bound directly so it picks up SelectedQuality
+        // automatically; the floating menu has its own ComboBox that needs
+        // a SetQualitySilent push to avoid feedback through QualityChanged.
+        Main.PropertyChanged += (_, ev) =>
+        {
+            if (ev.PropertyName == nameof(MainViewModel.SelectedQuality))
+                FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+        };
+
         // "Go" button: parse the four coord textboxes and apply.
         FloatingMenu.GoClick           += (_, _) => ApplyCoordsFromMenu();
 

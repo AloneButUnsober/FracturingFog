@@ -700,6 +700,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void OnInputViewChanged(object? sender, ViewChangedArgs e)
     {
+        // Wheel/keyboard zoom can auto-adapt ViewState.Quality (see
+        // FractalInputController.AdaptQualityForZoom). Mirror that into the
+        // combo so the displayed preset matches what's about to render —
+        // and so a save-region right after a zoom captures the live tier.
+        if (!ReferenceEquals(_selectedQuality, ViewState.Quality))
+            SetQualitySilent(ViewState.Quality);
+
         switch (e.Hint)
         {
             case RenderHint.Full:
