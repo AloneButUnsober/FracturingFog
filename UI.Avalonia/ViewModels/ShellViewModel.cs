@@ -172,14 +172,35 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             catch { /* unknown quality name — ignore */ }
         };
 
+        // Mirror auto-quality changes from the input controller (wheel/key
+        // zoom past a tier's ZoomMax) into the menu's quality combo. The
+        // toolbar combo is bound directly so it picks up SelectedQuality
+        // automatically; the floating menu has its own ComboBox that needs
+        // a SetQualitySilent push to avoid feedback through QualityChanged.
+        Main.PropertyChanged += (_, ev) =>
+        {
+            if (ev.PropertyName == nameof(MainViewModel.SelectedQuality))
+                FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+            // Fractal-type pick is a discrete nav — record it so Backspace
+            // can return to the prior fractal + view.
+            if (ev.PropertyName == nameof(MainViewModel.SelectedFractalType)
+             || ev.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
+                RecordNavChange();
+        };
+
         // "Go" button: parse the four coord textboxes and apply.
         FloatingMenu.GoClick           += (_, _) => ApplyCoordsFromMenu();
 
         // Iteration lock toggle in the menu maps onto MainViewModel state.
+        // Set LockedIterations FIRST so the IterLocked setter sees the user-
+        // typed iter count and skips its capture-current-iter fallback —
+        // otherwise the first render after the tick would use the auto-calc
+        // iter and FrameCompleted would push that stale value back into the
+        // menu textbox, masking the lock.
         FloatingMenu.IterLockChanged   += (_, e) =>
         {
-            Main.IterLocked = e.Locked;
             if (e.Locked && e.CurrentIter > 0) Main.LockedIterations = e.CurrentIter;
+            Main.IterLocked = e.Locked;
         };
 
         // Screenshot — host saves the most-recent BGRA buffer to disk.
@@ -303,8 +324,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3),
                 FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
-                info.Iterations.ToString(CultureInfo.InvariantCulture));
+                info.Iterations.ToString(CultureInfo.InvariantCulture),
+                FloatingMenu.ActiveCoordField);
+
+            // Pan/zoom settle → nav history. Each completed frame resets a
+            // ~700ms debounce; when the user stops moving, RecordNavChange
+            // captures the final view so Backspace can return to it. The
+            // dedup inside RecordNavChange ignores idle re-renders that
+            // didn't actually move the view.
+            _navSettleDebounce?.Change(NavSettleDebounceMs, global::System.Threading.Timeout.Infinite);
         };
+        _navSettleDebounce = new global::System.Threading.Timer(
+            _ => global::Avalonia.Threading.Dispatcher.UIThread.Post(RecordNavChange),
+            null, global::System.Threading.Timeout.Infinite, global::System.Threading.Timeout.Infinite);
 
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
@@ -512,30 +544,42 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     private void ApplyCoordsFromMenu()
     {
+        RecordNavChange();
         bool changed = false;
         // Coord fields accept pipe-separated limbs so deep-zoom regions
         // (Hi, Lo, Lo2, Lo3 in DD/QD format) can be pasted in directly:
         //   "-1.9918151296901943|-7.821983681126658E-17"
         // A single value (no pipe) sets the Hi limb and zeros the rest.
-        if (TryParseLimbs(FloatingMenu.CX, out double cxHi, out double cxLo, out double cxL2, out double cxL3))
+        //
+        // Skip any field whose current text matches what the host last
+        // pushed via UpdateCoords — that means the user didn't touch it,
+        // and re-parsing the FormatLimbs G29 string round-trips through
+        // decimal sum / split which can't reconstruct the original Lo/Lo2/Lo3
+        // limbs exactly. At deep zoom that drifts the centre by a visible
+        // fraction of a pixel on Go.
+        if (FloatingMenu.CX != FloatingMenu.LastPushedCX
+            && TryParseLimbs(FloatingMenu.CX, out double cxHi, out double cxLo, out double cxL2, out double cxL3))
         {
             Main.ViewState.CenterX = cxHi;
             Main.ViewState.CenterXLo = cxLo; Main.ViewState.CenterX2 = cxL2; Main.ViewState.CenterX3 = cxL3;
             changed = true;
         }
-        if (TryParseLimbs(FloatingMenu.CY, out double cyHi, out double cyLo, out double cyL2, out double cyL3))
+        if (FloatingMenu.CY != FloatingMenu.LastPushedCY
+            && TryParseLimbs(FloatingMenu.CY, out double cyHi, out double cyLo, out double cyL2, out double cyL3))
         {
             Main.ViewState.CenterY = cyHi;
             Main.ViewState.CenterYLo = cyLo; Main.ViewState.CenterY2 = cyL2; Main.ViewState.CenterY3 = cyL3;
             changed = true;
         }
-        if (double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
+        if (FloatingMenu.Zoom != FloatingMenu.LastPushedZoom
+            && double.TryParse(FloatingMenu.Zoom, NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom)
             && zoom > 0)
         {
             Main.ViewState.Zoom = zoom;
             changed = true;
         }
-        if (int.TryParse(FloatingMenu.Iter, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iter)
+        if (FloatingMenu.Iter != FloatingMenu.LastPushedIter
+            && int.TryParse(FloatingMenu.Iter, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iter)
             && iter > 0 && Main.IterLocked)
         {
             // "Go" never enables the lock (parity with legacy OnGoClick); it
@@ -973,6 +1017,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// both paths actually move the view instead of only relabelling it.</summary>
     private void JumpToRegion(string? name)
     {
+        RecordNavChange();
         Main.SetRegionName(name);
         // Mirror any watermark embedded in this region into MainViewModel so
         // the precedence resolver routes it through to the next frame. Null
@@ -1027,7 +1072,21 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 // the user can pin a preferred value across theme edits.
                 if (!Main.BrightnessLocked) Main.Brightness = def.Brightness ?? 0;
                 if (!Main.ContrastLocked)   Main.Contrast   = def.Contrast   ?? 0;
-                if (!Main.AdaptiveLocked)   Main.Adaptive   = def.Adaptive   ?? 0;
+                if (!Main.AdaptiveLocked)
+                {
+                    int adaptive = def.Adaptive ?? 0;
+                    bool changed = adaptive != Main.Adaptive;
+                    Main.Adaptive = adaptive;
+                    // ApplyColorMap (above) just rewrote the framebuffer with a
+                    // pure palette pass, dropping the prior histogram-eq layer.
+                    // The Adaptive setter only schedules a re-apply on a value
+                    // change, so when the user touches another editor field
+                    // while Adaptive is non-zero the visible result drops back
+                    // to non-adaptive until they toggle the checkbox. Force
+                    // the histogram-eq pass to re-run on every preview.
+                    if (!changed && adaptive > 0)
+                        Main.RenderHost.RepaintWithAdaptive();
+                }
             };
             // Real-time Post-FX (UI-gap #18 follow-up): the editor's
             // Brightness/Contrast/Adaptive sliders raise LivePostFxChanged
@@ -1044,9 +1103,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // Image…" is clicked. The host implements IPaletteExtractionService
             // and pops the ImagePaletteView; the editor consumes the returned
             // stops itself. UI.Avalonia stays free of System.Drawing.
-            vm.FromImageRequested     += (_, args) => FromImageRequested?.Invoke(this, args);
-            vm.SaveFileRequested      += (_, args) => SaveFileRequested?.Invoke(this, args);
-            vm.MessageRequested       += (_, args) => MessageRequested?.Invoke(this, args);
+            vm.FromImageRequested      += (_, args) => FromImageRequested?.Invoke(this, args);
+            vm.SaveFileRequested       += (_, args) => SaveFileRequested?.Invoke(this, args);
+            vm.MessageRequested        += (_, args) => MessageRequested?.Invoke(this, args);
+            vm.ImportPaletteRequested  += (_, args) => ImportPaletteRequested?.Invoke(this, args);
+            vm.ExportPaletteRequested  += (_, args) => ExportPaletteRequested?.Invoke(this, args);
+            vm.SampleColorRequested    += (_, args) => SampleColorRequested?.Invoke(this, args);
             ColorThemeEditor = vm;
         }
         IsColorThemeEditorVisible = true;
@@ -1155,6 +1217,21 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Editor or other child VM wants to show a MessageBox.</summary>
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
 
+    /// <summary>Editor wants to import a palette file. Host pops an
+    /// OpenFilePicker, parses the file, shows the Add/Replace prompt, and
+    /// fills the args' Colors + Result before completing.</summary>
+    public event EventHandler<ThemeImportPaletteEventArgs>? ImportPaletteRequested;
+
+    /// <summary>Editor wants to export the current stops as a palette file.
+    /// Host pops a SaveFilePicker and writes the format keyed off the
+    /// chosen extension.</summary>
+    public event EventHandler<ThemeExportPaletteEventArgs>? ExportPaletteRequested;
+
+    /// <summary>Editor wants the user to pick a screen pixel (eyedropper).
+    /// Host installs the global mouse hook and fills PickedR/G/B before
+    /// completing. PickedR null indicates the user cancelled.</summary>
+    public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
+
     /// <summary>Help VM wants the host to open a URL in the system browser.</summary>
     public event EventHandler<string>? LinkRequested;
 
@@ -1257,6 +1334,102 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public void RefreshRegionListsFromService()
     {
         FloatingMenu.RefreshRegions();
+    }
+
+    // ── Nav history (Backspace = go back) ───────────────────────────────
+    //
+    // Captures discrete navigations (region jump, coord Go, fractal-type
+    // change, reset, pan/zoom settle) into a stack of the last 10 view
+    // states so Backspace pops the previous one and restores it. Post-hoc
+    // model: every observed nav records the just-displayed state as the
+    // history entry — the "current" cache holds what we last recorded so
+    // we can push it before overwriting with the new state.
+    private sealed record NavSnapshot(
+        double Cx, double CxLo, double Cx2, double Cx3,
+        double Cy, double CyLo, double Cy2, double Cy3,
+        double Zoom,
+        global::FracturingFog.FractalType Type,
+        string? QualityName,
+        bool IterLocked,
+        int LockedIterations,
+        string? RegionName);
+
+    private const int MaxNavHistory = 10;
+    private const int NavSettleDebounceMs = 700;
+    private readonly System.Collections.Generic.LinkedList<NavSnapshot> _navHistory = new();
+    private NavSnapshot? _navLastSettled;
+    private bool _navigatingBack;
+    private global::System.Threading.Timer? _navSettleDebounce;
+
+    private NavSnapshot CaptureNavSnapshot()
+    {
+        var s = Main.ViewState;
+        return new NavSnapshot(
+            s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+            s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+            s.Zoom, s.FractalType, s.Quality?.Name,
+            s.IterLocked, s.LockedIterations,
+            Main.SelectedRegion);
+    }
+
+    /// <summary>Record the current view as the most-recent settled
+    /// navigation. The previous "settled" entry rolls into the history stack
+    /// so Backspace can pop back to it. No-op while a back-restore is in
+    /// flight (prevents the restore itself from polluting history).</summary>
+    public void RecordNavChange()
+    {
+        if (_navigatingBack) return;
+        var current = CaptureNavSnapshot();
+        if (_navLastSettled != null && !_navLastSettled.Equals(current))
+        {
+            _navHistory.AddFirst(_navLastSettled);
+            while (_navHistory.Count > MaxNavHistory) _navHistory.RemoveLast();
+        }
+        _navLastSettled = current;
+    }
+
+    /// <summary>Pop the previous nav state and apply it. Returns false when
+    /// the history is empty (Backspace becomes a no-op at startup).</summary>
+    public bool GoBack()
+    {
+        if (_navHistory.Count == 0) return false;
+        var snap = _navHistory.First!.Value;
+        _navHistory.RemoveFirst();
+        ApplyNavSnapshot(snap);
+        return true;
+    }
+
+    private void ApplyNavSnapshot(NavSnapshot snap)
+    {
+        _navigatingBack = true;
+        try
+        {
+            var s = Main.ViewState;
+            s.CenterX = snap.Cx; s.CenterXLo = snap.CxLo; s.CenterX2 = snap.Cx2; s.CenterX3 = snap.Cx3;
+            s.CenterY = snap.Cy; s.CenterYLo = snap.CyLo; s.CenterY2 = snap.Cy2; s.CenterY3 = snap.Cy3;
+            s.Zoom = snap.Zoom;
+            s.FractalType = snap.Type;
+            s.IterLocked = snap.IterLocked;
+            s.LockedIterations = snap.LockedIterations;
+            if (!string.IsNullOrEmpty(snap.QualityName))
+            {
+                var q = QualityPreset.FromName(snap.QualityName);
+                if (q != null)
+                {
+                    s.Quality = q;
+                    Main.SetQualitySilent(q);
+                    FloatingMenu.SetQualitySilent(q.Name);
+                }
+            }
+            Main.SetFractalTypeSilent(snap.Type);
+            Main.SetRegionName(snap.RegionName);
+            FloatingMenu.SetRegionSilent(snap.RegionName);
+            Main.SetIterLockSilent(snap.IterLocked, snap.LockedIterations);
+            FloatingMenu.SetIterLockSilent(snap.IterLocked, snap.LockedIterations);
+            _navLastSettled = snap;
+            Main.RenderHost.Trigger();
+        }
+        finally { _navigatingBack = false; }
     }
 
     public void Dispose()

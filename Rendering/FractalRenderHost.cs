@@ -479,27 +479,9 @@ namespace FracturingFog.Rendering
 
             if (useAlt)
             {
-                altCalc!.CenterX = calc.CenterX;
-                altCalc.CenterY = calc.CenterY;
-                altCalc.Zoom = calc.Zoom;
-                altCalc.MaxIterations = calc.MaxIterations;
-                altCalc.Quality = calc.Quality;
-                altCalc.ColorMap = calc.ColorMap;
+                SyncAltStateFromMandel(altCalc!);
                 switch (altCalc)
                 {
-                    case EscapeTimeCalculator e:
-                        e.FractalType = ViewState.FractalType;
-                        e.FractalParameters = ViewState.FractalParameters;
-                        break;
-                    case IFSCalculator ifs: ifs.FractalParameters = ViewState.FractalParameters; break;
-                    case LSystemCalculator ls: ls.FractalParameters = ViewState.FractalParameters; break;
-                    case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
-                    case BuddhabrotCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
-                    case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
-                    case UserEquationCalculator u: u.FractalParameters = ViewState.FractalParameters; break;
-                    case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
-                    case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
-                    case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                     case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz2:
                         // Big+ deep zoom: plumb the full DD/QD centre limbs +
                         // opt into the perturbation + BLA paths so the
@@ -793,16 +775,36 @@ namespace FracturingFog.Rendering
             if (_disposed || map == null) return;
             ColorMap = map; // propagate to every calculator + raise ColorMapChanged
 
-            if (SelectAltCalculator(ViewState.FractalType) == null)
+            // The cheap Mandelbrot recolor path reads only the cached
+            // Smooth/Distance/Iter/Normal/FinalZ/Final-dz buffers. Themes that
+            // pull data the cached buffers don't carry can't be drawn from
+            // them — they need a fresh Calculate:
+            //   • IOrbitAwareColorMap     — needs per-iteration z samples
+            //     (orbit traps, stripe / TIA, Lyapunov, Gaussian-integer,
+            //     curvature, exponential smoothing).
+            //   • IInteriorAwareColorMap  — needs Brent cycle-detection pass
+            //     (Cycle Period, Multiplier |λ|, Atom Domains, Interior
+            //     Argument, Fake DE).
+            //   • IPostProcessColorMap    — needs the post-pass over the full
+            //     framebuffer (Emboss Pump, Ambient Occlusion, Soft Shadow,
+            //     Entropy themes); a recolor would skip it.
+            // Without this, picking one of those themes only takes effect on
+            // the next pan/zoom (visible bug: image stays the previous theme
+            // until the user nudges the view).
+            bool needsFullRender =
+                map is IOrbitAwareColorMap     ||
+                map is IInteriorAwareColorMap  ||
+                map is IPostProcessColorMap;
+
+            if (!needsFullRender && SelectAltCalculator(ViewState.FractalType) == null)
             {
-                // Mandelbrot — recolour from the cached smooth/iteration buffers
-                // using the just-assigned map, then upload + present.
+                // Mandelbrot fast path — recolour from cached buffers.
                 _calculator.ApplyBandDitherRecolor(0.0);
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
             }
             else
             {
-                // No cheap recolor for alt calculators — recompute.
+                // Alt calculator OR theme needs data not in the cached buffers.
                 Trigger();
             }
         }
@@ -817,9 +819,37 @@ namespace FracturingFog.Rendering
         public uint[]? RecolorActiveToBuffer(IColorMap map)
         {
             if (_disposed || map == null) return null;
-            if (SelectAltCalculator(ViewState.FractalType) != null) return null; // Mandelbrot only
             ColorMap = map;
-            _calculator.ApplyBandDitherRecolor(0.0);
+            IFractalCalculator? alt = SelectAltCalculator(ViewState.FractalType);
+            // Same gate as ApplyColorMap: themes that need data the cached
+            // buffers don't carry (orbit/interior/post-process) can't be drawn
+            // by the cheap Mandelbrot recolor — they need a fresh Calculate.
+            bool needsFullRender =
+                map is IOrbitAwareColorMap     ||
+                map is IInteriorAwareColorMap  ||
+                map is IPostProcessColorMap;
+            if (alt != null)
+            {
+                // Alt calculators have no cheap recolor — recompute into the
+                // alt's ColorBuffer with the new map. Live state already
+                // reflects the new ColorMap; this fills the post-fade target
+                // so the caller can cross-fade against the snapshot of the
+                // old frame.
+                SyncAltStateFromMandel(alt);
+                alt.Calculate(System.Threading.CancellationToken.None);
+                var altSrc = alt.ColorBuffer;
+                var altCopy = new uint[altSrc.Length];
+                Array.Copy(altSrc, altCopy, altSrc.Length);
+                return altCopy;
+            }
+            if (needsFullRender)
+            {
+                _calculator.Calculate(System.Threading.CancellationToken.None);
+            }
+            else
+            {
+                _calculator.ApplyBandDitherRecolor(0.0);
+            }
             var src = _calculator.ColorBuffer;
             var copy = new uint[src.Length];
             Array.Copy(src, copy, src.Length);
@@ -844,6 +874,38 @@ namespace FracturingFog.Rendering
                 alt.ColorMap = _calculator.ColorMap;
             }
             Trigger();
+        }
+
+        // Common alt-calc state sync: pull centre/zoom/iter/quality/colormap
+        // from the live Mandelbrot calculator and the per-engine FractalParameters
+        // off ViewState onto the given alt. Used by the main render path and by
+        // RecolorActiveToBuffer (slideshow theme cross-fade). Generated calc
+        // tail (CenterXLo, UsePerturbation, UseBla, etc.) is set by the caller.
+        private void SyncAltStateFromMandel(IFractalCalculator alt)
+        {
+            var calc = _calculator;
+            alt.CenterX       = calc.CenterX;
+            alt.CenterY       = calc.CenterY;
+            alt.Zoom          = calc.Zoom;
+            alt.MaxIterations = calc.MaxIterations;
+            alt.Quality       = calc.Quality;
+            alt.ColorMap      = calc.ColorMap;
+            switch (alt)
+            {
+                case EscapeTimeCalculator e:
+                    e.FractalType = ViewState.FractalType;
+                    e.FractalParameters = ViewState.FractalParameters;
+                    break;
+                case IFSCalculator ifs: ifs.FractalParameters = ViewState.FractalParameters; break;
+                case LSystemCalculator ls: ls.FractalParameters = ViewState.FractalParameters; break;
+                case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
+                case BuddhabrotCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
+                case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
+                case UserEquationCalculator u: u.FractalParameters = ViewState.FractalParameters; break;
+                case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
+                case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
+                case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
+            }
         }
 
         private IFractalCalculator? SelectAltCalculator(FractalType type)

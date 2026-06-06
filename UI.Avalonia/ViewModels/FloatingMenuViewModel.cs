@@ -62,6 +62,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
         EditWatermarkCommand    = MakeCmd(() => EditWatermarkClick?.Invoke(this, EventArgs.Empty));
+        FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
     }
 
     private static ReactiveCommand<Unit, Unit> MakeCmd(Action a) => ReactiveCommand.Create(a);
@@ -378,6 +379,15 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private string _iter = "256";
     public string Iter { get => _iter; set => this.RaiseAndSetIfChanged(ref _iter, value); }
 
+    /// <summary>Name of the coord textbox the user is currently editing
+    /// (<c>"CX"</c> / <c>"CY"</c> / <c>"Zoom"</c> / <c>"Iter"</c>) or
+    /// <c>null</c> when focus is elsewhere. The view writes this on
+    /// GotFocus/LostFocus; the host reads it in FrameCompleted so the live
+    /// coord refresh doesn't clobber in-progress typing — without this guard,
+    /// the value Go reads back is whatever the last render produced, not what
+    /// the user just typed.</summary>
+    public string? ActiveCoordField { get; set; }
+
     private bool _suppressIterLock;
     private bool _iterLocked;
     public bool IterLocked
@@ -412,11 +422,23 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// <c>UpdateCoordBoxes</c> guard.</summary>
     public void UpdateCoords(string cx, string cy, string zoom, string iter, string? activeField = null)
     {
-        if (activeField != nameof(CX))   CX   = cx;
-        if (activeField != nameof(CY))   CY   = cy;
-        if (activeField != nameof(Zoom)) Zoom = zoom;
-        if (activeField != nameof(Iter)) Iter = iter;
+        if (activeField != nameof(CX))   { CX   = cx;   LastPushedCX   = cx;   }
+        if (activeField != nameof(CY))   { CY   = cy;   LastPushedCY   = cy;   }
+        if (activeField != nameof(Zoom)) { Zoom = zoom; LastPushedZoom = zoom; }
+        if (activeField != nameof(Iter)) { Iter = iter; LastPushedIter = iter; }
     }
+
+    /// <summary>Snapshot of the last value the host pushed into each coord
+    /// box via <see cref="UpdateCoords"/>. The Go handler skips re-parsing
+    /// any field that still equals its last-pushed string — a region jump
+    /// formats CX/CY through FormatLimbs (decimal-sum → G29 string), and a
+    /// re-parse loses the Lo/Lo2/Lo3 split that the region's original limbs
+    /// carried. At deep zoom that round-trip shifts the centre by a visible
+    /// fraction of a pixel; skip the parse when the user didn't touch the box.</summary>
+    public string? LastPushedCX   { get; private set; }
+    public string? LastPushedCY   { get; private set; }
+    public string? LastPushedZoom { get; private set; }
+    public string? LastPushedIter { get; private set; }
 
     // ── Post-FX sliders ───────────────────────────────────────────────────
 
@@ -650,6 +672,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
     public ReactiveCommand<Unit, Unit> EditWatermarkCommand { get; }
+    public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
 
@@ -678,6 +701,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? ServerClick;
     public event EventHandler? ClientClick;
     public event EventHandler? EditWatermarkClick;
+    public event EventHandler? FfmpegSetupClick;
 
     public event EventHandler<string>? RegionComboChanged;
     public event EventHandler<string>? ColorThemeChanged;

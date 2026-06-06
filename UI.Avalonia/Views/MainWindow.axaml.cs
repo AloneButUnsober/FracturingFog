@@ -180,12 +180,15 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    private static (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
+    private (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
     {
         var menu = new ContextMenu();
         AddItem(menu, "Toolbar",            () => shell.IsToolbarVisible   = !shell.IsToolbarVisible);
         AddItem(menu, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
         AddItem(menu, "Status",             () => shell.IsStatusBarVisible = !shell.IsStatusBarVisible);
+        var onTopItem = new MenuItem { Header = "On Top" };
+        onTopItem.Click += (_, _) => Topmost = !Topmost;
+        menu.Items.Add(onTopItem);
         AddItem(menu, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
         AddItem(menu, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
         menu.Items.Add(new Separator());
@@ -216,6 +219,8 @@ public sealed partial class MainWindow : Window
         AddItem(menu, "ColorGen Editor…",   () => shell.ShowColorGenEditorCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Close Program",      () => shell.FloatingMenu.CloseProgramCommand.Execute().Subscribe());
 
         // Refresh slideshow item state every time the menu opens. Avalonia's
         // MenuItem doesn't have a built-in checked indicator, so we encode
@@ -238,6 +243,7 @@ public sealed partial class MainWindow : Window
             focusItem.Header = shell.SlideshowFocusRegion
                 ? "Slideshow: More Colors"
                 : "Slideshow: More Regions";
+            onTopItem.Header = (Topmost ? "✓ " : "") + "On Top";
         };
         menu.Opening += (_, _) => sync();
         return (menu, sync);
@@ -257,6 +263,15 @@ public sealed partial class MainWindow : Window
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         if (_shell == null || e.Handled) return;
+
+        // Backspace = Back: pop the most recent nav snapshot off the shell's
+        // history stack. Like Escape, allowed even when a non-text combo has
+        // focus so the user doesn't have to click the surface first.
+        if (e.Key == Key.Back && e.KeyModifiers == KeyModifiers.None
+            && !(FocusManager?.GetFocusedElement() is TextBox))
+        {
+            if (_shell.GoBack()) { e.Handled = true; return; }
+        }
 
         // Don't steal keys from an editable control (toolbar combos / dialog
         // fields). Escape is always allowed so it can cancel span / a run.

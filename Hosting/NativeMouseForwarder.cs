@@ -50,6 +50,15 @@ namespace FracturingFog.Hosting
         // instead of resetting the view.
         public static Action? FocusRequested;
 
+        // ── Inspect-click callback ──────────────────────────────────────────
+        // Fired on WM_LBUTTONDOWN BEFORE the controller sees the event.
+        // Receives the click in HWND client coordinates. Returning true
+        // signals "consumed" — the forwarder swallows the message so the
+        // Color Theme Editor's Inspect mode does not also trigger a pan.
+        // The shell installs this when the editor is open; uninstalls
+        // when the editor closes.
+        public static Func<int, int, bool>? InspectClickHook;
+
         private static DateTime s_rightDownUtc;
         private static int s_rightDownX, s_rightDownY;
         private const int RightHoldSuppressMs = 1000;
@@ -118,6 +127,24 @@ namespace FracturingFog.Hosting
                 switch (msg)
                 {
                     case WM_LBUTTONDOWN:
+                        // Inspect-click hook gets first shot. If it returns
+                        // true the click was a probe, not a pan — pull
+                        // keyboard focus but don't notify the controller.
+                        {
+                            var hook = InspectClickHook;
+                            if (hook != null)
+                            {
+                                int ix = LoWordSigned(lParam);
+                                int iy = HiWordSigned(lParam);
+                                bool consumed = false;
+                                try { consumed = hook(ix, iy); } catch { /* UI errors must not crash native callback */ }
+                                if (consumed)
+                                {
+                                    try { FocusRequested?.Invoke(); } catch { /* UI errors must not crash native callback */ }
+                                    return IntPtr.Zero;
+                                }
+                            }
+                        }
                         SetCapture(hWnd);
                         try { FocusRequested?.Invoke(); } catch { /* UI errors must not crash native callback */ }
                         c.OnPointerDown(Pointer(hWnd, lParam, PointerButton.Left, wParam));

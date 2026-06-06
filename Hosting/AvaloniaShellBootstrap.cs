@@ -56,6 +56,14 @@ namespace FracturingFog.Hosting
     /// </summary>
     public static class AvaloniaShellBootstrap
     {
+        // ── Win32 plumbing for Inspect click → screen pixel conversion ───────
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
         private static IFractalRenderer? s_renderer;
         private static FractalRenderHost? s_renderHost;
         private static FractalInputController? s_input;
@@ -329,21 +337,59 @@ namespace FracturingFog.Hosting
             // colour theme — both invalidate the thumbnail.
             s_shell.Main.PropertyChanged += (_, e) =>
             {
-                if (s_shell == null || !s_shell.IsMiniMapVisible) return;
+                if (s_shell == null) return;
                 if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)
                  || e.PropertyName == nameof(MainViewModel.SelectedFractalEntry)
                  || e.PropertyName == nameof(MainViewModel.SelectedTheme))
                 {
-                    RenderMiniMapAsync(s_shell);
+                    if (s_shell.IsMiniMapVisible) RenderMiniMapAsync(s_shell);
+
+                    // Re-route any open params editor to the new fractal type's
+                    // editor so the modal tracks the toolbar selection instead
+                    // of stranding the user on the old type's knobs. Close the
+                    // generic FractalParamsView and the source-compiled
+                    // editors (UserEquation / Sandbox / UserBulb), then
+                    // re-fire the request so the bootstrap picks the right
+                    // window for the active type.
+                    if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)
+                     || e.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
+                    {
+                        bool wasOpen = s_paramsWin != null || s_userEqWin != null
+                                    || s_sandboxWin != null || s_userBulbWin != null;
+                        if (wasOpen)
+                        {
+                            try { s_paramsWin?.Close(); }   catch { /* ignore */ } s_paramsWin = null;
+                            try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;
+                            try { s_sandboxWin?.Close(); }  catch { /* ignore */ } s_sandboxWin = null;
+                            try { s_userBulbWin?.Close(); } catch { /* ignore */ } s_userBulbWin = null;
+                            Dispatcher.UIThread.Post(() =>
+                                s_shell?.ShowFractalParamsCommand.Execute().Subscribe());
+                        }
+                    }
                 }
             };
 
             WireShellHostEvents(s_shell);
 
+            // FFmpeg install / update launcher in the FloatingMenu. UI.Avalonia
+            // can't see FfmpegSetupDialog (it lives in the WinExe alongside
+            // FfmpegInstaller / FfmpegEncoder), so the routing happens here.
+            s_shell.FloatingMenu.FfmpegSetupClick += (_, _) =>
+                Dispatcher.UIThread.Post(() =>
+                    _ = FfmpegSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow));
+
             // Phase 3: start the 5-second probe that drives the status-bar
             // "● Server: running / off" indicator. Uses the default server
             // port (47823) unless a server-config.json under %APPDATA% overrides.
             s_shell.StartServerPing(FracturingFog.Server.ServerConfig.LoadOrDefault().Port);
+
+            // First-run FFmpeg setup prompt. Spec: show the install offer if
+            // ffmpeg.exe is missing AND the user has not previously elected
+            // Manual or Skip (FfmpegPreferences.SuppressStartupPrompt). Posted
+            // through the dispatcher so it appears after the main window is
+            // shown rather than blocking surface init.
+            Dispatcher.UIThread.Post(MaybeShowFfmpegStartupPrompt,
+                DispatcherPriority.Background);
 
             // ── Surface lifetime ─────────────────────────────────────────
             surface.Resized += OnSurfaceResized;
@@ -430,6 +476,146 @@ namespace FracturingFog.Hosting
                 {
                     args.Completion.TrySetResult(true);
                 }
+            };
+
+            // ── Palette import / export / eyedropper ─────────────────────
+            //
+            // Editor sends ThemeImportPaletteEventArgs. Host pops an
+            // OpenFilePicker filtered for PaletteBuilder JSON, GIMP .gpl,
+            // CSS, hex/.txt. PaletteFileIO parses the file (kept in the
+            // WinExe so UI.Avalonia stays free of palette-format code), then
+            // a 3-button Add/Replace/Cancel dialog seals the operation.
+            shell.ImportPaletteRequested += async (_, args) =>
+            {
+                try
+                {
+                    string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                        "Import Palette",
+                        FracturingFog.Views.Editors.PaletteFileIO.ImportFilter);
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    List<FracturingFog.Views.Editors.PaletteFileIO.Rgb> parsed;
+                    try { parsed = FracturingFog.Views.Editors.PaletteFileIO.Load(path); }
+                    catch (Exception ex)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Palette",
+                            "Failed to read palette file:\n" + ex.Message,
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    if (parsed.Count == 0)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Palette",
+                            "No colors found in the file. Verify it is a PaletteBuilder JSON, GIMP .gpl, CSS, or hex list.",
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    var choice = await AvaloniaDialogs.ShowAddOrReplaceAsync(
+                        parsed.Count, args.CurrentCount, System.IO.Path.GetFileName(path));
+                    if (choice == AvaloniaDialogs.AddOrReplaceResult.Cancel) return;
+
+                    args.Colors = new List<(byte R, byte G, byte B)>(parsed.Count);
+                    foreach (var c in parsed) args.Colors.Add((c.R, c.G, c.B));
+                    args.Result = choice switch
+                    {
+                        AvaloniaDialogs.AddOrReplaceResult.Add     => ThemeImportPaletteEventArgs.Choice.Add,
+                        AvaloniaDialogs.AddOrReplaceResult.Replace => ThemeImportPaletteEventArgs.Choice.Replace,
+                        _                                          => ThemeImportPaletteEventArgs.Choice.Cancel,
+                    };
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ImportPalette failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            shell.ExportPaletteRequested += async (_, args) =>
+            {
+                try
+                {
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Export Palette",
+                        args.SuggestedName,
+                        FracturingFog.Views.Editors.PaletteFileIO.ExportFilter);
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    // PaletteFileIO eats ColorStopData (WinExe DTO); convert
+                    // from the abstraction-layer ColorStopDef the VM holds.
+                    var native = new List<FracturingFog.Models.ColorStopData>(args.Stops.Count);
+                    foreach (var s in args.Stops)
+                        native.Add(new FracturingFog.Models.ColorStopData
+                        {
+                            Position = s.Position, R = s.R, G = s.G, B = s.B,
+                        });
+
+                    FracturingFog.Views.Editors.PaletteFileIO.Save(path, native, args.PaletteName);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ExportPalette failed: {ex.Message}");
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "Export Palette",
+                        "Failed to write palette file:\n" + ex.Message,
+                        expectsConfirmation: false);
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            shell.SampleColorRequested += (_, args) =>
+            {
+                if (FracturingFog.Views.Editors.DesktopEyedropper.IsActive)
+                {
+                    args.Completion.TrySetResult(true);
+                    return;
+                }
+                try
+                {
+                    FracturingFog.Views.Editors.DesktopEyedropper.Begin(
+                        picked =>
+                        {
+                            args.PickedR = picked.R;
+                            args.PickedG = picked.G;
+                            args.PickedB = picked.B;
+                            args.Completion.TrySetResult(true);
+                        },
+                        () => args.Completion.TrySetResult(true));
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Sample failed: {ex.Message}");
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            // Inspect hook: while the editor's Inspect checkbox is on every
+            // left-click on the rendered fractal samples the pixel under the
+            // cursor and routes the colour into the editor instead of
+            // starting a pan. Hook stays installed for the program lifetime
+            // and is a no-op when no editor is open or Inspect is unchecked.
+            FracturingFog.Hosting.NativeMouseForwarder.InspectClickHook = (clientX, clientY) =>
+            {
+                var editor = s_shell?.ColorThemeEditor;
+                if (editor == null || !editor.InspectActive) return false;
+                if (s_surface == null) return false;
+                var pt = new POINT { X = clientX, Y = clientY };
+                if (!ClientToScreen(s_surface.Handle, ref pt)) return false;
+                var c = FracturingFog.Views.Editors.DesktopEyedropper.SamplePixel(pt.X, pt.Y);
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    try { editor.HandleInspectColor(c.R, c.G, c.B); } catch { }
+                });
+                return true;
             };
 
             // From-image flow: editor wants the host to extract a palette
@@ -552,7 +738,15 @@ namespace FracturingFog.Hosting
                         bool ok = ((IColorThemeService)s_themeService!)
                             .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded);
                         if (ok)
-                            shell.FloatingMenu.SetRegions(s_themeService!.EnumerateRegionNames());
+                        {
+                            // RefreshRegions honours the menu's active sort +
+                            // fractal-type filter (unlike SetRegions with the
+                            // unfiltered enumeration), so the just-saved name
+                            // lands in the same bucket the user is browsing.
+                            shell.FloatingMenu.RefreshRegions();
+                            shell.FloatingMenu.SetRegionSilent(picked.Name);
+                            shell.Main.SetRegionName(picked.Name);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -1366,6 +1560,28 @@ namespace FracturingFog.Hosting
             return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
         }
 
+        // ── FFmpeg startup prompt ────────────────────────────────────────────
+        //
+        // First-launch (or freshly-deleted ffmpeg.exe) prompt: offer the
+        // install dialog when the binary is missing AND the user hasn't
+        // previously chosen "I'll install manually" or "Continue without
+        // video". The dialog itself persists the election to
+        // FfmpegPreferences so subsequent launches honour it.
+        private static void MaybeShowFfmpegStartupPrompt()
+        {
+            try
+            {
+                if (FfmpegEncoder.IsAvailable()) return;
+                if (FracturingFog.Models.FfmpegPreferences.Instance.SuppressStartupPrompt()) return;
+                _ = FfmpegSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[AvaloniaShellBootstrap] FFmpeg startup prompt failed: {ex.Message}");
+            }
+        }
+
         // ── #64 — Video recording save prompts ───────────────────────────────
 
         private static async Task HandleRecordingFinished(VideoRecordingResult result)
@@ -1456,12 +1672,15 @@ namespace FracturingFog.Hosting
             SetStatus($"Lossless PNG sequence saved: {finalFolder}");
 
             if (encode == VideoLosslessEncode.None) return;
-            if (!FfmpegEncoder.IsAvailable())
+            if (!FfmpegEncoder.IsEnabledForUser())
             {
+                string msg = FfmpegEncoder.IsAvailable()
+                    ? "Video encoding is disabled (Continue Without Video selected). " +
+                      "Open the FFmpeg setup dialog from the floating menu to re-enable it. " +
+                      "Keeping PNG sequence only."
+                    : "ffmpeg.exe is no longer available — keeping PNG sequence only.";
                 await AvaloniaDialogs.ShowMessageAsync(
-                    "Save Lossless",
-                    "ffmpeg.exe is no longer available — keeping PNG sequence only.",
-                    expectsConfirmation: false);
+                    "Save Lossless", msg, expectsConfirmation: false);
                 return;
             }
 

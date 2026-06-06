@@ -18,12 +18,17 @@ namespace FracturingFog.UI.Avalonia.Views;
 public sealed partial class FloatingMenuView : Window
 {
     private bool _sortMenusAttached;
+    private bool _coordFocusHooked;
 
     public FloatingMenuView()
     {
         AvaloniaXamlLoader.Load(this);
         // Attach right-click sort menus once the window (and its bound VM) is up.
-        Opened += (_, _) => AttachSortMenus();
+        Opened += (_, _) =>
+        {
+            AttachSortMenus();
+            HookCoordFocusTracking();
+        };
     }
 
     private void AttachSortMenus()
@@ -32,5 +37,26 @@ public sealed partial class FloatingMenuView : Window
         ComboSortMenu.Attach(this.FindControl<ComboBox>("RegionCombo"), vm.BuildRegionSortMenu);
         ComboSortMenu.Attach(this.FindControl<ComboBox>("ThemeCombo"), vm.BuildThemeSortMenu);
         _sortMenusAttached = true;
+    }
+
+    // Track which coord textbox the user is editing so the host's FrameCompleted
+    // refresh skips it. Without this, every completed frame overwrites the box
+    // mid-typing and Go applies a stale value.
+    private void HookCoordFocusTracking()
+    {
+        if (_coordFocusHooked || DataContext is not FloatingMenuViewModel vm) return;
+        Hook("CoordCX",   "CX");
+        Hook("CoordCY",   "CY");
+        Hook("CoordZoom", "Zoom");
+        Hook("CoordIter", "Iter");
+        _coordFocusHooked = true;
+
+        void Hook(string ctrlName, string field)
+        {
+            var box = this.FindControl<TextBox>(ctrlName);
+            if (box == null) return;
+            box.GotFocus  += (_, _) => vm.ActiveCoordField = field;
+            box.LostFocus += (_, _) => { if (vm.ActiveCoordField == field) vm.ActiveCoordField = null; };
+        }
     }
 }
