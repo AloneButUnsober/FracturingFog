@@ -260,6 +260,15 @@ public sealed partial class MainWindow : Window
     {
         if (_shell == null || e.Handled) return;
 
+        // Backspace = Back: pop the most recent nav snapshot off the shell's
+        // history stack. Like Escape, allowed even when a non-text combo has
+        // focus so the user doesn't have to click the surface first.
+        if (e.Key == Key.Back && e.KeyModifiers == KeyModifiers.None
+            && !(FocusManager?.GetFocusedElement() is TextBox))
+        {
+            if (_shell.GoBack()) { e.Handled = true; return; }
+        }
+
         // Don't steal keys from an editable control (toolbar combos / dialog
         // fields). Escape is always allowed so it can cancel span / a run.
         if (e.Key != Key.Escape && IsEditableFocused()) return;

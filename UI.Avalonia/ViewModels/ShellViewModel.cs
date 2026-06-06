@@ -181,6 +181,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             if (ev.PropertyName == nameof(MainViewModel.SelectedQuality))
                 FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+            // Fractal-type pick is a discrete nav — record it so Backspace
+            // can return to the prior fractal + view.
+            if (ev.PropertyName == nameof(MainViewModel.SelectedFractalType)
+             || ev.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
+                RecordNavChange();
         };
 
         // "Go" button: parse the four coord textboxes and apply.
@@ -320,7 +325,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
                 info.Iterations.ToString(CultureInfo.InvariantCulture));
+
+            // Pan/zoom settle → nav history. Each completed frame resets a
+            // ~700ms debounce; when the user stops moving, RecordNavChange
+            // captures the final view so Backspace can return to it. The
+            // dedup inside RecordNavChange ignores idle re-renders that
+            // didn't actually move the view.
+            _navSettleDebounce?.Change(NavSettleDebounceMs, global::System.Threading.Timeout.Infinite);
         };
+        _navSettleDebounce = new global::System.Threading.Timer(
+            _ => global::Avalonia.Threading.Dispatcher.UIThread.Post(RecordNavChange),
+            null, global::System.Threading.Timeout.Infinite, global::System.Threading.Timeout.Infinite);
 
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
@@ -528,6 +543,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     private void ApplyCoordsFromMenu()
     {
+        RecordNavChange();
         bool changed = false;
         // Coord fields accept pipe-separated limbs so deep-zoom regions
         // (Hi, Lo, Lo2, Lo3 in DD/QD format) can be pasted in directly:
@@ -989,6 +1005,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// both paths actually move the view instead of only relabelling it.</summary>
     private void JumpToRegion(string? name)
     {
+        RecordNavChange();
         Main.SetRegionName(name);
         // Mirror any watermark embedded in this region into MainViewModel so
         // the precedence resolver routes it through to the next frame. Null
@@ -1287,6 +1304,102 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public void RefreshRegionListsFromService()
     {
         FloatingMenu.RefreshRegions();
+    }
+
+    // ── Nav history (Backspace = go back) ───────────────────────────────
+    //
+    // Captures discrete navigations (region jump, coord Go, fractal-type
+    // change, reset, pan/zoom settle) into a stack of the last 10 view
+    // states so Backspace pops the previous one and restores it. Post-hoc
+    // model: every observed nav records the just-displayed state as the
+    // history entry — the "current" cache holds what we last recorded so
+    // we can push it before overwriting with the new state.
+    private sealed record NavSnapshot(
+        double Cx, double CxLo, double Cx2, double Cx3,
+        double Cy, double CyLo, double Cy2, double Cy3,
+        double Zoom,
+        global::FracturingFog.FractalType Type,
+        string? QualityName,
+        bool IterLocked,
+        int LockedIterations,
+        string? RegionName);
+
+    private const int MaxNavHistory = 10;
+    private const int NavSettleDebounceMs = 700;
+    private readonly System.Collections.Generic.LinkedList<NavSnapshot> _navHistory = new();
+    private NavSnapshot? _navLastSettled;
+    private bool _navigatingBack;
+    private global::System.Threading.Timer? _navSettleDebounce;
+
+    private NavSnapshot CaptureNavSnapshot()
+    {
+        var s = Main.ViewState;
+        return new NavSnapshot(
+            s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+            s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+            s.Zoom, s.FractalType, s.Quality?.Name,
+            s.IterLocked, s.LockedIterations,
+            Main.SelectedRegion);
+    }
+
+    /// <summary>Record the current view as the most-recent settled
+    /// navigation. The previous "settled" entry rolls into the history stack
+    /// so Backspace can pop back to it. No-op while a back-restore is in
+    /// flight (prevents the restore itself from polluting history).</summary>
+    public void RecordNavChange()
+    {
+        if (_navigatingBack) return;
+        var current = CaptureNavSnapshot();
+        if (_navLastSettled != null && !_navLastSettled.Equals(current))
+        {
+            _navHistory.AddFirst(_navLastSettled);
+            while (_navHistory.Count > MaxNavHistory) _navHistory.RemoveLast();
+        }
+        _navLastSettled = current;
+    }
+
+    /// <summary>Pop the previous nav state and apply it. Returns false when
+    /// the history is empty (Backspace becomes a no-op at startup).</summary>
+    public bool GoBack()
+    {
+        if (_navHistory.Count == 0) return false;
+        var snap = _navHistory.First!.Value;
+        _navHistory.RemoveFirst();
+        ApplyNavSnapshot(snap);
+        return true;
+    }
+
+    private void ApplyNavSnapshot(NavSnapshot snap)
+    {
+        _navigatingBack = true;
+        try
+        {
+            var s = Main.ViewState;
+            s.CenterX = snap.Cx; s.CenterXLo = snap.CxLo; s.CenterX2 = snap.Cx2; s.CenterX3 = snap.Cx3;
+            s.CenterY = snap.Cy; s.CenterYLo = snap.CyLo; s.CenterY2 = snap.Cy2; s.CenterY3 = snap.Cy3;
+            s.Zoom = snap.Zoom;
+            s.FractalType = snap.Type;
+            s.IterLocked = snap.IterLocked;
+            s.LockedIterations = snap.LockedIterations;
+            if (!string.IsNullOrEmpty(snap.QualityName))
+            {
+                var q = QualityPreset.FromName(snap.QualityName);
+                if (q != null)
+                {
+                    s.Quality = q;
+                    Main.SetQualitySilent(q);
+                    FloatingMenu.SetQualitySilent(q.Name);
+                }
+            }
+            Main.SetFractalTypeSilent(snap.Type);
+            Main.SetRegionName(snap.RegionName);
+            FloatingMenu.SetRegionSilent(snap.RegionName);
+            Main.SetIterLockSilent(snap.IterLocked, snap.LockedIterations);
+            FloatingMenu.SetIterLockSilent(snap.IterLocked, snap.LockedIterations);
+            _navLastSettled = snap;
+            Main.RenderHost.Trigger();
+        }
+        finally { _navigatingBack = false; }
     }
 
     public void Dispose()
