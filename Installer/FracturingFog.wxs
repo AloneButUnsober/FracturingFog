@@ -18,6 +18,7 @@
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Icon Id="AppIcon.ico" SourceFile="Stage\Resources\FracturingFog.ico" />
+    <Icon Id="PBAppIcon.ico" SourceFile="Stage\Resources\PaletteBuilder_Logo.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
 
@@ -105,7 +106,7 @@
                   Description="Fracturing Fog Palette Builder"
                   Target="[INSTALLFOLDER]PaletteBuilder\PaletteBuilder.exe"
                   WorkingDirectory="INSTALLFOLDER"
-                  Icon="AppIcon.ico" />
+                  Icon="PBAppIcon.ico" />
         <RegistryValue Root="HKCU"
                        Key="Software\AloneButUnsober\FracturingFog"
                        Name="StartMenuShortcutPaletteBuilder"

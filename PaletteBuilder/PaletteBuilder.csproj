@@ -44,6 +44,7 @@
   -->
   <PropertyGroup>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj.lib\**;bin.lib\**</DefaultItemExcludes>
+    <ApplicationIcon>Resources\PaletteBuilder_Logo.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Models\**" />
@@ -67,6 +68,9 @@
     <AvaloniaXaml Remove="obj.lib\**" />
     <Page Remove="Views\**" />
     <AdditionalFiles Remove="Views\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Resources\PaletteBuilder_Logo.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -95,8 +99,7 @@
       ProjectReference comment in PaletteBuilder.Lib.csproj for the full
       reason; this is the matching half on the consumer side.
     -->
-    <ProjectReference Include="PaletteBuilder.Lib.csproj"
-                      SetPlatform="Platform=x64" />
+    <ProjectReference Include="PaletteBuilder.Lib.csproj" SetPlatform="Platform=x64" />
   </ItemGroup>
 
   <!--
