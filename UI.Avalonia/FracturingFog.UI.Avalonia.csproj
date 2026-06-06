@@ -34,25 +34,23 @@
       build fails with CS1929 inside generated MainWindow.g.cs files placed
       in the WinExe's obj/ tree.
     -->
-    <PackageReference Include="Avalonia" Version="11.3.9">
+    <PackageReference Include="Avalonia" Version="12.0.4">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.9">
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.4">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9">
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.9">
-      <PrivateAssets>analyzers</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.9">
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.4">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
     <!-- Color wheel control for ColorThemeEditor swatches (UI-gap #19). -->
-    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="11.3.9">
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.4">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="ReactiveUI.Avalonia" Version="12.0.3" />
   </ItemGroup>
 
   <ItemGroup>

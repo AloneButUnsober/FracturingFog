@@ -46,7 +46,7 @@ public sealed partial class MainWindow : Window
     // Mini Mode (#12) — saved geometry restored on exit.
     private bool _miniModeActive;
     private global::Avalonia.Controls.WindowState _preMiniState;
-    private global::Avalonia.Controls.SystemDecorations _preMiniDecorations;
+    private global::Avalonia.Controls.WindowDecorations _preMiniDecorations;
     private global::Avalonia.PixelPoint _preMiniPosition;
     private double _preMiniWidth;
     private double _preMiniHeight;
@@ -477,7 +477,7 @@ public sealed partial class MainWindow : Window
         if (_miniModeActive || _shell == null) return;
 
         _preMiniState       = WindowState;
-        _preMiniDecorations = SystemDecorations;
+        _preMiniDecorations = WindowDecorations;
         _preMiniPosition    = Position;
         _preMiniWidth       = Width;
         _preMiniHeight      = Height;
@@ -486,7 +486,7 @@ public sealed partial class MainWindow : Window
         _preMiniStatus      = _shell.IsStatusBarVisible;
 
         WindowState        = global::Avalonia.Controls.WindowState.Normal;
-        SystemDecorations  = global::Avalonia.Controls.SystemDecorations.None;
+        WindowDecorations  = global::Avalonia.Controls.WindowDecorations.None;
         Topmost            = true;
         Width              = 320;
         Height             = 240;
@@ -504,7 +504,7 @@ public sealed partial class MainWindow : Window
         if (!_miniModeActive || _shell == null) return;
 
         WindowState        = _preMiniState;
-        SystemDecorations  = _preMiniDecorations;
+        WindowDecorations  = _preMiniDecorations;
         Topmost            = _preMiniTopmost;
         Width              = _preMiniWidth;
         Height             = _preMiniHeight;

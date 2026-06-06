@@ -828,10 +828,13 @@ namespace FracturingFog.Rendering
 
         // ── Internals ─────────────────────────────────────────────────────────
 
-        /// <summary>Install a hot-loaded calculator. While set it takes
-        /// priority over the FractalType-based dispatch. Pass null to
-        /// clear and revert to the static alt-calc table. Caller takes
-        /// the lifetime — the host doesn't dispose what it doesn't own.</summary>
+        /// <summary>Install a hot-loaded calculator. While set it overrides
+        /// the static UserEquation slot only — switching the active
+        /// FractalType to anything else still routes through
+        /// SelectAltCalculatorByType, so the user can leave the hot-loaded
+        /// equation and come back to it. Pass null to clear and revert to
+        /// the static alt-calc table. Caller takes the lifetime — the host
+        /// doesn't dispose what it doesn't own.</summary>
         public void SetDynamicAltCalculator(IFractalCalculator? alt)
         {
             _dynamicAltCalculator = alt;
@@ -845,7 +848,12 @@ namespace FracturingFog.Rendering
 
         private IFractalCalculator? SelectAltCalculator(FractalType type)
         {
-            if (_dynamicAltCalculator != null) return _dynamicAltCalculator;
+            // Dynamic hot-load slot is bound to UserEquation semantically — the
+            // Compile & Load button on the UserEquation dialog produces this
+            // calculator. Honouring it for every FractalType would lock the
+            // dropdown on the user equation until app close.
+            if (_dynamicAltCalculator != null && type == FractalType.UserEquation)
+                return _dynamicAltCalculator;
             return SelectAltCalculatorByType(type);
         }
 

@@ -220,7 +220,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // Span — toggle borderless multi-monitor fullscreen. This VM owns the
         // intent + button label; the host owns the actual Window geometry
-        // (SystemDecorations / position / size) and restores it on exit.
+        // (WindowDecorations / position / size) and restores it on exit.
         FloatingMenu.SpanClick += (_, _) =>
         {
             _isSpanning = !_isSpanning;

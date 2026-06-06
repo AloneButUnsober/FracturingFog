@@ -1,6 +1,6 @@
 using System;
 using Avalonia;
-using Avalonia.ReactiveUI;
+using ReactiveUI.Avalonia;
 using FracturingFog.Abstractions;
 
 namespace FracturingFog.UI.Avalonia;
@@ -74,5 +74,5 @@ public static class AvaloniaShell
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace()
-            .UseReactiveUI();
+            .UseReactiveUI(rxui => { });
 }
