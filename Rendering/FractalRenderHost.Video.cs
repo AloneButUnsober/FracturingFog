@@ -246,7 +246,7 @@ namespace FracturingFog.Rendering
                 cts = _videoSlideshowCts;
             }
 
-            Task.Run(() => VideoSlideshowLoop(seconds, constantRate, reverse, cts.Token), cts.Token)
+            Task.Run(() => VideoSlideshowLoop(seconds, constantRate, reverse, request.UseRegionWatermark, cts.Token), cts.Token)
                 .ContinueWith(t =>
                 {
                     _videoSlideshowRunning = false;
@@ -985,7 +985,7 @@ namespace FracturingFog.Rendering
         // Video slideshow (Mandelbrot-only legs, cross-faded)
         // ──────────────────────────────────────────────────────────────────
 
-        private void VideoSlideshowLoop(double seconds, bool constantRate, bool reverse, CancellationToken ct)
+        private void VideoSlideshowLoop(double seconds, bool constantRate, bool reverse, bool useRegionWatermark, CancellationToken ct)
         {
             var svc = _videoThemeService;
             if (svc == null) return;
@@ -1042,6 +1042,13 @@ namespace FracturingFog.Rendering
                 while (regions.Count > 1 && ri == lastRegion);
                 lastRegion = ri;
                 var region = regions[ri];
+
+                // When the user asked the video slideshow to honour each
+                // region's embedded watermark, swap it in before the leg's
+                // pre-render so the very first composited frame already
+                // carries the right branding.
+                if (useRegionWatermark)
+                    ActiveWatermark = region.EmbeddedWatermark;
 
                 double tz = Math.Clamp(region.Zoom, draftMin, ultraMax);
 

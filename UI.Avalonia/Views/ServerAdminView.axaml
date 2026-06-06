@@ -115,6 +115,33 @@
 
             <Border Classes="group">
                 <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Watermark" />
+                    <TextBlock Foreground="#7E7E7E" FontSize="11" TextWrapping="Wrap"
+                               Text="Decides which watermark the server composites onto saved jobs. Apply to save." />
+                    <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">
+                        <RadioButton GroupName="WatermarkMode" Content="Default"
+                                     IsChecked="{Binding IsWatermarkModeDefault, Mode=TwoWay}"
+                                     Foreground="#EEE"
+                                     ToolTip.Tip="Server uses region/theme + auto contrast (legacy behaviour)." />
+                        <RadioButton GroupName="WatermarkMode" Content="Custom"
+                                     IsChecked="{Binding IsWatermarkModeCustom, Mode=TwoWay}"
+                                     Foreground="#EEE"
+                                     ToolTip.Tip="Server uses the named server-side watermark below." />
+                        <RadioButton GroupName="WatermarkMode" Content="Client"
+                                     IsChecked="{Binding IsWatermarkModeClient, Mode=TwoWay}"
+                                     Foreground="#EEE"
+                                     ToolTip.Tip="Honour the client's per-request watermark payload (falls back to Default when absent)." />
+                    </StackPanel>
+                    <ComboBox ItemsSource="{Binding WatermarkNames}"
+                              SelectedItem="{Binding ServerCustomWatermarkName, Mode=TwoWay}"
+                              IsEnabled="{Binding IsWatermarkModeCustom}"
+                              HorizontalAlignment="Stretch"
+                              Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="group">
+                <StackPanel Spacing="6">
                     <TextBlock Classes="section" Text="Lifecycle" />
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Button Classes="primary" Content="Start"   Command="{Binding StartCommand}" />

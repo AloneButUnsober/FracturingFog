@@ -16,6 +16,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using FracturingFog.Models;
 
 namespace FracturingFog.Imaging
 {
@@ -274,6 +275,180 @@ namespace FracturingFog.Imaging
         {
             var c = ComputeContrastColor(swatch);
             return fade ? Color.FromArgb(75, c.R, c.G, c.B) : c;
+        }
+
+        // ── Configurable-watermark overloads ──────────────────────────────────
+        //
+        // These accept a WatermarkRender resolved by WatermarkResolver and honour
+        // its TextColor / HighlightColor / BackgroundColor / Placement / Justify.
+        // The legacy AddWaterMark(string, Color, string) overload above is kept
+        // for callers that haven't been migrated to pass a WatermarkRender yet.
+
+        /// <summary>Save BGRA pixels then composite a resolved watermark on top.
+        /// When <paramref name="wm"/> is null no watermark is drawn (used by the
+        /// no-watermark code paths that today pass watermarkText: "").</summary>
+        public static unsafe void SavePixelsToFile(
+            uint[] pixels, int w, int h, string path, ImageFormat format,
+            WatermarkRender? wm, bool poster = false, float dpi = 0f)
+        {
+            using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+            if (dpi > 0f) bmp.SetResolution(dpi, dpi);
+            var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
+                                    ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                fixed (uint* src = pixels)
+                {
+                    if (bmpData.Stride == w * 4)
+                        Buffer.MemoryCopy(src, (void*)bmpData.Scan0, (long)w * h * 4, (long)w * h * 4);
+                    else
+                    {
+                        byte* dst = (byte*)bmpData.Scan0;
+                        for (int row = 0; row < h; row++)
+                            Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
+                                              dst + (long)row * bmpData.Stride,
+                                              (long)w * 4, (long)w * 4);
+                    }
+                }
+            }
+            finally { bmp.UnlockBits(bmpData); }
+
+            if (format == ImageFormat.Tiff)
+            {
+                ImageCodecInfo? codec = null;
+                foreach (var c in ImageCodecInfo.GetImageEncoders())
+                    if (c.MimeType == "image/tiff") { codec = c; break; }
+                if (codec != null)
+                {
+                    using var ep = new EncoderParameters(1);
+                    ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Compression, (long)EncoderValue.CompressionLZW);
+                    bmp.Save(path, codec, ep);
+                }
+                else bmp.Save(path, format);
+            }
+            else bmp.Save(path, format);
+
+            if (wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText)))
+            {
+                using var g = Graphics.FromImage(bmp);
+                AddWaterMark(g, wm, w, h, poster);
+                bmp.Save(path, format);
+            }
+        }
+
+        /// <summary>Draw the resolved watermark onto an arbitrary GDI surface.
+        /// Honours top-line text + colour, optional background fill, optional
+        /// highlight outline, edge placement and inline justify. Subtext is
+        /// always rendered (program/version is mandatory per spec).</summary>
+        public static void AddWaterMark(
+            Graphics g,
+            WatermarkRender wm,
+            int width,
+            int height,
+            bool poster = false)
+        {
+            if (wm == null) return;
+
+            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
+            int subFontSize = System.Math.Max(1, fontSize / 2);
+            int edgePad = poster ? System.Math.Min(width, height) / 150 : 12;
+
+            using var fontMain = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var fontSub  = new Font("Segoe UI", subFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+
+            var fill = Color.FromArgb(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
+
+            // Default outline = luminance-opposite halo (matches legacy behaviour).
+            // When user supplied an explicit HighlightColor, honour it instead.
+            Color outline;
+            if (wm.HighlightColor != null)
+            {
+                outline = Color.FromArgb(wm.HighlightColor.A, wm.HighlightColor.R, wm.HighlightColor.G, wm.HighlightColor.B);
+            }
+            else
+            {
+                float lum = (fill.R * 0.299f + fill.G * 0.587f + fill.B * 0.114f) / 255f;
+                outline = lum < 0.5f
+                    ? Color.FromArgb(190, 255, 255, 255)
+                    : Color.FromArgb(190, 0, 0, 0);
+            }
+
+            float mainStroke = poster ? System.Math.Max(2f, fontSize / 10f) : 2f;
+            float subStroke = poster ? System.Math.Max(1.5f, fontSize / 16f) : 1.5f;
+
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            var szTop = string.IsNullOrEmpty(wm.TopText)
+                ? new SizeF(0, 0)
+                : g.MeasureString(wm.TopText, fontMain);
+            var szSub = string.IsNullOrEmpty(wm.SubText)
+                ? new SizeF(0, 0)
+                : g.MeasureString(wm.SubText, fontSub);
+
+            int topW = (int)System.Math.Ceiling(szTop.Width);
+            int topH = (int)System.Math.Ceiling(szTop.Height);
+            int subW = (int)System.Math.Ceiling(szSub.Width);
+            int subH = (int)System.Math.Ceiling(szSub.Height);
+
+            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
+                wm, width, height, topW, topH, subW, subH, edgePad);
+
+            // Optional background fill — covers the full block + a few px pad so
+            // anti-aliased glyph edges don't fringe past the rect.
+            if (wm.BackgroundColor != null)
+            {
+                var bg = Color.FromArgb(wm.BackgroundColor.A,
+                    wm.BackgroundColor.R, wm.BackgroundColor.G, wm.BackgroundColor.B);
+                const int bgPad = 4;
+                using var bgBrush = new SolidBrush(bg);
+                g.FillRectangle(bgBrush, bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2);
+            }
+
+            // Subtext stacks below top line in reading order.
+            int topX = WatermarkResolver.AlignLineX(bx, bw, topW, wm.Justify);
+            int subX = WatermarkResolver.AlignLineX(bx, bw, subW, wm.Justify);
+            int topY = by;
+            int subY = by + topH;
+
+            if (!string.IsNullOrEmpty(wm.TopText))
+                DrawOutlinedString(g, wm.TopText, fontMain, new PointF(topX, topY), fill, outline, mainStroke);
+
+            if (!string.IsNullOrEmpty(wm.SubText))
+                DrawOutlinedString(g, wm.SubText, fontSub, new PointF(subX, subY), fill, outline, subStroke);
+        }
+
+        /// <summary>Measure the on-image bounding rectangle the resolved
+        /// watermark will occupy. Used by overlay surfaces that allocate
+        /// scratch bitmaps the size of just the watermark band.</summary>
+        public static Rectangle MeasureWatermarkBBox(
+            WatermarkRender wm, int width, int height, bool poster = false)
+        {
+            if (wm == null) return Rectangle.Empty;
+
+            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
+            int subFontSize = System.Math.Max(1, fontSize / 2);
+            int edgePad = poster ? System.Math.Min(width, height) / 150 : 12;
+
+            using var fontMain = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var fontSub  = new Font("Segoe UI", subFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var dummy = new Bitmap(1, 1);
+            using var g = Graphics.FromImage(dummy);
+
+            int topW = string.IsNullOrEmpty(wm.TopText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.TopText, fontMain).Width);
+            int topH = string.IsNullOrEmpty(wm.TopText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.TopText, fontMain).Height);
+            int subW = string.IsNullOrEmpty(wm.SubText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.SubText, fontSub).Width);
+            int subH = string.IsNullOrEmpty(wm.SubText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.SubText, fontSub).Height);
+
+            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
+                wm, width, height, topW, topH, subW, subH, edgePad);
+
+            // Pad for outline stroke + AA fringe + optional background pad.
+            const int pad = 8;
+            int x0 = System.Math.Max(0, bx - pad);
+            int y0 = System.Math.Max(0, by - pad);
+            int x1 = System.Math.Min(width, bx + bw + pad);
+            int y1 = System.Math.Min(height, by + bh + pad);
+            return new Rectangle(x0, y0, x1 - x0, y1 - y0);
         }
     }
 }

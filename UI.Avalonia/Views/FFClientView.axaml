@@ -224,6 +224,12 @@
                         <TextBlock Classes="label" Text="Return mode" />
                         <ComboBox ItemsSource="{Binding ReturnModes}" SelectedItem="{Binding ReturnMode}" MinWidth="140" />
                     </StackPanel>
+                    <CheckBox Content="Send custom watermark with request"
+                              IsChecked="{Binding SendClientWatermark, Mode=TwoWay}"
+                              IsEnabled="{Binding ActiveWatermark, Converter={x:Static ObjectConverters.IsNotNull}}"
+                              Margin="0,8,0,0"
+                              Foreground="#EEE"
+                              ToolTip.Tip="Pack the active custom watermark into the request. The server's watermark mode decides whether to honour it." />
                 </StackPanel>
             </Border>
 

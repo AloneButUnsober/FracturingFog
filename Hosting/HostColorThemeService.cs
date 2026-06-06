@@ -350,7 +350,16 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
-        public bool SaveCurrentAsRegion(string regionName, FractalViewState state)
+        /// <inheritdoc/>
+        public WatermarkDef? GetRegionEmbeddedWatermark(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            var r = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(x => string.Equals(x.Name, regionName, StringComparison.OrdinalIgnoreCase));
+            return r?.EmbeddedWatermark?.Clone();
+        }
+
+        public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null)
         {
             if (string.IsNullOrWhiteSpace(regionName) || state == null) return false;
 
@@ -389,6 +398,7 @@ namespace FracturingFog.Hosting
                 UserBulbLightTheta     = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightTheta     ?? 0 : 0,
                 UserBulbLightPhi       = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightPhi       ?? 0 : 0,
                 Description = "",
+                EmbeddedWatermark = embeddedWatermark?.Clone(),
             };
             FractalRegionLibrary.Instance.UserRegions.Add(region);
             FractalRegionLibrary.Instance.Save();

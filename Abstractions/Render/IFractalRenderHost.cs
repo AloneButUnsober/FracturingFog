@@ -159,6 +159,13 @@ namespace FracturingFog.Render
         /// <summary>Theme label rendered in the watermark.</summary>
         string? ThemeName { get; set; }
 
+        /// <summary>Optional user-configured watermark that replaces the
+        /// default Region/Theme + auto-contrast composition. Null = default
+        /// behaviour (today). Set by the shell after applying the precedence
+        /// chain (FloatingMenu override → region embedded → master toggle).
+        /// Host re-uploads the next frame with the new watermark composited.</summary>
+        FracturingFog.Models.WatermarkDef? ActiveWatermark { get; set; }
+
         /// <summary>Set (or clear with all-null) the rubber-band rectangle
         /// drawn on top of the current frame while the user is right-drag
         /// selecting a zoom region in 2D. The host re-uploads the most-recent

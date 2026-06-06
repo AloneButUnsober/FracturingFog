@@ -36,6 +36,11 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         CertsDir = Config.ServerCertsDir ?? "";
         LogDir = Config.LogDir ?? "";
         WorkDir = Config.WorkDir ?? "";
+        WatermarkMode = Config.WatermarkMode;
+        ServerCustomWatermarkName = Config.ServerCustomWatermarkName;
+        try { FracturingFog.Models.UserWatermarkStore.Instance.Load(); } catch { }
+        WatermarkNames = new System.Collections.ObjectModel.ObservableCollection<string>(
+            FracturingFog.Models.UserWatermarkStore.Instance.EnumerateNames());
 
         StartCommand   = ReactiveCommand.Create(Start);
         RestartCommand = ReactiveCommand.Create(Restart);
@@ -77,6 +82,31 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
 
     private string _logDir = "";
     public string LogDir { get => _logDir; set => this.RaiseAndSetIfChanged(ref _logDir, value); }
+
+    public System.Collections.ObjectModel.ObservableCollection<string> WatermarkNames { get; private set; } = new();
+
+    private ServerWatermarkMode _watermarkMode = ServerWatermarkMode.Default;
+    public ServerWatermarkMode WatermarkMode
+    {
+        get => _watermarkMode;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _watermarkMode, value);
+            this.RaisePropertyChanged(nameof(IsWatermarkModeDefault));
+            this.RaisePropertyChanged(nameof(IsWatermarkModeCustom));
+            this.RaisePropertyChanged(nameof(IsWatermarkModeClient));
+        }
+    }
+    public bool IsWatermarkModeDefault { get => WatermarkMode == ServerWatermarkMode.Default; set { if (value) WatermarkMode = ServerWatermarkMode.Default; } }
+    public bool IsWatermarkModeCustom  { get => WatermarkMode == ServerWatermarkMode.Custom;  set { if (value) WatermarkMode = ServerWatermarkMode.Custom;  } }
+    public bool IsWatermarkModeClient  { get => WatermarkMode == ServerWatermarkMode.Client;  set { if (value) WatermarkMode = ServerWatermarkMode.Client;  } }
+
+    private string? _serverCustomWatermarkName;
+    public string? ServerCustomWatermarkName
+    {
+        get => _serverCustomWatermarkName;
+        set => this.RaiseAndSetIfChanged(ref _serverCustomWatermarkName, value);
+    }
 
     private string _workDir = "";
     public string WorkDir { get => _workDir; set => this.RaiseAndSetIfChanged(ref _workDir, value); }
@@ -225,6 +255,9 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         Config.ServerCertsDir = string.IsNullOrWhiteSpace(CertsDir) ? null : CertsDir.Trim();
         Config.LogDir         = string.IsNullOrWhiteSpace(LogDir)   ? null : LogDir.Trim();
         Config.WorkDir        = string.IsNullOrWhiteSpace(WorkDir)  ? null : WorkDir.Trim();
+        Config.WatermarkMode  = WatermarkMode;
+        Config.ServerCustomWatermarkName = string.IsNullOrWhiteSpace(ServerCustomWatermarkName)
+            ? null : ServerCustomWatermarkName!.Trim();
         try { Config.Save(); }
         catch (Exception ex) { LastError = "save failed: " + ex.Message; return; }
 

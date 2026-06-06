@@ -21,6 +21,8 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
+using FracturingFog.Imaging;
+using FracturingFog.Models;
 using FracturingFog.ViewState;
 
 namespace FracturingFog.Rendering
@@ -60,6 +62,7 @@ namespace FracturingFog.Rendering
             string? themeName,
             string? programName,
             string? programVersion,
+            WatermarkDef? activeWatermark,
             (int X, int Y, int W, int H)? selectionRect = null)
         {
             if (bgra == null || bgra.Length < width * height) return;
@@ -92,7 +95,7 @@ namespace FracturingFog.Rendering
                 if (showWatermark)
                     DrawWatermark(g, width, height,
                         regionName, themeName, programName, programVersion,
-                        ink, halo);
+                        activeWatermark, ink, halo);
 
                 if (selectionRect is { } r && r.W > 0 && r.H > 0)
                     DrawSelectionRect(g, width, height, r.X, r.Y, r.W, r.H, ink, halo);
@@ -219,35 +222,70 @@ namespace FracturingFog.Rendering
         private void DrawWatermark(Graphics g, int w, int h,
             string? region, string? theme,
             string? programName, string? programVersion,
+            WatermarkDef? activeWatermark,
             Color ink, Color halo)
         {
-            string main = "";
-            if (!string.IsNullOrEmpty(region)) main = region!;
-            if (!string.IsNullOrEmpty(theme))
-                main = string.IsNullOrEmpty(main) ? theme! : main + " - " + theme;
+            // Resolve through the shared chain. The shell has already applied
+            // precedence and handed us either a fully-realised activeWatermark
+            // or null (= default region/theme + auto-contrast). IsCustom is
+            // true exactly when activeWatermark is non-null.
+            var defaultText = new RgbDef(ink.R, ink.G, ink.B);
+            var wm = WatermarkResolver.Resolve(
+                activeCustom: activeWatermark,
+                regionEmbedded: null,
+                overrideRegionWatermark: activeWatermark != null,
+                useCustomWatermark: activeWatermark != null,
+                regionName: region ?? string.Empty,
+                themeName: theme ?? string.Empty,
+                programName: programName ?? "Fracturing Fog",
+                programVersion: programVersion ?? string.Empty,
+                defaultTextColor: defaultText);
 
-            string sub = $"{programName ?? "Fracturing Fog"} v{programVersion ?? "?"} {DateTime.Now.Year}";
+            Color fill = Color.FromArgb(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
+            using var mainBrush = new SolidBrush(Color.FromArgb(wm.IsCustom ? 255 : 220, fill));
+            using var subBrush  = new SolidBrush(Color.FromArgb(wm.IsCustom ? 230 : 180, fill));
+            Color haloColor = wm.HighlightColor != null
+                ? Color.FromArgb(wm.HighlightColor.A, wm.HighlightColor.R, wm.HighlightColor.G, wm.HighlightColor.B)
+                : halo;
+            using var shdBrush = new SolidBrush(haloColor);
 
-            using var mainBrush = new SolidBrush(Color.FromArgb(220, ink));
-            using var subBrush  = new SolidBrush(Color.FromArgb(180, ink));
-            using var shdBrush  = new SolidBrush(halo);
+            var topSz = string.IsNullOrEmpty(wm.TopText)
+                ? new SizeF(0, 0) : g.MeasureString(wm.TopText, _mainFont);
+            var subSz = string.IsNullOrEmpty(wm.SubText)
+                ? new SizeF(0, 0) : g.MeasureString(wm.SubText, _subFont);
 
-            var mainSz = g.MeasureString(main, _mainFont);
-            var subSz  = g.MeasureString(sub, _subFont);
+            int topW = (int)Math.Ceiling(topSz.Width);
+            int topH = (int)Math.Ceiling(topSz.Height);
+            int subW = (int)Math.Ceiling(subSz.Width);
+            int subH = (int)Math.Ceiling(subSz.Height);
 
-            float pad = 6;
-            float bx = w - Math.Max(mainSz.Width, subSz.Width) - pad;
-            float by = h - mainSz.Height - subSz.Height - pad;
+            const int edgePad = 6;
+            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
+                wm, w, h, topW, topH, subW, subH, edgePad);
 
-            if (!string.IsNullOrEmpty(main))
+            if (wm.BackgroundColor != null)
             {
-                g.DrawString(main, _mainFont, shdBrush, bx + 1, by + 1);
-                g.DrawString(main, _mainFont, mainBrush, bx, by);
+                var bg = Color.FromArgb(wm.BackgroundColor.A,
+                    wm.BackgroundColor.R, wm.BackgroundColor.G, wm.BackgroundColor.B);
+                const int bgPad = 4;
+                using var bgBrush = new SolidBrush(bg);
+                g.FillRectangle(bgBrush, bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2);
             }
-            float subY = by + mainSz.Height;
-            float subX = w - subSz.Width - pad;
-            g.DrawString(sub, _subFont, shdBrush, subX + 1, subY + 1);
-            g.DrawString(sub, _subFont, subBrush, subX, subY);
+
+            int topX = WatermarkResolver.AlignLineX(bx, bw, topW, wm.Justify);
+            int subX = WatermarkResolver.AlignLineX(bx, bw, subW, wm.Justify);
+
+            if (!string.IsNullOrEmpty(wm.TopText))
+            {
+                g.DrawString(wm.TopText, _mainFont, shdBrush, topX + 1, by + 1);
+                g.DrawString(wm.TopText, _mainFont, mainBrush, topX, by);
+            }
+            if (!string.IsNullOrEmpty(wm.SubText))
+            {
+                int subY = by + topH;
+                g.DrawString(wm.SubText, _subFont, shdBrush, subX + 1, subY + 1);
+                g.DrawString(wm.SubText, _subFont, subBrush, subX, subY);
+            }
         }
     }
 }

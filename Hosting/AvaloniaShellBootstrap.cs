@@ -248,6 +248,7 @@ namespace FracturingFog.Hosting
             try { UserEquationStore.Instance.Load(); }    catch { }
             try { SandboxEquationStore.Instance.Load(); }  catch { }
             try { UserBulbStore.Instance.Load(); }         catch { }
+            try { UserWatermarkStore.Instance.Load(); }    catch { }
 
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
@@ -268,6 +269,8 @@ namespace FracturingFog.Hosting
                         FracturingFog.Models.ResolutionDimensions.Resolutions,
                         r => !string.IsNullOrEmpty(r.Name)),
                     r => r.Name!));
+            // Watermark library combo — seeded from the user store loaded above.
+            s_shell.FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
             s_shell.FloatingMenu.ResolutionChanged += (_, name) =>
             {
                 var res = System.Linq.Enumerable.FirstOrDefault(
@@ -533,12 +536,21 @@ namespace FracturingFog.Hosting
             {
                 try
                 {
-                    string? name = await AvaloniaDialogs.PromptForTextAsync(
-                        "Save Region", "Region name:", suggested: BuildRegionNameDefault(shell));
-                    if (!string.IsNullOrWhiteSpace(name) && s_renderHost != null)
+                    bool customWatermarkAvailable =
+                        shell.Main.UseCustomWatermark
+                        && shell.Main.ActiveCustomWatermark != null;
+
+                    var prompt = await AvaloniaDialogs.PromptForSaveRegionAsync(
+                        "Save Region", "Region name:", BuildRegionNameDefault(shell),
+                        customWatermarkAvailable);
+
+                    if (prompt is { } picked && !string.IsNullOrWhiteSpace(picked.Name) && s_renderHost != null)
                     {
+                        var embedded = (customWatermarkAvailable && picked.IncludeWatermark)
+                            ? shell.Main.ActiveCustomWatermark
+                            : null;
                         bool ok = ((IColorThemeService)s_themeService!)
-                            .SaveCurrentAsRegion(name!, s_renderHost.ViewState);
+                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded);
                         if (ok)
                             shell.FloatingMenu.SetRegions(s_themeService!.EnumerateRegionNames());
                     }
@@ -798,7 +810,11 @@ namespace FracturingFog.Hosting
                 {
                     if (s_renderHost == null) return;
 
-                    var dims = await AvaloniaDialogs.ShowPosterAsync();
+                    var dims = await AvaloniaDialogs.ShowPosterAsync(
+                        watermarkNames: UserWatermarkStore.Instance.EnumerateNames(),
+                        customWatermarkDefault: shell.Main.UseCustomWatermark,
+                        watermarkNameDefault: shell.Main.SelectedCustomWatermarkName,
+                        onEditWatermark: () => Dispatcher.UIThread.Post(() => shell.ShowWatermarkEditor()));
                     if (dims == null) return;
 
                     int savedW = dims.Value.Portrait ? dims.Value.Height : dims.Value.Width;
@@ -830,9 +846,12 @@ namespace FracturingFog.Hosting
                         watermark += " - " + s_renderHost.ThemeName;
                     string subText = $"Fracturing Fog {DateTime.Now.Year}";
 
+                    var customWm = dims.Value.UseCustomWatermark
+                        ? UserWatermarkStore.Instance.GetByName(dims.Value.WatermarkName)
+                        : null;
                     var req = s_renderHost.CreatePosterRequest(
                         dims.Value.Width, dims.Value.Height, rotate: dims.Value.Portrait,
-                        path, format, watermark, subText);
+                        path, format, watermark, subText, customWm);
 
                     try
                     {

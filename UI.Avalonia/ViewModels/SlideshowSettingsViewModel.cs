@@ -27,6 +27,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private int _themeFadeMs;
     private int _regionFadeMs;
     private int _fadeSteps;
+    private bool _useRegionWatermark;
 
     public SlideshowSettingsViewModel(SlideshowSettings current, bool audioReactive)
     {
@@ -39,6 +40,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _themeFadeMs = _working.ColorThemeFadeMs;
         _regionFadeMs = _working.RegionFadeMs;
         _fadeSteps = _working.FadeSteps;
+        _useRegionWatermark = _working.UseRegionWatermark;
 
         OkCommand = ReactiveCommand.Create(Commit);
         CancelCommand = ReactiveCommand.Create(() => { });
@@ -94,6 +96,15 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _fadeSteps, Math.Clamp(value, 2, 200));
     }
 
+    /// <summary>When true the slideshow honours each region's embedded
+    /// watermark (if any); otherwise it leaves whatever watermark
+    /// MainViewModel resolved active before slideshow start.</summary>
+    public bool UseRegionWatermark
+    {
+        get => _useRegionWatermark;
+        set => this.RaiseAndSetIfChanged(ref _useRegionWatermark, value);
+    }
+
     /// <summary>Convenience derived property — drives IsEnabled on timing controls.</summary>
     public bool TimingEnabled => !_audioReactive;
 
@@ -119,6 +130,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.ColorThemeFadeMs = _themeFadeMs;
         _working.RegionFadeMs = _regionFadeMs;
         _working.FadeSteps = _fadeSteps;
+        _working.UseRegionWatermark = _useRegionWatermark;
         Result = _working;
     }
 
@@ -129,5 +141,6 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         ColorThemeFadeMs = s.ColorThemeFadeMs,
         RegionFadeMs = s.RegionFadeMs,
         FadeSteps = s.FadeSteps,
+        UseRegionWatermark = s.UseRegionWatermark,
     };
 }

@@ -358,18 +358,126 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
+        /// <summary>
+        /// Save-Region prompt: like PromptForTextAsync but with an additional
+        /// "Include watermark" checkbox shown only when a custom watermark is
+        /// active. Returns (Name, IncludeWatermark) on OK, null on cancel.
+        /// </summary>
+        public static Task<(string Name, bool IncludeWatermark)?> PromptForSaveRegionAsync(
+            string title,
+            string prompt,
+            string suggested,
+            bool customWatermarkAvailable)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<(string, bool)?>();
+
+            void Run()
+            {
+                var box = new TextBox
+                {
+                    Text = suggested,
+                    Watermark = prompt,
+                    Margin = new Thickness(16, 8, 16, 8),
+                    MinWidth = 320,
+                };
+                var includeWatermark = new CheckBox
+                {
+                    Content = "Include custom watermark in this region",
+                    Foreground = Brushes.White,
+                    IsEnabled = customWatermarkAvailable,
+                    IsChecked = false,
+                    Margin = new Thickness(16, 0, 16, 8),
+                };
+                if (!customWatermarkAvailable)
+                {
+                    global::Avalonia.Controls.ToolTip.SetTip(includeWatermark,
+                        "Enable \"Use custom watermark\" + pick a saved watermark first.");
+                }
+
+                var win = new Window
+                {
+                    Title = string.IsNullOrEmpty(title) ? "Save Region" : title,
+                    Width = 460,
+                    MinWidth = 360,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+                var promptText = new TextBlock
+                {
+                    Text = prompt,
+                    Foreground = Brushes.White,
+                    Margin = new Thickness(16, 16, 16, 4),
+                    TextWrapping = TextWrapping.Wrap,
+                };
+                var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
+                var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
+                void Close((string, bool)? r)
+                {
+                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(r);
+                    win.Close();
+                }
+                ok.Click += (_, _) => Close(string.IsNullOrWhiteSpace(box.Text)
+                    ? null
+                    : ((string Name, bool IncludeWatermark)?)(box.Text!, includeWatermark.IsChecked == true));
+                cancel.Click += (_, _) => Close(null);
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(16, 4, 16, 16),
+                    Spacing = 8,
+                };
+                buttonRow.Children.Add(cancel);
+                buttonRow.Children.Add(ok);
+
+                var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto") };
+                Grid.SetRow(promptText, 0);
+                Grid.SetRow(box, 1);
+                Grid.SetRow(includeWatermark, 2);
+                Grid.SetRow(buttonRow, 3);
+                grid.Children.Add(promptText);
+                grid.Children.Add(box);
+                grid.Children.Add(includeWatermark);
+                grid.Children.Add(buttonRow);
+                win.Content = grid;
+                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+                box.Focus();
+                box.SelectAll();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── Poster print ──────────────────────────────────────────────────────
 
         /// <summary>
         /// Modal poster-size prompt mirroring the legacy WinForms PosterDialog:
         /// poster width/height in inches × a DPI preset (150 / 300 / 600) gives
         /// the output pixel dimensions. Returns (PixelWidth, PixelHeight,
-        /// Portrait) on OK, null on cancel. Portrait also drives the 90° rotate.
+        /// Portrait, UseCustomWatermark, WatermarkName) on OK, null on cancel.
+        /// Portrait also drives the 90° rotate. UseCustomWatermark + WatermarkName
+        /// let the caller swap in the matching <c>WatermarkDef</c> from
+        /// <c>UserWatermarkStore</c> before submitting the poster render.
         /// </summary>
-        public static Task<(int Width, int Height, bool Portrait)?> ShowPosterAsync()
+        public static Task<(int Width, int Height, bool Portrait, bool UseCustomWatermark, string? WatermarkName)?> ShowPosterAsync(
+            System.Collections.Generic.IEnumerable<string> watermarkNames,
+            bool customWatermarkDefault,
+            string? watermarkNameDefault,
+            Action? onEditWatermark)
         {
             var owner = ActiveMainWindow;
-            var tcs = new TaskCompletionSource<(int, int, bool)?>();
+            var tcs = new TaskCompletionSource<(int, int, bool, bool, string?)?>();
 
             void Run()
             {
@@ -429,11 +537,26 @@ namespace FracturingFog.Hosting
                     VerticalAlignment = VerticalAlignment.Center,
                 };
 
+                // Watermark sub-controls.
+                var useWatermark = new CheckBox
+                {
+                    Content = "Use custom watermark",
+                    IsChecked = customWatermarkDefault,
+                    Foreground = Brushes.White,
+                };
+                var wmCombo = new ComboBox { MinWidth = 200, IsEnabled = customWatermarkDefault };
+                foreach (var n in watermarkNames) wmCombo.Items.Add(n);
+                if (!string.IsNullOrEmpty(watermarkNameDefault) && wmCombo.Items.Contains(watermarkNameDefault))
+                    wmCombo.SelectedItem = watermarkNameDefault;
+                useWatermark.IsCheckedChanged += (_, _) => wmCombo.IsEnabled = useWatermark.IsChecked == true;
+                var editWmBtn = new Button { Content = "Edit Watermark…", MinWidth = 120 };
+                editWmBtn.Click += (_, _) => onEditWatermark?.Invoke();
+
                 var grid = new Grid
                 {
                     Margin = new Thickness(16),
                     ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto"),
+                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
                 };
                 void Place(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); grid.Children.Add(c); }
 
@@ -459,9 +582,23 @@ namespace FracturingFog.Hosting
                 Grid.SetRow(pixelLabel, 4); Grid.SetColumn(pixelLabel, 0); Grid.SetColumnSpan(pixelLabel, 2);
                 grid.Children.Add(pixelLabel);
 
+                // Watermark band — checkbox row, combo + edit-button row.
+                Grid.SetRow(useWatermark, 5); Grid.SetColumn(useWatermark, 0); Grid.SetColumnSpan(useWatermark, 2);
+                grid.Children.Add(useWatermark);
+                var wmRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Margin = new Thickness(0, 4, 0, 0),
+                };
+                wmRow.Children.Add(wmCombo);
+                wmRow.Children.Add(editWmBtn);
+                Grid.SetRow(wmRow, 6); Grid.SetColumn(wmRow, 0); Grid.SetColumnSpan(wmRow, 2);
+                grid.Children.Add(wmRow);
+
                 var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
                 var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
-                void Close((int, int, bool)? r) { if (!tcs.Task.IsCompleted) tcs.TrySetResult(r); win.Close(); }
+                void Close((int, int, bool, bool, string?)? r) { if (!tcs.Task.IsCompleted) tcs.TrySetResult(r); win.Close(); }
                 ok.Click += (_, _) =>
                 {
                     var (pw, ph) = Pixels();
@@ -471,7 +608,9 @@ namespace FracturingFog.Hosting
                         pixelLabel.Text = "Enter positive width and height in inches.";
                         return;
                     }
-                    Close((pw, ph, portrait.IsChecked == true));
+                    Close((pw, ph, portrait.IsChecked == true,
+                        useWatermark.IsChecked == true,
+                        wmCombo.SelectedItem as string));
                 };
                 cancel.Click += (_, _) => Close(null);
 
@@ -484,7 +623,7 @@ namespace FracturingFog.Hosting
                 };
                 buttonRow.Children.Add(cancel);
                 buttonRow.Children.Add(ok);
-                Grid.SetRow(buttonRow, 5); Grid.SetColumn(buttonRow, 0); Grid.SetColumnSpan(buttonRow, 2);
+                Grid.SetRow(buttonRow, 7); Grid.SetColumn(buttonRow, 0); Grid.SetColumnSpan(buttonRow, 2);
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
@@ -644,6 +783,13 @@ namespace FracturingFog.Hosting
                 {
                     if (e.Property == RangeBase.ValueProperty)
                         ditherValue.Text = $"{(int)Math.Round(ditherSlider.Value)}%";
+                };
+
+                var chkUseRegionWatermark = new CheckBox
+                {
+                    Content = "Use each region's embedded watermark (slideshow only)",
+                    Foreground = Brushes.LightGray,
+                    Margin = new Thickness(0, 4, 0, 0),
                 };
 
                 var errLabel = new TextBlock
@@ -859,6 +1005,7 @@ namespace FracturingFog.Hosting
                         TaaSmoothing = (int)Math.Round(taaSlider.Value),
                         BandDither = chkBandDither.IsChecked == true,
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
+                        UseRegionWatermark = chkUseRegionWatermark.IsChecked == true,
                     });
                 };
                 cancelBtn.Click += (_, _) => Close(null);
@@ -887,6 +1034,7 @@ namespace FracturingFog.Hosting
                 root.Children.Add(LabeledRow("Post-encode:", encodeCombo));
                 root.Children.Add(chkReverse);
                 root.Children.Add(smoothBox);
+                root.Children.Add(chkUseRegionWatermark);
                 root.Children.Add(errLabel);
                 root.Children.Add(buttonRow);
 

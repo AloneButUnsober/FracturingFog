@@ -79,6 +79,21 @@ public sealed class ServerConfig
     [JsonPropertyName("logDir")]          public string? LogDir         { get; set; }
     [JsonPropertyName("workDir")]         public string? WorkDir        { get; set; }
 
+    /// <summary>How the server resolves the watermark on a render job.
+    /// "Default" preserves today's behaviour (region/theme + auto contrast).
+    /// "Custom" uses a server-side saved watermark named by
+    /// <see cref="ServerCustomWatermarkName"/>. "Client" honours the client's
+    /// per-request override when <c>RenderRequestDto.UseClientWatermark</c>
+    /// is set and the payload passes <c>WatermarkPayloadValidator</c>; falls
+    /// back to Default when missing.</summary>
+    [JsonPropertyName("watermarkMode")]
+    public ServerWatermarkMode WatermarkMode { get; set; } = ServerWatermarkMode.Default;
+
+    /// <summary>Name of the server-side <c>UserWatermarkStore</c> entry used
+    /// when <see cref="WatermarkMode"/> is Custom. Ignored otherwise.</summary>
+    [JsonPropertyName("serverCustomWatermarkName")]
+    public string? ServerCustomWatermarkName { get; set; }
+
     public static string DefaultConfigPath() => Path.Combine(AppDataDir(), "server-config.json");
     public static string DefaultCertDir()    => Path.Combine(AppDataDir(), "server-certs");
     public static string DefaultLogDir()     => Path.Combine(AppDataDir(), "server-logs");
@@ -100,7 +115,11 @@ public sealed class ServerConfig
             if (File.Exists(path))
             {
                 var json = File.ReadAllText(path);
-                return JsonSerializer.Deserialize<ServerConfig>(json) ?? new ServerConfig();
+                var opts = new JsonSerializerOptions
+                {
+                    Converters = { new JsonStringEnumConverter() },
+                };
+                return JsonSerializer.Deserialize<ServerConfig>(json, opts) ?? new ServerConfig();
             }
         }
         catch { }
@@ -115,7 +134,16 @@ public sealed class ServerConfig
         {
             WriteIndented = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Converters = { new JsonStringEnumConverter() },
         });
         File.WriteAllText(path, json);
     }
+
+}
+
+public enum ServerWatermarkMode
+{
+    Default,
+    Custom,
+    Client,
 }

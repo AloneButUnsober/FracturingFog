@@ -59,6 +59,12 @@ namespace FracturingFog.Imaging
         public string Watermark { get; init; } = "";
         public string SubText { get; init; } = "";
 
+        /// <summary>Optional custom watermark to composite onto the saved
+        /// poster. When non-null, replaces the default Watermark / SubText
+        /// composition; the SubText (program/version) still appears beneath the
+        /// user's top-line, built by <see cref="WatermarkResolver.Resolve"/>.</summary>
+        public WatermarkDef? CustomWatermark { get; init; }
+
         /// <summary>Pixels-per-inch metadata stamped into the saved file. 0 =
         /// leave whatever the encoder defaults to (96 dpi). Set when the
         /// caller wants the print pipeline to honour a poster size — print
@@ -148,20 +154,65 @@ namespace FracturingFog.Imaging
                 int savedW = h, savedH = w;
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: rotated, imgW: savedW, imgH: savedH);
+                var wm = BuildPosterWatermark(req, fontColor);
                 ImageExport.SavePixelsToFile(
                     rotated, savedW, savedH, req.Path, req.Format,
-                    req.Watermark, fontColor, req.SubText, poster: true, dpi: req.Dpi);
+                    wm, poster: true, dpi: req.Dpi);
                 return new PosterResult(savedW, savedH, sw.ElapsedMilliseconds);
             }
             else
             {
                 var fontColor = ImageExport.ComputeContrastColor(
                     Color.White, watermark: true, pixels: buffer, imgW: w, imgH: h);
+                var wm = BuildPosterWatermark(req, fontColor);
                 ImageExport.SavePixelsToFile(
                     buffer, w, h, req.Path, req.Format,
-                    req.Watermark, fontColor, req.SubText, poster: true, dpi: req.Dpi);
+                    wm, poster: true, dpi: req.Dpi);
                 return new PosterResult(w, h, sw.ElapsedMilliseconds);
             }
+        }
+
+        private static WatermarkRender? BuildPosterWatermark(PosterRequest req, Color fontColor)
+        {
+            // No top-line + no sub-line + no custom override = nothing to draw.
+            if (req.CustomWatermark == null
+                && string.IsNullOrEmpty(req.Watermark)
+                && string.IsNullOrEmpty(req.SubText))
+            {
+                return null;
+            }
+
+            // The caller (FractalRenderHost.CreatePosterRequest) pre-composes
+            // req.Watermark (= "Region - Theme") and req.SubText
+            // (= "Program vX YYYY"). The render struct can use those verbatim
+            // for the default path, or substitute the custom watermark's
+            // top-line + colours / placement / justify when supplied. Subtext
+            // (program/version) is always req.SubText — the user can re-style
+            // and re-place it but not edit or hide it.
+            if (req.CustomWatermark != null)
+            {
+                return new WatermarkRender
+                {
+                    TopText = req.CustomWatermark.Text ?? string.Empty,
+                    SubText = req.SubText ?? string.Empty,
+                    TextColor = req.CustomWatermark.TextColor ?? new RgbDef(255, 255, 255),
+                    HighlightColor = req.CustomWatermark.HighlightColor,
+                    BackgroundColor = req.CustomWatermark.BackgroundColor,
+                    Placement = req.CustomWatermark.Placement,
+                    Justify = req.CustomWatermark.Justify,
+                    IsCustom = true,
+                };
+            }
+
+            return new WatermarkRender
+            {
+                TopText = req.Watermark ?? string.Empty,
+                SubText = req.SubText ?? string.Empty,
+                TextColor = new RgbDef(fontColor.R, fontColor.G, fontColor.B),
+                Placement = WatermarkPlacement.Bottom,
+                Justify = WatermarkJustify.Right,
+                IsCustom = false,
+            };
         }
 
         /// <summary>

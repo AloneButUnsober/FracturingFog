@@ -92,6 +92,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // for a theme). Without these two calls the combos were label-only —
         // user saw no view change and the symptom looked like flaky bindings.
         FloatingMenu.RegionComboChanged += (_, name) => JumpToRegion(name);
+        FloatingMenu.EditWatermarkClick += (_, _) => ShowWatermarkEditor();
+        FloatingMenu.WatermarkChanged += (_, name) => Main.SelectedCustomWatermarkName = name;
+        FloatingMenu.UseCustomWatermarkChanged += (_, v) => Main.UseCustomWatermark = v;
+        FloatingMenu.OverrideRegionWatermarkChanged += (_, v) => Main.OverrideRegionWatermark = v;
         FloatingMenu.ColorThemeChanged  += (_, name) =>
         {
             Main.SetThemeName(name);
@@ -478,6 +482,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 Main.SetQualitySilent(Main.ViewState.Quality);
                 FloatingMenu.SetRegionSilent(regionName);
                 FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+                // When the slideshow honours each region's embedded watermark,
+                // push the lookup into MainViewModel so the precedence resolver
+                // re-emits the active watermark for the next frame. Otherwise
+                // clear so leftover region embedded state doesn't persist past
+                // a slideshow run that disabled per-region branding.
+                Main.RegionEmbeddedWatermark = settings.UseRegionWatermark
+                    ? _themeService.GetRegionEmbeddedWatermark(regionName)
+                    : null;
             });
             _slideshow.ThemeApplied += (_, themeName) => Dispatcher.UIThread.Post(() =>
             {
@@ -661,6 +673,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _help, value);
     }
 
+    private WatermarkEditorViewModel? _watermarkEditor;
+    public WatermarkEditorViewModel? WatermarkEditor
+    {
+        get => _watermarkEditor;
+        private set => this.RaiseAndSetIfChanged(ref _watermarkEditor, value);
+    }
+
     // ── Phase 3 dialogs ──────────────────────────────────────────────────
 
     private FFClientViewModel? _ffClient;
@@ -691,6 +710,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isColorThemeEditorVisible;
         set => this.RaiseAndSetIfChanged(ref _isColorThemeEditorVisible, value);
+    }
+
+    private bool _isWatermarkEditorVisible;
+    public bool IsWatermarkEditorVisible
+    {
+        get => _isWatermarkEditorVisible;
+        set => this.RaiseAndSetIfChanged(ref _isWatermarkEditorVisible, value);
     }
 
     private bool _isHelpVisible;
@@ -948,6 +974,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private void JumpToRegion(string? name)
     {
         Main.SetRegionName(name);
+        // Mirror any watermark embedded in this region into MainViewModel so
+        // the precedence resolver routes it through to the next frame. Null
+        // when the region doesn't exist or doesn't carry one.
+        Main.RegionEmbeddedWatermark = _themeService.GetRegionEmbeddedWatermark(name ?? string.Empty);
         if (string.IsNullOrEmpty(name)) return;
         if (_themeService.ApplyRegion(name, Main.ViewState))
         {
@@ -1022,10 +1052,57 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         IsColorThemeEditorVisible = true;
     }
 
+    /// <summary>Open the Watermark Editor dialog. Public so the Poster dialog
+    /// (hosted in Hosting/AvaloniaDialogs) can route its "Edit Watermark…"
+    /// button through the same code path as the FloatingMenu button.</summary>
+    public void ShowWatermarkEditor() => ShowWatermarkEditorInternal();
+
+    private void ShowWatermarkEditorInternal()
+    {
+        if (WatermarkEditor == null)
+        {
+            var vm = new WatermarkEditorViewModel(initialWatermarkName: Main.SelectedCustomWatermarkName);
+            // Live preview pipe: push the edited def straight into MainViewModel
+            // so the running overlay reflects every change. The shell already
+            // routes ActiveWatermark through the precedence chain, so feeding
+            // the editor's draft as if it were the saved entry is enough.
+            vm.PreviewRequested += (_, def) =>
+            {
+                // Mirror name selection if the user is editing the active one.
+                if (!string.IsNullOrEmpty(Main.SelectedCustomWatermarkName)
+                    && string.Equals(Main.SelectedCustomWatermarkName, def.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    Main.PushActiveWatermark();
+                    Main.RenderHost.RepaintWithPostFx();
+                }
+            };
+            vm.WatermarkSavedToLibrary += (_, name) =>
+            {
+                FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
+                FloatingMenu.SetWatermarkSilent(name);
+                Main.SelectedCustomWatermarkName = name;
+            };
+            vm.WatermarkDeletedFromLibrary += (_, name) =>
+            {
+                FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
+                if (string.Equals(Main.SelectedCustomWatermarkName, name, StringComparison.OrdinalIgnoreCase))
+                    Main.SelectedCustomWatermarkName = null;
+            };
+            vm.HelpRequested += (_, _) => ShowHelp();
+            vm.CloseRequested += (_, _) => IsWatermarkEditorVisible = false;
+            vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
+            WatermarkEditor = vm;
+        }
+        IsWatermarkEditorVisible = true;
+    }
+
     private void ShowFFClient()
     {
         if (FFClient == null)
             FFClient = new FFClientViewModel(_themeService);
+        // Mirror MainViewModel's active custom watermark in so the form's
+        // "Send custom watermark" checkbox has something to send.
+        FFClient.ActiveWatermark = Main.ActiveCustomWatermark;
         IsFFClientVisible = true;
     }
 

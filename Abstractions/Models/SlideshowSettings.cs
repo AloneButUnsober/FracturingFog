@@ -26,5 +26,11 @@ namespace FracturingFog.Models
 
         /// <summary>Number of cross-fade steps. Step duration = fade ms / FadeSteps.</summary>
         public int FadeSteps { get; set; } = 22;
+
+        /// <summary>True to honour each region's <c>EmbeddedWatermark</c>
+        /// during the slideshow. When false (default) the slideshow uses
+        /// whatever active watermark MainViewModel has resolved (the master
+        /// "Use Custom Watermark" toggle still applies).</summary>
+        public bool UseRegionWatermark { get; set; }
     }
 }

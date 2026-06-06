@@ -89,6 +89,11 @@ namespace FracturingFog.Render
 
         /// <summary>Band-dither magnitude, 0..100 %.</summary>
         public int BandDitherStrength { get; set; } = 25;
+
+        /// <summary>Slideshow only — when true, each region's embedded watermark
+        /// (if any) overrides the user's active watermark for its leg. Mirrors
+        /// the slideshow engine's <c>UseRegionWatermark</c> behaviour.</summary>
+        public bool UseRegionWatermark { get; set; }
     }
 
     /// <summary>Outcome of a single-shot recording, raised once the zoom ends

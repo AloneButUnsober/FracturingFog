@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
 
     private FloatingMenuView? _menuWin;
     private ColorThemeEditorView? _editorWin;
+    private WatermarkEditorView? _watermarkEditorWin;
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
@@ -383,6 +384,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.ColorThemeEditor):
                 SyncEditor();
                 break;
+            case nameof(ShellViewModel.IsWatermarkEditorVisible):
+            case nameof(ShellViewModel.WatermarkEditor):
+                SyncWatermarkEditor();
+                break;
             case nameof(ShellViewModel.IsHelpVisible):
             case nameof(ShellViewModel.Help):
                 SyncHelp();
@@ -609,6 +614,33 @@ public sealed partial class MainWindow : Window
         else
         {
             _editorWin?.Hide();
+        }
+    }
+
+    private void SyncWatermarkEditor()
+    {
+        if (_shell == null) return;
+        if (_shell.IsWatermarkEditorVisible && _shell.WatermarkEditor != null)
+        {
+            if (_watermarkEditorWin == null)
+            {
+                _watermarkEditorWin = new WatermarkEditorView { DataContext = _shell.WatermarkEditor };
+                _watermarkEditorWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsWatermarkEditorVisible = false;
+                };
+            }
+            else if (_watermarkEditorWin.DataContext != _shell.WatermarkEditor)
+            {
+                _watermarkEditorWin.DataContext = _shell.WatermarkEditor;
+            }
+            if (!_watermarkEditorWin.IsVisible) _watermarkEditorWin.Show(this);
+        }
+        else
+        {
+            _watermarkEditorWin?.Hide();
         }
     }
 

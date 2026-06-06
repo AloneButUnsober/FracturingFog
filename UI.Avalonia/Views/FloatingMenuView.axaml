@@ -231,6 +231,29 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Watermark -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Watermark" />
+                        <CheckBox Content="Use custom watermark"
+                                  IsChecked="{Binding UseCustomWatermark, Mode=TwoWay}"
+                                  ToolTip.Tip="Replace the default region/theme watermark with your saved custom one" />
+                        <ComboBox ItemsSource="{Binding WatermarkNames}"
+                                  SelectedItem="{Binding SelectedWatermark}"
+                                  IsEnabled="{Binding UseCustomWatermark}"
+                                  HorizontalAlignment="Stretch" />
+                        <CheckBox Content="Override region watermark"
+                                  IsChecked="{Binding OverrideRegionWatermark, Mode=TwoWay}"
+                                  ToolTip.Tip="Force the active custom watermark even when the region carries its own embedded watermark" />
+                        <Button Classes="action help"
+                                Content="Edit Watermark…"
+                                Command="{Binding EditWatermarkCommand}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,4,0,0"
+                                ToolTip.Tip="Open the Watermark Editor" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Slideshow Settings shortcut -->
                 <Button Classes="action slideshow"
                         Content="Slideshow Settings…"
