@@ -216,6 +216,8 @@ public sealed partial class MainWindow : Window
         AddItem(menu, "ColorGen Editor…",   () => shell.ShowColorGenEditorCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
+        menu.Items.Add(new Separator());
+        AddItem(menu, "Close Program",      () => shell.FloatingMenu.CloseProgramCommand.Execute().Subscribe());
 
         // Refresh slideshow item state every time the menu opens. Avalonia's
         // MenuItem doesn't have a built-in checked indicator, so we encode

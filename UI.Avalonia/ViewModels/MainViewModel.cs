@@ -601,12 +601,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (this.RaiseAndSetIfChangedReturnsChanged(ref _iterLocked, value))
             {
                 ViewState.IterLocked = value;
+                // Only capture-from-current when caller hasn't already supplied
+                // a target via LockedIterations. The shell handler sets
+                // LockedIterations first when the menu Lock checkbox is ticked,
+                // so this branch only fires for direct programmatic toggles
+                // (e.g. coming back from a region jump with no carried iter).
                 if (value && _lockedIterations <= 0)
-                {
-                    // Capture current iter count as the lock target.
                     LockedIterations = ViewState.Quality?.ComputeIterations(ViewState.Zoom) ?? 256;
-                }
-                ViewState.LockedIterations = _lockedIterations;
                 _renderHost.Trigger();
             }
         }
