@@ -30,11 +30,11 @@ public sealed partial class PdfSettingsDialog : Window
         Closed += (_, _) => _tcs?.TrySetResult(null);
     }
 
-    public Task<PdfExportOptions?> ShowDialogAsync(Window owner)
+    public async Task<PdfExportOptions?> ShowDialogAsync(Window owner)
     {
         _tcs = new TaskCompletionSource<PdfExportOptions?>();
-        _ = ShowDialog(owner);
-        return _tcs.Task;
+        await ShowDialog(owner);
+        return await _tcs.Task;
     }
 
     private void Accept()

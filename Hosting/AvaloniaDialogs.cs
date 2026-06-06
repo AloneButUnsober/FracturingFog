@@ -318,11 +318,8 @@ namespace FracturingFog.Hosting
                 };
                 var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
                 var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
-                void Close(string? r)
-                {
-                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(r);
-                    win.Close();
-                }
+                string? pending = null;
+                void Close(string? r) { pending = r; win.Close(); }
                 ok.Click += (_, _) => Close(box.Text);
                 cancel.Click += (_, _) => Close(null);
 
@@ -344,7 +341,7 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(box);
                 grid.Children.Add(buttonRow);
                 win.Content = grid;
-                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
                 if (owner != null) _ = win.ShowDialog(owner);
                 else win.Show();
@@ -415,11 +412,8 @@ namespace FracturingFog.Hosting
                 };
                 var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
                 var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
-                void Close((string, bool)? r)
-                {
-                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(r);
-                    win.Close();
-                }
+                (string, bool)? pending = null;
+                void Close((string, bool)? r) { pending = r; win.Close(); }
                 ok.Click += (_, _) => Close(string.IsNullOrWhiteSpace(box.Text)
                     ? null
                     : ((string Name, bool IncludeWatermark)?)(box.Text!, includeWatermark.IsChecked == true));
@@ -445,7 +439,7 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(includeWatermark);
                 grid.Children.Add(buttonRow);
                 win.Content = grid;
-                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
                 if (owner != null) _ = win.ShowDialog(owner);
                 else win.Show();
@@ -598,7 +592,8 @@ namespace FracturingFog.Hosting
 
                 var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
                 var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
-                void Close((int, int, bool, bool, string?)? r) { if (!tcs.Task.IsCompleted) tcs.TrySetResult(r); win.Close(); }
+                (int, int, bool, bool, string?)? pending = null;
+                void Close((int, int, bool, bool, string?)? r) { pending = r; win.Close(); }
                 ok.Click += (_, _) =>
                 {
                     var (pw, ph) = Pixels();
@@ -627,7 +622,7 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
-                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
                 if (owner != null) _ = win.ShowDialog(owner);
                 else win.Show();
@@ -934,11 +929,8 @@ namespace FracturingFog.Hosting
                 var startBtn = new Button { Content = "Start", MinWidth = 76, IsDefault = true, Background = new SolidColorBrush(Color.FromRgb(60, 80, 60)), Foreground = Brushes.White };
                 var cancelBtn = new Button { Content = "Cancel", MinWidth = 76, IsCancel = true, Background = new SolidColorBrush(Color.FromRgb(60, 60, 60)), Foreground = Brushes.White };
 
-                void Close(global::FracturingFog.Render.VideoZoomRequest? r)
-                {
-                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(r);
-                    win.Close();
-                }
+                global::FracturingFog.Render.VideoZoomRequest? pending = null;
+                void Close(global::FracturingFog.Render.VideoZoomRequest? r) { pending = r; win.Close(); }
 
                 global::FracturingFog.Render.VideoLosslessEncode MapEncode()
                 {
@@ -1039,7 +1031,7 @@ namespace FracturingFog.Hosting
                 root.Children.Add(buttonRow);
 
                 win.Content = root;
-                win.Closing += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(null); };
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
                 if (owner != null) _ = win.ShowDialog(owner);
                 else win.Show();
@@ -1113,11 +1105,8 @@ namespace FracturingFog.Hosting
                 Spacing = 8,
             };
 
-            void Close(MessageResult r)
-            {
-                if (!tcs.Task.IsCompleted) tcs.TrySetResult(r);
-                win.Close();
-            }
+            MessageResult pending = MessageResult.Cancelled;
+            void Close(MessageResult r) { pending = r; win.Close(); }
 
             if (expectsConfirmation)
             {
@@ -1135,9 +1124,9 @@ namespace FracturingFog.Hosting
                 buttonRow.Children.Add(ok);
             }
 
-            win.Closing += (_, _) =>
+            win.Closed += (_, _) =>
             {
-                if (!tcs.Task.IsCompleted) tcs.TrySetResult(MessageResult.Cancelled);
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending);
             };
 
             var grid = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
@@ -1182,18 +1171,18 @@ namespace FracturingFog.Hosting
             vm.ResultAccepted += (_, stops) =>
             {
                 accepted = stops;
-                if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
                 // MainWindow itself listens for ResultAccepted in picker
                 // mode and closes the window; no Close() call needed here.
+                // tcs resolves in win.Closed once the modal has fully torn
+                // down so the caller cannot race the next dialog/picker.
             };
 
-            // Cancel + X-close both resolve as "no palette". Cancel raises
-            // vm.Cancelled which MainWindow also subscribes to (it calls
-            // Close()), but listening on Closing alone is enough for the
-            // null-resolve path because Close() always fires Closing.
-            win.Closing += (_, _) =>
+            // Cancel + X-close both resolve as "no palette" by leaving
+            // accepted = null. The Closed handler reads accepted to decide
+            // result so callers always resume after the modal has released.
+            win.Closed += (_, _) =>
             {
-                if (!tcs.Task.IsCompleted) tcs.TrySetResult(false);
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(accepted != null);
             };
 
             var owner = ActiveMainWindow;
