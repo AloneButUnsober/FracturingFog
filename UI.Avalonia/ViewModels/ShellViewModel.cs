@@ -1043,7 +1043,21 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 // the user can pin a preferred value across theme edits.
                 if (!Main.BrightnessLocked) Main.Brightness = def.Brightness ?? 0;
                 if (!Main.ContrastLocked)   Main.Contrast   = def.Contrast   ?? 0;
-                if (!Main.AdaptiveLocked)   Main.Adaptive   = def.Adaptive   ?? 0;
+                if (!Main.AdaptiveLocked)
+                {
+                    int adaptive = def.Adaptive ?? 0;
+                    bool changed = adaptive != Main.Adaptive;
+                    Main.Adaptive = adaptive;
+                    // ApplyColorMap (above) just rewrote the framebuffer with a
+                    // pure palette pass, dropping the prior histogram-eq layer.
+                    // The Adaptive setter only schedules a re-apply on a value
+                    // change, so when the user touches another editor field
+                    // while Adaptive is non-zero the visible result drops back
+                    // to non-adaptive until they toggle the checkbox. Force
+                    // the histogram-eq pass to re-run on every preview.
+                    if (!changed && adaptive > 0)
+                        Main.RenderHost.RepaintWithAdaptive();
+                }
             };
             // Real-time Post-FX (UI-gap #18 follow-up): the editor's
             // Brightness/Contrast/Adaptive sliders raise LivePostFxChanged
