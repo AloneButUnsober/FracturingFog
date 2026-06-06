@@ -1,0 +1,204 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.FractalParamsView"
+        x:DataType="vm:FractalParamsViewModel"
+        Title="{Binding Title}"
+        Width="400"
+        SizeToContent="Height"
+        MinWidth="320"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#282828"
+        Foreground="White">
+
+    <!--
+      DIP-only layout. Each fractal type owns one StackPanel section bound to
+      an IsXxx visibility flag on the VM. The empty-state TextBlock shows for
+      fractals with no tunable parameters.
+    -->
+    <Grid Margin="14" RowDefinitions="*,Auto">
+
+        <StackPanel Grid.Row="0" Spacing="6">
+
+            <!-- Julia -->
+            <Grid IsVisible="{Binding IsJulia}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Julia c (real):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                               Value="{Binding JuliaR, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Julia c (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                               Value="{Binding JuliaI, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Multibrot -->
+            <Grid IsVisible="{Binding IsMultibrot}" ColumnDefinitions="160,*">
+                <TextBlock Grid.Column="0" Text="Exponent d:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Column="1"
+                               Minimum="2" Maximum="8" Increment="1" FormatString="F0"
+                               Value="{Binding MultibrotExponent, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Phoenix -->
+            <Grid IsVisible="{Binding IsPhoenix}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="p (real):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                               Value="{Binding PhoenixR, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="p (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                               Value="{Binding PhoenixI, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Newton / Nova -->
+            <Grid IsVisible="{Binding IsNewtonOrNova}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Exponent d:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="2" Maximum="8" Increment="1" FormatString="F0"
+                               Value="{Binding NewtonExponent, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Relaxation R:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="0.1" Maximum="2" Increment="0.05" FormatString="F3"
+                               Value="{Binding NewtonRelaxation, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- IFS -->
+            <Grid IsVisible="{Binding IsIFS}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Preset:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding IfsPresets}"
+                          SelectedItem="{Binding IfsPresetName, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Iterations:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="100000" Maximum="20000000" Increment="100000" FormatString="N0"
+                               Value="{Binding IfsIterations, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- LSystem -->
+            <Grid IsVisible="{Binding IsLSystem}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Preset:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding LSystemPresets}"
+                          SelectedItem="{Binding LSystemPresetName, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Depth:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="0" Maximum="12" Increment="1" FormatString="F0"
+                               Value="{Binding LSystemDepth, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Strange Attractor -->
+            <Grid IsVisible="{Binding IsStrangeAttractor}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Preset:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding AttractorPresets}"
+                          SelectedItem="{Binding AttractorPresetName, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Iterations:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="100000" Maximum="20000000" Increment="100000" FormatString="N0"
+                               Value="{Binding AttractorIterations, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="a:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="-3" Maximum="3" Increment="0.01" FormatString="F4"
+                               Value="{Binding AttractorA, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="b:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="-3" Maximum="3" Increment="0.01" FormatString="F4"
+                               Value="{Binding AttractorB, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="c:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="4" Grid.Column="1"
+                               Minimum="-3" Maximum="3" Increment="0.01" FormatString="F4"
+                               Value="{Binding AttractorC, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="d:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="5" Grid.Column="1"
+                               Minimum="-3" Maximum="3" Increment="0.01" FormatString="F4"
+                               Value="{Binding AttractorD, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- BuddhaBrot -->
+            <Grid IsVisible="{Binding IsBuddhaBrot}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Samples:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="50000" Maximum="50000000" Increment="50000" FormatString="N0"
+                               Value="{Binding BuddhaSamples, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Iter low:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="50" Maximum="100000" Increment="50" FormatString="F0"
+                               Value="{Binding BuddhaIterLow, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Iter mid:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="100" Maximum="200000" Increment="100" FormatString="F0"
+                               Value="{Binding BuddhaIterMid, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Iter high:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="500" Maximum="500000" Increment="500" FormatString="F0"
+                               Value="{Binding BuddhaIterHigh, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Mandelbulb -->
+            <Grid IsVisible="{Binding IsMandelbulb}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Power N:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="2" Maximum="16" Increment="0.1" FormatString="F1"
+                               Value="{Binding BulbPower, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="2" Maximum="16" Increment="1" FormatString="F0"
+                               Value="{Binding BulbIterations, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                               Value="{Binding BulbCameraTheta, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                               Value="{Binding BulbCameraPhi, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="4" Grid.Column="1"
+                               Minimum="1.5" Maximum="10" Increment="0.1" FormatString="F2"
+                               Value="{Binding BulbCameraDistance, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Empty state -->
+            <TextBlock IsVisible="{Binding HasNoParams}"
+                       Text="{Binding EmptyStateText}"
+                       Foreground="#B4B4B4"
+                       FontStyle="Italic"
+                       Margin="0,8" />
+
+        </StackPanel>
+
+        <!-- Close button -->
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,14,0,0">
+            <Button Content="Close"
+                    Command="{Binding CloseCommand}"
+                    IsCancel="True"
+                    Padding="18,6"
+                    Background="#464646"
+                    Foreground="White" />
+        </StackPanel>
+
+    </Grid>
+
+</Window>

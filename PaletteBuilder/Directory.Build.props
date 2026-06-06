@@ -1,0 +1,34 @@
+<Project>
+
+  <!--
+    Per-project obj/ and bin/ redirect for PaletteBuilder.Lib.
+    ===========================================================
+
+    Both PaletteBuilder.csproj (WinExe) and PaletteBuilder.Lib.csproj
+    (Library) sit in this folder. The standard SDK behaviour writes
+    *every* project's scratch state under `<csproj-folder>\obj\` and
+    bin\ — which means two projects in the same folder share the same
+    obj/project.assets.json, the same per-config AssemblyInfo.cs, the
+    same ref\ folder, etc. Under Release / parallel build the two
+    projects clobber each other and the WinExe ends up with a stale
+    or missing PaletteBuilder.Lib.dll ref + ColorStopData lookups
+    fail because Lib's restore output was overwritten by the WinExe's.
+
+    Splitting them with a per-project BaseIntermediateOutputPath /
+    BaseOutputPath fixes this. MSBuildProjectExtensionsPath has to be
+    redirected too — it controls where NuGet writes project.assets.json
+    plus the *.nuget.g.{props,targets} files, and MSBuild emits error
+    MSB3540 if it is set anywhere later than Directory.Build.props
+    (anything after Microsoft.Common.props imports is "too late").
+
+    Conditioned on MSBuildProjectName so only the lib relocates; the
+    WinExe stays in the conventional obj\ + bin\.
+  -->
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'PaletteBuilder.Lib'">
+    <BaseIntermediateOutputPath>obj.lib\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin.lib\</BaseOutputPath>
+    <MSBuildProjectExtensionsPath>$(MSBuildThisFileDirectory)obj.lib\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+
+</Project>

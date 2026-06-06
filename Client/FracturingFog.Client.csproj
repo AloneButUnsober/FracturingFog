@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Phase 3 client connection + persistence library. mTLS TCP + JSON-RPC
+      consumer (FFClientConnection), AES-GCM credential vault, saved
+      connection + render-preset stores. Shared by UI.Avalonia (FFClient
+      dialog) and by the WinExe headless batch remote path.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>FracturingFog.Client</RootNamespace>
+    <AssemblyName>FracturingFog.Client</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <ProjectReference Include="..\Server\FracturingFog.Server.csproj" />
+  </ItemGroup>
+
+</Project>

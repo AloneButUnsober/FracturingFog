@@ -30,11 +30,14 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectDir = Split-Path -Parent $scriptDir
 $csproj = Join-Path $projectDir 'FracturingFogCLD.csproj'
+$paletteCsproj = Join-Path $projectDir 'PaletteBuilder\PaletteBuilder.csproj'
 $stageDir = Join-Path $scriptDir 'Stage'
+$paletteStageDir = Join-Path $stageDir 'PaletteBuilder'
 $wxsFile = Join-Path $scriptDir 'FracturingFog.wxs'
 $msiOut = Join-Path $scriptDir "FracturingFog-$Version-x64.msi"
 
 if (-not (Test-Path $csproj)) { throw "csproj not found: $csproj" }
+if (-not (Test-Path $paletteCsproj)) { throw "csproj not found: $paletteCsproj" }
 
 # Verify wix tool present
 $wixCmd = Get-Command wix -ErrorAction SilentlyContinue
@@ -56,11 +59,48 @@ if ($exts -notmatch 'WixToolset\.Util\.wixext') {
 if (-not $SkipPublish) {
     Write-Host "Publishing self-contained win-x64 to $stageDir ..."
     if (Test-Path $stageDir) { Remove-Item $stageDir -Recurse -Force }
+
+    # NETSDK1152: stale bin/obj from prior builds with differing Platform/RID
+    # combos (e.g. Release\net10.0 vs Release\net10.0\win-x64 vs x64\Release)
+    # cause duplicate apphost.exe / deps.json paths during publish gather.
+    # Wipe scratch dirs of the generator projects (they're ProjectRef'd as
+    # libs by FracturingFogCLD) before publishing.
+    $scratchTargets = @(
+        (Join-Path $projectDir 'CalculatorGen\bin'),
+        (Join-Path $projectDir 'CalculatorGen\obj'),
+        (Join-Path $projectDir 'ColorGen\bin'),
+        (Join-Path $projectDir 'ColorGen\obj'),
+        (Join-Path $projectDir 'PaletteBuilder\bin'),
+        (Join-Path $projectDir 'PaletteBuilder\obj'),
+        (Join-Path $projectDir 'PaletteBuilder\bin.lib'),
+        (Join-Path $projectDir 'PaletteBuilder\obj.lib')
+    )
+    foreach ($t in $scratchTargets) {
+        if (Test-Path $t) {
+            Write-Host "Cleaning $t"
+            Remove-Item $t -Recurse -Force
+        }
+    }
+
+    # ErrorOnDuplicatePublishOutputFiles=false: CalculatorGen + ColorGen are
+    # OutputType=Exe referenced as ProjectRef. Publish builds them under
+    # multiple GlobalProperties variants (no Platform / Platform=x64 / +RID),
+    # each producing apphost.exe + deps.json + runtimeconfig.json in a
+    # separate obj subtree. The gather step then trips NETSDK1152. Same
+    # project, same content — last-wins copy is harmless.
     & dotnet publish $csproj -c $Configuration -r win-x64 --self-contained true `
-        -p:PublishSingleFile=false -p:PublishReadyToRun=false -o $stageDir
+        -p:PublishSingleFile=false -p:PublishReadyToRun=false `
+        -p:ErrorOnDuplicatePublishOutputFiles=false -o $stageDir
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE)" }
+
+    Write-Host "Publishing PaletteBuilder self-contained win-x64 to $paletteStageDir ..."
+    & dotnet publish $paletteCsproj -c $Configuration -r win-x64 --self-contained true `
+        -p:PublishSingleFile=false -p:PublishReadyToRun=false `
+        -p:ErrorOnDuplicatePublishOutputFiles=false -o $paletteStageDir
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish (PaletteBuilder) failed (exit $LASTEXITCODE)" }
 } else {
     if (-not (Test-Path $stageDir)) { throw "Stage dir missing: $stageDir" }
+    if (-not (Test-Path $paletteStageDir)) { throw "PaletteBuilder stage dir missing: $paletteStageDir" }
 }
 
 Write-Host "Compiling MSI -> $msiOut ..."

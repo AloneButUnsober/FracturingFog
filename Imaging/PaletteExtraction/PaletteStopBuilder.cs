@@ -20,12 +20,19 @@ namespace FracturingFog.Imaging.PaletteExtraction
         public float DedupDeltaE { get; set; } = 2f;
         public bool WeightedPositions { get; set; } = false;
 
+        /// <summary>
+        /// Distance formula used by the dedup pass. CIE76 (default) is the
+        /// historical behaviour; CIEDE2000 is more perceptually accurate at
+        /// the cost of trig calls per comparison.
+        /// </summary>
+        public DeltaEMetric DedupMetric { get; set; } = DeltaEMetric.DeltaE76;
+
         public List<ColorStopData> Build(IReadOnlyList<ExtractedColor> palette)
         {
             if (palette.Count == 0)
                 return new List<ColorStopData>();
 
-            var deduped = DedupByDeltaE(palette, DedupDeltaE);
+            var deduped = DedupByDeltaE(palette, DedupDeltaE, DedupMetric);
             var sorted = Sort switch
             {
                 StopSortMode.Hue                  => SortByHue(deduped),
@@ -81,7 +88,7 @@ namespace FracturingFog.Imaging.PaletteExtraction
             return stops;
         }
 
-        private static List<ExtractedColor> DedupByDeltaE(IReadOnlyList<ExtractedColor> input, float threshold)
+        private static List<ExtractedColor> DedupByDeltaE(IReadOnlyList<ExtractedColor> input, float threshold, DeltaEMetric metric)
         {
             if (threshold <= 0f) return input.ToList();
 
@@ -107,9 +114,13 @@ namespace FracturingFog.Imaging.PaletteExtraction
                 float bestDe = float.MaxValue;
                 foreach (int j in kept)
                 {
-                    float de = ColorSpaces.DeltaE76(
-                        labCache[i].L, labCache[i].a, labCache[i].b,
-                        labCache[j].L, labCache[j].a, labCache[j].b);
+                    float de = metric == DeltaEMetric.DeltaE2000
+                        ? ColorSpaces.DeltaE2000(
+                            labCache[i].L, labCache[i].a, labCache[i].b,
+                            labCache[j].L, labCache[j].a, labCache[j].b)
+                        : ColorSpaces.DeltaE76(
+                            labCache[i].L, labCache[i].a, labCache[i].b,
+                            labCache[j].L, labCache[j].a, labCache[j].b);
                     if (de < bestDe) { bestDe = de; bestKept = j; }
                 }
 

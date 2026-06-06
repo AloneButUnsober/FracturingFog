@@ -34,29 +34,12 @@ namespace FracturingFog.Models
         Pbr3D
     }
 
-    /// <summary>
-    /// Single gradient stop, JSON-friendly (avoids serializing System.Drawing.Color).
-    /// </summary>
-    public sealed class ColorStopData
-    {
-        public float Position { get; set; }
-        public byte R { get; set; }
-        public byte G { get; set; }
-        public byte B { get; set; }
-
-        public ColorStopData() { }
-
-        public ColorStopData(ColorStop stop)
-        {
-            Position = stop.Position;
-            R = stop.Color.R;
-            G = stop.Color.G;
-            B = stop.Color.B;
-        }
-
-        public ColorStop ToColorStop()
-            => new ColorStop(Position, Color.FromArgb(R, G, B));
-    }
+    // ColorStopData moved to Abstractions/Models/ColorStopData.cs so the
+    // shared lib (PaletteBuilder.Lib) and this host can both reference the
+    // same type. The ColorStop interop helpers (ctor from ColorStop +
+    // ToColorStop()) live as extension methods in
+    // Models/ColorStopDataExtensions.cs to keep System.Drawing out of the
+    // abstraction surface.
 
     /// <summary>
     /// Directional light source parameters used by Phong/PBR themes.

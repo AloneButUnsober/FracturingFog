@@ -1,0 +1,105 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ColorGenEditorView"
+        x:DataType="vm:ColorGenEditorViewModel"
+        Title="ColorGen Editor"
+        Width="720"
+        Height="600"
+        MinWidth="520"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#282828"
+        Foreground="White">
+
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+
+        <!-- Row 0: hint -->
+        <TextBlock Grid.Row="0"
+                   Text="ColorGen DSL — `let name = expr;` ... `return rgb|hsv|hsl(…);`. Inputs: smooth, dist, iter, maxIter, t, nx, ny, zr, zi, dzr, dzi, arg, mag, isInSet, pxScale."
+                   Foreground="#B4B4B4"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8" />
+
+        <!-- Row 1: saved -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="Saved:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding SavedNames}"
+                      SelectedItem="{Binding SelectedSavedName, Mode=TwoWay}"
+                      HorizontalAlignment="Stretch"
+                      MinWidth="160" />
+            <Button Grid.Column="2"
+                    Content="Save…"
+                    Command="{Binding SaveCommand}"
+                    Margin="8,0,0,0"
+                    Padding="14,4" />
+            <Button Grid.Column="3"
+                    Content="Delete"
+                    Command="{Binding DeleteCommand}"
+                    Margin="6,0,0,0"
+                    Padding="14,4" />
+        </Grid>
+
+        <!-- Row 2: theme metadata -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,*" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="Theme name:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBox    Grid.Column="1" Text="{Binding ThemeName, Mode=TwoWay}" />
+            <TextBlock Grid.Column="2" Text="Category:" VerticalAlignment="Center" Margin="12,0,8,0" />
+            <TextBox    Grid.Column="3" Text="{Binding Category, Mode=TwoWay}" />
+        </Grid>
+
+        <!-- Row 3: compile/generate -->
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+            <TextBox Grid.Column="0"
+                     Watermark="Description (optional)"
+                     Text="{Binding Description, Mode=TwoWay}" />
+            <Button Grid.Column="1"
+                    Content="Compile &amp; Load"
+                    Command="{Binding HotLoadCommand}"
+                    ToolTip.Tip="Roslyn-compile the DSL into an in-memory IColorMap and add it to the active palette list — no rebuild required."
+                    Margin="8,0,6,0"
+                    Padding="14,4" />
+            <Button Grid.Column="2"
+                    Content="Generate via ColorGen"
+                    Command="{Binding GenerateCommand}"
+                    ToolTip.Tip="Render the DSL to a C# file under Models/ColorSchemes/Generated/. Rebuild the app to pick it up."
+                    Padding="14,4" />
+        </Grid>
+
+        <!-- Row 4: editor (fills) -->
+        <Border Grid.Row="4"
+                BorderBrush="#505050"
+                BorderThickness="1"
+                Background="#1C1C1C">
+            <TextBox Text="{Binding Source, Mode=TwoWay}"
+                     AcceptsReturn="True"
+                     AcceptsTab="True"
+                     TextWrapping="NoWrap"
+                     FontFamily="Consolas, monospace"
+                     FontSize="14"
+                     Background="#1C1C1C"
+                     Foreground="White"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        </Border>
+
+        <!-- Row 5: status -->
+        <TextBlock Grid.Row="5"
+                   Text="{Binding StatusText}"
+                   FontFamily="Consolas, monospace"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Foreground="#64FF64"
+                   Classes.error="{Binding StatusIsError}"
+                   Margin="0,8,0,0">
+            <TextBlock.Styles>
+                <Style Selector="TextBlock.error">
+                    <Setter Property="Foreground" Value="#FF6464" />
+                </Style>
+            </TextBlock.Styles>
+        </TextBlock>
+    </Grid>
+</Window>

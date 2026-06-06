@@ -1,0 +1,13 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
+        x:Class="FracturingFog.UI.Avalonia.Views.MiniDepthWindow"
+        Title="MiniDepth"
+        Width="100" Height="228"
+        SystemDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="#121212">
+    <ctrl:MiniDepthControl x:Name="Depth" />
+</Window>

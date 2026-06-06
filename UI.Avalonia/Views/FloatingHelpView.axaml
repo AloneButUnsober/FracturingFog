@@ -1,0 +1,175 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:h="using:FracturingFog.Help"
+        x:Class="FracturingFog.UI.Avalonia.Views.FloatingHelpView"
+        x:DataType="vm:FloatingHelpViewModel"
+        Title="Help"
+        Width="720"
+        Height="780"
+        MinWidth="520"
+        MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="False"
+        Background="#161616"
+        Foreground="#DCDCDC">
+
+    <Window.Styles>
+        <Style Selector="TextBox.helpBody">
+            <Setter Property="Background" Value="#0F0F0F" />
+            <Setter Property="Foreground" Value="#DCDCDC" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontFamily" Value="Consolas, monospace" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+        <Style Selector="Button.action">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="10,4" />
+        </Style>
+        <Style Selector="Button.close"  > <Setter Property="Background" Value="#502323" /> </Style>
+        <Style Selector="Button.refresh"> <Setter Property="Background" Value="#283C64" /> </Style>
+        <Style Selector="Button.link"   >
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#9CBDFF" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="TabItem">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="10">
+
+        <!-- Header — window chrome already provides the close button. -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding TitleText}"
+                       Foreground="#C8C864"
+                       FontSize="14"
+                       FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="action refresh" Content="Refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh hardware / system info" />
+        </Grid>
+
+        <!-- Tab body -->
+        <TabControl Grid.Row="1">
+
+            <TabItem Header="About">
+                <Grid RowDefinitions="*,Auto">
+                    <TextBox Grid.Row="0" Classes="helpBody" Text="{Binding AboutText}" />
+                    <ItemsControl Grid.Row="1" ItemsSource="{Binding AboutLinks}" Margin="0,6,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="14" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="h:HelpLink">
+                                <Button Classes="link"
+                                        Content="{Binding Label}"
+                                        Command="{Binding $parent[ItemsControl].((vm:FloatingHelpViewModel)DataContext).OpenLinkCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Hardware">
+                <TextBox Classes="helpBody" Text="{Binding HardwareText}" />
+            </TabItem>
+
+            <TabItem Header="Features">
+                <TextBox Classes="helpBody" Text="{Binding FeaturesText}" />
+            </TabItem>
+
+            <TabItem Header="Using">
+                <TabControl TabStripPlacement="Left">
+                    <TabItem Header="Toolbar">
+                        <TextBox Classes="helpBody" Text="{Binding ToolbarText}" />
+                    </TabItem>
+                    <TabItem Header="Regions">
+                        <TextBox Classes="helpBody" Text="{Binding RegionsText}" />
+                    </TabItem>
+                    <TabItem Header="Slideshow + Video">
+                        <TextBox Classes="helpBody" Text="{Binding SlideshowText}" />
+                    </TabItem>
+                    <TabItem Header="Poster">
+                        <TextBox Classes="helpBody" Text="{Binding PosterText}" />
+                    </TabItem>
+                    <TabItem Header="Theme Editor">
+                        <TextBox Classes="helpBody" Text="{Binding EditorText}" />
+                    </TabItem>
+                    <TabItem Header="Audio-Reactive">
+                        <TextBox Classes="helpBody" Text="{Binding AudioText}" />
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Authoring">
+                <TabControl TabStripPlacement="Left">
+                    <TabItem Header="CalcGen">
+                        <TextBox Classes="helpBody" Text="{Binding CalcGenText}" />
+                    </TabItem>
+                    <TabItem Header="ColorGen">
+                        <TextBox Classes="helpBody" Text="{Binding ColorGenText}" />
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Batch / CLI">
+                <TextBox Classes="helpBody" Text="{Binding BatchText}" />
+            </TabItem>
+
+            <TabItem Header="Client / Server">
+                <TabControl TabStripPlacement="Left">
+                    <TabItem Header="Walkthrough">
+                        <TextBox Classes="helpBody" Text="{Binding ClientServerText}" />
+                    </TabItem>
+                    <TabItem Header="Server Admin">
+                        <TextBox Classes="helpBody" Text="{Binding ServerAdminText}" />
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Mathematics">
+                <TabControl ItemsSource="{Binding MathSubTabs}">
+                    <TabControl.ItemTemplate>
+                        <DataTemplate DataType="h:HelpSubTab">
+                            <TextBlock Text="{Binding Title}" />
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
+                    <TabControl.ContentTemplate>
+                        <DataTemplate DataType="h:HelpSubTab">
+                            <TextBox Classes="helpBody" Text="{Binding Body}" />
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Bio">
+                <TextBox Classes="helpBody" Text="{Binding BioText}" />
+            </TabItem>
+
+            <TabItem Header="Architecture">
+                <TextBox Classes="helpBody" Text="{Binding ArchitectureText}" />
+            </TabItem>
+        </TabControl>
+
+        <!-- Footer -->
+        <Button Grid.Row="2"
+                Classes="action close"
+                Content="Close"
+                Command="{Binding CloseCommand}"
+                HorizontalAlignment="Center"
+                HorizontalContentAlignment="Center"
+                Margin="0,8,0,0"
+                Width="140" />
+    </Grid>
+</Window>

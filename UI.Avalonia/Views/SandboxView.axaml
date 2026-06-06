@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.SandboxView"
+        x:DataType="vm:SandboxViewModel"
+        Title="Sandbox Equation"
+        Width="760"
+        Height="520"
+        MinWidth="520"
+        MinHeight="400"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#282828"
+        Foreground="White">
+
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <!-- Hint -->
+        <TextBlock Grid.Row="0"
+                   TextWrapping="Wrap"
+                   Foreground="#B4B4B4"
+                   Margin="0,0,0,8">
+            <Run Text="Expression returns Complex. Vars: z, c, n. Funcs: sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg pow(a,b)." />
+            <LineBreak />
+            <Run Text="Const: pi, e, i. Ops: + - * / ^ unary-. Ternary: cond ? a : b. Compare: &lt; &gt; &lt;= &gt;= == !=. Logical: &amp;&amp; || !. Let: let x = expr in body." />
+            <LineBreak />
+            <Run Text="Example:  let zz = z*z in zz + c" />
+        </TextBlock>
+
+        <!-- Saved row + Save/Delete/Export/Import -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto"
+              Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="Saved:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding SavedNames}"
+                      SelectedItem="{Binding SelectedSavedName, Mode=TwoWay}"
+                      HorizontalAlignment="Stretch"
+                      MinWidth="180" />
+            <Button Grid.Column="2" Content="Save…"   Command="{Binding SaveCommand}"   Margin="8,0,0,0" Padding="12,4" />
+            <Button Grid.Column="3" Content="Delete"  Command="{Binding DeleteCommand}" Margin="6,0,0,0" Padding="12,4" />
+            <Button Grid.Column="4" Content="Export…" Command="{Binding ExportCommand}" Margin="6,0,0,0" Padding="12,4" />
+            <Button Grid.Column="5" Content="Import…" Command="{Binding ImportCommand}" Margin="6,0,0,0" Padding="12,4" />
+        </Grid>
+
+        <!-- Promote -->
+        <CheckBox Grid.Row="2"
+                  Content="Promote to fractal list"
+                  IsChecked="{Binding Promote, Mode=TwoWay}"
+                  IsEnabled="{Binding PromoteEnabled}"
+                  Margin="0,0,0,6" />
+
+        <!-- Editor -->
+        <Border Grid.Row="3"
+                BorderBrush="#505050"
+                BorderThickness="1"
+                Background="#1C1C1C">
+            <TextBox Text="{Binding Source, Mode=TwoWay}"
+                     AcceptsReturn="True"
+                     AcceptsTab="True"
+                     TextWrapping="NoWrap"
+                     FontFamily="Consolas, monospace"
+                     FontSize="14"
+                     Background="#1C1C1C"
+                     Foreground="White"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+        </Border>
+
+        <!-- Status -->
+        <TextBlock Grid.Row="4"
+                   Text="{Binding StatusText}"
+                   FontFamily="Consolas, monospace"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Foreground="#64FF64"
+                   Classes.error="{Binding StatusIsError}"
+                   Margin="0,8,0,0">
+            <TextBlock.Styles>
+                <Style Selector="TextBlock.error">
+                    <Setter Property="Foreground" Value="#FF6464" />
+                </Style>
+            </TextBlock.Styles>
+        </TextBlock>
+
+    </Grid>
+
+</Window>
