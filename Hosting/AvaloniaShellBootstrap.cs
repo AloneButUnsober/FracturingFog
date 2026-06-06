@@ -552,7 +552,15 @@ namespace FracturingFog.Hosting
                         bool ok = ((IColorThemeService)s_themeService!)
                             .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded);
                         if (ok)
-                            shell.FloatingMenu.SetRegions(s_themeService!.EnumerateRegionNames());
+                        {
+                            // RefreshRegions honours the menu's active sort +
+                            // fractal-type filter (unlike SetRegions with the
+                            // unfiltered enumeration), so the just-saved name
+                            // lands in the same bucket the user is browsing.
+                            shell.FloatingMenu.RefreshRegions();
+                            shell.FloatingMenu.SetRegionSilent(picked.Name);
+                            shell.Main.SetRegionName(picked.Name);
+                        }
                     }
                 }
                 catch (Exception ex)
