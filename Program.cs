@@ -11,6 +11,14 @@ namespace FracturingFog;
 
 static class Program
 {
+    // Avalonia XAML previewer (Accelerate / OSS designer) scans the WinExe's
+    // entry assembly for a static `BuildAvaloniaApp` factory and bails silently
+    // when it is absent — "Previewer process exited unexpectedly" with no
+    // output. Forward to the shell so the previewer can boot. Not called at
+    // runtime; the avalonia CLI path goes through AvaloniaShell.Run directly.
+    public static global::Avalonia.AppBuilder BuildAvaloniaApp()
+        => FracturingFog.UI.Avalonia.AvaloniaShell.BuildAvaloniaApp();
+
     [STAThread]
     static int Main(string[] args)
     {
