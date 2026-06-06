@@ -1,10 +1,10 @@
 // SkiaSharpVersion.cs
 //
-// SkiaSharp 2.88 dropped the static SKVersion descriptor class some prior
-// builds shipped. This helper resolves the loaded SkiaSharp assembly's
-// informational version at runtime so the renderer description still names
-// the binary that actually shipped — useful when triaging native-library
-// mismatches across publish RIDs.
+// SkiaSharp dropped the static SKVersion descriptor class somewhere in the
+// 2.x line and never restored it through 3.x. This helper resolves the
+// loaded SkiaSharp assembly's informational version at runtime so the
+// renderer description still names the binary that actually shipped —
+// useful when triaging native-library mismatches across publish RIDs.
 
 using System.Reflection;
 using SkiaSharp;

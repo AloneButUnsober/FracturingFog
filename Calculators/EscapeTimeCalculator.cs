@@ -216,8 +216,11 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                     kernel.StepWithPrev(ref zr, ref zi, ref prevZr, ref prevZi, cx, cy);
                 }
                 IterationBuffer[idx] = iter;
-                // Phoenix doesn't carry a derivative; pass 1,0 as a stub.
-                FillAuxAndColor(idx, iter, maxIt, zr, zi, 1, 0, colorMap);
+                // Phoenix doesn't carry a derivative. Pass (0,0) so FillAuxAndColor's
+                // dMag < 1e-10 branch zeros distance + normal — themes that scale by
+                // distance (HSV value, WarpedHSV edge glow) would otherwise blacken
+                // every escaped pixel because |dz/dc|=1 yields dist = mag·log(mag).
+                FillAuxAndColor(idx, iter, maxIt, zr, zi, 0, 0, colorMap);
             }
         });
     }

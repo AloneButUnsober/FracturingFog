@@ -19,6 +19,7 @@ using System.IO;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform;

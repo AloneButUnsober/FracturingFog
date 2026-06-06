@@ -33,12 +33,13 @@
 
   <ItemGroup>
     <!--
-      SkiaSharp 2.88 is the long-term-support line as of 2026. Pulls the
-      native libSkiaSharp build for every desktop RID transparently — no
-      extra NativeAssets.* package needed for the standard win-x64 /
-      linux-x64 / osx-arm64 set.
+      SkiaSharp 3.119 is the current line as of 2026-06. Pulls the native
+      libSkiaSharp build for every desktop RID transparently — no extra
+      NativeAssets.* package needed for the standard win-x64 / linux-x64 /
+      osx-arm64 set. CPU-side InstallPixels API surface used by
+      SkiaCpuRenderer is unchanged from the 2.88 line.
     -->
-    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
   </ItemGroup>
 
   <ItemGroup>

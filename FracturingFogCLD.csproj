@@ -132,16 +132,16 @@
     <None Include="C:\Users\bradl\Documents\regions.json" Link="Resources\regions.json" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.11.0" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="Vortice.Direct3D12" Version="3.8.3" />
     <PackageReference Include="Vortice.DirectX" Version="3.8.3" />
     <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
     <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
-    <PackageReference Include="Vortice.Mathematics" Version="2.1.0" />
-    <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="ILGPU" Version="1.5.1" />
+    <PackageReference Include="Vortice.Mathematics" Version="2.1.1" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="ILGPU" Version="1.5.3" />
   </ItemGroup>
   <ItemGroup>
     <!-- Shared UI-free contracts (IGpuSurface and future siblings). -->
@@ -209,8 +209,7 @@
       this reference. ExcludeAssets=analyzers blocks the transitive
       Avalonia name-generator (same workaround as UI.Avalonia ref above).
     -->
-    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj"
-                      SetPlatform="Platform=x64">
+    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj" SetPlatform="Platform=x64">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
   </ItemGroup>
