@@ -262,6 +262,14 @@
                         Margin="0,0,0,8"
                         ToolTip.Tip="Configure slideshow timing + audio-reactive options" />
 
+                <!-- FFmpeg install / update launcher -->
+                <Button Classes="action video"
+                        Content="FFmpeg…"
+                        Command="{Binding FfmpegSetupCommand}"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,0,0,8"
+                        ToolTip.Tip="Install, update, or skip the FFmpeg video encoder" />
+
                 <!-- Server / Client (Phase 3 remote rendering) -->
                 <UniformGrid Columns="2" Margin="0,0,0,8">
                     <Button Classes="action neutral"

@@ -60,6 +60,19 @@ namespace FracturingFog
         public static bool IsAvailable() => FindFfmpeg() != null;
 
         /// <summary>
+        /// True when ffmpeg is on disk AND the user has not explicitly opted
+        /// out via the FFmpeg setup dialog (FfmpegUserElection.Skip). Use
+        /// this in the UI surface that decides whether to enable / show
+        /// ffmpeg-dependent controls (Save Lossless presets, lossless video
+        /// encode buttons). The bare <see cref="IsAvailable"/> still answers
+        /// "does the file exist" — call that from headless paths
+        /// (BatchRenderer, server) where the user election does not apply.
+        /// </summary>
+        public static bool IsEnabledForUser() =>
+            IsAvailable() &&
+            !FracturingFog.Models.FfmpegPreferences.Instance.IsVideoDisabledByUser();
+
+        /// <summary>
         /// Runs ffmpeg to encode the PNG sequence in <paramref name="pngFolder"/>
         /// (frame_NNNNNN.png) at <paramref name="fps"/> into <paramref name="outputPath"/>.
         /// Returns (success, stderr-tail). Blocks until ffmpeg exits or

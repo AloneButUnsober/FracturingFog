@@ -62,6 +62,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
         EditWatermarkCommand    = MakeCmd(() => EditWatermarkClick?.Invoke(this, EventArgs.Empty));
+        FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
     }
 
     private static ReactiveCommand<Unit, Unit> MakeCmd(Action a) => ReactiveCommand.Create(a);
@@ -671,6 +672,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
     public ReactiveCommand<Unit, Unit> EditWatermarkCommand { get; }
+    public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
 
@@ -699,6 +701,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? ServerClick;
     public event EventHandler? ClientClick;
     public event EventHandler? EditWatermarkClick;
+    public event EventHandler? FfmpegSetupClick;
 
     public event EventHandler<string>? RegionComboChanged;
     public event EventHandler<string>? ColorThemeChanged;

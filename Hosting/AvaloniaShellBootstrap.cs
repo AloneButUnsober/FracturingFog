@@ -363,10 +363,25 @@ namespace FracturingFog.Hosting
 
             WireShellHostEvents(s_shell);
 
+            // FFmpeg install / update launcher in the FloatingMenu. UI.Avalonia
+            // can't see FfmpegSetupDialog (it lives in the WinExe alongside
+            // FfmpegInstaller / FfmpegEncoder), so the routing happens here.
+            s_shell.FloatingMenu.FfmpegSetupClick += (_, _) =>
+                Dispatcher.UIThread.Post(() =>
+                    _ = FfmpegSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow));
+
             // Phase 3: start the 5-second probe that drives the status-bar
             // "● Server: running / off" indicator. Uses the default server
             // port (47823) unless a server-config.json under %APPDATA% overrides.
             s_shell.StartServerPing(FracturingFog.Server.ServerConfig.LoadOrDefault().Port);
+
+            // First-run FFmpeg setup prompt. Spec: show the install offer if
+            // ffmpeg.exe is missing AND the user has not previously elected
+            // Manual or Skip (FfmpegPreferences.SuppressStartupPrompt). Posted
+            // through the dispatcher so it appears after the main window is
+            // shown rather than blocking surface init.
+            Dispatcher.UIThread.Post(MaybeShowFfmpegStartupPrompt,
+                DispatcherPriority.Background);
 
             // ── Surface lifetime ─────────────────────────────────────────
             surface.Resized += OnSurfaceResized;
@@ -1397,6 +1412,28 @@ namespace FracturingFog.Hosting
             return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
         }
 
+        // ── FFmpeg startup prompt ────────────────────────────────────────────
+        //
+        // First-launch (or freshly-deleted ffmpeg.exe) prompt: offer the
+        // install dialog when the binary is missing AND the user hasn't
+        // previously chosen "I'll install manually" or "Continue without
+        // video". The dialog itself persists the election to
+        // FfmpegPreferences so subsequent launches honour it.
+        private static void MaybeShowFfmpegStartupPrompt()
+        {
+            try
+            {
+                if (FfmpegEncoder.IsAvailable()) return;
+                if (FracturingFog.Models.FfmpegPreferences.Instance.SuppressStartupPrompt()) return;
+                _ = FfmpegSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[AvaloniaShellBootstrap] FFmpeg startup prompt failed: {ex.Message}");
+            }
+        }
+
         // ── #64 — Video recording save prompts ───────────────────────────────
 
         private static async Task HandleRecordingFinished(VideoRecordingResult result)
@@ -1487,12 +1524,15 @@ namespace FracturingFog.Hosting
             SetStatus($"Lossless PNG sequence saved: {finalFolder}");
 
             if (encode == VideoLosslessEncode.None) return;
-            if (!FfmpegEncoder.IsAvailable())
+            if (!FfmpegEncoder.IsEnabledForUser())
             {
+                string msg = FfmpegEncoder.IsAvailable()
+                    ? "Video encoding is disabled (Continue Without Video selected). " +
+                      "Open the FFmpeg setup dialog from the floating menu to re-enable it. " +
+                      "Keeping PNG sequence only."
+                    : "ffmpeg.exe is no longer available — keeping PNG sequence only.";
                 await AvaloniaDialogs.ShowMessageAsync(
-                    "Save Lossless",
-                    "ffmpeg.exe is no longer available — keeping PNG sequence only.",
-                    expectsConfirmation: false);
+                    "Save Lossless", msg, expectsConfirmation: false);
                 return;
             }
 

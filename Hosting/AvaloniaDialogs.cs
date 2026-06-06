@@ -661,7 +661,12 @@ namespace FracturingFog.Hosting
                 const double CustomSecsMax = 300.0;
                 var ic = System.Globalization.CultureInfo.InvariantCulture;
                 double ultraCap = global::FracturingFog.Models.QualityPreset.Ultra.ZoomMax;
-                bool ffmpegHere = global::FracturingFog.FfmpegEncoder.IsAvailable();
+                // IsEnabledForUser collapses "binary on disk" + "user has not
+                // chosen Continue Without Video" — Skip election keeps the
+                // Lossless UI greyed even when ffmpeg.exe is present, matching
+                // the spec that the user's opt-out persists until they reverse
+                // it from the FloatingMenu FFmpeg setup dialog.
+                bool ffmpegHere = global::FracturingFog.FfmpegEncoder.IsEnabledForUser();
 
                 // Cached QD limbs for the picked region (folded into the parsed
                 // textbox value when the textbox carries only the Hi limb).
