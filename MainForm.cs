@@ -1,5 +1,11 @@
 // MainForm.cs  — v5
 //
+// DEPRECATED — WinForms shell. Active UI lives in UI.Avalonia/. See
+// CLAUDE.md at the repo root for the deprecation policy. Do not add
+// features here; new work goes into UI.Avalonia/Views + ViewModels.
+// This file is kept buildable so --winforms still launches the legacy
+// shell, but is no longer the canonical UI.
+//
 // Changes over v4
 //   • FIX: GridOverlayPanel Win32Exception resolved — Visible is set to false
 //     in the constructor (no handle yet) and the grid checkbox handler defers
