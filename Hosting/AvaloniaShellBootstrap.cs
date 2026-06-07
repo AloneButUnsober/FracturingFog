@@ -606,14 +606,22 @@ namespace FracturingFog.Hosting
             FracturingFog.Hosting.NativeMouseForwarder.InspectClickHook = (clientX, clientY) =>
             {
                 var editor = s_shell?.ColorThemeEditor;
-                if (editor == null || !editor.InspectActive) return false;
+                if (editor == null || !editor.AnyInspectActive) return false;
                 if (s_surface == null) return false;
                 var pt = new POINT { X = clientX, Y = clientY };
                 if (!ClientToScreen(s_surface.Handle, ref pt)) return false;
                 var c = FracturingFog.Views.Editors.DesktopEyedropper.SamplePixel(pt.X, pt.Y);
+                bool routeTo3D = editor.Inspect3DActive;
+                bool routeToBand = editor.InspectBandActive;
                 global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    try { editor.HandleInspectColor(c.R, c.G, c.B); } catch { }
+                    try
+                    {
+                        if (routeToBand) editor.HandleInspectBandColor(c.R, c.G, c.B);
+                        else if (routeTo3D) editor.HandleInspect3DColor(c.R, c.G, c.B);
+                        else editor.HandleInspectColor(c.R, c.G, c.B);
+                    }
+                    catch { }
                 });
                 return true;
             };
@@ -644,6 +652,38 @@ namespace FracturingFog.Hosting
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] FromImage failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            // Unsaved-changes prompt: the Color Theme Editor raises this
+            // when dirty and the user switches theme / closes the window.
+            // Host shows the three-button Save / Discard / Cancel modal and
+            // writes the pick back into args.Result before signalling.
+            shell.UnsavedChangesPromptRequested += async (_, args) =>
+            {
+                try
+                {
+                    var result = await AvaloniaDialogs.ShowSaveDiscardAsync(
+                        "Unsaved Changes",
+                        "You have unsaved changes to the current color theme.\n\n" +
+                        "• Save — keep the editor open and focus the Name field so you can save manually.\n" +
+                        "• Discard — drop your edits and continue.\n" +
+                        "• Cancel — back out and stay on the current theme.");
+                    args.Result = result switch
+                    {
+                        AvaloniaDialogs.MessageResult.Yes => UnsavedChangesChoice.Save,
+                        AvaloniaDialogs.MessageResult.No  => UnsavedChangesChoice.Discard,
+                        _                                 => UnsavedChangesChoice.Cancel,
+                    };
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] UnsavedChanges prompt failed: {ex.Message}");
+                    args.Result = UnsavedChangesChoice.Cancel;
                 }
                 finally
                 {

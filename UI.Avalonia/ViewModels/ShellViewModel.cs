@@ -96,6 +96,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.WatermarkChanged += (_, name) => Main.SelectedCustomWatermarkName = name;
         FloatingMenu.UseCustomWatermarkChanged += (_, v) => Main.UseCustomWatermark = v;
         FloatingMenu.OverrideRegionWatermarkChanged += (_, v) => Main.OverrideRegionWatermark = v;
+        FloatingMenu.ShowWatermarkChanged += (_, v) => Main.ShowWatermark = v;
         FloatingMenu.ColorThemeChanged  += (_, name) =>
         {
             Main.SetThemeName(name);
@@ -186,7 +187,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (ev.PropertyName == nameof(MainViewModel.SelectedFractalType)
              || ev.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
                 RecordNavChange();
+            // Mirror watermark master toggle so the menu checkbox stays in
+            // sync with the auto-enable from MainViewModel.UseCustomWatermark
+            // and with right-click toggles outside the menu.
+            if (ev.PropertyName == nameof(MainViewModel.ShowWatermark))
+                FloatingMenu.SetShowWatermarkSilent(Main.ShowWatermark);
         };
+
+        // Seed the menu mirror so the checkbox reflects the persisted state
+        // on first open instead of always defaulting to unchecked.
+        FloatingMenu.SetShowWatermarkSilent(Main.ShowWatermark);
 
         // "Go" button: parse the four coord textboxes and apply.
         FloatingMenu.GoClick           += (_, _) => ApplyCoordsFromMenu();
@@ -1109,6 +1119,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.ImportPaletteRequested  += (_, args) => ImportPaletteRequested?.Invoke(this, args);
             vm.ExportPaletteRequested  += (_, args) => ExportPaletteRequested?.Invoke(this, args);
             vm.SampleColorRequested    += (_, args) => SampleColorRequested?.Invoke(this, args);
+            vm.UnsavedChangesPromptRequested += (_, args) => UnsavedChangesPromptRequested?.Invoke(this, args);
             ColorThemeEditor = vm;
         }
         IsColorThemeEditorVisible = true;
@@ -1231,6 +1242,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Host installs the global mouse hook and fills PickedR/G/B before
     /// completing. PickedR null indicates the user cancelled.</summary>
     public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
+
+    /// <summary>Color Theme Editor raises this when dirty and the user picks
+    /// a different theme or tries to close the window. Host shows the modal
+    /// Save/Discard/Cancel prompt and signals the args' completion.</summary>
+    public event EventHandler<UnsavedChangesPromptEventArgs>? UnsavedChangesPromptRequested;
 
     /// <summary>Help VM wants the host to open a URL in the system browser.</summary>
     public event EventHandler<string>? LinkRequested;
