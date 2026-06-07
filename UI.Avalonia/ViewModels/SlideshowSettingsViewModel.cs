@@ -528,6 +528,19 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _postFxBrightness = pv != null && pv.TryGetValue(PostFxKeyBrightness, out var br) ? br : 100.0;
         _postFxContrast = pv != null && pv.TryGetValue(PostFxKeyContrast, out var co) ? co : 100.0;
         _postFxAdaptive = pv != null && pv.TryGetValue(PostFxKeyAdaptive, out var ad) ? ad : 0.0;
+
+        // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
+        // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
+        // _initializing so the reload itself doesn't dirty the working copy.
+        foreach (var item in AvailableRegions)
+            item.IsChecked = _working.IncludedRegions.Contains(item.Name);
+        foreach (var item in AvailableThemes)
+            item.IsChecked = _working.IncludedColorThemes.Contains(item.Name);
+        foreach (var item in AvailableFractalTypes)
+            item.IsChecked = _working.FilterFractalTypes.Contains(item.Name);
+        foreach (var item in AvailableQualityPresets)
+            item.IsChecked = _working.FilterQualityPresets.Contains(item.Name);
+
         this.RaisePropertyChanged(nameof(Type));
         this.RaisePropertyChanged(nameof(IsVideo));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
