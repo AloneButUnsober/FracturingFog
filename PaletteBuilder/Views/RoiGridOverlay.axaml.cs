@@ -118,28 +118,23 @@ namespace PaletteBuilder.Views
 
             if (ShowGrid)
             {
-                var stroke = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF));
+                // Halo strokes: a wider dark backing line behind a thin
+                // light line. The dark backing reads against bright image
+                // regions; the light inner reads against dark image regions.
+                // Same idea as a typeface halo / Photoshop guide rule —
+                // visible regardless of underlying luminance without any
+                // per-image pixel sampling.
+                var darkHalo  = new SolidColorBrush(Color.FromArgb(0xB0, 0, 0, 0));
+                var lightCore = new SolidColorBrush(Color.FromArgb(0xE0, 0xFF, 0xFF, 0xFF));
                 for (int i = 1; i < GridCols; i++)
                 {
                     double x = w * i / GridCols;
-                    _surface.Children.Add(new Line
-                    {
-                        StartPoint = new Point(x, 0),
-                        EndPoint = new Point(x, h),
-                        Stroke = stroke,
-                        StrokeThickness = 1,
-                    });
+                    AddHaloLine(new Point(x, 0), new Point(x, h), darkHalo, lightCore);
                 }
                 for (int i = 1; i < GridRows; i++)
                 {
                     double y = h * i / GridRows;
-                    _surface.Children.Add(new Line
-                    {
-                        StartPoint = new Point(0, y),
-                        EndPoint = new Point(w, y),
-                        Stroke = stroke,
-                        StrokeThickness = 1,
-                    });
+                    AddHaloLine(new Point(0, y), new Point(w, y), darkHalo, lightCore);
                 }
             }
 
@@ -158,7 +153,19 @@ namespace PaletteBuilder.Views
                 AddRect(0, ry, rx, rh, dim);                     // left
                 AddRect(rx + rw, ry, w - (rx + rw), rh, dim);    // right
 
-                // ROI outline.
+                // ROI outline gets the same halo treatment as the grid
+                // lines so the boundary stays legible against any image.
+                // Dark backing rectangle slightly inflated, then the
+                // accent-colour inner rectangle on top.
+                _surface.Children.Add(new Rectangle
+                {
+                    Width = rw + 2,
+                    Height = rh + 2,
+                    Stroke = new SolidColorBrush(Color.FromArgb(0xC0, 0, 0, 0)),
+                    StrokeThickness = 1,
+                    [Canvas.LeftProperty] = rx - 1,
+                    [Canvas.TopProperty] = ry - 1,
+                });
                 _surface.Children.Add(new Rectangle
                 {
                     Width = rw,
@@ -195,6 +202,27 @@ namespace PaletteBuilder.Views
                 Fill = fill,
                 [Canvas.LeftProperty] = x,
                 [Canvas.TopProperty] = y,
+            });
+        }
+
+        private void AddHaloLine(Point a, Point b, IBrush halo, IBrush core)
+        {
+            // Dark wider line first; light thin line on top. Two passes is
+            // cheaper than per-pixel sampling under the grid and always
+            // renders the lines visible regardless of underlying tone.
+            _surface!.Children.Add(new Line
+            {
+                StartPoint = a,
+                EndPoint = b,
+                Stroke = halo,
+                StrokeThickness = 3,
+            });
+            _surface.Children.Add(new Line
+            {
+                StartPoint = a,
+                EndPoint = b,
+                Stroke = core,
+                StrokeThickness = 1,
             });
         }
 
