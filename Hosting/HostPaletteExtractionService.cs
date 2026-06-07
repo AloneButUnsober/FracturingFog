@@ -14,8 +14,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
+using SkiaSharp;
 
 using FracturingFog.Imaging;
 using FracturingFog.Imaging.PaletteExtraction;
@@ -42,7 +42,7 @@ namespace FracturingFog.Hosting
         };
 
         private readonly object _gate = new();
-        private Bitmap? _source;
+        private SKBitmap? _source;
         private string? _sourcePath;
 
         // Cached downsampled-and-filtered RGB buffer so back-to-back single
@@ -76,17 +76,32 @@ namespace FracturingFog.Hosting
 
             try
             {
-                // Decode into an independent owned Bitmap so the original
-                // file handle is released immediately (Bitmap.FromFile keeps
-                // the file locked for the bitmap's lifetime).
-                using var decoded = (Bitmap)Image.FromFile(path);
-                var copy = new Bitmap(decoded);
-                BitmapSampler.ApplyExifOrientation(copy);
+                // SkiaSharp decode: streams the file into the codec, so the
+                // FileStream is disposed at the end of this block — no GDI-
+                // style file lock retained for the bitmap's lifetime.
+                using var fs = File.OpenRead(path);
+                using var codec = SKCodec.Create(fs);
+                if (codec == null)
+                {
+                    errorMessage = "Unsupported image format: " + path;
+                    return false;
+                }
+                var info = new SKImageInfo(codec.Info.Width, codec.Info.Height,
+                                           SKColorType.Bgra8888, SKAlphaType.Premul);
+                var raw = new SKBitmap(info);
+                var decodeResult = codec.GetPixels(info, raw.GetPixels());
+                if (decodeResult != SKCodecResult.Success && decodeResult != SKCodecResult.IncompleteInput)
+                {
+                    raw.Dispose();
+                    errorMessage = "Failed to decode image: " + decodeResult + " — " + path;
+                    return false;
+                }
+                var oriented = BitmapSampler.ApplyOrigin(raw, codec.EncodedOrigin);
 
                 lock (_gate)
                 {
                     _source?.Dispose();
-                    _source = copy;
+                    _source = oriented;
                     _sourcePath = path;
                     InvalidatePixelCacheNoLock();
                 }
@@ -205,7 +220,7 @@ namespace FracturingFog.Hosting
 
             using var cropped = opts.HasRoi
                 ? BitmapSampler.CropNormalised(_source!, opts.RoiX, opts.RoiY, opts.RoiWidth, opts.RoiHeight)
-                : new Bitmap(_source!);
+                : _source!.Copy(SKColorType.Bgra8888);
             using var down = BitmapSampler.Downsample(cropped, opts.DownsampleMaxDim);
             _cachedWidth = down.Width;
             _cachedHeight = down.Height;

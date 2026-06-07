@@ -295,7 +295,7 @@ public sealed partial class MainWindow : Window
 
     private static IEnumerable<string> EnumerateImagesInFolder(string folder)
     {
-        string[] exts = { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff" };
+        string[] exts = { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".heic", ".heif" };
         foreach (var f in Directory.EnumerateFiles(folder, "*.*", SearchOption.TopDirectoryOnly))
             if (Array.IndexOf(exts, Path.GetExtension(f).ToLowerInvariant()) >= 0)
                 yield return f;
@@ -347,7 +347,7 @@ public sealed partial class MainWindow : Window
             {
                 new FilePickerFileType("Images")
                 {
-                    Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tif", "*.tiff" },
+                    Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tif", "*.tiff", "*.webp", "*.heic", "*.heif" },
                 },
                 new FilePickerFileType("All files") { Patterns = new[] { "*" } },
             },

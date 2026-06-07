@@ -12,10 +12,12 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using SkiaSharp;
 
 using FracturingFog.Imaging.PaletteExtraction;
 using FracturingFog.Models;
@@ -508,7 +510,13 @@ namespace FracturingFog.Views
             if (_cachedPixels != null && _cacheKey == key)
                 return (_cachedPixels, _cachedCount);
 
-            using var down = BitmapSampler.Downsample(_sourceImage!, opts.DownsampleMaxDim);
+            // WinForms dialog is on the deprecation tail (CLAUDE.md): keep it
+            // buildable but minimise churn. _sourceImage stays a GDI Bitmap
+            // (for the PictureBox preview); convert to SKBitmap at the
+            // sampler boundary so the new SkiaSharp BitmapSampler API stays
+            // the only path for pixel extraction.
+            using var skia = GdiToSkia(_sourceImage!);
+            using var down = BitmapSampler.Downsample(skia, opts.DownsampleMaxDim);
             _cachedPixels = BitmapSampler.ExtractPixels(down,
                 opts.ExcludeNearBlack, opts.ExcludeNearWhite,
                 out _cachedCount);
@@ -777,6 +785,33 @@ namespace FracturingFog.Views
                 }
             }
             return Color.FromArgb(last.R, last.G, last.B);
+        }
+
+        // ── GDI → Skia bridge (deprecation-tail only) ────────────────────────
+        //
+        // ImagePaletteDialog keeps a GDI Bitmap for the WinForms PictureBox
+        // preview; the SkiaSharp BitmapSampler is the canonical pixel path.
+        // Convert at the sampler boundary so the WinForms shell stays
+        // buildable per CLAUDE.md without polluting the lib with a GDI
+        // overload.
+        private static unsafe SKBitmap GdiToSkia(Bitmap src)
+        {
+            var info = new SKImageInfo(src.Width, src.Height,
+                                       SKColorType.Bgra8888, SKAlphaType.Premul);
+            var dst = new SKBitmap(info);
+            var rect = new Rectangle(0, 0, src.Width, src.Height);
+            var data = src.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                int rowBytes = src.Width * 4;
+                byte* sp = (byte*)data.Scan0.ToPointer();
+                byte* dp = (byte*)dst.GetPixels().ToPointer();
+                int dstStride = dst.RowBytes;
+                for (int y = 0; y < src.Height; y++)
+                    Buffer.MemoryCopy(sp + y * data.Stride, dp + y * dstStride, rowBytes, rowBytes);
+            }
+            finally { src.UnlockBits(data); }
+            return dst;
         }
 
         // ── Cleanup ──────────────────────────────────────────────────────────
