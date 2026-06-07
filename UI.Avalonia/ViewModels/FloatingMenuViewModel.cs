@@ -346,6 +346,27 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(UseCustomWatermark));
     }
 
+    private bool _showWatermark;
+    /// <summary>Mirrors MainViewModel.ShowWatermark — the master visibility
+    /// gate for the on-screen overlay. Without this surfaced in the menu, the
+    /// only way to flip it was the right-click context menu, which made
+    /// "Use custom watermark" look broken (selection had no visible effect).</summary>
+    public bool ShowWatermark
+    {
+        get => _showWatermark;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _showWatermark, value))
+                ShowWatermarkChanged?.Invoke(this, value);
+        }
+    }
+    public void SetShowWatermarkSilent(bool value)
+    {
+        if (_showWatermark == value) return;
+        _showWatermark = value;
+        this.RaisePropertyChanged(nameof(ShowWatermark));
+    }
+
     private bool _overrideRegionWatermark;
     /// <summary>Override checkbox in the watermark band: forces the active
     /// custom watermark over any region-embedded watermark.</summary>
@@ -710,6 +731,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<string?>? WatermarkChanged;
     public event EventHandler<bool>? UseCustomWatermarkChanged;
     public event EventHandler<bool>? OverrideRegionWatermarkChanged;
+    public event EventHandler<bool>? ShowWatermarkChanged;
 
     public event EventHandler<int>? BrightnessSlide;
     public event EventHandler<int>? ContrastSlide;

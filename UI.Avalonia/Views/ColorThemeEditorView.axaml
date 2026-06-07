@@ -157,7 +157,7 @@
                         <StackPanel Spacing="6">
                             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                 <TextBlock Grid.Column="0" Classes="section" Text="Color stops" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Classes="action add"    Content="+ Add stop"   Command="{Binding AddStopCommand}" />
+                                <Button Grid.Column="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
                                 <Button Grid.Column="2" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
                                 <Button Grid.Column="3" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
                                 <Button Grid.Column="4" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
@@ -166,10 +166,13 @@
                                 <CheckBox  Grid.Column="0" Content="Inspect"  IsChecked="{Binding InspectActive}"
                                            Foreground="#C8C878" FontWeight="Bold" VerticalAlignment="Center"
                                            ToolTip.Tip="Single-click the rendered fractal to highlight the closest matching stop." />
-                                <Button    Grid.Column="1" Classes="action save" Content="Sample…"
-                                           Margin="12,0,0,0"
+                                <Button    Grid.Column="1" Classes="action save"
+                                           Margin="30,0,0,0"
                                            Command="{Binding SampleSelectedCommand}"
-                                           ToolTip.Tip="Eyedropper: click a stop row first, then sample any pixel on the desktop to replace its color." />
+                                           ToolTip.Tip="Eyedropper: click a stop row first, then sample any pixel on the desktop to replace its color.">
+                                    <Image Source="avares://FracturingFog.UI.Avalonia/Assets/Sampler.png"
+                                           Width="20" Height="20"/>
+                                    </Button>
                                 <TextBlock Grid.Column="2" Text="(click a stop to select it)"
                                            Foreground="#808080" FontStyle="Italic"
                                            VerticalAlignment="Center" Margin="12,0,0,0" />
@@ -180,7 +183,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="vm:ColorStopRowVm">
                                                 <Border Background="{Binding RowBackground}" CornerRadius="2" Margin="2,1" Padding="2">
-                                                    <Grid ColumnDefinitions="92,Auto,*,Auto,Auto" Margin="2,1">
+                                                    <Grid ColumnDefinitions="132,Auto,Auto,Auto" Margin="2,1">
                                                         <Grid.Styles>
                                                             <Style Selector="Grid">
                                                                 <Setter Property="Background" Value="Transparent" />
@@ -190,12 +193,13 @@
                                                                        Value="{Binding Position}"
                                                                        Minimum="0" Maximum="1"
                                                                        Increment="0.05"
-                                                                       FormatString="0.###" />
-                                                        <Border Grid.Column="1" Width="32" Height="22" Margin="6,0"
+                                                                       FormatString="0.###" Width="130" />
+                                                        <!--<Border Grid.Column="1" Width="32" Height="22" Margin="6,0"
                                                                 Background="{Binding SwatchBrush}"
-                                                                BorderBrush="#444" BorderThickness="1" />
-                                                        <ColorPicker Grid.Column="2" Color="{Binding StopColor, Mode=TwoWay}" Margin="4,0" HorizontalAlignment="Left" />
-                                                        <Button Grid.Column="3" Content="◎" Width="28" Margin="2,0"
+                                                                BorderBrush="#444" BorderThickness="1" />-->
+                                                        <ColorPicker Grid.Column="1" Color="{Binding StopColor, Mode=TwoWay}" 
+                                                                     Margin="4,0" HorizontalAlignment="Left" Width="120" />
+                                                        <Button Grid.Column="2" Content="◎" Width="32" Margin="2,0,12,0"
                                                                 Background="#325A6E" Foreground="White" FontWeight="Bold"
                                                                 Command="{Binding SampleCommand}"
                                                                 ToolTip.Tip="Sample a color from anywhere on the desktop and apply to this stop." />
@@ -213,29 +217,30 @@
                     </Border>
 
                     <!-- Cycle -->
-                    <Border Classes="group" IsVisible="{Binding ShowCycle}">
-                        <StackPanel Spacing="6">
-                            <TextBlock Classes="section" Text="Cycle" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Classes="label" Text="Speed:" />
-                                <NumericUpDown Value="{Binding CycleSpeed}"
-                                               Minimum="0.0001" Maximum="10" Increment="0.001"
-                                               FormatString="0.0000" Width="120" />
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- In-set -->
                     <Border Classes="group">
-                        <StackPanel Spacing="6">
-                            <TextBlock Classes="section" Text="In-set (interior)" />
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <CheckBox Content="Override" IsChecked="{Binding UseInSet}" Foreground="#B4B4B4" VerticalAlignment="Center" />
-                                <Border Width="40" Height="22"
+                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                <StackPanel Spacing="6" IsEnabled="{Binding ShowCycle}">
+                                    <TextBlock Classes="section" Text="Cycle" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="Speed:" />
+                                        <NumericUpDown Value="{Binding CycleSpeed}"
+                                                       Minimum="0.0001" Maximum="10" Increment="0.001"
+                                                       FormatString="0.0000" Width="135" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                            <!-- In-set -->
+                                <StackPanel Spacing="6" Margin="8,0,0,0">
+                                    <TextBlock Classes="section" Text="In-set (interior)" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <CheckBox Content="Override" IsChecked="{Binding UseInSet}" Foreground="#B4B4B4" VerticalAlignment="Center" />
+                                        <!--<Border Width="40" Height="22"
                                         Background="{Binding InSetSwatchBrush}"
-                                        BorderBrush="#444" BorderThickness="1" />
-                                <ColorPicker Color="{Binding InSetColor, Mode=TwoWay}" IsEnabled="{Binding UseInSet}" />
-                            </StackPanel>
+                                        BorderBrush="#444" BorderThickness="1" />-->
+                                        <ColorPicker Color="{Binding InSetColor, Mode=TwoWay}"
+                                                     IsEnabled="{Binding UseInSet}" Width="130"/>
+                                    </StackPanel>
+                                </StackPanel>
                         </StackPanel>
                     </Border>
 
@@ -244,12 +249,18 @@
                         <StackPanel Spacing="4">
                             <TextBlock Classes="section" Text="Post-FX defaults" />
                             <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
-                                <CheckBox Grid.Row="0" Grid.Column="0" Content="Brightness" IsChecked="{Binding UseBrightness}" Foreground="#B4B4B4" Margin="0,0,12,4" VerticalAlignment="Center" />
-                                <Slider Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseBrightness}" Margin="0,0,0,4" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Brightness}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,4" />
+                                <CheckBox Grid.Row="0" Grid.Column="0" Content="Brightness" IsChecked="{Binding UseBrightness}" 
+                                          Foreground="#B4B4B4" Margin="0,0,12,4" VerticalAlignment="Center" />
+                                <Slider Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" 
+                                        TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseBrightness}" 
+                                        Margin="0,0,0,4" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Brightness}" Foreground="#9B9B9B" 
+                                           Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,4" />
+                                
                                 <CheckBox Grid.Row="1" Grid.Column="0" Content="Contrast" IsChecked="{Binding UseContrast}" Foreground="#B4B4B4" Margin="0,0,12,4" VerticalAlignment="Center" />
                                 <Slider Grid.Row="1" Grid.Column="1" Value="{Binding Contrast}" Minimum="-100" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseContrast}" Margin="0,0,0,4" VerticalAlignment="Center" />
                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Contrast}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,4" />
+                                
                                 <CheckBox Grid.Row="2" Grid.Column="0" Content="Adaptive" IsChecked="{Binding UseAdaptive}" Foreground="#B4B4B4" Margin="0,0,12,0" VerticalAlignment="Center" />
                                 <Slider Grid.Row="2" Grid.Column="1" Value="{Binding Adaptive}" Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseAdaptive}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Adaptive}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,0" />
@@ -265,67 +276,97 @@
                     <Border Classes="group" IsVisible="{Binding Show3D}">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="3D lighting (Phong / PBR)" />
-                            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
-                                <TextBlock Classes="label" Grid.Column="0" Text="Steepness:" Margin="0,0,8,0" />
-                                <NumericUpDown Grid.Column="1" Value="{Binding Steepness}" Minimum="0.1" Maximum="10" Increment="0.05" FormatString="0.00" Width="100" Margin="0,0,16,0" />
-                                <TextBlock Classes="label" Grid.Column="2" Text="Ambient:" Margin="0,0,8,0" />
-                                <NumericUpDown Grid.Column="3" Value="{Binding Ambient}" Minimum="0" Maximum="1" Increment="0.01" FormatString="0.000" Width="100" />
+                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto" Margin="0,4,0,0">
+                                <TextBlock Classes="label" Grid.Column="0" Text="Steepness:" Margin="0,0,2,0" />
+                                <NumericUpDown Grid.Column="1" Value="{Binding Steepness}"
+                                               Minimum="0.1" Maximum="10" Increment="0.05"
+                                               FormatString="0.00" Width="130" Margin="0,0,16,0" />
+                                <TextBlock Classes="label" Grid.Column="2" Text="Ambient:" Margin="0,0,2,0" />
+                                <NumericUpDown Grid.Column="3" Value="{Binding Ambient}"
+                                               Minimum="0" Maximum="1" Increment="0.01"
+                                               FormatString="0.000" Width="130" />
                             </Grid>
 
                             <!-- Key Light -->
                             <Border BorderBrush="#2A2A2A" BorderThickness="1" Padding="6" Margin="0,8,0,0">
-                                <StackPanel Spacing="4" DataContext="{Binding KeyLight}">
-                                    <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Key light" />
-                                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
-                                        <TextBlock Classes="label" Grid.Column="0" Text="Dir X" Margin="0,0,4,0" />
-                                        <NumericUpDown Grid.Column="1" Value="{Binding Lx}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                        <TextBlock Classes="label" Grid.Column="2" Text="Y" Margin="8,0,4,0" />
-                                        <NumericUpDown Grid.Column="3" Value="{Binding Ly}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                        <TextBlock Classes="label" Grid.Column="4" Text="Z" Margin="8,0,4,0" />
-                                        <NumericUpDown Grid.Column="5" Value="{Binding Lz}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                    </Grid>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Diffuse" Width="60" />
-                                        <Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" />
+                                <StackPanel Spacing="4" DataContext="{Binding KeyLight}" Orientation="Horizontal">
+                                    <StackPanel Spacing="4" Orientation="Vertical">
+                                        <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Key light" />
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="0" Text="X" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="1" Value="{Binding Lx}"
+                                                           Minimum="-10" Maximum="10" Increment="0.05"
+                                                           FormatString="0.000" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="2" Text="Y" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="3" Value="{Binding Ly}"
+                                                           Minimum="-10" Maximum="10" Increment="0.05"
+                                                           FormatString="0.000" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="4" Text="Z" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="5" Value="{Binding Lz}"
+                                                           Minimum="-10" Maximum="10" Increment="0.05"
+                                                           FormatString="0.000" Width="130" />
+                                        </StackPanel>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Specular" Width="60" />
-                                        <Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Shininess" Width="60" />
-                                        <NumericUpDown Value="{Binding Shininess}" Minimum="1" Maximum="512" Width="100" />
+                                    <StackPanel Spacing="4" Orientation="Vertical">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Diffuse" Width="70" Margin="8,20,0,0"/>
+                                            <!--<Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />-->
+                                            <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" Margin="0,22,0,0" Width="130"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Specular" Width="70" Margin="8,0,0,0"/>
+                                            <!--<Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />-->
+                                            <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Shininess" Width="70" Margin="8,0,0,0"/>
+                                            <NumericUpDown Value="{Binding Shininess}" Minimum="1" Maximum="512"
+                                                           Width="130" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
 
                             <!-- Fill Light -->
                             <Border BorderBrush="#2A2A2A" BorderThickness="1" Padding="6" Margin="0,4,0,0">
-                                <StackPanel Spacing="4" DataContext="{Binding FillLight}">
-                                    <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Fill light" />
-                                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
-                                        <TextBlock Classes="label" Grid.Column="0" Text="Dir X" Margin="0,0,4,0" />
-                                        <NumericUpDown Grid.Column="1" Value="{Binding Lx}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                        <TextBlock Classes="label" Grid.Column="2" Text="Y" Margin="8,0,4,0" />
-                                        <NumericUpDown Grid.Column="3" Value="{Binding Ly}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                        <TextBlock Classes="label" Grid.Column="4" Text="Z" Margin="8,0,4,0" />
-                                        <NumericUpDown Grid.Column="5" Value="{Binding Lz}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                    </Grid>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Diffuse" Width="60" />
-                                        <Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" />
+                                <StackPanel Spacing="4" DataContext="{Binding FillLight}" Orientation="Horizontal">
+                                    <StackPanel Spacing="4" Orientation="Vertical">
+                                        <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Fill light" />
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="0" Text="X" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="1" Value="{Binding Lx}" Minimum="-10" Maximum="10"
+                                                           Increment="0.05" FormatString="0.000" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="2" Text="Y" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="3" Value="{Binding Ly}" Minimum="-10" Maximum="10"
+                                                           Increment="0.05" FormatString="0.000" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="4" Text="Z" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="5" Value="{Binding Lz}" Minimum="-10" Maximum="10"
+                                                           Increment="0.05" FormatString="0.000" Width="130" />
+                                        </StackPanel>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Specular" Width="60" />
-                                        <Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Shininess" Width="60" />
-                                        <NumericUpDown Value="{Binding Shininess}" Minimum="1" Maximum="512" Width="100" />
+                                    <StackPanel Spacing="4" Orientation="Vertical">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Diffuse" Width="70" Margin="8,20,0,0"/>
+                                            <!--<Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />-->
+                                            <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" Margin="0,22,0,0" Width="130"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Specular" Width="70" Margin="8,0,0,0"/>
+                                            <!--<Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />-->
+                                            <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" Width="130"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Shininess" Width="70" Margin="8,0,0,0"/>
+                                            <NumericUpDown Value="{Binding Shininess}" Minimum="1" Maximum="512" Width="130" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -333,29 +374,40 @@
                             <!-- Rim Light -->
                             <CheckBox Content="Enable rim light" IsChecked="{Binding UseRim}" Foreground="#C8C878" FontWeight="Bold" Margin="0,8,0,0" />
                             <Border BorderBrush="#2A2A2A" BorderThickness="1" Padding="6" IsEnabled="{Binding UseRim}">
-                                <StackPanel Spacing="4" DataContext="{Binding RimLight}">
-                                    <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Rim light" />
-                                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
-                                        <TextBlock Classes="label" Grid.Column="0" Text="Dir X" Margin="0,0,4,0" />
-                                        <NumericUpDown Grid.Column="1" Value="{Binding Lx}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                        <TextBlock Classes="label" Grid.Column="2" Text="Y" Margin="8,0,4,0" />
-                                        <NumericUpDown Grid.Column="3" Value="{Binding Ly}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                        <TextBlock Classes="label" Grid.Column="4" Text="Z" Margin="8,0,4,0" />
-                                        <NumericUpDown Grid.Column="5" Value="{Binding Lz}" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Width="92" />
-                                    </Grid>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Diffuse" Width="60" />
-                                        <Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" />
+                                <StackPanel Spacing="4" DataContext="{Binding RimLight}" Orientation="Horizontal">
+                                    <StackPanel Spacing="4" Orientation="Vertical">
+                                        <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Rim light" />
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="0" Text="X" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="1" Value="{Binding Lx}" Minimum="-10" Maximum="10"
+                                                           Increment="0.05" FormatString="0.000" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="2" Text="Y" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="3" Value="{Binding Ly}" Minimum="-10" Maximum="10"
+                                                           Increment="0.05" FormatString="0.000" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="4" Orientation="Horizontal">
+                                            <TextBlock Classes="label" Grid.Column="4" Text="Z" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="5" Value="{Binding Lz}" Minimum="-10" Maximum="10"
+                                                           Increment="0.05" FormatString="0.000" Width="130" />
+                                        </StackPanel>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Specular" Width="60" />
-                                        <Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />
-                                        <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <TextBlock Classes="label" Text="Shininess" Width="60" />
-                                        <NumericUpDown Value="{Binding Shininess}" Minimum="1" Maximum="512" Width="100" />
+                                    <StackPanel Spacing="4" Orientation="Vertical">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Diffuse" Width="70" Margin="8,20,0,0"/>
+                                            <!--<Border Width="32" Height="22" Background="{Binding DiffSwatchBrush}" BorderBrush="#444" BorderThickness="1" />-->
+                                            <ColorPicker Color="{Binding DiffColor, Mode=TwoWay}" Margin="0,22,0,0" Width="130"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Specular" Width="70" Margin="8,0,0,0"/>
+                                            <!--<Border Width="32" Height="22" Background="{Binding SpecSwatchBrush}" BorderBrush="#444" BorderThickness="1" />-->
+                                            <ColorPicker Color="{Binding SpecColor, Mode=TwoWay}" Width="130" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Classes="label" Text="Shininess" Width="70" Margin="8,0,0,0"/>
+                                            <NumericUpDown Value="{Binding Shininess}" Minimum="1" Maximum="512" Width="130" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -366,17 +418,55 @@
                     <Border Classes="group" IsVisible="{Binding ShowPhongExtras}">
                         <StackPanel Spacing="4">
                             <TextBlock Classes="section" Text="Phong3D extras" />
+                            <StackPanel Spacing="4" Orientation="Horizontal">
+                                <StackPanel Spacing="4" Orientation="Vertical">
+                                    <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Specular" />
+                                    <StackPanel Spacing="4" Orientation="Horizontal">
+                                        <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Key:"
+                                                   Margin="0,0,8,4" Width="25" />
+                                        <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding KeySpec}"
+                                                       Minimum="0" Maximum="10" Increment="0.05"
+                                                       FormatString="0.000" Width="130"
+                                                       HorizontalAlignment="Left" Margin="0,0,0,4" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="4" Orientation="Horizontal">
+                                        <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Fill:"
+                                                   Margin="0,0,8,4" Width="25"/>
+                                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding FillSpec}"
+                                                       Minimum="0" Maximum="10" Increment="0.05"
+                                                       FormatString="0.000" Width="130"
+                                                       HorizontalAlignment="Left" Margin="0,0,0,4" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="4" Orientation="Horizontal">
+                                        <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Rim spec:"
+                                                   Margin="0,0,8,4" Width="25"/>
+                                        <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding RimSpec}"
+                                                       Minimum="0" Maximum="10" Increment="0.05"
+                                                       FormatString="0.000" Width="130"
+                                                       HorizontalAlignment="Left" Margin="0,0,0,4" IsEnabled="{Binding UseRim}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Spacing="4" Orientation="Vertical">
+                                    <TextBlock Foreground="#A0A0A0" FontWeight="Bold" Text="Diffuse" />
+                                    <StackPanel Spacing="4" Orientation="Horizontal">
+                                        <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Fill:"
+                                                   Margin="8,0,8,4" Width="25" />
+                                        <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding FillDiff}"
+                                                       Minimum="0" Maximum="10" Increment="0.05"
+                                                       FormatString="0.000" Width="130"
+                                                       HorizontalAlignment="Left" Margin="0,0,0,4" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="4" Orientation="Horizontal">
+                                        <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Rim:"
+                                                   Margin="8,0,8,0" Width="25"/>
+                                        <NumericUpDown Grid.Row="4" Grid.Column="1" Value="{Binding RimDiff}"
+                                                       Minimum="0" Maximum="10" Increment="0.05"
+                                                       FormatString="0.000" Width="130"
+                                                       HorizontalAlignment="Left" IsEnabled="{Binding UseRim}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
                             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
-                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Key spec:"  Margin="0,0,8,4" />
-                                <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding KeySpec}"  Minimum="0" Maximum="10" Increment="0.05" FormatString="0.000" Width="120" HorizontalAlignment="Left" Margin="0,0,0,4" />
-                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Fill spec:" Margin="0,0,8,4" />
-                                <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding FillSpec}" Minimum="0" Maximum="10" Increment="0.05" FormatString="0.000" Width="120" HorizontalAlignment="Left" Margin="0,0,0,4" />
-                                <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Fill diff:" Margin="0,0,8,4" />
-                                <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding FillDiff}" Minimum="0" Maximum="10" Increment="0.05" FormatString="0.000" Width="120" HorizontalAlignment="Left" Margin="0,0,0,4" />
-                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Rim spec:"  Margin="0,0,8,4" />
-                                <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding RimSpec}"  Minimum="0" Maximum="10" Increment="0.05" FormatString="0.000" Width="120" HorizontalAlignment="Left" Margin="0,0,0,4" IsEnabled="{Binding UseRim}" />
-                                <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Rim diff:"  Margin="0,0,8,0" />
-                                <NumericUpDown Grid.Row="4" Grid.Column="1" Value="{Binding RimDiff}"  Minimum="0" Maximum="10" Increment="0.05" FormatString="0.000" Width="120" HorizontalAlignment="Left" IsEnabled="{Binding UseRim}" />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -389,9 +479,11 @@
                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Lighting:" Margin="0,0,8,4" />
                                 <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding PbrLightingModes}" SelectedItem="{Binding PbrLightingMode}" Width="220" HorizontalAlignment="Left" Margin="0,0,0,4" />
                                 <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Glow exp:" Margin="0,0,8,4" />
-                                <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding GlowExponent}" Minimum="0" Maximum="50" Increment="0.5" FormatString="0.00" Width="120" HorizontalAlignment="Left" Margin="0,0,0,4" />
+                                <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding GlowExponent}" Minimum="0" Maximum="50" 
+                                               Increment="0.5" FormatString="0.00" Width="130" HorizontalAlignment="Left" Margin="0,0,0,4" />
                                 <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Glow scale:" Margin="0,0,8,0" />
-                                <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding GlowScale}" Minimum="0" Maximum="10" Increment="0.05" FormatString="0.000" Width="120" HorizontalAlignment="Left" />
+                                <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding GlowScale}" Minimum="0" Maximum="10" 
+                                               Increment="0.05" FormatString="0.000" Width="130" HorizontalAlignment="Left" />
                             </Grid>
 
                             <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
@@ -404,9 +496,12 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="vm:MaterialBandRowVm">
                                                 <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" Margin="4,2">
-                                                    <NumericUpDown Grid.Column="0" Value="{Binding UpperT}"    Minimum="0" Maximum="2" Increment="0.05" FormatString="0.###" Width="90" Margin="0,0,4,0" />
-                                                    <NumericUpDown Grid.Column="1" Value="{Binding Metal}"     Minimum="0" Maximum="1" Increment="0.05" FormatString="0.###" Width="90" Margin="2,0" />
-                                                    <NumericUpDown Grid.Column="2" Value="{Binding Roughness}" Minimum="0" Maximum="1" Increment="0.05" FormatString="0.###" Width="90" Margin="2,0,6,0" />
+                                                    <NumericUpDown Grid.Column="0" Value="{Binding UpperT}"    Minimum="0" Maximum="2" 
+                                                                   Increment="0.05" FormatString="0.###" Width="130" Margin="0,0,4,0" />
+                                                    <NumericUpDown Grid.Column="1" Value="{Binding Metal}"     Minimum="0" Maximum="1" 
+                                                                   Increment="0.05" FormatString="0.###" Width="130" Margin="2,0" />
+                                                    <NumericUpDown Grid.Column="2" Value="{Binding Roughness}" Minimum="0" Maximum="1" 
+                                                                   Increment="0.05" FormatString="0.###" Width="130" Margin="2,0,6,0" />
                                                     <Button Grid.Column="3" Classes="action danger" Content="X" Width="28"
                                                             Command="{Binding $parent[ItemsControl].((vm:ColorThemeEditorViewModel)DataContext).RemoveBandCommand}"
                                                             CommandParameter="{Binding}" />
