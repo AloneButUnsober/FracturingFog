@@ -4,9 +4,9 @@
         x:Class="FracturingFog.UI.Avalonia.Views.SlideshowSettingsView"
         x:DataType="vm:SlideshowSettingsViewModel"
         Title="Slideshow Settings"
-        Width="460"
+        Width="520"
         SizeToContent="Height"
-        MinWidth="380"
+        MinWidth="460"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -18,11 +18,52 @@
       dimension and even that uses MinWidth so a larger system font (e.g. a
       4K display at 200% scaling with a 12pt UI font) cannot crop labels.
     -->
-    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="780">
+    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="*,Auto">
 
-        <!-- Row 0: Audio-Reactive toggle + Audio… button -->
-        <DockPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10" LastChildFill="False">
+        <!-- Row 0: Saved-config name combo + Type droplist (library mode only) -->
+        <Grid Grid.Row="0" Grid.ColumnSpan="2"
+              IsVisible="{Binding IsLibraryMode}"
+              ColumnDefinitions="Auto,*,Auto,Auto"
+              Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Text="Name:" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <ComboBox Grid.Column="1"
+                      Name="NameCombo"
+                      ItemsSource="{Binding SavedConfigNames}"
+                      SelectedItem="{Binding ActiveName, Mode=TwoWay}"
+                      IsEditable="True"
+                      MinWidth="200" />
+            <TextBlock Grid.Column="2" Text="Type:" VerticalAlignment="Center" Margin="10,0,6,0" />
+            <ComboBox Grid.Column="3"
+                      ItemsSource="{Binding AllSlideshowTypes}"
+                      SelectedItem="{Binding Type, Mode=TwoWay}"
+                      Width="100" />
+        </Grid>
+
+        <!-- Row 1: library buttons -->
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2"
+                    IsVisible="{Binding IsLibraryMode}"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    Margin="0,0,0,10">
+            <Button Content="Save"   Command="{Binding SaveCommand}"   Padding="10,4" />
+            <Button Content="Delete" Command="{Binding DeleteCommand}" Padding="10,4" />
+            <Button Content="Import" Command="{Binding ImportCommand}" Padding="10,4" />
+            <Button Content="Export" Command="{Binding ExportCommand}" Padding="10,4" />
+            <Button Content="Video Settings…"
+                    Command="{Binding EditVideoSettingsCommand}"
+                    IsVisible="{Binding IsVideo}"
+                    Padding="10,4" />
+            <TextBlock Text=" •"
+                       Foreground="#E0B040"
+                       FontWeight="Bold"
+                       IsVisible="{Binding IsDirty}"
+                       VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- Row 2: Audio-Reactive toggle + Audio… button -->
+        <DockPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,10" LastChildFill="False">
             <ToggleButton Content="Audio-Reactive Slideshow"
                           IsChecked="{Binding AudioReactive, Mode=TwoWay}"
                           FontWeight="Bold"
@@ -35,69 +76,69 @@
                     DockPanel.Dock="Left" />
         </DockPanel>
 
-        <!-- Row 1: Extreme regions toggle -->
-        <CheckBox Grid.Row="1" Grid.ColumnSpan="2"
+        <!-- Row 3: Extreme regions toggle -->
+        <CheckBox Grid.Row="3" Grid.ColumnSpan="2"
                   Content="Use Extreme Regions"
                   IsChecked="{Binding UseExtremeRegions, Mode=TwoWay}"
                   Foreground="#DCA0A0"
                   FontWeight="Bold"
                   Margin="0,0,0,8" />
 
-        <!-- Row 2: Timing group header -->
-        <TextBlock Grid.Row="2" Grid.ColumnSpan="2"
+        <!-- Row 4: Timing group header -->
+        <TextBlock Grid.Row="4" Grid.ColumnSpan="2"
                    Text="Timing (used when Audio-Reactive is OFF)"
                    Foreground="#B4DCB4"
                    FontWeight="Bold"
                    Margin="0,4,0,6" />
 
-        <!-- Rows 3..6: timing spinners. IsEnabled bound so audio-reactive
+        <!-- Rows 5..8: timing spinners. IsEnabled bound so audio-reactive
              greys them out exactly as the WinForms dialog did. -->
-        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"
+        <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"
                    Text="Total display time per region (s):"
                    IsEnabled="{Binding TimingEnabled}" />
-        <NumericUpDown Grid.Row="3" Grid.Column="1"
+        <NumericUpDown Grid.Row="5" Grid.Column="1"
                        Minimum="3" Maximum="600" Increment="1"
                        Value="{Binding TotalDisplaySec, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
                        Width="110" Margin="8,2" />
 
-        <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"
+        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"
                    Text="Color theme fade (ms):"
                    IsEnabled="{Binding TimingEnabled}" />
-        <NumericUpDown Grid.Row="4" Grid.Column="1"
+        <NumericUpDown Grid.Row="6" Grid.Column="1"
                        Minimum="100" Maximum="20000" Increment="100"
                        Value="{Binding ThemeFadeMs, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
                        Width="110" Margin="8,2" />
 
-        <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"
+        <TextBlock Grid.Row="7" Grid.Column="0" VerticalAlignment="Center"
                    Text="Region fade (ms):"
                    IsEnabled="{Binding TimingEnabled}" />
-        <NumericUpDown Grid.Row="5" Grid.Column="1"
+        <NumericUpDown Grid.Row="7" Grid.Column="1"
                        Minimum="100" Maximum="20000" Increment="100"
                        Value="{Binding RegionFadeMs, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
                        Width="110" Margin="8,2" />
 
-        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"
+        <TextBlock Grid.Row="8" Grid.Column="0" VerticalAlignment="Center"
                    Text="Fade steps:"
                    IsEnabled="{Binding TimingEnabled}" />
-        <NumericUpDown Grid.Row="6" Grid.Column="1"
+        <NumericUpDown Grid.Row="8" Grid.Column="1"
                        Minimum="2" Maximum="200" Increment="1"
                        Value="{Binding FadeSteps, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
                        Width="110" Margin="8,2" />
 
-        <!-- Row 7: timing note, visibility bound to AudioReactive -->
-        <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
+        <!-- Row 9: timing note, visibility bound to AudioReactive -->
+        <TextBlock Grid.Row="9" Grid.ColumnSpan="2"
                    Text="(Disabled while Audio-Reactive is on — beats drive timing.)"
                    FontStyle="Italic"
                    Foreground="#969696"
                    Margin="0,6,0,4"
                    IsVisible="{Binding TimingNoteVisible}" />
 
-        <!-- Row 8: per-region watermark toggle -->
-        <CheckBox Grid.Row="8" Grid.ColumnSpan="2"
+        <!-- Row 10: per-region watermark toggle -->
+        <CheckBox Grid.Row="10" Grid.ColumnSpan="2"
                   Content="Use each region's embedded watermark"
                   IsChecked="{Binding UseRegionWatermark, Mode=TwoWay}"
                   Foreground="#B4DCB4"
@@ -105,12 +146,93 @@
                   Margin="0,4,0,0"
                   ToolTip.Tip="When on, each region that carries an embedded watermark drives its own branding during the slideshow." />
 
-        <!-- Row 9: OK / Cancel buttons -->
-        <StackPanel Grid.Row="9" Grid.ColumnSpan="2"
+        <!-- Row 11: Filter expander — regions / themes / fractal types / quality presets -->
+        <Expander Grid.Row="11" Grid.ColumnSpan="2"
+                  Header="Filters (regions / themes / fractal type / quality)"
+                  Margin="0,12,0,0"
+                  IsExpanded="False">
+            <StackPanel Spacing="6" Margin="0,6,0,0">
+                <TextBlock Text="Included Regions  (unchecked all = all eligible)"
+                           Foreground="#B4DCB4" FontWeight="Bold" />
+                <ListBox ItemsSource="{Binding AvailableRegions}"
+                         MaxHeight="140"
+                         SelectionMode="Multiple">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Name}"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Text="Included Color Themes" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
+                <ListBox ItemsSource="{Binding AvailableThemes}"
+                         MaxHeight="140"
+                         SelectionMode="Multiple">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Name}"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Text="Restrict by Fractal Type" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
+                <ListBox ItemsSource="{Binding AvailableFractalTypes}"
+                         MaxHeight="120"
+                         SelectionMode="Multiple">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Name}"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Text="Restrict by Quality" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
+                <ListBox ItemsSource="{Binding AvailableQualityPresets}"
+                         MaxHeight="100"
+                         SelectionMode="Multiple">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Name}"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
+        </Expander>
+
+        <!-- Row 12: Adaptive Sweep placeholder. Phase 4 wires concrete bindings. -->
+        <Expander Grid.Row="12" Grid.ColumnSpan="2"
+                  Header="Adaptive Sweep (configured separately — Phase 4)"
+                  Margin="0,8,0,0"
+                  IsExpanded="False">
+            <TextBlock Text="Sweep controls are owned by the Floating Menu today. Phase 4 surfaces start/end/mode/loop here so each preset can carry its own sweep schedule."
+                       Foreground="#969696" FontStyle="Italic" Margin="6" />
+        </Expander>
+
+        <!-- Row 13: Post-FX placeholder. Phase 4 wires snapshot/restore. -->
+        <Expander Grid.Row="13" Grid.ColumnSpan="2"
+                  Header="Post-FX snapshot (Phase 4)"
+                  Margin="0,8,0,0"
+                  IsExpanded="False">
+            <TextBlock Text="A future revision captures the current Post-FX slider stack here so each preset can restore its look on Start."
+                       Foreground="#969696" FontStyle="Italic" Margin="6" />
+        </Expander>
+
+        <!-- Row 14: Start / OK / Cancel buttons -->
+        <StackPanel Grid.Row="14" Grid.ColumnSpan="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="8"
-                    Margin="0,12,0,0">
+                    Margin="0,16,0,0">
+            <Button Content="Start Slideshow"
+                    Command="{Binding StartCommand}"
+                    IsVisible="{Binding IsLibraryMode}"
+                    Padding="14,6"
+                    Background="#2A4E2A"
+                    Foreground="White" />
             <Button Content="OK"
                     Command="{Binding OkCommand}"
                     IsDefault="True"
@@ -128,5 +250,6 @@
         </StackPanel>
 
     </Grid>
+    </ScrollViewer>
 
 </Window>

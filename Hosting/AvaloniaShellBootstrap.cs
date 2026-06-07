@@ -22,6 +22,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -934,10 +935,38 @@ namespace FracturingFog.Hosting
             {
                 try
                 {
-                    var current = SlideshowSettingsStore.Load();
-                    var chosen = await AvaloniaDialogs.ShowSlideshowSettingsAsync(current, audioReactive: false);
+                    var file = SlideshowConfigLibrary.Load();
+                    var themeNames = s_themeService?.EnumerateThemeNames();
+                    var regionNames = FractalRegionLibrary.Instance
+                        .AllSlideshowRegions
+                        .Select(r => r.Name)
+                        .ToList();
+                    var chosen = await AvaloniaDialogs.ShowSlideshowSettingsAsync(
+                        file,
+                        audioReactive: false,
+                        regionNames: regionNames,
+                        themeNames: themeNames);
                     if (chosen != null)
-                        SlideshowSettingsStore.Save(chosen.Value.Settings);
+                    {
+                        // Persist active edits (Save button already wrote through;
+                        // OK / Start commit the working copy without saving).
+                        SlideshowConfigLibrary.Upsert(file, chosen.Value.Config);
+                        // Mirror Timing into the legacy single-file store so the
+                        // WinForms shell + ShellViewModel.ToggleSlideshow (which
+                        // still reads SlideshowSettingsStore.Load) honour the
+                        // active preset's timing values.
+                        SlideshowSettingsStore.Save(chosen.Value.Config.Timing);
+
+                        // Start button — route to the active type's engine.
+                        if (chosen.Value.StartRequested)
+                        {
+                            if (chosen.Value.Config.Type == SlideshowType.Image)
+                                shell.ToggleSlideshowCommand?.Execute(System.Reactive.Unit.Default);
+                            // Video-type start dispatch wires through StartVideoFromRequest
+                            // once the unified config carries a complete VideoZoomRequest;
+                            // until then the user can launch via the existing Video toolbar.
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
