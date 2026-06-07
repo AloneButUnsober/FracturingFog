@@ -214,7 +214,16 @@ namespace FracturingFog.Hosting
 
         private (byte[] pixels, int count, int width, int height) GetPixelsNoLock(PaletteExtractionOptions opts)
         {
-            string key = $"{_sourcePath}|{opts.DownsampleMaxDim}|{opts.ExcludeNearBlack}|{opts.ExcludeNearWhite}";
+            // Cache key must cover every option that changes the pixel set —
+            // not just downsample + black/white filters. Without the ROI +
+            // alpha/sat/lum/saliency fields, dragging the ROI re-uses the
+            // stale cache and the palette never updates.
+            string key = $"{_sourcePath}|{opts.DownsampleMaxDim}|{opts.ExcludeNearBlack}|{opts.ExcludeNearWhite}" +
+                         $"|{opts.ExcludeTransparent}|{opts.AlphaThreshold}" +
+                         $"|{opts.MinSaturation:F3}|{opts.MaxSaturation:F3}" +
+                         $"|{opts.MinLightness:F3}|{opts.MaxLightness:F3}" +
+                         $"|{opts.RoiX:F3}|{opts.RoiY:F3}|{opts.RoiWidth:F3}|{opts.RoiHeight:F3}" +
+                         $"|{opts.UseSaliency}|{opts.SaliencyThreshold:F3}";
             if (_cachedPixels != null && _cacheKey == key)
                 return (_cachedPixels, _cachedCount, _cachedWidth, _cachedHeight);
 
