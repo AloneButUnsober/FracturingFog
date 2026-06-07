@@ -121,9 +121,15 @@ namespace FracturingFog.Rendering
         private List<(double T, string Theme)>? _videoLegThemeSchedule;
         private int _videoLegThemeIdx;
         private Stopwatch? _videoLegSw;
-        // Cross-fade tuning for in-leg theme transitions. ~1 s at 18×55 ms.
-        private const int VideoThemeFadeSteps = 18;
-        private const int VideoThemeFadeStepMs = 55;
+        // Cross-fade tuning for in-leg theme transitions. Time-based now —
+        // the fade runs concurrently with zoom advancement by swapping in a
+        // BlendedColorMap whose T ticks each frame. ~1 s by default.
+        private const double VideoThemeFadeSeconds = 1.0;
+        // Active fade state. Non-null between schedule fire and T>=1; the
+        // _calculator.ColorMap is the BlendedColorMap during that window.
+        private BlendedColorMap? _videoActiveFade;
+        private IColorMap? _videoActiveFadeTo;
+        private double _videoActiveFadeStartSecs;
 
         /// <summary>Adaptive-sweep schedule for the running video slideshow.
         /// Null = no sweep (slider stays at user value). Shell sets before
@@ -487,6 +493,13 @@ namespace FracturingFog.Rendering
             _videoLegThemeIdx = 0;
             _videoLegSw = Stopwatch.StartNew();
 
+            // If a fade survived the previous leg (shouldn't, but guard) commit
+            // it to its target so the new leg starts on a plain palette.
+            if (_videoActiveFade != null && _videoActiveFadeTo != null)
+                ColorMap = _videoActiveFadeTo;
+            _videoActiveFade = null;
+            _videoActiveFadeTo = null;
+
             double logZ0 = Math.Log(Math.Max(z0, 1e-12));
             double logZ1 = Math.Log(Math.Max(z1, 1e-12));
 
@@ -575,13 +588,15 @@ namespace FracturingFog.Rendering
             }
         }
 
-        // Walks past every entry in the leg theme-schedule whose t-fraction
-        // has elapsed and cross-fades the on-screen palette to the entry's
-        // theme. The zoom freezes during each fade (matches the image
-        // slideshow's mid-region theme-fade behaviour). Mandelbrot-only —
-        // alt fractals skip via the early-out inside RenderVideoFrame.
+        // Per-frame hook called before each RenderVideoFrame inside VideoLoop.
+        // Walks past every elapsed schedule entry and starts a new fade for
+        // the latest, then advances any in-flight fade's blend factor. Zoom
+        // continues to advance normally — the fade rides along on the per-
+        // pixel palette lookup instead of pausing the view.
         private void TryRunScheduledThemeFade(double legSeconds, CancellationToken ct)
         {
+            AdvanceActiveFade();
+
             if (_videoLegThemeSchedule == null || _videoThemeService == null) return;
             if (_videoLegSw == null || legSeconds <= 0.0) return;
 
@@ -591,68 +606,58 @@ namespace FracturingFog.Rendering
             {
                 var entry = _videoLegThemeSchedule[_videoLegThemeIdx++];
                 if (ct.IsCancellationRequested) return;
-                DoVideoThemeCrossFade(entry.Theme, ct);
+                BeginVideoThemeFade(entry.Theme);
             }
         }
 
-        // Snapshot current ColorBuffer (palette A), swap to palette B, re-run
-        // Calculate at the same view state so ColorBuffer holds the same
-        // iteration field recoloured with palette B, snapshot, per-pixel
-        // cross-fade between the two. Stash the new frame as the TAA prev so
-        // the next reproject doesn't pull from a palette-A buffer.
-        private void DoVideoThemeCrossFade(string newTheme, CancellationToken ct)
+        // Capture the current host.ColorMap as "from", swap to the new theme's
+        // map (which the host setter assigns), capture as "to", then install
+        // a BlendedColorMap so subsequent Calculate() calls produce a per-pixel
+        // lerp. T starts at 0; AdvanceActiveFade ticks it toward 1.
+        private void BeginVideoThemeFade(string newTheme)
         {
             if (_videoThemeService == null) return;
-            int w = _calculator.Width, h = _calculator.Height;
-            int n = w * h;
-            if (n <= 0)
+
+            // Mid-fade arrival: commit prior fade to its target so we never
+            // stack three palettes (the BlendedColorMap holds two).
+            if (_videoActiveFade != null && _videoActiveFadeTo != null)
             {
-                _videoThemeService.ApplyThemeSilent(newTheme);
+                ColorMap = _videoActiveFadeTo;
+                _videoActiveFade = null;
+                _videoActiveFadeTo = null;
+            }
+
+            var fromMap = ColorMap;
+            if (!_videoThemeService.ApplyThemeSilent(newTheme)) return;
+            var toMap = ColorMap;
+            if (fromMap == null || toMap == null || ReferenceEquals(fromMap, toMap)) return;
+
+            var blended = new BlendedColorMap(fromMap, toMap, 0f);
+            ColorMap = blended;
+            _videoActiveFade = blended;
+            _videoActiveFadeTo = toMap;
+            _videoActiveFadeStartSecs = _videoLegSw?.Elapsed.TotalSeconds ?? 0.0;
+
+            // The leg-locked CDF was built against the from-palette's recolour
+            // output. Invalidate so the next eq pass rebuilds against the
+            // blended palette — keeps histogram mapping stable through the
+            // transition.
+            _videoLegCdfStale = true;
+        }
+
+        private void AdvanceActiveFade()
+        {
+            if (_videoActiveFade == null || _videoLegSw == null) return;
+            double elapsed = _videoLegSw.Elapsed.TotalSeconds - _videoActiveFadeStartSecs;
+            float t = (float)(elapsed / VideoThemeFadeSeconds);
+            if (t >= 1f)
+            {
+                if (_videoActiveFadeTo != null) ColorMap = _videoActiveFadeTo;
+                _videoActiveFade = null;
+                _videoActiveFadeTo = null;
                 return;
             }
-
-            uint[] fromBuf = new uint[n];
-            Array.Copy(_calculator.ColorBuffer, fromBuf, n);
-
-            _videoThemeService.ApplyThemeSilent(newTheme);
-
-            try { _calculator.Calculate(ct); }
-            catch (OperationCanceledException) { return; }
-            if (ct.IsCancellationRequested) return;
-
-            // Re-apply the leg's eq/dither stack so the newly-recoloured
-            // frame matches the live look (otherwise the fade target looks
-            // pre-correction and pops at the end of the blend).
-            double ditherIter = _videoBandDitherEnabled ? _videoBandDitherStrength : 0.0;
-            int eq = ViewState.HistogramEq;
-            if (eq > 0)
-            {
-                double strength = eq / 100.0;
-                if (_videoLegCdf != null)
-                {
-                    _calculator.ApplyHistogramEqualizationWithCdf(
-                        _videoLegCdf, _videoLegCdfBins, _videoLegCdfMaxIter,
-                        strength, ditherIter, out _, out _);
-                }
-                else
-                {
-                    _calculator.ApplyHistogramEqualization(strength);
-                    if (ditherIter > 0.0) _calculator.ApplyBandDitherRecolor(ditherIter);
-                }
-            }
-            else if (ditherIter > 0.0)
-            {
-                _calculator.ApplyBandDitherRecolor(ditherIter);
-            }
-
-            uint[] toBuf = new uint[n];
-            Array.Copy(_calculator.ColorBuffer, toBuf, n);
-
-            VideoCrossFade(fromBuf, toBuf, VideoThemeFadeSteps, VideoThemeFadeStepMs, ct);
-
-            // Refresh TAA prev so the next reproject blends from the new
-            // palette, not the pre-fade buffer.
-            StashCurrentFrameAsPrev();
+            _videoActiveFade.T = t;
         }
 
         private void RenderVideoFrame(QDCoord cx, QDCoord cy, double zoom, CancellationToken ct)
