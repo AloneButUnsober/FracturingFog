@@ -42,6 +42,8 @@ public sealed partial class MainWindow : Window
     private ServerAdminView? _serverAdminWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
+    private MiniWindowTether? _miniMapTether;
+    private MiniWindowTether? _miniDepthTether;
 
     // Mini Mode (#12) — saved geometry restored on exit.
     private bool _miniModeActive;
@@ -443,7 +445,18 @@ public sealed partial class MainWindow : Window
             if (!_miniDepthWin.IsVisible)
             {
                 _miniDepthWin.Show(this);
-                PositionMiniDepth();
+                if (_miniDepthTether == null)
+                {
+                    _miniDepthTether = new MiniWindowTether(
+                        this, _miniDepthWin, MiniWindowTether.AnchorCorner.BottomLeft);
+                    _miniDepthWin.ResetAnchorRequested += (_, _) => _miniDepthTether?.ResetAnchor();
+                }
+                // Defer initial positioning so Show's own PositionChanged
+                // (centered placement) settles before tether takes ownership;
+                // otherwise it would be misread as a user drag.
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _miniDepthTether?.Apply(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
             }
         }
         else
@@ -530,16 +543,6 @@ public sealed partial class MainWindow : Window
         _miniModeActive = false;
     }
 
-    private void PositionMiniDepth()
-    {
-        if (_miniDepthWin == null) return;
-        // Bottom-left of main window (mirrors legacy WinForms placement).
-        double scale = DesktopScaling;
-        int x = Position.X + (int)(12 * scale);
-        int y = Position.Y + (int)((Bounds.Height - _miniDepthWin.Height - 12) * scale);
-        _miniDepthWin.Position = new global::Avalonia.PixelPoint(x, y);
-    }
-
     private void SyncMiniMap()
     {
         if (_shell == null) return;
@@ -558,25 +561,24 @@ public sealed partial class MainWindow : Window
             if (!_miniMapWin.IsVisible)
             {
                 _miniMapWin.Show(this);
-                PositionMiniMap();
+                if (_miniMapTether == null)
+                {
+                    _miniMapTether = new MiniWindowTether(
+                        this, _miniMapWin, MiniWindowTether.AnchorCorner.BottomRight);
+                    _miniMapWin.ResetAnchorRequested += (_, _) => _miniMapTether?.ResetAnchor();
+                }
+                // Defer initial positioning so Show's own PositionChanged
+                // settles before tether takes ownership; otherwise it would
+                // be misread as a user drag.
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _miniMapTether?.Apply(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
             }
         }
         else
         {
             _miniMapWin?.Hide();
         }
-    }
-
-    private void PositionMiniMap()
-    {
-        if (_miniMapWin == null) return;
-        // Anchor to bottom-right of main window (matches legacy WinForms
-        // MiniMapPanel placement). PixelPoint conversion uses the main
-        // window's PixelPoint origin + DIP→pixel via DesktopScaling.
-        double scale = DesktopScaling;
-        int x = Position.X + (int)((Bounds.Width  - _miniMapWin.Width  - 12) * scale);
-        int y = Position.Y + (int)((Bounds.Height - _miniMapWin.Height - 12) * scale);
-        _miniMapWin.Position = new global::Avalonia.PixelPoint(x, y);
     }
 
     // ── Child window sync (lazy create, Show / Hide) ──────────────────────
@@ -765,11 +767,18 @@ public sealed partial class MainWindow : Window
         _inputAdapter?.Dispose();
         _inputAdapter = null;
 
+        _miniMapTether?.Dispose();
+        _miniDepthTether?.Dispose();
+        _miniMapTether = null;
+        _miniDepthTether = null;
+
         _menuWin?.Close();
         _editorWin?.Close();
         _helpWin?.Close();
         _ffClientWin?.Close();
         _serverAdminWin?.Close();
+        _miniMapWin?.Close();
+        _miniDepthWin?.Close();
 
         DetachShell();
     }

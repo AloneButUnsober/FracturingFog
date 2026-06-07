@@ -5,11 +5,24 @@
         x:Class="FracturingFog.UI.Avalonia.Views.MiniMapWindow"
         x:DataType="vm:MiniMapViewModel"
         Title="MiniMap"
-        Width="228" Height="188"
+        Width="228" Height="200"
+        MinWidth="140" MinHeight="120"
         WindowDecorations="None"
-        CanResize="False"
+        WindowStartupLocation="Manual"
+        CanResize="True"
         ShowInTaskbar="False"
         Topmost="True"
         Background="#121212">
-    <ctrl:MiniMapControl />
+    <Border BorderBrush="#404040" BorderThickness="1">
+        <Grid RowDefinitions="16,*">
+            <Border x:Name="DragHandle" Grid.Row="0" Background="#202020" Cursor="SizeAll">
+                <TextBlock Text="MiniMap"
+                           Foreground="#A0A0A0"
+                           FontSize="10"
+                           VerticalAlignment="Center"
+                           Margin="6,0,0,0" />
+            </Border>
+            <ctrl:MiniMapControl Grid.Row="1" />
+        </Grid>
+    </Border>
 </Window>

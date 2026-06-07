@@ -138,19 +138,46 @@ public sealed class MiniMapControl : Control
         // the host view roughly matches the thumbnail's framing.
         double indicatorRadius = Math.Max(3.0, Math.Min(rect.Width, rect.Height) * 0.06 / Math.Max(1.0, Math.Log10(vm.HostZoom + 1)));
 
-        var ringPen = new Pen(new SolidColorBrush(Color.FromArgb(220, 255, 220, 80)), 1.5);
+        // Halo pass: draw a wider dark stroke under the ring + crosshair so
+        // the reticle stays legible against any colour theme (bright yellows
+        // / pale palettes washed out the previous flat-yellow indicator).
+        // Mirrors the ROI overlay halo trick used in Palette Builder.
+        var haloRingPen  = new Pen(new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)), 3.5);
+        var haloCrossPen = new Pen(new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)), 3.0);
+        double crossExt = indicatorRadius + 4;
+
+        g.DrawEllipse(null, haloRingPen,
+            new Point(pxCenter, pyCenter), indicatorRadius, indicatorRadius);
+        g.DrawLine(haloCrossPen,
+            new Point(pxCenter - crossExt, pyCenter),
+            new Point(pxCenter + crossExt, pyCenter));
+        g.DrawLine(haloCrossPen,
+            new Point(pxCenter, pyCenter - crossExt),
+            new Point(pxCenter, pyCenter + crossExt));
+
+        // Foreground reticle on top of the halo.
+        var ringPen  = new Pen(new SolidColorBrush(Color.FromArgb(230, 255, 220, 80)), 1.5);
+        var crossPen = new Pen(new SolidColorBrush(Color.FromArgb(220, 255, 220, 80)), 1);
+
         g.DrawEllipse(null, ringPen,
             new Point(pxCenter, pyCenter), indicatorRadius, indicatorRadius);
-
-        // Crosshair lines.
-        var crossPen = new Pen(new SolidColorBrush(Color.FromArgb(180, 255, 220, 80)), 1);
-        double crossExt = indicatorRadius + 4;
         g.DrawLine(crossPen,
             new Point(pxCenter - crossExt, pyCenter),
             new Point(pxCenter + crossExt, pyCenter));
         g.DrawLine(crossPen,
             new Point(pxCenter, pyCenter - crossExt),
             new Point(pxCenter, pyCenter + crossExt));
+
+        // Centre dot — small bright pip with its own halo so the exact view
+        // centre is pinpoint-readable even when the ring is small.
+        g.DrawEllipse(
+            new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
+            null,
+            new Point(pxCenter, pyCenter), 2.2, 2.2);
+        g.DrawEllipse(
+            new SolidColorBrush(Color.FromArgb(255, 255, 220, 80)),
+            null,
+            new Point(pxCenter, pyCenter), 1.2, 1.2);
     }
 
     private static void DrawBorder(DrawingContext g, Rect rect)

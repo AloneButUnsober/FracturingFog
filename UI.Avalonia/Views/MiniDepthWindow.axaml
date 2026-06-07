@@ -3,11 +3,24 @@
         xmlns:ctrl="using:FracturingFog.UI.Avalonia.Controls"
         x:Class="FracturingFog.UI.Avalonia.Views.MiniDepthWindow"
         Title="MiniDepth"
-        Width="100" Height="228"
+        Width="100" Height="240"
+        MinWidth="70" MinHeight="140"
         WindowDecorations="None"
-        CanResize="False"
+        WindowStartupLocation="Manual"
+        CanResize="True"
         ShowInTaskbar="False"
         Topmost="True"
         Background="#121212">
-    <ctrl:MiniDepthControl x:Name="Depth" />
+    <Border BorderBrush="#404040" BorderThickness="1">
+        <Grid RowDefinitions="16,*">
+            <Border x:Name="DragHandle" Grid.Row="0" Background="#202020" Cursor="SizeAll">
+                <TextBlock Text="Depth"
+                           Foreground="#A0A0A0"
+                           FontSize="10"
+                           VerticalAlignment="Center"
+                           Margin="6,0,0,0" />
+            </Border>
+            <ctrl:MiniDepthControl Grid.Row="1" x:Name="Depth" />
+        </Grid>
+    </Border>
 </Window>
