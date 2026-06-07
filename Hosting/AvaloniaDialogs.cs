@@ -237,7 +237,8 @@ namespace FracturingFog.Hosting
                 global::FracturingFog.Models.SlideshowConfigFile file,
                 bool audioReactive,
                 IReadOnlyList<string>? regionNames = null,
-                IReadOnlyList<string>? themeNames = null)
+                IReadOnlyList<string>? themeNames = null,
+                Action<Action<double, double, double>>? capturePostFxCallback = null)
         {
             var tcs = new TaskCompletionSource<UnifiedSlideshowResult?>();
 
@@ -247,6 +248,10 @@ namespace FracturingFog.Hosting
                 vm.PopulateAvailableLists(regionNames, themeNames);
                 var win = new SlideshowSettingsView { DataContext = vm };
                 vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
+                vm.CapturePostFxRequested += (_, _) =>
+                {
+                    capturePostFxCallback?.Invoke((b, c, a) => vm.ApplyCapturedPostFx(b, c, a));
+                };
 
                 vm.ImportRequested += async (_, _) =>
                 {

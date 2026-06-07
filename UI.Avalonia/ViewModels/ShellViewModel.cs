@@ -563,6 +563,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         _slideshow.Config = activeConfig;
         _slideshow.AdaptiveValueSink = v => Dispatcher.UIThread.Post(() => FloatingMenu.Adaptive = v);
 
+        // Push the Post-FX snapshot before kicking the loop so the first leg
+        // already renders with the preset's look. Adaptive Sweep will override
+        // the Adaptive value per-tick when enabled.
+        if (activeConfig.PostFx.Enabled && activeConfig.PostFx.Values != null)
+        {
+            var v = activeConfig.PostFx.Values;
+            if (v.TryGetValue("brightness", out var b)) FloatingMenu.Brightness = (int)Math.Round(b);
+            if (v.TryGetValue("contrast", out var c)) FloatingMenu.Contrast = (int)Math.Round(c);
+            if (v.TryGetValue("adaptive", out var a)) FloatingMenu.Adaptive = (int)Math.Round(a);
+        }
+
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
         _slideshow.Start();
@@ -1363,6 +1374,45 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             _video.StartVideo(request);
         }
+    }
+
+    /// <summary>Build a <see cref="VideoZoomRequest"/> from the unified
+    /// <see cref="SlideshowConfig"/> + active <see cref="VideoSettingsConfig"/>
+    /// and start the auto video slideshow. Pushes adaptive-sweep schedule onto
+    /// the controller so per-leg ramps fire as requested.</summary>
+    public void StartVideoSlideshowFromConfig(SlideshowConfig config)
+    {
+        if (_video == null || config == null) return;
+        if (_video.IsRunning) return;
+
+        var v = config.Video ?? new VideoSettingsConfig();
+        double secs = v.SecondsPerLeg > 0 ? v.SecondsPerLeg : 30.0;
+
+        var req = new VideoZoomRequest
+        {
+            IsSlideshow = true,
+            Seconds = secs,
+            SlideshowSecondsOverride = secs,
+            IsConstantRate = v.ConstantRate,
+            IsReverse = v.Reverse,
+            TaaSmoothing = v.TaaSmoothing,
+            BandDither = v.BandDither,
+            BandDitherStrength = v.BandDitherStrength,
+            UseRegionWatermark = config.Timing.UseRegionWatermark,
+        };
+
+        _video.VideoSweepConfig = config.AdaptiveSweep;
+        _video.VideoAdaptiveValueSink = val => Dispatcher.UIThread.Post(() => FloatingMenu.Adaptive = val);
+
+        if (config.PostFx.Enabled && config.PostFx.Values != null)
+        {
+            var pv = config.PostFx.Values;
+            if (pv.TryGetValue("brightness", out var b)) FloatingMenu.Brightness = (int)Math.Round(b);
+            if (pv.TryGetValue("contrast", out var c)) FloatingMenu.Contrast = (int)Math.Round(c);
+            if (pv.TryGetValue("adaptive", out var a)) FloatingMenu.Adaptive = (int)Math.Round(a);
+        }
+
+        StartVideoFromRequest(req);
     }
 
     /// <summary>Re-pull region names from the service into the menu combo.

@@ -157,5 +157,13 @@ namespace FracturingFog.Render
         /// slideshow) has fully stopped, so the shell can reset button text
         /// and hide the VCR.</summary>
         event EventHandler? Stopped;
+
+        /// <summary>Optional adaptive-sweep schedule used by the auto video
+        /// slideshow. Null disables the per-leg ramp.</summary>
+        global::FracturingFog.Models.AdaptiveSweepConfig? VideoSweepConfig { get; set; }
+
+        /// <summary>Callback invoked with the current Adaptive value as the
+        /// per-leg ramp advances. Shell marshals to the UI thread.</summary>
+        Action<int>? VideoAdaptiveValueSink { get; set; }
     }
 }

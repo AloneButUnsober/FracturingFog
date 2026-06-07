@@ -44,6 +44,19 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private bool _isDirty;
     private bool _initializing;
     private bool _startRequested;
+    private bool _sweepEnabled;
+    private int _sweepStart;
+    private int _sweepEnd;
+    private FracturingFog.Models.AdaptiveSweepMode _sweepMode;
+    private bool _sweepLoop;
+    private bool _postFxEnabled;
+    private double _postFxBrightness;
+    private double _postFxContrast;
+    private double _postFxAdaptive;
+
+    private const string PostFxKeyBrightness = "brightness";
+    private const string PostFxKeyContrast   = "contrast";
+    private const string PostFxKeyAdaptive   = "adaptive";
 
     public SlideshowSettingsViewModel(SlideshowSettings current, bool audioReactive)
         : this(BuildEphemeralFile(current), audioReactive, libraryMode: false)
@@ -106,6 +119,82 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     /// <summary>Static enum-value list bound to the Type droplist.</summary>
     public IReadOnlyList<SlideshowType> AllSlideshowTypes { get; } =
         new[] { SlideshowType.Image, SlideshowType.Video };
+
+    /// <summary>Static enum-value list bound to the Adaptive Sweep Mode droplist.</summary>
+    public IReadOnlyList<FracturingFog.Models.AdaptiveSweepMode> AllAdaptiveSweepModes { get; } =
+        new[] { FracturingFog.Models.AdaptiveSweepMode.Forward, FracturingFog.Models.AdaptiveSweepMode.Reverse, FracturingFog.Models.AdaptiveSweepMode.PingPong };
+
+    public bool AdaptiveSweepEnabled
+    {
+        get => _sweepEnabled;
+        set { this.RaiseAndSetIfChanged(ref _sweepEnabled, value); MarkDirty(); }
+    }
+
+    public int AdaptiveSweepStart
+    {
+        get => _sweepStart;
+        set { this.RaiseAndSetIfChanged(ref _sweepStart, Math.Clamp(value, 0, 100)); MarkDirty(); }
+    }
+
+    public int AdaptiveSweepEnd
+    {
+        get => _sweepEnd;
+        set { this.RaiseAndSetIfChanged(ref _sweepEnd, Math.Clamp(value, 0, 100)); MarkDirty(); }
+    }
+
+    public FracturingFog.Models.AdaptiveSweepMode AdaptiveSweepMode_
+    {
+        get => _sweepMode;
+        set { this.RaiseAndSetIfChanged(ref _sweepMode, value); MarkDirty(); }
+    }
+
+    public bool AdaptiveSweepLoop
+    {
+        get => _sweepLoop;
+        set { this.RaiseAndSetIfChanged(ref _sweepLoop, value); MarkDirty(); }
+    }
+
+    public bool PostFxEnabled
+    {
+        get => _postFxEnabled;
+        set { this.RaiseAndSetIfChanged(ref _postFxEnabled, value); MarkDirty(); }
+    }
+
+    public double PostFxBrightness
+    {
+        get => _postFxBrightness;
+        set { this.RaiseAndSetIfChanged(ref _postFxBrightness, Math.Clamp(value, 0, 200)); MarkDirty(); }
+    }
+
+    public double PostFxContrast
+    {
+        get => _postFxContrast;
+        set { this.RaiseAndSetIfChanged(ref _postFxContrast, Math.Clamp(value, 0, 200)); MarkDirty(); }
+    }
+
+    public double PostFxAdaptive
+    {
+        get => _postFxAdaptive;
+        set { this.RaiseAndSetIfChanged(ref _postFxAdaptive, Math.Clamp(value, 0, 100)); MarkDirty(); }
+    }
+
+    /// <summary>Raised when the user clicks "Capture from current". Host
+    /// reads live FloatingMenu values and calls
+    /// <see cref="ApplyCapturedPostFx"/>.</summary>
+    public event EventHandler? CapturePostFxRequested;
+
+    public ReactiveCommand<Unit, Unit> CapturePostFxCommand =>
+        ReactiveCommand.Create(() => CapturePostFxRequested?.Invoke(this, EventArgs.Empty));
+
+    /// <summary>Host pushes live brightness / contrast / adaptive values into
+    /// the working snapshot.</summary>
+    public void ApplyCapturedPostFx(double brightness, double contrast, double adaptive)
+    {
+        PostFxBrightness = brightness;
+        PostFxContrast = contrast;
+        PostFxAdaptive = adaptive;
+        PostFxEnabled = true;
+    }
 
     /// <summary>Available regions for the include-list (checkable items).</summary>
     public ObservableCollection<CheckableItem> AvailableRegions { get; } = new();
@@ -384,6 +473,18 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.FilterFractalTypes = AvailableFractalTypes.Where(i => i.IsChecked).Select(i => i.Name).ToList();
         _working.FilterQualityPresets = AvailableQualityPresets.Where(i => i.IsChecked).Select(i => i.Name).ToList();
 
+        _working.AdaptiveSweep.Enabled = _sweepEnabled;
+        _working.AdaptiveSweep.Start = _sweepStart;
+        _working.AdaptiveSweep.End = _sweepEnd;
+        _working.AdaptiveSweep.Mode = _sweepMode;
+        _working.AdaptiveSweep.Loop = _sweepLoop;
+
+        _working.PostFx.Enabled = _postFxEnabled;
+        _working.PostFx.Values ??= new Dictionary<string, double>();
+        _working.PostFx.Values[PostFxKeyBrightness] = _postFxBrightness;
+        _working.PostFx.Values[PostFxKeyContrast] = _postFxContrast;
+        _working.PostFx.Values[PostFxKeyAdaptive] = _postFxAdaptive;
+
         Result = _working.Clone();
     }
 
@@ -396,6 +497,16 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _regionFadeMs = _working.Timing.RegionFadeMs;
         _fadeSteps = _working.Timing.FadeSteps;
         _useRegionWatermark = _working.Timing.UseRegionWatermark;
+        _sweepEnabled = _working.AdaptiveSweep.Enabled;
+        _sweepStart = Math.Clamp(_working.AdaptiveSweep.Start, 0, 100);
+        _sweepEnd = Math.Clamp(_working.AdaptiveSweep.End, 0, 100);
+        _sweepMode = _working.AdaptiveSweep.Mode;
+        _sweepLoop = _working.AdaptiveSweep.Loop;
+        _postFxEnabled = _working.PostFx.Enabled;
+        var pv = _working.PostFx.Values;
+        _postFxBrightness = pv != null && pv.TryGetValue(PostFxKeyBrightness, out var br) ? br : 100.0;
+        _postFxContrast = pv != null && pv.TryGetValue(PostFxKeyContrast, out var co) ? co : 100.0;
+        _postFxAdaptive = pv != null && pv.TryGetValue(PostFxKeyAdaptive, out var ad) ? ad : 0.0;
         this.RaisePropertyChanged(nameof(Type));
         this.RaisePropertyChanged(nameof(IsVideo));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
@@ -404,6 +515,15 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(RegionFadeMs));
         this.RaisePropertyChanged(nameof(FadeSteps));
         this.RaisePropertyChanged(nameof(UseRegionWatermark));
+        this.RaisePropertyChanged(nameof(AdaptiveSweepEnabled));
+        this.RaisePropertyChanged(nameof(AdaptiveSweepStart));
+        this.RaisePropertyChanged(nameof(AdaptiveSweepEnd));
+        this.RaisePropertyChanged(nameof(AdaptiveSweepMode_));
+        this.RaisePropertyChanged(nameof(AdaptiveSweepLoop));
+        this.RaisePropertyChanged(nameof(PostFxEnabled));
+        this.RaisePropertyChanged(nameof(PostFxBrightness));
+        this.RaisePropertyChanged(nameof(PostFxContrast));
+        this.RaisePropertyChanged(nameof(PostFxAdaptive));
     }
 
     private void RefreshNameList()

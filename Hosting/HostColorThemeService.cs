@@ -641,14 +641,34 @@ namespace FracturingFog.Hosting
         /// <inheritdoc/>
         public double GetRegionZoom(string regionName)
         {
-            if (string.IsNullOrEmpty(regionName)) return 0.0;
+            var r = FindSlideshowRegion(regionName);
+            return r?.Zoom ?? 0.0;
+        }
+
+        /// <inheritdoc/>
+        public string GetRegionFractalTypeName(string regionName)
+        {
+            var r = FindSlideshowRegion(regionName);
+            return r?.FractalType.ToString() ?? string.Empty;
+        }
+
+        /// <inheritdoc/>
+        public string GetRegionQualityPresetName(string regionName)
+        {
+            var r = FindSlideshowRegion(regionName);
+            return r?.QualityPreset?.Name ?? string.Empty;
+        }
+
+        private static FractalRegion? FindSlideshowRegion(string regionName)
+        {
+            if (string.IsNullOrEmpty(regionName)) return null;
             foreach (var r in FractalRegionLibrary.Instance.All)
                 if (string.Equals(r.Name, regionName, StringComparison.Ordinal))
-                    return r.Zoom;
+                    return r;
             foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
                 if (string.Equals(r.Name, regionName, StringComparison.Ordinal))
-                    return r.Zoom;
-            return 0.0;
+                    return r;
+            return null;
         }
 
         /// <inheritdoc/>

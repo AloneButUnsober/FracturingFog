@@ -203,22 +203,94 @@
             </StackPanel>
         </Expander>
 
-        <!-- Row 12: Adaptive Sweep placeholder. Phase 4 wires concrete bindings. -->
+        <!-- Row 12: Adaptive Sweep configuration -->
         <Expander Grid.Row="12" Grid.ColumnSpan="2"
-                  Header="Adaptive Sweep (configured separately — Phase 4)"
+                  Header="Adaptive Sweep"
                   Margin="0,8,0,0"
                   IsExpanded="False">
-            <TextBlock Text="Sweep controls are owned by the Floating Menu today. Phase 4 surfaces start/end/mode/loop here so each preset can carry its own sweep schedule."
-                       Foreground="#969696" FontStyle="Italic" Margin="6" />
+            <StackPanel Spacing="6" Margin="0,6,0,0">
+                <CheckBox Content="Enable per-leg Adaptive sweep"
+                          IsChecked="{Binding AdaptiveSweepEnabled, Mode=TwoWay}"
+                          FontWeight="Bold" Foreground="#B4DCB4" />
+                <Grid ColumnDefinitions="160,*">
+                    <TextBlock Grid.Column="0" Text="Start value (0..100):" VerticalAlignment="Center"
+                               IsEnabled="{Binding AdaptiveSweepEnabled}" />
+                    <NumericUpDown Grid.Column="1"
+                                   Minimum="0" Maximum="100" Increment="1"
+                                   Value="{Binding AdaptiveSweepStart, Mode=TwoWay}"
+                                   IsEnabled="{Binding AdaptiveSweepEnabled}"
+                                   Width="110" HorizontalAlignment="Left" />
+                </Grid>
+                <Grid ColumnDefinitions="160,*">
+                    <TextBlock Grid.Column="0" Text="End value (0..100):" VerticalAlignment="Center"
+                               IsEnabled="{Binding AdaptiveSweepEnabled}" />
+                    <NumericUpDown Grid.Column="1"
+                                   Minimum="0" Maximum="100" Increment="1"
+                                   Value="{Binding AdaptiveSweepEnd, Mode=TwoWay}"
+                                   IsEnabled="{Binding AdaptiveSweepEnabled}"
+                                   Width="110" HorizontalAlignment="Left" />
+                </Grid>
+                <Grid ColumnDefinitions="160,*">
+                    <TextBlock Grid.Column="0" Text="Mode:" VerticalAlignment="Center"
+                               IsEnabled="{Binding AdaptiveSweepEnabled}" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding AllAdaptiveSweepModes}"
+                              SelectedItem="{Binding AdaptiveSweepMode_, Mode=TwoWay}"
+                              IsEnabled="{Binding AdaptiveSweepEnabled}"
+                              MinWidth="150" HorizontalAlignment="Left" />
+                </Grid>
+                <CheckBox Content="Loop (restart sweep at leg boundary instead of stopping)"
+                          IsChecked="{Binding AdaptiveSweepLoop, Mode=TwoWay}"
+                          IsEnabled="{Binding AdaptiveSweepEnabled}" />
+            </StackPanel>
         </Expander>
 
-        <!-- Row 13: Post-FX placeholder. Phase 4 wires snapshot/restore. -->
+        <!-- Row 13: Post-FX snapshot -->
         <Expander Grid.Row="13" Grid.ColumnSpan="2"
-                  Header="Post-FX snapshot (Phase 4)"
+                  Header="Post-FX snapshot"
                   Margin="0,8,0,0"
                   IsExpanded="False">
-            <TextBlock Text="A future revision captures the current Post-FX slider stack here so each preset can restore its look on Start."
-                       Foreground="#969696" FontStyle="Italic" Margin="6" />
+            <StackPanel Spacing="6" Margin="0,6,0,0">
+                <DockPanel LastChildFill="False">
+                    <CheckBox Content="Apply snapshot on slideshow start"
+                              IsChecked="{Binding PostFxEnabled, Mode=TwoWay}"
+                              FontWeight="Bold" Foreground="#B4DCB4"
+                              DockPanel.Dock="Left" />
+                    <Button Content="Capture from current"
+                            Command="{Binding CapturePostFxCommand}"
+                            DockPanel.Dock="Right"
+                            Padding="10,4" />
+                </DockPanel>
+                <Grid ColumnDefinitions="160,*">
+                    <TextBlock Grid.Column="0" Text="Brightness (0..200):" VerticalAlignment="Center"
+                               IsEnabled="{Binding PostFxEnabled}" />
+                    <NumericUpDown Grid.Column="1"
+                                   Minimum="0" Maximum="200" Increment="1"
+                                   Value="{Binding PostFxBrightness, Mode=TwoWay}"
+                                   IsEnabled="{Binding PostFxEnabled}"
+                                   Width="110" HorizontalAlignment="Left" />
+                </Grid>
+                <Grid ColumnDefinitions="160,*">
+                    <TextBlock Grid.Column="0" Text="Contrast (0..200):" VerticalAlignment="Center"
+                               IsEnabled="{Binding PostFxEnabled}" />
+                    <NumericUpDown Grid.Column="1"
+                                   Minimum="0" Maximum="200" Increment="1"
+                                   Value="{Binding PostFxContrast, Mode=TwoWay}"
+                                   IsEnabled="{Binding PostFxEnabled}"
+                                   Width="110" HorizontalAlignment="Left" />
+                </Grid>
+                <Grid ColumnDefinitions="160,*">
+                    <TextBlock Grid.Column="0" Text="Adaptive (0..100):" VerticalAlignment="Center"
+                               IsEnabled="{Binding PostFxEnabled}" />
+                    <NumericUpDown Grid.Column="1"
+                                   Minimum="0" Maximum="100" Increment="1"
+                                   Value="{Binding PostFxAdaptive, Mode=TwoWay}"
+                                   IsEnabled="{Binding PostFxEnabled}"
+                                   Width="110" HorizontalAlignment="Left" />
+                </Grid>
+                <TextBlock Text="Adaptive Sweep overrides the Adaptive value when enabled."
+                           Foreground="#969696" FontStyle="Italic" />
+            </StackPanel>
         </Expander>
 
         <!-- Row 14: Start / OK / Cancel buttons -->
