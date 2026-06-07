@@ -394,12 +394,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Push live view-state into the MiniMap VM on every frame so the
         // indicator tracks the user's pan/zoom. Mirrors legacy MainForm's
         // _miniMapPanel.RefreshIndicator() call sites.
+        //
+        // FrameCompleted is raised on TaskScheduler.Default (background
+        // thread) — assigning the VM properties directly would raise
+        // PropertyChanged off-UI-thread, and MiniMapControl.InvalidateVisual
+        // silently no-ops when called outside the UI thread, leaving the
+        // reticle frozen. Marshal to the UI thread the same way the
+        // MiniDepth indicator refresh does (MainWindow.ConfigureMiniDepth).
         Main.RenderHost.FrameCompleted += (_, info) =>
         {
-            MiniMap.ActiveType = Main.ViewState.FractalType;
-            MiniMap.CenterX = info.CenterX;
-            MiniMap.CenterY = info.CenterY;
-            MiniMap.HostZoom = info.Zoom;
+            Dispatcher.UIThread.Post(() =>
+            {
+                MiniMap.ActiveType = Main.ViewState.FractalType;
+                MiniMap.CenterX = info.CenterX;
+                MiniMap.CenterY = info.CenterY;
+                MiniMap.HostZoom = info.Zoom;
+            });
         };
         MiniMap.NavigationRequested += (_, pt) =>
         {
