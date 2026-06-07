@@ -1475,6 +1475,10 @@
               "target": "Package",
               "version": "[12.0.3, )"
             },
+            "SkiaSharp": {
+              "target": "Package",
+              "version": "[3.119.4, )"
+            },
             "System.Drawing.Common": {
               "target": "Package",
               "version": "[10.0.8, )"

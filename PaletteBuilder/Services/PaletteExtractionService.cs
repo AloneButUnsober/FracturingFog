@@ -16,9 +16,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
+using SkiaSharp;
 
 using FracturingFog.Imaging;
 using FracturingFog.Imaging.PaletteExtraction;
@@ -43,7 +43,7 @@ namespace PaletteBuilder.Services
         };
 
         private readonly object _gate = new();
-        private readonly List<Bitmap> _sources = new();
+        private readonly List<SKBitmap> _sources = new();
         private readonly List<string> _sourcePaths = new();
 
         private byte[]? _cachedPixels;
@@ -89,7 +89,7 @@ namespace PaletteBuilder.Services
                 return false;
             }
 
-            var loaded = new List<(Bitmap, string)>(paths.Count);
+            var loaded = new List<(SKBitmap, string)>(paths.Count);
             try
             {
                 foreach (var path in paths)
@@ -100,10 +100,27 @@ namespace PaletteBuilder.Services
                         DisposeAll(loaded);
                         return false;
                     }
-                    using var decoded = (Bitmap)Image.FromFile(path);
-                    var copy = new Bitmap(decoded);
-                    BitmapSampler.ApplyExifOrientation(copy);
-                    loaded.Add((copy, path));
+                    using var fs = File.OpenRead(path);
+                    using var codec = SKCodec.Create(fs);
+                    if (codec == null)
+                    {
+                        errorMessage = "Unsupported image format: " + path;
+                        DisposeAll(loaded);
+                        return false;
+                    }
+                    var info = new SKImageInfo(codec.Info.Width, codec.Info.Height,
+                                               SKColorType.Bgra8888, SKAlphaType.Premul);
+                    var raw = new SKBitmap(info);
+                    var decodeResult = codec.GetPixels(info, raw.GetPixels());
+                    if (decodeResult != SKCodecResult.Success && decodeResult != SKCodecResult.IncompleteInput)
+                    {
+                        raw.Dispose();
+                        errorMessage = "Failed to decode image: " + decodeResult + " — " + path;
+                        DisposeAll(loaded);
+                        return false;
+                    }
+                    var oriented = BitmapSampler.ApplyOrigin(raw, codec.EncodedOrigin);
+                    loaded.Add((oriented, path));
                 }
             }
             catch (Exception ex)
@@ -234,7 +251,7 @@ namespace PaletteBuilder.Services
             {
                 using var cropped = opts.HasRoi
                     ? BitmapSampler.CropNormalised(_sources[0], opts.RoiX, opts.RoiY, opts.RoiWidth, opts.RoiHeight)
-                    : new Bitmap(_sources[0]);
+                    : _sources[0].Copy(SKColorType.Bgra8888);
                 using var down = BitmapSampler.Downsample(cropped, opts.DownsampleMaxDim);
                 reportWidth = down.Width;
                 reportHeight = down.Height;
@@ -267,7 +284,7 @@ namespace PaletteBuilder.Services
                 {
                     using var cropped = opts.HasRoi
                         ? BitmapSampler.CropNormalised(src, opts.RoiX, opts.RoiY, opts.RoiWidth, opts.RoiHeight)
-                        : new Bitmap(src);
+                        : src.Copy(SKColorType.Bgra8888);
                     using var down = BitmapSampler.Downsample(cropped, opts.DownsampleMaxDim);
 
                     float[]? saliency = null;
@@ -328,7 +345,7 @@ namespace PaletteBuilder.Services
             _sourcePaths.Clear();
         }
 
-        private static void DisposeAll(List<(Bitmap, string)> items)
+        private static void DisposeAll(List<(SKBitmap, string)> items)
         {
             foreach (var (b, _) in items) b.Dispose();
         }

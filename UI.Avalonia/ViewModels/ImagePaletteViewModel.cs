@@ -276,6 +276,50 @@ public class ImagePaletteViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _saliencyThreshold, Math.Clamp(value, 0.0, 1.0));
     }
 
+    // ── ROI grid overlay ───────────────────────────────────────────────
+
+    private bool _showGrid;
+    public bool ShowGrid
+    {
+        get => _showGrid;
+        set => this.RaiseAndSetIfChanged(ref _showGrid, value);
+    }
+
+    private int _gridRows = 3;
+    public int GridRows
+    {
+        get => _gridRows;
+        set => this.RaiseAndSetIfChanged(ref _gridRows, Math.Clamp(value, 1, 16));
+    }
+
+    private int _gridCols = 3;
+    public int GridCols
+    {
+        get => _gridCols;
+        set => this.RaiseAndSetIfChanged(ref _gridCols, Math.Clamp(value, 1, 16));
+    }
+
+    private bool _snapToGrid;
+    public bool SnapToGrid
+    {
+        get => _snapToGrid;
+        set => this.RaiseAndSetIfChanged(ref _snapToGrid, value);
+    }
+
+    private int _sourcePixelWidth;
+    public int SourcePixelWidth
+    {
+        get => _sourcePixelWidth;
+        private set => this.RaiseAndSetIfChanged(ref _sourcePixelWidth, value);
+    }
+
+    private int _sourcePixelHeight;
+    public int SourcePixelHeight
+    {
+        get => _sourcePixelHeight;
+        private set => this.RaiseAndSetIfChanged(ref _sourcePixelHeight, value);
+    }
+
     // ── Results ────────────────────────────────────────────────────────
 
     public ObservableCollection<PaletteResultViewModel> Results { get; } = new();
@@ -339,6 +383,8 @@ public class ImagePaletteViewModel : ViewModelBase
 
         SourcePath = path;
         PreviewImage = previewBitmap;
+        SourcePixelWidth = previewBitmap?.PixelSize.Width ?? 0;
+        SourcePixelHeight = previewBitmap?.PixelSize.Height ?? 0;
         Results.Clear();
         SelectedResult = null;
     }
