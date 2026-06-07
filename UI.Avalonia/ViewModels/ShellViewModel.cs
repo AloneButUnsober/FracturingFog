@@ -1380,6 +1380,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <see cref="SlideshowConfig"/> + active <see cref="VideoSettingsConfig"/>
     /// and start the auto video slideshow. Pushes adaptive-sweep schedule onto
     /// the controller so per-leg ramps fire as requested.</summary>
+    /// <summary>True while the video engine is running (single-shot or slideshow).</summary>
+    public bool IsVideoRunning => _video is { IsRunning: true };
+
+    /// <summary>Stop the running video engine (single-shot or slideshow). No-op when idle.</summary>
+    public void StopVideo() => _video?.Stop();
+
     public void StartVideoSlideshowFromConfig(SlideshowConfig config)
     {
         if (_video == null || config == null) return;

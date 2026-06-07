@@ -968,9 +968,19 @@ namespace FracturingFog.Hosting
                         if (chosen.Value.StartRequested)
                         {
                             if (chosen.Value.Config.Type == SlideshowType.Image)
-                                shell.ToggleSlideshowCommand?.Execute(System.Reactive.Unit.Default);
+                            {
+                                // Stop any running video slideshow before kicking
+                                // the image engine — the two share the render host.
+                                if (shell.IsVideoRunning) shell.StopVideo();
+                                shell.ToggleSlideshowCommand?.Execute().Subscribe();
+                            }
                             else
+                            {
+                                // Same the other way — stop a running image
+                                // slideshow before starting the video engine.
+                                if (shell.IsSlideshowRunning) shell.ToggleSlideshowCommand?.Execute().Subscribe();
                                 shell.StartVideoSlideshowFromConfig(chosen.Value.Config);
+                            }
                         }
                     }
                 }
