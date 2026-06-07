@@ -519,17 +519,57 @@ public sealed class FloatingMenuViewModel : ViewModelBase
 
     // ── Adaptive sweep ────────────────────────────────────────────────────
     //
-    // Animates Adaptive 0 → 100 over AdaptiveSweepDurationSeconds using a
-    // sine ease-in/out curve, then stops automatically. Each tick writes
-    // through the Adaptive property so the slider UI and Main.Adaptive both
-    // stay in sync — the throttled RepaintWithAdaptive in MainViewModel
-    // coalesces ticks into a steady render cadence.
+    // Animates the Adaptive slider across the duration using a linear ramp.
+    // Mode selects the curve:
+    //   Forward  — 0 → 100
+    //   Reverse  — 100 → 0
+    //   PingPong — 0 → 100 → 0 within the duration (split in half)
     //
-    // Tick interval is held slightly above the render debounce window so
-    // the trailing-edge debounce gets a chance to fire between writes
-    // (otherwise each tick would reset the debounce and stall the render).
+    // AdaptiveSweepLoop, when true, restarts the cycle on completion so the
+    // sweep runs continuously until the user stops it. When false the sweep
+    // runs once and stops at its terminal value.
+    //
+    // Each tick writes through the Adaptive property so the slider UI and
+    // Main.Adaptive both stay in sync — the throttled RepaintWithAdaptive in
+    // MainViewModel coalesces ticks into a steady render cadence.
 
     private const int AdaptiveSweepTickMs = 50;
+
+    private AdaptiveSweepMode _adaptiveSweepMode = AdaptiveSweepMode.Forward;
+    public AdaptiveSweepMode AdaptiveSweepMode
+    {
+        get => _adaptiveSweepMode;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _adaptiveSweepMode, value);
+            this.RaisePropertyChanged(nameof(IsForwardMode));
+            this.RaisePropertyChanged(nameof(IsReverseMode));
+            this.RaisePropertyChanged(nameof(IsPingPongMode));
+        }
+    }
+
+    public bool IsForwardMode
+    {
+        get => AdaptiveSweepMode == AdaptiveSweepMode.Forward;
+        set { if (value) AdaptiveSweepMode = AdaptiveSweepMode.Forward; }
+    }
+    public bool IsReverseMode
+    {
+        get => AdaptiveSweepMode == AdaptiveSweepMode.Reverse;
+        set { if (value) AdaptiveSweepMode = AdaptiveSweepMode.Reverse; }
+    }
+    public bool IsPingPongMode
+    {
+        get => AdaptiveSweepMode == AdaptiveSweepMode.PingPong;
+        set { if (value) AdaptiveSweepMode = AdaptiveSweepMode.PingPong; }
+    }
+
+    private bool _adaptiveSweepLoop;
+    public bool AdaptiveSweepLoop
+    {
+        get => _adaptiveSweepLoop;
+        set => this.RaiseAndSetIfChanged(ref _adaptiveSweepLoop, value);
+    }
 
     private double _adaptiveSweepDurationSeconds = 5.0;
     public double AdaptiveSweepDurationSeconds
@@ -556,6 +596,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private DispatcherTimer? _adaptiveSweepTimer;
     private DateTime _adaptiveSweepStartedUtc;
     private double _adaptiveSweepDurationMsSnapshot;
+    private AdaptiveSweepMode _adaptiveSweepActiveMode;
+    private bool _adaptiveSweepActiveLoop;
 
     private void ToggleAdaptiveSweep()
     {
@@ -568,7 +610,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         if (IsAdaptiveSweeping) return;
         _adaptiveSweepDurationMsSnapshot = Math.Max(250.0, AdaptiveSweepDurationSeconds * 1000.0);
         _adaptiveSweepStartedUtc = DateTime.UtcNow;
-        Adaptive = 0;
+        _adaptiveSweepActiveMode = AdaptiveSweepMode;
+        _adaptiveSweepActiveLoop = AdaptiveSweepLoop;
+        Adaptive = _adaptiveSweepActiveMode == AdaptiveSweepMode.Reverse ? 100 : 0;
         IsAdaptiveSweeping = true;
 
         // Render priority (not Background): Background is the lowest dispatch
@@ -595,20 +639,38 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     {
         double elapsedMs = (DateTime.UtcNow - _adaptiveSweepStartedUtc).TotalMilliseconds;
         double t = elapsedMs / _adaptiveSweepDurationMsSnapshot;
+
         if (t >= 1.0)
         {
-            Adaptive = 100;
+            if (_adaptiveSweepActiveLoop)
+            {
+                // Restart the cycle; don't stop. Re-anchor start so phase
+                // stays smooth across the wrap.
+                _adaptiveSweepStartedUtc = DateTime.UtcNow;
+                Adaptive = _adaptiveSweepActiveMode == AdaptiveSweepMode.Reverse ? 100 : 0;
+                return;
+            }
+            Adaptive = _adaptiveSweepActiveMode switch
+            {
+                AdaptiveSweepMode.Forward  => 100,
+                AdaptiveSweepMode.Reverse  => 0,
+                AdaptiveSweepMode.PingPong => 0,
+                _ => Adaptive,
+            };
             StopAdaptiveSweep();
             return;
         }
-        // Linear ramp. The previous sine ease-in/out felt janky in practice:
-        // its derivative is ~0 at both endpoints, so the integer Adaptive
-        // value stays at 0 for the first ~225 ms (visible as "delay at the
-        // start") and stays at 99/100 for the last ~225 ms (visible as "slows
-        // at the end"). Mid-sweep the derivative peaked at ~π/2× the linear
-        // rate, so int values jumped 2 at a time — the "jumpy" mid-sweep.
-        // A flat linear ramp removes all three artifacts.
-        Adaptive = (int)Math.Round(t * 100.0);
+
+        Adaptive = _adaptiveSweepActiveMode switch
+        {
+            AdaptiveSweepMode.Forward  => (int)Math.Round(t * 100.0),
+            AdaptiveSweepMode.Reverse  => (int)Math.Round((1.0 - t) * 100.0),
+            // Ping-Pong splits duration: first half 0→100, second half 100→0.
+            AdaptiveSweepMode.PingPong => t < 0.5
+                ? (int)Math.Round(t * 2.0 * 100.0)
+                : (int)Math.Round((1.0 - t) * 2.0 * 100.0),
+            _ => Adaptive,
+        };
     }
 
     /// <summary>Programmatic setter that does NOT raise the BrightnessSlide
@@ -752,4 +814,11 @@ public sealed class IterLockEventArgs : EventArgs
     }
     public bool Locked { get; }
     public int CurrentIter { get; }
+}
+
+public enum AdaptiveSweepMode
+{
+    Forward,
+    Reverse,
+    PingPong,
 }
