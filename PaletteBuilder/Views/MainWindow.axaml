@@ -79,6 +79,7 @@
             <MenuItem Header="_File">
                 <MenuItem Header="_Open Image(s)…" Click="OnMenuOpen" />
                 <MenuItem Header="Open _Folder…" Click="OnMenuOpenFolder" />
+                <MenuItem Header="From _URL…" Click="OnMenuFromUrl" />
                 <MenuItem Name="RecentMenu" Header="_Recent" />
                 <Separator />
                 <MenuItem Header="E_xit" Click="OnMenuExit" />
@@ -123,8 +124,8 @@
                         Background="#1E1E1E"
                         BorderBrush="#505050"
                         BorderThickness="1"
-                        Height="280">
-                    <Grid RowDefinitions="*,Auto">
+                        Height="320">
+                    <Grid RowDefinitions="*,Auto,Auto">
                         <Grid Grid.Row="0" Margin="4">
                             <Image Source="{Binding PreviewImage}"
                                    Stretch="Uniform" />
@@ -135,20 +136,64 @@
                                        Foreground="#8C8C8C"
                                        FontStyle="Italic"
                                        IsVisible="{Binding ShowDropHint}" />
+                            <local:RoiGridOverlay
+                                ShowGrid="{Binding ShowGrid}"
+                                SnapToGrid="{Binding SnapToGrid}"
+                                GridRows="{Binding GridRows}"
+                                GridCols="{Binding GridCols}"
+                                RoiX="{Binding RoiX}"
+                                RoiY="{Binding RoiY}"
+                                RoiWidth="{Binding RoiWidth}"
+                                RoiHeight="{Binding RoiHeight}"
+                                SourcePixelWidth="{Binding SourcePixelWidth}"
+                                SourcePixelHeight="{Binding SourcePixelHeight}"
+                                IsVisible="{Binding HasImage}" />
                         </Grid>
-                        <Grid Grid.Row="1" Margin="4,2,4,4" ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Row="1"
+                                    Orientation="Horizontal"
+                                    Margin="4,0,4,2"
+                                    Spacing="6">
+                            <CheckBox Content="Grid"
+                                      IsChecked="{Binding ShowGrid}"
+                                      Foreground="#DCDCDC"
+                                      VerticalAlignment="Center" />
+                            <TextBlock Text="rows" Foreground="#B4B4B4"
+                                       VerticalAlignment="Center" />
+                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
+                                           Value="{Binding GridRows}"
+                                           FormatString="0"
+                                           Width="68" />
+                            <TextBlock Text="cols" Foreground="#B4B4B4"
+                                       VerticalAlignment="Center" />
+                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
+                                           Value="{Binding GridCols}"
+                                           FormatString="0"
+                                           Width="68" />
+                            <CheckBox Content="Snap"
+                                      IsChecked="{Binding SnapToGrid}"
+                                      Foreground="#DCDCDC"
+                                      VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Grid Grid.Row="2" Margin="4,2,4,4" ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0"
                                        Text="{Binding FileLabel}"
                                        TextTrimming="CharacterEllipsis"
                                        VerticalAlignment="Center"
                                        Foreground="#A0A0A0"
                                        FontSize="11" />
-                            <Button Grid.Column="1"
-                                    Content="Browse…"
-                                    Command="{Binding BrowseCommand}"
-                                    Background="#2D4164"
-                                    Foreground="White"
-                                    Padding="10,2" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button Content="Browse…"
+                                        Command="{Binding BrowseCommand}"
+                                        Background="#2D4164"
+                                        Foreground="White"
+                                        Padding="10,2"
+                                        Margin="0,0,4,0" />
+                                <Button Content="URL…"
+                                        Click="OnMenuFromUrl"
+                                        Background="#2D4164"
+                                        Foreground="White"
+                                        Padding="10,2" />
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Border>

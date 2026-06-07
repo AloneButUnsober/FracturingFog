@@ -172,6 +172,18 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { await ShowInfoAsync("Open folder failed: " + ex.Message); }
     }
 
+    private async void OnMenuFromUrl(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new UrlFetchDialog();
+            var ok = await dlg.ShowDialog<bool>(this);
+            if (ok && !string.IsNullOrEmpty(dlg.ResolvedTempPath))
+                TryLoadIntoVm(dlg.ResolvedTempPath);
+        }
+        catch (Exception ex) { await ShowInfoAsync("URL load failed: " + ex.Message); }
+    }
+
     private void OnMenuClearRoi(object? sender, RoutedEventArgs e) => _vm.ClearRoi();
 
     private void OnMenuExit(object? sender, RoutedEventArgs e) => Close();
@@ -295,7 +307,7 @@ public sealed partial class MainWindow : Window
 
     private static IEnumerable<string> EnumerateImagesInFolder(string folder)
     {
-        string[] exts = { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff" };
+        string[] exts = { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".heic", ".heif" };
         foreach (var f in Directory.EnumerateFiles(folder, "*.*", SearchOption.TopDirectoryOnly))
             if (Array.IndexOf(exts, Path.GetExtension(f).ToLowerInvariant()) >= 0)
                 yield return f;
@@ -347,7 +359,7 @@ public sealed partial class MainWindow : Window
             {
                 new FilePickerFileType("Images")
                 {
-                    Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tif", "*.tiff" },
+                    Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif", "*.tif", "*.tiff", "*.webp", "*.heic", "*.heif" },
                 },
                 new FilePickerFileType("All files") { Patterns = new[] { "*" } },
             },
