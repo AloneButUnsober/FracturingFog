@@ -333,14 +333,30 @@ namespace FracturingFog.Hosting
             // FrameCompleted in ShellViewModel — no re-render needed for
             // pan/zoom.
             s_shell.MiniMapVisibilityChanged += (_, _) => RenderMiniMapAsync(s_shell);
-            // Also regenerate when the user picks a new fractal type or
-            // colour theme — both invalidate the thumbnail.
+
+            // Theme change → regenerate thumbnail with the new ColorMap.
+            // Hook the render host's ColorMapChanged (not MainViewModel's
+            // SelectedTheme PropertyChanged) so the render fires AFTER the
+            // new IColorMap has been pushed across every calculator. The
+            // SelectedTheme PropertyChanged is raised by RaiseAndSetIfChanged
+            // before the ShellViewModel.ColorThemeChanged handler calls
+            // _themeService.ApplyTheme(...), so reading ColorMap at that
+            // point yielded the previous theme — the thumbnail rendered
+            // with stale colours across every fractal type. ColorMapChanged
+            // fires once the new map is propagated.
+            s_renderHost.ColorMapChanged += (_, _) =>
+            {
+                if (s_shell == null) return;
+                if (s_shell.IsMiniMapVisible) RenderMiniMapAsync(s_shell);
+            };
+
+            // Also regenerate when the user picks a new fractal type — that
+            // path doesn't change the ColorMap so ColorMapChanged won't fire.
             s_shell.Main.PropertyChanged += (_, e) =>
             {
                 if (s_shell == null) return;
                 if (e.PropertyName == nameof(MainViewModel.SelectedFractalType)
-                 || e.PropertyName == nameof(MainViewModel.SelectedFractalEntry)
-                 || e.PropertyName == nameof(MainViewModel.SelectedTheme))
+                 || e.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
                 {
                     if (s_shell.IsMiniMapVisible) RenderMiniMapAsync(s_shell);
 
