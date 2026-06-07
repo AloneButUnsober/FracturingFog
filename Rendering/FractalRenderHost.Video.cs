@@ -233,6 +233,30 @@ namespace FracturingFog.Rendering
 
             double seconds = request.Seconds;
             bool reverse = request.IsReverse;
+
+            // Build the in-zoom theme-fade schedule for single-shot when the
+            // dialog asked for it. Slideshow has its own scheduler.
+            _videoLegThemeSchedule = null;
+            _videoLegThemeIdx = 0;
+            if (request.ThemeFadeEnabled && _videoThemeService != null)
+            {
+                int n = Math.Clamp(request.ThemesPerLeg, 2, 12);
+                var pool = _videoThemeService.EnumerateThemeNamesForZoom(reverse ? startZoom : targetZoom);
+                if (pool != null && pool.Count >= 2)
+                {
+                    var sched = new List<(double T, string Theme)>(n - 1);
+                    int last = -1;
+                    for (int k = 1; k < n; k++)
+                    {
+                        int idx;
+                        do { idx = _videoRng.Next(pool.Count); } while (pool.Count > 1 && idx == last);
+                        sched.Add((k / (double)n, pool[idx]));
+                        last = idx;
+                    }
+                    _videoLegThemeSchedule = sched;
+                }
+            }
+
             Task.Run(() =>
             {
                 // Recorders before the loop so frame 0 is captured. Failure

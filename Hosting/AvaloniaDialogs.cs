@@ -1059,6 +1059,37 @@ namespace FracturingFog.Hosting
                     Margin = new Thickness(0, 4, 0, 0),
                 };
 
+                // Single-shot theme-fade controls: enable + count. The slideshow
+                // path always cycles 3 themes/leg today, so these affect Start
+                // only — Slideshow ignores them.
+                var chkThemeFade = new CheckBox
+                {
+                    Content = "Cycle color themes during zoom (single-shot)",
+                    Foreground = Brushes.LightGray,
+                };
+                var nudThemesPerLeg = new NumericUpDown
+                {
+                    Minimum = 2, Maximum = 12, Increment = 1, Value = 3,
+                    Width = 90,
+                    IsEnabled = false,
+                };
+                var themesLbl = new TextBlock
+                {
+                    Text = "Themes per zoom:",
+                    Foreground = Brushes.LightGray,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
+                };
+                chkThemeFade.IsCheckedChanged += (_, _) =>
+                    nudThemesPerLeg.IsEnabled = chkThemeFade.IsChecked == true;
+                var themeFadeRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal, Spacing = 8,
+                    Margin = new Thickness(20, 2, 0, 0),
+                };
+                themeFadeRow.Children.Add(themesLbl);
+                themeFadeRow.Children.Add(nudThemesPerLeg);
+
                 var errLabel = new TextBlock
                 {
                     Foreground = Brushes.OrangeRed,
@@ -1243,6 +1274,8 @@ namespace FracturingFog.Hosting
                         TaaSmoothing = (int)Math.Round(taaSlider.Value),
                         BandDither = chkBandDither.IsChecked == true,
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
+                        ThemeFadeEnabled = chkThemeFade.IsChecked == true,
+                        ThemesPerLeg = (int)Math.Round(nudThemesPerLeg.Value ?? 3m),
                     });
                 };
 
@@ -1299,6 +1332,8 @@ namespace FracturingFog.Hosting
                 root.Children.Add(chkReverse);
                 root.Children.Add(smoothBox);
                 root.Children.Add(chkUseRegionWatermark);
+                root.Children.Add(chkThemeFade);
+                root.Children.Add(themeFadeRow);
                 root.Children.Add(errLabel);
                 root.Children.Add(buttonRow);
 
