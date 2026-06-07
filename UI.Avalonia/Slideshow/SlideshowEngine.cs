@@ -206,18 +206,32 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
         // ── Filter helpers ────────────────────────────────────────────────
         // Intersect the eligibility set surfaced by the host with the include
-        // list carried on Config. Null/empty include list = keep everything.
-        // Returns the original list when no filter narrows the set so the
-        // engine's downstream "did the host produce zero regions?" guard still
-        // fires correctly on a misconfigured host.
+        // list + metadata filters carried on Config. Null/empty filter = keep
+        // everything. Returns the original list when every filter ends up
+        // emptying the set so the engine's downstream "host produced zero
+        // regions?" guard still fires (rather than silently skipping a leg).
         private IReadOnlyList<string> ApplyRegionFilter(IReadOnlyList<string> input)
         {
             var inc = Config?.IncludedRegions;
-            if (inc == null || inc.Count == 0) return input;
-            var set = new HashSet<string>(inc, StringComparer.OrdinalIgnoreCase);
-            var filtered = new List<string>(Math.Min(input.Count, inc.Count));
+            var ft = Config?.FilterFractalTypes;
+            var qp = Config?.FilterQualityPresets;
+            bool hasInc = inc != null && inc.Count > 0;
+            bool hasFt = ft != null && ft.Count > 0;
+            bool hasQp = qp != null && qp.Count > 0;
+            if (!hasInc && !hasFt && !hasQp) return input;
+
+            var incSet = hasInc ? new HashSet<string>(inc!, StringComparer.OrdinalIgnoreCase) : null;
+            var ftSet = hasFt ? new HashSet<string>(ft!, StringComparer.OrdinalIgnoreCase) : null;
+            var qpSet = hasQp ? new HashSet<string>(qp!, StringComparer.OrdinalIgnoreCase) : null;
+
+            var filtered = new List<string>(input.Count);
             foreach (var n in input)
-                if (set.Contains(n)) filtered.Add(n);
+            {
+                if (incSet != null && !incSet.Contains(n)) continue;
+                if (ftSet != null && !ftSet.Contains(_service.GetRegionFractalTypeName(n))) continue;
+                if (qpSet != null && !qpSet.Contains(_service.GetRegionQualityPresetName(n))) continue;
+                filtered.Add(n);
+            }
             return filtered.Count > 0 ? filtered : input;
         }
 

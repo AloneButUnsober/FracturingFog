@@ -941,11 +941,18 @@ namespace FracturingFog.Hosting
                         .AllSlideshowRegions
                         .Select(r => r.Name)
                         .ToList();
+                    Action<Action<double, double, double>>? captureCallback = capture =>
+                    {
+                        var fm = shell.FloatingMenu;
+                        if (fm == null) return;
+                        capture(fm.Brightness, fm.Contrast, fm.Adaptive);
+                    };
                     var chosen = await AvaloniaDialogs.ShowSlideshowSettingsAsync(
                         file,
                         audioReactive: false,
                         regionNames: regionNames,
-                        themeNames: themeNames);
+                        themeNames: themeNames,
+                        capturePostFxCallback: captureCallback);
                     if (chosen != null)
                     {
                         // Persist active edits (Save button already wrote through;
@@ -962,9 +969,8 @@ namespace FracturingFog.Hosting
                         {
                             if (chosen.Value.Config.Type == SlideshowType.Image)
                                 shell.ToggleSlideshowCommand?.Execute(System.Reactive.Unit.Default);
-                            // Video-type start dispatch wires through StartVideoFromRequest
-                            // once the unified config carries a complete VideoZoomRequest;
-                            // until then the user can launch via the existing Video toolbar.
+                            else
+                                shell.StartVideoSlideshowFromConfig(chosen.Value.Config);
                         }
                     }
                 }
