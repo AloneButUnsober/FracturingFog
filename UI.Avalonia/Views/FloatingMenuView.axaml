@@ -215,7 +215,7 @@
                                     IsEnabled="{Binding AdaptiveEnabled}"
                                     HorizontalAlignment="Stretch"
                                     Margin="0,0,6,0"
-                                    ToolTip.Tip="Sweep Adaptive 0 → 100 over the given duration with a sine ease" />
+                                    ToolTip.Tip="Sweep Adaptive across the given duration in the selected mode" />
                             <NumericUpDown Grid.Column="1"
                                            Value="{Binding AdaptiveSweepDurationSeconds}"
                                            Minimum="0.25"
@@ -231,6 +231,32 @@
                                        VerticalAlignment="Center"
                                        Margin="4,0,0,0" />
                         </Grid>
+                        <UniformGrid Columns="3" Margin="0,6,0,0">
+                            <RadioButton GroupName="AdaptiveSweepMode"
+                                         Content="Forward"
+                                         IsChecked="{Binding IsForwardMode, Mode=TwoWay}"
+                                         IsEnabled="{Binding AdaptiveEnabled}"
+                                         Foreground="#B4B4B4"
+                                         ToolTip.Tip="0 → 100" />
+                            <RadioButton GroupName="AdaptiveSweepMode"
+                                         Content="Reverse"
+                                         IsChecked="{Binding IsReverseMode, Mode=TwoWay}"
+                                         IsEnabled="{Binding AdaptiveEnabled}"
+                                         Foreground="#B4B4B4"
+                                         ToolTip.Tip="100 → 0" />
+                            <RadioButton GroupName="AdaptiveSweepMode"
+                                         Content="Ping-Pong"
+                                         IsChecked="{Binding IsPingPongMode, Mode=TwoWay}"
+                                         IsEnabled="{Binding AdaptiveEnabled}"
+                                         Foreground="#B4B4B4"
+                                         ToolTip.Tip="0 → 100 → 0 within the duration (split in half)" />
+                        </UniformGrid>
+                        <CheckBox Content="Loop"
+                                  IsChecked="{Binding AdaptiveSweepLoop, Mode=TwoWay}"
+                                  IsEnabled="{Binding AdaptiveEnabled}"
+                                  Foreground="#B4B4B4"
+                                  Margin="0,4,0,0"
+                                  ToolTip.Tip="Repeat the selected sweep mode indefinitely until stopped" />
                     </StackPanel>
                 </Border>
 
