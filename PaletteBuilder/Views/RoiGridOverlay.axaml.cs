@@ -18,6 +18,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace PaletteBuilder.Views
 {
@@ -32,18 +33,20 @@ namespace PaletteBuilder.Views
         public static readonly StyledProperty<int> GridColsProperty =
             AvaloniaProperty.Register<RoiGridOverlay, int>(nameof(GridCols), defaultValue: 3);
 
+        // ROI properties are OneWay (VM → overlay). Drag handlers push back
+        // to the VM directly through DataContext (WriteRoiToDataContext)
+        // because relying on TwoWay binding write-back through a StyledProperty
+        // SetValue chain proved unreliable: the overlay drew the new rect but
+        // the VM never saw the change, so the cache key stayed identical and
+        // the palette never re-extracted. Direct write closes that gap.
         public static readonly StyledProperty<double> RoiXProperty =
-            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiX),
-                defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiX));
         public static readonly StyledProperty<double> RoiYProperty =
-            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiY),
-                defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiY));
         public static readonly StyledProperty<double> RoiWidthProperty =
-            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiWidth),
-                defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiWidth));
         public static readonly StyledProperty<double> RoiHeightProperty =
-            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiHeight),
-                defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+            AvaloniaProperty.Register<RoiGridOverlay, double>(nameof(RoiHeight));
 
         public static readonly StyledProperty<int> SourcePixelWidthProperty =
             AvaloniaProperty.Register<RoiGridOverlay, int>(nameof(SourcePixelWidth));
@@ -328,6 +331,7 @@ namespace PaletteBuilder.Views
                         break;
                     }
             }
+            WriteRoiToDataContext();
         }
 
         private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -350,6 +354,25 @@ namespace PaletteBuilder.Views
                 RoiY = Math.Min(y0, y1);
                 RoiWidth = Math.Abs(x1 - x0);
                 RoiHeight = Math.Abs(y1 - y0);
+            }
+
+            WriteRoiToDataContext();
+        }
+
+        /// <summary>
+        /// Push the current ROI rect into the VM. Called after every drag
+        /// update so the VM's WhenAnyValue throttle observes a real change
+        /// stream — without this, auto-extract never fires because the VM
+        /// properties never move off their default (0,0,0,0).
+        /// </summary>
+        private void WriteRoiToDataContext()
+        {
+            if (DataContext is ImagePaletteViewModel vm)
+            {
+                vm.RoiX = RoiX;
+                vm.RoiY = RoiY;
+                vm.RoiWidth = RoiWidth;
+                vm.RoiHeight = RoiHeight;
             }
         }
     }
