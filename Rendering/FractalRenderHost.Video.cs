@@ -110,6 +110,31 @@ namespace FracturingFog.Rendering
         // constructed (the slideshow needs it to enumerate + apply palettes).
         private IColorThemeService? _videoThemeService;
 
+        // ── Per-leg colour-theme schedule ─────────────────────────────────
+        // Populated by VideoSlideshowLoop before each VideoLoop call. Entries
+        // are (legFractionAtFireTime, themeName); VideoLoop calls
+        // TryRunScheduledThemeFade before each frame, walks past every entry
+        // whose t-fraction has elapsed, and cross-fades the on-screen palette
+        // from the outgoing buffer to the freshly-recoloured incoming buffer.
+        // Same-leg zoom advancement freezes for the fade window (matches the
+        // image slideshow's mid-region theme-fade UX).
+        private List<(double T, string Theme)>? _videoLegThemeSchedule;
+        private int _videoLegThemeIdx;
+        private Stopwatch? _videoLegSw;
+        // Cross-fade tuning for in-leg theme transitions. ~1 s at 18×55 ms.
+        private const int VideoThemeFadeSteps = 18;
+        private const int VideoThemeFadeStepMs = 55;
+
+        /// <summary>Adaptive-sweep schedule for the running video slideshow.
+        /// Null = no sweep (slider stays at user value). Shell sets before
+        /// StartVideoSlideshow; engine drives <see cref="VideoAdaptiveValueSink"/>.</summary>
+        public AdaptiveSweepConfig? VideoSweepConfig { get; set; }
+
+        /// <summary>Callback invoked with the current Adaptive slider value as
+        /// the per-leg ramp advances. Shell wires this to
+        /// <c>FloatingMenu.Adaptive</c>.</summary>
+        public Action<int>? VideoAdaptiveValueSink { get; set; }
+
         private readonly record struct QDCoord(double Hi, double Lo, double X2, double X3);
 
         // ──────────────────────────────────────────────────────────────────
@@ -457,6 +482,11 @@ namespace FracturingFog.Rendering
 
             BeginVideoLeg();
 
+            // Reset the per-leg theme-fade tracker (caller seeds
+            // _videoLegThemeSchedule before invoking VideoLoop).
+            _videoLegThemeIdx = 0;
+            _videoLegSw = Stopwatch.StartNew();
+
             double logZ0 = Math.Log(Math.Max(z0, 1e-12));
             double logZ1 = Math.Log(Math.Max(z1, 1e-12));
 
@@ -481,6 +511,8 @@ namespace FracturingFog.Rendering
                         if (last) t = 1.0;
                         double te = t * t * (3.0 - 2.0 * t);
                         double zoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
+                        TryRunScheduledThemeFade(seconds, ct);
+                        if (ct.IsCancellationRequested) break;
                         RenderVideoFrame(cx0, cy0, zoom, ct);
                         if (last) break;
                     }
@@ -496,6 +528,8 @@ namespace FracturingFog.Rendering
                         double te = t * t * (3.0 - 2.0 * t);
                         QDCoord cx = QDLerp(cx0, cx1, te);
                         QDCoord cy = QDLerp(cy0, cy1, te);
+                        TryRunScheduledThemeFade(seconds, ct);
+                        if (ct.IsCancellationRequested) break;
                         RenderVideoFrame(cx, cy, z1, ct);
                         if (last) break;
                     }
@@ -515,6 +549,8 @@ namespace FracturingFog.Rendering
                         double te = t * t * (3.0 - 2.0 * t);
                         QDCoord cx = QDLerp(cx0, cx1, te);
                         QDCoord cy = QDLerp(cy0, cy1, te);
+                        TryRunScheduledThemeFade(seconds, ct);
+                        if (ct.IsCancellationRequested) break;
                         RenderVideoFrame(cx, cy, z0, ct);
                         if (last) break;
                     }
@@ -530,11 +566,93 @@ namespace FracturingFog.Rendering
                         if (last) t = 1.0;
                         double te = t * t * (3.0 - 2.0 * t);
                         double zoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
+                        TryRunScheduledThemeFade(seconds, ct);
+                        if (ct.IsCancellationRequested) break;
                         RenderVideoFrame(cx1, cy1, zoom, ct);
                         if (last) break;
                     }
                 }
             }
+        }
+
+        // Walks past every entry in the leg theme-schedule whose t-fraction
+        // has elapsed and cross-fades the on-screen palette to the entry's
+        // theme. The zoom freezes during each fade (matches the image
+        // slideshow's mid-region theme-fade behaviour). Mandelbrot-only —
+        // alt fractals skip via the early-out inside RenderVideoFrame.
+        private void TryRunScheduledThemeFade(double legSeconds, CancellationToken ct)
+        {
+            if (_videoLegThemeSchedule == null || _videoThemeService == null) return;
+            if (_videoLegSw == null || legSeconds <= 0.0) return;
+
+            double t = _videoLegSw.Elapsed.TotalSeconds / legSeconds;
+            while (_videoLegThemeIdx < _videoLegThemeSchedule.Count
+                && _videoLegThemeSchedule[_videoLegThemeIdx].T <= t)
+            {
+                var entry = _videoLegThemeSchedule[_videoLegThemeIdx++];
+                if (ct.IsCancellationRequested) return;
+                DoVideoThemeCrossFade(entry.Theme, ct);
+            }
+        }
+
+        // Snapshot current ColorBuffer (palette A), swap to palette B, re-run
+        // Calculate at the same view state so ColorBuffer holds the same
+        // iteration field recoloured with palette B, snapshot, per-pixel
+        // cross-fade between the two. Stash the new frame as the TAA prev so
+        // the next reproject doesn't pull from a palette-A buffer.
+        private void DoVideoThemeCrossFade(string newTheme, CancellationToken ct)
+        {
+            if (_videoThemeService == null) return;
+            int w = _calculator.Width, h = _calculator.Height;
+            int n = w * h;
+            if (n <= 0)
+            {
+                _videoThemeService.ApplyThemeSilent(newTheme);
+                return;
+            }
+
+            uint[] fromBuf = new uint[n];
+            Array.Copy(_calculator.ColorBuffer, fromBuf, n);
+
+            _videoThemeService.ApplyThemeSilent(newTheme);
+
+            try { _calculator.Calculate(ct); }
+            catch (OperationCanceledException) { return; }
+            if (ct.IsCancellationRequested) return;
+
+            // Re-apply the leg's eq/dither stack so the newly-recoloured
+            // frame matches the live look (otherwise the fade target looks
+            // pre-correction and pops at the end of the blend).
+            double ditherIter = _videoBandDitherEnabled ? _videoBandDitherStrength : 0.0;
+            int eq = ViewState.HistogramEq;
+            if (eq > 0)
+            {
+                double strength = eq / 100.0;
+                if (_videoLegCdf != null)
+                {
+                    _calculator.ApplyHistogramEqualizationWithCdf(
+                        _videoLegCdf, _videoLegCdfBins, _videoLegCdfMaxIter,
+                        strength, ditherIter, out _, out _);
+                }
+                else
+                {
+                    _calculator.ApplyHistogramEqualization(strength);
+                    if (ditherIter > 0.0) _calculator.ApplyBandDitherRecolor(ditherIter);
+                }
+            }
+            else if (ditherIter > 0.0)
+            {
+                _calculator.ApplyBandDitherRecolor(ditherIter);
+            }
+
+            uint[] toBuf = new uint[n];
+            Array.Copy(_calculator.ColorBuffer, toBuf, n);
+
+            VideoCrossFade(fromBuf, toBuf, VideoThemeFadeSteps, VideoThemeFadeStepMs, ct);
+
+            // Refresh TAA prev so the next reproject blends from the new
+            // palette, not the pre-fade buffer.
+            StashCurrentFrameAsPrev();
         }
 
         private void RenderVideoFrame(QDCoord cx, QDCoord cy, double zoom, CancellationToken ct)
@@ -1123,6 +1241,30 @@ namespace FracturingFog.Rendering
                 }
 
                 svc.ApplyThemeSilent(theme);
+
+                // Build the in-leg theme-fade schedule. Default 3 themes per
+                // leg (matches the image slideshow's Region-Focus cadence);
+                // schedule swaps at t = 1/3 and 2/3 of the leg so each theme
+                // gets roughly equal screen time. Skip when the leg pool is
+                // too small to pick distinct themes.
+                _videoLegThemeSchedule = null;
+                _videoLegThemeIdx = 0;
+                const int themesPerLeg = 3;
+                if (legThemes.Count >= 2)
+                {
+                    var schedule = new List<(double T, string Theme)>(themesPerLeg - 1);
+                    int prev = ti;
+                    for (int k = 1; k < themesPerLeg; k++)
+                    {
+                        int next;
+                        do { next = _videoRng.Next(legThemes.Count); }
+                        while (legThemes.Count > 1 && next == prev);
+                        schedule.Add((k / (double)themesPerLeg, legThemes[next]));
+                        prev = next;
+                    }
+                    _videoLegThemeSchedule = schedule;
+                }
+
                 RaiseStatus($"Video {(reverse ? "reverse " : "")}slideshow: {region.Name}  •  {theme}  ({legSeconds:F1}s)");
 
                 if (ct.IsCancellationRequested) break;
@@ -1188,9 +1330,11 @@ namespace FracturingFog.Rendering
                     legTargetZoom = tz;
                 }
 
+                using var sweepCts = StartVideoLegSweep(legSeconds, legCt);
                 VideoLoop(legStartCX, legStartCY, legStartZoom,
                           legTargetCX, legTargetCY, legTargetZoom,
                           legSeconds, legCt, reverse);
+                sweepCts.Cancel();
 
                 if (ct.IsCancellationRequested) break;
 
@@ -1241,5 +1385,68 @@ namespace FracturingFog.Rendering
         }
 
         private void RaiseStatus(string message) => StatusChanged?.Invoke(this, message);
+
+        // ── Adaptive sweep (video) ────────────────────────────────────────
+        // Returns a CTS scoped to the current leg; caller cancels it when the
+        // leg ends so the ramp task exits promptly even when the leg was cut
+        // short by a skip. Sink is invoked from a background thread; consumers
+        // marshal to the UI thread themselves.
+        private CancellationTokenSource StartVideoLegSweep(double legSeconds, CancellationToken parentCt)
+        {
+            var legCts = CancellationTokenSource.CreateLinkedTokenSource(parentCt);
+            var cfg = VideoSweepConfig;
+            var sink = VideoAdaptiveValueSink;
+            if (cfg == null || !cfg.Enabled || sink == null || legSeconds <= 0.0)
+                return legCts;
+
+            int start = Math.Clamp(cfg.Start, 0, 100);
+            int end = Math.Clamp(cfg.End, 0, 100);
+            var mode = cfg.Mode;
+            bool loop = cfg.Loop;
+            int legMs = (int)Math.Max(50.0, legSeconds * 1000.0);
+            var ct = legCts.Token;
+
+            Task.Run(async () =>
+            {
+                const int tickMs = 50;
+                int elapsed = 0;
+                while (!ct.IsCancellationRequested)
+                {
+                    double phase = legMs > 0 ? Math.Clamp(elapsed / (double)legMs, 0.0, 1.0) : 1.0;
+                    int v = ComputeVideoSweepValue(phase, start, end, mode);
+                    try { sink(v); } catch { }
+
+                    if (elapsed >= legMs)
+                    {
+                        if (!loop) return;
+                        elapsed = 0;
+                    }
+                    try { await Task.Delay(tickMs, ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
+                    elapsed += tickMs;
+                }
+            }, ct);
+
+            return legCts;
+        }
+
+        private static int ComputeVideoSweepValue(double phase, int start, int end, AdaptiveSweepMode mode)
+        {
+            switch (mode)
+            {
+                case AdaptiveSweepMode.Reverse: return LerpAdaptive(end, start, phase);
+                case AdaptiveSweepMode.PingPong:
+                    double pp = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0;
+                    return LerpAdaptive(start, end, pp);
+                case AdaptiveSweepMode.Forward:
+                default: return LerpAdaptive(start, end, phase);
+            }
+        }
+
+        private static int LerpAdaptive(int a, int b, double t)
+        {
+            t = Math.Clamp(t, 0.0, 1.0);
+            return (int)Math.Round(a + (b - a) * t);
+        }
     }
 }

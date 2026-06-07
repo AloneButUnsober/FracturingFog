@@ -508,9 +508,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Reload persisted user-tunable timings each toggle so changes made
-        // in the Slideshow Settings dialog take effect on the next run.
-        var settings = SlideshowSettingsStore.Load();
+        // Reload the active SlideshowConfig each toggle so any preset edits
+        // made in the unified Slideshow Settings dialog take effect on the
+        // next run. Timing values are pulled out of the active config; the
+        // legacy SlideshowSettings store stays the single timing source the
+        // engine constructor accepts.
+        var configFile = SlideshowConfigLibrary.Load();
+        var activeConfig = SlideshowConfigLibrary.GetActive(configFile);
+        var settings = activeConfig.Timing;
 
         if (_slideshow == null)
         {
@@ -555,6 +560,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // user changes to TotalDisplayMsPerRegion / FadeSteps / fade durations
         // would never reach the running loop.
         _slideshow.ApplySettings(settings);
+        _slideshow.Config = activeConfig;
+        _slideshow.AdaptiveValueSink = v => Dispatcher.UIThread.Post(() => FloatingMenu.Adaptive = v);
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;

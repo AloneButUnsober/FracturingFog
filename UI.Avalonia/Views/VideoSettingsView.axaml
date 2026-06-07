@@ -1,0 +1,118 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.VideoSettingsView"
+        x:DataType="vm:VideoSettingsViewModel"
+        Title="Video Settings"
+        Width="460"
+        SizeToContent="Height"
+        MinWidth="380"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#1C1C1C">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="720">
+        <StackPanel Margin="14" Spacing="8">
+
+            <TextBlock Text="Embedded mode — settings stored in the active Slideshow preset"
+                       Foreground="#969696" FontStyle="Italic" Margin="0,0,0,4" />
+
+            <!-- Speed preset -->
+            <Grid ColumnDefinitions="160,*,Auto">
+                <TextBlock Grid.Column="0" Text="Speed:" VerticalAlignment="Center" />
+                <ComboBox  Grid.Column="1"
+                           ItemsSource="{Binding SpeedPresets}"
+                           SelectedItem="{Binding SpeedPreset, Mode=TwoWay}"
+                           MinWidth="160" />
+                <NumericUpDown Grid.Column="2"
+                               Minimum="0.5" Maximum="600" Increment="1"
+                               Value="{Binding CustomSeconds, Mode=TwoWay}"
+                               IsEnabled="{Binding IsCustomSpeed}"
+                               Width="110" Margin="8,0,0,0"
+                               ToolTip.Tip="Custom seconds — used only when Speed=Custom." />
+            </Grid>
+
+            <CheckBox Content="Constant rate (scale per-leg duration with depth)"
+                      IsChecked="{Binding ConstantRate, Mode=TwoWay}" />
+            <CheckBox Content="Reverse zoom (start at target, zoom out)"
+                      IsChecked="{Binding Reverse, Mode=TwoWay}" />
+
+            <TextBlock Text="Recording" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,8,0,0" />
+            <CheckBox Content="Save MP4"     IsChecked="{Binding SaveVideo, Mode=TwoWay}" />
+            <CheckBox Content="Save lossless (PNG sequence)" IsChecked="{Binding SaveLossless, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="160,*">
+                <TextBlock Grid.Column="0" Text="Post-encode:" VerticalAlignment="Center" />
+                <ComboBox  Grid.Column="1"
+                           ItemsSource="{Binding LosslessEncodeChoices}"
+                           SelectedItem="{Binding LosslessEncode, Mode=TwoWay}"
+                           MinWidth="220" />
+            </Grid>
+
+            <TextBlock Text="Temporal smoothing (TAA)" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,8,0,0" />
+            <Grid ColumnDefinitions="*,Auto">
+                <Slider Grid.Column="0"
+                        Minimum="0" Maximum="100"
+                        Value="{Binding TaaSmoothing, Mode=TwoWay}"
+                        TickFrequency="10"
+                        IsSnapToTickEnabled="True" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding TaaSmoothing}"
+                           VerticalAlignment="Center"
+                           Width="36"
+                           HorizontalAlignment="Right"
+                           Margin="8,0,0,0" />
+            </Grid>
+
+            <TextBlock Text="Band-edge dither" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,8,0,0" />
+            <CheckBox Content="Enable" IsChecked="{Binding BandDither, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="*,Auto">
+                <Slider Grid.Column="0"
+                        Minimum="0" Maximum="100"
+                        Value="{Binding BandDitherStrength, Mode=TwoWay}"
+                        TickFrequency="10"
+                        IsSnapToTickEnabled="True"
+                        IsEnabled="{Binding BandDither}" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding BandDitherStrength}"
+                           VerticalAlignment="Center"
+                           Width="36"
+                           HorizontalAlignment="Right"
+                           Margin="8,0,0,0" />
+            </Grid>
+
+            <TextBlock Text="In-leg color theme fade" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,8,0,0" />
+            <CheckBox Content="Enable theme cross-fade during each leg"
+                      IsChecked="{Binding ThemeFadeEnabled, Mode=TwoWay}" />
+            <Grid ColumnDefinitions="160,*">
+                <TextBlock Grid.Column="0" Text="Themes per leg:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Column="1"
+                               Minimum="1" Maximum="12" Increment="1"
+                               Value="{Binding ThemesPerLeg, Mode=TwoWay}"
+                               IsEnabled="{Binding ThemeFadeEnabled}"
+                               Width="110" />
+            </Grid>
+
+            <!-- OK / Cancel -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="8"
+                        Margin="0,16,0,0">
+                <Button Content="OK"
+                        Command="{Binding OkCommand}"
+                        IsDefault="True"
+                        Padding="18,6"
+                        Background="#284632"
+                        Foreground="White"
+                        Click="OnOkClicked" />
+                <Button Content="Cancel"
+                        Command="{Binding CancelCommand}"
+                        IsCancel="True"
+                        Padding="14,6"
+                        Background="#462828"
+                        Foreground="White"
+                        Click="OnCancelClicked" />
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</Window>
