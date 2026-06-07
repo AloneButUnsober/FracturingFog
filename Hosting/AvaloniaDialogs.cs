@@ -1257,6 +1257,86 @@ namespace FracturingFog.Hosting
             return win;
         }
 
+        // ── Save / Discard / Cancel prompt ──────────────────────────────────
+
+        /// <summary>Three-button modal: Save / Discard / Cancel. Returns the
+        /// picked button (or Cancelled if the user dismissed via the X).
+        /// Used by the Color Theme Editor's unsaved-changes guard when the
+        /// user picks a different theme or tries to close the window.</summary>
+        public static Task<MessageResult> ShowSaveDiscardAsync(string title, string body)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<MessageResult>();
+
+            void Run()
+            {
+                var win = new Window
+                {
+                    Title = string.IsNullOrEmpty(title) ? "Unsaved Changes" : title,
+                    Width = 480,
+                    MinWidth = 320,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+
+                var bodyText = new TextBlock
+                {
+                    Text = body ?? "",
+                    Foreground = Brushes.White,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(16, 16, 16, 8),
+                };
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(16, 8, 16, 16),
+                    Spacing = 8,
+                };
+
+                // "Save"  → Yes  (caller treats as: stay open, focus Name field
+                //                  so the user can manually press the Save button)
+                // "Discard" → No (caller treats as: drop edits, proceed)
+                // "Cancel" → Cancelled (close prompt, no action)
+                MessageResult pending = MessageResult.Cancelled;
+                void Close(MessageResult r) { pending = r; win.Close(); }
+
+                var save = new Button { Content = "Save", MinWidth = 80 };
+                save.Click += (_, _) => Close(MessageResult.Yes);
+                var discard = new Button { Content = "Discard", MinWidth = 80 };
+                discard.Click += (_, _) => Close(MessageResult.No);
+                var cancel = new Button { Content = "Cancel", MinWidth = 80 };
+                cancel.Click += (_, _) => Close(MessageResult.Cancelled);
+                buttonRow.Children.Add(save);
+                buttonRow.Children.Add(discard);
+                buttonRow.Children.Add(cancel);
+
+                win.Closed += (_, _) =>
+                {
+                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending);
+                };
+
+                var grid = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+                Grid.SetRow(bodyText, 0);
+                Grid.SetRow(buttonRow, 1);
+                grid.Children.Add(bodyText);
+                grid.Children.Add(buttonRow);
+
+                win.Content = grid;
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── Image-palette picker ─────────────────────────────────────────────
 
         /// <summary>

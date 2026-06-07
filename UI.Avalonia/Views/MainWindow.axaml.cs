@@ -612,11 +612,28 @@ public sealed partial class MainWindow : Window
             if (_editorWin == null)
             {
                 _editorWin = new ColorThemeEditorView { DataContext = _shell.ColorThemeEditor };
-                _editorWin.Closing += (_, ev) =>
+                _editorWin.Closing += async (_, ev) =>
                 {
                     if (_shuttingDown) return;
                     ev.Cancel = true;
-                    if (_shell != null) _shell.IsColorThemeEditorVisible = false;
+                    if (_shell == null) return;
+                    var vm = _shell.ColorThemeEditor;
+                    // Unsaved-changes guard: if the editor is dirty, prompt
+                    // the user. Save → keep open + focus Name field; Discard
+                    // → fall through and hide; Cancel → just abort the close.
+                    if (vm != null && vm.IsDirty)
+                    {
+                        var choice = await vm.PromptUnsavedAsync();
+                        if (choice == FracturingFog.UI.Avalonia.ViewModels.UnsavedChangesChoice.Cancel)
+                            return;
+                        if (choice == FracturingFog.UI.Avalonia.ViewModels.UnsavedChangesChoice.Save)
+                        {
+                            vm.RequestFocusNameField();
+                            return;
+                        }
+                        // Discard → fall through to hide.
+                    }
+                    _shell.IsColorThemeEditorVisible = false;
                 };
             }
             else if (_editorWin.DataContext != _shell.ColorThemeEditor)
