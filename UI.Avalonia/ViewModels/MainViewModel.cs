@@ -512,6 +512,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             if (this.RaiseAndSetIfChangedReturnsChanged(ref _useCustomWatermark, value))
             {
+                // Flipping the master toggle on with a real selection is a strong
+                // intent signal: the user expects to see the custom watermark
+                // immediately. Auto-enable ShowWatermark so the overlay actually
+                // composites — otherwise the toggle is silently inert until the
+                // user also flips Show Watermark (only surfaced via right-click).
+                if (value && ActiveCustomWatermark != null && !_showWatermark)
+                    ShowWatermark = true;
                 PushActiveWatermark();
                 if (_showWatermark) _renderHost.RepaintWithPostFx();
             }
@@ -529,6 +536,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             if (this.RaiseAndSetIfChangedReturnsChanged(ref _selectedCustomWatermarkName, value))
             {
+                // Picking a watermark while the master toggle is on but Show
+                // Watermark is off is the same intent-signal case as the toggle
+                // setter — auto-enable so the user sees it.
+                if (_useCustomWatermark && !_showWatermark && ActiveCustomWatermark != null)
+                    ShowWatermark = true;
                 PushActiveWatermark();
                 if (_showWatermark) _renderHost.RepaintWithPostFx();
             }

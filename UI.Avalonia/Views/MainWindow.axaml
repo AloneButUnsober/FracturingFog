@@ -62,6 +62,19 @@
                 IsVisible="{Binding IsToolbarVisible}">
             <DockPanel LastChildFill="False">
                 <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
+                    <Button Classes="toolbar" Content="Reset"
+                            Command="{Binding Main.ResetViewCommand}" />
+                    <Button Classes="toolbar" Content="Menu"
+                            Command="{Binding ShowFloatingMenuCommand}" />
+                    <!--<ToggleButton Classes="toolbar" Content="Grid"
+                                  IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
+                                  ToolTip.Tip="Show Cartesian grid overlay" />
+                    <ToggleButton Classes="toolbar" Content="Watermark"
+                                  IsChecked="{Binding Main.ShowWatermark, Mode=TwoWay}"
+                                  ToolTip.Tip="Show region/theme + program watermark" />-->
+                    <Button Classes="toolbar" Content="?"
+                            Command="{Binding ShowHelpCommand}" 
+                            ToolTip.Tip="Help menu..."/>
                     <TextBlock Text="Type" Classes="label" />
                     <ComboBox Classes="toolbar"
                               MinWidth="150"
@@ -73,6 +86,9 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
+                    <Button Classes="toolbar" Content="Params"
+                            Command="{Binding ShowFractalParamsCommand}"
+                            ToolTip.Tip="Edit parameters for the current fractal type" />
                     <TextBlock Text="Quality" Classes="label" Margin="8,0,0,0" />
                     <ComboBox Classes="toolbar"
                               MinWidth="130"
@@ -96,26 +112,12 @@
                               MinWidth="180"
                               ItemsSource="{Binding FloatingMenu.ThemeNames}"
                               SelectedItem="{Binding FloatingMenu.SelectedTheme}" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Right">
-                    <ToggleButton Classes="toolbar" Content="Grid"
-                                  IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
-                                  ToolTip.Tip="Show Cartesian grid overlay" />
-                    <ToggleButton Classes="toolbar" Content="Watermark"
-                                  IsChecked="{Binding Main.ShowWatermark, Mode=TwoWay}"
-                                  ToolTip.Tip="Show region/theme + program watermark" />
-                    <Button Classes="toolbar" Content="Params"
-                            Command="{Binding ShowFractalParamsCommand}"
-                            ToolTip.Tip="Edit parameters for the current fractal type" />
-                    <Button Classes="toolbar" Content="Reset"
-                            Command="{Binding Main.ResetViewCommand}" />
-                    <Button Classes="toolbar" Content="Edit Theme"
+                    <Button Classes="toolbar" Content="Edit"
                             Command="{Binding ShowColorThemeEditorCommand}" />
-                    <Button Classes="toolbar" Content="Menu"
-                            Command="{Binding ShowFloatingMenuCommand}" />
-                    <Button Classes="toolbar" Content="Help"
-                            Command="{Binding ShowHelpCommand}" />
                 </StackPanel>
+                <!--<StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Right">
+                    
+                </StackPanel>-->
             </DockPanel>
         </Border>
 
