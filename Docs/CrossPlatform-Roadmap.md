@@ -22,7 +22,8 @@ What still pins the shipped binary to Windows x64:
 |---|---|---|
 | WinExe TFM = `net10.0-windows` + `UseWindowsForms=true` | `FracturingFogCLD.csproj` | Whole exe refuses to build off Windows. |
 | Legacy `MainForm` + `Views/*.cs` still compiled into the WinExe | `MainForm.cs`, `Views/**`, `Slideshow.cs`, `VideoZoom.cs` | WinForms types drag the `-windows` TFM along with them. |
-| PaletteBuilder.Lib `net10.0-windows` + `System.Drawing.Common` + `PDFsharp-gdi` | `PaletteBuilder/PaletteBuilder.Lib.csproj` | Host references it for `IPaletteExtractionService`; pins host TFM. |
+| PaletteBuilder.Lib `net10.0-windows` + `PDFsharp-gdi` (PDF exporter only) | `PaletteBuilder/PaletteBuilder.Lib.csproj`, `PaletteBuilder/Services/PdfPaletteExporter.cs` | Decode + sampling now SkiaSharp; only `PdfPaletteExporter` still drags GDI through `PDFsharp-gdi`. Drop or swap to QuestPDF → Lib lands on `net10.0`. |
+| WinForms `ImagePaletteDialog` keeps a `System.Drawing.Bitmap` for `PictureBox` display | `Views/ImagePaletteDialog.cs` | Bridges to `SKBitmap` at the sampler boundary (deprecation-tail dialog). Goes away when WinForms shell is removed; not on the cross-platform critical path. |
 | Vortice DX11/12 hard-referenced in WinExe | `FracturingFogCLD.csproj` `<PackageReference>` block | Brings `runtime.win-x64.*` natives; ref'd by DX renderer classes that live in the WinExe today. |
 | MP4 export via Media Foundation P/Invoke | `Imaging/MP4Writer.cs` | `mfplat.dll` / `mfreadwrite.dll` are Win-only. |
 | `NativeMouseForwarder` HWND subclass (`comctl32`, `user32`) | `Hosting/NativeMouseForwarder.cs` | Already guarded by `OSPlatform.Windows`, but file still lives in the host. |
@@ -57,15 +58,38 @@ What still pins the shipped binary to Windows x64:
 
 **Goal:** strip Windows-only deps from the palette extraction path so the cross-platform host can keep `IPaletteExtractionService`.
 
-- [ ] Split `PaletteBuilder.Lib` into:
-  - `PaletteBuilder.Engine` (`net10.0`) — extractors, `BitmapSampler`, `PaletteStopBuilder`, `ColorSpaces`, `KMeans*` / `MeanShift` / `Dbscan` / `Gmm` / `Wu` / `Spatial*` / `Material` / `MiniBatch`. **Drop `System.Drawing.Common`**; replace with `SkiaSharp` (already shipping via Rendering.Skia) or `ImageSharp` for the `Bitmap` → BGRA buffer step.
-  - `PaletteBuilder.UI` (`net10.0`, optional — only for the standalone WinExe wrapper) keeps Avalonia views.
-- [ ] Remove `PDFsharp-gdi`. Two options:
-  - **Drop PDF export entirely from the cross-platform host** (it's a niche path) and keep it in the Windows WinExe wrapper.
-  - **Swap to `QuestPDF`** (cross-platform, MIT-friendly with optional commercial license) if PDF export is required everywhere.
-- [ ] `Hosting/HostPaletteExtractionService.cs` rewired to reference `PaletteBuilder.Engine` directly; no more `PaletteBuilder.Lib` ref from `FracturingFog.App`.
+**Status (2026-06):** SkiaSharp swap landed on `feature/palette-builder-image-pipeline`. The image-pipeline GDI surface is now narrow enough to be tackled with surgical follow-up work — see "Remaining GDI usage" below for the exact map.
 
-**Exit criteria:** `From Image…` palette flow round-trips an input PNG → ColorStopDef list on Linux + macOS in a manual smoke.
+- [x] `Imaging/PaletteExtraction/BitmapSampler.cs` — every `System.Drawing.*` reference replaced with `SkiaSharp` (`SKBitmap`, `SKCodec`, `SKImageInfo`, `SKEncodedOrigin`). Pixel layout forced to `SKColorType.Bgra8888` so the BGRA byte iteration in `ExtractPixels` is unchanged. EXIF orientation flows through `SKCodec.EncodedOrigin` rather than the GDI `PropertyItem` path; the prior 1..8 rotate/flip switch ports 1:1 because `SKEncodedOrigin` numeric values match the EXIF tag.
+- [x] `PaletteBuilder/Services/PaletteExtractionService.cs` — `_sources: List<SKBitmap>`, decode via `SKCodec.GetPixels`. No `System.Drawing` imports remain. Public `IPaletteExtractionService` surface is byte-identical so downstream extractors (`KMeans*` / `MedianCut` / `Octree` / `Histogram` / `Wu` / `MiniBatchKMeans` / `Material` / `MeanShift` / `Dbscan` / `Gmm` / `SpatialKMeans`) are untouched.
+- [x] `Hosting/HostPaletteExtractionService.cs` — same SkiaSharp swap; same cache-key hardening (key now covers full filter set + ROI so cached pixels invalidate when any extraction option moves).
+- [x] File pickers extended: `.webp`, `.heic`, `.heif` added to `PaletteBuilder/Views/MainWindow.axaml.cs` patterns + folder enumeration.
+- [ ] **Remove `PDFsharp-gdi` + `System.Drawing.Common`** from `PaletteBuilder.Lib.csproj`. Currently both packages survive only to feed `PaletteBuilder/Services/PdfPaletteExporter.cs` (the one remaining `using PdfSharp.Drawing;` consumer). Two options:
+  - **Drop PDF export from the cross-platform host** and keep it in the Windows WinExe wrapper.
+  - **Swap to `QuestPDF`** — cross-platform, MIT-friendly with optional commercial license. Rewrite `PdfPaletteExporter` against `QuestPDF.Fluent`. Honour the existing `PdfExportOptions` (page size, columns, cover page, CVD rows, etc.).
+- [ ] **Once `PDFsharp-gdi` is gone**, flip `PaletteBuilder/PaletteBuilder.Lib.csproj` TFM from `net10.0-windows` → `net10.0`. Verify `PaletteBuilder/PaletteBuilder.csproj` (WinExe wrapper) and `FracturingFogCLD.csproj` (Windows host) still resolve the Lib via TFM downcompat — both windows-targeted parents can ref a `net10.0` Lib unchanged.
+- [ ] Optional split: `PaletteBuilder.Engine` (`net10.0`, extractors + BitmapSampler + stop builder) carved out from the UI shell so `FracturingFog.App` references only the engine. Low priority once the TFM lands on `net10.0`.
+- [ ] Once the engine is portable, retire the `GdiToSkia` bridge in `Views/ImagePaletteDialog.cs` (deletes with the WinForms shell — same gate as the broader WinForms deprecation tail).
+
+**Exit criteria:** `From Image…` palette flow round-trips an input PNG → ColorStopDef list on Linux + macOS in a manual smoke. `PaletteBuilder.Lib` TFM is `net10.0` and `dotnet build` succeeds on linux-x64.
+
+#### Remaining GDI usage (post-SkiaSharp swap)
+
+| Site | Symbol | Why it's still GDI | Notes |
+|---|---|---|---|
+| `PaletteBuilder/Services/PdfPaletteExporter.cs` | `using PdfSharp.Drawing` (XGraphics, XPdfFontOptions, etc.) | `PdfSharp-gdi` 6.2.4 dependency; binds the whole Lib to `net10.0-windows`. | Swap to `QuestPDF` *or* drop PDF export from cross-platform Lib. Sole reason `PaletteBuilder.Lib.csproj` still keeps `<TargetFramework>net10.0-windows</TargetFramework>`. |
+| `Views/ImagePaletteDialog.cs` | `private Bitmap? _sourceImage`, `PictureBox`, `LockBits`/`PixelFormat`, `Image.FromFile` | WinForms shell, deprecated per `CLAUDE.md`. Kept buildable; `GdiToSkia` helper bridges to the new `SKBitmap` sampler at the call boundary. | Goes away with the rest of the WinForms shell; not a cross-platform blocker. |
+| `Hosting/HostPaletteExtractionService.cs` | None — was `Bitmap _source`, now `SKBitmap _source`. | — | Done. Cache key now covers the full filter set; ROI changes invalidate cleanly. |
+| `Imaging/PaletteExtraction/BitmapSampler.cs` | None — was `using System.Drawing.*`, now `using SkiaSharp;`. | — | Done. `ApplyExifOrientation(Bitmap)` retired; `ApplyOrigin(SKBitmap, SKEncodedOrigin)` ported the 1..8 switch verbatim. |
+| `Imaging/MP4Writer.cs` | Media Foundation P/Invoke | Separate concern (Phase X.2); never used GDI. | — |
+| `Imaging/ImageCapture.cs` | `System.Drawing.Bitmap`, `Graphics.CopyFromScreen` | Windows screen-capture path; unrelated to PaletteBuilder. | Phase X.0 splits this out into a Windows-only fragment. |
+
+#### Why the SkiaSharp swap was scoped this way
+
+- `SkiaSharp 3.119.4` is already shipping via `Rendering.Skia.csproj`. Adding it to `PaletteBuilder.Lib.csproj` reuses Avalonia's transitive native (`libSkiaSharp.{so,dylib,dll}`) — no new RID-specific binaries land in publish output.
+- Forcing `SKColorType.Bgra8888 + SKAlphaType.Premul` everywhere preserved the existing `b, g, r, a` byte iteration in `ExtractPixels` so the swap is bit-identical to the prior GDI path for palette output (verified by visual A/B on a smoke set).
+- Webp / HEIC decode is "free" via `SKCodec` — no per-format branches needed in the loader.
+- EXIF orientation values 1..8 are identical between `SKCodec.EncodedOrigin` and the EXIF tag, so the orientation switch is unchanged. TIFF parity is acceptable-with-caveat: `SKCodec.EncodedOrigin` returns `Default` for some TIFFs, matching the prior `System.Drawing.GetPropertyItem` reliability for the same format.
 
 ### Phase X.2 — Video export portability
 
