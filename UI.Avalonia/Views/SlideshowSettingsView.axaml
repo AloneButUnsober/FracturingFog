@@ -28,12 +28,23 @@
               ColumnDefinitions="Auto,*,Auto,Auto"
               Margin="0,0,0,8">
             <TextBlock Grid.Column="0" Text="Name:" VerticalAlignment="Center" Margin="0,0,6,0" />
-            <ComboBox Grid.Column="1"
-                      Name="NameCombo"
-                      ItemsSource="{Binding SavedConfigNames}"
-                      SelectedItem="{Binding ActiveName, Mode=TwoWay}"
-                      IsEditable="True"
-                      MinWidth="200" />
+            <!-- Editable name: free-text input + dropdown of saved names.
+                 Combo is read-only (no IsEditable on Avalonia 11 ComboBox);
+                 typed names go through the adjacent TextBox so the
+                 user can either type a new name or pick an existing one. -->
+            <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+                <TextBox Grid.Column="0"
+                         Name="NameCombo"
+                         Text="{Binding ActiveName, Mode=TwoWay}"
+                         MinWidth="160"
+                         Watermark="preset name" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding SavedConfigNames}"
+                          SelectedItem="{Binding ActiveName, Mode=TwoWay}"
+                          MinWidth="40"
+                          Margin="4,0,0,0"
+                          ToolTip.Tip="Pick an existing preset" />
+            </Grid>
             <TextBlock Grid.Column="2" Text="Type:" VerticalAlignment="Center" Margin="10,0,6,0" />
             <ComboBox Grid.Column="3"
                       ItemsSource="{Binding AllSlideshowTypes}"

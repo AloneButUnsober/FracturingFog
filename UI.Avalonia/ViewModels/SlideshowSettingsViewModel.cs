@@ -256,25 +256,46 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     public ObservableCollection<string> SavedConfigNames { get; }
 
     /// <summary>Active preset name. Setter swaps the working copy to the
-    /// chosen preset (after confirming via dirty prompt at the view layer).</summary>
+    /// chosen preset when the new name matches an existing entry in the
+    /// library; typed-but-not-yet-saved names just update the field so the
+    /// pending Save uses that name. The setter is silent during
+    /// <see cref="RefreshNameList"/> (combobox Clear() fires a transient
+    /// SelectedItem=null that would otherwise blow away the working copy).</summary>
     public string ActiveName
     {
         get => _activeName;
         set
         {
+            if (_refreshing) return;
+            value ??= string.Empty;
             if (string.Equals(_activeName, value, StringComparison.Ordinal)) return;
-            this.RaiseAndSetIfChanged(ref _activeName, value ?? string.Empty);
-            if (_file != null && !string.IsNullOrWhiteSpace(value))
+            this.RaiseAndSetIfChanged(ref _activeName, value);
+
+            if (_file == null || string.IsNullOrWhiteSpace(value)) return;
+
+            // Only swap working state when the new name is an existing preset.
+            // Free-text entry (typed new name) leaves the working copy alone so
+            // the user's in-progress edits aren't clobbered when they rename.
+            bool isExisting = false;
+            foreach (var c in _file.Configs)
+                if (string.Equals(c.Name, value, StringComparison.OrdinalIgnoreCase))
+                { isExisting = true; break; }
+            if (!isExisting)
             {
-                _file.ActiveName = value;
-                _working = SlideshowConfigLibrary.GetActive(_file);
-                _initializing = true;
-                LoadWorkingIntoBindings();
-                _initializing = false;
-                IsDirty = false;
+                MarkDirty();
+                return;
             }
+
+            _file.ActiveName = value;
+            _working = SlideshowConfigLibrary.GetActive(_file);
+            _initializing = true;
+            LoadWorkingIntoBindings();
+            _initializing = false;
+            IsDirty = false;
         }
     }
+
+    private bool _refreshing;
 
     public SlideshowType Type
     {
@@ -529,8 +550,20 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private void RefreshNameList()
     {
         if (_file == null) return;
-        SavedConfigNames.Clear();
-        foreach (var c in _file.Configs) SavedConfigNames.Add(c.Name);
+        _refreshing = true;
+        try
+        {
+            SavedConfigNames.Clear();
+            foreach (var c in _file.Configs) SavedConfigNames.Add(c.Name);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+        // Re-raise so the bound ComboBox.SelectedItem picks the active entry
+        // after the list was rebuilt (the suppressed setter skipped any
+        // transient SelectedItem=null during Clear()).
+        this.RaisePropertyChanged(nameof(ActiveName));
     }
 
     private void MarkDirty()
