@@ -95,18 +95,21 @@ public sealed class MiniMapControl : Control
             return;
         }
 
-        // Bitmap fill.
+        // Bitmap fill — letterboxed at 88% so the indicator reticle has
+        // breathing room against the window edge and the fractal doesn't
+        // butt up against the border.
+        var imgRect = ShrinkCentered(rect, 0.88);
         if (vm.Thumbnail is Bitmap bmp)
         {
-            g.DrawImage(bmp, new Rect(0, 0, bmp.PixelSize.Width, bmp.PixelSize.Height), rect);
+            g.DrawImage(bmp, new Rect(0, 0, bmp.PixelSize.Width, bmp.PixelSize.Height), imgRect);
         }
         else
         {
-            DrawPlaceholder(g, rect, "(rendering…)");
+            DrawPlaceholder(g, imgRect, "(rendering…)");
         }
 
-        // Indicator.
-        DrawIndicator(g, rect, vm);
+        // Indicator (uses the same shrunk rect so reticle aligns with image).
+        DrawIndicator(g, imgRect, vm);
 
         DrawBorder(g, rect);
     }
@@ -178,6 +181,15 @@ public sealed class MiniMapControl : Control
             new SolidColorBrush(Color.FromArgb(255, 255, 220, 80)),
             null,
             new Point(pxCenter, pyCenter), 1.2, 1.2);
+    }
+
+    private static Rect ShrinkCentered(Rect r, double factor)
+    {
+        double w = r.Width * factor;
+        double h = r.Height * factor;
+        double x = r.X + (r.Width  - w) * 0.5;
+        double y = r.Y + (r.Height - h) * 0.5;
+        return new Rect(x, y, w, h);
     }
 
     private static void DrawBorder(DrawingContext g, Rect rect)

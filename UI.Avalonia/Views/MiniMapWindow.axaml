@@ -11,7 +11,7 @@
         WindowStartupLocation="Manual"
         CanResize="True"
         ShowInTaskbar="False"
-        Topmost="True"
+        Topmost="False"
         Background="#121212">
     <Border BorderBrush="#404040" BorderThickness="1">
         <Grid RowDefinitions="16,*">
