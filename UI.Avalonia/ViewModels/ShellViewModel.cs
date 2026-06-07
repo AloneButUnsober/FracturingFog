@@ -515,6 +515,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // engine constructor accepts.
         var configFile = SlideshowConfigLibrary.Load();
         var activeConfig = SlideshowConfigLibrary.GetActive(configFile);
+        StartSlideshowWithConfig(activeConfig);
+    }
+
+    /// <summary>Start the image slideshow from an explicit in-memory
+    /// <see cref="SlideshowConfig"/>. Used by the host when the user clicked
+    /// Start in the unified dialog with unsaved edits — drives the run from
+    /// the dialog's working copy without touching the on-disk preset.</summary>
+    public void StartSlideshowFromConfig(SlideshowConfig config)
+    {
+        if (config == null) return;
+        if (_slideshow is { IsRunning: true }) return;
+        StartSlideshowWithConfig(config);
+    }
+
+    private void StartSlideshowWithConfig(SlideshowConfig activeConfig)
+    {
         var settings = activeConfig.Timing;
 
         if (_slideshow == null)
