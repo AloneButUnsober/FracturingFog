@@ -71,9 +71,9 @@
     <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- Menu bar — hidden when MainWindow is hosted as a picker dialog
-             by the main FracturingFog WinExe. File/Presets/Tools/Help are
-             standalone-app concerns; the host's "From Image…" flow only
-             wants the extract + Apply contract. -->
+        by the main FracturingFog WinExe. File/Presets/Tools/Help are
+        standalone-app concerns; the host's "From Image…" flow only
+        wants the extract + Apply contract. -->
         <Menu Grid.Row="0" Background="#1E1E1E"
               IsVisible="{Binding StandaloneMode}">
             <MenuItem Header="_File">
@@ -118,25 +118,26 @@
                        Text="Palette Builder"
                        Margin="0,0,0,10" />
 
-            <Grid Grid.Row="1" ColumnDefinitions="300,12,*" Margin="0,0,0,10">
-
-                <Border Grid.Column="0"
-                        Background="#1E1E1E"
-                        BorderBrush="#505050"
-                        BorderThickness="1"
-                        Height="320">
-                    <Grid RowDefinitions="*,Auto,Auto">
-                        <Grid Grid.Row="0" Margin="4">
-                            <Image Source="{Binding PreviewImage}"
-                                   Stretch="Uniform" />
-                            <TextBlock Text="Drop image here&#x0A;or click Browse…"
-                                       TextAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Center"
-                                       Foreground="#8C8C8C"
-                                       FontStyle="Italic"
-                                       IsVisible="{Binding ShowDropHint}" />
-                            <local:RoiGridOverlay
+            <Grid Grid.Row="1" ColumnDefinitions="474,12,*" RowDefinitions="Auto,Auto" Margin="0,0,0,10">
+                <StackPanel Orientation="Vertical" Spacing="4">
+                    <Border Grid.Column="0"
+                            Grid.Row="0"
+                            Background="#1E1E1E"
+                            BorderBrush="#505050"
+                            BorderThickness="1"
+                            Height="420">
+                        <Grid RowDefinitions="*,Auto,Auto,Auto">
+                            <Grid Grid.Row="0" Margin="4">
+                                <Image Source="{Binding PreviewImage}"
+                                       Stretch="Uniform" />
+                                <TextBlock Text="Drop image here&#x0A;or click Browse…"
+                                           TextAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           Foreground="#8C8C8C"
+                                           FontStyle="Italic"
+                                           IsVisible="{Binding ShowDropHint}" />
+                                <local:RoiGridOverlay
                                 ShowGrid="{Binding ShowGrid}"
                                 SnapToGrid="{Binding SnapToGrid}"
                                 GridRows="{Binding GridRows}"
@@ -148,56 +149,108 @@
                                 SourcePixelWidth="{Binding SourcePixelWidth}"
                                 SourcePixelHeight="{Binding SourcePixelHeight}"
                                 IsVisible="{Binding HasImage}" />
-                        </Grid>
-                        <StackPanel Grid.Row="1"
-                                    Orientation="Horizontal"
-                                    Margin="4,0,4,2"
-                                    Spacing="6">
-                            <CheckBox Content="Grid"
-                                      IsChecked="{Binding ShowGrid}"
-                                      Foreground="#DCDCDC"
-                                      VerticalAlignment="Center" />
-                            <TextBlock Text="rows" Foreground="#B4B4B4"
-                                       VerticalAlignment="Center" />
-                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
-                                           Value="{Binding GridRows}"
-                                           FormatString="0"
-                                           Width="68" />
-                            <TextBlock Text="cols" Foreground="#B4B4B4"
-                                       VerticalAlignment="Center" />
-                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
-                                           Value="{Binding GridCols}"
-                                           FormatString="0"
-                                           Width="68" />
-                            <CheckBox Content="Snap"
-                                      IsChecked="{Binding SnapToGrid}"
-                                      Foreground="#DCDCDC"
-                                      VerticalAlignment="Center" />
-                        </StackPanel>
-                        <Grid Grid.Row="2" Margin="4,2,4,4" ColumnDefinitions="*,Auto">
+                            </Grid>
+
                             <TextBlock Grid.Column="0"
+                                       Grid.Row="2"
                                        Text="{Binding FileLabel}"
                                        TextTrimming="CharacterEllipsis"
                                        VerticalAlignment="Center"
                                        Foreground="#A0A0A0"
                                        FontSize="11" />
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button Content="Browse…"
-                                        Command="{Binding BrowseCommand}"
-                                        Background="#2D4164"
-                                        Foreground="White"
-                                        Padding="10,2"
-                                        Margin="0,0,4,0" />
-                                <Button Content="URL…"
-                                        Click="OnMenuFromUrl"
-                                        Background="#2D4164"
-                                        Foreground="White"
-                                        Padding="10,2" />
+                            <Grid Grid.Row="3" Margin="4,2,4,4" ColumnDefinitions="*,Auto">
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="Browse…"
+                                            Command="{Binding BrowseCommand}"
+                                            Background="#2D4164"
+                                            Foreground="White"
+                                            Padding="10,2"
+                                            Margin="0,0,4,0" />
+                                    <Button Content="URL…"
+                                            Click="OnMenuFromUrl"
+                                            Background="#2D4164"
+                                            Foreground="White"
+                                            Padding="10,2" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                    <Border Grid.Column="0"
+                            Grid.Row="1"
+                            Background="#1E1E1E"
+                            BorderBrush="#505050"
+                            BorderThickness="1"
+                            Height="160">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="55,*,*,*" ColumnSpacing="4"
+                              RowSpacing="2">
+                            <StackPanel Grid.Row="0"
+                                        Orientation="Horizontal"
+                                        Margin="4,0,4,2"
+                                        Spacing="6"
+                                        VerticalAlignment="Center">
+                                <CheckBox Content="Grid"
+                                          IsChecked="{Binding ShowGrid}"
+                                          Foreground="#DCDCDC"
+                                          VerticalAlignment="Center" />
+                                <CheckBox Content="Snap"
+                                          IsChecked="{Binding SnapToGrid}"
+                                          Foreground="#DCDCDC"
+                                          VerticalAlignment="Center"
+                                          IsEnabled="{Binding ShowGrid}"
+                                          Margin="8,0,0,0"/>
+                            </StackPanel>
+
+                            <TextBlock Text="Rows:" Foreground="#B4B4B4"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       Grid.Row="1" Grid.Column="0"
+                                       Margin="0,0,4,0"/>
+                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
+                                           Value="{Binding GridRows}"
+                                           FormatString="0"
+                                           Width="120"
+                                           Height="20"
+                                           HorizontalAlignment="Left"
+                                           Grid.Row="1"
+                                           Grid.Column="1"
+                                           IsEnabled="{Binding ShowGrid}"/>
+                            <TextBlock Text="Cols:" Foreground="#B4B4B4"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       Grid.Row="2" Grid.Column="0"
+                                       Margin="0,0,0,0" />
+                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
+                                           Value="{Binding GridCols}"
+                                           FormatString="0"
+                                           Width="120"
+                                           Height="20"
+                                           HorizontalAlignment="Left"
+                                           Grid.Row="2"
+                                           Grid.Column="1"
+                                           IsEnabled="{Binding ShowGrid}"/>
+                            <StackPanel Orientation="Vertical" Grid.Column="1" Grid.Row="0"
+                                        Grid.RowSpan="4" Grid.ColumnSpan="3"
+                                        Margin="152,5,0,0">
+                            <CheckBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3"
+                                      Content="Weight stop positions by cluster size"
+                                      IsChecked="{Binding WeightedPositions}"/>
+
+                            <CheckBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                                      Content="Exclude near-black pixels"
+                                      IsChecked="{Binding ExcludeNearBlack}" />
+
+                            <CheckBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3"
+                                      Content="Exclude near-white pixels"
+                                      IsChecked="{Binding ExcludeNearWhite}" />
+
+                            <CheckBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3"
+                                      Content="Gamma-correct (linearise RGB before clustering)"
+                                      IsChecked="{Binding GammaCorrect}" />
                             </StackPanel>
                         </Grid>
-                    </Grid>
-                </Border>
-
+                    </Border>
+                </StackPanel>
                 <Grid Grid.Column="2"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                       ColumnDefinitions="140,*">
@@ -249,7 +302,7 @@
                         <ComboBoxItem Content="ΔE2000 (accurate)" />
                     </ComboBox>
 
-                    <CheckBox Grid.Row="7" Grid.ColumnSpan="2"
+                    <!--<CheckBox Grid.Row="7" Grid.ColumnSpan="2"
                               Content="Weight stop positions by cluster size"
                               IsChecked="{Binding WeightedPositions}"
                               Margin="0,4,0,0" />
@@ -267,7 +320,7 @@
                     <CheckBox Grid.Row="10" Grid.ColumnSpan="2"
                               Content="Gamma-correct (linearise RGB before clustering)"
                               IsChecked="{Binding GammaCorrect}"
-                              Margin="0,2,0,0" />
+                              Margin="0,2,0,0" />-->
 
                     <Expander Grid.Row="11" Grid.ColumnSpan="2"
                               Header="Preprocessing filters"
@@ -476,8 +529,8 @@
                             Spacing="8"
                             Margin="12,0,0,0">
                     <!-- Common controls — visible in both modes. Gradient
-                         space + Inspect are useful whether the user wants
-                         to export or apply the palette to the host. -->
+                    space + Inspect are useful whether the user wants
+                    to export or apply the palette to the host. -->
                     <TextBlock Classes="label" Text="Gradient:" />
                     <ComboBox Width="110"
                               SelectedIndex="{Binding GradientInterpolationIndex}"
@@ -492,7 +545,7 @@
                             Click="OnInspectClick" />
 
                     <!-- Standalone-mode trailing controls: Export to file
-                         picker + Close. -->
+                    picker + Close. -->
                     <TextBlock Classes="label" Text="Format:"
                                IsVisible="{Binding StandaloneMode}" />
                     <ComboBox Width="200"
@@ -511,9 +564,9 @@
                             IsVisible="{Binding StandaloneMode}" />
 
                     <!-- Picker-mode trailing controls: Apply returns the
-                         selected palette's stops to the host via the
-                         ResultAccepted event on ImagePaletteViewModel.
-                         Cancel closes the dialog and returns null. -->
+                    selected palette's stops to the host via the
+                    ResultAccepted event on ImagePaletteViewModel.
+                    Cancel closes the dialog and returns null. -->
                     <Button Classes="apply"
                             Content="Apply"
                             IsEnabled="{Binding CanApply}"
@@ -528,8 +581,8 @@
         </Grid>
 
         <!-- Status bar — standalone-only. The picker dialog has no need
-             for elapsed-extract telemetry; the host owns its own status
-             reporting. -->
+        for elapsed-extract telemetry; the host owns its own status
+        reporting. -->
         <Border Grid.Row="2" Background="#1A1A1A" BorderBrush="#3C3C3C" BorderThickness="0,1,0,0" Padding="10,4"
                 IsVisible="{Binding StandaloneMode}">
             <TextBlock Text="{Binding StatusBarText}" Foreground="#A8A8A8" FontSize="11" />
