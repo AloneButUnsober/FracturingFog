@@ -1,7 +1,10 @@
+using System;
+
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 using FracturingFog.UI.Avalonia.Controls;
@@ -20,11 +23,13 @@ namespace FracturingFog.UI.Avalonia.Views;
 public sealed partial class ColorThemeEditorView : Window
 {
     private bool _sortMenusAttached;
+    private ColorThemeEditorViewModel? _boundVm;
 
     public ColorThemeEditorView()
     {
         AvaloniaXamlLoader.Load(this);
         Opened += (_, _) => AttachSortMenus();
+        DataContextChanged += OnDataContextChanged;
 
         // Route any pointer-press inside a stop row up to the parent VM as
         // a selection. Inner controls (NumericUpDown, ColorPicker) consume
@@ -33,6 +38,65 @@ public sealed partial class ColorThemeEditorView : Window
         // approximation to "click anywhere on the row to select it".
         AddHandler(InputElement.PointerPressedEvent, OnAnyPointerPressed,
             RoutingStrategies.Bubble, handledEventsToo: false);
+    }
+
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (_boundVm != null)
+        {
+            _boundVm.ScrollStopIntoViewRequested -= OnScrollStopRequested;
+            _boundVm.ScrollBandIntoViewRequested -= OnScrollBandRequested;
+            _boundVm.FocusNameRequested -= OnFocusNameRequested;
+        }
+        _boundVm = DataContext as ColorThemeEditorViewModel;
+        if (_boundVm != null)
+        {
+            _boundVm.ScrollStopIntoViewRequested += OnScrollStopRequested;
+            _boundVm.ScrollBandIntoViewRequested += OnScrollBandRequested;
+            _boundVm.FocusNameRequested += OnFocusNameRequested;
+        }
+    }
+
+    private void OnFocusNameRequested(object? sender, EventArgs e)
+    {
+        // After "Save" pick: bring this window to front and put keyboard
+        // focus + caret in the Name field so the user can rename + Save.
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (!IsVisible) return;
+                Activate();
+                var tb = this.FindControl<TextBox>("NameField");
+                if (tb != null)
+                {
+                    tb.Focus();
+                    tb.SelectAll();
+                }
+            }
+            catch { }
+        }, DispatcherPriority.Background);
+    }
+
+    private void OnScrollStopRequested(object? sender, ColorStopRowVm row)
+        => ScrollItemIntoView("StopsItems", row);
+
+    private void OnScrollBandRequested(object? sender, MaterialBandRowVm row)
+        => ScrollItemIntoView("BandsItems", row);
+
+    /// <summary>Walks the named ItemsControl, finds the container for the
+    /// row item, and scrolls it into view. Containers are realised lazily
+    /// inside a virtualizing stack panel, so a Dispatcher hop covers the
+    /// case where the container hasn't been materialised yet.</summary>
+    private void ScrollItemIntoView(string itemsControlName, object item)
+    {
+        var ic = this.FindControl<ItemsControl>(itemsControlName);
+        if (ic == null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            var container = ic.ContainerFromItem(item) as Control;
+            container?.BringIntoView();
+        }, DispatcherPriority.Background);
     }
 
     private void AttachSortMenus()
