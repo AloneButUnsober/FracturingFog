@@ -79,6 +79,7 @@
             <MenuItem Header="_File">
                 <MenuItem Header="_Open Image(s)…" Click="OnMenuOpen" />
                 <MenuItem Header="Open _Folder…" Click="OnMenuOpenFolder" />
+                <MenuItem Header="From _URL…" Click="OnMenuFromUrl" />
                 <MenuItem Name="RecentMenu" Header="_Recent" />
                 <Separator />
                 <MenuItem Header="E_xit" Click="OnMenuExit" />
@@ -143,12 +144,19 @@
                                        VerticalAlignment="Center"
                                        Foreground="#A0A0A0"
                                        FontSize="11" />
-                            <Button Grid.Column="1"
-                                    Content="Browse…"
-                                    Command="{Binding BrowseCommand}"
-                                    Background="#2D4164"
-                                    Foreground="White"
-                                    Padding="10,2" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button Content="Browse…"
+                                        Command="{Binding BrowseCommand}"
+                                        Background="#2D4164"
+                                        Foreground="White"
+                                        Padding="10,2"
+                                        Margin="0,0,4,0" />
+                                <Button Content="URL…"
+                                        Click="OnMenuFromUrl"
+                                        Background="#2D4164"
+                                        Foreground="White"
+                                        Padding="10,2" />
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Border>

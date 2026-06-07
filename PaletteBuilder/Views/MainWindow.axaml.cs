@@ -172,6 +172,18 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { await ShowInfoAsync("Open folder failed: " + ex.Message); }
     }
 
+    private async void OnMenuFromUrl(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new UrlFetchDialog();
+            var ok = await dlg.ShowDialog<bool>(this);
+            if (ok && !string.IsNullOrEmpty(dlg.ResolvedTempPath))
+                TryLoadIntoVm(dlg.ResolvedTempPath);
+        }
+        catch (Exception ex) { await ShowInfoAsync("URL load failed: " + ex.Message); }
+    }
+
     private void OnMenuClearRoi(object? sender, RoutedEventArgs e) => _vm.ClearRoi();
 
     private void OnMenuExit(object? sender, RoutedEventArgs e) => Close();
