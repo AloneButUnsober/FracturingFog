@@ -297,6 +297,30 @@ public sealed partial class MainWindow : Window
                 if (_shell.HandleCommandKey(cmd)) e.Handled = true;
                 return;
             }
+
+            // Overlay / dialog toggles. Active in every fractal type so the
+            // shortcuts work consistently regardless of selected mode.
+            //   G  = Grid           K  = Watermark
+            //   P  = Params dialog  F1 = Help window
+            switch (e.Key)
+            {
+                case Key.G:
+                    _shell.Main.ShowGrid = !_shell.Main.ShowGrid;
+                    e.Handled = true;
+                    return;
+                case Key.K:
+                    _shell.Main.ShowWatermark = !_shell.Main.ShowWatermark;
+                    e.Handled = true;
+                    return;
+                case Key.P:
+                    _shell.ShowFractalParamsCommand.Execute().Subscribe();
+                    e.Handled = true;
+                    return;
+                case Key.F1:
+                    _shell.ShowHelpCommand.Execute().Subscribe();
+                    e.Handled = true;
+                    return;
+            }
         }
 
         // Pan / zoom / 3-D camera + light keys. Forwarded to the controller

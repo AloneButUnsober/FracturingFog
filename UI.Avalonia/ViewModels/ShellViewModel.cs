@@ -1198,6 +1198,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     private void ShowHelp()
     {
+        // Toggle so the same command (right-click "Help…", F1) flips the
+        // floating help window on/off rather than only opening it.
+        if (IsHelpVisible) { IsHelpVisible = false; return; }
         if (Help == null)
         {
             var vm = new FloatingHelpViewModel(_helpProvider);

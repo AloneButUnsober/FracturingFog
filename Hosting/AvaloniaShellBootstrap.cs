@@ -1160,6 +1160,14 @@ namespace FracturingFog.Hosting
                     if (s_renderHost == null) return;
                     var vs = s_renderHost.ViewState;
 
+                    // Toggle close — repeated invocation (e.g. P key, or a
+                    // second right-click "Params") closes the editor instead
+                    // of stacking duplicates or refusing to act.
+                    if (s_userEqWin   != null) { try { s_userEqWin.Close();   } catch { } s_userEqWin   = null; return; }
+                    if (s_sandboxWin  != null) { try { s_sandboxWin.Close();  } catch { } s_sandboxWin  = null; return; }
+                    if (s_userBulbWin != null) { try { s_userBulbWin.Close(); } catch { } s_userBulbWin = null; return; }
+                    if (s_paramsWin   != null) { try { s_paramsWin.Close();   } catch { } s_paramsWin   = null; return; }
+
                     // UserEquation / Sandbox / UserBulb carry their own
                     // source-compiled editors (source textbox + knobs), not the
                     // generic FractalParamsView. Route each to its dedicated
@@ -1176,13 +1184,6 @@ namespace FracturingFog.Hosting
                         case global::FracturingFog.FractalType.UserBulb:
                             OpenUserBulbEditor(vs.FractalParameters);
                             return;
-                    }
-
-                    // Already open → bring to front rather than duplicate.
-                    if (s_paramsWin != null)
-                    {
-                        s_paramsWin.Activate();
-                        return;
                     }
 
                     var vm = new FractalParamsViewModel(

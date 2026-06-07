@@ -189,10 +189,16 @@ public sealed class FractalOverlayControl : Control
         var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(160, contrast.R, contrast.G, contrast.B)), 1.0);
         var axisPen = new Pen(new SolidColorBrush(Color.FromArgb(210, contrast.R, contrast.G, contrast.B)), 1.8);
         var labelBrush = new SolidColorBrush(Color.FromArgb(200, contrast.R, contrast.G, contrast.B));
-        // Shadow inverts ink so dark text gets a white halo and vice versa.
+        // Halo inverts ink so dark lines/text get a bright halo and vice versa.
+        // Mirrors the Palette Builder ROI + MiniMap reticle halo trick — a wider
+        // stroke under the foreground line keeps the grid visible against any
+        // tone, not just images that contrast with the chosen ink colour.
         bool darkInk = (contrast.R + contrast.G + contrast.B) < 384;
         byte hs = darkInk ? (byte)255 : (byte)0;
-        var shadowBrush = new SolidColorBrush(Color.FromArgb(120, hs, hs, hs));
+        var haloColor      = Color.FromArgb(180, hs, hs, hs);
+        var haloGridPen    = new Pen(new SolidColorBrush(haloColor), 3.0);
+        var haloAxisPen    = new Pen(new SolidColorBrush(haloColor), 4.0);
+        var shadowBrush    = new SolidColorBrush(Color.FromArgb(200, hs, hs, hs));
 
         var labelTypeface = new Typeface("Consolas");
         double labelSize = 10;
@@ -208,7 +214,8 @@ public sealed class FractalOverlayControl : Control
             double px = (wx - cx) / scale + w * 0.5;
             if (px < 0 || px > w) continue;
             bool isAxis = Math.Abs(wx) < gridStep * 0.01;
-            ctx.DrawLine(isAxis ? axisPen : gridPen, new Point(px, 0), new Point(px, h));
+            ctx.DrawLine(isAxis ? haloAxisPen : haloGridPen, new Point(px, 0), new Point(px, h));
+            ctx.DrawLine(isAxis ? axisPen     : gridPen,     new Point(px, 0), new Point(px, h));
 
             string lbl = FormatCoord(wx);
             var ft = new FormattedText(lbl, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
@@ -218,7 +225,7 @@ public sealed class FractalOverlayControl : Control
             if (ly < 0) ly = 2;
             var ftShadow = new FormattedText(lbl, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
                 labelTypeface, labelSize, shadowBrush);
-            ctx.DrawText(ftShadow, new Point(lx + 1, ly + 1));
+            DrawTextHalo(ctx, ftShadow, lx, ly);
             ctx.DrawText(ft, new Point(lx, ly));
         }
 
@@ -229,7 +236,8 @@ public sealed class FractalOverlayControl : Control
             double py = -(wy - cy) / scale + h * 0.5;
             if (py < 0 || py > h) continue;
             bool isAxis = Math.Abs(wy) < gridStep * 0.01;
-            ctx.DrawLine(isAxis ? axisPen : gridPen, new Point(0, py), new Point(w, py));
+            ctx.DrawLine(isAxis ? haloAxisPen : haloGridPen, new Point(0, py), new Point(w, py));
+            ctx.DrawLine(isAxis ? axisPen     : gridPen,     new Point(0, py), new Point(w, py));
             if (isAxis) continue;
 
             string lbl = FormatCoord(wy) + "i";
@@ -237,7 +245,7 @@ public sealed class FractalOverlayControl : Control
                 labelTypeface, labelSize, labelBrush);
             var ftShadow = new FormattedText(lbl, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
                 labelTypeface, labelSize, shadowBrush);
-            ctx.DrawText(ftShadow, new Point(4, py - ft.Height * 0.5 + 1));
+            DrawTextHalo(ctx, ftShadow, 3, py - ft.Height * 0.5);
             ctx.DrawText(ft, new Point(3, py - ft.Height * 0.5));
         }
 
@@ -251,9 +259,24 @@ public sealed class FractalOverlayControl : Control
                 zeroTypeface, zeroSize, labelBrush);
             var ftShadow = new FormattedText("0", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
                 zeroTypeface, zeroSize, shadowBrush);
-            ctx.DrawText(ftShadow, new Point(ox + 3, oy + 3));
+            DrawTextHalo(ctx, ftShadow, ox + 2, oy + 2);
             ctx.DrawText(ft, new Point(ox + 2, oy + 2));
         }
+    }
+
+    // 8-direction halo: draw the shadow text once per offset so the foreground
+    // ink reads against any underlying tone. Cheap — labels are short.
+    private static void DrawTextHalo(DrawingContext ctx, FormattedText shadow, double x, double y)
+    {
+        const double d = 1.2;
+        ctx.DrawText(shadow, new Point(x - d, y - d));
+        ctx.DrawText(shadow, new Point(x,     y - d));
+        ctx.DrawText(shadow, new Point(x + d, y - d));
+        ctx.DrawText(shadow, new Point(x - d, y));
+        ctx.DrawText(shadow, new Point(x + d, y));
+        ctx.DrawText(shadow, new Point(x - d, y + d));
+        ctx.DrawText(shadow, new Point(x,     y + d));
+        ctx.DrawText(shadow, new Point(x + d, y + d));
     }
 
     private static double NiceStep(double raw)
