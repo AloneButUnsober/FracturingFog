@@ -955,16 +955,13 @@ namespace FracturingFog.Hosting
                         capturePostFxCallback: captureCallback);
                     if (chosen != null)
                     {
-                        // Persist active edits (Save button already wrote through;
-                        // OK / Start commit the working copy without saving).
-                        SlideshowConfigLibrary.Upsert(file, chosen.Value.Config);
-                        // Mirror Timing into the legacy single-file store so the
-                        // WinForms shell + ShellViewModel.ToggleSlideshow (which
-                        // still reads SlideshowSettingsStore.Load) honour the
-                        // active preset's timing values.
-                        SlideshowSettingsStore.Save(chosen.Value.Config.Timing);
+                        // No persistence on dialog close — the Save button is the
+                        // only persistence path. OK / Start drive the engine with
+                        // the in-memory working copy so unsaved edits don't get
+                        // silently written back to the selected preset.
 
-                        // Start button — route to the active type's engine.
+                        // Start button — route to the active type's engine,
+                        // passing the working config in-memory.
                         if (chosen.Value.StartRequested)
                         {
                             if (chosen.Value.Config.Type == SlideshowType.Image)
@@ -972,7 +969,7 @@ namespace FracturingFog.Hosting
                                 // Stop any running video slideshow before kicking
                                 // the image engine — the two share the render host.
                                 if (shell.IsVideoRunning) shell.StopVideo();
-                                shell.ToggleSlideshowCommand?.Execute().Subscribe();
+                                shell.StartSlideshowFromConfig(chosen.Value.Config);
                             }
                             else
                             {
