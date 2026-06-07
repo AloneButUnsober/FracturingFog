@@ -1119,6 +1119,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.ImportPaletteRequested  += (_, args) => ImportPaletteRequested?.Invoke(this, args);
             vm.ExportPaletteRequested  += (_, args) => ExportPaletteRequested?.Invoke(this, args);
             vm.SampleColorRequested    += (_, args) => SampleColorRequested?.Invoke(this, args);
+            vm.UnsavedChangesPromptRequested += (_, args) => UnsavedChangesPromptRequested?.Invoke(this, args);
             ColorThemeEditor = vm;
         }
         IsColorThemeEditorVisible = true;
@@ -1241,6 +1242,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Host installs the global mouse hook and fills PickedR/G/B before
     /// completing. PickedR null indicates the user cancelled.</summary>
     public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
+
+    /// <summary>Color Theme Editor raises this when dirty and the user picks
+    /// a different theme or tries to close the window. Host shows the modal
+    /// Save/Discard/Cancel prompt and signals the args' completion.</summary>
+    public event EventHandler<UnsavedChangesPromptEventArgs>? UnsavedChangesPromptRequested;
 
     /// <summary>Help VM wants the host to open a URL in the system browser.</summary>
     public event EventHandler<string>? LinkRequested;

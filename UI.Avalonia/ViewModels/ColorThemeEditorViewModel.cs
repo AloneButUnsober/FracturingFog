@@ -147,9 +147,37 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _selectedRegion, value); OnRegionComboSelected(value); }
     }
 
-    private void OnThemeComboSelected(string? name)
+    private async void OnThemeComboSelected(string? name)
     {
         if (_suppressChange || string.IsNullOrEmpty(name) || IsHeader(name)) return;
+
+        // Unsaved-changes guard: if the user has edited the current theme
+        // and is now switching away, prompt before discarding their work.
+        // Picking the currently-loaded name is a no-op for this purpose.
+        if (IsDirty && !string.Equals(name, _loadedSourceName, StringComparison.Ordinal))
+        {
+            var choice = await PromptUnsavedAsync();
+            if (choice == UnsavedChangesChoice.Cancel)
+            {
+                // Revert the combo to the loaded theme — user backed out.
+                _suppressChange = true;
+                SelectedTheme = _loadedSourceName;
+                _suppressChange = false;
+                return;
+            }
+            if (choice == UnsavedChangesChoice.Save)
+            {
+                // "Save" = abort the switch and let the user finish naming /
+                // saving themselves. Revert the combo and focus the Name field.
+                _suppressChange = true;
+                SelectedTheme = _loadedSourceName;
+                _suppressChange = false;
+                FocusNameRequested?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+            // Discard → fall through, load the new theme.
+        }
+
         LoadFromTheme(name);
         // Always push preview on explicit theme pick — even if live-preview
         // is unchecked — so the user sees the chosen theme immediately.
@@ -351,7 +379,68 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public bool InspectActive
     {
         get => _inspectActive;
-        set => this.RaiseAndSetIfChanged(ref _inspectActive, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _inspectActive, value);
+            if (value)
+            {
+                if (_inspect3DActive) { _inspect3DActive = false; this.RaisePropertyChanged(nameof(Inspect3DActive)); }
+                if (_inspectBandActive) { _inspectBandActive = false; this.RaisePropertyChanged(nameof(InspectBandActive)); }
+            }
+            RaiseInspectEnabledChanged();
+        }
+    }
+
+    private bool _inspect3DActive;
+    public bool Inspect3DActive
+    {
+        get => _inspect3DActive;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _inspect3DActive, value);
+            if (value)
+            {
+                if (_inspectActive) { _inspectActive = false; this.RaisePropertyChanged(nameof(InspectActive)); }
+                if (_inspectBandActive) { _inspectBandActive = false; this.RaisePropertyChanged(nameof(InspectBandActive)); }
+            }
+            RaiseInspectEnabledChanged();
+        }
+    }
+
+    private bool _inspectBandActive;
+    public bool InspectBandActive
+    {
+        get => _inspectBandActive;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _inspectBandActive, value);
+            if (value)
+            {
+                if (_inspectActive) { _inspectActive = false; this.RaisePropertyChanged(nameof(InspectActive)); }
+                if (_inspect3DActive) { _inspect3DActive = false; this.RaisePropertyChanged(nameof(Inspect3DActive)); }
+            }
+            RaiseInspectEnabledChanged();
+        }
+    }
+
+    /// <summary>True while any inspect mode is on. Bootstrap click hook
+    /// checks this to decide whether to swallow the click.</summary>
+    public bool AnyInspectActive => _inspectActive || _inspect3DActive || _inspectBandActive;
+
+    // ── Inspect mutex: each checkbox stays enabled only when no other
+    //    inspect mode is active. Bindings keep the unused checkboxes
+    //    visually greyed out instead of letting the user click them off
+    //    while another mode is on. ──
+    public bool InspectStopEnabled => !_inspect3DActive && !_inspectBandActive;
+    public bool Inspect3DEnabled => !_inspectActive && !_inspectBandActive;
+    public bool InspectBandEnabled => !_inspectActive && !_inspect3DActive;
+
+    private void RaiseInspectEnabledChanged()
+    {
+        this.RaisePropertyChanged(nameof(InspectStopEnabled));
+        this.RaisePropertyChanged(nameof(Inspect3DEnabled));
+        this.RaisePropertyChanged(nameof(InspectBandEnabled));
+        this.RaisePropertyChanged(nameof(AnyInspectActive));
     }
 
     /// <summary>
@@ -372,6 +461,129 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         if (best == null) return;
         SelectedStop = best;
         best.Pulse();
+        ScrollStopIntoViewRequested?.Invoke(this, best);
+    }
+
+    /// <summary>
+    /// Called by the shell when 3D Inspect is active and the user clicked
+    /// the rendered image. Highlights (pulses + selects) the enabled light
+    /// whose Diffuse colour is closest to the sampled pixel.
+    /// </summary>
+    public void HandleInspect3DColor(byte r, byte g, byte b)
+    {
+        LightSourceRowVm? best = null;
+        int bestDist = int.MaxValue;
+        foreach (var light in EnumerateActiveLights())
+        {
+            int dr = light.DiffR - r, dg = light.DiffG - g, db = light.DiffB - b;
+            int d = dr * dr + dg * dg + db * db;
+            if (d < bestDist) { bestDist = d; best = light; }
+        }
+        if (best == null) return;
+        SelectedLight = best;
+        best.Pulse();
+    }
+
+    private IEnumerable<LightSourceRowVm> EnumerateActiveLights()
+    {
+        yield return KeyLight;
+        yield return FillLight;
+        if (UseRim) yield return RimLight;
+    }
+
+    /// <summary>
+    /// Called by the shell when Band Inspect is active and the user clicked
+    /// the rendered image. Maps the sampled pixel to its closest stop
+    /// Position (treated as PBR <c>t</c>), then walks the bands in UpperT
+    /// order to find the first band whose UpperT exceeds t — the same
+    /// selection rule the runtime uses in <c>BuildMaterial</c>. The final
+    /// band acts as a catch-all.
+    /// </summary>
+    public void HandleInspectBandColor(byte r, byte g, byte b)
+    {
+        if (MaterialBands.Count == 0) return;
+
+        ColorStopRowVm? bestStop = null;
+        int bestDist = int.MaxValue;
+        foreach (var row in Stops)
+        {
+            int dr = row.R - r, dg = row.G - g, db = row.B - b;
+            int d = dr * dr + dg * dg + db * db;
+            if (d < bestDist) { bestDist = d; bestStop = row; }
+        }
+        if (bestStop == null) return;
+
+        float t = bestStop.Position;
+        var ordered = MaterialBands.OrderBy(x => x.UpperT).ToList();
+        MaterialBandRowVm? winner = null;
+        for (int i = 0; i < ordered.Count - 1; i++)
+        {
+            if (t < ordered[i].UpperT) { winner = ordered[i]; break; }
+        }
+        winner ??= ordered[^1];
+
+        SelectedBand = winner;
+        winner.Pulse();
+        ScrollBandIntoViewRequested?.Invoke(this, winner);
+    }
+
+    /// <summary>Fired when an inspect path picks a stop — view scrolls it
+    /// into view in the Stops ItemsControl.</summary>
+    public event EventHandler<ColorStopRowVm>? ScrollStopIntoViewRequested;
+
+    /// <summary>Fired when band-inspect picks a band — view scrolls it into
+    /// view in the MaterialBands ItemsControl.</summary>
+    public event EventHandler<MaterialBandRowVm>? ScrollBandIntoViewRequested;
+
+    private MaterialBandRowVm? _selectedBand;
+    public MaterialBandRowVm? SelectedBand
+    {
+        get => _selectedBand;
+        set
+        {
+            if (_selectedBand != null && _selectedBand != value) _selectedBand.IsSelected = false;
+            this.RaiseAndSetIfChanged(ref _selectedBand, value);
+            if (value != null) value.IsSelected = true;
+        }
+    }
+
+    private LightSourceRowVm? _selectedLight;
+    public LightSourceRowVm? SelectedLight
+    {
+        get => _selectedLight;
+        set
+        {
+            if (_selectedLight != null && _selectedLight != value) _selectedLight.IsSelected = false;
+            this.RaiseAndSetIfChanged(ref _selectedLight, value);
+            if (value != null) value.IsSelected = true;
+        }
+    }
+
+    /// <summary>Called by a light row's per-channel Sample button. Starts the
+    /// eyedropper and applies the picked color to <paramref name="row"/>'s
+    /// Diffuse channel.</summary>
+    internal async Task BeginSampleForLightDiffAsync(LightSourceRowVm row)
+    {
+        var args = new ThemeSampleColorEventArgs();
+        var handler = SampleColorRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+        if (args.PickedR == null) return;
+        row.SetDiffColor(args.PickedR.Value, args.PickedG!.Value, args.PickedB!.Value);
+    }
+
+    /// <summary>Same as <see cref="BeginSampleForLightDiffAsync"/> for the
+    /// Specular channel.</summary>
+    internal async Task BeginSampleForLightSpecAsync(LightSourceRowVm row)
+    {
+        var args = new ThemeSampleColorEventArgs();
+        var handler = SampleColorRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+        if (args.PickedR == null) return;
+        row.SetSpecColor(args.PickedR.Value, args.PickedG!.Value, args.PickedB!.Value);
     }
 
     // ── Palette import / export ───────────────────────────────────────────
@@ -734,6 +946,44 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public event EventHandler<ThemeExportPaletteEventArgs>? ExportPaletteRequested;
     public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
 
+    /// <summary>Editor raises this when the user is about to switch themes /
+    /// close the window while <see cref="IsDirty"/>. Host shows the modal
+    /// prompt and writes the user's pick into <see cref="UnsavedChangesPromptEventArgs.Result"/>
+    /// before signalling <see cref="UnsavedChangesPromptEventArgs.Completion"/>.</summary>
+    public event EventHandler<UnsavedChangesPromptEventArgs>? UnsavedChangesPromptRequested;
+
+    /// <summary>View subscribes to this to set keyboard focus on the Name
+    /// TextBox after the user picks "Save" in the unsaved-changes prompt.</summary>
+    public event EventHandler? FocusNameRequested;
+
+    /// <summary>True when the user has edited any field since the last
+    /// successful load / save. Drives the unsaved-changes prompt on theme
+    /// switch and window close.</summary>
+    private bool _isDirty;
+    public bool IsDirty
+    {
+        get => _isDirty;
+        private set => this.RaiseAndSetIfChanged(ref _isDirty, value);
+    }
+
+    /// <summary>Raises <see cref="UnsavedChangesPromptRequested"/> and awaits
+    /// the host's signal. Returns the user's pick (defaults to Cancel if no
+    /// host subscriber so the calling flow stays safe).</summary>
+    public async Task<UnsavedChangesChoice> PromptUnsavedAsync()
+    {
+        var args = new UnsavedChangesPromptEventArgs();
+        var handler = UnsavedChangesPromptRequested;
+        if (handler == null) { return UnsavedChangesChoice.Cancel; }
+        handler.Invoke(this, args);
+        await args.Completion.Task;
+        return args.Result;
+    }
+
+    /// <summary>Public escape hatch so external close handlers (e.g. the
+    /// MainWindow editor-Closing handler) can request the Name field be
+    /// focused after a "Save" pick.</summary>
+    public void RequestFocusNameField() => FocusNameRequested?.Invoke(this, EventArgs.Empty);
+
     // ── Internal: row-change notification ─────────────────────────────────
 
     /// <summary>Called by Stops / Bands / Light rows when any of their fields
@@ -744,6 +994,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     private void FieldChanged()
     {
         if (_suppressChange) return;
+        // Any real (non-suppressed) field change marks the editor dirty so
+        // theme switch / window close prompts the user to save or discard.
+        IsDirty = true;
         if (!LivePreview) return;
         // 150 ms debounce — matches the legacy timer interval.
         _previewDebounce.Disposable = Observable
@@ -844,6 +1097,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         finally
         {
             _suppressChange = false;
+            // Freshly loaded definition == not dirty. Any field touched after
+            // this point flips IsDirty back to true via FieldChanged.
+            IsDirty = false;
         }
     }
 
@@ -959,6 +1215,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         SelectedTheme = def.Name;
         _suppressChange = false;
         _loadedSourceName = def.Name;
+        // Persisted to library — clear the dirty flag so a subsequent theme
+        // switch / window close doesn't re-prompt.
+        IsDirty = false;
 
         await RaiseMessageAsync(new ThemeMessageEventArgs("Save Theme", $"\"{def.Name}\" saved.", MessageSeverity.Info));
     }
@@ -1206,6 +1465,7 @@ public sealed class ColorStopRowVm : ReactiveObject
 public sealed class MaterialBandRowVm : ReactiveObject
 {
     private readonly ColorThemeEditorViewModel _parent;
+    private System.Threading.Timer? _pulseTimer;
 
     public MaterialBandRowVm(PbrMaterialBandDef seed, ColorThemeEditorViewModel parent)
     {
@@ -1213,6 +1473,50 @@ public sealed class MaterialBandRowVm : ReactiveObject
         _upperT = seed.UpperT;
         _metal = seed.Metal;
         _roughness = seed.Roughness;
+    }
+
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set
+        {
+            this.RaiseAndSetIfChanged(ref _isSelected, value);
+            this.RaisePropertyChanged(nameof(RowBackground));
+        }
+    }
+
+    private bool _isPulsing;
+    public bool IsPulsing
+    {
+        get => _isPulsing;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isPulsing, value);
+            this.RaisePropertyChanged(nameof(RowBackground));
+        }
+    }
+
+    /// <summary>Background brush combining selection + pulse state. Mirrors
+    /// <see cref="ColorStopRowVm.RowBackground"/>.</summary>
+    public IBrush RowBackground
+    {
+        get
+        {
+            if (_isPulsing) return new ImmutableSolidColorBrush(Color.FromRgb(0x50, 0x6E, 0x3C));
+            if (_isSelected) return new ImmutableSolidColorBrush(Color.FromRgb(0x2D, 0x3C, 0x50));
+            return new ImmutableSolidColorBrush(Colors.Transparent);
+        }
+    }
+
+    public void Pulse()
+    {
+        IsPulsing = true;
+        _pulseTimer?.Dispose();
+        _pulseTimer = new System.Threading.Timer(_ =>
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPulsing = false);
+        }, null, 700, System.Threading.Timeout.Infinite);
     }
 
     private float _upperT;
@@ -1242,11 +1546,87 @@ public sealed class MaterialBandRowVm : ReactiveObject
 public sealed class LightSourceRowVm : ReactiveObject
 {
     private readonly ColorThemeEditorViewModel _parent;
+    private System.Threading.Timer? _pulseTimer;
 
     public LightSourceRowVm(LightSourceDef seed, ColorThemeEditorViewModel parent)
     {
         _parent = parent;
         Load(seed);
+        SampleDiffCommand = ReactiveCommand.CreateFromTask(() => _parent.BeginSampleForLightDiffAsync(this));
+        SampleSpecCommand = ReactiveCommand.CreateFromTask(() => _parent.BeginSampleForLightSpecAsync(this));
+    }
+
+    public ReactiveCommand<Unit, Unit> SampleDiffCommand { get; }
+    public ReactiveCommand<Unit, Unit> SampleSpecCommand { get; }
+
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set
+        {
+            this.RaiseAndSetIfChanged(ref _isSelected, value);
+            this.RaisePropertyChanged(nameof(RowBackground));
+        }
+    }
+
+    private bool _isPulsing;
+    public bool IsPulsing
+    {
+        get => _isPulsing;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isPulsing, value);
+            this.RaisePropertyChanged(nameof(RowBackground));
+        }
+    }
+
+    /// <summary>Background brush combining selection + pulse state for the
+    /// light card. Mirrors <see cref="ColorStopRowVm.RowBackground"/>.</summary>
+    public IBrush RowBackground
+    {
+        get
+        {
+            if (_isPulsing) return new ImmutableSolidColorBrush(Color.FromRgb(0x50, 0x6E, 0x3C));
+            if (_isSelected) return new ImmutableSolidColorBrush(Color.FromRgb(0x2D, 0x3C, 0x50));
+            return new ImmutableSolidColorBrush(Colors.Transparent);
+        }
+    }
+
+    /// <summary>Flash the light card background green for ~700ms.</summary>
+    public void Pulse()
+    {
+        IsPulsing = true;
+        _pulseTimer?.Dispose();
+        _pulseTimer = new System.Threading.Timer(_ =>
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => IsPulsing = false);
+        }, null, 700, System.Threading.Timeout.Infinite);
+    }
+
+    /// <summary>Update the Diffuse RGB channels in one shot. Used by the
+    /// per-light eyedropper.</summary>
+    internal void SetDiffColor(byte r, byte g, byte b)
+    {
+        _diffR = r; _diffG = g; _diffB = b;
+        this.RaisePropertyChanged(nameof(DiffR));
+        this.RaisePropertyChanged(nameof(DiffG));
+        this.RaisePropertyChanged(nameof(DiffB));
+        this.RaisePropertyChanged(nameof(DiffColor));
+        this.RaisePropertyChanged(nameof(DiffSwatchBrush));
+        _parent.NotifyRowChanged();
+    }
+
+    /// <summary>Update the Specular RGB channels in one shot.</summary>
+    internal void SetSpecColor(byte r, byte g, byte b)
+    {
+        _specR = r; _specG = g; _specB = b;
+        this.RaisePropertyChanged(nameof(SpecR));
+        this.RaisePropertyChanged(nameof(SpecG));
+        this.RaisePropertyChanged(nameof(SpecB));
+        this.RaisePropertyChanged(nameof(SpecColor));
+        this.RaisePropertyChanged(nameof(SpecSwatchBrush));
+        _parent.NotifyRowChanged();
     }
 
     public void Load(LightSourceDef seed)
@@ -1417,6 +1797,24 @@ public sealed class ThemeExportPaletteEventArgs : EventArgs
     public string SuggestedName { get; init; } = "palette.json";
     public string PaletteName { get; init; } = "Palette";
     public List<ColorStopDef> Stops { get; init; } = new();
+    public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
+/// <summary>Result of the editor's unsaved-changes prompt:
+/// <list type="bullet">
+///   <item><term>Save</term><description>Stay open, focus Name field so the user can save manually.</description></item>
+///   <item><term>Discard</term><description>Drop edits and proceed with the impending close / switch.</description></item>
+///   <item><term>Cancel</term><description>Back out — abort the close / switch entirely.</description></item>
+/// </list></summary>
+public enum UnsavedChangesChoice { Save, Discard, Cancel }
+
+public sealed class UnsavedChangesPromptEventArgs : EventArgs
+{
+    /// <summary>Host writes the user's pick before signalling
+    /// <see cref="Completion"/>. Defaults to Cancel so a host that signals
+    /// without picking does the safe thing.</summary>
+    public UnsavedChangesChoice Result { get; set; } = UnsavedChangesChoice.Cancel;
+
     public TaskCompletionSource<bool> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
