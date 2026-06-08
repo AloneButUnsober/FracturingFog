@@ -189,6 +189,27 @@ namespace FracturingFog.Models
             new OrbitTrapPolarRoseMap(),
             new OrbitTrapImageRainbowMap(),
 
+            // ── 3D-lit orbit-trap variants ───────────────────────────────────
+            new OrbitTrapPointPhong3DMap(),
+            new OrbitTrapCrossPhong3DMap(),
+            new OrbitTrapCirclePhong3DMap(),
+            new OrbitTrapLinePhong3DMap(),
+            new OrbitTrapStarPhong3DMap(),
+            new OrbitTrapSquarePhong3DMap(),
+            new OrbitTrapRingPhong3DMap(),
+            new OrbitTrapHyperbolaPhong3DMap(),
+            new OrbitTrapLemniscatePhong3DMap(),
+            new OrbitTrapCardioidPhong3DMap(),
+            new OrbitTrapDiagonalCrossPhong3DMap(),
+            new OrbitTrapTrianglePhong3DMap(),
+            new OrbitTrapHexagonPhong3DMap(),
+            new OrbitTrapHeartPhong3DMap(),
+            new OrbitTrapSineWavePhong3DMap(),
+            new OrbitTrapConcentricPhong3DMap(),
+            new OrbitTrapGridPhong3DMap(),
+            new OrbitTrapPinwheelPhong3DMap(),
+            new OrbitTrapPolarRosePhong3DMap(),
+
             // ── Stripe Average + TIA (Ultra Fractal look) ─────────────────────
             new StripeAverageClassicMap(),
             new TriangleInequalityMap(),

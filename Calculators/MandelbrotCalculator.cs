@@ -323,6 +323,26 @@ public sealed class MandelbrotCalculator
             case OrbitTrapGridMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapPinwheelMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapPolarRoseMap m: CalculateOrbitAware(m, ct); return;
+            // 3D-lit orbit-trap variants (OrbitTrap3DThemes.cs)
+            case OrbitTrapPointPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCrossPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCirclePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapLinePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapStarPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapSquarePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapRingPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHyperbolaPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapLemniscatePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCardioidPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapDiagonalCrossPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapTrianglePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHexagonPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHeartPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapSineWavePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapConcentricPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapGridPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapPinwheelPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapPolarRosePhong3DMap m: CalculateOrbitAware(m, ct); return;
             case StripeAverageClassicMap m: CalculateOrbitAware(m, ct); return;
             case TriangleInequalityMap m: CalculateOrbitAware(m, ct); return;
             case StripeTiaBlendMap m: CalculateOrbitAware(m, ct); return;
