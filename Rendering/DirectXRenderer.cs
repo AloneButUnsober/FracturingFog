@@ -236,8 +236,8 @@ float4 PS(VSOut i) : SV_Target
 
         // ── Vertex shader ──────────────────────────────────────────────────
         Result vsResult = Compiler.Compile(
-            defines:     null,
-            include:    null,
+            defines:     null!,
+            include:    null!,
             shaderSource: ShaderSource,
             entryPoint:   "VS",
             sourceName:   "Mandelbrot.hlsl",
@@ -261,8 +261,8 @@ float4 PS(VSOut i) : SV_Target
 
         // ── Pixel shader ───────────────────────────────────────────────────
         Result psResult = Compiler.Compile(
-            defines:     null,
-            include:    null,
+            defines:     null!,
+            include:    null!,
             shaderSource: ShaderSource,
             entryPoint:   "PS",
             sourceName:   "Mandelbrot.hlsl",
@@ -457,7 +457,7 @@ float4 PS(VSOut i) : SV_Target
         _height = height;
 
         // Unbind the RTV before resize; D3D11 will refuse if it is still bound.
-        _context.OMSetRenderTargets((ID3D11RenderTargetView?)null);
+        _context.OMSetRenderTargets((ID3D11RenderTargetView)null!);
         _rtv.Dispose();
 
         // Pass zero width/height to let DXGI inherit the new client area size;

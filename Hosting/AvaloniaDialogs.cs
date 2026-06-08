@@ -561,7 +561,7 @@ namespace FracturingFog.Hosting
                 var box = new TextBox
                 {
                     Text = suggested,
-                    Watermark = prompt,
+                    PlaceholderText = prompt,
                     Margin = new Thickness(16, 8, 16, 8),
                     MinWidth = 320,
                 };
@@ -641,7 +641,7 @@ namespace FracturingFog.Hosting
                 var box = new TextBox
                 {
                     Text = suggested,
-                    Watermark = prompt,
+                    PlaceholderText = prompt,
                     Margin = new Thickness(16, 8, 16, 8),
                     MinWidth = 320,
                 };
@@ -742,8 +742,8 @@ namespace FracturingFog.Hosting
 
             void Run()
             {
-                var widthTx = new TextBox { Text = "24", MinWidth = 70, Watermark = "inches" };
-                var heightTx = new TextBox { Text = "36", MinWidth = 70, Watermark = "inches" };
+                var widthTx = new TextBox { Text = "24", MinWidth = 70, PlaceholderText = "inches" };
+                var heightTx = new TextBox { Text = "36", MinWidth = 70, PlaceholderText = "inches" };
 
                 var portrait = new CheckBox { Content = "Portrait orientation", IsChecked = true, Foreground = Brushes.White };
 

@@ -130,7 +130,8 @@ public sealed class DirectX12Renderer : IFractalRenderer
         if (D3D12GetDebugInterface(out ID3D12Debug? dbg).Success && dbg != null)
         { dbg.EnableDebugLayer(); dbg.Dispose(); }
 #endif
-        D3D12CreateDevice(null, FeatureLevel.Level_12_0, out _device).CheckError();
+        D3D12CreateDevice(null, FeatureLevel.Level_12_0, out ID3D12Device2? dev).CheckError();
+        _device = dev!;
     }
 
     private void CreateCommandInfrastructure()
