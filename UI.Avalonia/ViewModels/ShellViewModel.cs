@@ -1354,7 +1354,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>FloatingMenu's Dimensions combo picked a new render size.
     /// Host resizes the MainWindow to (Width, Height). No-op when the
     /// requested size exceeds the working area — host clamps as needed.</summary>
+#pragma warning disable CS0067 // raised by host subscribing via reflection / future wiring
     public event EventHandler<(int Width, int Height)>? ResizeRequested;
+#pragma warning restore CS0067
 
     /// <summary>Render a high-resolution poster. Host pops the poster-size
     /// dialog + a SaveFilePicker, then runs the shared PosterRenderer.</summary>

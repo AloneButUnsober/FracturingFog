@@ -121,7 +121,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private IColorThemeService? _themeService;
     private ThemeSortMode _themeSort = ThemeSortMode.Default;
     private string? _themeKind;
-    private bool _themeEditableOnly;
+    private const bool _themeEditableOnly = false;
     private RegionSortMode _regionSort = RegionSortMode.Default;
     private FractalType _regionType = FractalType.Mandelbrot;
 

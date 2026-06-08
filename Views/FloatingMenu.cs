@@ -1,4 +1,6 @@
-﻿using System;
+﻿// DEPRECATED WinForms file — see CLAUDE.md. Hygiene warnings suppressed.
+#pragma warning disable CS0169, CS0414, CS0649, CS8618, CS8602, CS8604, CS8625, CS8600, CS8601, CS0219
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;

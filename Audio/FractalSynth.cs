@@ -51,7 +51,6 @@ namespace FracturingFog.Audio
 
         // Sample probe scan cache (refreshed periodically).
         private int[] _scanCache = new int[16];
-        private double _scanRefreshSamples;
         private const double ScanRefreshIntervalSec = 0.25;
         private double _samplesSinceScan;
 

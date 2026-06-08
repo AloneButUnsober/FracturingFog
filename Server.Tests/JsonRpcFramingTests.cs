@@ -11,6 +11,7 @@ public sealed class JsonRpcFramingTests
     [Fact]
     public async Task RoundTrip_PreservesEnvelopeFields()
     {
+        var ct = TestContext.Current.CancellationToken;
         var sent = new MessageEnvelope
         {
             Kind = "request",
@@ -20,10 +21,10 @@ public sealed class JsonRpcFramingTests
         };
 
         using var ms = new MemoryStream();
-        await JsonRpcFraming.WriteAsync(ms, sent);
+        await JsonRpcFraming.WriteAsync(ms, sent, ct: ct);
         ms.Position = 0;
 
-        var got = await JsonRpcFraming.ReadAsync(ms);
+        var got = await JsonRpcFraming.ReadAsync(ms, ct: ct);
         Assert.NotNull(got);
         Assert.Equal("request", got!.Kind);
         Assert.Equal("abc-123", got.Id);
@@ -36,6 +37,7 @@ public sealed class JsonRpcFramingTests
     [Fact]
     public async Task RoundTrip_MultipleFramesBackToBack()
     {
+        var ct = TestContext.Current.CancellationToken;
         using var ms = new MemoryStream();
         for (int i = 0; i < 5; i++)
         {
@@ -44,32 +46,34 @@ public sealed class JsonRpcFramingTests
                 Kind = "request",
                 Id = i.ToString(),
                 Method = "ping",
-            });
+            }, ct: ct);
         }
         ms.Position = 0;
 
         for (int i = 0; i < 5; i++)
         {
-            var got = await JsonRpcFraming.ReadAsync(ms);
+            var got = await JsonRpcFraming.ReadAsync(ms, ct: ct);
             Assert.NotNull(got);
             Assert.Equal(i.ToString(), got!.Id);
         }
-        Assert.Null(await JsonRpcFraming.ReadAsync(ms)); // EOF
+        Assert.Null(await JsonRpcFraming.ReadAsync(ms, ct: ct)); // EOF
     }
 
     [Fact]
     public async Task Read_RejectsFrameLargerThanCap()
     {
+        var ct = TestContext.Current.CancellationToken;
         // Hand-craft a 4-byte little-endian header that claims a 1 GB body.
         byte[] header = { 0x00, 0x00, 0x00, 0x40 }; // 0x4000_0000 = 1 GiB
         using var ms = new MemoryStream(header);
         await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await JsonRpcFraming.ReadAsync(ms, maxFrameBytes: 1 * 1024 * 1024));
+            await JsonRpcFraming.ReadAsync(ms, maxFrameBytes: 1 * 1024 * 1024, ct: ct));
     }
 
     [Fact]
     public async Task Write_RejectsBodyOverCap()
     {
+        var ct = TestContext.Current.CancellationToken;
         var env = new MessageEnvelope
         {
             Kind = "request",
@@ -79,6 +83,6 @@ public sealed class JsonRpcFramingTests
         };
         using var ms = new MemoryStream();
         await Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
-            await JsonRpcFraming.WriteAsync(ms, env, maxFrameBytes: 256));
+            await JsonRpcFraming.WriteAsync(ms, env, maxFrameBytes: 256, ct: ct));
     }
 }

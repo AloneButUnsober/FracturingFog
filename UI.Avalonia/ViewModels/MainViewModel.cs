@@ -125,7 +125,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 System.Threading.Volatile.Write(ref _adaptiveRepaintBusy, 0);
                 if (System.Threading.Interlocked.Exchange(ref _adaptiveRepaintPending, 0) == 1)
                 {
-                    _adaptiveRepaintDebounce.Change(AdaptiveRepaintDebounceMs, System.Threading.Timeout.Infinite);
+                    _adaptiveRepaintDebounce!.Change(AdaptiveRepaintDebounceMs, System.Threading.Timeout.Infinite);
                 }
             }
         }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
@@ -674,7 +674,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     // ── Region pick from outside (theme editor jump, slideshow advance) ───
 
+#pragma warning disable CS0067 // public API surface; raised by consumers via reflection / future wiring
     public event EventHandler<string>? RegionJumpRequested;
+#pragma warning restore CS0067
 
     /// <summary>Called by ShellViewModel after a region pick lands. The
     /// host service translates the name into a FractalRegion + per-engine
