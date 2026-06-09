@@ -520,7 +520,33 @@ Expected gain on hit: skip the single-threaded reference-orbit loop
 (~100k+ iters of DD/QD math per frame at zoom > 1e25). 30-70% video-frame
 time reduction at deep zoom.
 
-### T3.1 GPU compute (phase 1) — deferred
+### T3.1 GPU compute (phase 1, kernel land)
+
+`Rendering/MandelbrotGpuKernel.cs` — D3D11 compute shader (HLSL CS 5.0)
+for the SP Mandelbrot escape-time inner loop. Owns its own `cs_5_0`
+blob compiled via `Vortice.D3DCompiler`, a 48-byte cbuffer for
+per-frame params (split centre + split scale for ~6 extra mantissa
+bits past plain FP32), and two `StructuredBuffer<uint>` / `<float>` UAVs
+for the iter + smooth outputs. `Run()` is synchronous: Dispatch →
+`CopyResource` → `Map(Read)` → memcpy into the caller's pinned
+`int[]` + `float[]`. 8×8 threadgroup, one thread per pixel,
+whole-cardioid + period-2 bulb early-out matches the CPU SIMD path.
+
+What's NOT wired yet (the rest of phase 1):
+- DirectXRenderer needs to expose its `ID3D11Device` + immediate
+  context so `FractalRenderHost` can construct one `MandelbrotGpuKernel`
+  per session. Currently the device is `private` and there's no
+  accessor on `IFractalRenderer`. Add an optional accessor (cast at
+  runtime in the host).
+- `MandelbrotCalculator.UseGpuCompute` toggle. When true (+ kernel
+  present, + not high-precision, + maxIter sane), `CalculateDoublePrecision`
+  branches to `_gpuKernel.Run(...)` then runs the existing IColorMap
+  pass on CPU over the returned iter+smooth buffers.
+- UI toggle: extend the Adaptive iter-cap ComboBox in both Video
+  dialogs to a tri-state row with a separate "GPU compute" checkbox
+  (default off until validated on a few drivers).
+
+### T3.1 GPU compute (phase 2-5) — deferred
 
 **Why deferred:** new HLSL compute shader + new D3D11 dispatch path + new
 GPU↔CPU sync model. Phase 1 alone (Mandelbrot SP kernel, palette on CPU)
