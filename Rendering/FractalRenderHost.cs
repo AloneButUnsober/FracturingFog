@@ -987,9 +987,11 @@ namespace FracturingFog.Rendering
 
             // Reuse the pooled scratch buffer instead of allocating a fresh
             // uint[n] every call. At 1080p this is an 8 MB allocation that
-            // used to happen on every adaptive-slider tick.
+            // used to happen on every adaptive-slider tick. Pinned LOH so
+            // the buffer is removed from GC scan and the GPU upload path
+            // does not need a per-frame GCHandle.Alloc.
             if (_uploadDstPool == null || _uploadDstPool.Length < n)
-                _uploadDstPool = new uint[n];
+                _uploadDstPool = GC.AllocateUninitializedArray<uint>(n, pinned: true);
             var dst = _uploadDstPool;
 
             int brightness = ViewState.Brightness;
@@ -1051,7 +1053,7 @@ namespace FracturingFog.Rendering
             if (!_recordingActive)
             {
                 if (_uploadPrePool == null || _uploadPrePool.Length < n)
-                    _uploadPrePool = new uint[n];
+                    _uploadPrePool = GC.AllocateUninitializedArray<uint>(n, pinned: true);
                 var pre = _uploadPrePool;
                 Array.Copy(dst, pre, n);
                 _lastPreOverlayBuffer = pre;
