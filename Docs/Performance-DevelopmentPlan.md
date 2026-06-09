@@ -590,6 +590,31 @@ Phase 1.b open items:
   IColorMap → HLSL emit so palette runs on GPU and ColorBuffer
   stays GPU-side. Eliminates the per-frame readback.
 
+### T3.1 phase 3 — alt-fractal kinds on GPU
+
+`MandelbrotGpuKernel` gains a `FractalKind { Mandelbrot, Julia,
+BurningShip, Tricorn }` enum and three new cbuffer fields
+(`gFractalKind`, `gParam0`, `gParam1`). Shader switches on `gFractalKind`
+inside `CSMain`:
+- **Mandelbrot (0)** — unchanged. Cardioid + period-2 bulb early-out
+  only fires for this kind (other shapes have different in-sets).
+- **Julia (1)** — `z_0` initialised to the pixel coord; iteration `c`
+  is the constant `(gParam0, gParam1)`.
+- **BurningShip (2)** — pre-step transform `z := |Re(z)| + i|Im(z)|`.
+- **Tricorn (3)** — pre-step `z := conj(z)`.
+
+`EscapeTimeCalculator` gains `UseGpuCompute` + `GpuKernel` (shared
+instance, set by the host alongside the Mandelbrot one) and a
+`TryDispatchGpu` helper. Called at the top of `Calculate` — when the
+fractal type is shader-supported, dispatches the kernel, runs the
+same CPU writeback as the Mandelbrot path (smooth + distance estimate
++ normal from final z+dz), and skips the CPU switch entirely. Returns
+false for Multibrot (pow, deferred) and Phoenix (two-step memory,
+out of scope for the polynomial path).
+
+The cbuffer grew from 64 to 64 bytes — the four new ints fit in the
+existing pad slots.
+
 ### T3.1 GPU compute (phase 2-5) — deferred
 
 **Why deferred:** new HLSL compute shader + new D3D11 dispatch path + new
