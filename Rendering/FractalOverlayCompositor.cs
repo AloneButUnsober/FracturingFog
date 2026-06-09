@@ -287,5 +287,115 @@ namespace FracturingFog.Rendering
                 g.DrawString(wm.SubText, _subFont, subBrush, subX, subY);
             }
         }
+
+        // ── Perf HUD ──────────────────────────────────────────────────────
+        //
+        // Top-left diagnostic block. Drawn on top of the grid + watermark so
+        // it stays readable on dense regions. Translucent black background
+        // for legibility against any palette.
+
+        private readonly Font _hudHeader = new(new FontFamily(GenericFontFamilies.Monospace), 10f, FontStyle.Bold);
+        private readonly Font _hudBody   = new(new FontFamily(GenericFontFamilies.Monospace), 9f,  FontStyle.Regular);
+
+        /// <summary>
+        /// Composite the perf HUD (phase timings + HW summary) into a BGRA
+        /// buffer. Standalone of <see cref="Composite"/> so the HUD layer is
+        /// independent of the grid/watermark toggles — host can call only
+        /// this when the user has the HUD on without the other overlays.
+        /// </summary>
+        public void CompositePerfHud(
+            uint[] bgra, int width, int height,
+            PerfSnapshot snap, string hwSummary,
+            int frameW, int frameH, int maxIter, string precisionLabel)
+        {
+            if (bgra == null || bgra.Length < width * height) return;
+            if (width <= 1 || height <= 1) return;
+
+            var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+            try
+            {
+                IntPtr ptr = handle.AddrOfPinnedObject();
+                using var bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppArgb, ptr);
+                using var g = Graphics.FromImage(bmp);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.AntiAlias;
+                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
+
+                // 12 lines. Sized for monospace at 9pt → roughly 14 px per
+                // line including the header at 10pt bold.
+                string[] lines =
+                {
+                    "PERF HUD",
+                    $"frame  {snap.FrameMs,6:F1} ms  ({snap.Fps,5:F1} fps)",
+                    $"  min  {snap.FrameMin,6:F1}    max  {snap.FrameMax,6:F1}",
+                    $"calc   {snap.CalcMs,6:F1} ms  ({Pct(snap.CalcMs, snap.FrameMs)})",
+                    $"upload {snap.UploadMs,6:F1} ms  ({Pct(snap.UploadMs, snap.FrameMs)})",
+                    $"presnt {snap.PresentMs,6:F1} ms  ({Pct(snap.PresentMs, snap.FrameMs)})",
+                    $"GC g0 {snap.Gen0PerSec,5:F2}/s  g1 {snap.Gen1PerSec,5:F2}/s  g2 {snap.Gen2PerSec,5:F2}/s",
+                    $"samples {snap.SampleCount}",
+                    "",
+                    $"frame  {frameW}x{frameH}  iter {maxIter}  {precisionLabel}",
+                    hwSummary,
+                };
+
+                float maxW = 0;
+                float lineH = _hudBody.GetHeight(g);
+                float headerH = _hudHeader.GetHeight(g);
+                foreach (var ln in lines)
+                {
+                    if (string.IsNullOrEmpty(ln)) continue;
+                    var sz = g.MeasureString(ln, _hudBody);
+                    if (sz.Width > maxW) maxW = sz.Width;
+                }
+                var hdrSz = g.MeasureString(lines[0], _hudHeader);
+                if (hdrSz.Width > maxW) maxW = hdrSz.Width;
+
+                const int pad = 6;
+                int x0 = 8;
+                int y0 = 8;
+                int boxW = (int)Math.Ceiling(maxW) + pad * 2;
+                int boxH = (int)Math.Ceiling(headerH + lineH * (lines.Length - 1)) + pad * 2;
+
+                using var bg = new SolidBrush(Color.FromArgb(170, 0, 0, 0));
+                using var bord = new Pen(Color.FromArgb(180, 80, 200, 255), 1f);
+                using var headBrush = new SolidBrush(Color.FromArgb(255, 120, 220, 255));
+                using var bodyBrush = new SolidBrush(Color.FromArgb(245, 230, 230, 230));
+                using var shadowBrush = new SolidBrush(Color.FromArgb(160, 0, 0, 0));
+
+                g.FillRectangle(bg, x0, y0, boxW, boxH);
+                g.DrawRectangle(bord, x0, y0, boxW, boxH);
+
+                float ty = y0 + pad;
+                // Header line
+                g.DrawString(lines[0], _hudHeader, shadowBrush, x0 + pad + 1, ty + 1);
+                g.DrawString(lines[0], _hudHeader, headBrush, x0 + pad, ty);
+                ty += headerH;
+                // Body lines
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    if (lines[i].Length > 0)
+                    {
+                        g.DrawString(lines[i], _hudBody, shadowBrush, x0 + pad + 1, ty + 1);
+                        g.DrawString(lines[i], _hudBody, bodyBrush, x0 + pad, ty);
+                    }
+                    ty += lineH;
+                }
+
+                g.Flush();
+            }
+            finally
+            {
+                handle.Free();
+            }
+        }
+
+        private static string Pct(double part, double whole)
+        {
+            if (whole <= 0) return "  --%";
+            double p = 100.0 * part / whole;
+            if (p < 0) p = 0;
+            if (p > 999) p = 999;
+            return $"{p,4:F0}%";
+        }
     }
 }

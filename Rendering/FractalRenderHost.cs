@@ -267,6 +267,19 @@ namespace FracturingFog.Rendering
 
         public bool ShowGrid { get; set; }
         public bool ShowWatermark { get; set; }
+        /// <summary>When true, the post-FX upload composites a perf HUD
+        /// (phase timings + HW summary) into the top-left of the frame.
+        /// Cheap (~0.1 ms/frame) — safe to leave on during video record.</summary>
+        public bool ShowPerfHud { get; set; }
+
+        // Rolling perf collector. Sampled by the calc thread + upload path.
+        private readonly PerfStats _perfStats = new();
+
+        /// <summary>Clear the perf HUD's rolling buffers + reset the
+        /// GC-rate baseline. Used to start a clean capture window when
+        /// switching regions / starting a video so the prior region's
+        /// samples do not skew the averages.</summary>
+        public void ResetPerfStats() => _perfStats.Reset();
         public string? RegionName { get; set; }
         public string? ThemeName { get; set; }
         public string? ProgramName { get; set; } = "Fracturing Fog";
@@ -669,12 +682,16 @@ namespace FracturingFog.Rendering
                 }
             }
 
+            long calcStart = Stopwatch.GetTimestamp();
             try
             {
                 if (useAlt) altCalc!.Calculate(token);
                 else calc.Calculate(token);
             }
             catch (OperationCanceledException) { }
+            long calcEnd = Stopwatch.GetTimestamp();
+            if (ShowPerfHud)
+                _perfStats.RecordCalc((calcEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
 
             long ms = job.Sw.ElapsedMilliseconds;
 
@@ -692,80 +709,84 @@ namespace FracturingFog.Rendering
             var altCalc = job.AltCalc;
             bool useAlt = altCalc != null;
 
-            if (token.IsCancellationRequested)
             {
-                // Cancelled render still counts as "done" for animation
-                // gating — otherwise a mid-animation cancel would leave
-                // the gate stuck.
-                AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-                return;
-            }
-            if (_disposed) return;
-
-            // Adaptive contrast — Mandelbrot only. Build the CDF and
-            // cache it so subsequent live-slider / sweep ticks can skip
-            // the (serial) histogram build and just re-apply with the new
-            // strength. Even at HistogramEq == 0 we build the CDF here so
-            // the first slider movement off zero is instant.
-            if (!useAlt)
-            {
-                if (calc.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
+                if (token.IsCancellationRequested)
                 {
-                    lock (_adaptiveCdfLock)
+                    // Cancelled render still counts as "done" for animation
+                    // gating — otherwise a mid-animation cancel would leave
+                    // the gate stuck.
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+                if (_disposed) return;
+
+                // Adaptive contrast — Mandelbrot only. Build the CDF and
+                // cache it so subsequent live-slider / sweep ticks can skip
+                // the (serial) histogram build and just re-apply with the new
+                // strength. Even at HistogramEq == 0 we build the CDF here so
+                // the first slider movement off zero is instant.
+                if (!useAlt)
+                {
+                    if (calc.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
                     {
-                        _cachedAdaptiveCdf = cdf;
-                        _cachedAdaptiveBins = bins;
-                        _cachedAdaptiveSourceMaxIter = srcMaxIter;
-                        _adaptiveCdfValid = true;
+                        lock (_adaptiveCdfLock)
+                        {
+                            _cachedAdaptiveCdf = cdf;
+                            _cachedAdaptiveBins = bins;
+                            _cachedAdaptiveSourceMaxIter = srcMaxIter;
+                            _adaptiveCdfValid = true;
+                        }
+                        if (ViewState.HistogramEq > 0)
+                            calc.ApplyHistogramEqualizationWithCdf(cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
                     }
-                    if (ViewState.HistogramEq > 0)
-                        calc.ApplyHistogramEqualizationWithCdf(cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
+                    else if (ViewState.HistogramEq > 0)
+                    {
+                        // No escaped pixels (e.g. fully in-set) — leave the
+                        // ColorBuffer alone; Calculate already coloured it.
+                    }
                 }
-                else if (ViewState.HistogramEq > 0)
-                {
-                    // No escaped pixels (e.g. fully in-set) — leave the
-                    // ColorBuffer alone; Calculate already coloured it.
-                }
+
+                if (useAlt)
+                    UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
+                else
+                    UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+
+                // Pull the richer LastPrecisionLabel from the generated calcs
+                // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
+                // path actually ran — essential for diagnosing perf at
+                // deep zoom. Legacy MandelbrotCalculator exposes only a
+                // boolean (IsHighPrecisionActive); collapse to "DD"/"SP"
+                // for the status string in that case.
+                string? lbl = useAlt
+                    ? altCalc switch
+                    {
+                        FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g2 => g2.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g3 => g3.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.MandelbrotZ4Calculator g4 => g4.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g5 => g5.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
+                        FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
+                        _ => null
+                    }
+                    : (calc.IsHighPrecisionActive ? "DD" : "SP");
+                bool hp = useAlt
+                    ? (lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD")))
+                    : calc.IsHighPrecisionActive;
+                int curW = useAlt ? altCalc!.Width : calc.Width;
+                int curH = useAlt ? altCalc!.Height : calc.Height;
+                int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
+                double curCx = useAlt ? altCalc!.CenterX : calc.CenterX;
+                double curCy = useAlt ? altCalc!.CenterY : calc.CenterY;
+                double curZoom = useAlt ? altCalc!.Zoom : calc.Zoom;
+
+                FrameCompleted?.Invoke(this, new RenderFrameInfo(
+                    curCx, curCy, curZoom, curIter, ms, curW, curH,
+                    hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+
+                if (ShowPerfHud) _perfStats.RecordFrame(ms);
+
+                AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
             }
-
-            if (useAlt)
-                UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
-            else
-                UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
-
-            // Pull the richer LastPrecisionLabel from the generated calcs
-            // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
-            // path actually ran — essential for diagnosing perf at
-            // deep zoom. Legacy MandelbrotCalculator exposes only a
-            // boolean (IsHighPrecisionActive); collapse to "DD"/"SP"
-            // for the status string in that case.
-            string? lbl = useAlt
-                ? altCalc switch
-                {
-                    FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g2 => g2.LastPrecisionLabel,
-                    FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g3 => g3.LastPrecisionLabel,
-                    FracturingFog.Calculators.Generated.MandelbrotZ4Calculator g4 => g4.LastPrecisionLabel,
-                    FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g5 => g5.LastPrecisionLabel,
-                    FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
-                    FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
-                    _ => null
-                }
-                : (calc.IsHighPrecisionActive ? "DD" : "SP");
-            bool hp = useAlt
-                ? (lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD")))
-                : calc.IsHighPrecisionActive;
-            int curW = useAlt ? altCalc!.Width : calc.Width;
-            int curH = useAlt ? altCalc!.Height : calc.Height;
-            int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
-            double curCx = useAlt ? altCalc!.CenterX : calc.CenterX;
-            double curCy = useAlt ? altCalc!.CenterY : calc.CenterY;
-            double curZoom = useAlt ? altCalc!.Zoom : calc.Zoom;
-
-            FrameCompleted?.Invoke(this, new RenderFrameInfo(
-                curCx, curCy, curZoom, curIter, ms, curW, curH,
-                hp, ViewState.IterLocked, ViewState.FractalType, lbl));
-
-            AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
         }
 
         // ── Resize ────────────────────────────────────────────────────────────
@@ -1102,6 +1123,7 @@ namespace FracturingFog.Rendering
         private void UploadProcessedBuffer(uint[] src, int w, int h)
         {
             int n = w * h;
+            long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             lock (_uploadGate)
             {
 
@@ -1211,10 +1233,43 @@ namespace FracturingFog.Rendering
                 }
             }
 
+            // Perf HUD: composited last so it sits above grid + watermark.
+            // Standalone of those toggles — user wants timings even on a
+            // bare frame. Sampled phase data from _perfStats.
+            if (ShowPerfHud && OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    var snap = _perfStats.Snapshot();
+                    string lbl = _calculator.IsHighPrecisionActive ? "DD" : "SP";
+                    _overlay.CompositePerfHud(dst, w, h,
+                        snap, HardwareProbe.Summary,
+                        w, h, _calculator.MaxIterations, lbl);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[FractalRenderHost] Perf HUD composite failed: {ex.Message}");
+                }
+            }
+
+            // Stop the upload-ms clock here so its value reflects only
+            // post-FX + overlay + HUD CPU work, separate from the GPU
+            // upload + present cost which is measured below.
+            if (ShowPerfHud)
+            {
+                long uploadEnd = Stopwatch.GetTimestamp();
+                _perfStats.RecordUpload((uploadEnd - uploadStart) * 1000.0 / Stopwatch.Frequency);
+            }
+            long presentStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             lock (_d3dGate)
             {
                 _renderer.UpdateTexture(dst, w, h);
                 _renderer.Render();
+            }
+            if (ShowPerfHud)
+            {
+                long presentEnd = Stopwatch.GetTimestamp();
+                _perfStats.RecordPresent((presentEnd - presentStart) * 1000.0 / Stopwatch.Frequency);
             }
             _lastUploadedBuffer = dst;
             _lastUploadedWidth = w;

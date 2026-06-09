@@ -518,6 +518,31 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private bool _showPerfHud;
+    /// <summary>True to blend the perf HUD (phase timings + HW summary)
+    /// into the top-left of the uploaded texture. Cheap to leave on.</summary>
+    public bool ShowPerfHud
+    {
+        get => _showPerfHud;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _showPerfHud, value))
+            {
+                _renderHost.ShowPerfHud = value;
+                _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
+    /// <summary>Clear the perf HUD's rolling buffers + reset GC-rate
+    /// baseline. Bound to Shift+H so the user can start a clean capture
+    /// when switching regions mid-test.</summary>
+    public void ResetPerfStats()
+    {
+        _renderHost.ResetPerfStats();
+        _renderHost.RepaintWithPostFx();
+    }
+
     // ── Custom watermark precedence chain ────────────────────────────────
     //
     // The render host gets one resolved WatermarkDef? — null means "use the
