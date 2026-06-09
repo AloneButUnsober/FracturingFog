@@ -414,6 +414,25 @@ Sandbox hot-load).
   Calculate on sub-rects or pushing a per-tile cap array into the
   iteration loop in every color-map specialisation — out of scope for
   the Phase 1 commit, tracked as a follow-up.
+- **Video iter-cap dialog picker (Phase 2)** — `MandelbrotCalculator`
+  gains `int[]? PerRowMaxIter`; when non-null and sized to `Height`,
+  row `y` uses `PerRowMaxIter[y]` instead of the global
+  `MaxIterations`. Only the SP path
+  (`CalculateDoublePrecision`/`ComputeRowSP`) honours it; HP (DD/QD)
+  perturbation paths still use the global cap (Phase 2.1 follow-up).
+  `FractalRenderHost.Video.cs` divides the frame into `TileBands = 8`
+  vertical row bands. After each successful Calculate the SP path
+  samples `IterationBuffer` along a single near-mid-band row at
+  `samplesPerBand = 32` strides per band — `O(TileBands * 32)` per
+  frame. `BuildPerRowMaxIterCap` smoothsteps the normalised band avg
+  dwell over `[TileInteriorLo=0.50, TileInteriorHi=0.90]` and lerps
+  the per-band cap multiplier from `1.0` (full quality, boundary
+  detail) down to `TileMinCapMult=0.40` (interior-dominated, capped).
+  Caps floor at 64 iter. The per-row array is pooled + reused across
+  frames; cleared at video end + slideshow end + run start so
+  interactive `Trigger()` reverts to the global cap path. PerTile no
+  longer routes to Global — the Phase 1 fallback warning + one-shot
+  guard field are removed.
 
 ## Tier 3 landed-so-far
 

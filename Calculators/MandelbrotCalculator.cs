@@ -86,6 +86,15 @@ public sealed class MandelbrotCalculator
 
     public int MaxIterations { get; set; } = 512;
 
+    /// <summary>Optional per-row iteration cap. When non-null and sized to
+    /// <see cref="Height"/>, row y uses <c>PerRowMaxIter[y]</c> instead of
+    /// the global <see cref="MaxIterations"/>. Used by the video pipeline's
+    /// PerTile cap mode to keep boundary-rich rows at full quality while
+    /// capping interior-dominated rows where the extra iterations don't
+    /// produce visible detail. Currently honoured by the SP path only; HP
+    /// (DD/QD perturbation) paths fall back to <see cref="MaxIterations"/>.</summary>
+    public int[]? PerRowMaxIter { get; set; }
+
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
 
     /// <summary>True when the last Calculate() used double-double arithmetic.</summary>
@@ -735,14 +744,20 @@ public sealed class MandelbrotCalculator
     {
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
+        // Per-tile maxIter (PerTile mode). Captured once so the per-row
+        // body never touches a property that could be re-assigned mid-frame.
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
 
         _po.CancellationToken = ct;
         var po = _po;
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = CenterY + (y - Height * 0.5) * scale;
-            ComputeRowSP(cy, CenterX, scale, maxIt, y * Width, colorMap);
+            ComputeRowSP(cy, CenterX, scale, rowMaxIt, y * Width, colorMap);
         });
     }
 
