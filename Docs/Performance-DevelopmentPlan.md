@@ -448,6 +448,32 @@ Sandbox hot-load).
   the recolor's `iters >= maxIter` in-set gate classifies it
   correctly — semantically right for unescaped pixels and prevents
   visible iter-banding at band boundaries.
+- **Video iter-cap dialog picker (single-shot Video Zoom dialog)** —
+  `AvaloniaDialogs.ShowVideoAsync` (single-shot Video Zoom dialog under
+  the FloatingMenu) gains the same Adaptive iter-cap ComboBox the
+  embedded VideoSettingsView already had. Both `startBtn.Click` and
+  `slideshowBtn.Click` populate `IterCapMode` from the picker. Default
+  Global preserves the prior behaviour.
+- **Video iter-cap dialog picker (alt-calc extension)** —
+  `EscapeTimeCalculator` (used by Julia / BurningShip / Tricorn /
+  Multibrot / Phoenix) gains `int[]? PerRowMaxIter` with the same
+  semantics as `MandelbrotCalculator`. All three calc paths
+  (`CalculateCoreSimd`, `CalculateCore`, `CalculatePhoenix`) honour
+  the per-row cap and run the in-set rewrite post-row.
+  `SyncAltCalculatorForVideoFrame` copies the per-row array onto an
+  `EscapeTimeCalculator` cast. Generated calcs under
+  `Calculators/Generated/` are template-driven by `CalculatorGen` and
+  don't honour per-row caps yet — listed as a follow-up requiring
+  template + regen.
+- **Video iter-cap dialog picker (band-stat smoothing)** —
+  `SampleBandDwellStats` now averages `BandRowsPerBand = 4` evenly-
+  spaced rows per band at `samplesPerBand = 32` strides per row
+  (1024 IterationBuffer reads per frame total) instead of a single
+  near-midpoint row. Adds an EMA (`emaAlpha = 0.40`) so per-band
+  stats refresh fully over ~5 frames — fast enough to track region
+  changes during a zoom, slow enough that a single noisy frame
+  doesn't whip the cap. First frame after StartVideo/StartSlideshow
+  still records the raw average (no EMA prior).
 
 ## Tier 3 landed-so-far
 

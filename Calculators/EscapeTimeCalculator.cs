@@ -41,6 +41,11 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
     public double Zoom { get; set; } = 1.0;
     public int MaxIterations { get; set; } = 512;
+    /// <summary>Phase 2.1 per-row maxIter cap. See
+    /// <see cref="MandelbrotCalculator.PerRowMaxIter"/> for the policy.
+    /// Honoured by the SIMD + scalar core paths; bulb-skip / in-set
+    /// auxiliary paths fall back to <see cref="MaxIterations"/>.</summary>
+    public int[]? PerRowMaxIter { get; set; }
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
 
     /// <summary>Always false — this engine is SP only.</summary>
@@ -200,6 +205,10 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         int vecLen = Vector<double>.Count;
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
+        // Phase 2.1: per-row cap snapshot. Same semantics as
+        // MandelbrotCalculator — null or short array → fall back to global.
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
         double centerX = CenterX;
         double centerY = CenterY;
         int width = Width;
@@ -212,6 +221,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         ParallelForRows(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
 
@@ -230,6 +241,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                 var cxV = new Vector<double>(cxBuf);
 
                 // Whole-block cardioid skip — fires often on shallow zooms.
+                // Always writes maxIt (the global) so recolor's in-set gate
+                // treats these pixels correctly regardless of per-row cap.
                 if (hasCardioidSkip)
                 {
                     int bulbBits = 0;
@@ -253,7 +266,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                     out Vector<double> dr, out Vector<double> di);
                 var iterCountV = zeroV;
 
-                for (int iter = 0; iter < maxIt; iter++)
+                for (int iter = 0; iter < rowMaxIt; iter++)
                 {
                     var mag2 = zr * zr + zi * zi;
                     var notEscaped = Vector.LessThan(mag2, bailoutV);
@@ -298,13 +311,23 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                 kernel.InitState(cx, cy, out double zrs, out double zis, out double drs, out double dis);
 
                 int iter;
-                for (iter = 0; iter < maxIt; iter++)
+                for (iter = 0; iter < rowMaxIt; iter++)
                 {
                     if (zrs * zrs + zis * zis >= bailout2) break;
                     kernel.Step(ref zrs, ref zis, ref drs, ref dis, cx, cy);
                 }
                 IterationBuffer[idx] = iter;
                 FillAuxAndColor(idx, iter, maxIt, zrs, zis, drs, dis, colorMap);
+            }
+
+            // Phase 2.1 in-set rewrite (see MandelbrotCalculator).
+            if (rowMaxIt < maxIt)
+            {
+                for (int xx = 0; xx < width; xx++)
+                {
+                    if (IterationBuffer[rowBase + xx] >= rowMaxIt)
+                        IterationBuffer[rowBase + xx] = maxIt;
+                }
             }
         });
     }
@@ -364,6 +387,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
     {
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
         double centerX = CenterX;
         double centerY = CenterY;
         int width = Width;
@@ -376,6 +401,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         ParallelForRows(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
@@ -393,13 +420,22 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                 kernel.InitState(cx, cy, out double zr, out double zi, out double dr, out double di);
 
                 int iter;
-                for (iter = 0; iter < maxIt; iter++)
+                for (iter = 0; iter < rowMaxIt; iter++)
                 {
                     if (zr * zr + zi * zi >= bailout2) break;
                     kernel.Step(ref zr, ref zi, ref dr, ref di, cx, cy);
                 }
                 IterationBuffer[idx] = iter;
                 FillAuxAndColor(idx, iter, maxIt, zr, zi, dr, di, colorMap);
+            }
+            // Phase 2.1 in-set rewrite.
+            if (rowMaxIt < maxIt)
+            {
+                for (int xx = 0; xx < width; xx++)
+                {
+                    if (IterationBuffer[rowBase + xx] >= rowMaxIt)
+                        IterationBuffer[rowBase + xx] = maxIt;
+                }
             }
         });
     }
@@ -411,6 +447,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
     {
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
         double centerX = CenterX;
         double centerY = CenterY;
         int width = Width;
@@ -422,6 +460,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         ParallelForRows(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
@@ -431,7 +471,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
                 double zr = 0, zi = 0, prevZr = 0, prevZi = 0;
                 int iter;
-                for (iter = 0; iter < maxIt; iter++)
+                for (iter = 0; iter < rowMaxIt; iter++)
                 {
                     if (zr * zr + zi * zi >= bailout2) break;
                     kernel.StepWithPrev(ref zr, ref zi, ref prevZr, ref prevZi, cx, cy);
@@ -442,6 +482,15 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                 // distance (HSV value, WarpedHSV edge glow) would otherwise blacken
                 // every escaped pixel because |dz/dc|=1 yields dist = mag·log(mag).
                 FillAuxAndColor(idx, iter, maxIt, zr, zi, 0, 0, colorMap);
+            }
+            // Phase 2.1 in-set rewrite.
+            if (rowMaxIt < maxIt)
+            {
+                for (int xx = 0; xx < width; xx++)
+                {
+                    if (IterationBuffer[rowBase + xx] >= rowMaxIt)
+                        IterationBuffer[rowBase + xx] = maxIt;
+                }
             }
         });
     }

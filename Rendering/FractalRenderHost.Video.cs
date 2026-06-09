@@ -1177,27 +1177,51 @@ namespace FracturingFog.Rendering
             if (_bandAvgDwell == null || _bandAvgDwell.Length != TileBands)
                 _bandAvgDwell = new double[TileBands];
 
-            // For each band, sample every Nth pixel from a single row near
-            // the band's midpoint. Trades exactness for predictable O(TileBands
-            // * stride) cost — band averages are a smoothing input anyway, so
-            // a few samples are sufficient.
+            // Multi-row band averaging. Sample BandRowsPerBand evenly-spaced
+            // rows per band at samplesPerBand strides per row. Reduces band-
+            // stat noise when a single mid-band row happens to lie on a
+            // narrow filament — the cap on the whole band would otherwise
+            // chase that one row's escape count. Cost stays predictable:
+            // O(TileBands * BandRowsPerBand * samplesPerBand) per frame.
+            // For 8 bands × 4 rows/band × 32 samples = 1024 IterationBuffer
+            // reads per frame — well under 0.1 ms at any sane Height/Width.
             const int samplesPerBand = 32;
+            const int BandRowsPerBand = 4;
             int sampleStride = Math.Max(1, w / samplesPerBand);
+            // Optional exponential moving average over time for additional
+            // smoothing: new = (1 - emaAlpha) * prior + emaAlpha * frameAvg.
+            // Picked so a stat fully refreshes over ~5 frames — fast enough
+            // to track region changes during a zoom but slow enough that a
+            // single noisy frame doesn't whip the cap.
+            const double emaAlpha = 0.40;
+            bool emaApplies = _bandStatsValid;
             for (int b = 0; b < TileBands; b++)
             {
                 int yStart = (int)((long)b * h / TileBands);
                 int yEnd = (int)((long)(b + 1) * h / TileBands);
-                int yMid = (yStart + yEnd) / 2;
-                if (yMid >= h) yMid = h - 1;
-                int rowBase = yMid * w;
+                if (yEnd <= yStart) yEnd = yStart + 1;
+                if (yEnd > h) yEnd = h;
                 long sum = 0;
                 int n = 0;
-                for (int x = 0; x < w; x += sampleStride)
+                // Evenly distribute BandRowsPerBand probes across this band's
+                // y-range. Off-by-one safe: rowK = yStart + (k+0.5)*span/rows.
+                int span = yEnd - yStart;
+                int rowsThisBand = Math.Min(BandRowsPerBand, span);
+                for (int k = 0; k < rowsThisBand; k++)
                 {
-                    sum += iters[rowBase + x];
-                    n++;
+                    int yProbe = yStart + (int)(((long)(2 * k + 1) * span) / (2 * rowsThisBand));
+                    if (yProbe >= h) yProbe = h - 1;
+                    int rowBase = yProbe * w;
+                    for (int x = 0; x < w; x += sampleStride)
+                    {
+                        sum += iters[rowBase + x];
+                        n++;
+                    }
                 }
-                _bandAvgDwell[b] = n > 0 ? (double)sum / n : 0.0;
+                double frameAvg = n > 0 ? (double)sum / n : 0.0;
+                _bandAvgDwell[b] = emaApplies
+                    ? (1.0 - emaAlpha) * _bandAvgDwell[b] + emaAlpha * frameAvg
+                    : frameAvg;
             }
             _bandStatsValid = true;
         }
@@ -1314,6 +1338,13 @@ namespace FracturingFog.Rendering
             alt.MaxIterations = _calculator.MaxIterations;
             alt.Quality = _calculator.Quality;
             alt.ColorMap = _calculator.ColorMap;
+            // Phase 2.1: alt-calcs that expose PerRowMaxIter (today:
+            // EscapeTimeCalculator) get the same per-row cap array the main
+            // Mandelbrot path uses. Generated calcs in Calculators/Generated/
+            // are template-driven and don't honour per-row caps yet — extend
+            // CalculatorGen + regenerate to enable.
+            if (alt is EscapeTimeCalculator etPerRow)
+                etPerRow.PerRowMaxIter = _calculator.PerRowMaxIter;
             switch (alt)
             {
                 case EscapeTimeCalculator e: e.FractalType = ViewState.FractalType; e.FractalParameters = ViewState.FractalParameters; break;
