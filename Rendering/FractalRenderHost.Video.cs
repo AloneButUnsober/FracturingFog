@@ -832,7 +832,17 @@ namespace FracturingFog.Rendering
             long calcStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             _calculator.Calculate(ct);
             if (ShowPerfHud)
+            {
                 _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStart) * 1000.0 / Stopwatch.Frequency);
+                // Phase 1.b GPU split sample.
+                if (_gpuKernel != null
+                    && _calculator.UseGpuCompute
+                    && !_calculator.IsHighPrecisionActive)
+                {
+                    _perfStats.RecordGpuDispatch(_gpuKernel.LastDispatchMs);
+                    _perfStats.RecordGpuReadback(_gpuKernel.LastReadbackMs);
+                }
+            }
             if (ct.IsCancellationRequested) return;
 
             // Phase 2: sample band-dwell stats from the freshly-filled

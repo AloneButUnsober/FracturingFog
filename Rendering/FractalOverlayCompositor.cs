@@ -323,7 +323,27 @@ namespace FracturingFog.Rendering
 
                 // 12 lines. Sized for monospace at 9pt → roughly 14 px per
                 // line including the header at 10pt bold.
-                string[] lines =
+                // Phase 1.b: optional GPU split row appears only when the
+                // kernel has run since the last Reset (GpuSampleCount > 0).
+                bool hasGpu = snap.GpuSampleCount > 0;
+                string gpuRow = hasGpu
+                    ? $"  gpu  dis {snap.GpuDispatchMs,5:F1}  rb {snap.GpuReadbackMs,5:F1} ms"
+                    : "";
+                string[] lines = hasGpu ? new[]
+                {
+                    "PERF HUD",
+                    $"frame  {snap.FrameMs,6:F1} ms  ({snap.Fps,5:F1} fps)",
+                    $"  min  {snap.FrameMin,6:F1}    max  {snap.FrameMax,6:F1}",
+                    $"calc   {snap.CalcMs,6:F1} ms  ({Pct(snap.CalcMs, snap.FrameMs)})",
+                    gpuRow,
+                    $"upload {snap.UploadMs,6:F1} ms  ({Pct(snap.UploadMs, snap.FrameMs)})",
+                    $"presnt {snap.PresentMs,6:F1} ms  ({Pct(snap.PresentMs, snap.FrameMs)})",
+                    $"GC g0 {snap.Gen0PerSec,5:F2}/s  g1 {snap.Gen1PerSec,5:F2}/s  g2 {snap.Gen2PerSec,5:F2}/s",
+                    $"samples {snap.SampleCount}",
+                    "",
+                    $"frame  {frameW}x{frameH}  iter {maxIter}  {precisionLabel}",
+                    hwSummary,
+                } : new[]
                 {
                     "PERF HUD",
                     $"frame  {snap.FrameMs,6:F1} ms  ({snap.Fps,5:F1} fps)",
