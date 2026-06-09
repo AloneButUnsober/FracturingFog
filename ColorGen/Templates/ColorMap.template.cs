@@ -14,9 +14,13 @@ using System.Runtime.CompilerServices;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 
+// HLSL palette source is emitted as a raw string literal — needs escaping for
+// double-quotes and at-prefix; @"" handles all newline + brace cases the DSL
+// produces.
+
 namespace FracturingFog.Models.Generated;
 
-public sealed class {{CLASS_NAME}} : IColorMap, INamedColorMap, IColorMapWithPixelScale, IColorMapHandlesInSet
+public sealed class {{CLASS_NAME}} : IColorMap, INamedColorMap, IColorMapWithPixelScale, IColorMapHandlesInSet, IGpuHlslPalette
 {
     public static string Name => "{{THEME_NAME}}";
     public static string Category => "{{CATEGORY}}";
@@ -33,6 +37,13 @@ public sealed class {{CLASS_NAME}} : IColorMap, INamedColorMap, IColorMapWithPix
     // Set per-frame by the calculator; default keeps stand-alone usage safe.
     private double _pixelScale = 1.0;
     public double PixelScale { set => _pixelScale = value; }
+
+    // ── GPU HLSL palette — IGpuHlslPalette (T3.1 phase 2). ───────────────
+    // Emitted alongside the C# body so the kernel can compile this theme into
+    // the compute shader and skip the CPU palette pass for SP renders.
+    public string HlslPaletteBody => @"{{HLSL_BODY}}";
+    public string HlslPrelude     => @"{{HLSL_PRELUDE}}";
+    public string PaletteId       => "{{CLASS_NAME}}_{{HLSL_HASH}}";
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Map(float smooth, float distance, int iterations)

@@ -660,7 +660,64 @@ Neither option is scheduled. Phase 2 (HLSL palette emit) and phase 4
 cut the per-frame readback cost regardless of zoom and benefit every
 GPU-eligible frame.
 
-### T3.1 GPU compute (phase 2-5) — deferred
+### T3.1 phase 2 + 4 — HLSL palette emit + GPU-resident ColorBuffer (landed)
+
+ColorGen now emits a HLSL twin of every theme's Map() body. Generated
+themes implement `IGpuHlslPalette` (in `Interefaces/IGpuHlslPalette.cs`)
+returning three strings:
+- `HlslPaletteBody` — the body of a `float3 EvalPalette(...)` HLSL
+  function with the 15 DSL inputs surfaced as `float` args
+  (canonical order in `GpuPaletteInputOrder.FloatInputs`).
+- `HlslPrelude` — helper definitions (`cg_mods`, `cg_hash`,
+  `cg_fromHsv/Hsl`, plus per-arity `cg_paletteN`).
+- `PaletteId` — short SHA-256 fingerprint for kernel shader cache.
+
+`MandelbrotGpuKernel` keeps two shader variants: `_csBase` (no colour
+write — for non-IGpuHlslPalette themes) and `_csByPaletteId[id]`
+(emits the GPU colour write to a new `RWStructuredBuffer<uint> gColor
+: register(u3)`). The kernel composes its shader source per-variant at
+`SetPalette` time, splicing the prelude before EvalPalette and the
+EvalPalette body inside a generated wrapper. Compile failures fall
+back to `_csBase` so the CPU palette path still works.
+
+`Run` gained an optional `colorDst: uint[]?` arg. When provided AND
+`HasGpuPalette` is true, the kernel binds the colour UAV, dispatches
+the colour-emitting CS, copies the colour staging buffer into the
+caller's `ColorBuffer` via `Buffer.MemoryCopy`, and the calculator
+skips the CPU palette pass entirely. When `colorDst == null` (legacy
+themes or non-IGpuHlslPalette colour maps), behaviour is identical to
+phase 1.b.
+
+`MandelbrotCalculator` and `EscapeTimeCalculator` both detect
+`IGpuHlslPalette` on the active `ColorMap`, call `SetPalette`, and
+forward `ColorBuffer` as `colorDst` when GPU palette is live. Aux
+buffers (distance / normal) stay zero on the GPU palette path — the
+emitted DSL inputs `in_dist`, `in_nx`, `in_ny` get 0 inside the
+shader (degrades gracefully for themes that read them; honest themes
+that ship through the DSL pipeline either drive colour from `smooth`
++ `t` + `arg` + `mag` or accept the degradation).
+
+Limitations:
+- Only ColorGen-emitted themes get the GPU palette. Hand-written
+  `IColorMap` impls (HsvPalette, FirePalette, RainbowColorMap, etc.)
+  stay on the CPU palette path. Adding GPU palette to a hand-written
+  theme is a manual translation job — implement `IGpuHlslPalette` on
+  the type.
+- Orbit-aware themes (`IOrbitAwareColorMap`) and interior-aware themes
+  (`IInteriorAwareColorMap`) need per-step samples the kernel doesn't
+  produce; they remain CPU-bound regardless.
+- HP/DD paths still go through CPU (zoom gate `<= 1e4` on the GPU
+  branch). HP zoom paints the CPU palette pass.
+
+Expected gain: at 1080p with a ColorGen theme active, the per-frame
+readback drops from 4 buffers (iter + smooth + finalZD) at ~3-5 MB
+total to 1 buffer (color uint[]) at 8 MB but avoids the CPU palette
+loop's ~5-15 ms per Mp pass. Net wins biggest on themes whose CPU
+`Map()` does heavy work (palette interpolation, `cg_palette`,
+multiple `Hsv` calls); marginal on trivial themes whose CPU eval is
+already cache-resident.
+
+### T3.1 GPU compute (phase 5) — remaining
 
 **Why deferred:** new HLSL compute shader + new D3D11 dispatch path + new
 GPU↔CPU sync model. Phase 1 alone (Mandelbrot SP kernel, palette on CPU)

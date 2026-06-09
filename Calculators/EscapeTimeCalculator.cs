@@ -207,12 +207,22 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                 return false;  // Multibrot / Phoenix etc. — CPU only.
         }
 
+        bool gpuPalette;
         try
         {
             int[]? perRow = PerRowMaxIter;
             bool useTileCap = perRow != null && perRow.Length >= Height;
             double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
-            GpuKernel!.Run(
+            // T3.1 phase 4 — share the GPU palette path with
+            // MandelbrotCalculator. SetPalette caches per-PaletteId, so
+            // switching back-and-forth between Mandelbrot + Julia themes
+            // with the same colour map only compiles the HLSL once.
+            var hlslPalette = ColorMap as FracturingFog.Interefaces.IGpuHlslPalette;
+            if (hlslPalette != null) GpuKernel!.SetPalette(hlslPalette);
+            else GpuKernel!.SetPalette(null);
+            gpuPalette = hlslPalette != null && GpuKernel.HasGpuPalette;
+
+            GpuKernel.Run(
                 Width, Height,
                 CenterX, CenterY, scale,
                 MaxIterations, 4.0,
@@ -220,13 +230,23 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                 FinalZrBuffer, FinalZiBuffer,
                 FinalDrBuffer, FinalDiBuffer,
                 useTileCap ? perRow : null,
-                kind, p0, p1);
+                kind, p0, p1,
+                colorDst: gpuPalette ? ColorBuffer : null);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine(
                 $"[EscapeTimeCalculator] GPU dispatch failed, falling back to CPU: {ex.Message}");
             return false;
+        }
+
+        if (gpuPalette)
+        {
+            // GPU emitted ColorBuffer end-to-end. Aux buffers stay at
+            // whatever the previous frame left them — none of the
+            // ColorGen-emitted themes consume them through the CPU
+            // writeback in this path.
+            return true;
         }
 
         // CPU writeback: aux + ColorBuffer from the GPU's iter + smooth +
