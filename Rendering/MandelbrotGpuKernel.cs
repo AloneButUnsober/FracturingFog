@@ -77,12 +77,23 @@ cbuffer Params : register(b0)
     float gCYLo;
     float gScaleHi;
     float gScaleLo;
-    // 12 ints / floats packed — D3D11 cbuffer requires float4 alignment so
-    // pad to 48 bytes (12 * 4). Already 48 — no pad slots needed.
+    int   gUsePerRow;      // 0 = use gMaxIter for every row, 1 = use gPerRow
+    int   _pad0;
+    int   _pad1;
+    int   _pad2;
+    // 14 ints / floats packed + 3 pad = 64 bytes (multiple of 16 = float4
+    // alignment).
 }
 
-RWStructuredBuffer<uint>  gIter   : register(u0);
-RWStructuredBuffer<float> gSmooth : register(u1);
+RWStructuredBuffer<uint>   gIter    : register(u0);
+RWStructuredBuffer<float>  gSmooth  : register(u1);
+// Phase 1.b: final z + dz/dc per pixel. .xy = zr, zi; .zw = dr, di.
+// Lets the CPU writeback path drive distance-estimate + normal
+// themes that need the final orbit state. Aux buffers stay CPU.
+RWStructuredBuffer<float4> gFinalZD : register(u2);
+// Phase 1.b: per-row maxIter cap. Bound only when gUsePerRow != 0;
+// otherwise the shader uses gMaxIter for every row.
+StructuredBuffer<uint>     gPerRow  : register(t0);
 
 bool InCardioid(float cx, float cy)
 {
@@ -115,25 +126,49 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
     float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
 
+    // Per-row cap lookup. Falls back to gMaxIter when disabled or when
+    // the buffer holds 0 for this row (defensive).
+    int rowMaxIt = gMaxIter;
+    if (gUsePerRow != 0)
+    {
+        uint rc = gPerRow[y];
+        if (rc > 0) rowMaxIt = (int)rc;
+    }
+
     // Whole-cardioid + period-2 bulb early-out. Saves the full iteration
-    // for any pixel guaranteed in-set on shallow zoom video frames.
+    // for any pixel guaranteed in-set on shallow zoom video frames. Always
+    // writes gMaxIter (the global) so the in-set gate is consistent across
+    // bands regardless of per-row cap. Final z+dz are (0,0,1,0) — matches
+    // the CPU's bulb-skip writeback.
     if (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy))
     {
-        gIter[idx]   = (uint)gMaxIter;
-        gSmooth[idx] = 0.0;
+        gIter[idx]    = (uint)gMaxIter;
+        gSmooth[idx]  = 0.0;
+        gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
         return;
     }
 
     float zr = 0.0;
     float zi = 0.0;
+    // Derivative dz/dc. CPU convention inits (1, 0) — one step ahead of
+    // dz_0 = 0 since dz_1 = 2*z_0*dz_0 + 1 = 1. Keeps the post-step
+    // writeback bit-identical to the CPU SIMD path.
+    float dr = 1.0;
+    float di = 0.0;
     int   it = 0;
     [loop]
-    for (; it < gMaxIter; it++)
+    for (; it < rowMaxIt; it++)
     {
         float zr2 = zr * zr;
         float zi2 = zi * zi;
         float mag2 = zr2 + zi2;
         if (mag2 >= gBailout2) break;
+
+        // d_{n+1} = 2 * z_n * d_n + 1  (complex multiply)
+        float newDr = 2.0 * (zr * dr - zi * di) + 1.0;
+        float newDi = 2.0 * (zr * di + zi * dr);
+        dr = newDr;
+        di = newDi;
 
         float zrNew = zr2 - zi2 + cx;
         float zi_new_unscaled = zr * zi;
@@ -141,15 +176,20 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         zr = zrNew;
     }
 
-    gIter[idx] = (uint)it;
-    if (it >= gMaxIter)
+    gFinalZD[idx] = float4(zr, zi, dr, di);
+    if (it >= rowMaxIt)
     {
+        // In-set rewrite: row-capped unescaped pixels report as
+        // gMaxIter so the recolor's `iters >= maxIter` gate
+        // classifies them correctly (matches the CPU Phase 2.1
+        // post-row rewrite).
+        gIter[idx]   = (uint)gMaxIter;
         gSmooth[idx] = 0.0;
     }
     else
     {
-        // log-log smoothing for continuous palette index. Equivalent to the
-        // CPU path's smooth =  it + 1 - log2(log(|z|)).
+        gIter[idx] = (uint)it;
+        // log-log smoothing for continuous palette index.
         float mag = sqrt(zr * zr + zi * zi);
         float nu = log(log(max(mag, 1.001))) / log(2.0);
         gSmooth[idx] = (float)it + 1.0 - nu;
@@ -166,10 +206,13 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         public float Bailout2;
         public float CXHi, CXLo, CYHi, CYLo;
         public float ScaleHi, ScaleLo;
-        // 10 fields × 4 bytes = 40 — cbuffers must be 16-byte multiples,
-        // so pad to 48.
+        public int UsePerRow;
+        // 11 fields × 4 = 44 — pad to 64 (next float4 multiple).
         private readonly int _pad0;
         private readonly int _pad1;
+        private readonly int _pad2;
+        private readonly int _pad3;
+        private readonly int _pad4;
     }
 
     private readonly ID3D11Device _device;
@@ -184,11 +227,19 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     private ID3D11Buffer _paramsBuf = null!;
     private ID3D11Buffer _iterBuf = null!;
     private ID3D11Buffer _smoothBuf = null!;
+    private ID3D11Buffer _finalZDBuf = null!;
     private ID3D11Buffer _iterStaging = null!;
     private ID3D11Buffer _smoothStaging = null!;
+    private ID3D11Buffer _finalZDStaging = null!;
     private ID3D11UnorderedAccessView _iterUav = null!;
     private ID3D11UnorderedAccessView _smoothUav = null!;
+    private ID3D11UnorderedAccessView _finalZDUav = null!;
     private int _allocPixels;
+    // Phase 1.b: per-row maxIter SRV. Sized to Height; re-alloc on Height
+    // change. Null until first PerTile run.
+    private ID3D11Buffer? _perRowBuf;
+    private ID3D11ShaderResourceView? _perRowSrv;
+    private int _perRowAllocRows;
     private bool _disposed;
 
     public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
@@ -230,11 +281,36 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     private void AllocParamsBuffer()
     {
         var desc = new BufferDescription(
-            byteWidth: 48,
+            byteWidth: 64,
             bindFlags: BindFlags.ConstantBuffer,
             usage: ResourceUsage.Dynamic,
             cpuAccessFlags: CpuAccessFlags.Write);
         _paramsBuf = _device.CreateBuffer(desc);
+    }
+
+    private void EnsurePerRowBuffer(int height)
+    {
+        if (_perRowBuf != null && _perRowAllocRows == height) return;
+        _perRowSrv?.Dispose();
+        _perRowBuf?.Dispose();
+        var desc = new BufferDescription
+        {
+            ByteWidth = (uint)(height * sizeof(uint)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(uint),
+        };
+        _perRowBuf = _device.CreateBuffer(desc);
+        var srvDesc = new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)height },
+        };
+        _perRowSrv = _device.CreateShaderResourceView(_perRowBuf, srvDesc);
+        _perRowAllocRows = height;
     }
 
     private void EnsureOutputBuffers(int width, int height)
@@ -244,10 +320,13 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
 
         _iterUav?.Dispose();
         _smoothUav?.Dispose();
+        _finalZDUav?.Dispose();
         _iterBuf?.Dispose();
         _smoothBuf?.Dispose();
+        _finalZDBuf?.Dispose();
         _iterStaging?.Dispose();
         _smoothStaging?.Dispose();
+        _finalZDStaging?.Dispose();
 
         // Structured buffers — one uint per pixel for iter, one float per pixel
         // for smooth. Default usage so the CS writes via UAV; staging buffers
@@ -267,6 +346,18 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         var smoothDesc = iterDesc with { StructureByteStride = sizeof(float) };
         _smoothBuf = _device.CreateBuffer(smoothDesc);
 
+        // FinalZD: float4 per pixel (zr, zi, dr, di).
+        var finalZDDesc = new BufferDescription
+        {
+            ByteWidth = (uint)(n * 4 * sizeof(float)),
+            BindFlags = BindFlags.UnorderedAccess | BindFlags.ShaderResource,
+            Usage = ResourceUsage.Default,
+            CPUAccessFlags = CpuAccessFlags.None,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = 4 * sizeof(float),
+        };
+        _finalZDBuf = _device.CreateBuffer(finalZDDesc);
+
         var stageIter = new BufferDescription
         {
             ByteWidth = (uint)(n * sizeof(uint)),
@@ -281,6 +372,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         var stageSmooth = stageIter with { ByteWidth = (uint)(n * sizeof(float)) };
         _smoothStaging = _device.CreateBuffer(stageSmooth);
 
+        var stageFinalZD = stageIter with { ByteWidth = (uint)(n * 4 * sizeof(float)) };
+        _finalZDStaging = _device.CreateBuffer(stageFinalZD);
+
         var uavDesc = new UnorderedAccessViewDescription
         {
             Format = Vortice.DXGI.Format.Unknown,
@@ -289,6 +383,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         };
         _iterUav = _device.CreateUnorderedAccessView(_iterBuf, uavDesc);
         _smoothUav = _device.CreateUnorderedAccessView(_smoothBuf, uavDesc);
+        _finalZDUav = _device.CreateUnorderedAccessView(_finalZDBuf, uavDesc);
 
         _allocPixels = n;
     }
@@ -297,16 +392,54 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     /// caller's pinned buffers. iterDst length must be at least width*height,
     /// likewise smoothDst. Phase 1: synchronous readback — caller blocks on
     /// the CPU mapping; total cost ~2-5 ms per Mp at 1080p on a modest IGP.</summary>
+    /// <summary>Last dispatch's wall time in ms — measured from start of
+    /// Run() up to the first Map(Read), so it covers cbuffer + per-row
+    /// uploads, Dispatch submission, and the implicit GPU flush triggered
+    /// by the first staging Map. Includes driver synchronisation, not just
+    /// shader runtime.</summary>
+    public double LastDispatchMs { get; private set; }
+
+    /// <summary>Last dispatch's CPU readback cost in ms — Map+memcpy of
+    /// all three staging buffers (iter, smooth, finalZD). Useful for
+    /// diagnosing PCIe / unified-memory bandwidth bottlenecks on weak
+    /// IGPs.</summary>
+    public double LastReadbackMs { get; private set; }
+
     public void Run(int width, int height, double centerX, double centerY,
         double scale, int maxIter, double bailout2,
-        int[] iterDst, float[] smoothDst)
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst,
+        int[]? perRowMaxIter = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
 
         lock (_d3dGate)
         {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureOutputBuffers(width, height);
+
+            bool usePerRow = perRowMaxIter != null && perRowMaxIter.Length >= height;
+            if (usePerRow)
+            {
+                EnsurePerRowBuffer(height);
+                // Upload per-row caps as uint[] via WriteDiscard. perRowMaxIter
+                // is int[] from the calculator — we narrow per-element to uint
+                // since negative caps don't make sense (defensive: shader
+                // falls back to gMaxIter when cell is 0).
+                var prMapped = _ctx.Map(_perRowBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe
+                {
+                    uint* dst = (uint*)prMapped.DataPointer;
+                    for (int i = 0; i < height; i++)
+                    {
+                        int v = perRowMaxIter![i];
+                        dst[i] = v > 0 ? (uint)v : 0u;
+                    }
+                }
+                _ctx.Unmap(_perRowBuf!, 0);
+            }
 
             // Update params (split centre + split scale so we keep ~6 extra
             // mantissa bits past FP32 — fragile past zoom ~1e9 anyway).
@@ -322,6 +455,7 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
                 CYLo = (float)(centerY - (float)centerY),
                 ScaleHi = (float)scale,
                 ScaleLo = (float)(scale - (float)scale),
+                UsePerRow = usePerRow ? 1 : 0,
             };
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe
@@ -334,6 +468,8 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
             _ctx.CSSetUnorderedAccessView(0, _iterUav);
             _ctx.CSSetUnorderedAccessView(1, _smoothUav);
+            _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
+            if (usePerRow) _ctx.CSSetShaderResource(0, _perRowSrv);
 
             uint groupsX = (uint)((width + 7) / 8);
             uint groupsY = (uint)((height + 7) / 8);
@@ -341,11 +477,19 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
 
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSUnsetUnorderedAccessView(1);
+            _ctx.CSUnsetUnorderedAccessView(2);
+            if (usePerRow) _ctx.CSUnsetShaderResource(0);
 
             // Copy default → staging then Map(Read) for CPU readback. Synchronous.
             _ctx.CopyResource(_iterStaging, _iterBuf);
             _ctx.CopyResource(_smoothStaging, _smoothBuf);
+            _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
 
+            // Dispatch + flush cost: the first Map(Read) below blocks until
+            // GPU finishes, so dispatch_ms covers cbuffer upload, Dispatch
+            // submission, and the implicit flush — everything but the
+            // CPU-side memcpy.
+            long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
             int n = width * height;
             var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
             try
@@ -375,6 +519,38 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
                 }
             }
             finally { _ctx.Unmap(_smoothStaging, 0); }
+
+            // Unpack the packed float4 into four CPU arrays. Could be SIMD'd
+            // (Avx.GatherVector256) — left scalar for clarity since cost is
+            // ~0.5 ms at 1080p, much less than the kernel + IColorMap pass.
+            var fzdMap = _ctx.Map(_finalZDStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    float* src = (float*)fzdMap.DataPointer;
+                    fixed (float* zr = finalZrDst)
+                    fixed (float* zi = finalZiDst)
+                    fixed (float* dr = finalDrDst)
+                    fixed (float* di = finalDiDst)
+                    {
+                        for (int i = 0; i < n; i++)
+                        {
+                            int b = i * 4;
+                            zr[i] = src[b + 0];
+                            zi[i] = src[b + 1];
+                            dr[i] = src[b + 2];
+                            di[i] = src[b + 3];
+                        }
+                    }
+                }
+            }
+            finally { _ctx.Unmap(_finalZDStaging, 0); }
+
+            long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
+            double freq = System.Diagnostics.Stopwatch.Frequency;
+            LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+            LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
         }
     }
 
@@ -388,6 +564,8 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         try { _smoothBuf?.Dispose(); } catch { }
         try { _iterStaging?.Dispose(); } catch { }
         try { _smoothStaging?.Dispose(); } catch { }
+        try { _perRowSrv?.Dispose(); } catch { }
+        try { _perRowBuf?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }
         try { _cs?.Dispose(); } catch { }
     }

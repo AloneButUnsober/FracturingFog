@@ -31,9 +31,16 @@ namespace FracturingFog.Rendering
         private readonly double[] _upload  = new double[CAP];
         private readonly double[] _present = new double[CAP];
         private readonly double[] _frame   = new double[CAP];
+        // Phase 1.b: optional GPU split. Populated only when the SP path
+        // ran on the GPU kernel this frame; HUD treats sampleCount == 0
+        // as "no GPU" and hides the rows.
+        private readonly double[] _gpuDispatch = new double[CAP];
+        private readonly double[] _gpuReadback = new double[CAP];
 
         private int _idxCalc, _idxUp, _idxPres, _idxFrame;
         private int _cntCalc, _cntUp, _cntPres, _cntFrame;
+        private int _idxGpuD, _idxGpuR;
+        private int _cntGpuD, _cntGpuR;
 
         private readonly object _lock = new();
 
@@ -82,6 +89,26 @@ namespace FracturingFog.Rendering
             }
         }
 
+        public void RecordGpuDispatch(double ms)
+        {
+            lock (_lock)
+            {
+                _gpuDispatch[_idxGpuD] = ms;
+                _idxGpuD = (_idxGpuD + 1) % CAP;
+                if (_cntGpuD < CAP) _cntGpuD++;
+            }
+        }
+
+        public void RecordGpuReadback(double ms)
+        {
+            lock (_lock)
+            {
+                _gpuReadback[_idxGpuR] = ms;
+                _idxGpuR = (_idxGpuR + 1) % CAP;
+                if (_cntGpuR < CAP) _cntGpuR++;
+            }
+        }
+
         public PerfSnapshot Snapshot()
         {
             lock (_lock)
@@ -90,6 +117,8 @@ namespace FracturingFog.Rendering
                 double aUp   = Avg(_upload, _cntUp);
                 double aPres = Avg(_present, _cntPres);
                 double aFr   = Avg(_frame, _cntFrame);
+                double aGpuD = Avg(_gpuDispatch, _cntGpuD);
+                double aGpuR = Avg(_gpuReadback, _cntGpuR);
                 double fMin  = Min(_frame, _cntFrame);
                 double fMax  = Max(_frame, _cntFrame);
                 long now = Stopwatch.GetTimestamp();
@@ -105,7 +134,8 @@ namespace FracturingFog.Rendering
                     aCalc, aUp, aPres, aFr,
                     fMin, fMax, fps,
                     g0Rate, g1Rate, g2Rate,
-                    _cntFrame);
+                    _cntFrame,
+                    aGpuD, aGpuR, _cntGpuD);
             }
         }
 
@@ -115,8 +145,11 @@ namespace FracturingFog.Rendering
             {
                 Array.Clear(_calc); Array.Clear(_upload);
                 Array.Clear(_present); Array.Clear(_frame);
+                Array.Clear(_gpuDispatch); Array.Clear(_gpuReadback);
                 _idxCalc = _idxUp = _idxPres = _idxFrame = 0;
                 _cntCalc = _cntUp = _cntPres = _cntFrame = 0;
+                _idxGpuD = _idxGpuR = 0;
+                _cntGpuD = _cntGpuR = 0;
                 _startTicks = Stopwatch.GetTimestamp();
                 _gen0Start = GC.CollectionCount(0);
                 _gen1Start = GC.CollectionCount(1);
@@ -162,16 +195,25 @@ namespace FracturingFog.Rendering
         public readonly double Gen1PerSec;
         public readonly double Gen2PerSec;
         public readonly int SampleCount;
+        // Phase 1.b GPU split. GpuSampleCount == 0 means the GPU path hasn't
+        // run since the last Reset — HUD hides the GPU rows in that case.
+        public readonly double GpuDispatchMs;
+        public readonly double GpuReadbackMs;
+        public readonly int GpuSampleCount;
 
         public PerfSnapshot(double calcMs, double uploadMs, double presentMs, double frameMs,
             double frameMin, double frameMax, double fps,
             double g0, double g1, double g2,
-            int sampleCount)
+            int sampleCount,
+            double gpuDispatchMs, double gpuReadbackMs, int gpuSampleCount)
         {
             CalcMs = calcMs; UploadMs = uploadMs; PresentMs = presentMs; FrameMs = frameMs;
             FrameMin = frameMin; FrameMax = frameMax; Fps = fps;
             Gen0PerSec = g0; Gen1PerSec = g1; Gen2PerSec = g2;
             SampleCount = sampleCount;
+            GpuDispatchMs = gpuDispatchMs;
+            GpuReadbackMs = gpuReadbackMs;
+            GpuSampleCount = gpuSampleCount;
         }
     }
 

@@ -741,7 +741,19 @@ namespace FracturingFog.Rendering
             catch (OperationCanceledException) { }
             long calcEnd = Stopwatch.GetTimestamp();
             if (ShowPerfHud)
+            {
                 _perfStats.RecordCalc((calcEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
+                // Phase 1.b: if the SP path ran on the GPU kernel this
+                // frame, sample its split timings into the same window.
+                // Skipped when CPU path ran (LastDispatchMs == 0 or NaN).
+                if (_gpuKernel != null
+                    && calc.UseGpuCompute
+                    && !calc.IsHighPrecisionActive)
+                {
+                    _perfStats.RecordGpuDispatch(_gpuKernel.LastDispatchMs);
+                    _perfStats.RecordGpuReadback(_gpuKernel.LastReadbackMs);
+                }
+            }
 
             long ms = job.Sw.ElapsedMilliseconds;
 

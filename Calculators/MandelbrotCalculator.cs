@@ -770,14 +770,13 @@ public sealed class MandelbrotCalculator
         // T3.1 GPU compute dispatch.
         //   • Only when explicitly toggled on (UseGpuCompute) AND a kernel
         //     is attached (host sets it if the renderer is D3D11).
-        //   • Skipped while PerRowMaxIter is active — per-row caps aren't
-        //     plumbed into the shader yet (phase 1.b follow-up).
-        //   • Phase 1: kernel writes iter + smooth back to CPU; we run
-        //     the existing FillAuxAndColorSP per-pixel to fill aux buffers
-        //     + emit ColorBuffer. Loses the calc thread's IColorMap path
-        //     for orbit-aware themes — those keep CPU dispatch via the
-        //     existing CalculateOrbitAware top-level switch.
-        if (UseGpuCompute && GpuKernel != null && !useTileCap)
+        //   • Phase 1.b: PerRowMaxIter is plumbed into the shader as an SRV;
+        //     the kernel reads gPerRow[y] when UsePerRow is set, applies the
+        //     same in-set rewrite (row-capped unescaped → write gMaxIter).
+        //     Orbit-aware themes are still CPU-only — they need per-step z
+        //     samples the shader doesn't produce; dispatched via the
+        //     CalculateOrbitAware top-level switch.
+        if (UseGpuCompute && GpuKernel != null)
         {
             try
             {
@@ -785,15 +784,17 @@ public sealed class MandelbrotCalculator
                     Width, Height,
                     CenterX, CenterY, scale,
                     maxIt, EscapeRadius2,
-                    IterationBuffer, SmoothBuffer);
-                // Emit ColorBuffer from the GPU's iter + smooth outputs.
-                // FillAuxAndColorSP would overwrite the GPU's SmoothBuffer
-                // value by recomputing `iters + 1 - log2(log2(mag))` against
-                // a zero z (the GPU path doesn't return z + dz/dc) →
-                // smooth = NaN → black frame. Use a GPU-aware writeback that
-                // reads SmoothBuffer (already filled by the kernel) and
-                // zeroes the aux channels (distance / normal / final z+dz)
-                // that the GPU path doesn't carry.
+                    IterationBuffer, SmoothBuffer,
+                    FinalZrBuffer, FinalZiBuffer,
+                    FinalDrBuffer, FinalDiBuffer,
+                    useTileCap ? perRow : null);
+                // Emit ColorBuffer from the GPU's iter + smooth + final z/dz
+                // outputs. FillAuxAndColorSP would re-derive smooth from z
+                // (which it would clobber to whatever's already in
+                // SmoothBuffer's adjacent slots — wrong); inline a GPU-aware
+                // writeback that consumes the kernel's smooth + final state
+                // directly. Distance + normal come from the standard
+                // post-iteration formulae using the GPU's final z+dz.
                 _po.CancellationToken = ct;
                 var poFill = _po;
                 bool handlesInSet = colorMap is IColorMapHandlesInSet;
@@ -809,21 +810,24 @@ public sealed class MandelbrotCalculator
                         if (iters < maxIt)
                         {
                             float smooth = SmoothBuffer[idx];
-                            // Aux channels the GPU path doesn't compute.
-                            // Shallow-zoom SP where this path runs is fine
-                            // with zeros — distance-estimate / normal-based
-                            // themes degrade to a flat smooth-iter palette,
-                            // which is acceptable for phase 1.
-                            DistanceBuffer[idx] = 0f;
-                            NormalXBuffer[idx] = 0f;
-                            NormalYBuffer[idx] = 0f;
-                            FinalZrBuffer[idx] = 0f;
-                            FinalZiBuffer[idx] = 0f;
-                            FinalDrBuffer[idx] = 0f;
-                            FinalDiBuffer[idx] = 0f;
+                            float fzr = FinalZrBuffer[idx];
+                            float fzi = FinalZiBuffer[idx];
+                            float fdr = FinalDrBuffer[idx];
+                            float fdi = FinalDiBuffer[idx];
+                            // Distance estimate: |z| * log(|z|) / |dz|
+                            double mag = Math.Sqrt(fzr * fzr + fzi * fzi);
+                            double dMag = Math.Sqrt(fdr * fdr + fdi * fdi);
+                            float dist = dMag > 1e-10
+                                ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+                            DistanceBuffer[idx] = dist;
+                            // Normal via FillNormal helper (writes NormalX/Y
+                            // from z + dz like the CPU path).
+                            FillNormal(idx, fzr, fzi, fdr, fdi);
                             int iterArg = handlesInSet ? iters : maxIt;
                             ColorBuffer[idx] = (uint)colorMap.Map(
-                                smooth, 0f, iterArg, 0f, 0f, 0f, 0f, 0f, 0f);
+                                smooth, dist, iterArg,
+                                NormalXBuffer[idx], NormalYBuffer[idx],
+                                fzr, fzi, fdr, fdi);
                         }
                         else
                         {

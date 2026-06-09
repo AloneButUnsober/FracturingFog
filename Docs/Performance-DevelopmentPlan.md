@@ -557,18 +557,38 @@ Phase 1 host integration — landed.
   precision label appends "(GPU)" when the kernel actually ran this
   frame.
 
+Phase 1.b landed:
+- **PerRowMaxIter on GPU.** `MandelbrotGpuKernel` gains a
+  `StructuredBuffer<uint>` SRV at t0 and a `gUsePerRow` cbuffer flag.
+  Shader loop bound becomes `rowMaxIt = gUsePerRow ? gPerRow[y] :
+  gMaxIter`; row-capped unescaped pixels write `gMaxIter` to iter +
+  `0` to smooth (same in-set rewrite as the CPU Phase 2.1 post-row
+  pass). `Run()` takes `int[]? perRowMaxIter`; `MandelbrotCalculator`
+  passes `PerRowMaxIter` directly — no more CPU fallback when both
+  PerTile + GPU are active.
+- **z+dz UAVs.** Kernel writes a packed `RWStructuredBuffer<float4>`
+  at u2 holding final `zr, zi, dr, di` per pixel. Tracks derivative
+  through the iteration loop with the standard `d_{n+1} = 2 z_n d_n + 1`
+  recurrence (init `(1, 0)` matching the CPU SIMD convention). CPU
+  writeback now drives distance-estimate via the standard
+  `|z|·log|z|/|dz|` formula and the existing `FillNormal` helper, so
+  Phong / distance / orbit-glow themes work under GPU compute.
+- **Split GPU timing.** `MandelbrotGpuKernel.LastDispatchMs` covers
+  cbuffer + per-row upload + Dispatch submission + implicit flush
+  (the first Map blocks until the GPU finishes); `LastReadbackMs`
+  isolates the three staging Map+memcpy passes. `PerfStats` gains
+  `RecordGpuDispatch` / `RecordGpuReadback` + a snapshot row. HUD
+  shows a "gpu  dis X  rb Y ms" line when `GpuSampleCount > 0`,
+  hidden otherwise so the CPU-only case isn't cluttered.
+
 Phase 1.b open items:
-- PerRowMaxIter integration. PerTile mode currently forces CPU
-  fallback. Wire per-row caps into the cbuffer (as an SRV with one
-  int per row, or a packed band-count + caps array) so PerTile works
-  alongside GPU compute.
-- Split GPU-dispatch vs GPU-readback timing in PerfStats so the HUD
-  can diagnose bus-saturation vs occupancy issues on weak IGPs (the
-  existing calc-ms already counts the kernel call but doesn't split).
 - Orbit-aware themes: `CalculateOrbitAware` keeps CPU dispatch
   unconditionally — the kernel doesn't sample z per iteration. Per-
   orbit reductions inside the shader (stripe sum, TIA accumulator)
   are a phase 2 candidate.
+- GPU-resident colour. Phase 2 of the original plan: code-gen
+  IColorMap → HLSL emit so palette runs on GPU and ColorBuffer
+  stays GPU-side. Eliminates the per-frame readback.
 
 ### T3.1 GPU compute (phase 2-5) — deferred
 
