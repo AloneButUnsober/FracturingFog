@@ -142,10 +142,13 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
 
         // T3.1 phase 3: GPU dispatch for the SIMD-capable kinds. Skipped
-        // when the kernel isn't attached, when the toggle is off, or when
-        // the active fractal type isn't shader-supported (Multibrot needs
+        // when the kernel isn't attached, when the toggle is off, when
+        // zoom exceeds MaxGpuZoom (FP32 precision band), or when the
+        // active fractal type isn't shader-supported (Multibrot needs
         // pow, Phoenix has prev-z carry — both stay CPU).
-        if (UseGpuCompute && GpuKernel != null && TryDispatchGpu(ct))
+        if (UseGpuCompute && GpuKernel != null
+            && Zoom <= MandelbrotCalculator.MaxGpuZoom
+            && TryDispatchGpu(ct))
             return;
 
         switch (FractalType)
