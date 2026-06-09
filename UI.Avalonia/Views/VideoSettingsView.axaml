@@ -80,6 +80,17 @@
                            Margin="8,0,0,0" />
             </Grid>
 
+            <TextBlock Text="Adaptive iter cap (perf vs quality)"
+                       Foreground="#B4DCB4" FontWeight="Bold" Margin="0,8,0,0" />
+            <Grid ColumnDefinitions="160,*">
+                <TextBlock Grid.Column="0" Text="Mode:" VerticalAlignment="Center" />
+                <ComboBox  Grid.Column="1"
+                           ItemsSource="{Binding IterCapModes}"
+                           SelectedItem="{Binding IterCapMode, Mode=TwoWay}"
+                           MinWidth="220"
+                           ToolTip.Tip="Off = full quality (strong-HW recommended). Global = per-frame adaptive multiplier (default; smooths choppy regions). PerTile = per-tile cap (Phase 1 routes to Global at runtime)." />
+            </Grid>
+
             <TextBlock Text="In-leg color theme fade" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,8,0,0" />
             <CheckBox Content="Enable theme cross-fade during each leg"
                       IsChecked="{Binding ThemeFadeEnabled, Mode=TwoWay}" />

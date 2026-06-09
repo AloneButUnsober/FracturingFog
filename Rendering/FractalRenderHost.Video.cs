@@ -93,6 +93,20 @@ namespace FracturingFog.Rendering
         // (wire later if visible iter-banding becomes a complaint).
         public bool VideoAdaptiveIterEnabled { get; set; } = true;
 
+        /// <summary>Adaptive iter-cap policy applied during video record /
+        /// slideshow playback. Off = no cap (full quality, drops frames on
+        /// heavy regions / modest HW). Global = per-frame adaptive multiplier
+        /// (default, existing behaviour). PerTile = per-tile cap; Phase 1
+        /// routes to Global at runtime with a one-time console warning
+        /// since the real per-tile pass requires a calculator refactor
+        /// (Phase 2). Set per-run from <see cref="VideoZoomRequest.IterCapMode"/>.</summary>
+        public FracturingFog.Models.VideoIterCapMode IterCapMode { get; set; }
+            = FracturingFog.Models.VideoIterCapMode.Global;
+
+        // One-shot guard so the PerTile→Global fallback warning prints only
+        // once per process even if the user re-starts the video several times.
+        private static int _perTileWarnFired;
+
         // ── Recorders (single-shot only; slideshow never records) ──────────
         private Mp4Writer? _videoMp4Writer;
         private string? _videoMp4TempPath;
@@ -251,6 +265,18 @@ namespace FracturingFog.Rendering
             // Reset adaptive iter cap so each video run starts at full quality.
             _videoIterCap = 1.0;
             _videoLastFrameMs = 0.0;
+
+            // Apply the per-run iter-cap mode from the request. Phase 1:
+            // PerTile is a stub that routes to Global with a one-time
+            // warning — true per-tile lands in Phase 2.
+            IterCapMode = request.IterCapMode;
+            if (IterCapMode == FracturingFog.Models.VideoIterCapMode.PerTile
+                && System.Threading.Interlocked.Exchange(ref _perTileWarnFired, 1) == 0)
+            {
+                Console.Error.WriteLine(
+                    "[FractalRenderHost.Video] IterCapMode=PerTile selected; " +
+                    "Phase 1 routes to Global (per-tile pass lands in Phase 2).");
+            }
             RaiseStatus(request.IsReverse
                 ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
                 : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
@@ -318,6 +344,17 @@ namespace FracturingFog.Rendering
             double seconds = request.SlideshowSecondsOverride ?? VideoSlideshowSeconds;
             bool constantRate = request.IsConstantRate;
             bool reverse = request.IsReverse;
+
+            // Apply the per-run iter-cap mode from the request. Phase 1:
+            // PerTile is a stub that routes to Global with a one-time warning.
+            IterCapMode = request.IterCapMode;
+            if (IterCapMode == FracturingFog.Models.VideoIterCapMode.PerTile
+                && System.Threading.Interlocked.Exchange(ref _perTileWarnFired, 1) == 0)
+            {
+                Console.Error.WriteLine(
+                    "[FractalRenderHost.Video] IterCapMode=PerTile selected; " +
+                    "Phase 1 routes to Global (per-tile pass lands in Phase 2).");
+            }
 
             _videoSlideshowRunning = true;
             string mode = reverse ? "reverse " : "";
@@ -728,7 +765,15 @@ namespace FracturingFog.Rendering
             // (Feigenbaum point, minibrot fields) where the inner loop blows
             // through the frame budget; relax back to 1.0 when the budget
             // recovers. Skipped when iter is user-locked.
-            if (VideoAdaptiveIterEnabled && !ViewState.IterLocked && _videoLastFrameMs > 0.0)
+            // Phase 1: PerTile falls through to Global at runtime, so the
+            // "iter cap active" predicate is mode != Off (and still gated by
+            // the legacy master toggle + iter-not-locked + we have a prior
+            // frame to measure against).
+            bool capActive = VideoAdaptiveIterEnabled
+                && IterCapMode != FracturingFog.Models.VideoIterCapMode.Off
+                && !ViewState.IterLocked
+                && _videoLastFrameMs > 0.0;
+            if (capActive)
             {
                 if (_videoLastFrameMs > VideoFrameBudgetMs * 1.5)
                     _videoIterCap *= VideoIterCapDown;
@@ -1129,7 +1174,9 @@ namespace FracturingFog.Rendering
                 // Finding C: apply adaptive cap (set by RenderVideoFrame from
                 // prior-frame elapsed). Min floor of 64 so the image never
                 // collapses to all-in-set even when the cap clamps hard.
-                if (VideoAdaptiveIterEnabled && _videoIterCap < VideoIterCapMax)
+                if (VideoAdaptiveIterEnabled
+                    && IterCapMode != FracturingFog.Models.VideoIterCapMode.Off
+                    && _videoIterCap < VideoIterCapMax)
                 {
                     int capped = (int)(it * _videoIterCap);
                     if (capped < 64) capped = 64;

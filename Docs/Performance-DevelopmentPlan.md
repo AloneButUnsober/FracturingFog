@@ -398,6 +398,22 @@ Sandbox hot-load).
   band-dither recolor, plain recolor) now use the cached `_po` field.
   Largest win on small frames + low maxIter where scheduling overhead
   dominated row body cost.
+- **Video iter-cap dialog picker (Phase 1)** — `VideoIterCapMode { Off,
+  Global, PerTile }` enum added to `Abstractions/Models/SlideshowConfig.cs`,
+  persisted on `VideoSettingsConfig.IterCapMode` (default `Global` =
+  prior auto-adaptive behaviour). Wired through `VideoZoomRequest`,
+  `VideoSettingsViewModel` (`IterCapModes` list + `IterCapMode` string),
+  the embedded `VideoSettingsView` (ComboBox row under "Adaptive iter
+  cap (perf vs quality)"), and `ShellViewModel.StartVideoFromConfig`.
+  `FractalRenderHost.Video.cs` honours the mode in the adaptive ratchet
+  (`Off` keeps `_videoIterCap` pinned at 1.0 so the calculator always
+  runs at full maxIter — strong-HW path) and in the per-frame iter
+  application. `PerTile` is a Phase-1 stub: `StartVideo` / `StartSlideshow`
+  emit a one-time `Console.Error` warning and the runtime treats it as
+  `Global`. Phase 2 (true per-tile cap) requires either multi-call
+  Calculate on sub-rects or pushing a per-tile cap array into the
+  iteration loop in every color-map specialisation — out of scope for
+  the Phase 1 commit, tracked as a follow-up.
 
 ## Tier 3 landed-so-far
 

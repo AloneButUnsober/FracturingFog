@@ -106,6 +106,14 @@ namespace FracturingFog.Render
         /// uniformly: schedule fires at t = k / ThemesPerLeg for k = 1..N-1.
         /// Clamped to [1, 12]; values ≤ 1 disable the schedule.</summary>
         public int ThemesPerLeg { get; set; } = 3;
+
+        /// <summary>Adaptive iteration-cap mode used during playback / record.
+        /// Off = no cap (full quality, may drop frames on heavy regions /
+        /// modest HW). Global = per-frame adaptive multiplier (existing
+        /// behaviour). PerTile = per-tile cap (Phase 1 routes to Global at
+        /// runtime; Phase 2 implements the real per-tile pass).</summary>
+        public FracturingFog.Models.VideoIterCapMode IterCapMode { get; set; }
+            = FracturingFog.Models.VideoIterCapMode.Global;
     }
 
     /// <summary>Outcome of a single-shot recording, raised once the zoom ends
