@@ -82,16 +82,17 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         Width = width;
         Height = height;
         int n = width * height;
-        IterationBuffer = new int[n];
-        SmoothBuffer = new float[n];
-        DistanceBuffer = new float[n];
-        NormalXBuffer = new float[n];
-        NormalYBuffer = new float[n];
-        ColorBuffer = new uint[n];
-        FinalZrBuffer = new float[n];
-        FinalZiBuffer = new float[n];
-        FinalDrBuffer = new float[n];
-        FinalDiBuffer = new float[n];
+        // Pinned LOH (see MandelbrotCalculator.Resize notes).
+        IterationBuffer = GC.AllocateUninitializedArray<int>(n, pinned: true);
+        SmoothBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        DistanceBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        NormalXBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        NormalYBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        ColorBuffer = GC.AllocateUninitializedArray<uint>(n, pinned: true);
+        FinalZrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalZiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalDrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalDiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
     }
 
     // ── Entry point ──────────────────────────────────────────────────────────

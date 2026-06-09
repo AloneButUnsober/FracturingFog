@@ -371,3 +371,87 @@ Sandbox hot-load).
 3. **Tier 3 phase planning** — design doc for T3.1 GPU compute. Begin T3.2
    ref-orbit recycling and T3.3 non-temporal stores in parallel.
 4. **Tier 3 build-out** — T3.1 phases 1 → 5.
+
+---
+
+## Tier 3 landed-so-far
+
+- **T3.3 (light)** — pinned LOH alloc via `GC.AllocateUninitializedArray<T>(n, pinned: true)`
+  on all `MandelbrotCalculator` + `EscapeTimeCalculator` output buffers and
+  the `FractalRenderHost` upload-pool buffers. Eliminates per-frame
+  `GCHandle.Alloc/Free` (LOH pin is built into the allocation) and removes
+  the buffers from the GC mark-and-compact scan. Non-temporal `Avx.Store*`
+  writes deferred — needs the SIMD write paths refactored to use raw
+  pointers, which is a larger touch.
+- **T3.4** — `<PublishReadyToRun>true</PublishReadyToRun>` +
+  `<PublishReadyToRunComposite>true</PublishReadyToRunComposite>` set on the
+  `Publish|x64` + `Publish|AnyCPU` configurations of `FracturingFogCLD.csproj`.
+  No effect on `dotnet build` Debug/Release; takes effect on
+  `dotnet publish -c Publish` which now emits native AOT-precompiled code
+  alongside IL for cold-start + first-frame perf.
+
+## Tier 3 deferred (need dedicated branches)
+
+### T3.2 ref-orbit recycling — deferred
+
+**Why deferred:** correct mathematical recycling requires per-pixel `dc`
+plumbing into three SIMD row paths (`ComputeRowPT8`, `ComputeRowPT4`,
+`ComputeRowPTScalar`) so the perturbation loop sees `dc' = (pixel - displayCenter) + (displayCenter - cachedCenter)`.
+Each row path is ~150 lines of tightly-tuned AVX2/AVX-512 with its own SA
+prelude + BLA skip; adding a `(ΔcR, ΔcI)` parameter and threading it through
+the iteration loop without breaking the BLA/SA validity bounds needs a
+dedicated session with side-by-side render verification.
+
+**Concrete steps for the follow-up branch:**
+1. Add `_refRecycleOffsetX/Y` fields. Populated when
+   `ComputeReferenceOrbit*` detects centre drift below
+   `recycleTolerance = pixelScale * 0.5`.
+2. Pass `(ΔcR, ΔcI)` into `ComputeRowPT8` / `ComputeRowPT4` /
+   `ComputeRowPTScalar` as scalar arguments (broadcast inside the row).
+3. Per-pixel `dcR = (x - halfW) * scale + ΔcR; dcY = (y - halfH) * scale + ΔcI`.
+4. Force `EnsureBlaTable` + `EnsureSeriesApproximation` rebuild when Δ
+   non-zero (BLA coefficients depend on `dcMaxAbs` which grew by `|Δ|`).
+5. Visual regression test: render a video zoom at zoom > 1e30, compare
+   recycled vs full-rebuild frames. Expect identical output to within
+   colour-LSB tolerance.
+
+Expected gain on hit: skip the single-threaded reference-orbit loop
+(~100k+ iters of DD/QD math per frame at zoom > 1e25). 30-70% video-frame
+time reduction at deep zoom.
+
+### T3.1 GPU compute (phase 1) — deferred
+
+**Why deferred:** new HLSL compute shader + new D3D11 dispatch path + new
+GPU↔CPU sync model. Phase 1 alone (Mandelbrot SP kernel, palette on CPU)
+needs roughly:
+- ~200 lines of HLSL CS 5.0 (escape loop, smooth iter, derivative
+  tracking for normal/distance estimate).
+- New `D3D11ComputeRenderer` (or extend `DirectXRenderer`) with
+  `CreateComputeShader`, two `StructuredBuffer<float>` outputs
+  (smoothIter + distance), `Dispatch((W+15)/16, (H+15)/16, 1)` per frame.
+- CPU readback for palette eval (StagingResource + Map/Unmap), or move
+  palette to HLSL too.
+- Integration into `FractalRenderHost.Trigger` selecting GPU vs CPU
+  based on a quality / zoom gate (SP only — zoom < 1e15; DD/QD stays CPU).
+- Validation pass: pixel-by-pixel compare GPU vs CPU output across
+  a regression set of regions to catch float precision drift.
+
+**Concrete steps for the follow-up branch (phase 1 only):**
+1. New file `Rendering/MandelbrotComputeShader.hlsl` with the
+   `[numthreads(16,16,1)]` Mandelbrot SP escape loop emitting
+   `RWStructuredBuffer<float>` smoothIter + dist.
+2. New `Rendering/D3D11ComputeBackend.cs` owning the CS, the
+   `ID3D11ComputeShader`, and the dispatch + readback path. Reuses
+   `DirectXRenderer._device` / `_context`.
+3. Extend `IFractalRenderer` with `bool SupportsGpuCompute { get; }` so
+   the host can gate dispatch per backend.
+4. `FractalRenderHost.Trigger` decision: `ViewState.UseGpuCompute && zoom < 1e15 && fractalType == Mandelbrot && !IsHighPrecisionActive` → dispatch CS;
+   else current CPU path.
+5. Status string: surface `"GPU-CS"` precision label so deep-zoom paths
+   stay diagnosable.
+6. Benchmark vs current CPU SIMD path on 1080p / 4K / 8K at maxIter 256 /
+   1024 / 4096. Document gain in `Benchmarks/`.
+
+Phases 2-5 (HLSL palette codegen, GPU-resident colour buffer, kernel
+extension to Julia/BurningShip/Tricorn/Multibrot, FP64 ILGPU/CUDA path)
+each get their own follow-up branches once phase 1 is verified.

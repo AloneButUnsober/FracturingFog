@@ -263,23 +263,29 @@ public sealed class MandelbrotCalculator
         Width = width;
         Height = height;
         int n = width * height;
-        IterationBuffer = new int[n];
-        SmoothBuffer = new float[n];
-        DistanceBuffer = new float[n];
-        NormalXBuffer = new float[n];
-        NormalYBuffer = new float[n];
-        ColorBuffer = new uint[n];
-        TrapBuffer = new float[n];
-        StripeBuffer = new float[n];
-        TiaBuffer = new float[n];
-        FinalZrBuffer = new float[n];
-        FinalZiBuffer = new float[n];
-        FinalDrBuffer = new float[n];
-        FinalDiBuffer = new float[n];
-        InteriorPeriodBuffer = new int[n];
-        AttractorZrBuffer = new float[n];
-        AttractorZiBuffer = new float[n];
-        MultiplierMagBuffer = new float[n];
+        // Pinned LOH allocation: these buffers are large (8 MB+ at 1080p),
+        // long-lived (resize is rare), and consumed by GPU upload / native
+        // memcpy. Pinned avoids the GCHandle.Alloc/Free pair every frame
+        // the upload path used to need and removes the buffers from the GC
+        // mark-and-compact scan. Alignment is 8 byte on the LOH which is
+        // sufficient for our Vector256/AVX2 SIMD writes.
+        IterationBuffer = GC.AllocateUninitializedArray<int>(n, pinned: true);
+        SmoothBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        DistanceBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        NormalXBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        NormalYBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        ColorBuffer = GC.AllocateUninitializedArray<uint>(n, pinned: true);
+        TrapBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        StripeBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        TiaBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalZrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalZiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalDrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalDiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        InteriorPeriodBuffer = GC.AllocateUninitializedArray<int>(n, pinned: true);
+        AttractorZrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        AttractorZiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        MultiplierMagBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
