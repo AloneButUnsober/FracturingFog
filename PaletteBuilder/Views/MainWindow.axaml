@@ -110,7 +110,7 @@
             </MenuItem>
         </Menu>
 
-        <Grid Grid.Row="1" Margin="12,12,12,4" RowDefinitions="Auto,Auto,*,Auto">
+        <Grid Grid.Row="1" Margin="12,12,12,4" RowDefinitions="Auto,*,5,*,Auto">
 
             <TextBlock Grid.Row="0"
                        Classes="section"
@@ -118,14 +118,58 @@
                        Text="Palette Builder"
                        Margin="0,0,0,10" />
 
-            <Grid Grid.Row="1" ColumnDefinitions="474,12,*" RowDefinitions="Auto,Auto" Margin="0,0,0,10">
-                <StackPanel Orientation="Vertical" Spacing="4">
+            <Grid Grid.Row="1" ColumnDefinitions="474,5,*" RowDefinitions="*" Margin="0,0,0,10">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="4">
                     <Border Grid.Column="0"
                             Grid.Row="0"
                             Background="#1E1E1E"
                             BorderBrush="#505050"
                             BorderThickness="1"
-                            Height="420">
+                            Height="35">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                            <CheckBox Content="Grid"
+                                      Grid.Column="0"
+                                      IsChecked="{Binding ShowGrid}"
+                                      Foreground="#DCDCDC"
+                                      VerticalAlignment="Center"
+                                      Margin="4"/>
+                            <CheckBox Content="Snap"
+                                      Grid.Column="1"
+                                      IsChecked="{Binding SnapToGrid}"
+                                      Foreground="#DCDCDC"
+                                      VerticalAlignment="Center"
+                                      IsEnabled="{Binding ShowGrid}"
+                                      Margin="8,0,0,0"/>
+                            <TextBlock Text="Rows:" Foreground="#B4B4B4"
+                                       VerticalAlignment="Center"
+                                       Grid.Column="2"
+                                       Margin="4,0,4,0"/>
+                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
+                                           Value="{Binding GridRows}"
+                                           FormatString="0"
+                                           Width="105"
+                                           Height="10" 
+                                           Grid.Column="3"
+                                           IsEnabled="{Binding ShowGrid}"/>
+                            <TextBlock Text="Cols:" Foreground="#B4B4B4"
+                                       VerticalAlignment="Center"
+                                       Grid.Column="4"
+                                       Margin="4,0,4,0" />
+                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
+                                           Value="{Binding GridCols}"
+                                           FormatString="0"
+                                           Width="105"
+                                           Height="10"
+                                           Grid.Column="5"
+                                           IsEnabled="{Binding ShowGrid}"/>
+                        </Grid>
+                    </Border>
+                    <Border Grid.Column="0"
+                            Grid.Row="1"
+                            Background="#1E1E1E"
+                            BorderBrush="#505050"
+                            BorderThickness="1"
+                            MinHeight="200">
                         <Grid RowDefinitions="*,Auto,Auto,Auto">
                             <Grid Grid.Row="0" Margin="4">
                                 <Image Source="{Binding PreviewImage}"
@@ -177,80 +221,36 @@
                         </Grid>
                     </Border>
                     <Border Grid.Column="0"
-                            Grid.Row="1"
+                            Grid.Row="2"
                             Background="#1E1E1E"
                             BorderBrush="#505050"
                             BorderThickness="1"
-                            Height="160">
-                        <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="55,*,*,*" ColumnSpacing="4"
+                            Height="95">
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="250,*" ColumnSpacing="4"
                               RowSpacing="2">
-                            <StackPanel Grid.Row="0"
-                                        Orientation="Horizontal"
-                                        Margin="4,0,4,2"
-                                        Spacing="6"
-                                        VerticalAlignment="Center">
-                                <CheckBox Content="Grid"
-                                          IsChecked="{Binding ShowGrid}"
-                                          Foreground="#DCDCDC"
-                                          VerticalAlignment="Center" />
-                                <CheckBox Content="Snap"
-                                          IsChecked="{Binding SnapToGrid}"
-                                          Foreground="#DCDCDC"
-                                          VerticalAlignment="Center"
-                                          IsEnabled="{Binding ShowGrid}"
-                                          Margin="8,0,0,0"/>
-                            </StackPanel>
+                                <CheckBox Grid.Row="0" Grid.Column="0"
+                                          Content="Weight stop positions by cluster size"
+                                          IsChecked="{Binding WeightedPositions}"
+                                          Margin="0,5"/>
 
-                            <TextBlock Text="Rows:" Foreground="#B4B4B4"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Right"
-                                       Grid.Row="1" Grid.Column="0"
-                                       Margin="0,0,4,0"/>
-                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
-                                           Value="{Binding GridRows}"
-                                           FormatString="0"
-                                           Width="120"
-                                           Height="20"
-                                           HorizontalAlignment="Left"
-                                           Grid.Row="1"
-                                           Grid.Column="1"
-                                           IsEnabled="{Binding ShowGrid}"/>
-                            <TextBlock Text="Cols:" Foreground="#B4B4B4"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Right"
-                                       Grid.Row="2" Grid.Column="0"
-                                       Margin="0,0,0,0" />
-                            <NumericUpDown Minimum="1" Maximum="16" Increment="1"
-                                           Value="{Binding GridCols}"
-                                           FormatString="0"
-                                           Width="120"
-                                           Height="20"
-                                           HorizontalAlignment="Left"
-                                           Grid.Row="2"
-                                           Grid.Column="1"
-                                           IsEnabled="{Binding ShowGrid}"/>
-                            <StackPanel Orientation="Vertical" Grid.Column="1" Grid.Row="0"
-                                        Grid.RowSpan="4" Grid.ColumnSpan="3"
-                                        Margin="152,5,0,0">
-                            <CheckBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3"
-                                      Content="Weight stop positions by cluster size"
-                                      IsChecked="{Binding WeightedPositions}"/>
+                                <CheckBox Grid.Row="0" Grid.Column="1"
+                                          Content="Exclude near-black pixels"
+                                          IsChecked="{Binding ExcludeNearBlack}" />
 
-                            <CheckBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
-                                      Content="Exclude near-black pixels"
-                                      IsChecked="{Binding ExcludeNearBlack}" />
+                                <CheckBox Grid.Row="1" Grid.Column="1"
+                                          Content="Exclude near-white pixels"
+                                          IsChecked="{Binding ExcludeNearWhite}" />
 
-                            <CheckBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3"
-                                      Content="Exclude near-white pixels"
-                                      IsChecked="{Binding ExcludeNearWhite}" />
-
-                            <CheckBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3"
-                                      Content="Gamma-correct (linearise RGB before clustering)"
-                                      IsChecked="{Binding GammaCorrect}" />
-                            </StackPanel>
+                                <CheckBox Grid.Row="1" Grid.Column="0"
+                                          Content="Gamma-correct (linearise RGB before clustering)"
+                                          IsChecked="{Binding GammaCorrect}" />
                         </Grid>
                     </Border>
-                </StackPanel>
+                </Grid>
+                <GridSplitter Grid.Column="1"
+                              ResizeDirection="Columns"
+                              Background="#3C3C3C"
+                              HorizontalAlignment="Stretch" />
                 <Grid Grid.Column="2"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                       ColumnDefinitions="140,*">
@@ -303,24 +303,24 @@
                     </ComboBox>
 
                     <!--<CheckBox Grid.Row="7" Grid.ColumnSpan="2"
-                              Content="Weight stop positions by cluster size"
-                              IsChecked="{Binding WeightedPositions}"
-                              Margin="0,4,0,0" />
+                    Content="Weight stop positions by cluster size"
+                    IsChecked="{Binding WeightedPositions}"
+                    Margin="0,4,0,0" />
 
                     <CheckBox Grid.Row="8" Grid.ColumnSpan="2"
-                              Content="Exclude near-black pixels"
-                              IsChecked="{Binding ExcludeNearBlack}"
-                              Margin="0,2,0,0" />
+                    Content="Exclude near-black pixels"
+                    IsChecked="{Binding ExcludeNearBlack}"
+                    Margin="0,2,0,0" />
 
                     <CheckBox Grid.Row="9" Grid.ColumnSpan="2"
-                              Content="Exclude near-white pixels"
-                              IsChecked="{Binding ExcludeNearWhite}"
-                              Margin="0,2,0,0" />
+                    Content="Exclude near-white pixels"
+                    IsChecked="{Binding ExcludeNearWhite}"
+                    Margin="0,2,0,0" />
 
                     <CheckBox Grid.Row="10" Grid.ColumnSpan="2"
-                              Content="Gamma-correct (linearise RGB before clustering)"
-                              IsChecked="{Binding GammaCorrect}"
-                              Margin="0,2,0,0" />-->
+                    Content="Gamma-correct (linearise RGB before clustering)"
+                    IsChecked="{Binding GammaCorrect}"
+                    Margin="0,2,0,0" />-->
 
                     <Expander Grid.Row="11" Grid.ColumnSpan="2"
                               Header="Preprocessing filters"
@@ -441,7 +441,12 @@
                 </Grid>
             </Grid>
 
-            <Border Grid.Row="2"
+            <GridSplitter Grid.Row="2"
+                          ResizeDirection="Rows"
+                          Background="#3C3C3C"
+                          HorizontalAlignment="Stretch" />
+
+            <Border Grid.Row="3"
                     Background="#1C1C1C"
                     BorderBrush="#505050"
                     BorderThickness="1">
@@ -506,7 +511,7 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="3" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
+            <Grid Grid.Row="4" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
                 <!-- Temp / tint sliders -->
                 <Grid Grid.Column="0" ColumnDefinitions="Auto,*,Auto,Auto,*,Auto">
                     <TextBlock Grid.Column="0" Classes="label" Text="Temp:" Margin="0,0,6,0" />
