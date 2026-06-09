@@ -238,6 +238,9 @@ namespace FracturingFog.Imaging
                 FractalType.LSystem          => new LSystemCalculator(w, h),
                 FractalType.StrangeAttractor => new AttractorCalculator(w, h),
                 FractalType.BuddhaBrot       => new BuddhabrotCalculator(w, h),
+                FractalType.Nebulabrot       => new NebulabrotCalculator(w, h),
+                FractalType.AntiBuddhabrot   => new AntiBuddhabrotCalculator(w, h),
+                FractalType.AntiNebulabrot   => new AntiNebulabrotCalculator(w, h),
                 FractalType.Newton           => new NewtonCalculator(w, h),
                 FractalType.Nova             => new NewtonCalculator(w, h),
                 FractalType.UserEquation     => new UserEquationCalculator(w, h),
@@ -264,7 +267,7 @@ namespace FracturingFog.Imaging
                 case IFSCalculator ifs:        ifs.FractalParameters = req.FractalParameters; break;
                 case LSystemCalculator ls:     ls.FractalParameters = req.FractalParameters; break;
                 case AttractorCalculator a:    a.FractalParameters = req.FractalParameters; break;
-                case BuddhabrotCalculator b:   b.FractalParameters = req.FractalParameters; break;
+                case BuddhaFamilyCalculator b: b.FractalParameters = req.FractalParameters; break;
                 case NewtonCalculator n:       n.FractalParameters = req.FractalParameters; break;
                 case UserEquationCalculator u: u.FractalParameters = req.FractalParameters; break;
                 case MandelbulbCalculator m:   m.FractalParameters = req.FractalParameters; break;

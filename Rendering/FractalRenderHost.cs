@@ -45,6 +45,9 @@ namespace FracturingFog.Rendering
         private LSystemCalculator _lsystemCalculator;
         private AttractorCalculator _attractorCalculator;
         private BuddhabrotCalculator _buddhabrotCalculator;
+        private NebulabrotCalculator _nebulabrotCalculator;
+        private AntiBuddhabrotCalculator _antiBuddhabrotCalculator;
+        private AntiNebulabrotCalculator _antiNebulabrotCalculator;
         private NewtonCalculator _newtonCalculator;
         private UserEquationCalculator _userEquationCalculator;
         private MandelbulbCalculator _mandelbulbCalculator;
@@ -140,6 +143,9 @@ namespace FracturingFog.Rendering
             _lsystemCalculator = new LSystemCalculator(w, h);
             _attractorCalculator = new AttractorCalculator(w, h);
             _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
+            _nebulabrotCalculator = new NebulabrotCalculator(w, h);
+            _antiBuddhabrotCalculator = new AntiBuddhabrotCalculator(w, h);
+            _antiNebulabrotCalculator = new AntiNebulabrotCalculator(w, h);
             _newtonCalculator = new NewtonCalculator(w, h);
             _userEquationCalculator = new UserEquationCalculator(w, h);
             _mandelbulbCalculator = new MandelbulbCalculator(w, h);
@@ -161,6 +167,9 @@ namespace FracturingFog.Rendering
                 _lsystemCalculator.ColorMap = initialColorMap;
                 _attractorCalculator.ColorMap = initialColorMap;
                 _buddhabrotCalculator.ColorMap = initialColorMap;
+                _nebulabrotCalculator.ColorMap = initialColorMap;
+                _antiBuddhabrotCalculator.ColorMap = initialColorMap;
+                _antiNebulabrotCalculator.ColorMap = initialColorMap;
                 _newtonCalculator.ColorMap = initialColorMap;
                 _userEquationCalculator.ColorMap = initialColorMap;
                 _mandelbulbCalculator.ColorMap = initialColorMap;
@@ -266,6 +275,9 @@ namespace FracturingFog.Rendering
                 _lsystemCalculator.ColorMap = value;
                 _attractorCalculator.ColorMap = value;
                 _buddhabrotCalculator.ColorMap = value;
+                _nebulabrotCalculator.ColorMap = value;
+                _antiBuddhabrotCalculator.ColorMap = value;
+                _antiNebulabrotCalculator.ColorMap = value;
                 _newtonCalculator.ColorMap = value;
                 _userEquationCalculator.ColorMap = value;
                 _mandelbulbCalculator.ColorMap = value;
@@ -650,6 +662,9 @@ namespace FracturingFog.Rendering
             _lsystemCalculator.Resize(w, h);
             _attractorCalculator.Resize(w, h);
             _buddhabrotCalculator.Resize(w, h);
+            _nebulabrotCalculator.Resize(w, h);
+            _antiBuddhabrotCalculator.Resize(w, h);
+            _antiNebulabrotCalculator.Resize(w, h);
             _newtonCalculator.Resize(w, h);
             _userEquationCalculator.Resize(w, h);
             _mandelbulbCalculator.Resize(w, h);
@@ -899,7 +914,7 @@ namespace FracturingFog.Rendering
                 case IFSCalculator ifs: ifs.FractalParameters = ViewState.FractalParameters; break;
                 case LSystemCalculator ls: ls.FractalParameters = ViewState.FractalParameters; break;
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
-                case BuddhabrotCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
+                case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
                 case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
                 case UserEquationCalculator u: u.FractalParameters = ViewState.FractalParameters; break;
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
@@ -931,6 +946,9 @@ namespace FracturingFog.Rendering
             FractalType.LSystem => _lsystemCalculator,
             FractalType.StrangeAttractor => _attractorCalculator,
             FractalType.BuddhaBrot => _buddhabrotCalculator,
+            FractalType.Nebulabrot => _nebulabrotCalculator,
+            FractalType.AntiBuddhabrot => _antiBuddhabrotCalculator,
+            FractalType.AntiNebulabrot => _antiNebulabrotCalculator,
             FractalType.Newton => _newtonCalculator,
             FractalType.Nova => _newtonCalculator,
             FractalType.UserEquation => _userEquationCalculator,

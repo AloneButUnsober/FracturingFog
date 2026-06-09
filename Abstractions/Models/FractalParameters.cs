@@ -72,6 +72,35 @@ namespace FracturingFog.Models
         public int BuddhaIterMid { get; set; } = 5_000;
         public int BuddhaIterHigh { get; set; } = 50_000;
 
+        /// <summary>Output blend for the Buddhabrot family. NebulabrotBands
+        /// keeps the classic three-band R/G/B composite; ColorMap log-norms
+        /// a single-channel hit histogram and feeds it through the active
+        /// IColorMap. Defaults differ per FractalType (single-channel calcs
+        /// pick ColorMap, 3-band calcs pick NebulabrotBands).</summary>
+        public BuddhaColorMode BuddhaColorMode { get; set; } = BuddhaColorMode.NebulabrotBands;
+
+        /// <summary>Render quality for the Buddhabrot family. Standard matches
+        /// the classic per-pixel splat. HighDefinition enables stochastic
+        /// bilinear splatting (4-tap subpixel jitter), real-axis mirror sample
+        /// duplication (free 2× effective sample count), joint-channel
+        /// normalisation, and low-hit noise-floor rejection. HD trades ~15-20%
+        /// extra CPU per sample for substantially smoother filaments and a
+        /// cleaner background (no speckle lift).</summary>
+        public BuddhaQualityMode BuddhaQualityMode { get; set; } = BuddhaQualityMode.Standard;
+
+        /// <summary>Use Metropolis-Hastings importance sampling. When the
+        /// view is zoomed in, the vast majority of uniform random samples
+        /// produce orbits that don't enter the viewport — MH concentrates
+        /// samples on c values whose orbits hit pixels the user can see.
+        /// Big quality gain when zoomed, small loss when fully zoomed out.</summary>
+        public bool BuddhaMetropolis { get; set; } = false;
+
+        /// <summary>Progressive accumulation: split the sample budget into
+        /// chunks and composite to the output buffer between chunks. The
+        /// user can cancel mid-render and still get a usable image. Cost is
+        /// a few extra composites per render (cheap relative to sampling).</summary>
+        public bool BuddhaProgressive { get; set; } = false;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -191,6 +220,10 @@ namespace FracturingFog.Models
                 BuddhaIterLow = BuddhaIterLow,
                 BuddhaIterMid = BuddhaIterMid,
                 BuddhaIterHigh = BuddhaIterHigh,
+                BuddhaColorMode = BuddhaColorMode,
+                BuddhaQualityMode = BuddhaQualityMode,
+                BuddhaMetropolis = BuddhaMetropolis,
+                BuddhaProgressive = BuddhaProgressive,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,
@@ -283,6 +316,30 @@ namespace FracturingFog.Models
     {
         Vec3,
         Quat,
+    }
+
+    /// <summary>Output blend for the Buddhabrot family.</summary>
+    public enum BuddhaColorMode
+    {
+        /// <summary>Classic three-band R/G/B composite. Three iter windows
+        /// (Low/Mid/High) → three hit buffers → log-normalised channels.</summary>
+        NebulabrotBands,
+        /// <summary>Single hit buffer, log-normalised, driven through the
+        /// active <see cref="IColorMap"/>. High iter cap = MaxIterations.</summary>
+        ColorMap,
+    }
+
+    /// <summary>Render quality for the Buddhabrot family.</summary>
+    public enum BuddhaQualityMode
+    {
+        /// <summary>Classic nearest-pixel splat, per-channel log normalisation.
+        /// Fastest; matches reference Buddhabrot output.</summary>
+        Standard,
+        /// <summary>Stochastic bilinear splat (subpixel anti-aliasing),
+        /// real-axis mirror sampling (free 2× effective samples), joint
+        /// channel normalisation, low-hit noise-floor reject. Slower but
+        /// markedly smoother filaments and clean background.</summary>
+        HighDefinition,
     }
 
     public enum BulbColorDriver
