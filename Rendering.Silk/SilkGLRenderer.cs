@@ -58,6 +58,17 @@ void main()
 
     public string RendererDescription { get; }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// GL swap interval is owned by the swap-chain init (host's window
+    /// creation), not per-Render. This property tracks intent so callers
+    /// see consistent state, but flipping at runtime does not change the
+    /// GL pacing — the host must call wglSwapIntervalEXT / glXSwapIntervalEXT
+    /// to act on it. Acceptable for now: the GL backend is not the hot
+    /// video-record path on Windows (DX11/DX12 are).
+    /// </remarks>
+    public bool VSync { get; set; } = true;
+
     public SilkGLRenderer(GL gl, int width, int height,
                          Action makeCurrent, Action swap)
     {

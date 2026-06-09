@@ -72,6 +72,27 @@ namespace FracturingFog.Rendering
         // use the preset's computed count only.
         private int _videoTargetIterations;
 
+        // ── Finding C: adaptive maxIter cap for video record ───────────────
+        // Dense-feature regions (Feigenbaum point, deep minibrot fields) blow
+        // through the frame budget because inside-set minibrot interiors run
+        // the full maxIter loop. This cap is a smoothed multiplier on the
+        // nominal iter count, ratcheted down when the prior frame ran over
+        // budget and back up when the budget is met. Keeps the video frame
+        // rate roughly steady at the cost of mild iter banding in the choppy
+        // regions. Disabled when iter is user-locked.
+        private double _videoIterCap = 1.0;
+        private double _videoLastFrameMs;
+        // Target ~30 fps for video record. Below this is "in budget"; above
+        // 1.5× this ratchets the cap down.
+        private const double VideoFrameBudgetMs = 33.3;
+        private const double VideoIterCapMin = 0.40;
+        private const double VideoIterCapMax = 1.00;
+        private const double VideoIterCapDown = 0.92;
+        private const double VideoIterCapUp   = 1.05;
+        // Master toggle. Default on; user can clear via ViewState surface
+        // (wire later if visible iter-banding becomes a complaint).
+        public bool VideoAdaptiveIterEnabled { get; set; } = true;
+
         // ── Recorders (single-shot only; slideshow never records) ──────────
         private Mp4Writer? _videoMp4Writer;
         private string? _videoMp4TempPath;
@@ -219,6 +240,17 @@ namespace FracturingFog.Rendering
             var pngEncode = request.LosslessEncode;
 
             _videoRunning = true;
+            // Uncap Present pacing for the duration of the video run — the
+            // calc loop must not be paced by the monitor refresh. Restored
+            // in FinishSingleShot. DX11/DX12 honor this immediately; GL and
+            // Skia track the property without runtime effect (see backends).
+            try { _renderer.VSync = false; } catch { }
+            // Suppress the pre-overlay snapshot copy in UploadProcessedBuffer
+            // while recording — SaveLastFrameToPng is user-action only.
+            _recordingActive = wantMp4 || wantPng;
+            // Reset adaptive iter cap so each video run starts at full quality.
+            _videoIterCap = 1.0;
+            _videoLastFrameMs = 0.0;
             RaiseStatus(request.IsReverse
                 ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
                 : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
@@ -340,6 +372,9 @@ namespace FracturingFog.Rendering
         {
             _videoRunning = false;
             _videoTargetIterations = 0;
+            // Restore vsync for interactive preview.
+            try { _renderer.VSync = true; } catch { }
+            _recordingActive = false;
 
             // Finalise both encoders first so the temp artefacts are fully
             // written by the time the shell decides whether to keep them.
@@ -687,8 +722,30 @@ namespace FracturingFog.Rendering
         private void RenderVideoFrame(QDCoord cx, QDCoord cy, double zoom, CancellationToken ct)
         {
             if (ct.IsCancellationRequested) return;
+
+            // Finding C: ratchet iter cap based on prior-frame elapsed time
+            // before applying view state. Caps engage on dense regions
+            // (Feigenbaum point, minibrot fields) where the inner loop blows
+            // through the frame budget; relax back to 1.0 when the budget
+            // recovers. Skipped when iter is user-locked.
+            if (VideoAdaptiveIterEnabled && !ViewState.IterLocked && _videoLastFrameMs > 0.0)
+            {
+                if (_videoLastFrameMs > VideoFrameBudgetMs * 1.5)
+                    _videoIterCap *= VideoIterCapDown;
+                else if (_videoLastFrameMs < VideoFrameBudgetMs * 0.9)
+                    _videoIterCap *= VideoIterCapUp;
+                if (_videoIterCap < VideoIterCapMin) _videoIterCap = VideoIterCapMin;
+                else if (_videoIterCap > VideoIterCapMax) _videoIterCap = VideoIterCapMax;
+            }
+            else
+            {
+                _videoIterCap = 1.0;
+            }
+
+            var frameSw = Stopwatch.StartNew();
+
             ApplyVideoFrameState(cx, cy, zoom);
-            if (ct.IsCancellationRequested) return;
+            if (ct.IsCancellationRequested) { _videoLastFrameMs = frameSw.Elapsed.TotalMilliseconds; return; }
 
             // Non-Mandelbrot fractals: dispatch to the alt calculator and upload
             // its buffer directly. Histogram-eq / TAA / dither read from the
@@ -748,6 +805,8 @@ namespace FracturingFog.Rendering
 
             // Capture this frame for the next iteration's reprojection.
             StashCurrentFrameAsPrev();
+
+            _videoLastFrameMs = frameSw.Elapsed.TotalMilliseconds;
         }
 
         // Builds the per-leg CDF on the first frame; refreshes after a >5%
@@ -1059,6 +1118,15 @@ namespace FracturingFog.Rendering
             {
                 int it = _videoQuality.ComputeIterations(clampedZoom);
                 if (_videoTargetIterations > it) it = _videoTargetIterations;
+                // Finding C: apply adaptive cap (set by RenderVideoFrame from
+                // prior-frame elapsed). Min floor of 64 so the image never
+                // collapses to all-in-set even when the cap clamps hard.
+                if (VideoAdaptiveIterEnabled && _videoIterCap < VideoIterCapMax)
+                {
+                    int capped = (int)(it * _videoIterCap);
+                    if (capped < 64) capped = 64;
+                    it = capped;
+                }
                 _calculator.MaxIterations = it;
             }
         }

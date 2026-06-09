@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 using FracturingFog.Interefaces;
@@ -9,7 +10,7 @@ namespace FracturingFog.Models.FractalKernels
     /// The caller passes the pixel coordinates as (cx, cy); InitState uses them
     /// as z0 and the kernel substitutes its captured constant for c during Step.
     /// </summary>
-    public readonly struct JuliaKernel : IFractalKernel
+    public readonly struct JuliaKernel : ISimdFractalKernel
     {
         private readonly double _cr;
         private readonly double _ci;
@@ -39,6 +40,39 @@ namespace FracturingFog.Models.FractalKernels
             dr = newDr; di = newDi;
             double newZr = zr2 - zi2 + _cr;
             zi = 2.0 * zr * zi + _ci;
+            zr = newZr;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void InitStateSimd(
+            Vector<double> cx, Vector<double> cy,
+            out Vector<double> zr, out Vector<double> zi,
+            out Vector<double> dr, out Vector<double> di)
+        {
+            // Pixel is z0 for Julia.
+            zr = cx;
+            zi = cy;
+            dr = Vector<double>.One;
+            di = Vector<double>.Zero;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void StepSimd(
+            ref Vector<double> zr, ref Vector<double> zi,
+            ref Vector<double> dr, ref Vector<double> di,
+            Vector<double> cx, Vector<double> cy)
+        {
+            var two = new Vector<double>(2.0);
+            var crV = new Vector<double>(_cr);
+            var ciV = new Vector<double>(_ci);
+            var zr2 = zr * zr;
+            var zi2 = zi * zi;
+            // Julia derivative: no +1 — c constant w.r.t. z0.
+            var newDr = two * (zr * dr - zi * di);
+            var newDi = two * (zr * di + zi * dr);
+            dr = newDr; di = newDi;
+            var newZr = zr2 - zi2 + crV;
+            zi = two * zr * zi + ciV;
             zr = newZr;
         }
     }

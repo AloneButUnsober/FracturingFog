@@ -40,10 +40,23 @@
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|x64'">
     <DebugType>full</DebugType>
+    <!--
+      Tier 3: emit native ReadyToRun code alongside IL. Kills JIT-warmup
+      tax on first frame after launch and on hot-reload of UserEquation /
+      Sandbox / ColorGen assemblies. Publish-only (does nothing on Debug /
+      Release `dotnet build`). PublishReadyToRunComposite=true compiles
+      the full closure including dependent assemblies into one R2R image.
+    -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+    <TieredCompilation>true</TieredCompilation>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Publish|AnyCPU'">
     <DebugType>full</DebugType>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+    <TieredCompilation>true</TieredCompilation>
   </PropertyGroup>
 
   <ItemGroup>

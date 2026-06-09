@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 using FracturingFog.Interefaces;
@@ -10,7 +11,7 @@ namespace FracturingFog.Models.FractalKernels
     /// can exercise the kernel path uniformly. Production Mandelbrot rendering
     /// still routes to MandelbrotCalculator.cs for the SIMD/PT/SA/BLA pipeline.
     /// </summary>
-    public readonly struct MandelbrotKernel : IFractalKernel
+    public readonly struct MandelbrotKernel : ISimdFractalKernel
     {
         public double BailoutRadius2 { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => 512.0 * 512.0; }
         public bool HasCardioidSkip { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => true; }
@@ -41,6 +42,36 @@ namespace FracturingFog.Models.FractalKernels
             dr = newDr; di = newDi;
             double newZr = zr2 - zi2 + cx;
             zi = 2.0 * zr * zi + cy;
+            zr = newZr;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void InitStateSimd(
+            Vector<double> cx, Vector<double> cy,
+            out Vector<double> zr, out Vector<double> zi,
+            out Vector<double> dr, out Vector<double> di)
+        {
+            zr = Vector<double>.Zero;
+            zi = Vector<double>.Zero;
+            dr = Vector<double>.One;
+            di = Vector<double>.Zero;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void StepSimd(
+            ref Vector<double> zr, ref Vector<double> zi,
+            ref Vector<double> dr, ref Vector<double> di,
+            Vector<double> cx, Vector<double> cy)
+        {
+            var two = new Vector<double>(2.0);
+            var one = Vector<double>.One;
+            var zr2 = zr * zr;
+            var zi2 = zi * zi;
+            var newDr = two * (zr * dr - zi * di) + one;
+            var newDi = two * (zr * di + zi * dr);
+            dr = newDr; di = newDi;
+            var newZr = zr2 - zi2 + cx;
+            zi = two * zr * zi + cy;
             zr = newZr;
         }
     }

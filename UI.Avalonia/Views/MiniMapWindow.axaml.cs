@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 
+using FracturingFog.UI.Avalonia.Input;
+
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>Topmost borderless window hosting the MiniMapControl. Created on
@@ -18,6 +20,7 @@ public sealed partial class MiniMapWindow : Window
     public MiniMapWindow()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
 
         var handle = this.FindControl<Border>("DragHandle");
         if (handle != null)

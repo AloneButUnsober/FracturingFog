@@ -2,6 +2,8 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
+using FracturingFog.UI.Avalonia.Input;
+
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>Avalonia embedded-mode Video Settings dialog. OK populates
@@ -11,6 +13,7 @@ public sealed partial class VideoSettingsView : Window
     public VideoSettingsView()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
     }
 
     private void OnOkClicked(object? sender, RoutedEventArgs e) => Close(true);

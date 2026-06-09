@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
+using FracturingFog.UI.Avalonia.Input;
+
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>
@@ -15,5 +17,6 @@ public sealed partial class UserEquationView : Window
     public UserEquationView()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
     }
 }

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using FracturingFog.UI.Avalonia.Controls;
+using FracturingFog.UI.Avalonia.Input;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
@@ -21,6 +22,7 @@ public sealed partial class MiniDepthWindow : Window
     public MiniDepthWindow()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
         Inner = this.FindControl<MiniDepthControl>("Depth")
             ?? throw new InvalidOperationException("MiniDepthControl x:Name=Depth missing");
 

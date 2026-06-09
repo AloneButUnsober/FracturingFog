@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
+using FracturingFog.UI.Avalonia.Input;
+
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>
@@ -18,5 +20,6 @@ public sealed partial class UserBulbView : Window
     public UserBulbView()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
     }
 }
