@@ -251,6 +251,8 @@ public sealed class Avx2Emitter : EmitterBase
         "cos" => $"{rOut} = Math.Cos({re}) * Math.Cosh({im}); {iOut} = -(Math.Sin({re}) * Math.Sinh({im}));",
         "exp" => $"{{ double ex = Math.Exp({re}); {rOut} = ex * Math.Cos({im}); {iOut} = ex * Math.Sin({im}); }}",
         "log" => $"{rOut} = 0.5 * Math.Log({re} * {re} + {im} * {im}); {iOut} = Math.Atan2({im}, {re});",
+        // arg(a+bi) = atan2(b, a). Result lifted to (arg, 0) — iOut = 0.
+        "arg" => $"{rOut} = Math.Atan2({im}, {re}); {iOut} = 0.0;",
         _ => throw new InvalidOperationException($"Avx2Emitter: unknown transcendental {op}"),
     };
 
@@ -258,6 +260,52 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => EmitPerLaneTranscendental(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => EmitPerLaneTranscendental(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => EmitPerLaneTranscendental(a, "log");
+    protected override ComplexExpr OpArg(ComplexExpr a) => EmitPerLaneTranscendental(a, "arg");
+    // Binary atan2 has no AVX2 vector intrinsic and the existing per-lane
+    // helper takes a single complex input. Scalar / DD / QD paths cover
+    // atan2 fully — let the generator surface a clear error here so the
+    // user knows to either rewrite via arg() or accept the scalar-only
+    // path (CalcGen runs the scalar emitter unconditionally as a fallback).
+    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
+        throw new InvalidOperationException(
+            "atan2(y, x) is not implemented on the AVX2 path. Use arg(z) instead, " +
+            "or accept the scalar-only fallback by removing the AVX2 calc registration.");
+
+    // min / max have native Vector256<double> intrinsics — emit them
+    // directly so the inner loop stays vectorised. Inputs treated as
+    // real-valued: imag part dropped, output ImZero=true so downstream
+    // Add/Mul elides the dead-zero imag like RealConst.
+    protected override ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        new($"Vector256.Min({a.Re}, {b.Re})", "Vector256<double>.Zero", ImZero: true);
+
+    protected override ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        new($"Vector256.Max({a.Re}, {b.Re})", "Vector256<double>.Zero", ImZero: true);
+
+    // mod (%) has no SIMD intrinsic — fall back to per-lane scalar via the
+    // existing transcendental infrastructure, but adapted to two inputs.
+    // Materialise both vectors into 4 doubles each, run % per lane, repack.
+    protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b)
+    {
+        string ar = a.Re;
+        string br = b.Re;
+        string tre = NewTemp("re");
+        string ns = tre;
+        _prelude.Append(_indent).Append("Vector256<double> ").Append(tre).Append(';').Append('\n');
+        _prelude.Append(_indent).Append("{\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double a").Append(k).Append("_").Append(ns)
+                .Append(" = ").Append(ar).Append(".GetElement(").Append(k).Append(");\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double b").Append(k).Append("_").Append(ns)
+                .Append(" = ").Append(br).Append(".GetElement(").Append(k).Append(");\n");
+        _prelude.Append(_indent).Append("    ").Append(tre).Append(" = Vector256.Create(")
+            .Append("a0_").Append(ns).Append(" % b0_").Append(ns).Append(", ")
+            .Append("a1_").Append(ns).Append(" % b1_").Append(ns).Append(", ")
+            .Append("a2_").Append(ns).Append(" % b2_").Append(ns).Append(", ")
+            .Append("a3_").Append(ns).Append(" % b3_").Append(ns).Append(");\n");
+        _prelude.Append(_indent).Append("}\n");
+        return new ComplexExpr(tre, "Vector256<double>.Zero", ImZero: true);
+    }
 
     // Piecewise — mask blend via Avx.Compare → Vector256.ConditionalSelect.
     // Compare returns the per-lane mask as Vector256<double> (all-1 bits

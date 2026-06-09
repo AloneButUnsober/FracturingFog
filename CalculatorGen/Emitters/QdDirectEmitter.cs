@@ -137,6 +137,21 @@ public sealed class QdDirectEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => ScalarComplex(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => ScalarComplex(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => ScalarComplex(a, "log");
+    // arg / atan2 degrade to double inside the atan2 call (same pattern
+    // as OpLog's imag part). Wrap each operand in ((QD)x).X0 — handles
+    // both QD-typed expressions and bare double literals from Const.
+    protected override ComplexExpr OpArg(ComplexExpr a) =>
+        new($"(QD)Math.Atan2({(a.ImZero ? "0.0" : $"((QD)({a.Im})).X0")}, ((QD)({a.Re})).X0)", "(QD)0.0", ImZero: true);
+    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
+        new($"(QD)Math.Atan2(((QD)({y.Re})).X0, ((QD)({x.Re})).X0)", "(QD)0.0", ImZero: true);
+
+    // QD high limb access via ((QD)x).X0 normalises constants.
+    protected override ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        new($"(((QD)({a.Re})).X0 <= ((QD)({b.Re})).X0 ? ((QD)({a.Re})) : ((QD)({b.Re})))", "(QD)0.0", ImZero: true);
+    protected override ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        new($"(((QD)({a.Re})).X0 >= ((QD)({b.Re})).X0 ? ((QD)({a.Re})) : ((QD)({b.Re})))", "(QD)0.0", ImZero: true);
+    protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
+        new($"(QD)(((QD)({a.Re})).X0 % ((QD)({b.Re})).X0)", "(QD)0.0", ImZero: true);
 
     // Piecewise: condition compares QD values via .X0 (high limb).
     // Branches selected by C# ternary on QD expression; both eager-

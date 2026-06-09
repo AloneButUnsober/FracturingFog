@@ -113,6 +113,36 @@ public sealed record Exp(AstNode Operand) : AstNode;
 /// Holomorphic on C\{0}. See <see cref="Sin"/> for capability notes.</summary>
 public sealed record Log(AstNode Operand) : AstNode;
 
+/// <summary>Principal argument of a complex number, lifted to complex as
+/// (arg, 0). arg(a+bi) = atan2(b, a) ∈ (-π, π]. Non-holomorphic — same
+/// gating as <see cref="Conj"/>: distance estimate disabled, perturbation
+/// Taylor / BLA disabled, SA recurrence rejected. Differentiator treats
+/// it as opaque (∂arg/∂z = 0 in the holomorphic chain rule).</summary>
+public sealed record Arg(AstNode Operand) : AstNode;
+
+/// <summary>Two-argument arctangent, lifted to complex as (atan2(y, x), 0).
+/// Same gating as <see cref="Arg"/>. The unary form `arg(z)` desugars in
+/// downstream visitors that prefer the binary surface — emission for both
+/// goes through the same OpArg path on the emitter base class.</summary>
+public sealed record Atan2(AstNode Y, AstNode X) : AstNode;
+
+/// <summary>Real minimum of two operands, lifted to complex as (min, 0).
+/// Inputs are treated as real-valued — the emitter feeds Re(Left) and
+/// Re(Right) to the underlying Math.Min. Non-holomorphic (subgradient at
+/// the boundary). Distance estimate / perturbation / BLA / SA all gate
+/// off via the same hasArg / hasMinMax flag rolled into hasTrans.</summary>
+public sealed record Min(AstNode Left, AstNode Right) : AstNode;
+
+/// <summary>Real maximum of two operands, lifted to complex. See <see cref="Min"/>.</summary>
+public sealed record Max(AstNode Left, AstNode Right) : AstNode;
+
+/// <summary>Real modulo (IEEE remainder semantics): mod(a, b) = a - trunc(a/b)*b
+/// on the real components, lifted to complex. The emitter uses C#'s `%`
+/// on doubles (matches Math.IEEERemainder for finite arguments after the
+/// trunc-style rounding the spec prescribes; users who need true IEEE
+/// rounding can rewrite explicitly). Same gating as Min / Max.</summary>
+public sealed record Mod(AstNode Left, AstNode Right) : AstNode;
+
 /// <summary>Piecewise complex expression: if <paramref name="Cond"/> then
 /// <paramref name="Then"/> else <paramref name="Else"/>. Holomorphic
 /// piecewise — distance estimate is valid inside each branch but the

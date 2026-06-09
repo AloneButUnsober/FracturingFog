@@ -89,7 +89,19 @@ public static class CalculatorGenApi
         bool hasTrans  = AstHelpers.Contains<Sin>(root)
                       || AstHelpers.Contains<Cos>(root)
                       || AstHelpers.Contains<Exp>(root)
-                      || AstHelpers.Contains<Log>(root);
+                      || AstHelpers.Contains<Log>(root)
+                      || AstHelpers.Contains<Arg>(root)
+                      || AstHelpers.Contains<Atan2>(root)
+                      || AstHelpers.Contains<Min>(root)
+                      || AstHelpers.Contains<Max>(root)
+                      || AstHelpers.Contains<Mod>(root);
+        // arg / atan2 / min / max / mod are non-holomorphic. Distance
+        // estimate breaks like Conj/Folded — feed all into the DE gate.
+        bool hasArg    = AstHelpers.Contains<Arg>(root)
+                      || AstHelpers.Contains<Atan2>(root)
+                      || AstHelpers.Contains<Min>(root)
+                      || AstHelpers.Contains<Max>(root)
+                      || AstHelpers.Contains<Mod>(root);
         // Conditional / piecewise (If): branches are individually
         // holomorphic so DE survives inside each side (a discontinuity
         // along the boundary locus is the only cost), but the δ-Taylor
@@ -106,7 +118,7 @@ public static class CalculatorGenApi
         // across ref orbit vs pixel → perturbation can't linearise an
         // iter-dependent step. Gate perturbation off; keep DE on.
         bool hasIter  = AstHelpers.Contains<IterRef>(root);
-        bool supportsDe = !(hasConj || hasFolded || hasPrev);
+        bool supportsDe = !(hasConj || hasFolded || hasPrev || hasArg);
         bool supportsPerturbation = !(hasConj || hasFolded || hasDiv || hasTrans || hasCond || hasPrev || hasIter);
 
         string perturbBody, perturbDdBody, perturbAvx2Body, perturbAvx512Body,

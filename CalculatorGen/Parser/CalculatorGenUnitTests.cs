@@ -320,6 +320,53 @@ public static class CalculatorGenUnitTests
         Check("lexer: 'tnh' suggests 'tanh'",
             () => TryParseError("tnh(z) + c", out var msg)
                   && msg.Contains("Did you mean 'tanh'?"));
+
+        // ── arg / atan2 ───────────────────────────────────────────────
+        Check("parser: arg(z) parses as Arg node",
+            () => EquationParser.Parse("arg(z)") is Arg);
+        Check("parser: atan2(im(z), re(z)) requires comma",
+            () => EquationParser.Parse("atan2(z, c)") is Atan2);
+        Check("parser: atan2 without comma errors",
+            () => TryParseError("atan2(z c)", out _));
+        Check("flags: Arg detected via Contains<Arg>",
+            () => AstHelpers.Contains<Arg>(EquationParser.Parse("z*z + arg(z) + c")));
+        Check("flags: Atan2 detected via Contains<Atan2>",
+            () => AstHelpers.Contains<Atan2>(EquationParser.Parse("z*z + atan2(z, c) + c")));
+        Check("SA: arg → 0 (rejected, non-holomorphic)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("z*z + arg(z) + c")).polyZ == null);
+        Check("diff: ∂(z*z + arg(z))/∂z = z+z (arg opaque)",
+            () => DpDzOf("z*z + arg(z) + c") == "z + z");
+        Check("preproc: Complex.Phase → arg",
+            () => Pre("Complex.Phase(z)") == "arg(z)");
+        Check("preproc: Math.Atan2(a, b) → atan2(a, b)",
+            () => Pre("Math.Atan2(z, c)") == "atan2(z, c)");
+        Check("lexer: 'arg' suggests itself on typo 'rg'",
+            () => TryParseError("rg(z) + c", out var msg2)
+                  && msg2.Contains("Did you mean 'arg'?"));
+
+        // ── min / max / mod ──────────────────────────────────────────
+        Check("parser: min(z, c) parses as Min node",
+            () => EquationParser.Parse("min(z, c)") is Min);
+        Check("parser: max(z, c) parses as Max node",
+            () => EquationParser.Parse("max(z, c)") is Max);
+        Check("parser: mod(z, c) parses as Mod node",
+            () => EquationParser.Parse("mod(z, c)") is Mod);
+        Check("flags: Min/Max/Mod detected via Contains<T>",
+            () => AstHelpers.Contains<Min>(EquationParser.Parse("min(z, c) + c"))
+               && AstHelpers.Contains<Max>(EquationParser.Parse("max(z, c) + c"))
+               && AstHelpers.Contains<Mod>(EquationParser.Parse("mod(z, c) + c")));
+        Check("SA: min(z, c) → 0 (rejected, non-holomorphic)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("z*z + min(z, c) + c")).polyZ == null);
+        Check("diff: ∂(z*z + min(z, c))/∂z = z+z (min opaque)",
+            () => DpDzOf("z*z + min(z, c) + c") == "z + z");
+        Check("preproc: Math.Min → min",
+            () => Pre("Math.Min(z, c)") == "min(z, c)");
+        Check("preproc: Math.Max → max",
+            () => Pre("Math.Max(z, c)") == "max(z, c)");
+        Check("preproc: Math.IEEERemainder → mod",
+            () => Pre("Math.IEEERemainder(z, c)") == "mod(z, c)");
+        Check("parser: min without comma errors",
+            () => TryParseError("min(z c)", out _));
         Check("preproc: leaves DSL syntax untouched",
             () => Pre("sin(z) + c") == "sin(z) + c");
 

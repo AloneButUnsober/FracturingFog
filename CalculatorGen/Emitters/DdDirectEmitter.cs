@@ -140,6 +140,24 @@ public sealed class DdDirectEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => ScalarComplex(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => ScalarComplex(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => ScalarComplex(a, "log");
+    // arg / atan2 return a real angle; precision degrades to plain double
+    // inside the atan2 call (same as the imag-part of OpLog). DD has no
+    // implicit double cast — extract .Hi explicitly to feed Math.Atan2.
+    protected override ComplexExpr OpArg(ComplexExpr a) =>
+        new($"(DD)Math.Atan2({(a.ImZero ? "0.0" : $"((DD)({a.Im})).Hi")}, ((DD)({a.Re})).Hi)", "(DD)0.0", ImZero: true);
+    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
+        new($"(DD)Math.Atan2(((DD)({y.Re})).Hi, ((DD)({x.Re})).Hi)", "(DD)0.0", ImZero: true);
+
+    // min/max emit DD-aware ternaries on the .Hi limb (matches OpIf's
+    // comparison strategy). mod scalarises through double — DD precision
+    // doesn't survive the %, same trade-off as atan2 above. Operands
+    // wrapped in ((DD)x).Hi so RealConst-emitted double literals work.
+    protected override ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        new($"(((DD)({a.Re})).Hi <= ((DD)({b.Re})).Hi ? ((DD)({a.Re})) : ((DD)({b.Re})))", "(DD)0.0", ImZero: true);
+    protected override ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        new($"(((DD)({a.Re})).Hi >= ((DD)({b.Re})).Hi ? ((DD)({a.Re})) : ((DD)({b.Re})))", "(DD)0.0", ImZero: true);
+    protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
+        new($"(DD)(((DD)({a.Re})).Hi % ((DD)({b.Re})).Hi)", "(DD)0.0", ImZero: true);
 
     // Piecewise: condition compares DD values via .Hi (high-double).
     // Sufficient for typical Mandelbrot-style thresholds — the

@@ -67,6 +67,37 @@ public static class AstPrinter
             case Log lg:
                 sb.Append("log("); WriteExpr(sb, lg.Operand, 0); sb.Append(')');
                 break;
+            case Arg ar:
+                sb.Append("arg("); WriteExpr(sb, ar.Operand, 0); sb.Append(')');
+                break;
+            case Atan2 at:
+                sb.Append("atan2(");
+                WriteExpr(sb, at.Y, 0);
+                sb.Append(", ");
+                WriteExpr(sb, at.X, 0);
+                sb.Append(')');
+                break;
+            case Min mn:
+                sb.Append("min(");
+                WriteExpr(sb, mn.Left, 0);
+                sb.Append(", ");
+                WriteExpr(sb, mn.Right, 0);
+                sb.Append(')');
+                break;
+            case Max mx:
+                sb.Append("max(");
+                WriteExpr(sb, mx.Left, 0);
+                sb.Append(", ");
+                WriteExpr(sb, mx.Right, 0);
+                sb.Append(')');
+                break;
+            case Mod md:
+                sb.Append("mod(");
+                WriteExpr(sb, md.Left, 0);
+                sb.Append(", ");
+                WriteExpr(sb, md.Right, 0);
+                sb.Append(')');
+                break;
             case If i:
                 Wrap(sb, parentPrec, 0, () =>
                 {

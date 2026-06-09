@@ -42,6 +42,12 @@ public enum TokenKind
     Sqrt,
     Exp,
     Log,
+    Arg,
+    Atan2,
+    Min,
+    Max,
+    Mod,
+    Comma,
     PiConst,
     EConst,
     If,
@@ -151,6 +157,16 @@ public static class EquationLexer
                     tokens.Add(new Token(TokenKind.Exp, name, start, startLine, startCol));
                 else if (name.Equals("log", StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.Log, name, start, startLine, startCol));
+                else if (name.Equals("arg", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Arg, name, start, startLine, startCol));
+                else if (name.Equals("atan2", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Atan2, name, start, startLine, startCol));
+                else if (name.Equals("min", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Min, name, start, startLine, startCol));
+                else if (name.Equals("max", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Max, name, start, startLine, startCol));
+                else if (name.Equals("mod", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Mod, name, start, startLine, startCol));
                 else if (name.Equals("pi", StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.PiConst, name, start, startLine, startCol));
                 else if (name.Equals("e", StringComparison.OrdinalIgnoreCase))
@@ -176,7 +192,8 @@ public static class EquationLexer
                 {
                     // Suggest the closest valid keyword via Levenshtein-≤2.
                     string[] keywords = { "z", "c", "conj", "fold", "sqr", "sin", "cos", "tan",
-                                          "sinh", "cosh", "tanh", "sqrt", "exp", "log", "pi", "e",
+                                          "sinh", "cosh", "tanh", "sqrt", "exp", "log", "arg", "atan2",
+                                          "min", "max", "mod", "pi", "e",
                                           "if", "then", "else", "re", "im", "abs", "prev", "iter", "n" };
                     string? best = null;
                     int bestD = int.MaxValue;
@@ -193,7 +210,8 @@ public static class EquationLexer
                     throw new FormatException(
                         $"Unknown identifier '{name}' at {where}.{suggestion} " +
                         "Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, " +
-                        "exp, log, pi, e, if, then, else, re, im, abs, prev, iter (or n).");
+                        "exp, log, arg, atan2, min, max, mod, pi, e, " +
+                        "if, then, else, re, im, abs, prev, iter (or n).");
                 }
                 continue;
             }
@@ -208,6 +226,7 @@ public static class EquationLexer
                 case '^': tokens.Add(new Token(TokenKind.Caret,  "^", i, chLine, chCol)); Bump(ch); i++; continue;
                 case '(': tokens.Add(new Token(TokenKind.LParen, "(", i, chLine, chCol)); Bump(ch); i++; continue;
                 case ')': tokens.Add(new Token(TokenKind.RParen, ")", i, chLine, chCol)); Bump(ch); i++; continue;
+                case ',': tokens.Add(new Token(TokenKind.Comma,  ",", i, chLine, chCol)); Bump(ch); i++; continue;
                 case '>':
                     if (i + 1 < source.Length && source[i + 1] == '=')
                     { tokens.Add(new Token(TokenKind.Ge, ">=", i, chLine, chCol)); Bump(ch); Bump(source[i+1]); i += 2; continue; }

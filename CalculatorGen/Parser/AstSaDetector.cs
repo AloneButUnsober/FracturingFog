@@ -89,6 +89,11 @@ public static class AstSaDetector
             case Cos:
             case Exp:
             case Log:
+            case Arg:
+            case Atan2:
+            case Min:
+            case Max:
+            case Mod:
             case If:
             case PrevRef:
             case IterRef:

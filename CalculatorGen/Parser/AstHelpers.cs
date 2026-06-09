@@ -34,6 +34,11 @@ public static class AstHelpers
         Cos co => Contains<T>(co.Operand),
         Exp e  => Contains<T>(e.Operand),
         Log lg => Contains<T>(lg.Operand),
+        Arg ar => Contains<T>(ar.Operand),
+        Atan2 at => Contains<T>(at.Y) || Contains<T>(at.X),
+        Min mn => Contains<T>(mn.Left) || Contains<T>(mn.Right),
+        Max mx => Contains<T>(mx.Left) || Contains<T>(mx.Right),
+        Mod md => Contains<T>(md.Left) || Contains<T>(md.Right),
         // Piecewise — recurse into both branches and into any AstNodes
         // embedded inside the condition's CondTerms (re(...)/im(...)/abs(...)
         // each carry a complex sub-expression).
