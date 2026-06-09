@@ -179,7 +179,7 @@ namespace FracturingFog.Hosting
                     null,
                     Vortice.Direct3D.DriverType.Hardware,
                     Vortice.Direct3D11.DeviceCreationFlags.None,
-                    null,
+                    null!,
                     out _, out var fl, out _);
                 sb.AppendLine($"Max Feature Level: {fl}");
             }

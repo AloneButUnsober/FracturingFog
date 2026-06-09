@@ -94,6 +94,18 @@ namespace FracturingFog.Render
         /// (if any) overrides the user's active watermark for its leg. Mirrors
         /// the slideshow engine's <c>UseRegionWatermark</c> behaviour.</summary>
         public bool UseRegionWatermark { get; set; }
+
+        /// <summary>Single-shot only — cycle the colour palette through several
+        /// themes during the zoom, cross-fading via the BlendedColorMap so the
+        /// zoom keeps advancing across the swap. Ignored for slideshow (the
+        /// slideshow path already drives its own per-leg theme schedule).</summary>
+        public bool ThemeFadeEnabled { get; set; }
+
+        /// <summary>Themes shown across the single-shot zoom when
+        /// <see cref="ThemeFadeEnabled"/> is true. Swap timings are spaced
+        /// uniformly: schedule fires at t = k / ThemesPerLeg for k = 1..N-1.
+        /// Clamped to [1, 12]; values ≤ 1 disable the schedule.</summary>
+        public int ThemesPerLeg { get; set; } = 3;
     }
 
     /// <summary>Outcome of a single-shot recording, raised once the zoom ends
@@ -157,5 +169,13 @@ namespace FracturingFog.Render
         /// slideshow) has fully stopped, so the shell can reset button text
         /// and hide the VCR.</summary>
         event EventHandler? Stopped;
+
+        /// <summary>Optional adaptive-sweep schedule used by the auto video
+        /// slideshow. Null disables the per-leg ramp.</summary>
+        global::FracturingFog.Models.AdaptiveSweepConfig? VideoSweepConfig { get; set; }
+
+        /// <summary>Callback invoked with the current Adaptive value as the
+        /// per-leg ramp advances. Shell marshals to the UI thread.</summary>
+        Action<int>? VideoAdaptiveValueSink { get; set; }
     }
 }

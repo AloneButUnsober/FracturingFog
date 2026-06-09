@@ -34,17 +34,17 @@ namespace FracturingFog.Models
 
         protected readonly FractalType fractalType = FractalType.Mandelbrot;
 
-        protected int[] colorBuffer;
+        protected int[] colorBuffer = null!;
 
         protected IColorMap? colorMap = null;
 
         protected CancellationTokenSource? _cancelTokenSource;
 
-        protected float[] distanceBuffer;
+        protected float[] distanceBuffer = null!;
 
         protected FractalView fractalView = FractalViews.Classic;
 
-        protected int[] outputBuffer;
+        protected int[] outputBuffer = null!;
 
         protected Vector<float> _laneOffsets;
 
@@ -58,7 +58,7 @@ namespace FracturingFog.Models
 
         protected int renderWidth;
 
-        protected float[] smoothBuffer;
+        protected float[] smoothBuffer = null!;
 
         protected bool viewChanged = true;
 

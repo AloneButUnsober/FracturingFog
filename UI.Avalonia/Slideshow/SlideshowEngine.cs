@@ -59,6 +59,16 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             if (settings != null) _settings = settings;
         }
 
+        /// <summary>Optional richer config — provides adaptive-sweep schedule,
+        /// post-fx snapshot, and (eventually) include/filter sets. Null leaves
+        /// the engine in pure-timing mode.</summary>
+        public SlideshowConfig? Config { get; set; }
+
+        /// <summary>Optional callback fired with the live Adaptive-slider value
+        /// as the per-leg sweep ramp advances. Shell wires this to
+        /// <c>FloatingMenu.Adaptive</c>.</summary>
+        public Action<int>? AdaptiveValueSink { get; set; }
+
         public event EventHandler<string>? StatusChanged;
         public event EventHandler? Stopped;
 
@@ -107,7 +117,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         {
             try
             {
-                var regions = _service.EnumerateSlideshowRegionNames();
+                var regions = ApplyRegionFilter(_service.EnumerateSlideshowRegionNames());
                 if (regions == null || regions.Count == 0) return;
 
                 int fadeSteps = Math.Clamp(_settings.FadeSteps, 2, 200);
@@ -135,7 +145,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     }
 
                     double zoom = _service.GetRegionZoom(regionName);
-                    var themes = _service.EnumerateThemeNamesForZoom(zoom);
+                    var themes = ApplyThemeFilter(_service.EnumerateThemeNamesForZoom(zoom));
                     int lastTheme = -1;
 
                     // Matches legacy Slideshow.cs cadence:
@@ -163,6 +173,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         StatusChanged?.Invoke(this,
                             $"Slideshow: {regionName}{(themeName != null ? " / " + themeName : "")}");
 
+                        int themesPerRegionNow = FocusRegion ? 3 : 8;
+                        int legMs = Math.Max(800, totalRegionMs / Math.Max(1, themesPerRegionNow));
+                        using var legSweepCts = StartAdaptiveSweep(legMs, ct);
+
                         // themeMs is recomputed each WaitAsync tick so a
                         // FocusRegion toggle mid-theme shortens (or extends)
                         // the visible duration immediately.
@@ -188,6 +202,49 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     return 0;
                 }, CancellationToken.None);
             }
+        }
+
+        // ── Filter helpers ────────────────────────────────────────────────
+        // Intersect the eligibility set surfaced by the host with the include
+        // list + metadata filters carried on Config. Null/empty filter = keep
+        // everything. Returns the original list when every filter ends up
+        // emptying the set so the engine's downstream "host produced zero
+        // regions?" guard still fires (rather than silently skipping a leg).
+        private IReadOnlyList<string> ApplyRegionFilter(IReadOnlyList<string> input)
+        {
+            var inc = Config?.IncludedRegions;
+            var ft = Config?.FilterFractalTypes;
+            var qp = Config?.FilterQualityPresets;
+            bool hasInc = inc != null && inc.Count > 0;
+            bool hasFt = ft != null && ft.Count > 0;
+            bool hasQp = qp != null && qp.Count > 0;
+            if (!hasInc && !hasFt && !hasQp) return input;
+
+            var incSet = hasInc ? new HashSet<string>(inc!, StringComparer.OrdinalIgnoreCase) : null;
+            var ftSet = hasFt ? new HashSet<string>(ft!, StringComparer.OrdinalIgnoreCase) : null;
+            var qpSet = hasQp ? new HashSet<string>(qp!, StringComparer.OrdinalIgnoreCase) : null;
+
+            var filtered = new List<string>(input.Count);
+            foreach (var n in input)
+            {
+                if (incSet != null && !incSet.Contains(n)) continue;
+                if (ftSet != null && !ftSet.Contains(_service.GetRegionFractalTypeName(n))) continue;
+                if (qpSet != null && !qpSet.Contains(_service.GetRegionQualityPresetName(n))) continue;
+                filtered.Add(n);
+            }
+            return filtered.Count > 0 ? filtered : input;
+        }
+
+        private IReadOnlyList<string>? ApplyThemeFilter(IReadOnlyList<string>? input)
+        {
+            if (input == null) return null;
+            var inc = Config?.IncludedColorThemes;
+            if (inc == null || inc.Count == 0) return input;
+            var set = new HashSet<string>(inc, StringComparer.OrdinalIgnoreCase);
+            var filtered = new List<string>(Math.Min(input.Count, inc.Count));
+            foreach (var n in input)
+                if (set.Contains(n)) filtered.Add(n);
+            return filtered.Count > 0 ? filtered : input;
         }
 
         private string? PickTheme(IReadOnlyList<string>? themes, ref int lastTheme)
@@ -370,6 +427,73 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 if (!_paused) elapsed += tick;
             }
             return false;
+        }
+
+        // ── Adaptive sweep ────────────────────────────────────────────────
+        //
+        // Drives the FloatingMenu Adaptive slider over the lifetime of a leg
+        // per <see cref="SlideshowConfig.AdaptiveSweep"/>. The shell wires
+        // <see cref="AdaptiveValueSink"/> to <c>FloatingMenu.Adaptive</c>.
+        // Returns a CTS that the caller should dispose to abort the sweep
+        // when the leg ends early (skip / stop).
+        private CancellationTokenSource StartAdaptiveSweep(int legMs, CancellationToken parentCt)
+        {
+            var legCts = CancellationTokenSource.CreateLinkedTokenSource(parentCt);
+            var cfg = Config?.AdaptiveSweep;
+            if (cfg == null || !cfg.Enabled || AdaptiveValueSink == null || legMs <= 0)
+                return legCts;
+
+            int start = Math.Clamp(cfg.Start, 0, 100);
+            int end = Math.Clamp(cfg.End, 0, 100);
+            var mode = cfg.Mode;
+            bool loop = cfg.Loop;
+            var sink = AdaptiveValueSink;
+            var ct = legCts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                const int tickMs = 50;
+                int elapsed = 0;
+                while (!ct.IsCancellationRequested)
+                {
+                    double phase = legMs > 0 ? Math.Clamp(elapsed / (double)legMs, 0.0, 1.0) : 1.0;
+                    int v = ComputeSweepValue(phase, start, end, mode);
+                    try { await OnUiAsync(() => sink(v), ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
+
+                    if (elapsed >= legMs)
+                    {
+                        if (!loop) return;
+                        elapsed = 0;
+                    }
+                    try { await Task.Delay(tickMs, ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
+                    elapsed += tickMs;
+                }
+            }, ct);
+
+            return legCts;
+        }
+
+        private static int ComputeSweepValue(double phase, int start, int end, AdaptiveSweepMode mode)
+        {
+            switch (mode)
+            {
+                case AdaptiveSweepMode.Reverse:
+                    return Lerp(end, start, phase);
+                case AdaptiveSweepMode.PingPong:
+                    double pp = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0;
+                    return Lerp(start, end, pp);
+                case AdaptiveSweepMode.Forward:
+                default:
+                    return Lerp(start, end, phase);
+            }
+        }
+
+        private static int Lerp(int a, int b, double t)
+        {
+            t = Math.Clamp(t, 0.0, 1.0);
+            return (int)Math.Round(a + (b - a) * t);
         }
 
         private static Task OnUiAsync(Action action, CancellationToken ct)

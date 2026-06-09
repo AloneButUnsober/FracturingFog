@@ -911,7 +911,9 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
                 // Reuse the scalar z-update body (no derivative needed for ref orbit).
                 {
                     double cr = Cr, ci = Ci;
-                    double dr = 0.0, di = 0.0;          // unused; kept so SCALAR_Z_BODY parses
+#pragma warning disable CS0219 // dr/di required by SCALAR_Z_BODY signature; ref orbit doesn't need derivative
+                    double dr = 0.0, di = 0.0;
+#pragma warning restore CS0219
 {{ITER_DECL_SCALAR_REF}}{{SCALAR_Z_BODY}}
 {{PREV_UPDATE_SCALAR_REF}}                    zr = zr_new; zi = zi_new;
                 }
@@ -1230,6 +1232,18 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
                 // ref search engaged at deep zoom.
                 Vector512<double> refOffX_v = Vector512.Create(refOffsetX);
 
+                // Hoisted out of column loop to avoid CA2014 stack growth
+                // (was 9 × stackalloc[8] per iter → up to Width/8 × ~280 B).
+                Span<long>   itersS  = stackalloc long[8];
+                Span<double> finZrS  = stackalloc double[8];
+                Span<double> finZiS  = stackalloc double[8];
+                Span<double> finDrvS = stackalloc double[8];
+                Span<double> finDivS = stackalloc double[8];
+                Span<double> finDrS  = stackalloc double[8];
+                Span<double> finDiS  = stackalloc double[8];
+                Span<long>   actS    = stackalloc long[8];
+                Span<long>   glS     = stackalloc long[8];
+
                 for (; x + 8 <= Width; x += 8)
                 {
                     Vector512<double> idx_v = Vector512.Create(
@@ -1392,15 +1406,7 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
                     // Unpack + colour. Lanes that escaped → ColorFor.
                     // Lanes that didn't escape (still active or glitched) →
                     // per-pixel HP-direct fallback.
-                    Span<long>   itersS  = stackalloc long[8];
-                    Span<double> finZrS  = stackalloc double[8];
-                    Span<double> finZiS  = stackalloc double[8];
-                    Span<double> finDrvS = stackalloc double[8];
-                    Span<double> finDivS = stackalloc double[8];
-                    Span<double> finDrS  = stackalloc double[8];
-                    Span<double> finDiS  = stackalloc double[8];
-                    Span<long>   actS    = stackalloc long[8];
-                    Span<long>   glS     = stackalloc long[8];
+                    // Scratch spans hoisted above loop (see CA2014 fix).
                     escapeIter.CopyTo(itersS);
                     finalZrVec.CopyTo(finZrS); finalZiVec.CopyTo(finZiS);
                     finalDrvVec.CopyTo(finDrvS); finalDivVec.CopyTo(finDivS);
@@ -1480,6 +1486,17 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
                 Vector256<double> dZero     = Vector256<double>.Zero;
                 Vector256<long>   lZero     = Vector256<long>.Zero;
                 Vector256<double> refOffX_v = Vector256.Create(refOffsetX);
+
+                // Hoisted out of column loop to avoid CA2014 stack growth.
+                Span<long>   itersS  = stackalloc long[4];
+                Span<double> finZrS  = stackalloc double[4];
+                Span<double> finZiS  = stackalloc double[4];
+                Span<double> finDrvS = stackalloc double[4];
+                Span<double> finDivS = stackalloc double[4];
+                Span<double> finDrS  = stackalloc double[4];
+                Span<double> finDiS  = stackalloc double[4];
+                Span<long>   actS    = stackalloc long[4];
+                Span<long>   glS     = stackalloc long[4];
 
                 for (; x + 4 <= Width; x += 4)
                 {
@@ -1621,15 +1638,7 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
                         }
                     }
 
-                    Span<long>   itersS  = stackalloc long[4];
-                    Span<double> finZrS  = stackalloc double[4];
-                    Span<double> finZiS  = stackalloc double[4];
-                    Span<double> finDrvS = stackalloc double[4];
-                    Span<double> finDivS = stackalloc double[4];
-                    Span<double> finDrS  = stackalloc double[4];
-                    Span<double> finDiS  = stackalloc double[4];
-                    Span<long>   actS    = stackalloc long[4];
-                    Span<long>   glS     = stackalloc long[4];
+                    // Scratch spans hoisted above loop (see CA2014 fix).
                     escapeIter.CopyTo(itersS);
                     finalZrVec.CopyTo(finZrS); finalZiVec.CopyTo(finZiS);
                     finalDrvVec.CopyTo(finDrvS); finalDivVec.CopyTo(finDivS);
@@ -2856,6 +2865,7 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
         // gracefully to smooth-count-only.
         float distance = 0f;
         float nx = 0f, ny = 0f;
+#pragma warning disable CS0162 // SupportsDe is const; branch folded out for anti-holomorphic equations
         if (SupportsDe)
         {
             double dMag2 = dr * dr + di * di;
@@ -2869,6 +2879,7 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
             if (dMag > 1e-30 && zMag > 1.0)
                 distance = (float)(0.5 * zMag * Math.Log(zMag) / dMag);
         }
+#pragma warning restore CS0162
 
         return (uint)ColorMap.Map(
             smooth, distance, maxIt, nx, ny,

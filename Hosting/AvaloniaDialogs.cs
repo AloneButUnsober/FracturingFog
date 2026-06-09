@@ -182,11 +182,9 @@ namespace FracturingFog.Hosting
         // ── Slideshow settings ───────────────────────────────────────────────
 
         /// <summary>
-        /// Opens the Avalonia <see cref="SlideshowSettingsView"/> bound to a
-        /// new <see cref="SlideshowSettingsViewModel"/> seeded from
-        /// <paramref name="current"/> / <paramref name="audioReactive"/>.
-        /// Returns the chosen settings + audio-reactive flag on OK, null on
-        /// Cancel.
+        /// Legacy overload — opens the dialog bound to a single
+        /// <see cref="global::FracturingFog.Models.SlideshowSettings"/>.
+        /// Returns the chosen settings + audio flag on OK, null on Cancel.
         /// </summary>
         public static Task<(global::FracturingFog.Models.SlideshowSettings Settings, bool AudioReactive)?>
             ShowSlideshowSettingsAsync(
@@ -199,15 +197,12 @@ namespace FracturingFog.Hosting
             {
                 var vm = new SlideshowSettingsViewModel(current, audioReactive);
                 var win = new SlideshowSettingsView { DataContext = vm };
-                // Audio… button — open the audio-reactive settings dialog as a
-                // nested modal owned by this window. Without this wiring the
-                // button raised its event into the void (the dialog never showed).
                 vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
                 win.Closed += (_, _) =>
                 {
                     if (tcs.Task.IsCompleted) return;
-                    if (vm.Result != null)
-                        tcs.TrySetResult((vm.Result, vm.AudioReactiveResult));
+                    if (vm.ResultSettings != null)
+                        tcs.TrySetResult((vm.ResultSettings, vm.AudioReactiveResult));
                     else
                         tcs.TrySetResult(null);
                 };
@@ -220,6 +215,165 @@ namespace FracturingFog.Hosting
             else Dispatcher.UIThread.Post(Run);
 
             return tcs.Task;
+        }
+
+        /// <summary>Result envelope from the unified Slideshow Settings dialog
+        /// (library mode). <see cref="StartRequested"/> is true when the user
+        /// clicked Start (rather than OK), so the shell can immediately route
+        /// to the slideshow engine.</summary>
+        public readonly record struct UnifiedSlideshowResult(
+            global::FracturingFog.Models.SlideshowConfig Config,
+            bool AudioReactive,
+            bool StartRequested);
+
+        /// <summary>
+        /// Library-mode entry point. Binds the dialog to the live
+        /// <see cref="global::FracturingFog.Models.SlideshowConfigFile"/>; the
+        /// VM Save/Delete/Import buttons mutate the library directly. Returns
+        /// the resolved Result on OK or Start, null on Cancel.
+        /// </summary>
+        public static Task<UnifiedSlideshowResult?>
+            ShowSlideshowSettingsAsync(
+                global::FracturingFog.Models.SlideshowConfigFile file,
+                bool audioReactive,
+                IReadOnlyList<string>? regionNames = null,
+                IReadOnlyList<string>? themeNames = null,
+                Action<Action<double, double, double>>? capturePostFxCallback = null)
+        {
+            var tcs = new TaskCompletionSource<UnifiedSlideshowResult?>();
+
+            void Run()
+            {
+                var vm = new SlideshowSettingsViewModel(file, audioReactive);
+                vm.PopulateAvailableLists(regionNames, themeNames);
+                var win = new SlideshowSettingsView { DataContext = vm };
+                vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
+                vm.CapturePostFxRequested += (_, _) =>
+                {
+                    capturePostFxCallback?.Invoke((b, c, a) => vm.ApplyCapturedPostFx(b, c, a));
+                };
+
+                vm.ImportRequested += async (_, _) =>
+                {
+                    try
+                    {
+                        var path = await PickOpenFileAsync(
+                            "Import Slideshow Preset",
+                            "JSON File (*.json)|*.json|All Files (*.*)|*.*");
+                        if (string.IsNullOrEmpty(path)) return;
+                        var name = global::FracturingFog.Models.SlideshowConfigLibrary.Import(file, path);
+                        vm.ApplyImportedConfig(name);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaDialogs] Slideshow Import failed: {ex.Message}");
+                    }
+                };
+
+                vm.ExportRequested += async (_, _) =>
+                {
+                    try
+                    {
+                        var path = await PickSaveFileAsync(
+                            "Export Slideshow Preset",
+                            SanitizeFileName(vm.ActiveName) + ".json",
+                            "JSON File (*.json)|*.json");
+                        if (string.IsNullOrEmpty(path)) return;
+                        global::FracturingFog.Models.SlideshowConfigLibrary.Export(file, vm.ActiveName, path);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaDialogs] Slideshow Export failed: {ex.Message}");
+                    }
+                };
+
+                vm.EditVideoSettingsRequested += async (_, _) =>
+                {
+                    try
+                    {
+                        var current = file.Configs.FirstOrDefault(c =>
+                            string.Equals(c.Name, vm.ActiveName, StringComparison.OrdinalIgnoreCase))?.Video;
+                        var edited = await ShowVideoSettingsAsync(current, owner: win);
+                        if (edited != null) vm.ApplyEditedVideoSettings(edited);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaDialogs] Video Settings edit failed: {ex.Message}");
+                    }
+                };
+
+                vm.UnsavedStartPrompt += async (_, _) =>
+                {
+                    try
+                    {
+                        // Yes = Start with current edits. No = Save first (focus the Name combo).
+                        var result = await ShowMessageAsync(
+                            "Unsaved Changes",
+                            "You have unsaved changes.\n\nYes = Start the slideshow now with the current edits.\nNo  = Return to the dialog and save them under a name first.",
+                            expectsConfirmation: true);
+                        if (result == MessageResult.Yes) vm.ProceedToStart();
+                        else vm.RequestNameFocus();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaDialogs] Unsaved-start prompt failed: {ex.Message}");
+                    }
+                };
+
+                win.Closed += (_, _) =>
+                {
+                    if (tcs.Task.IsCompleted) return;
+                    if (vm.Result != null)
+                        tcs.TrySetResult(new UnifiedSlideshowResult(vm.Result, vm.AudioReactiveResult, vm.StartRequested));
+                    else
+                        tcs.TrySetResult(null);
+                };
+
+                var owner = ActiveMainWindow;
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
+        /// <summary>Opens the embedded-mode Avalonia Video Settings dialog.
+        /// Returns a populated <see cref="global::FracturingFog.Models.VideoSettingsConfig"/>
+        /// on OK, null on Cancel.</summary>
+        public static Task<global::FracturingFog.Models.VideoSettingsConfig?>
+            ShowVideoSettingsAsync(global::FracturingFog.Models.VideoSettingsConfig? current, Window? owner = null)
+        {
+            var tcs = new TaskCompletionSource<global::FracturingFog.Models.VideoSettingsConfig?>();
+
+            void Run()
+            {
+                var vm = new VideoSettingsViewModel(current);
+                var win = new VideoSettingsView { DataContext = vm };
+                win.Closed += (_, _) =>
+                {
+                    if (tcs.Task.IsCompleted) return;
+                    tcs.TrySetResult(vm.Result);
+                };
+                var o = owner ?? ActiveMainWindow;
+                if (o != null) _ = win.ShowDialog(o);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
+        private static string SanitizeFileName(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return "slideshow";
+            foreach (var bad in Path.GetInvalidFileNameChars())
+                s = s.Replace(bad, '_');
+            return s;
         }
 
         // ── Audio-reactive settings ────────────────────────────────────────────
@@ -407,7 +561,7 @@ namespace FracturingFog.Hosting
                 var box = new TextBox
                 {
                     Text = suggested,
-                    Watermark = prompt,
+                    PlaceholderText = prompt,
                     Margin = new Thickness(16, 8, 16, 8),
                     MinWidth = 320,
                 };
@@ -487,7 +641,7 @@ namespace FracturingFog.Hosting
                 var box = new TextBox
                 {
                     Text = suggested,
-                    Watermark = prompt,
+                    PlaceholderText = prompt,
                     Margin = new Thickness(16, 8, 16, 8),
                     MinWidth = 320,
                 };
@@ -588,8 +742,8 @@ namespace FracturingFog.Hosting
 
             void Run()
             {
-                var widthTx = new TextBox { Text = "24", MinWidth = 70, Watermark = "inches" };
-                var heightTx = new TextBox { Text = "36", MinWidth = 70, Watermark = "inches" };
+                var widthTx = new TextBox { Text = "24", MinWidth = 70, PlaceholderText = "inches" };
+                var heightTx = new TextBox { Text = "36", MinWidth = 70, PlaceholderText = "inches" };
 
                 var portrait = new CheckBox { Content = "Portrait orientation", IsChecked = true, Foreground = Brushes.White };
 
@@ -905,6 +1059,37 @@ namespace FracturingFog.Hosting
                     Margin = new Thickness(0, 4, 0, 0),
                 };
 
+                // Single-shot theme-fade controls: enable + count. The slideshow
+                // path always cycles 3 themes/leg today, so these affect Start
+                // only — Slideshow ignores them.
+                var chkThemeFade = new CheckBox
+                {
+                    Content = "Cycle color themes during zoom (single-shot)",
+                    Foreground = Brushes.LightGray,
+                };
+                var nudThemesPerLeg = new NumericUpDown
+                {
+                    Minimum = 2, Maximum = 12, Increment = 1, Value = 3,
+                    Width = 90,
+                    IsEnabled = false,
+                };
+                var themesLbl = new TextBlock
+                {
+                    Text = "Themes per zoom:",
+                    Foreground = Brushes.LightGray,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
+                };
+                chkThemeFade.IsCheckedChanged += (_, _) =>
+                    nudThemesPerLeg.IsEnabled = chkThemeFade.IsChecked == true;
+                var themeFadeRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal, Spacing = 8,
+                    Margin = new Thickness(20, 2, 0, 0),
+                };
+                themeFadeRow.Children.Add(themesLbl);
+                themeFadeRow.Children.Add(nudThemesPerLeg);
+
                 var errLabel = new TextBlock
                 {
                     Foreground = Brushes.OrangeRed,
@@ -1089,6 +1274,8 @@ namespace FracturingFog.Hosting
                         TaaSmoothing = (int)Math.Round(taaSlider.Value),
                         BandDither = chkBandDither.IsChecked == true,
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
+                        ThemeFadeEnabled = chkThemeFade.IsChecked == true,
+                        ThemesPerLeg = (int)Math.Round(nudThemesPerLeg.Value ?? 3m),
                     });
                 };
 
@@ -1145,6 +1332,8 @@ namespace FracturingFog.Hosting
                 root.Children.Add(chkReverse);
                 root.Children.Add(smoothBox);
                 root.Children.Add(chkUseRegionWatermark);
+                root.Children.Add(chkThemeFade);
+                root.Children.Add(themeFadeRow);
                 root.Children.Add(errLabel);
                 root.Children.Add(buttonRow);
 

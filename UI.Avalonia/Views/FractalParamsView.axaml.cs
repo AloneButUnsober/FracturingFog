@@ -23,6 +23,13 @@ public sealed partial class FractalParamsView : Window
                 vm.CloseRequested += OnVmCloseRequested;
             }
         };
+        Closing += (_, _) =>
+        {
+            // Window-chrome close (X / Alt+F4) bypasses the VM's CloseCommand,
+            // so stop any timers explicitly to avoid a leaked DispatcherTimer
+            // ticking against a stale Julia animation.
+            (DataContext as FractalParamsViewModel)?.StopAnimations();
+        };
     }
 
     private void OnVmCloseRequested(object? sender, System.EventArgs e) => Close();

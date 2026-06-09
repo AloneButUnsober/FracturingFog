@@ -9,6 +9,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using FracturingFog.Abstractions;
+
 namespace FracturingFog.Server;
 
 public sealed class ServerConfig
@@ -103,9 +105,7 @@ public sealed class ServerConfig
     public string EffectiveCertsDir()
         => string.IsNullOrWhiteSpace(ServerCertsDir) ? DefaultCertDir() : ServerCertsDir!;
 
-    public static string AppDataDir() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "FracturingFog");
+    public static string AppDataDir() => AppDataPaths.Root;
 
     public static ServerConfig LoadOrDefault(string? path = null)
     {

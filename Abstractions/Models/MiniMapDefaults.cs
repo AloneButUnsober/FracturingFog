@@ -44,6 +44,9 @@ public static class MiniMapDefaults
         FractalType.Newton           => new( 0.0,  0.0, 0.9),
         FractalType.Nova             => new( 1.0,  0.0, 0.8),
         FractalType.BuddhaBrot       => new(-0.5,  0.0, 1.5),
+        FractalType.Nebulabrot       => new(-0.5,  0.0, 1.5),
+        FractalType.AntiBuddhabrot   => new(-0.5,  0.0, 1.5),
+        FractalType.AntiNebulabrot   => new(-0.5,  0.0, 1.5),
         FractalType.IFS              => new( 0.0,  0.0, 1.0),
         FractalType.LSystem          => new( 0.0,  0.0, 1.0),
         FractalType.StrangeAttractor => new( 0.0,  0.0, 1.0),
@@ -64,6 +67,9 @@ public static class MiniMapDefaults
         FractalType.StrangeAttractor => 80_000,
         FractalType.LSystem          => 4,
         FractalType.BuddhaBrot       => 20_000,
+        FractalType.Nebulabrot       => 20_000,
+        FractalType.AntiBuddhabrot   => 20_000,
+        FractalType.AntiNebulabrot   => 20_000,
         _                            => 256
     };
 }

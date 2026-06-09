@@ -22,6 +22,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -393,6 +394,13 @@ namespace FracturingFog.Hosting
             s_shell.FloatingMenu.FfmpegSetupClick += (_, _) =>
                 Dispatcher.UIThread.Post(() =>
                     _ = FfmpegSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow));
+
+            // User-data location picker. Lets the user move every FracturingFog
+            // settings file (presets, themes, equations, etc.) to a folder of
+            // their choice. Honoured via AppDataPaths; effective on next launch
+            // since the singletons cache their paths at first access.
+            s_shell.FloatingMenu.AppDataLocationClick += (_, _) =>
+                Dispatcher.UIThread.Post(async () => await ShowAppDataLocationDialogAsync());
 
             // Phase 3: start the 5-second probe that drives the status-bar
             // "● Server: running / off" indicator. Uses the default server
@@ -934,10 +942,51 @@ namespace FracturingFog.Hosting
             {
                 try
                 {
-                    var current = SlideshowSettingsStore.Load();
-                    var chosen = await AvaloniaDialogs.ShowSlideshowSettingsAsync(current, audioReactive: false);
+                    var file = SlideshowConfigLibrary.Load();
+                    var themeNames = s_themeService?.EnumerateThemeNames();
+                    var regionNames = FractalRegionLibrary.Instance
+                        .AllSlideshowRegions
+                        .Select(r => r.Name)
+                        .ToList();
+                    Action<Action<double, double, double>>? captureCallback = capture =>
+                    {
+                        var fm = shell.FloatingMenu;
+                        if (fm == null) return;
+                        capture(fm.Brightness, fm.Contrast, fm.Adaptive);
+                    };
+                    var chosen = await AvaloniaDialogs.ShowSlideshowSettingsAsync(
+                        file,
+                        audioReactive: false,
+                        regionNames: regionNames,
+                        themeNames: themeNames,
+                        capturePostFxCallback: captureCallback);
                     if (chosen != null)
-                        SlideshowSettingsStore.Save(chosen.Value.Settings);
+                    {
+                        // No persistence on dialog close — the Save button is the
+                        // only persistence path. OK / Start drive the engine with
+                        // the in-memory working copy so unsaved edits don't get
+                        // silently written back to the selected preset.
+
+                        // Start button — route to the active type's engine,
+                        // passing the working config in-memory.
+                        if (chosen.Value.StartRequested)
+                        {
+                            if (chosen.Value.Config.Type == SlideshowType.Image)
+                            {
+                                // Stop any running video slideshow before kicking
+                                // the image engine — the two share the render host.
+                                if (shell.IsVideoRunning) shell.StopVideo();
+                                shell.StartSlideshowFromConfig(chosen.Value.Config);
+                            }
+                            else
+                            {
+                                // Same the other way — stop a running image
+                                // slideshow before starting the video engine.
+                                if (shell.IsSlideshowRunning) shell.ToggleSlideshowCommand?.Execute().Subscribe();
+                                shell.StartVideoSlideshowFromConfig(chosen.Value.Config);
+                            }
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1195,8 +1244,22 @@ namespace FracturingFog.Hosting
                         attractorDefaults: global::FracturingFog.AttractorCalculator.DefaultParams);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
+                    // Render-completion gate for the Julia animation. Without
+                    // this the timer-driven c-orbit fires Trigger every tick
+                    // and floods the render pipe — the UI thread loses ground
+                    // until the dialog appears to freeze. Forwarding
+                    // FrameCompleted lets the VM emit the next render only
+                    // after the previous one finishes.
+                    EventHandler<RenderFrameInfo> onFrame = (_, _) => vm.NotifyRenderCompleted();
+                    var host = s_renderHost!;
+                    host.FrameCompleted += onFrame;
+
                     var win = new FractalParamsView { DataContext = vm };
-                    win.Closed += (_, _) => s_paramsWin = null;
+                    win.Closed += (_, _) =>
+                    {
+                        host.FrameCompleted -= onFrame;
+                        s_paramsWin = null;
+                    };
                     s_paramsWin = win;
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
@@ -1637,6 +1700,57 @@ namespace FracturingFog.Hosting
                 Console.Error.WriteLine(
                     $"[AvaloniaShellBootstrap] FFmpeg startup prompt failed: {ex.Message}");
             }
+        }
+
+        // ── AppData location picker ─────────────────────────────────────────
+
+        private static async Task ShowAppDataLocationDialogAsync()
+        {
+            string current = AppDataPaths.Root;
+            string defaultPath = AppDataPaths.DefaultRoot;
+            bool isOverridden = !string.Equals(current, defaultPath, StringComparison.OrdinalIgnoreCase);
+
+            string body = isOverridden
+                ? $"Current AppData folder:\n{current}\n\n(Default: {defaultPath})\n\nPick a new folder?"
+                : $"Current AppData folder:\n{current}\n\nPick a new folder?";
+
+            var pick = await AvaloniaDialogs.ShowMessageAsync(
+                "AppData Location",
+                body,
+                expectsConfirmation: true);
+            if (pick != AvaloniaDialogs.MessageResult.Yes) return;
+
+            string? chosen = await AvaloniaDialogs.PickFolderAsync("Choose new AppData folder");
+            if (string.IsNullOrWhiteSpace(chosen)) return;
+
+            // Same folder selected — nothing to do.
+            if (string.Equals(System.IO.Path.GetFullPath(chosen), System.IO.Path.GetFullPath(current),
+                              StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var migrate = await AvaloniaDialogs.ShowMessageAsync(
+                "Copy Existing Data?",
+                $"Copy existing settings from\n{current}\nto\n{chosen}?\n\n(No = leave old files in place; FracturingFog starts fresh in the new folder.)",
+                expectsConfirmation: true);
+            if (migrate == AvaloniaDialogs.MessageResult.Cancelled) return;
+
+            try
+            {
+                AppDataPaths.SetRoot(chosen!, migrateFiles: migrate == AvaloniaDialogs.MessageResult.Yes);
+            }
+            catch (Exception ex)
+            {
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "AppData Location Failed",
+                    $"Could not switch AppData folder:\n{ex.Message}",
+                    expectsConfirmation: false);
+                return;
+            }
+
+            await AvaloniaDialogs.ShowMessageAsync(
+                "AppData Location Updated",
+                $"AppData folder set to:\n{chosen}\n\nRestart FracturingFog so all settings reload from the new location.",
+                expectsConfirmation: false);
         }
 
         // ── #64 — Video recording save prompts ───────────────────────────────

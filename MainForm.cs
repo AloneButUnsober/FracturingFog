@@ -6,6 +6,11 @@
 // This file is kept buildable so --winforms still launches the legacy
 // shell, but is no longer the canonical UI.
 //
+// Per deprecation policy, hygiene warnings are suppressed here — the
+// file is frozen, so dead fields / nullable hygiene issues will not be
+// fixed. CA2014 (perf) and real bugs are NOT in this list.
+#pragma warning disable CS0169, CS0414, CS0649, CS8618, CS8602, CS8604, CS8625, CS8600, CS8601, CS0219
+//
 // Changes over v4
 //   • FIX: GridOverlayPanel Win32Exception resolved — Visible is set to false
 //     in the constructor (no handle yet) and the grid checkbox handler defers
