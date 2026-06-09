@@ -2,9 +2,11 @@
 //
 // User election for the FFmpeg first-run modal (auto-download / manual /
 // skip) plus the last-known installed version string. Persisted JSON at
-// %LOCALAPPDATA%\FracturingFog\ffmpeg-prefs.json. LocalApplicationData
-// chosen over ApplicationData so the prefs stay machine-local (BtbN
-// binary is x64 Windows; roaming profiles can land on a non-Windows host).
+// %APPDATA%\FracturingFog\ffmpeg-prefs.json (Roaming) so the user's
+// election follows them across machines like the rest of FracturingFog's
+// user prefs. The ffmpeg binary itself stays machine-local elsewhere; only
+// the election + version metadata roams. A one-shot migration moves an
+// existing prefs file from the legacy %LOCALAPPDATA% path on first load.
 //
 // Election semantics:
 //   None       — user has never been asked.
@@ -22,6 +24,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
@@ -48,21 +51,39 @@ namespace FracturingFog.Models
         /// <summary>UTC time of the last successful install.</summary>
         public DateTime? LastInstalledUtc { get; set; }
 
-        private static string SettingsDir =>
+        private static string SettingsDir => AppDataPaths.Root;
+
+        private static string PrefsFile =>
+            Path.Combine(SettingsDir, "ffmpeg-prefs.json");
+
+        private static string LegacySettingsDir =>
             Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "FracturingFog");
 
-        private static string PrefsFile =>
-            Path.Combine(SettingsDir, "ffmpeg-prefs.json");
+        private static string LegacyPrefsFile =>
+            Path.Combine(LegacySettingsDir, "ffmpeg-prefs.json");
 
         private static JsonSerializerOptions BuildJsonOptions() => new()
         {
             WriteIndented = true,
         };
 
+        private static void MigrateLegacyPrefsIfNeeded()
+        {
+            try
+            {
+                if (File.Exists(PrefsFile)) return;
+                if (!File.Exists(LegacyPrefsFile)) return;
+                Directory.CreateDirectory(SettingsDir);
+                File.Move(LegacyPrefsFile, PrefsFile);
+            }
+            catch { /* migration is best-effort; fall through to defaults */ }
+        }
+
         private static FfmpegPreferences LoadOrDefault()
         {
+            MigrateLegacyPrefsIfNeeded();
             try
             {
                 if (File.Exists(PrefsFile))

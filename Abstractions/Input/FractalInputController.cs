@@ -544,12 +544,17 @@ namespace FracturingFog.Input
 
         private void Adjust3DDistance(double delta)
         {
+            // Upper bound 500 (was 50): user-defined bulb equations sometimes
+            // produce sets that extend well beyond the unit sphere, and the
+            // standard 50-unit cap clipped the camera before the whole figure
+            // came into view. Lower bound stays at 0.1 to avoid degenerate
+            // ray directions when the camera sits on the surface.
             if (ViewState.FractalType == FractalType.UserBulb)
                 ViewState.FractalParameters.UserBulbCameraDistance = Math.Clamp(
-                    ViewState.FractalParameters.UserBulbCameraDistance + delta, 0.1, 50.0);
+                    ViewState.FractalParameters.UserBulbCameraDistance + delta, 0.1, 500.0);
             else if (ViewState.FractalType == FractalType.Mandelbulb)
                 ViewState.FractalParameters.BulbCameraDistance = Math.Clamp(
-                    ViewState.FractalParameters.BulbCameraDistance + delta, 0.1, 50.0);
+                    ViewState.FractalParameters.BulbCameraDistance + delta, 0.1, 500.0);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }

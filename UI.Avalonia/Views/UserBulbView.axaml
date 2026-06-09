@@ -95,7 +95,7 @@
                 <Grid ColumnDefinitions="Auto,80,Auto,80,Auto,80,Auto"
                       RowDefinitions="Auto,Auto" Margin="0,0,0,4">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Distance:" />
-                    <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0.1" Maximum="50" Increment="0.1" FormatString="0.00"
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0.1" Maximum="500" Increment="0.1" FormatString="0.00"
                                    Value="{Binding CamDistance}" />
                     <TextBlock Grid.Row="0" Grid.Column="2" Classes="label" Text="Theta°:" Margin="10,0,6,0" />
                     <NumericUpDown Grid.Row="0" Grid.Column="3" Minimum="-360" Maximum="360" Increment="5" FormatString="0.0"

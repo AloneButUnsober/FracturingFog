@@ -1,15 +1,14 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
-    /// <summary>Persists <see cref="SlideshowSettings"/> to %APPDATA%\FracturingFog\slideshow-settings.json.</summary>
+    /// <summary>Persists <see cref="SlideshowSettings"/> to <see cref="AppDataPaths.Root"/>\slideshow-settings.json.</summary>
     public static class SlideshowSettingsStore
     {
-        private static string SettingsDir => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "FracturingFog");
+        private static string SettingsDir => AppDataPaths.Root;
 
         private static string SettingsFile => Path.Combine(SettingsDir, "slideshow-settings.json");
 

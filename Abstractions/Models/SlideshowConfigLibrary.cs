@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
@@ -30,9 +31,7 @@ namespace FracturingFog.Models
     /// (Load / Save) so the host code can swap to it with minimal ceremony.</summary>
     public static class SlideshowConfigLibrary
     {
-        private static string SettingsDir => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "FracturingFog");
+        private static string SettingsDir => AppDataPaths.Root;
 
         private static string ConfigsFile => Path.Combine(SettingsDir, "slideshow-configs.json");
         private const string DefaultConfigName = "Default";

@@ -11,6 +11,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using FracturingFog.Abstractions;
+
 namespace FracturingFog.Client;
 
 public sealed class ClientConnectionEntry
@@ -51,9 +53,7 @@ public sealed class ClientConnectionStore
     public int Iterations { get; set; } = AesVault.DefaultIterations;
     public List<ClientConnectionEntry> Entries { get; set; } = new();
 
-    public static string DefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "FracturingFog", "client-connections.json");
+    public static string DefaultPath() => Path.Combine(AppDataPaths.Root, "client-connections.json");
 
     public static ClientConnectionStore LoadOrCreate(string? path = null)
     {
