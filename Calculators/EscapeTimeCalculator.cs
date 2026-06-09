@@ -9,6 +9,7 @@
 // either engine based on FractalType without major refactor.
 
 using System;
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -70,6 +71,27 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
     // Cached ParallelOptions — see MandelbrotCalculator._po notes.
     private readonly ParallelOptions _po = new();
+
+    // T2.5: chunked row partitioner. Single dispatch per worker chunk
+    // instead of one per row — see MandelbrotCalculator.ParallelForRows.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int RowChunk(int count)
+    {
+        int chunk = count / (Environment.ProcessorCount * 4);
+        return chunk < 1 ? 1 : chunk;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ParallelForRows(int from, int to, ParallelOptions po, Action<int> body)
+    {
+        int count = to - from;
+        if (count <= 0) return;
+        Parallel.ForEach(Partitioner.Create(from, to, RowChunk(count)), po, range =>
+        {
+            for (int y = range.Item1; y < range.Item2; y++)
+                body(y);
+        });
+    }
 
     // ── Constructor / resize ─────────────────────────────────────────────────
 
@@ -187,7 +209,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, height, po, y =>
+        ParallelForRows(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             double cy = centerY + (y - height * 0.5) * scale;
@@ -351,7 +373,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, height, po, y =>
+        ParallelForRows(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             double cy = centerY + (y - height * 0.5) * scale;
@@ -397,7 +419,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, height, po, y =>
+        ParallelForRows(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             double cy = centerY + (y - height * 0.5) * scale;

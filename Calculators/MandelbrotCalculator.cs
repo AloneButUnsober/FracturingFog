@@ -44,6 +44,7 @@
 //     A bool parameter skips filling them on the live render path.
 
 using System;
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -251,6 +252,32 @@ public sealed class MandelbrotCalculator
     // by the host's _calcLock, so swapping CancellationToken in-place is
     // safe.
     private readonly ParallelOptions _po = new();
+
+    // T2.5: chunked range partitioner. Default `Parallel.For(0, h, body)`
+    // schedules one work item per row, so a Calculate over `h` rows pays
+    // `h` enqueue/dispatch overheads. With Partitioner.Create(0, h, chunk)
+    // each worker grabs a contiguous block of rows in a single dispatch,
+    // collapsing scheduling cost to `procCount * 4` work items regardless
+    // of height. Largest win at low maxIter / small frames where the
+    // scheduling overhead dominated the actual row work.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int RowChunk(int count)
+    {
+        int chunk = count / (Environment.ProcessorCount * 4);
+        return chunk < 1 ? 1 : chunk;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ParallelForRows(int from, int to, ParallelOptions po, Action<int> body)
+    {
+        int count = to - from;
+        if (count <= 0) return;
+        Parallel.ForEach(Partitioner.Create(from, to, RowChunk(count)), po, range =>
+        {
+            for (int y = range.Item1; y < range.Item2; y++)
+                body(y);
+        });
+    }
 
     // ── Constructor / resize ──────────────────────────────────────────────────
 
@@ -574,7 +601,7 @@ public sealed class MandelbrotCalculator
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, h, po, y =>
+        ParallelForRows(0, h, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             double cy = cy0 + (y - h * 0.5) * scale;
@@ -711,7 +738,7 @@ public sealed class MandelbrotCalculator
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, Height, po, y =>
+        ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             double cy = CenterY + (y - Height * 0.5) * scale;
@@ -1100,7 +1127,7 @@ public sealed class MandelbrotCalculator
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, Height, po, y =>
+        ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             double cy = CenterY + (y - Height * 0.5) * scale;
@@ -1269,7 +1296,7 @@ public sealed class MandelbrotCalculator
         }
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, Height, po, y =>
+        ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             int rowBase = y * Width;
@@ -2526,8 +2553,9 @@ public sealed class MandelbrotCalculator
         long[] rowEscaped = new long[h];
         long[] rowSaturated = new long[h];
 
-        var po = new ParallelOptions();
-        Parallel.For(0, h, po, y =>
+        _po.CancellationToken = CancellationToken.None;
+        var po = _po;
+        ParallelForRows(0, h, po, y =>
         {
             int rowBase = y * w;
             long esc = 0;
@@ -2608,8 +2636,9 @@ public sealed class MandelbrotCalculator
         bool handlesInSet = ColorMap is IColorMapHandlesInSet;
         float ditherIter = (float)ditherIterStrength;
 
-        var po = new ParallelOptions();
-        Parallel.For(0, h, po, y =>
+        _po.CancellationToken = CancellationToken.None;
+        var po = _po;
+        ParallelForRows(0, h, po, y =>
         {
             int rowBase = y * w;
             for (int x = 0; x < w; x++)
@@ -2662,8 +2691,9 @@ public sealed class MandelbrotCalculator
         ColorMap.MaxIterations = maxIter;
         if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
         bool handlesInSet = ColorMap is IColorMapHandlesInSet;
-        var po = new ParallelOptions();
-        Parallel.For(0, h, po, y =>
+        _po.CancellationToken = CancellationToken.None;
+        var po = _po;
+        ParallelForRows(0, h, po, y =>
         {
             int rowBase = y * w;
             for (int x = 0; x < w; x++)
