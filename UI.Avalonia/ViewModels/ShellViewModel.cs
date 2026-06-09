@@ -1422,6 +1422,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             TaaSmoothing = v.TaaSmoothing,
             BandDither = v.BandDither,
             BandDitherStrength = v.BandDitherStrength,
+            IterCapMode = v.IterCapMode,
             UseRegionWatermark = config.Timing.UseRegionWatermark,
         };
 

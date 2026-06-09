@@ -34,6 +34,7 @@ public sealed class VideoSettingsViewModel : ViewModelBase
     private int _bandDitherStrength;
     private bool _themeFadeEnabled;
     private int _themesPerLeg;
+    private string _iterCapMode;
 
     public VideoSettingsViewModel(VideoSettingsConfig? current)
     {
@@ -51,6 +52,7 @@ public sealed class VideoSettingsViewModel : ViewModelBase
         _bandDitherStrength = Math.Clamp(_working.BandDitherStrength, 0, 100);
         _themeFadeEnabled = _working.ThemeFadeEnabled;
         _themesPerLeg = Math.Clamp(_working.ThemesPerLeg, 1, 12);
+        _iterCapMode = _working.IterCapMode.ToString();
 
         OkCommand = ReactiveCommand.Create(Commit);
         CancelCommand = ReactiveCommand.Create(() => { });
@@ -63,6 +65,19 @@ public sealed class VideoSettingsViewModel : ViewModelBase
 
     public IReadOnlyList<string> LosslessEncodeChoices { get; } =
         new[] { "None", "LosslessH264Mp4", "Ffv1Mkv", "HighQualityH264Mp4" };
+
+    /// <summary>Adaptive iter-cap choices for the video record / playback
+    /// pipeline. Off = no cap (full quality, strong-HW recommended).
+    /// Global = per-frame adaptive multiplier. PerTile = per-tile cap
+    /// (Phase 1 routes to Global at runtime).</summary>
+    public IReadOnlyList<string> IterCapModes { get; } =
+        new[] { "Off", "Global", "PerTile" };
+
+    public string IterCapMode
+    {
+        get => _iterCapMode;
+        set => this.RaiseAndSetIfChanged(ref _iterCapMode, value ?? "Global");
+    }
 
     public string SpeedPreset
     {
@@ -160,6 +175,9 @@ public sealed class VideoSettingsViewModel : ViewModelBase
         _working.BandDitherStrength = _bandDitherStrength;
         _working.ThemeFadeEnabled = _themeFadeEnabled;
         _working.ThemesPerLeg = _themesPerLeg;
+        _working.IterCapMode = Enum.TryParse<VideoIterCapMode>(_iterCapMode, ignoreCase: true, out var m)
+            ? m
+            : VideoIterCapMode.Global;
         Result = _working.Clone();
     }
 
@@ -197,6 +215,7 @@ public static class VideoSettingsConfigExtensions
             BandDitherStrength = src.BandDitherStrength,
             ThemeFadeEnabled = src.ThemeFadeEnabled,
             ThemesPerLeg = src.ThemesPerLeg,
+            IterCapMode = src.IterCapMode,
             Extras = new System.Collections.Generic.Dictionary<string, string>(src.Extras ?? new()),
         };
     }

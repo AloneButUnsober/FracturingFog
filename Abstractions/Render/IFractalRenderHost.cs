@@ -153,6 +153,20 @@ namespace FracturingFog.Render
         /// into the next uploaded frame.</summary>
         bool ShowWatermark { get; set; }
 
+        /// <summary>True to blend the perf HUD (phase timings + HW summary)
+        /// into the top-left of the next uploaded frame. Cheap (~0.1 ms /
+        /// frame) — safe during video record. Toggled by the shell.</summary>
+        bool ShowPerfHud { get; set; }
+
+        /// <summary>Clear the perf HUD's rolling buffers + reset the
+        /// GC-rate baseline so the next capture window starts clean.</summary>
+        void ResetPerfStats();
+
+        /// <summary>T3.1: toggle GPU compute on the SP Mandelbrot path.
+        /// Setter has no effect when the active renderer is not D3D11 —
+        /// caller should re-read after setting to verify.</summary>
+        bool UseGpuCompute { get; set; }
+
         /// <summary>Region label rendered in the watermark.</summary>
         string? RegionName { get; set; }
 

@@ -1033,6 +1033,29 @@ namespace FracturingFog.Hosting
                     Foreground = Brushes.LightGray,
                 };
 
+                // Adaptive iter cap mode — Off / Global / PerTile.
+                // Default Global preserves the prior auto-adaptive behaviour.
+                // Off = full quality (recommended for strong HW).
+                // PerTile = vertical row bands cap independently from prior
+                // frame band dwell so interior bands shed cost while boundary
+                // bands keep full detail.
+                var iterCapCombo = new ComboBox
+                {
+                    MinWidth = 280,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                iterCapCombo.Items.Add("Off (full quality, strong-HW recommended)");
+                iterCapCombo.Items.Add("Global (per-frame adaptive multiplier)");
+                iterCapCombo.Items.Add("PerTile (per-band cap from prior frame stats)");
+                iterCapCombo.SelectedIndex = 1;
+                global::FracturingFog.Models.VideoIterCapMode PickIterCapMode() =>
+                    iterCapCombo.SelectedIndex switch
+                    {
+                        0 => global::FracturingFog.Models.VideoIterCapMode.Off,
+                        2 => global::FracturingFog.Models.VideoIterCapMode.PerTile,
+                        _ => global::FracturingFog.Models.VideoIterCapMode.Global,
+                    };
+
                 // ── Smoothing (TAA blend + band dither) ──────────────────
                 var taaSlider = new Slider { Minimum = 0, Maximum = 100, Value = 55, TickFrequency = 10, Width = 230 };
                 var taaValue = new TextBlock { Text = "55%", Foreground = Brushes.LightGray, Width = 40, VerticalAlignment = VerticalAlignment.Center };
@@ -1276,6 +1299,7 @@ namespace FracturingFog.Hosting
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
                         ThemeFadeEnabled = chkThemeFade.IsChecked == true,
                         ThemesPerLeg = (int)Math.Round(nudThemesPerLeg.Value ?? 3m),
+                        IterCapMode = PickIterCapMode(),
                     });
                 };
 
@@ -1303,6 +1327,7 @@ namespace FracturingFog.Hosting
                         BandDither = chkBandDither.IsChecked == true,
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
                         UseRegionWatermark = chkUseRegionWatermark.IsChecked == true,
+                        IterCapMode = PickIterCapMode(),
                     });
                 };
                 cancelBtn.Click += (_, _) => Close(null);
@@ -1330,6 +1355,7 @@ namespace FracturingFog.Hosting
                 root.Children.Add(chkSaveLossless);
                 root.Children.Add(LabeledRow("Post-encode:", encodeCombo));
                 root.Children.Add(chkReverse);
+                root.Children.Add(LabeledRow("Adaptive iter cap:", iterCapCombo));
                 root.Children.Add(smoothBox);
                 root.Children.Add(chkUseRegionWatermark);
                 root.Children.Add(chkThemeFade);

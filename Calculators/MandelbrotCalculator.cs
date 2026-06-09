@@ -44,6 +44,7 @@
 //     A bool parameter skips filling them on the live render path.
 
 using System;
+using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -84,6 +85,46 @@ public sealed class MandelbrotCalculator
     private const double QDZoomThreshold = 1e25;
 
     public int MaxIterations { get; set; } = 512;
+
+    /// <summary>T3.1 phase 1: zoom ceiling above which GPU dispatch falls
+    /// back to CPU. The shader uses FP32 with a split-centre + split-scale
+    /// approximation that lifts the practical zoom floor a few digits past
+    /// raw float32 but isn't true double-double. Past ~1e4 the per-pixel
+    /// `cx = cxHi + fx*scaleHi + cxLo + fx*scaleLo` reconstruction suffers
+    /// catastrophic cancellation against the FP32 ULP, producing pixelation
+    /// + wrong cardioid/bulb early-out predicates that collapse whole
+    /// regions to the in-set colour. CPU (double precision) handles past
+    /// 1e12 cleanly; HP (DD/QD) takes over from there. Conservatively
+    /// gates GPU off at 1e4 so user-visible zooms never enter the
+    /// FP32-broken band.</summary>
+    public const double MaxGpuZoom = 1e4;
+
+    /// <summary>T3.1: when true and a GPU kernel is attached via
+    /// <see cref="SetGpuKernel"/>, the SP path
+    /// (<see cref="CalculateDoublePrecision{TMap}"/>) dispatches the
+    /// iteration loop to a D3D11 compute shader instead of the CPU
+    /// Parallel.ForEach SIMD path. Palette evaluation stays CPU (phase
+    /// 1); the kernel writes back iter + smooth, the existing color
+    /// stage fills aux buffers + emits ColorBuffer. Falls back to CPU
+    /// when no kernel is set, when HP precision is active, when an
+    /// orbit-aware ColorMap is selected (the kernel doesn't sample z
+    /// per iteration), or when PerRowMaxIter is non-null (per-row caps
+    /// not yet plumbed to the shader).</summary>
+    public bool UseGpuCompute { get; set; }
+
+    /// <summary>T3.1: GPU compute kernel attached by the host when the
+    /// active renderer is D3D11. Null = CPU-only; UseGpuCompute has
+    /// no effect.</summary>
+    public FracturingFog.Rendering.MandelbrotGpuKernel? GpuKernel { get; set; }
+
+    /// <summary>Optional per-row iteration cap. When non-null and sized to
+    /// <see cref="Height"/>, row y uses <c>PerRowMaxIter[y]</c> instead of
+    /// the global <see cref="MaxIterations"/>. Used by the video pipeline's
+    /// PerTile cap mode to keep boundary-rich rows at full quality while
+    /// capping interior-dominated rows where the extra iterations don't
+    /// produce visible detail. Currently honoured by the SP path only; HP
+    /// (DD/QD perturbation) paths fall back to <see cref="MaxIterations"/>.</summary>
+    public int[]? PerRowMaxIter { get; set; }
 
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
 
@@ -251,6 +292,32 @@ public sealed class MandelbrotCalculator
     // by the host's _calcLock, so swapping CancellationToken in-place is
     // safe.
     private readonly ParallelOptions _po = new();
+
+    // T2.5: chunked range partitioner. Default `Parallel.For(0, h, body)`
+    // schedules one work item per row, so a Calculate over `h` rows pays
+    // `h` enqueue/dispatch overheads. With Partitioner.Create(0, h, chunk)
+    // each worker grabs a contiguous block of rows in a single dispatch,
+    // collapsing scheduling cost to `procCount * 4` work items regardless
+    // of height. Largest win at low maxIter / small frames where the
+    // scheduling overhead dominated the actual row work.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int RowChunk(int count)
+    {
+        int chunk = count / (Environment.ProcessorCount * 4);
+        return chunk < 1 ? 1 : chunk;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ParallelForRows(int from, int to, ParallelOptions po, Action<int> body)
+    {
+        int count = to - from;
+        if (count <= 0) return;
+        Parallel.ForEach(Partitioner.Create(from, to, RowChunk(count)), po, range =>
+        {
+            for (int y = range.Item1; y < range.Item2; y++)
+                body(y);
+        });
+    }
 
     // ── Constructor / resize ──────────────────────────────────────────────────
 
@@ -574,7 +641,7 @@ public sealed class MandelbrotCalculator
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, h, po, y =>
+        ParallelForRows(0, h, po, y =>
         {
             if (ct.IsCancellationRequested) return;
             double cy = cy0 + (y - h * 0.5) * scale;
@@ -708,14 +775,147 @@ public sealed class MandelbrotCalculator
     {
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
+        // Per-tile maxIter (PerTile mode). Captured once so the per-row
+        // body never touches a property that could be re-assigned mid-frame.
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+
+        // T3.1 GPU compute dispatch.
+        //   • Only when explicitly toggled on (UseGpuCompute) AND a kernel
+        //     is attached (host sets it if the renderer is D3D11).
+        //   • Zoom-gated: above MaxGpuZoom the FP32 split-centre math
+        //     hits ULP cancellation → pixelation + wrong bulb-skip
+        //     predicates. CPU path handles those zooms cleanly.
+        //   • Phase 1.b: PerRowMaxIter is plumbed into the shader as an SRV;
+        //     the kernel reads gPerRow[y] when UsePerRow is set, applies the
+        //     same in-set rewrite (row-capped unescaped → write gMaxIter).
+        //     Orbit-aware themes are still CPU-only — they need per-step z
+        //     samples the shader doesn't produce; dispatched via the
+        //     CalculateOrbitAware top-level switch.
+        if (UseGpuCompute && GpuKernel != null && Zoom <= MaxGpuZoom)
+        {
+            try
+            {
+                // T3.1 phase 2/4 — pick GPU palette path when the active
+                // colour map ships an IGpuHlslPalette impl AND we're the
+                // Mandelbrot kernel kind (Julia/BurningShip/Tricorn come
+                // through EscapeTimeCalculator and stay on CPU palette
+                // until phase 5 wires them in). Falls back automatically
+                // when SetPalette failed at compile time.
+                var hlslPalette = colorMap as FracturingFog.Interefaces.IGpuHlslPalette;
+                if (hlslPalette != null) GpuKernel.SetPalette(hlslPalette);
+                else GpuKernel.SetPalette(null);
+                bool gpuPalette = hlslPalette != null && GpuKernel.HasGpuPalette;
+
+                GpuKernel.Run(
+                    Width, Height,
+                    CenterX, CenterY, scale,
+                    maxIt, EscapeRadius2,
+                    IterationBuffer, SmoothBuffer,
+                    FinalZrBuffer, FinalZiBuffer,
+                    FinalDrBuffer, FinalDiBuffer,
+                    useTileCap ? perRow : null,
+                    colorDst: gpuPalette ? ColorBuffer : null);
+
+                if (gpuPalette)
+                {
+                    // GPU produced the colour buffer end-to-end. Aux
+                    // buffers (distance / normal) stay zeroed — themes
+                    // that need them aren't IGpuHlslPalette eligible
+                    // (or are running through a different path).
+                    return;
+                }
+                // Emit ColorBuffer from the GPU's iter + smooth + final z/dz
+                // outputs. FillAuxAndColorSP would re-derive smooth from z
+                // (which it would clobber to whatever's already in
+                // SmoothBuffer's adjacent slots — wrong); inline a GPU-aware
+                // writeback that consumes the kernel's smooth + final state
+                // directly. Distance + normal come from the standard
+                // post-iteration formulae using the GPU's final z+dz.
+                _po.CancellationToken = ct;
+                var poFill = _po;
+                bool handlesInSet = colorMap is IColorMapHandlesInSet;
+                uint inSetColor = colorMap.InSetColor;
+                ParallelForRows(0, Height, poFill, y =>
+                {
+                    if (ct.IsCancellationRequested) return;
+                    int rb = y * Width;
+                    for (int x = 0; x < Width; x++)
+                    {
+                        int idx = rb + x;
+                        int iters = IterationBuffer[idx];
+                        if (iters < maxIt)
+                        {
+                            float smooth = SmoothBuffer[idx];
+                            float fzr = FinalZrBuffer[idx];
+                            float fzi = FinalZiBuffer[idx];
+                            float fdr = FinalDrBuffer[idx];
+                            float fdi = FinalDiBuffer[idx];
+                            // Distance estimate: |z| * log(|z|) / |dz|
+                            double mag = Math.Sqrt(fzr * fzr + fzi * fzi);
+                            double dMag = Math.Sqrt(fdr * fdr + fdi * fdi);
+                            float dist = dMag > 1e-10
+                                ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+                            DistanceBuffer[idx] = dist;
+                            // Normal via FillNormal helper (writes NormalX/Y
+                            // from z + dz like the CPU path).
+                            FillNormal(idx, fzr, fzi, fdr, fdi);
+                            int iterArg = handlesInSet ? iters : maxIt;
+                            ColorBuffer[idx] = (uint)colorMap.Map(
+                                smooth, dist, iterArg,
+                                NormalXBuffer[idx], NormalYBuffer[idx],
+                                fzr, fzi, fdr, fdi);
+                        }
+                        else
+                        {
+                            SmoothBuffer[idx] = 0f;
+                            DistanceBuffer[idx] = 0f;
+                            NormalXBuffer[idx] = 0f;
+                            NormalYBuffer[idx] = 0f;
+                            FinalZrBuffer[idx] = 0f;
+                            FinalZiBuffer[idx] = 0f;
+                            FinalDrBuffer[idx] = 0f;
+                            FinalDiBuffer[idx] = 0f;
+                            ColorBuffer[idx] = handlesInSet
+                                ? (uint)colorMap.Map(0f, 0f, maxIt, 0f, 0f, 0f, 0f, 0f, 0f)
+                                : inSetColor;
+                        }
+                    }
+                });
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Kernel failure (device lost, shader bug, OOM) — fall
+                // through to the CPU path so the user still gets a frame.
+                Debug.WriteLine($"[MandelbrotCalculator] GPU dispatch failed, falling back to CPU: {ex.Message}");
+            }
+        }
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, Height, po, y =>
+        ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = CenterY + (y - Height * 0.5) * scale;
-            ComputeRowSP(cy, CenterX, scale, maxIt, y * Width, colorMap);
+            ComputeRowSP(cy, CenterX, scale, rowMaxIt, y * Width, colorMap);
+            // Phase 2.1 in-set rewrite. Pixels that exhausted the row cap
+            // without escape land in IterationBuffer at rowMaxIt; the
+            // recolor's in-set gate (`iters >= maxIter`) tests against the
+            // global cap, so a row-cap pixel would be miscolored as
+            // "escaped at rowMaxIt". Rewriting to maxIt restores the in-set
+            // classification — semantically correct for unescaped pixels.
+            if (rowMaxIt < maxIt)
+            {
+                int rb = y * Width;
+                for (int x = 0; x < Width; x++)
+                {
+                    if (IterationBuffer[rb + x] >= rowMaxIt)
+                        IterationBuffer[rb + x] = maxIt;
+                }
+            }
         });
     }
 
@@ -1097,18 +1297,32 @@ public sealed class MandelbrotCalculator
 
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
+        // Phase 2.1: OrbitAware honours PerRowMaxIter when supplied.
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
 
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, Height, po, y =>
+        ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = CenterY + (y - Height * 0.5) * scale;
             int rowBase = y * Width;
             for (int x = 0; x < Width; x++)
             {
                 double cx = CenterX + (x - Width * 0.5) * scale;
-                ComputePixelOrbit(cx, cy, maxIt, rowBase + x, colorMap);
+                ComputePixelOrbit(cx, cy, rowMaxIt, rowBase + x, colorMap);
+            }
+            // Phase 2.1 in-set rewrite (see CalculateDoublePrecision).
+            if (rowMaxIt < maxIt)
+            {
+                for (int x = 0; x < Width; x++)
+                {
+                    if (IterationBuffer[rowBase + x] >= rowMaxIt)
+                        IterationBuffer[rowBase + x] = maxIt;
+                }
             }
         });
     }
@@ -1267,18 +1481,39 @@ public sealed class MandelbrotCalculator
                                                  : "PT path: scalar");
             _loggedSimdPath = true;
         }
+        // Phase 2.1: HP perturbation honours PerRowMaxIter when supplied
+        // (Video PerTile mode). Per-row lookup is one int read per row —
+        // negligible against the perturbation inner loop. Reference orbit
+        // length is independent of pixel cap, so capping individual rows
+        // doesn't invalidate BLA/SA tables.
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+
         _po.CancellationToken = ct;
         var po = _po;
-        Parallel.For(0, Height, po, y =>
+        ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             int rowBase = y * Width;
             if (useSimd512)
-                ComputeRowPT8(y, scale, maxIt, rowBase, colorMap);
+                ComputeRowPT8(y, scale, rowMaxIt, rowBase, colorMap);
             else if (useSimd)
-                ComputeRowPT4(y, scale, maxIt, rowBase, colorMap);
+                ComputeRowPT4(y, scale, rowMaxIt, rowBase, colorMap);
             else
-                ComputeRowPTScalar(y, scale, maxIt, rowBase, colorMap);
+                ComputeRowPTScalar(y, scale, rowMaxIt, rowBase, colorMap);
+            // Phase 2.1 in-set rewrite (see CalculateDoublePrecision for
+            // the rationale). Row-capped unescaped pixels get reclassed
+            // as in-set so the recolor gate works.
+            if (rowMaxIt < maxIt)
+            {
+                for (int x = 0; x < Width; x++)
+                {
+                    if (IterationBuffer[rowBase + x] >= rowMaxIt)
+                        IterationBuffer[rowBase + x] = maxIt;
+                }
+            }
         });
 
         if (_blaTable != null)
@@ -2526,8 +2761,9 @@ public sealed class MandelbrotCalculator
         long[] rowEscaped = new long[h];
         long[] rowSaturated = new long[h];
 
-        var po = new ParallelOptions();
-        Parallel.For(0, h, po, y =>
+        _po.CancellationToken = CancellationToken.None;
+        var po = _po;
+        ParallelForRows(0, h, po, y =>
         {
             int rowBase = y * w;
             long esc = 0;
@@ -2608,8 +2844,9 @@ public sealed class MandelbrotCalculator
         bool handlesInSet = ColorMap is IColorMapHandlesInSet;
         float ditherIter = (float)ditherIterStrength;
 
-        var po = new ParallelOptions();
-        Parallel.For(0, h, po, y =>
+        _po.CancellationToken = CancellationToken.None;
+        var po = _po;
+        ParallelForRows(0, h, po, y =>
         {
             int rowBase = y * w;
             for (int x = 0; x < w; x++)
@@ -2662,8 +2899,9 @@ public sealed class MandelbrotCalculator
         ColorMap.MaxIterations = maxIter;
         if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
         bool handlesInSet = ColorMap is IColorMapHandlesInSet;
-        var po = new ParallelOptions();
-        Parallel.For(0, h, po, y =>
+        _po.CancellationToken = CancellationToken.None;
+        var po = _po;
+        ParallelForRows(0, h, po, y =>
         {
             int rowBase = y * w;
             for (int x = 0; x < w; x++)

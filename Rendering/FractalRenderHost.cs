@@ -16,6 +16,7 @@
 // here because it lives on MandelbrotCalculator itself.
 
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Runtime.CompilerServices;
@@ -140,6 +141,53 @@ namespace FracturingFog.Rendering
 
         private bool _disposed;
 
+        // T2.4: dedicated calc thread + latest-only queue. Replaces the
+        // per-Trigger Task.Run + ContinueWith pair (4+ allocations per frame)
+        // with a single long-lived background Thread that owns the
+        // stale-upload + Calculate pass. Bounded capacity 1 with a drain on
+        // each enqueue gives "latest only" semantics: bursts of Triggers
+        // collapse to the most recent job before the calc thread ever sees
+        // them. The calc-completion (CDF build + UploadProcessedBuffer +
+        // FrameCompleted) is dispatched onto the threadpool so the calc
+        // thread turns around immediately for the next job.
+        private readonly BlockingCollection<FrameJob> _calcQueue =
+            new BlockingCollection<FrameJob>(boundedCapacity: 1);
+        private Thread? _calcThread;
+
+        private readonly struct FrameJob
+        {
+            public readonly CancellationToken Token;
+            public readonly MandelbrotCalculator Calc;
+            public readonly IFractalCalculator? AltCalc;
+            public readonly Stopwatch Sw;
+            public readonly uint[]? StaleBuf;
+            public readonly int StaleW;
+            public readonly int StaleH;
+            public readonly int CalcW;
+            public readonly int CalcH;
+
+            public FrameJob(CancellationToken token, MandelbrotCalculator calc,
+                IFractalCalculator? altCalc, Stopwatch sw,
+                uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH)
+            {
+                Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
+                StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
+                CalcW = calcW; CalcH = calcH;
+            }
+        }
+
+        private readonly struct UploadCtx
+        {
+            public readonly FractalRenderHost Host;
+            public readonly FrameJob Job;
+            public readonly long Ms;
+            public UploadCtx(FractalRenderHost host, FrameJob job, long ms)
+            { Host = host; Job = job; Ms = ms; }
+        }
+
+        private static readonly Action<UploadCtx> s_uploadCallback =
+            static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms);
+
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
         {
             _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
@@ -193,6 +241,13 @@ namespace FracturingFog.Rendering
                 _generatedTricornCalculator.ColorMap     = initialColorMap;
                 _generatedBurningShipCalculator.ColorMap = initialColorMap;
             }
+
+            _calcThread = new Thread(CalcThreadLoop)
+            {
+                IsBackground = true,
+                Name = "FractalCalc",
+            };
+            _calcThread.Start();
         }
 
         public FractalViewState ViewState { get; }
@@ -212,6 +267,19 @@ namespace FracturingFog.Rendering
 
         public bool ShowGrid { get; set; }
         public bool ShowWatermark { get; set; }
+        /// <summary>When true, the post-FX upload composites a perf HUD
+        /// (phase timings + HW summary) into the top-left of the frame.
+        /// Cheap (~0.1 ms/frame) — safe to leave on during video record.</summary>
+        public bool ShowPerfHud { get; set; }
+
+        // Rolling perf collector. Sampled by the calc thread + upload path.
+        private readonly PerfStats _perfStats = new();
+
+        /// <summary>Clear the perf HUD's rolling buffers + reset the
+        /// GC-rate baseline. Used to start a clean capture window when
+        /// switching regions / starting a video so the prior region's
+        /// samples do not skew the averages.</summary>
+        public void ResetPerfStats() => _perfStats.Reset();
         public string? RegionName { get; set; }
         public string? ThemeName { get; set; }
         public string? ProgramName { get; set; } = "Fracturing Fog";
@@ -227,6 +295,59 @@ namespace FracturingFog.Rendering
         /// engine-specific knobs that have not yet been lifted into the
         /// view-state contract.</summary>
         public MandelbrotCalculator Mandelbrot => _calculator;
+
+        // T3.1: GPU compute kernel constructed lazily on the first Use
+        // request when the renderer is D3D11. Null on non-D3D11 backends or
+        // when the user has never enabled the feature.
+        private MandelbrotGpuKernel? _gpuKernel;
+
+        /// <summary>T3.1: toggle the SP-path GPU compute dispatch on the
+        /// active MandelbrotCalculator. First true assignment lazily
+        /// constructs the kernel against the renderer's D3D11 device;
+        /// subsequent toggles just flip the calc's
+        /// <see cref="MandelbrotCalculator.UseGpuCompute"/> flag. Silently
+        /// stays false when the renderer is not D3D11 — caller should reflect
+        /// that back to the UI by re-reading the property.</summary>
+        public bool UseGpuCompute
+        {
+            get => _calculator.UseGpuCompute;
+            set
+            {
+                if (value && _gpuKernel == null)
+                {
+                    if (_renderer is DirectXRenderer dx
+                        && dx.TryGetD3D11(out var dev, out var ctx))
+                    {
+                        try
+                        {
+                            // Share _d3dGate so kernel.Run serialises with
+                            // renderer.Render — the immediate context is not
+                            // thread-safe across the calc thread + upload
+                            // threadpool calls.
+                            _gpuKernel = new MandelbrotGpuKernel(dev, ctx, _d3dGate);
+                            _calculator.GpuKernel = _gpuKernel;
+                            _escapeCalculator.GpuKernel = _gpuKernel;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine(
+                                $"[FractalRenderHost] GPU compute kernel init failed: {ex.Message}");
+                            _gpuKernel = null;
+                            _calculator.GpuKernel = null;
+                            _escapeCalculator.GpuKernel = null;
+                            return; // leave UseGpuCompute false
+                        }
+                    }
+                    else
+                    {
+                        // Non-D3D11 renderer (GL / Skia) — silently stay off.
+                        return;
+                    }
+                }
+                _calculator.UseGpuCompute = value;
+                _escapeCalculator.UseGpuCompute = value;
+            }
+        }
 
         // ── Source-compiled calculators (UserEquation / Sandbox / UserBulb) ──
         // The Avalonia shell's dedicated editors live in UI.Avalonia and can't
@@ -557,32 +678,104 @@ namespace FracturingFog.Rendering
             int calcW = _calculator.Width;
             int calcH = _calculator.Height;
 
-            Task.Run(() =>
+            // T2.4: enqueue onto the dedicated calc thread (latest-only).
+            // Drain any queued-but-unstarted job first so a burst of Triggers
+            // (wheel zoom, key-repeat) collapses to the freshest job before
+            // the calc thread can pick a stale one up.
+            var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
+                staleBuf, staleW, staleH, calcW, calcH);
+            while (_calcQueue.TryTake(out _)) { }
+            try { _calcQueue.Add(job); }
+            catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
+        }
+
+        // Long-lived background thread. Owns the stale-frame re-upload + the
+        // Calculate() call. After Calculate the upload step is handed off to
+        // the threadpool so this thread immediately becomes available for the
+        // next queued frame, preserving the calc↔upload overlap the old
+        // Task.Run+ContinueWith path got for free.
+        private void CalcThreadLoop()
+        {
+            try
             {
-                // Stale-frame re-upload so the screen shows a correct (if
-                // old) image while the next frame computes. Serialised
-                // against the calc-completion upload via _d3dGate, so the
-                // new frame in the continuation always paints over the
-                // stale here (never the reverse).
-                if (staleBuf != null && staleW == calcW && staleH == calcH)
+                foreach (var job in _calcQueue.GetConsumingEnumerable())
                 {
-                    lock (_uploadGate)
+                    try { RunFrameJobCalc(in job); }
+                    catch (OperationCanceledException) { }
+                    catch { /* swallow — token-driven cancellation is the only
+                              expected failure mode; surface anything else via
+                              the calc's own error path if it has one. */ }
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
+        }
+
+        private void RunFrameJobCalc(in FrameJob job)
+        {
+            var token = job.Token;
+            var calc = job.Calc;
+            var altCalc = job.AltCalc;
+            bool useAlt = altCalc != null;
+
+            // Stale-frame re-upload so the screen shows a correct (if
+            // old) image while the next frame computes. Serialised
+            // against the calc-completion upload via _d3dGate, so the
+            // new frame in the continuation always paints over the
+            // stale here (never the reverse).
+            if (job.StaleBuf != null && job.StaleW == job.CalcW && job.StaleH == job.CalcH)
+            {
+                lock (_uploadGate)
+                {
+                    lock (_d3dGate)
                     {
-                        lock (_d3dGate)
-                        {
-                            _renderer.UpdateTexture(staleBuf, staleW, staleH);
-                            _renderer.Render();
-                        }
+                        _renderer.UpdateTexture(job.StaleBuf, job.StaleW, job.StaleH);
+                        _renderer.Render();
                     }
                 }
+            }
 
+            long calcStart = Stopwatch.GetTimestamp();
+            try
+            {
                 if (useAlt) altCalc!.Calculate(token);
                 else calc.Calculate(token);
-                return sw.ElapsedMilliseconds;
-            }, token)
-            .ContinueWith(t =>
+            }
+            catch (OperationCanceledException) { }
+            long calcEnd = Stopwatch.GetTimestamp();
+            if (ShowPerfHud)
             {
-                if (t.IsCanceled || token.IsCancellationRequested)
+                _perfStats.RecordCalc((calcEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
+                // Phase 1.b: if the SP path ran on the GPU kernel this
+                // frame, sample its split timings into the same window.
+                // Skipped when CPU path ran (LastDispatchMs == 0 or NaN).
+                if (_gpuKernel != null
+                    && calc.UseGpuCompute
+                    && !calc.IsHighPrecisionActive)
+                {
+                    _perfStats.RecordGpuDispatch(_gpuKernel.LastDispatchMs);
+                    _perfStats.RecordGpuReadback(_gpuKernel.LastReadbackMs);
+                }
+            }
+
+            long ms = job.Sw.ElapsedMilliseconds;
+
+            // Hand the post-calc upload to the threadpool so this calc
+            // thread loops back for the next queued frame without blocking
+            // on UploadProcessedBuffer (post-FX + GPU upload).
+            ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
+                new UploadCtx(this, job, ms), preferLocal: false);
+        }
+
+        private void RunFrameJobUpload(FrameJob job, long ms)
+        {
+            var token = job.Token;
+            var calc = job.Calc;
+            var altCalc = job.AltCalc;
+            bool useAlt = altCalc != null;
+
+            {
+                if (token.IsCancellationRequested)
                 {
                     // Cancelled render still counts as "done" for animation
                     // gating — otherwise a mid-animation cancel would leave
@@ -591,8 +784,6 @@ namespace FracturingFog.Rendering
                     return;
                 }
                 if (_disposed) return;
-
-                long ms = t.IsCompletedSuccessfully ? t.Result : -1;
 
                 // Adaptive contrast — Mandelbrot only. Build the CDF and
                 // cache it so subsequent live-slider / sweep ticks can skip
@@ -657,8 +848,10 @@ namespace FracturingFog.Rendering
                     curCx, curCy, curZoom, curIter, ms, curW, curH,
                     hp, ViewState.IterLocked, ViewState.FractalType, lbl));
 
+                if (ShowPerfHud) _perfStats.RecordFrame(ms);
+
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-            }, TaskScheduler.Default);
+            }
         }
 
         // ── Resize ────────────────────────────────────────────────────────────
@@ -995,6 +1188,7 @@ namespace FracturingFog.Rendering
         private void UploadProcessedBuffer(uint[] src, int w, int h)
         {
             int n = w * h;
+            long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             lock (_uploadGate)
             {
 
@@ -1023,32 +1217,39 @@ namespace FracturingFog.Rendering
                 // it scaled with window area, which is why the sweep
                 // visibly stuttered at larger window sizes. SIMD inner loop
                 // (Vector256, 8 BGRA pixels per step) gives another 4-8×.
-                Parallel.For(0, h, y =>
+                // T2.5: chunked Partitioner — one dispatch per worker chunk
+                // (procCount * 4 total) instead of one per row.
+                int chunk = h / (Environment.ProcessorCount * 4);
+                if (chunk < 1) chunk = 1;
+                Parallel.ForEach(Partitioner.Create(0, h, chunk), range =>
                 {
-                    int rowBase = y * w;
-                    int end = rowBase + w;
-                    int i = rowBase;
-                    if (Vector256.IsHardwareAccelerated)
+                    for (int y = range.Item1; y < range.Item2; y++)
                     {
-                        i = ProcessRowSimd(src, dst, i, end,
-                                           contrastFactor, brightnessOffset255);
-                    }
-                    // Scalar tail (and full fallback when SIMD unavailable).
-                    for (; i < end; i++)
-                    {
-                        uint p = src[i];
-                        float r = ((p >> 16) & 0xFF);
-                        float g = ((p >> 8) & 0xFF);
-                        float b = (p & 0xFF);
+                        int rowBase = y * w;
+                        int end = rowBase + w;
+                        int i = rowBase;
+                        if (Vector256.IsHardwareAccelerated)
+                        {
+                            i = ProcessRowSimd(src, dst, i, end,
+                                               contrastFactor, brightnessOffset255);
+                        }
+                        // Scalar tail (and full fallback when SIMD unavailable).
+                        for (; i < end; i++)
+                        {
+                            uint p = src[i];
+                            float r = ((p >> 16) & 0xFF);
+                            float g = ((p >> 8) & 0xFF);
+                            float b = (p & 0xFF);
 
-                        r = (r - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
-                        g = (g - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
-                        b = (b - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                            r = (r - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                            g = (g - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                            b = (b - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
 
-                        byte R = (byte)Math.Clamp(r, 0f, 255f);
-                        byte G = (byte)Math.Clamp(g, 0f, 255f);
-                        byte B = (byte)Math.Clamp(b, 0f, 255f);
-                        dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                            byte R = (byte)Math.Clamp(r, 0f, 255f);
+                            byte G = (byte)Math.Clamp(g, 0f, 255f);
+                            byte B = (byte)Math.Clamp(b, 0f, 255f);
+                            dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                        }
                     }
                 });
             }
@@ -1097,10 +1298,55 @@ namespace FracturingFog.Rendering
                 }
             }
 
+            // Perf HUD: composited last so it sits above grid + watermark.
+            // Standalone of those toggles — user wants timings even on a
+            // bare frame. Sampled phase data from _perfStats.
+            if (ShowPerfHud && OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    var snap = _perfStats.Snapshot();
+                    string lbl = _calculator.IsHighPrecisionActive ? "DD" : "SP";
+                    // T3.1: append GPU marker when the SP path actually ran
+                    // on the GPU compute kernel this frame. Mirrors the
+                    // exact same predicate the calculator uses (toggle on,
+                    // kernel present, not HP, zoom within FP32 band) so the
+                    // label reads "(GPU)" iff the kernel really did fire.
+                    if (_calculator.UseGpuCompute
+                        && _calculator.GpuKernel != null
+                        && !_calculator.IsHighPrecisionActive
+                        && _calculator.Zoom <= MandelbrotCalculator.MaxGpuZoom)
+                    {
+                        lbl += " (GPU)";
+                    }
+                    _overlay.CompositePerfHud(dst, w, h,
+                        snap, HardwareProbe.Summary,
+                        w, h, _calculator.MaxIterations, lbl);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[FractalRenderHost] Perf HUD composite failed: {ex.Message}");
+                }
+            }
+
+            // Stop the upload-ms clock here so its value reflects only
+            // post-FX + overlay + HUD CPU work, separate from the GPU
+            // upload + present cost which is measured below.
+            if (ShowPerfHud)
+            {
+                long uploadEnd = Stopwatch.GetTimestamp();
+                _perfStats.RecordUpload((uploadEnd - uploadStart) * 1000.0 / Stopwatch.Frequency);
+            }
+            long presentStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             lock (_d3dGate)
             {
                 _renderer.UpdateTexture(dst, w, h);
                 _renderer.Render();
+            }
+            if (ShowPerfHud)
+            {
+                long presentEnd = Stopwatch.GetTimestamp();
+                _perfStats.RecordPresent((presentEnd - presentStart) * 1000.0 / Stopwatch.Frequency);
             }
             _lastUploadedBuffer = dst;
             _lastUploadedWidth = w;
@@ -1277,6 +1523,25 @@ namespace FracturingFog.Rendering
                 _videoSlideshowLegCts?.Cancel();
             }
             lock (_calcLock) _calcCts?.Cancel();
+
+            // T2.4: stop the dedicated calc thread before tearing down the
+            // renderer so a running Calculate doesn't try to use a disposed
+            // device on its way out.
+            try { _calcQueue.CompleteAdding(); } catch { }
+            try { _calcThread?.Join(2000); } catch { }
+            try { _calcQueue.Dispose(); } catch { }
+
+            // T3.1: dispose the GPU compute kernel before the renderer so its
+            // UAV / staging / cbuffer / CS releases hit the device first.
+            try
+            {
+                _calculator.GpuKernel = null;
+                _escapeCalculator.GpuKernel = null;
+                _gpuKernel?.Dispose();
+                _gpuKernel = null;
+            }
+            catch { }
+
             lock (_d3dGate) _renderer.Dispose();
         }
     }
