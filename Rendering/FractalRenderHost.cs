@@ -1308,11 +1308,14 @@ namespace FracturingFog.Rendering
                     var snap = _perfStats.Snapshot();
                     string lbl = _calculator.IsHighPrecisionActive ? "DD" : "SP";
                     // T3.1: append GPU marker when the SP path actually ran
-                    // on the GPU compute kernel this frame. Surfaces the
-                    // toggle state at a glance during A/B tests.
+                    // on the GPU compute kernel this frame. Mirrors the
+                    // exact same predicate the calculator uses (toggle on,
+                    // kernel present, not HP, zoom within FP32 band) so the
+                    // label reads "(GPU)" iff the kernel really did fire.
                     if (_calculator.UseGpuCompute
                         && _calculator.GpuKernel != null
-                        && !_calculator.IsHighPrecisionActive)
+                        && !_calculator.IsHighPrecisionActive
+                        && _calculator.Zoom <= MandelbrotCalculator.MaxGpuZoom)
                     {
                         lbl += " (GPU)";
                     }

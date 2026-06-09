@@ -86,6 +86,19 @@ public sealed class MandelbrotCalculator
 
     public int MaxIterations { get; set; } = 512;
 
+    /// <summary>T3.1 phase 1: zoom ceiling above which GPU dispatch falls
+    /// back to CPU. The shader uses FP32 with a split-centre + split-scale
+    /// approximation that lifts the practical zoom floor a few digits past
+    /// raw float32 but isn't true double-double. Past ~1e4 the per-pixel
+    /// `cx = cxHi + fx*scaleHi + cxLo + fx*scaleLo` reconstruction suffers
+    /// catastrophic cancellation against the FP32 ULP, producing pixelation
+    /// + wrong cardioid/bulb early-out predicates that collapse whole
+    /// regions to the in-set colour. CPU (double precision) handles past
+    /// 1e12 cleanly; HP (DD/QD) takes over from there. Conservatively
+    /// gates GPU off at 1e4 so user-visible zooms never enter the
+    /// FP32-broken band.</summary>
+    public const double MaxGpuZoom = 1e4;
+
     /// <summary>T3.1: when true and a GPU kernel is attached via
     /// <see cref="SetGpuKernel"/>, the SP path
     /// (<see cref="CalculateDoublePrecision{TMap}"/>) dispatches the
@@ -770,13 +783,16 @@ public sealed class MandelbrotCalculator
         // T3.1 GPU compute dispatch.
         //   • Only when explicitly toggled on (UseGpuCompute) AND a kernel
         //     is attached (host sets it if the renderer is D3D11).
+        //   • Zoom-gated: above MaxGpuZoom the FP32 split-centre math
+        //     hits ULP cancellation → pixelation + wrong bulb-skip
+        //     predicates. CPU path handles those zooms cleanly.
         //   • Phase 1.b: PerRowMaxIter is plumbed into the shader as an SRV;
         //     the kernel reads gPerRow[y] when UsePerRow is set, applies the
         //     same in-set rewrite (row-capped unescaped → write gMaxIter).
         //     Orbit-aware themes are still CPU-only — they need per-step z
         //     samples the shader doesn't produce; dispatched via the
         //     CalculateOrbitAware top-level switch.
-        if (UseGpuCompute && GpuKernel != null)
+        if (UseGpuCompute && GpuKernel != null && Zoom <= MaxGpuZoom)
         {
             try
             {
