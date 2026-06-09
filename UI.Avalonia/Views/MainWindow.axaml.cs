@@ -279,6 +279,26 @@ public sealed partial class MainWindow : Window
         // fields). Escape is always allowed so it can cancel span / a run.
         if (e.Key != Key.Escape && IsEditableFocused()) return;
 
+        // Shift+H = reset the perf HUD's rolling buffers so a new region /
+        // video capture starts clean. Handled before the unmodified switch
+        // so it doesn't fall through to plain H (toggle).
+        if (e.Key == Key.H && e.KeyModifiers == KeyModifiers.Shift)
+        {
+            _shell.Main.ResetPerfStats();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+G = toggle T3.1 GPU compute on the SP Mandelbrot path.
+        // Handled before the unmodified switch so it doesn't fall through
+        // to plain G (Grid toggle).
+        if (e.Key == Key.G && e.KeyModifiers == KeyModifiers.Control)
+        {
+            _shell.Main.UseGpuCompute = !_shell.Main.UseGpuCompute;
+            e.Handled = true;
+            return;
+        }
+
         // Command keys (M/T/R/V/Escape) — unmodified only; Ctrl/Alt/Shift
         // combos are reserved (diagnostic toggles, precise-pan).
         if (e.KeyModifiers == KeyModifiers.None)
@@ -300,7 +320,7 @@ public sealed partial class MainWindow : Window
 
             // Overlay / dialog toggles. Active in every fractal type so the
             // shortcuts work consistently regardless of selected mode.
-            //   G  = Grid           K  = Watermark
+            //   G  = Grid           K  = Watermark    H = Perf HUD (Shift+H = reset)
             //   P  = Params dialog  F1 = Help window
             switch (e.Key)
             {
@@ -310,6 +330,10 @@ public sealed partial class MainWindow : Window
                     return;
                 case Key.K:
                     _shell.Main.ShowWatermark = !_shell.Main.ShowWatermark;
+                    e.Handled = true;
+                    return;
+                case Key.H:
+                    _shell.Main.ShowPerfHud = !_shell.Main.ShowPerfHud;
                     e.Handled = true;
                     return;
                 case Key.P:

@@ -374,6 +374,107 @@ Sandbox hot-load).
 
 ---
 
+## Tier 2 landed-so-far
+
+- **T2.4** — `FractalRenderHost` now owns a dedicated background `Thread`
+  ("FractalCalc") + a `BlockingCollection<FrameJob>` with `boundedCapacity: 1`.
+  `Trigger()` drains any queued-but-unstarted job and enqueues the freshest
+  one (latest-only semantics), so bursts of wheel / key-repeat triggers
+  collapse before the calc thread sees them. The thread runs the
+  stale-frame re-upload + `Calculate(token)` inline, then hands the
+  post-calc upload (CDF build + `UploadProcessedBuffer` + `FrameCompleted`)
+  off to the threadpool via `ThreadPool.UnsafeQueueUserWorkItem` + cached
+  `Action<UploadCtx>`. Removes the per-frame `Task.Run` + `ContinueWith`
+  pair (~4 allocs/frame) and removes the per-trigger threadpool dispatch
+  hops. `Dispose()` calls `CompleteAdding()` + `Join(2000)` before tearing
+  down the renderer.
+- **T2.5** — chunked `Partitioner.Create(0, h, chunk)` replaces
+  `Parallel.For(0, h, ...)` everywhere in `MandelbrotCalculator` (7 sites),
+  `EscapeTimeCalculator` (3 sites), and `FractalRenderHost.UploadProcessedBuffer`
+  (1 site). `chunk = max(1, h / (procCount * 4))` so workers grab
+  contiguous row blocks instead of single rows — collapses scheduling
+  dispatch count from `h` to `~procCount * 4` per Calculate. Three stray
+  `new ParallelOptions()` sites in `MandelbrotCalculator` (Adaptive HE,
+  band-dither recolor, plain recolor) now use the cached `_po` field.
+  Largest win on small frames + low maxIter where scheduling overhead
+  dominated row body cost.
+- **Video iter-cap dialog picker (Phase 1)** — `VideoIterCapMode { Off,
+  Global, PerTile }` enum added to `Abstractions/Models/SlideshowConfig.cs`,
+  persisted on `VideoSettingsConfig.IterCapMode` (default `Global` =
+  prior auto-adaptive behaviour). Wired through `VideoZoomRequest`,
+  `VideoSettingsViewModel` (`IterCapModes` list + `IterCapMode` string),
+  the embedded `VideoSettingsView` (ComboBox row under "Adaptive iter
+  cap (perf vs quality)"), and `ShellViewModel.StartVideoFromConfig`.
+  `FractalRenderHost.Video.cs` honours the mode in the adaptive ratchet
+  (`Off` keeps `_videoIterCap` pinned at 1.0 so the calculator always
+  runs at full maxIter — strong-HW path) and in the per-frame iter
+  application. `PerTile` is a Phase-1 stub: `StartVideo` / `StartSlideshow`
+  emit a one-time `Console.Error` warning and the runtime treats it as
+  `Global`. Phase 2 (true per-tile cap) requires either multi-call
+  Calculate on sub-rects or pushing a per-tile cap array into the
+  iteration loop in every color-map specialisation — out of scope for
+  the Phase 1 commit, tracked as a follow-up.
+- **Video iter-cap dialog picker (Phase 2)** — `MandelbrotCalculator`
+  gains `int[]? PerRowMaxIter`; when non-null and sized to `Height`,
+  row `y` uses `PerRowMaxIter[y]` instead of the global
+  `MaxIterations`. Only the SP path
+  (`CalculateDoublePrecision`/`ComputeRowSP`) honours it; HP (DD/QD)
+  perturbation paths still use the global cap (Phase 2.1 follow-up).
+  `FractalRenderHost.Video.cs` divides the frame into `TileBands = 8`
+  vertical row bands. After each successful Calculate the SP path
+  samples `IterationBuffer` along a single near-mid-band row at
+  `samplesPerBand = 32` strides per band — `O(TileBands * 32)` per
+  frame. `BuildPerRowMaxIterCap` smoothsteps the normalised band avg
+  dwell over `[TileInteriorLo=0.50, TileInteriorHi=0.90]` and lerps
+  the per-band cap multiplier from `1.0` (full quality, boundary
+  detail) down to `TileMinCapMult=0.40` (interior-dominated, capped).
+  Caps floor at 64 iter. The per-row array is pooled + reused across
+  frames; cleared at video end + slideshow end + run start so
+  interactive `Trigger()` reverts to the global cap path. PerTile no
+  longer routes to Global — the Phase 1 fallback warning + one-shot
+  guard field are removed.
+- **Video iter-cap dialog picker (Phase 2.1)** — extends `PerRowMaxIter`
+  honouring to the HP (DD/QD) perturbation path
+  (`CalculateHighPrecision` dispatching `ComputeRowPT8`/`PT4`/`Scalar`)
+  and the `CalculateOrbitAware` path (orbit traps, stripe average,
+  TIA, etc.). Deep-zoom Mandelbrot regions (Deep Julias visual class)
+  use the HP path; without this, PerTile mode produced no win past
+  the HP-promote threshold. Each row body reads `PerRowMaxIter[y]`
+  once, falls back to `MaxIterations` when null or zero. Reference
+  orbit length is pixel-cap independent so BLA/SA tables are not
+  invalidated by per-row caps. Adds an in-set rewrite post-row: any
+  pixel whose `IterationBuffer` entry hit the row cap (`iters >=
+  rowMaxIt < MaxIterations`) is overwritten with `MaxIterations` so
+  the recolor's `iters >= maxIter` in-set gate classifies it
+  correctly — semantically right for unescaped pixels and prevents
+  visible iter-banding at band boundaries.
+- **Video iter-cap dialog picker (single-shot Video Zoom dialog)** —
+  `AvaloniaDialogs.ShowVideoAsync` (single-shot Video Zoom dialog under
+  the FloatingMenu) gains the same Adaptive iter-cap ComboBox the
+  embedded VideoSettingsView already had. Both `startBtn.Click` and
+  `slideshowBtn.Click` populate `IterCapMode` from the picker. Default
+  Global preserves the prior behaviour.
+- **Video iter-cap dialog picker (alt-calc extension)** —
+  `EscapeTimeCalculator` (used by Julia / BurningShip / Tricorn /
+  Multibrot / Phoenix) gains `int[]? PerRowMaxIter` with the same
+  semantics as `MandelbrotCalculator`. All three calc paths
+  (`CalculateCoreSimd`, `CalculateCore`, `CalculatePhoenix`) honour
+  the per-row cap and run the in-set rewrite post-row.
+  `SyncAltCalculatorForVideoFrame` copies the per-row array onto an
+  `EscapeTimeCalculator` cast. Generated calcs under
+  `Calculators/Generated/` are template-driven by `CalculatorGen` and
+  don't honour per-row caps yet — listed as a follow-up requiring
+  template + regen.
+- **Video iter-cap dialog picker (band-stat smoothing)** —
+  `SampleBandDwellStats` now averages `BandRowsPerBand = 4` evenly-
+  spaced rows per band at `samplesPerBand = 32` strides per row
+  (1024 IterationBuffer reads per frame total) instead of a single
+  near-midpoint row. Adds an EMA (`emaAlpha = 0.40`) so per-band
+  stats refresh fully over ~5 frames — fast enough to track region
+  changes during a zoom, slow enough that a single noisy frame
+  doesn't whip the cap. First frame after StartVideo/StartSlideshow
+  still records the raw average (no EMA prior).
+
 ## Tier 3 landed-so-far
 
 - **T3.3 (light)** — pinned LOH alloc via `GC.AllocateUninitializedArray<T>(n, pinned: true)`
@@ -419,7 +520,204 @@ Expected gain on hit: skip the single-threaded reference-orbit loop
 (~100k+ iters of DD/QD math per frame at zoom > 1e25). 30-70% video-frame
 time reduction at deep zoom.
 
-### T3.1 GPU compute (phase 1) — deferred
+### T3.1 GPU compute (phase 1, kernel land)
+
+`Rendering/MandelbrotGpuKernel.cs` — D3D11 compute shader (HLSL CS 5.0)
+for the SP Mandelbrot escape-time inner loop. Owns its own `cs_5_0`
+blob compiled via `Vortice.D3DCompiler`, a 48-byte cbuffer for
+per-frame params (split centre + split scale for ~6 extra mantissa
+bits past plain FP32), and two `StructuredBuffer<uint>` / `<float>` UAVs
+for the iter + smooth outputs. `Run()` is synchronous: Dispatch →
+`CopyResource` → `Map(Read)` → memcpy into the caller's pinned
+`int[]` + `float[]`. 8×8 threadgroup, one thread per pixel,
+whole-cardioid + period-2 bulb early-out matches the CPU SIMD path.
+
+Phase 1 host integration — landed.
+- `DirectXRenderer.TryGetD3D11(out device, out context)` exposes the
+  device + immediate context the swap chain is bound to. Returns false
+  on non-Windows / non-D3D11 backends (GL / Skia) — caller falls back
+  to CPU.
+- `MandelbrotCalculator.UseGpuCompute` + `GpuKernel` properties.
+  `CalculateDoublePrecision` branches to `GpuKernel.Run(...)` when the
+  toggle is on + kernel present + `PerRowMaxIter` null. The CPU palette
+  stage runs as a `Parallel.ForEach` over rows with `FillAuxAndColorSP`
+  per pixel (consuming the GPU's iter + smooth writeback). On kernel
+  exception the call falls through to the CPU SIMD path with a
+  `Debug.WriteLine` — user still gets a frame.
+- `IFractalRenderHost.UseGpuCompute` lazy-constructs the kernel on
+  first true assignment; null when the renderer isn't D3D11. Cleaned
+  up in `Dispose` before tearing the renderer down.
+- `MandelbrotGpuKernel` ctor takes the host's `_d3dGate` lock; `Run()`
+  wraps its entire dispatch + readback in `lock (_d3dGate)` so the
+  kernel never overlaps the swap-chain Render. ID3D11DeviceContext
+  (immediate) is not thread-safe.
+- UI: Ctrl+G toggles GPU compute. `MainViewModel.UseGpuCompute`
+  delegates to the host and re-reads after assignment so the property
+  reflects "didn't engage" when the renderer isn't D3D11. Perf HUD's
+  precision label appends "(GPU)" when the kernel actually ran this
+  frame.
+
+Phase 1.b landed:
+- **PerRowMaxIter on GPU.** `MandelbrotGpuKernel` gains a
+  `StructuredBuffer<uint>` SRV at t0 and a `gUsePerRow` cbuffer flag.
+  Shader loop bound becomes `rowMaxIt = gUsePerRow ? gPerRow[y] :
+  gMaxIter`; row-capped unescaped pixels write `gMaxIter` to iter +
+  `0` to smooth (same in-set rewrite as the CPU Phase 2.1 post-row
+  pass). `Run()` takes `int[]? perRowMaxIter`; `MandelbrotCalculator`
+  passes `PerRowMaxIter` directly — no more CPU fallback when both
+  PerTile + GPU are active.
+- **z+dz UAVs.** Kernel writes a packed `RWStructuredBuffer<float4>`
+  at u2 holding final `zr, zi, dr, di` per pixel. Tracks derivative
+  through the iteration loop with the standard `d_{n+1} = 2 z_n d_n + 1`
+  recurrence (init `(1, 0)` matching the CPU SIMD convention). CPU
+  writeback now drives distance-estimate via the standard
+  `|z|·log|z|/|dz|` formula and the existing `FillNormal` helper, so
+  Phong / distance / orbit-glow themes work under GPU compute.
+- **Split GPU timing.** `MandelbrotGpuKernel.LastDispatchMs` covers
+  cbuffer + per-row upload + Dispatch submission + implicit flush
+  (the first Map blocks until the GPU finishes); `LastReadbackMs`
+  isolates the three staging Map+memcpy passes. `PerfStats` gains
+  `RecordGpuDispatch` / `RecordGpuReadback` + a snapshot row. HUD
+  shows a "gpu  dis X  rb Y ms" line when `GpuSampleCount > 0`,
+  hidden otherwise so the CPU-only case isn't cluttered.
+
+Phase 1.b open items:
+- Orbit-aware themes: `CalculateOrbitAware` keeps CPU dispatch
+  unconditionally — the kernel doesn't sample z per iteration. Per-
+  orbit reductions inside the shader (stripe sum, TIA accumulator)
+  are a phase 2 candidate.
+- GPU-resident colour. Phase 2 of the original plan: code-gen
+  IColorMap → HLSL emit so palette runs on GPU and ColorBuffer
+  stays GPU-side. Eliminates the per-frame readback.
+
+### T3.1 phase 3 — alt-fractal kinds on GPU
+
+`MandelbrotGpuKernel` gains a `FractalKind { Mandelbrot, Julia,
+BurningShip, Tricorn }` enum and three new cbuffer fields
+(`gFractalKind`, `gParam0`, `gParam1`). Shader switches on `gFractalKind`
+inside `CSMain`:
+- **Mandelbrot (0)** — unchanged. Cardioid + period-2 bulb early-out
+  only fires for this kind (other shapes have different in-sets).
+- **Julia (1)** — `z_0` initialised to the pixel coord; iteration `c`
+  is the constant `(gParam0, gParam1)`.
+- **BurningShip (2)** — pre-step transform `z := |Re(z)| + i|Im(z)|`.
+- **Tricorn (3)** — pre-step `z := conj(z)`.
+
+`EscapeTimeCalculator` gains `UseGpuCompute` + `GpuKernel` (shared
+instance, set by the host alongside the Mandelbrot one) and a
+`TryDispatchGpu` helper. Called at the top of `Calculate` — when the
+fractal type is shader-supported, dispatches the kernel, runs the
+same CPU writeback as the Mandelbrot path (smooth + distance estimate
++ normal from final z+dz), and skips the CPU switch entirely. Returns
+false for Multibrot (pow, deferred) and Phoenix (two-step memory,
+out of scope for the polynomial path).
+
+The cbuffer grew from 64 to 64 bytes — the four new ints fit in the
+existing pad slots.
+
+### T3.1 — FP32 zoom-ceiling fix + future precision uplifts
+
+`MandelbrotCalculator.MaxGpuZoom = 1e4` gates GPU dispatch off above the
+band where the shader's split-centre + split-scale FP32 reconstruction
+hits catastrophic cancellation. `cx = cxHi + fx*scaleHi + cxLo + fx*scaleLo`
+needs an FP32 ULP smaller than the pixel-size; pixel-size at zoom 1e4
+≈ 4.8e-7 already brushes the ULP of centres near 1, so 1e4 is the
+conservative ceiling before users see pixelation + cardioid/bulb
+mispredicates that paint the whole frame as in-set. CPU SP path
+(double precision) handles cleanly through ~1e12 and HP (DD/QD) takes
+over from there. HUD precision label drops the `(GPU)` suffix when the
+gate engages so the user sees the path switch.
+
+**Deferred precision-uplift options** (only land if profiling shows GPU
+matters at deep zoom on real user HW):
+
+1. **Full double-double in HLSL.** Re-emit the centre reconstruction
+   + every iteration's z² + c step as DD arithmetic (Dekker TwoSum +
+   Veltkamp split, two FP32 components per scalar). Lifts the ceiling
+   toward the CPU's ~1e12 limit. Cost: roughly 5× shader work — every
+   add becomes a 6-op TwoSum, every multiply becomes a 17-op DD mul.
+   Likely loses GPU throughput against the calc-thread CPU SIMD path
+   for the maxIter ranges modest HW runs, so the user-visible win is
+   only on the small zoom band 1e4..1e8 where CPU SP still works but
+   slower than DD-GPU. Implementation = full new HLSL file + DD helper
+   inline; ~400 lines of careful shader code. Verify against the CPU
+   path bit-for-bit before shipping.
+
+2. **GPU perturbation.** Mirror the CPU HP path: one reference orbit
+   computed CPU-side in DD/QD, uploaded as a `StructuredBuffer<float2>`
+   of (refZr, refZi) per iteration; shader iterates only the FP32
+   delta `δ_n = z_n − Z_n` against the reference. Lifts the ceiling
+   past 1e15 to wherever the reference orbit precision holds. Cost is
+   high: needs the BLA table + series-approximation prelude ported
+   too (or the CPU computes them and ships skip tables to GPU); also
+   needs glitch detection per-pixel to spot pixels whose δ_n diverges
+   from the reference and re-iterate them with a fresh nearby
+   reference. ~800 lines of new HLSL + CPU-side orbit-upload pipeline.
+   Real engineering month, not a session-scoped task.
+
+Neither option is scheduled. Phase 2 (HLSL palette emit) and phase 4
+(GPU-resident ColorBuffer) are the next worthwhile GPU lifts — they
+cut the per-frame readback cost regardless of zoom and benefit every
+GPU-eligible frame.
+
+### T3.1 phase 2 + 4 — HLSL palette emit + GPU-resident ColorBuffer (landed)
+
+ColorGen now emits a HLSL twin of every theme's Map() body. Generated
+themes implement `IGpuHlslPalette` (in `Interefaces/IGpuHlslPalette.cs`)
+returning three strings:
+- `HlslPaletteBody` — the body of a `float3 EvalPalette(...)` HLSL
+  function with the 15 DSL inputs surfaced as `float` args
+  (canonical order in `GpuPaletteInputOrder.FloatInputs`).
+- `HlslPrelude` — helper definitions (`cg_mods`, `cg_hash`,
+  `cg_fromHsv/Hsl`, plus per-arity `cg_paletteN`).
+- `PaletteId` — short SHA-256 fingerprint for kernel shader cache.
+
+`MandelbrotGpuKernel` keeps two shader variants: `_csBase` (no colour
+write — for non-IGpuHlslPalette themes) and `_csByPaletteId[id]`
+(emits the GPU colour write to a new `RWStructuredBuffer<uint> gColor
+: register(u3)`). The kernel composes its shader source per-variant at
+`SetPalette` time, splicing the prelude before EvalPalette and the
+EvalPalette body inside a generated wrapper. Compile failures fall
+back to `_csBase` so the CPU palette path still works.
+
+`Run` gained an optional `colorDst: uint[]?` arg. When provided AND
+`HasGpuPalette` is true, the kernel binds the colour UAV, dispatches
+the colour-emitting CS, copies the colour staging buffer into the
+caller's `ColorBuffer` via `Buffer.MemoryCopy`, and the calculator
+skips the CPU palette pass entirely. When `colorDst == null` (legacy
+themes or non-IGpuHlslPalette colour maps), behaviour is identical to
+phase 1.b.
+
+`MandelbrotCalculator` and `EscapeTimeCalculator` both detect
+`IGpuHlslPalette` on the active `ColorMap`, call `SetPalette`, and
+forward `ColorBuffer` as `colorDst` when GPU palette is live. Aux
+buffers (distance / normal) stay zero on the GPU palette path — the
+emitted DSL inputs `in_dist`, `in_nx`, `in_ny` get 0 inside the
+shader (degrades gracefully for themes that read them; honest themes
+that ship through the DSL pipeline either drive colour from `smooth`
++ `t` + `arg` + `mag` or accept the degradation).
+
+Limitations:
+- Only ColorGen-emitted themes get the GPU palette. Hand-written
+  `IColorMap` impls (HsvPalette, FirePalette, RainbowColorMap, etc.)
+  stay on the CPU palette path. Adding GPU palette to a hand-written
+  theme is a manual translation job — implement `IGpuHlslPalette` on
+  the type.
+- Orbit-aware themes (`IOrbitAwareColorMap`) and interior-aware themes
+  (`IInteriorAwareColorMap`) need per-step samples the kernel doesn't
+  produce; they remain CPU-bound regardless.
+- HP/DD paths still go through CPU (zoom gate `<= 1e4` on the GPU
+  branch). HP zoom paints the CPU palette pass.
+
+Expected gain: at 1080p with a ColorGen theme active, the per-frame
+readback drops from 4 buffers (iter + smooth + finalZD) at ~3-5 MB
+total to 1 buffer (color uint[]) at 8 MB but avoids the CPU palette
+loop's ~5-15 ms per Mp pass. Net wins biggest on themes whose CPU
+`Map()` does heavy work (palette interpolation, `cg_palette`,
+multiple `Hsv` calls); marginal on trivial themes whose CPU eval is
+already cache-resident.
+
+### T3.1 GPU compute (phase 5) — remaining
 
 **Why deferred:** new HLSL compute shader + new D3D11 dispatch path + new
 GPU↔CPU sync model. Phase 1 alone (Mandelbrot SP kernel, palette on CPU)

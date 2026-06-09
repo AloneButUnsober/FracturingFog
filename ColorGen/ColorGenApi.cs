@@ -58,6 +58,15 @@ public static class ColorGenApi
 
         string body = new ColorGenEmitter(indent: "        ").EmitBody(prog);
 
+        // T3.1 phase 2: also emit HLSL body + prelude so the generated theme
+        // implements IGpuHlslPalette. Verbatim string literal escape — only
+        // double-quote chars need doubling; the emitter doesn't produce any
+        // (no string-typed DSL constructs), so a plain @"..." wrap is safe.
+        var hlslEmit = new ColorGenHlslEmitter(indent: "    ");
+        string hlslBody = hlslEmit.EmitBody(prog);
+        string hlslPrelude = ColorGenHlslPrelude.Build(hlslEmit.PaletteArities);
+        string hlslHash = ShortHash(hlslBody + "\0" + hlslPrelude);
+
         var opts = options ?? new GenerateOptions();
         string template = LoadTemplate("ColorMap.template.cs");
         string rendered = template
@@ -67,6 +76,9 @@ public static class ColorGenApi
             .Replace("{{DESCRIPTION}}", EscapeQuotes(opts.Description))
             .Replace("{{SOURCE_COMMENT}}", CommentBlock(source))
             .Replace("{{BODY}}", body)
+            .Replace("{{HLSL_BODY}}",    EscapeVerbatim(hlslBody))
+            .Replace("{{HLSL_PRELUDE}}", EscapeVerbatim(hlslPrelude))
+            .Replace("{{HLSL_HASH}}",    hlslHash)
             .Replace("{{TIMESTAMP}}",   DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC", CultureInfo.InvariantCulture));
 
         return new GenerateResult(sanitized, rendered, null);
@@ -99,6 +111,24 @@ public static class ColorGenApi
 
     private static string EscapeQuotes(string s)
         => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "").Replace("\n", " ");
+
+    /// <summary>Verbatim-string-literal escape: inside @"…", only `"`
+    /// needs doubling. The HLSL emitter doesn't produce `"` chars (no DSL
+    /// construct emits string literals) so this is usually a no-op, but
+    /// stay defensive — future intrinsic could embed one.</summary>
+    private static string EscapeVerbatim(string s)
+        => (s ?? "").Replace("\"", "\"\"");
+
+    /// <summary>10-char base16 hash — enough to disambiguate ~10^12 themes
+    /// for the kernel cache key.</summary>
+    private static string ShortHash(string s)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        byte[] h = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(s ?? ""));
+        var sb = new System.Text.StringBuilder(10);
+        for (int i = 0; i < 5; i++) sb.Append(h[i].ToString("x2"));
+        return sb.ToString();
+    }
 
     private static string CommentBlock(string s)
     {

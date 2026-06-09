@@ -93,6 +93,39 @@ namespace FracturingFog.Rendering
         // (wire later if visible iter-banding becomes a complaint).
         public bool VideoAdaptiveIterEnabled { get; set; } = true;
 
+        /// <summary>Adaptive iter-cap policy applied during video record /
+        /// slideshow playback. Off = no cap (full quality, drops frames on
+        /// heavy regions / modest HW). Global = per-frame adaptive multiplier
+        /// (default, existing behaviour). PerTile = per-tile cap; Phase 1
+        /// routes to Global at runtime with a one-time console warning
+        /// since the real per-tile pass requires a calculator refactor
+        /// (Phase 2). Set per-run from <see cref="VideoZoomRequest.IterCapMode"/>.</summary>
+        public FracturingFog.Models.VideoIterCapMode IterCapMode { get; set; }
+            = FracturingFog.Models.VideoIterCapMode.Global;
+
+        // ── Phase 2 per-tile cap state ───────────────────────────────────
+        // Frame is divided into TileBands vertical row bands. After each
+        // successful Calculate, the band's average IterationBuffer value is
+        // sampled (one stride per band, not every row, to keep the sample
+        // cost ~O(TileBands * Width)). On the next frame, ApplyVideoFrameState
+        // builds a per-row maxIter array from those band averages: bands
+        // dominated by interior pixels (high avg dwell) get a tighter cap,
+        // bands with boundary detail (low avg dwell) keep the full count.
+        // First frame of a video run has no prior stats → cap disabled, all
+        // rows run at full MaxIterations.
+        private const int TileBands = 8;
+        // Smoothstep edges over interior-fraction. Bands with normalised
+        // avg dwell below 0.5 keep full quality; above 0.9 hit the floor.
+        private const double TileInteriorLo = 0.50;
+        private const double TileInteriorHi = 0.90;
+        // Floor cap multiplier. Interior-heavy bands clamp to this fraction
+        // of MaxIterations (matches Global mode's VideoIterCapMin so the
+        // image-quality envelope is similar between modes).
+        private const double TileMinCapMult = 0.40;
+        private int[]? _perRowMaxIterPool;
+        private double[]? _bandAvgDwell;
+        private bool _bandStatsValid;
+
         // ── Recorders (single-shot only; slideshow never records) ──────────
         private Mp4Writer? _videoMp4Writer;
         private string? _videoMp4TempPath;
@@ -251,6 +284,13 @@ namespace FracturingFog.Rendering
             // Reset adaptive iter cap so each video run starts at full quality.
             _videoIterCap = 1.0;
             _videoLastFrameMs = 0.0;
+
+            // Apply the per-run iter-cap mode from the request and clear
+            // per-tile prior-frame stats so each run starts with all rows
+            // at full MaxIterations.
+            IterCapMode = request.IterCapMode;
+            _bandStatsValid = false;
+            _calculator.PerRowMaxIter = null;
             RaiseStatus(request.IsReverse
                 ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
                 : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
@@ -319,6 +359,13 @@ namespace FracturingFog.Rendering
             bool constantRate = request.IsConstantRate;
             bool reverse = request.IsReverse;
 
+            // Apply the per-run iter-cap mode from the request and clear
+            // per-tile prior-frame stats so each leg starts with all rows
+            // at full MaxIterations.
+            IterCapMode = request.IterCapMode;
+            _bandStatsValid = false;
+            _calculator.PerRowMaxIter = null;
+
             _videoSlideshowRunning = true;
             string mode = reverse ? "reverse " : "";
             RaiseStatus(constantRate
@@ -338,6 +385,11 @@ namespace FracturingFog.Rendering
                 {
                     _videoSlideshowRunning = false;
                     _videoTargetIterations = 0;
+                    // Clear per-tile state so subsequent interactive
+                    // Trigger()s see the calculator at its normal
+                    // global-MaxIterations path.
+                    _calculator.PerRowMaxIter = null;
+                    _bandStatsValid = false;
                     if (t.IsFaulted)
                         RaiseStatus($"Video slideshow error: {t.Exception?.InnerException?.Message}");
                     else
@@ -375,6 +427,10 @@ namespace FracturingFog.Rendering
             // Restore vsync for interactive preview.
             try { _renderer.VSync = true; } catch { }
             _recordingActive = false;
+            // Clear per-tile state so subsequent interactive Trigger()s
+            // see the calculator at its normal global-MaxIterations path.
+            _calculator.PerRowMaxIter = null;
+            _bandStatsValid = false;
 
             // Finalise both encoders first so the temp artefacts are fully
             // written by the time the shell decides whether to keep them.
@@ -728,7 +784,15 @@ namespace FracturingFog.Rendering
             // (Feigenbaum point, minibrot fields) where the inner loop blows
             // through the frame budget; relax back to 1.0 when the budget
             // recovers. Skipped when iter is user-locked.
-            if (VideoAdaptiveIterEnabled && !ViewState.IterLocked && _videoLastFrameMs > 0.0)
+            // Phase 1: PerTile falls through to Global at runtime, so the
+            // "iter cap active" predicate is mode != Off (and still gated by
+            // the legacy master toggle + iter-not-locked + we have a prior
+            // frame to measure against).
+            bool capActive = VideoAdaptiveIterEnabled
+                && IterCapMode != FracturingFog.Models.VideoIterCapMode.Off
+                && !ViewState.IterLocked
+                && _videoLastFrameMs > 0.0;
+            if (capActive)
             {
                 if (_videoLastFrameMs > VideoFrameBudgetMs * 1.5)
                     _videoIterCap *= VideoIterCapDown;
@@ -754,15 +818,38 @@ namespace FracturingFog.Rendering
             if (alt != null)
             {
                 SyncAltCalculatorForVideoFrame(alt);
+                long calcStartA = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
                 alt.Calculate(ct);
+                if (ShowPerfHud)
+                    _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStartA) * 1000.0 / Stopwatch.Frequency);
                 if (ct.IsCancellationRequested) return;
                 UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
                 CaptureVideoFrame();
+                if (ShowPerfHud) _perfStats.RecordFrame(frameSw.Elapsed.TotalMilliseconds);
                 return;
             }
 
+            long calcStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             _calculator.Calculate(ct);
+            if (ShowPerfHud)
+            {
+                _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStart) * 1000.0 / Stopwatch.Frequency);
+                // Phase 1.b GPU split sample.
+                if (_gpuKernel != null
+                    && _calculator.UseGpuCompute
+                    && !_calculator.IsHighPrecisionActive)
+                {
+                    _perfStats.RecordGpuDispatch(_gpuKernel.LastDispatchMs);
+                    _perfStats.RecordGpuReadback(_gpuKernel.LastReadbackMs);
+                }
+            }
             if (ct.IsCancellationRequested) return;
+
+            // Phase 2: sample band-dwell stats from the freshly-filled
+            // IterationBuffer so the next frame's ApplyVideoFrameState can
+            // build a per-row cap. Early-outs internally when IterCapMode !=
+            // PerTile.
+            SampleBandDwellStats();
 
             // Adaptive contrast via the leg-locked CDF so the histogram mapping
             // is identical across all frames of the leg (else the palette
@@ -807,6 +894,7 @@ namespace FracturingFog.Rendering
             StashCurrentFrameAsPrev();
 
             _videoLastFrameMs = frameSw.Elapsed.TotalMilliseconds;
+            if (ShowPerfHud) _perfStats.RecordFrame(_videoLastFrameMs);
         }
 
         // Builds the per-leg CDF on the first frame; refreshes after a >5%
@@ -1081,6 +1169,110 @@ namespace FracturingFog.Rendering
         // and auto-promotes the quality preset (upward only) as the zoom crosses
         // a tier boundary. All four limbs flow through so deep targets land on
         // the correct pixel.
+        /// <summary>Sample average IterationBuffer dwell across each tile
+        /// band (vertical row range). Called after each successful Calculate
+        /// in the SP path so the next frame's ApplyVideoFrameState can build
+        /// a per-row maxIter cap from the stats. Cheap — one stride read per
+        /// band, not every row.</summary>
+        private void SampleBandDwellStats()
+        {
+            if (IterCapMode != FracturingFog.Models.VideoIterCapMode.PerTile)
+                return;
+            int h = _calculator.Height;
+            int w = _calculator.Width;
+            if (h <= 0 || w <= 0) return;
+            int[] iters = _calculator.IterationBuffer;
+            if (iters.Length < h * w) return;
+
+            if (_bandAvgDwell == null || _bandAvgDwell.Length != TileBands)
+                _bandAvgDwell = new double[TileBands];
+
+            // Multi-row band averaging. Sample BandRowsPerBand evenly-spaced
+            // rows per band at samplesPerBand strides per row. Reduces band-
+            // stat noise when a single mid-band row happens to lie on a
+            // narrow filament — the cap on the whole band would otherwise
+            // chase that one row's escape count. Cost stays predictable:
+            // O(TileBands * BandRowsPerBand * samplesPerBand) per frame.
+            // For 8 bands × 4 rows/band × 32 samples = 1024 IterationBuffer
+            // reads per frame — well under 0.1 ms at any sane Height/Width.
+            const int samplesPerBand = 32;
+            const int BandRowsPerBand = 4;
+            int sampleStride = Math.Max(1, w / samplesPerBand);
+            // Optional exponential moving average over time for additional
+            // smoothing: new = (1 - emaAlpha) * prior + emaAlpha * frameAvg.
+            // Picked so a stat fully refreshes over ~5 frames — fast enough
+            // to track region changes during a zoom but slow enough that a
+            // single noisy frame doesn't whip the cap.
+            const double emaAlpha = 0.40;
+            bool emaApplies = _bandStatsValid;
+            for (int b = 0; b < TileBands; b++)
+            {
+                int yStart = (int)((long)b * h / TileBands);
+                int yEnd = (int)((long)(b + 1) * h / TileBands);
+                if (yEnd <= yStart) yEnd = yStart + 1;
+                if (yEnd > h) yEnd = h;
+                long sum = 0;
+                int n = 0;
+                // Evenly distribute BandRowsPerBand probes across this band's
+                // y-range. Off-by-one safe: rowK = yStart + (k+0.5)*span/rows.
+                int span = yEnd - yStart;
+                int rowsThisBand = Math.Min(BandRowsPerBand, span);
+                for (int k = 0; k < rowsThisBand; k++)
+                {
+                    int yProbe = yStart + (int)(((long)(2 * k + 1) * span) / (2 * rowsThisBand));
+                    if (yProbe >= h) yProbe = h - 1;
+                    int rowBase = yProbe * w;
+                    for (int x = 0; x < w; x += sampleStride)
+                    {
+                        sum += iters[rowBase + x];
+                        n++;
+                    }
+                }
+                double frameAvg = n > 0 ? (double)sum / n : 0.0;
+                _bandAvgDwell[b] = emaApplies
+                    ? (1.0 - emaAlpha) * _bandAvgDwell[b] + emaAlpha * frameAvg
+                    : frameAvg;
+            }
+            _bandStatsValid = true;
+        }
+
+        /// <summary>Build the per-row maxIter cap array from the prior-frame
+        /// band stats. Caller must have set _bandStatsValid and supplied
+        /// _bandAvgDwell. Returns null when stats are unavailable so the
+        /// calculator falls back to its global MaxIterations.</summary>
+        private int[]? BuildPerRowMaxIterCap(int height, int maxIter)
+        {
+            if (!_bandStatsValid || _bandAvgDwell == null) return null;
+            if (height <= 0 || maxIter <= 0) return null;
+
+            if (_perRowMaxIterPool == null || _perRowMaxIterPool.Length < height)
+                _perRowMaxIterPool = new int[height];
+
+            // Per-band cap from interior-fraction smoothstep. Bands with avg
+            // dwell well below 0.5*maxIter keep full quality; bands above
+            // 0.9*maxIter floor at TileMinCapMult. Caps are computed once per
+            // band then broadcast to every row in the band.
+            Span<int> bandCap = stackalloc int[TileBands];
+            for (int b = 0; b < TileBands; b++)
+            {
+                double frac = _bandAvgDwell[b] / maxIter;
+                double t = (frac - TileInteriorLo) / (TileInteriorHi - TileInteriorLo);
+                if (t < 0.0) t = 0.0; else if (t > 1.0) t = 1.0;
+                t = t * t * (3.0 - 2.0 * t);  // smoothstep
+                double mult = 1.0 + (TileMinCapMult - 1.0) * t;
+                int cap = (int)(maxIter * mult);
+                if (cap < 64) cap = 64;
+                bandCap[b] = cap;
+            }
+            for (int y = 0; y < height; y++)
+            {
+                int b = (int)((long)y * TileBands / height);
+                if (b >= TileBands) b = TileBands - 1;
+                _perRowMaxIterPool[y] = bandCap[b];
+            }
+            return _perRowMaxIterPool;
+        }
+
         private void ApplyVideoFrameState(QDCoord cx, QDCoord cy, double zoom)
         {
             QualityPreset target = _videoQuality;
@@ -1113,6 +1305,9 @@ namespace FracturingFog.Rendering
             if (s.IterLocked)
             {
                 _calculator.MaxIterations = s.LockedIterations;
+                // Per-tile not used in iter-locked mode — user picked an
+                // exact iteration count and we honour that for every row.
+                _calculator.PerRowMaxIter = null;
             }
             else
             {
@@ -1121,13 +1316,25 @@ namespace FracturingFog.Rendering
                 // Finding C: apply adaptive cap (set by RenderVideoFrame from
                 // prior-frame elapsed). Min floor of 64 so the image never
                 // collapses to all-in-set even when the cap clamps hard.
-                if (VideoAdaptiveIterEnabled && _videoIterCap < VideoIterCapMax)
+                // For Global mode this is the per-frame scalar multiplier;
+                // for PerTile it sets the upper-bound MaxIterations the
+                // per-row cap array is computed against.
+                if (VideoAdaptiveIterEnabled
+                    && IterCapMode != FracturingFog.Models.VideoIterCapMode.Off
+                    && _videoIterCap < VideoIterCapMax)
                 {
                     int capped = (int)(it * _videoIterCap);
                     if (capped < 64) capped = 64;
                     it = capped;
                 }
                 _calculator.MaxIterations = it;
+                // Phase 2: PerTile mode builds a per-row cap array from
+                // prior-frame band stats. SP path honours it directly; HP
+                // perturbation paths (DD/QD) still use MaxIterations.
+                _calculator.PerRowMaxIter =
+                    IterCapMode == FracturingFog.Models.VideoIterCapMode.PerTile
+                        ? BuildPerRowMaxIterCap(_calculator.Height, it)
+                        : null;
             }
         }
 
@@ -1141,6 +1348,13 @@ namespace FracturingFog.Rendering
             alt.MaxIterations = _calculator.MaxIterations;
             alt.Quality = _calculator.Quality;
             alt.ColorMap = _calculator.ColorMap;
+            // Phase 2.1: alt-calcs that expose PerRowMaxIter (today:
+            // EscapeTimeCalculator) get the same per-row cap array the main
+            // Mandelbrot path uses. Generated calcs in Calculators/Generated/
+            // are template-driven and don't honour per-row caps yet — extend
+            // CalculatorGen + regenerate to enable.
+            if (alt is EscapeTimeCalculator etPerRow)
+                etPerRow.PerRowMaxIter = _calculator.PerRowMaxIter;
             switch (alt)
             {
                 case EscapeTimeCalculator e: e.FractalType = ViewState.FractalType; e.FractalParameters = ViewState.FractalParameters; break;

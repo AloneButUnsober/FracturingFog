@@ -28,6 +28,30 @@ namespace FracturingFog.Models
         Video = 1,
     }
 
+    /// <summary>Per-frame iteration-cap policy applied during video record /
+    /// slideshow playback. Trades image quality for sustained frame rate when
+    /// the CPU calc path can't hit the per-frame budget at full iteration
+    /// count (e.g. cardioid neighbourhoods, deep Julia stalks on modest HW).
+    /// User picks in Video Settings dialog; default Global preserves the
+    /// prior auto-adaptive behaviour.</summary>
+    public enum VideoIterCapMode
+    {
+        /// <summary>No cap. Calculator runs at full maxIterations for every
+        /// frame. Best image quality, can drop frames on heavy regions /
+        /// modest hardware. Recommended for strong HW.</summary>
+        Off = 0,
+        /// <summary>Global per-frame adaptive multiplier (existing
+        /// behaviour). Frame elapsed &gt; 1.5× budget ratchets the cap down;
+        /// frame elapsed &lt; 0.9× budget ratchets back up. Single multiplier
+        /// applied to the whole frame.</summary>
+        Global = 1,
+        /// <summary>Per-tile adaptive cap (subdivides frame into a tile grid
+        /// and caps each tile independently from prior-frame tile elapsed).
+        /// Phase 1: routes to Global at runtime with a one-time console
+        /// warning — real per-tile pass lands in Phase 2.</summary>
+        PerTile = 2,
+    }
+
     /// <summary>Direction model for the Adaptive slider sweep during a leg.
     /// Mirrors the FloatingMenu sweep mode so a config can replay it.</summary>
     public enum AdaptiveSweepMode
@@ -112,6 +136,11 @@ namespace FracturingFog.Models
 
         /// <summary>Number of themes shown per leg (drives the fade schedule).</summary>
         public int ThemesPerLeg { get; set; } = 3;
+
+        /// <summary>Adaptive iteration-cap policy applied per frame during
+        /// playback / record. Default Global = prior auto-adaptive behaviour.</summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public VideoIterCapMode IterCapMode { get; set; } = VideoIterCapMode.Global;
 
         /// <summary>Loose bag for forward-compat fields not yet promoted.</summary>
         public Dictionary<string, string> Extras { get; set; } = new();
