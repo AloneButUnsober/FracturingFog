@@ -153,6 +153,15 @@ namespace FracturingFog.Render
         /// into the next uploaded frame.</summary>
         bool ShowWatermark { get; set; }
 
+        /// <summary>True to blend the perf HUD (phase timings + HW summary)
+        /// into the top-left of the next uploaded frame. Cheap (~0.1 ms /
+        /// frame) — safe during video record. Toggled by the shell.</summary>
+        bool ShowPerfHud { get; set; }
+
+        /// <summary>Clear the perf HUD's rolling buffers + reset the
+        /// GC-rate baseline so the next capture window starts clean.</summary>
+        void ResetPerfStats();
+
         /// <summary>Region label rendered in the watermark.</summary>
         string? RegionName { get; set; }
 

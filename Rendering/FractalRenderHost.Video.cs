@@ -754,14 +754,21 @@ namespace FracturingFog.Rendering
             if (alt != null)
             {
                 SyncAltCalculatorForVideoFrame(alt);
+                long calcStartA = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
                 alt.Calculate(ct);
+                if (ShowPerfHud)
+                    _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStartA) * 1000.0 / Stopwatch.Frequency);
                 if (ct.IsCancellationRequested) return;
                 UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
                 CaptureVideoFrame();
+                if (ShowPerfHud) _perfStats.RecordFrame(frameSw.Elapsed.TotalMilliseconds);
                 return;
             }
 
+            long calcStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             _calculator.Calculate(ct);
+            if (ShowPerfHud)
+                _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStart) * 1000.0 / Stopwatch.Frequency);
             if (ct.IsCancellationRequested) return;
 
             // Adaptive contrast via the leg-locked CDF so the histogram mapping
@@ -807,6 +814,7 @@ namespace FracturingFog.Rendering
             StashCurrentFrameAsPrev();
 
             _videoLastFrameMs = frameSw.Elapsed.TotalMilliseconds;
+            if (ShowPerfHud) _perfStats.RecordFrame(_videoLastFrameMs);
         }
 
         // Builds the per-leg CDF on the first frame; refreshes after a >5%
