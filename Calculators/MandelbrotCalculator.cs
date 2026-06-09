@@ -244,6 +244,14 @@ public sealed class MandelbrotCalculator
     private long _saIterSkippedTotal;
     private bool _loggedSimdPath;
 
+    // Cached ParallelOptions reused across every Parallel.For inside a
+    // single Calculate. Cheaper than `new ParallelOptions { ct }` per row
+    // band (one alloc per band × 6 paths = 6 allocs per Calculate). The
+    // calculator is single-instance per host and Calculate is serialised
+    // by the host's _calcLock, so swapping CancellationToken in-place is
+    // safe.
+    private readonly ParallelOptions _po = new();
+
     // ── Constructor / resize ──────────────────────────────────────────────────
 
     public MandelbrotCalculator(int width, int height) => Resize(width, height);
@@ -255,23 +263,29 @@ public sealed class MandelbrotCalculator
         Width = width;
         Height = height;
         int n = width * height;
-        IterationBuffer = new int[n];
-        SmoothBuffer = new float[n];
-        DistanceBuffer = new float[n];
-        NormalXBuffer = new float[n];
-        NormalYBuffer = new float[n];
-        ColorBuffer = new uint[n];
-        TrapBuffer = new float[n];
-        StripeBuffer = new float[n];
-        TiaBuffer = new float[n];
-        FinalZrBuffer = new float[n];
-        FinalZiBuffer = new float[n];
-        FinalDrBuffer = new float[n];
-        FinalDiBuffer = new float[n];
-        InteriorPeriodBuffer = new int[n];
-        AttractorZrBuffer = new float[n];
-        AttractorZiBuffer = new float[n];
-        MultiplierMagBuffer = new float[n];
+        // Pinned LOH allocation: these buffers are large (8 MB+ at 1080p),
+        // long-lived (resize is rare), and consumed by GPU upload / native
+        // memcpy. Pinned avoids the GCHandle.Alloc/Free pair every frame
+        // the upload path used to need and removes the buffers from the GC
+        // mark-and-compact scan. Alignment is 8 byte on the LOH which is
+        // sufficient for our Vector256/AVX2 SIMD writes.
+        IterationBuffer = GC.AllocateUninitializedArray<int>(n, pinned: true);
+        SmoothBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        DistanceBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        NormalXBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        NormalYBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        ColorBuffer = GC.AllocateUninitializedArray<uint>(n, pinned: true);
+        TrapBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        StripeBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        TiaBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalZrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalZiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalDrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        FinalDiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        InteriorPeriodBuffer = GC.AllocateUninitializedArray<int>(n, pinned: true);
+        AttractorZrBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        AttractorZiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
+        MultiplierMagBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -284,8 +298,12 @@ public sealed class MandelbrotCalculator
     /// </summary>
     public void Calculate(CancellationToken ct = default)
     {
+#if DEBUG
+        // Stacktrace alloc + reflection. Skipped in Release so the hot
+        // video/preview path does not pay for the diagnostic.
         var callingMethod = new StackTrace().GetFrame(1)?.GetMethod();
         Debug.WriteLine($"Calculate() called from {callingMethod?.DeclaringType?.Name}.{callingMethod?.Name}{Environment.NewLine} with ColorMap={ColorMap.GetType().Name}, MaxIterations={MaxIterations}");
+#endif
         ColorMap.MaxIterations = MaxIterations;
 
         // Update pixel scale so DE-style themes can normalise raw distance
@@ -554,7 +572,8 @@ public sealed class MandelbrotCalculator
         // Period search budget — covers all visible secondary / tertiary bulbs.
         const int maxPeriod = 1024;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, h, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -690,7 +709,8 @@ public sealed class MandelbrotCalculator
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -1078,7 +1098,8 @@ public sealed class MandelbrotCalculator
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -1246,7 +1267,8 @@ public sealed class MandelbrotCalculator
                                                  : "PT path: scalar");
             _loggedSimdPath = true;
         }
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;

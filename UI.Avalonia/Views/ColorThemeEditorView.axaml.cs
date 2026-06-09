@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 using FracturingFog.UI.Avalonia.Controls;
+using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -28,6 +29,7 @@ public sealed partial class ColorThemeEditorView : Window
     public ColorThemeEditorView()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
         Opened += (_, _) => AttachSortMenus();
         DataContextChanged += OnDataContextChanged;
 
