@@ -433,6 +433,21 @@ Sandbox hot-load).
   interactive `Trigger()` reverts to the global cap path. PerTile no
   longer routes to Global — the Phase 1 fallback warning + one-shot
   guard field are removed.
+- **Video iter-cap dialog picker (Phase 2.1)** — extends `PerRowMaxIter`
+  honouring to the HP (DD/QD) perturbation path
+  (`CalculateHighPrecision` dispatching `ComputeRowPT8`/`PT4`/`Scalar`)
+  and the `CalculateOrbitAware` path (orbit traps, stripe average,
+  TIA, etc.). Deep-zoom Mandelbrot regions (Deep Julias visual class)
+  use the HP path; without this, PerTile mode produced no win past
+  the HP-promote threshold. Each row body reads `PerRowMaxIter[y]`
+  once, falls back to `MaxIterations` when null or zero. Reference
+  orbit length is pixel-cap independent so BLA/SA tables are not
+  invalidated by per-row caps. Adds an in-set rewrite post-row: any
+  pixel whose `IterationBuffer` entry hit the row cap (`iters >=
+  rowMaxIt < MaxIterations`) is overwritten with `MaxIterations` so
+  the recolor's `iters >= maxIter` in-set gate classifies it
+  correctly — semantically right for unescaped pixels and prevents
+  visible iter-banding at band boundaries.
 
 ## Tier 3 landed-so-far
 
