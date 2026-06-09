@@ -786,12 +786,18 @@ public sealed class MandelbrotCalculator
                     CenterX, CenterY, scale,
                     maxIt, EscapeRadius2,
                     IterationBuffer, SmoothBuffer);
-                // Fill aux buffers + emit ColorBuffer from the GPU's
-                // iter + smooth outputs. Parallel over rows; same shape
-                // as the CPU SIMD writeback so colour matches bit-for-bit
-                // outside the kernel's float-vs-double precision delta.
+                // Emit ColorBuffer from the GPU's iter + smooth outputs.
+                // FillAuxAndColorSP would overwrite the GPU's SmoothBuffer
+                // value by recomputing `iters + 1 - log2(log2(mag))` against
+                // a zero z (the GPU path doesn't return z + dz/dc) →
+                // smooth = NaN → black frame. Use a GPU-aware writeback that
+                // reads SmoothBuffer (already filled by the kernel) and
+                // zeroes the aux channels (distance / normal / final z+dz)
+                // that the GPU path doesn't carry.
                 _po.CancellationToken = ct;
                 var poFill = _po;
+                bool handlesInSet = colorMap is IColorMapHandlesInSet;
+                uint inSetColor = colorMap.InSetColor;
                 ParallelForRows(0, Height, poFill, y =>
                 {
                     if (ct.IsCancellationRequested) return;
@@ -800,13 +806,39 @@ public sealed class MandelbrotCalculator
                     {
                         int idx = rb + x;
                         int iters = IterationBuffer[idx];
-                        // GPU path doesn't carry z + dz/dc, so pass (0,0,1,0).
-                        // FillAuxAndColorSP gates aux fill by iters < maxIter
-                        // and uses smooth from SmoothBuffer when iters carries
-                        // a valid smooth — pass zr=zi=0 for in-set, dr=1,di=0
-                        // so distance becomes 0 (acceptable for shallow zoom
-                        // SP where the GPU path runs).
-                        FillAuxAndColorSP(idx, iters, maxIt, 0, 0, 1, 0, colorMap);
+                        if (iters < maxIt)
+                        {
+                            float smooth = SmoothBuffer[idx];
+                            // Aux channels the GPU path doesn't compute.
+                            // Shallow-zoom SP where this path runs is fine
+                            // with zeros — distance-estimate / normal-based
+                            // themes degrade to a flat smooth-iter palette,
+                            // which is acceptable for phase 1.
+                            DistanceBuffer[idx] = 0f;
+                            NormalXBuffer[idx] = 0f;
+                            NormalYBuffer[idx] = 0f;
+                            FinalZrBuffer[idx] = 0f;
+                            FinalZiBuffer[idx] = 0f;
+                            FinalDrBuffer[idx] = 0f;
+                            FinalDiBuffer[idx] = 0f;
+                            int iterArg = handlesInSet ? iters : maxIt;
+                            ColorBuffer[idx] = (uint)colorMap.Map(
+                                smooth, 0f, iterArg, 0f, 0f, 0f, 0f, 0f, 0f);
+                        }
+                        else
+                        {
+                            SmoothBuffer[idx] = 0f;
+                            DistanceBuffer[idx] = 0f;
+                            NormalXBuffer[idx] = 0f;
+                            NormalYBuffer[idx] = 0f;
+                            FinalZrBuffer[idx] = 0f;
+                            FinalZiBuffer[idx] = 0f;
+                            FinalDrBuffer[idx] = 0f;
+                            FinalDiBuffer[idx] = 0f;
+                            ColorBuffer[idx] = handlesInSet
+                                ? (uint)colorMap.Map(0f, 0f, maxIt, 0f, 0f, 0f, 0f, 0f, 0f)
+                                : inSetColor;
+                        }
                     }
                 });
                 return;
