@@ -758,6 +758,21 @@ public sealed class MandelbrotCalculator
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = CenterY + (y - Height * 0.5) * scale;
             ComputeRowSP(cy, CenterX, scale, rowMaxIt, y * Width, colorMap);
+            // Phase 2.1 in-set rewrite. Pixels that exhausted the row cap
+            // without escape land in IterationBuffer at rowMaxIt; the
+            // recolor's in-set gate (`iters >= maxIter`) tests against the
+            // global cap, so a row-cap pixel would be miscolored as
+            // "escaped at rowMaxIt". Rewriting to maxIt restores the in-set
+            // classification — semantically correct for unescaped pixels.
+            if (rowMaxIt < maxIt)
+            {
+                int rb = y * Width;
+                for (int x = 0; x < Width; x++)
+                {
+                    if (IterationBuffer[rb + x] >= rowMaxIt)
+                        IterationBuffer[rb + x] = maxIt;
+                }
+            }
         });
     }
 
@@ -1139,18 +1154,32 @@ public sealed class MandelbrotCalculator
 
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
+        // Phase 2.1: OrbitAware honours PerRowMaxIter when supplied.
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
 
         _po.CancellationToken = ct;
         var po = _po;
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             double cy = CenterY + (y - Height * 0.5) * scale;
             int rowBase = y * Width;
             for (int x = 0; x < Width; x++)
             {
                 double cx = CenterX + (x - Width * 0.5) * scale;
-                ComputePixelOrbit(cx, cy, maxIt, rowBase + x, colorMap);
+                ComputePixelOrbit(cx, cy, rowMaxIt, rowBase + x, colorMap);
+            }
+            // Phase 2.1 in-set rewrite (see CalculateDoublePrecision).
+            if (rowMaxIt < maxIt)
+            {
+                for (int x = 0; x < Width; x++)
+                {
+                    if (IterationBuffer[rowBase + x] >= rowMaxIt)
+                        IterationBuffer[rowBase + x] = maxIt;
+                }
             }
         });
     }
@@ -1309,18 +1338,39 @@ public sealed class MandelbrotCalculator
                                                  : "PT path: scalar");
             _loggedSimdPath = true;
         }
+        // Phase 2.1: HP perturbation honours PerRowMaxIter when supplied
+        // (Video PerTile mode). Per-row lookup is one int read per row —
+        // negligible against the perturbation inner loop. Reference orbit
+        // length is independent of pixel cap, so capping individual rows
+        // doesn't invalidate BLA/SA tables.
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+
         _po.CancellationToken = ct;
         var po = _po;
         ParallelForRows(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
             int rowBase = y * Width;
             if (useSimd512)
-                ComputeRowPT8(y, scale, maxIt, rowBase, colorMap);
+                ComputeRowPT8(y, scale, rowMaxIt, rowBase, colorMap);
             else if (useSimd)
-                ComputeRowPT4(y, scale, maxIt, rowBase, colorMap);
+                ComputeRowPT4(y, scale, rowMaxIt, rowBase, colorMap);
             else
-                ComputeRowPTScalar(y, scale, maxIt, rowBase, colorMap);
+                ComputeRowPTScalar(y, scale, rowMaxIt, rowBase, colorMap);
+            // Phase 2.1 in-set rewrite (see CalculateDoublePrecision for
+            // the rationale). Row-capped unescaped pixels get reclassed
+            // as in-set so the recolor gate works.
+            if (rowMaxIt < maxIt)
+            {
+                for (int x = 0; x < Width; x++)
+                {
+                    if (IterationBuffer[rowBase + x] >= rowMaxIt)
+                        IterationBuffer[rowBase + x] = maxIt;
+                }
+            }
         });
 
         if (_blaTable != null)
