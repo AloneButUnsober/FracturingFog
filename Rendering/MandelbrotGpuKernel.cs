@@ -78,11 +78,13 @@ cbuffer Params : register(b0)
     float gScaleHi;
     float gScaleLo;
     int   gUsePerRow;      // 0 = use gMaxIter for every row, 1 = use gPerRow
+    // Phase 3: alt-fractal selector. 0=Mandelbrot, 1=Julia, 2=BurningShip,
+    // 3=Tricorn. Cardioid + period-2 bulb skip only applies to kind 0.
+    int   gFractalKind;
+    float gParam0;         // Julia c.re
+    float gParam1;         // Julia c.im
     int   _pad0;
-    int   _pad1;
-    int   _pad2;
-    // 14 ints / floats packed + 3 pad = 64 bytes (multiple of 16 = float4
-    // alignment).
+    // 16 fields × 4 bytes = 64 (float4 multiple — same size as phase 1.b).
 }
 
 RWStructuredBuffer<uint>   gIter    : register(u0);
@@ -135,12 +137,12 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         if (rc > 0) rowMaxIt = (int)rc;
     }
 
-    // Whole-cardioid + period-2 bulb early-out. Saves the full iteration
-    // for any pixel guaranteed in-set on shallow zoom video frames. Always
-    // writes gMaxIter (the global) so the in-set gate is consistent across
-    // bands regardless of per-row cap. Final z+dz are (0,0,1,0) — matches
-    // the CPU's bulb-skip writeback.
-    if (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy))
+    // Whole-cardioid + period-2 bulb early-out. Mandelbrot-only — Julia /
+    // BurningShip / Tricorn have different in-set shapes. Always writes
+    // gMaxIter so the in-set gate is consistent across bands regardless of
+    // per-row cap. Final z+dz are (0,0,1,0) — matches the CPU bulb-skip
+    // writeback.
+    if (gFractalKind == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
     {
         gIter[idx]    = (uint)gMaxIter;
         gSmooth[idx]  = 0.0;
@@ -148,31 +150,60 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         return;
     }
 
-    float zr = 0.0;
-    float zi = 0.0;
-    // Derivative dz/dc. CPU convention inits (1, 0) — one step ahead of
-    // dz_0 = 0 since dz_1 = 2*z_0*dz_0 + 1 = 1. Keeps the post-step
-    // writeback bit-identical to the CPU SIMD path.
+    // Per-fractal init. Mandelbrot/BurningShip/Tricorn: z_0 = 0, c =
+    // pixel coord. Julia: z_0 = pixel coord, c = (gParam0, gParam1) const.
+    float zr, zi;
+    float cIterR, cIterI;
+    if (gFractalKind == 1)
+    {
+        zr = cx;     zi = cy;
+        cIterR = gParam0; cIterI = gParam1;
+    }
+    else
+    {
+        zr = 0.0;    zi = 0.0;
+        cIterR = cx; cIterI = cy;
+    }
+    // Derivative dz/dc. Init (1, 0) matches the CPU SIMD convention. Note
+    // for Julia the derivative is dz/d(z_0) not dz/dc; same recurrence
+    // since z_0 acts as the perturbation source.
     float dr = 1.0;
     float di = 0.0;
     int   it = 0;
     [loop]
     for (; it < rowMaxIt; it++)
     {
-        float zr2 = zr * zr;
-        float zi2 = zi * zi;
+        // Per-fractal pre-step transform on z.
+        float fzr = zr;
+        float fzi = zi;
+        if (gFractalKind == 2)
+        {
+            // BurningShip: z := |Re(z)| + i|Im(z)|
+            fzr = abs(zr);
+            fzi = abs(zi);
+        }
+        else if (gFractalKind == 3)
+        {
+            // Tricorn: z := conj(z)
+            fzi = -zi;
+        }
+
+        float zr2 = fzr * fzr;
+        float zi2 = fzi * fzi;
         float mag2 = zr2 + zi2;
         if (mag2 >= gBailout2) break;
 
-        // d_{n+1} = 2 * z_n * d_n + 1  (complex multiply)
-        float newDr = 2.0 * (zr * dr - zi * di) + 1.0;
-        float newDi = 2.0 * (zr * di + zi * dr);
+        // d_{n+1} = 2 * z_n * d_n + 1  (complex multiply). Same shape
+        // across all four kinds — distance estimate stays usable.
+        float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
+        float newDi = 2.0 * (fzr * di + fzi * dr);
         dr = newDr;
         di = newDi;
 
-        float zrNew = zr2 - zi2 + cx;
-        float zi_new_unscaled = zr * zi;
-        zi = zi_new_unscaled + zi_new_unscaled + cy;
+        // z_{n+1} = z^2 + c  (with the pre-transform applied above).
+        float zrNew = zr2 - zi2 + cIterR;
+        float zi_new_unscaled = fzr * fzi;
+        zi = zi_new_unscaled + zi_new_unscaled + cIterI;
         zr = zrNew;
     }
 
@@ -207,12 +238,22 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         public float CXHi, CXLo, CYHi, CYLo;
         public float ScaleHi, ScaleLo;
         public int UsePerRow;
-        // 11 fields × 4 = 44 — pad to 64 (next float4 multiple).
+        public int FractalKind;
+        public float Param0;
+        public float Param1;
+        // 15 fields × 4 = 60 — pad to 64 (next float4 multiple).
         private readonly int _pad0;
-        private readonly int _pad1;
-        private readonly int _pad2;
-        private readonly int _pad3;
-        private readonly int _pad4;
+    }
+
+    /// <summary>Phase 3 fractal selector. Matches the shader's
+    /// <c>gFractalKind</c> switch order. Mandelbrot is the default; other
+    /// kinds pass appropriate per-pixel <c>cIter</c> + <c>z_0</c> init.</summary>
+    public enum FractalKind
+    {
+        Mandelbrot = 0,
+        Julia = 1,
+        BurningShip = 2,
+        Tricorn = 3,
     }
 
     private readonly ID3D11Device _device;
@@ -410,7 +451,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         int[] iterDst, float[] smoothDst,
         float[] finalZrDst, float[] finalZiDst,
         float[] finalDrDst, float[] finalDiDst,
-        int[]? perRowMaxIter = null)
+        int[]? perRowMaxIter = null,
+        FractalKind kind = FractalKind.Mandelbrot,
+        float param0 = 0f, float param1 = 0f)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
@@ -456,6 +499,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
                 ScaleHi = (float)scale,
                 ScaleLo = (float)(scale - (float)scale),
                 UsePerRow = usePerRow ? 1 : 0,
+                FractalKind = (int)kind,
+                Param0 = param0,
+                Param1 = param1,
             };
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe

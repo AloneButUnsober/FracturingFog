@@ -326,6 +326,7 @@ namespace FracturingFog.Rendering
                             // threadpool calls.
                             _gpuKernel = new MandelbrotGpuKernel(dev, ctx, _d3dGate);
                             _calculator.GpuKernel = _gpuKernel;
+                            _escapeCalculator.GpuKernel = _gpuKernel;
                         }
                         catch (Exception ex)
                         {
@@ -333,6 +334,7 @@ namespace FracturingFog.Rendering
                                 $"[FractalRenderHost] GPU compute kernel init failed: {ex.Message}");
                             _gpuKernel = null;
                             _calculator.GpuKernel = null;
+                            _escapeCalculator.GpuKernel = null;
                             return; // leave UseGpuCompute false
                         }
                     }
@@ -343,6 +345,7 @@ namespace FracturingFog.Rendering
                     }
                 }
                 _calculator.UseGpuCompute = value;
+                _escapeCalculator.UseGpuCompute = value;
             }
         }
 
@@ -1530,6 +1533,7 @@ namespace FracturingFog.Rendering
             try
             {
                 _calculator.GpuKernel = null;
+                _escapeCalculator.GpuKernel = null;
                 _gpuKernel?.Dispose();
                 _gpuKernel = null;
             }
