@@ -17,6 +17,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using FracturingFog.Abstractions;
 using FracturingFog.FFMath;
 
 using Vortice.Direct3D12.Video;
@@ -218,10 +219,7 @@ namespace FracturingFog.Models
 
         // ── Storage ───────────────────────────────────────────────────────────
 
-        private static string SettingsDir =>
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "FracturingFog");
+        private static string SettingsDir => AppDataPaths.Root;
 
         private static string RegionsFile =>
             Path.Combine(SettingsDir, "regions.json");

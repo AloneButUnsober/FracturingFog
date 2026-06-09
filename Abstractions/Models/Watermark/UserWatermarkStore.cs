@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
@@ -21,10 +22,7 @@ namespace FracturingFog.Models
 
         public List<WatermarkDef> Watermarks { get; } = new();
 
-        private static string SettingsDir =>
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "FracturingFog");
+        private static string SettingsDir => AppDataPaths.Root;
 
         private static string WatermarksFile =>
             Path.Combine(SettingsDir, "userwatermarks.json");

@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
@@ -31,10 +32,7 @@ namespace FracturingFog.Models
 
         public List<UserColorGenEntry> Entries { get; } = new();
 
-        private static string SettingsDir =>
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "FracturingFog");
+        private static string SettingsDir => AppDataPaths.Root;
 
         private static string EntriesFile =>
             Path.Combine(SettingsDir, "colorgen.json");

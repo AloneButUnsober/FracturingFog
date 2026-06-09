@@ -1,18 +1,17 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using FracturingFog.Abstractions;
 
 namespace FracturingFog.Audio
 {
     /// <summary>
-    /// Persists <see cref="AudioSettings"/> to %APPDATA%\FracturingFog\audio-settings.json.
+    /// Persists <see cref="AudioSettings"/> to <see cref="AppDataPaths.Root"/>\audio-settings.json.
     /// All I/O wrapped in try/catch — settings are non-critical state.
     /// </summary>
     public static class AudioSettingsStore
     {
-        private static string SettingsDir => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "FracturingFog");
+        private static string SettingsDir => AppDataPaths.Root;
 
         private static string SettingsFile => Path.Combine(SettingsDir, "audio-settings.json");
 

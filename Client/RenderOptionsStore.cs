@@ -9,6 +9,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using FracturingFog.Abstractions;
 using FracturingFog.Server.Protocol;
 
 namespace FracturingFog.Client;
@@ -24,9 +25,7 @@ public sealed class RenderOptionsStore
 {
     public List<RenderOptionPreset> Presets { get; set; } = new();
 
-    public static string DefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "FracturingFog", "client-render-presets.json");
+    public static string DefaultPath() => Path.Combine(AppDataPaths.Root, "client-render-presets.json");
 
     public static RenderOptionsStore LoadOrCreate(string? path = null)
     {
