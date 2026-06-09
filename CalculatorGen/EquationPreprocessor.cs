@@ -170,7 +170,7 @@ public static class EquationPreprocessor
         // else short-circuits with a span pointing at the user's character.
         var known = new HashSet<string>(StringComparer.Ordinal)
         { "Sin", "Cos", "Tan", "Sinh", "Cosh", "Tanh", "Sqrt",
-          "Exp", "Log", "Conjugate", "Pow",
+          "Exp", "Log", "Conjugate", "Pow", "Phase",
           "Zero", "One", "ImaginaryOne", "Abs" };
         foreach (Match m in Regex.Matches(s, @"\bComplex\.([A-Za-z_][A-Za-z0-9_]*)\b"))
         {
@@ -182,7 +182,7 @@ public static class EquationPreprocessor
             // make sense as replacements — Zero/One/ImaginaryOne/Abs are
             // properties or already-rejected forms.
             string[] callable = { "Sin", "Cos", "Tan", "Sinh", "Cosh", "Tanh", "Sqrt",
-                                  "Exp", "Log", "Conjugate", "Pow" };
+                                  "Exp", "Log", "Conjugate", "Pow", "Phase" };
             string? best = null;
             int bestD = int.MaxValue;
             foreach (var k in callable)
@@ -195,7 +195,7 @@ public static class EquationPreprocessor
             // shortens to `conj` in DSL too.
             string? csFix  = bestD <= 2 && best != null ? $"Complex.{best}" : null;
             string? dslFix = bestD <= 2 && best != null
-                ? (best switch { "Conjugate" => "conj", _ => best.ToLowerInvariant() })
+                ? (best switch { "Conjugate" => "conj", "Phase" => "arg", _ => best.ToLowerInvariant() })
                 : null;
             string hint = csFix != null ? $" Did you mean '{csFix}'?" : "";
             diagnostic = new PreprocessDiagnostic(
@@ -227,6 +227,14 @@ public static class EquationPreprocessor
             s = RewriteCall(s, "Complex.Exp",       args => args.Length == 1 ? $"exp({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Log",       args => args.Length == 1 ? $"log({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Conjugate", args => args.Length == 1 ? $"conj({args[0].Trim()})" : null);
+            // Complex.Phase is the BCL accessor for arg(z). Translates 1:1.
+            s = RewriteCall(s, "Complex.Phase",     args => args.Length == 1 ? $"arg({args[0].Trim()})"  : null);
+            // Math.Atan2(y, x) is real-valued; DSL atan2 lifts to complex.
+            s = RewriteCall(s, "Math.Atan2",        args => args.Length == 2 ? $"atan2({args[0].Trim()}, {args[1].Trim()})" : null);
+            // Math.Min / Max / IEEERemainder → DSL counterparts.
+            s = RewriteCall(s, "Math.Min",          args => args.Length == 2 ? $"min({args[0].Trim()}, {args[1].Trim()})" : null);
+            s = RewriteCall(s, "Math.Max",          args => args.Length == 2 ? $"max({args[0].Trim()}, {args[1].Trim()})" : null);
+            s = RewriteCall(s, "Math.IEEERemainder", args => args.Length == 2 ? $"mod({args[0].Trim()}, {args[1].Trim()})" : null);
 
             // Pow has a special-case integer-exponent fast path so common
             // cases like `Complex.Pow(z, -3)` translate to a clean `1/(z)^3`

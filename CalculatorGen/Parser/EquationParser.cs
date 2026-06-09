@@ -81,6 +81,12 @@ public sealed class EquationParser
         TokenKind.Sqrt   => "sqrt(...)",
         TokenKind.Exp    => "exp(...)",
         TokenKind.Log    => "log(...)",
+        TokenKind.Arg    => "arg(...)",
+        TokenKind.Atan2  => "atan2(...)",
+        TokenKind.Min    => "min(...)",
+        TokenKind.Max    => "max(...)",
+        TokenKind.Mod    => "mod(...)",
+        TokenKind.Comma  => "','",
         TokenKind.PiConst => "'pi'",
         TokenKind.EConst => "'e'",
         TokenKind.If     => "'if'",
@@ -354,6 +360,48 @@ public sealed class EquationParser
                 var sqrtArg = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new Exp(new Mul(new RealConst(0.5), new Log(sqrtArg)));
+            case TokenKind.Arg:
+                // arg(x) — non-holomorphic angle, lifted to complex as
+                // (atan2(im(x), re(x)), 0). Gating handled like Conj/Folded
+                // by Contains<Arg> checks in downstream visitors.
+                Advance();
+                Expect(TokenKind.LParen);
+                var argArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Arg(argArg);
+            case TokenKind.Atan2:
+                // atan2(y, x) — binary form, requires the new Comma token.
+                Advance();
+                Expect(TokenKind.LParen);
+                var atan2Y = ParseExpr();
+                Expect(TokenKind.Comma);
+                var atan2X = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Atan2(atan2Y, atan2X);
+            case TokenKind.Min:
+                Advance();
+                Expect(TokenKind.LParen);
+                var minL = ParseExpr();
+                Expect(TokenKind.Comma);
+                var minR = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Min(minL, minR);
+            case TokenKind.Max:
+                Advance();
+                Expect(TokenKind.LParen);
+                var maxL = ParseExpr();
+                Expect(TokenKind.Comma);
+                var maxR = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Max(maxL, maxR);
+            case TokenKind.Mod:
+                Advance();
+                Expect(TokenKind.LParen);
+                var modL = ParseExpr();
+                Expect(TokenKind.Comma);
+                var modR = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Mod(modL, modR);
             case TokenKind.PiConst:
                 Advance();
                 return new RealConst(Math.PI);

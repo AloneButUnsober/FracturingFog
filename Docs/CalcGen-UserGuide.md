@@ -59,6 +59,10 @@ z_{n+1} = <expression>
 | Transcendental   | `sin(z) cos(z) tan(z) exp(z) log(z)` | Holomorphic              |
 | Hyperbolic       | `sinh(z) cosh(z) tanh(z)`| Desugared via exp; holomorphic   |
 | Square root      | `sqrt(z)`                | Desugared as `exp(0.5*log(z))`   |
+| Argument         | `arg(z)`                 | Real angle in (-π, π], lifted to (arg, 0). Non-holomorphic — disables DE / perturbation / BLA / SA. |
+| Atan2            | `atan2(y, x)`            | Binary; same gating as `arg`. AVX2 main path emits an error — use `arg(z)` when on AVX2. |
+| Min / Max        | `min(a, b)`, `max(a, b)` | Real-valued, lifted to (result, 0). Imag parts discarded. Vectorised on AVX2 via Vector256.Min/Max. Same gating as `arg`. |
+| Modulo           | `mod(a, b)`              | Real-valued C# `%` on the real parts, lifted. Per-lane scalar on AVX2. Same gating as `arg`. |
 | Constants        | `pi`, `e`                | Real literals (Math.PI / Math.E) |
 | Previous iter    | `prev`                   | z_{n-1} — Phoenix coupling       |
 | Iter index       | `iter` (or `n`)          | Real scalar; current index       |
@@ -231,6 +235,49 @@ sin(pi*z) + c
 e*z*z + c
 ```
 
+### 4.10 Argument-driven (arg / atan2)
+
+`arg(z)` is the principal angle of `z` in (-π, π], lifted back to complex
+as `(arg, 0)`. Non-holomorphic — same gating as `conj`: distance estimate,
+perturbation, BLA, and SA all turn off when the equation contains `arg`.
+
+#### Spiral by angle
+```
+z*z + 0.1*arg(z) + c
+```
+
+#### Branch by quadrant via atan2
+```
+z*z + 0.05*atan2(z, c) + c
+```
+
+(`atan2(y, x)` is real-valued; if you author for the AVX2 main path,
+prefer `arg(z)` — the AVX2 emitter cannot vectorise the binary form
+and surfaces a clear error during generation.)
+
+### 4.11 Real binary ops (min / max / mod)
+
+`min(a, b)`, `max(a, b)`, `mod(a, b)` all act on the real parts of their
+operands (imag is dropped) and lift back to complex as `(result, 0)`.
+Non-holomorphic — same gating as `arg` / `atan2`. `min` / `max` use
+`Vector256.Min` / `Vector256.Max` intrinsics on the AVX2 path so they
+stay vectorised; `mod` falls back to per-lane scalar `%`.
+
+#### Clamp by min/max
+```
+min(z*z, max(z, -1.0)) + c
+```
+
+#### Periodic wrap via mod
+```
+z*z + mod(z, 1.0) + c
+```
+
+#### Hybrid step
+```
+max(z*z, sqr(z)) + c
+```
+
 ### 4.6 Newton-like patterns
 
 (Newton fractals proper use the dedicated NewtonCalculator, but
@@ -349,7 +396,7 @@ Flags:
 
 | Symptom                                   | Likely cause / fix                                  |
 |-------------------------------------------|------------------------------------------------------|
-| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, exp, log, pi, e, if/then/else, re, im, abs, prev, iter/n. |
+| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, exp, log, arg, atan2, min, max, mod, pi, e, if/then/else, re, im, abs, prev, iter/n. |
 | `Unexpected character …`                  | Stray punctuation. `=` alone is not allowed; use `==`.|
 | `Exponent must be 0..16`                  | Use `z*z*z…` or break into factored form.            |
 | `Equation is empty`                       | Editor text is blank after preprocessor strip.       |
@@ -368,6 +415,8 @@ Conditional     if <cmp> then <expr> else <expr>
 Unary           -expr  conj(...) fold(...) abs(...) sqr(...)
 Lifts           re(z), im(z), abs(z)          (real scalar → (n, 0))
 Transcendentals sin cos tan sinh cosh tanh exp log sqrt
+Argument        arg(x)            atan2(y, x)
+Real binary     min(a, b)  max(a, b)  mod(a, b)
 Constants       pi  e
 State           z   c   prev   iter (or n)
 ```

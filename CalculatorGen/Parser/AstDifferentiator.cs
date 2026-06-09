@@ -63,6 +63,16 @@ public static class AstDifferentiator
         // only.
         Conj       => new RealConst(0.0),
         Folded     => new RealConst(0.0),
+        // arg / atan2 are non-holomorphic (Wirtinger-real derivative). Treat
+        // them like Conj/Folded: ∂/∂z arg(u) = 0 in the holomorphic chain.
+        // SupportsDe is gated off by Contains<Arg> / Contains<Atan2> upstream.
+        Arg        => new RealConst(0.0),
+        Atan2      => new RealConst(0.0),
+        // min/max/mod: subgradient at boundary, treated as opaque for the
+        // chain rule. Distance estimate is disabled when present anyway.
+        Min        => new RealConst(0.0),
+        Max        => new RealConst(0.0),
+        Mod        => new RealConst(0.0),
         // Transcendentals — holomorphic chain rules:
         //   d/dv sin(u) =  cos(u) · u'
         //   d/dv cos(u) = -sin(u) · u'

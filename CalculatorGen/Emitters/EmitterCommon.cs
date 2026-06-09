@@ -108,6 +108,28 @@ public abstract class EmitterBase
     protected virtual ComplexExpr OpLog(ComplexExpr a) =>
         throw new InvalidOperationException("OpLog not implemented in this emitter");
 
+    /// <summary>Principal argument lifted to complex: (atan2(im, re), 0).
+    /// Non-holomorphic. Output ImZero is true so downstream Add/Mul can
+    /// elide the zero imag part exactly like real-lift nodes.</summary>
+    protected virtual ComplexExpr OpArg(ComplexExpr a) =>
+        throw new InvalidOperationException("OpArg not implemented in this emitter");
+
+    /// <summary>Binary atan2(y, x) lifted to complex. Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
+        throw new InvalidOperationException("OpAtan2 not implemented in this emitter");
+
+    /// <summary>Real minimum lifted to complex (min, 0). Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpMin not implemented in this emitter");
+
+    /// <summary>Real maximum lifted to complex (max, 0). Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpMax not implemented in this emitter");
+
+    /// <summary>Real modulo (C# '%' on doubles) lifted to complex. Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpMod not implemented in this emitter");
+
     /// <summary>Piecewise selection: given a boolean expression and two
     /// pre-evaluated complex branches, return the selected complex value.
     /// Subclasses choose the strategy — scalar uses a C# ternary on the
@@ -140,6 +162,11 @@ public abstract class EmitterBase
         Cos c2      => OpCos(Emit(c2.Operand)),
         Exp ex      => OpExp(Emit(ex.Operand)),
         Log lg      => OpLog(Emit(lg.Operand)),
+        Arg ar      => OpArg(Emit(ar.Operand)),
+        Atan2 at    => OpAtan2(Emit(at.Y), Emit(at.X)),
+        Min mn      => OpMin(Emit(mn.Left), Emit(mn.Right)),
+        Max mx      => OpMax(Emit(mx.Left), Emit(mx.Right)),
+        Mod md      => OpMod(Emit(md.Left), Emit(md.Right)),
         // Eager-evaluate both branches so any SSA prelude they emit
         // runs unconditionally — matches SIMD lane semantics where
         // every lane evaluates every branch. The cost is paid in

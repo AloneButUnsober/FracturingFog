@@ -171,6 +171,32 @@ public sealed class ScalarEmitter : EmitterBase
             ImZero: false);
     }
 
+    // arg(a+bi) = atan2(b, a) ∈ (-π, π]. Lift to complex (arg, 0). When
+    // the input has ImZero, the angle is 0 (positive a) or π (negative a)
+    // — emit Math.Atan2(0, a) so the sign of a still picks the right
+    // branch instead of just emitting "0.0".
+    protected override ComplexExpr OpArg(ComplexExpr a) =>
+        new($"Math.Atan2({(a.ImZero ? "0.0" : a.Im)}, {a.Re})", "0.0", ImZero: true);
+
+    // atan2(y, x) lifted to complex (atan2, 0). The complex inputs are
+    // expected to be real-lifted (ImZero=true) — the imaginary parts of
+    // y and x are dropped; only their real components feed atan2. This
+    // matches mathematical atan2(y_real, x_real); users passing genuinely
+    // complex y/x should rewrite via re()/im() to make intent explicit.
+    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
+        new($"Math.Atan2({y.Re}, {x.Re})", "0.0", ImZero: true);
+
+    // min / max / mod operate on the real parts of complex inputs (imag
+    // discarded). Lifted back to complex as (result, 0).
+    protected override ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        new($"Math.Min({a.Re}, {b.Re})", "0.0", ImZero: true);
+
+    protected override ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        new($"Math.Max({a.Re}, {b.Re})", "0.0", ImZero: true);
+
+    protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
+        new($"(({a.Re}) % ({b.Re}))", "0.0", ImZero: true);
+
     // Piecewise selection — scalar C# ternary on the rendered cond
     // expression. Both branches were eager-evaluated by EmitterBase so
     // any Sin/Cos/etc work has been folded into the ComplexExpr inline
