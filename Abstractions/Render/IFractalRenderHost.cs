@@ -162,6 +162,11 @@ namespace FracturingFog.Render
         /// GC-rate baseline so the next capture window starts clean.</summary>
         void ResetPerfStats();
 
+        /// <summary>T3.1: toggle GPU compute on the SP Mandelbrot path.
+        /// Setter has no effect when the active renderer is not D3D11 —
+        /// caller should re-read after setting to verify.</summary>
+        bool UseGpuCompute { get; set; }
+
         /// <summary>Region label rendered in the watermark.</summary>
         string? RegionName { get; set; }
 

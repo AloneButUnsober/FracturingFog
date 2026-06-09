@@ -98,6 +98,21 @@ float4 PS(VSOut i) : SV_Target
     private ID3D11DeviceContext  _context    = null!;
     private IDXGISwapChain1      _swapChain  = null!;
 
+    /// <summary>T3.1: expose the device + immediate context to callers
+    /// that want to build a compute-shader kernel sharing the same D3D11
+    /// device the swap chain is bound to. Sharing the device avoids a
+    /// second adapter selection + DXGI factory creation, and means the
+    /// kernel's UAV outputs can later be promoted to GPU-resident SRVs
+    /// the display pixel shader samples directly (T3.1 phase 4).
+    /// Returns false on non-Windows / non-D3D11 backends — caller falls
+    /// back to the CPU path.</summary>
+    public bool TryGetD3D11(out ID3D11Device device, out ID3D11DeviceContext context)
+    {
+        device = _device;
+        context = _context;
+        return device != null && context != null;
+    }
+
     private ID3D11RenderTargetView  _rtv        = null!;
     private ID3D11VertexShader      _vs         = null!;
     private ID3D11PixelShader       _ps         = null!;

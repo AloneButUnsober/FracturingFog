@@ -296,6 +296,56 @@ namespace FracturingFog.Rendering
         /// view-state contract.</summary>
         public MandelbrotCalculator Mandelbrot => _calculator;
 
+        // T3.1: GPU compute kernel constructed lazily on the first Use
+        // request when the renderer is D3D11. Null on non-D3D11 backends or
+        // when the user has never enabled the feature.
+        private MandelbrotGpuKernel? _gpuKernel;
+
+        /// <summary>T3.1: toggle the SP-path GPU compute dispatch on the
+        /// active MandelbrotCalculator. First true assignment lazily
+        /// constructs the kernel against the renderer's D3D11 device;
+        /// subsequent toggles just flip the calc's
+        /// <see cref="MandelbrotCalculator.UseGpuCompute"/> flag. Silently
+        /// stays false when the renderer is not D3D11 — caller should reflect
+        /// that back to the UI by re-reading the property.</summary>
+        public bool UseGpuCompute
+        {
+            get => _calculator.UseGpuCompute;
+            set
+            {
+                if (value && _gpuKernel == null)
+                {
+                    if (_renderer is DirectXRenderer dx
+                        && dx.TryGetD3D11(out var dev, out var ctx))
+                    {
+                        try
+                        {
+                            // Share _d3dGate so kernel.Run serialises with
+                            // renderer.Render — the immediate context is not
+                            // thread-safe across the calc thread + upload
+                            // threadpool calls.
+                            _gpuKernel = new MandelbrotGpuKernel(dev, ctx, _d3dGate);
+                            _calculator.GpuKernel = _gpuKernel;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine(
+                                $"[FractalRenderHost] GPU compute kernel init failed: {ex.Message}");
+                            _gpuKernel = null;
+                            _calculator.GpuKernel = null;
+                            return; // leave UseGpuCompute false
+                        }
+                    }
+                    else
+                    {
+                        // Non-D3D11 renderer (GL / Skia) — silently stay off.
+                        return;
+                    }
+                }
+                _calculator.UseGpuCompute = value;
+            }
+        }
+
         // ── Source-compiled calculators (UserEquation / Sandbox / UserBulb) ──
         // The Avalonia shell's dedicated editors live in UI.Avalonia and can't
         // see these main-project calculators directly. These thin wrappers let
@@ -1242,6 +1292,15 @@ namespace FracturingFog.Rendering
                 {
                     var snap = _perfStats.Snapshot();
                     string lbl = _calculator.IsHighPrecisionActive ? "DD" : "SP";
+                    // T3.1: append GPU marker when the SP path actually ran
+                    // on the GPU compute kernel this frame. Surfaces the
+                    // toggle state at a glance during A/B tests.
+                    if (_calculator.UseGpuCompute
+                        && _calculator.GpuKernel != null
+                        && !_calculator.IsHighPrecisionActive)
+                    {
+                        lbl += " (GPU)";
+                    }
                     _overlay.CompositePerfHud(dst, w, h,
                         snap, HardwareProbe.Summary,
                         w, h, _calculator.MaxIterations, lbl);
@@ -1453,6 +1512,16 @@ namespace FracturingFog.Rendering
             try { _calcQueue.CompleteAdding(); } catch { }
             try { _calcThread?.Join(2000); } catch { }
             try { _calcQueue.Dispose(); } catch { }
+
+            // T3.1: dispose the GPU compute kernel before the renderer so its
+            // UAV / staging / cbuffer / CS releases hit the device first.
+            try
+            {
+                _calculator.GpuKernel = null;
+                _gpuKernel?.Dispose();
+                _gpuKernel = null;
+            }
+            catch { }
 
             lock (_d3dGate) _renderer.Dispose();
         }

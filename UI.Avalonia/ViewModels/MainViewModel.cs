@@ -534,6 +534,20 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>T3.1: GPU compute toggle for the SP Mandelbrot path.
+    /// Bound to Ctrl+G. Re-reads from the host after assignment so the
+    /// UI reflects "didn't engage" when the renderer is not D3D11.</summary>
+    public bool UseGpuCompute
+    {
+        get => _renderHost.UseGpuCompute;
+        set
+        {
+            _renderHost.UseGpuCompute = value;
+            this.RaisePropertyChanged(nameof(UseGpuCompute));
+            _renderHost.Trigger();
+        }
+    }
+
     /// <summary>Clear the perf HUD's rolling buffers + reset GC-rate
     /// baseline. Bound to Shift+H so the user can start a clean capture
     /// when switching regions mid-test.</summary>

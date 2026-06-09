@@ -174,6 +174,12 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
+    // Shared D3D gate — same lock the FractalRenderHost takes around every
+    // renderer.Render / renderer.UpdateTexture so kernel.Run never overlaps
+    // the immediate-context's swap-chain present path. ID3D11DeviceContext
+    // (immediate) is not thread-safe; the calc thread (which calls Run)
+    // and the threadpool upload (which calls Render) must serialise.
+    private readonly object _d3dGate;
     private ID3D11ComputeShader _cs = null!;
     private ID3D11Buffer _paramsBuf = null!;
     private ID3D11Buffer _iterBuf = null!;
@@ -185,10 +191,11 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     private int _allocPixels;
     private bool _disposed;
 
-    public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context)
+    public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
     {
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _ctx = context ?? throw new ArgumentNullException(nameof(context));
+        _d3dGate = d3dGate ?? throw new ArgumentNullException(nameof(d3dGate));
         CompileShader();
         AllocParamsBuffer();
     }
@@ -296,75 +303,79 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
-        EnsureOutputBuffers(width, height);
 
-        // Update params (split centre + split scale so we keep ~6 extra
-        // mantissa bits past FP32 — fragile past zoom ~1e9 anyway).
-        var p = new Params
+        lock (_d3dGate)
         {
-            Width = width,
-            Height = height,
-            MaxIter = maxIter,
-            Bailout2 = (float)bailout2,
-            CXHi = (float)centerX,
-            CXLo = (float)(centerX - (float)centerX),
-            CYHi = (float)centerY,
-            CYLo = (float)(centerY - (float)centerY),
-            ScaleHi = (float)scale,
-            ScaleLo = (float)(scale - (float)scale),
-        };
-        var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
-        unsafe
-        {
-            *(Params*)mapped.DataPointer = p;
-        }
-        _ctx.Unmap(_paramsBuf, 0);
+            EnsureOutputBuffers(width, height);
 
-        _ctx.CSSetShader(_cs);
-        _ctx.CSSetConstantBuffer(0, _paramsBuf);
-        _ctx.CSSetUnorderedAccessView(0, _iterUav);
-        _ctx.CSSetUnorderedAccessView(1, _smoothUav);
-
-        uint groupsX = (uint)((width + 7) / 8);
-        uint groupsY = (uint)((height + 7) / 8);
-        _ctx.Dispatch(groupsX, groupsY, 1);
-
-        _ctx.CSUnsetUnorderedAccessView(0);
-        _ctx.CSUnsetUnorderedAccessView(1);
-
-        // Copy default → staging then Map(Read) for CPU readback. Synchronous.
-        _ctx.CopyResource(_iterStaging, _iterBuf);
-        _ctx.CopyResource(_smoothStaging, _smoothBuf);
-
-        int n = width * height;
-        var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-        try
-        {
+            // Update params (split centre + split scale so we keep ~6 extra
+            // mantissa bits past FP32 — fragile past zoom ~1e9 anyway).
+            var p = new Params
+            {
+                Width = width,
+                Height = height,
+                MaxIter = maxIter,
+                Bailout2 = (float)bailout2,
+                CXHi = (float)centerX,
+                CXLo = (float)(centerX - (float)centerX),
+                CYHi = (float)centerY,
+                CYLo = (float)(centerY - (float)centerY),
+                ScaleHi = (float)scale,
+                ScaleLo = (float)(scale - (float)scale),
+            };
+            var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe
             {
-                uint* src = (uint*)iterMap.DataPointer;
-                fixed (int* dst = iterDst)
-                {
-                    for (int i = 0; i < n; i++)
-                        dst[i] = (int)src[i];
-                }
+                *(Params*)mapped.DataPointer = p;
             }
-        }
-        finally { _ctx.Unmap(_iterStaging, 0); }
+            _ctx.Unmap(_paramsBuf, 0);
 
-        var smoothMap = _ctx.Map(_smoothStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
-        try
-        {
-            unsafe
+            _ctx.CSSetShader(_cs);
+            _ctx.CSSetConstantBuffer(0, _paramsBuf);
+            _ctx.CSSetUnorderedAccessView(0, _iterUav);
+            _ctx.CSSetUnorderedAccessView(1, _smoothUav);
+
+            uint groupsX = (uint)((width + 7) / 8);
+            uint groupsY = (uint)((height + 7) / 8);
+            _ctx.Dispatch(groupsX, groupsY, 1);
+
+            _ctx.CSUnsetUnorderedAccessView(0);
+            _ctx.CSUnsetUnorderedAccessView(1);
+
+            // Copy default → staging then Map(Read) for CPU readback. Synchronous.
+            _ctx.CopyResource(_iterStaging, _iterBuf);
+            _ctx.CopyResource(_smoothStaging, _smoothBuf);
+
+            int n = width * height;
+            var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
             {
-                float* src = (float*)smoothMap.DataPointer;
-                fixed (float* dst = smoothDst)
+                unsafe
                 {
-                    for (int i = 0; i < n; i++) dst[i] = src[i];
+                    uint* src = (uint*)iterMap.DataPointer;
+                    fixed (int* dst = iterDst)
+                    {
+                        for (int i = 0; i < n; i++)
+                            dst[i] = (int)src[i];
+                    }
                 }
             }
+            finally { _ctx.Unmap(_iterStaging, 0); }
+
+            var smoothMap = _ctx.Map(_smoothStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    float* src = (float*)smoothMap.DataPointer;
+                    fixed (float* dst = smoothDst)
+                    {
+                        for (int i = 0; i < n; i++) dst[i] = src[i];
+                    }
+                }
+            }
+            finally { _ctx.Unmap(_smoothStaging, 0); }
         }
-        finally { _ctx.Unmap(_smoothStaging, 0); }
     }
 
     public void Dispose()

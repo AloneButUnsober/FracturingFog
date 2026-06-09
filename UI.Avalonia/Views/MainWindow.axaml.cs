@@ -289,6 +289,16 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Ctrl+G = toggle T3.1 GPU compute on the SP Mandelbrot path.
+        // Handled before the unmodified switch so it doesn't fall through
+        // to plain G (Grid toggle).
+        if (e.Key == Key.G && e.KeyModifiers == KeyModifiers.Control)
+        {
+            _shell.Main.UseGpuCompute = !_shell.Main.UseGpuCompute;
+            e.Handled = true;
+            return;
+        }
+
         // Command keys (M/T/R/V/Escape) — unmodified only; Ctrl/Alt/Shift
         // combos are reserved (diagnostic toggles, precise-pan).
         if (e.KeyModifiers == KeyModifiers.None)
