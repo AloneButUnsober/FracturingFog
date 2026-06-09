@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -15,6 +16,7 @@ public sealed partial class AudioSettingsView : Window
     public AudioSettingsView()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
         DataContextChanged += (_, _) =>
         {
             if (DataContext is AudioSettingsViewModel vm)

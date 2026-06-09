@@ -1,7 +1,42 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace FracturingFog.Interefaces
 {
+    /// <summary>
+    /// Marker + SIMD-step interface for kernels that admit a Vector&lt;double&gt;
+    /// inner loop. Implementations are pure polynomial in zr/zi (Mandelbrot,
+    /// Julia, BurningShip, Tricorn). Multibrot / Phoenix use transcendentals
+    /// or memory state that fight vectorisation — they stay scalar.
+    ///
+    /// EscapeTimeCalculator checks the runtime kernel type against this
+    /// interface and routes to a SIMD inner loop when supported. JIT
+    /// specialises the generic per concrete kernel struct so the type check
+    /// is constant-folded.
+    /// </summary>
+    public interface ISimdFractalKernel : IFractalKernel
+    {
+        /// <summary>
+        /// Per-lane initial state. Mandelbrot family: zr=zi=0, dr=1, di=0.
+        /// Julia: zr=cx, zi=cy, dr=1, di=0 (pixel is z0; c is the captured
+        /// constant the kernel substitutes in StepSimd).
+        /// </summary>
+        void InitStateSimd(
+            Vector<double> cx, Vector<double> cy,
+            out Vector<double> zr, out Vector<double> zi,
+            out Vector<double> dr, out Vector<double> di);
+
+        /// <summary>
+        /// One iteration step on VecLen lanes. Same algebra as Step but on
+        /// Vector&lt;double&gt;. The caller broadcasts c and gathers the
+        /// per-lane pixel inputs.
+        /// </summary>
+        void StepSimd(
+            ref Vector<double> zr, ref Vector<double> zi,
+            ref Vector<double> dr, ref Vector<double> di,
+            Vector<double> cx, Vector<double> cy);
+    }
+
     /// <summary>
     /// Per-pixel iteration kernel for an escape-time fractal. Kernels are structs;
     /// generic Calculate&lt;TKernel&gt; methods take them by value so the JIT

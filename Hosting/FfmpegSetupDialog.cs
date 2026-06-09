@@ -219,6 +219,18 @@ namespace FracturingFog.Hosting
                         Content = body,
                     },
                 };
+                win.AddHandler(
+                    global::Avalonia.Input.InputElement.KeyDownEvent,
+                    (_, ke) =>
+                    {
+                        if (ke.Handled) return;
+                        if (ke.Key != global::Avalonia.Input.Key.Escape) return;
+                        if (ke.KeyModifiers != global::Avalonia.Input.KeyModifiers.None) return;
+                        ke.Handled = true;
+                        win.Close();
+                    },
+                    global::Avalonia.Interactivity.RoutingStrategies.Tunnel,
+                    handledEventsToo: false);
 
                 CancellationTokenSource? cts = null;
 

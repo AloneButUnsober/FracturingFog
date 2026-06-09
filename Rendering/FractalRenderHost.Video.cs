@@ -219,6 +219,14 @@ namespace FracturingFog.Rendering
             var pngEncode = request.LosslessEncode;
 
             _videoRunning = true;
+            // Uncap Present pacing for the duration of the video run — the
+            // calc loop must not be paced by the monitor refresh. Restored
+            // in FinishSingleShot. DX11/DX12 honor this immediately; GL and
+            // Skia track the property without runtime effect (see backends).
+            try { _renderer.VSync = false; } catch { }
+            // Suppress the pre-overlay snapshot copy in UploadProcessedBuffer
+            // while recording — SaveLastFrameToPng is user-action only.
+            _recordingActive = wantMp4 || wantPng;
             RaiseStatus(request.IsReverse
                 ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
                 : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
@@ -340,6 +348,9 @@ namespace FracturingFog.Rendering
         {
             _videoRunning = false;
             _videoTargetIterations = 0;
+            // Restore vsync for interactive preview.
+            try { _renderer.VSync = true; } catch { }
+            _recordingActive = false;
 
             // Finalise both encoders first so the temp artefacts are fully
             // written by the time the shell decides whether to keep them.

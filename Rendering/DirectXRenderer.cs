@@ -112,7 +112,10 @@ float4 PS(VSOut i) : SV_Target
     private int  _width;
     private int  _height;
     private bool _disposed;
-    
+
+    /// <inheritdoc/>
+    public bool VSync { get; set; } = true;
+
     // ── IFractalRenderer ──────────────────────────────────────────────────────
     public string RendererDescription
     {
@@ -373,14 +376,26 @@ float4 PS(VSOut i) : SV_Target
             fixed (uint* srcPtr = colorBuffer)
             {
                 byte* src = (byte*)srcPtr;
-                for (int row = 0; row < height; row++)
+                long rowBytes = (long)width * 4;
+                if (mapped.RowPitch == rowBytes)
                 {
-                    // Copy one row; RowPitch may be larger than width*4 due to GPU alignment.
-                    Buffer.MemoryCopy(
-                        source:                 src + (long)row * width * 4,
-                        destination:            dst + (long)row * mapped.RowPitch,
-                        destinationSizeInBytes: (long)width * 4,
-                        sourceBytesToCopy:      (long)width * 4);
+                    // Tight pack — one whole-buffer copy. Saves height-many
+                    // call overheads + per-row branch. Common case at 1080p+
+                    // on modern drivers where RowPitch matches width*4.
+                    long total = rowBytes * height;
+                    Buffer.MemoryCopy(src, dst, total, total);
+                }
+                else
+                {
+                    for (int row = 0; row < height; row++)
+                    {
+                        // RowPitch is larger than width*4 due to GPU alignment.
+                        Buffer.MemoryCopy(
+                            source:                 src + (long)row * rowBytes,
+                            destination:            dst + (long)row * mapped.RowPitch,
+                            destinationSizeInBytes: rowBytes,
+                            sourceBytesToCopy:      rowBytes);
+                    }
                 }
             }
         }
@@ -414,7 +429,7 @@ float4 PS(VSOut i) : SV_Target
         if (_tex == null)
         {
             _context.ClearRenderTargetView(_rtv, new Color4(0f, 0f, 0f, 1f));
-            _swapChain.Present(1, PresentFlags.None);
+            _swapChain.Present(VSync ? 1u : 0u, PresentFlags.None);
             return;
         }
         
@@ -438,8 +453,9 @@ float4 PS(VSOut i) : SV_Target
         _context.Draw(3, 0);
 
         // Present: SyncInterval=1 → wait for next VBlank (vsync on).
-        // Set to 0 for uncapped frame rate.
-        _swapChain.Present(1, PresentFlags.None);
+        // VSync=false → SyncInterval=0 → uncapped (video record / blocking
+        // single-image render path).
+        _swapChain.Present(VSync ? 1u : 0u, PresentFlags.None);
     }
 
     // ── Resize ────────────────────────────────────────────────────────────────

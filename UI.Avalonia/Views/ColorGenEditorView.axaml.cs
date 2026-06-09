@@ -8,6 +8,8 @@
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
+using FracturingFog.UI.Avalonia.Input;
+
 namespace FracturingFog.UI.Avalonia.Views;
 
 public partial class ColorGenEditorView : Window
@@ -15,6 +17,7 @@ public partial class ColorGenEditorView : Window
     public ColorGenEditorView()
     {
         InitializeComponent();
+        EscapeCloseBehavior.Attach(this);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

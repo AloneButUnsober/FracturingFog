@@ -10,13 +10,19 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 
+using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
 public partial class FFClientView : Window
 {
-    public FFClientView() { InitializeComponent(); DataContextChanged += OnDcChanged; }
+    public FFClientView()
+    {
+        InitializeComponent();
+        EscapeCloseBehavior.Attach(this);
+        DataContextChanged += OnDcChanged;
+    }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 
