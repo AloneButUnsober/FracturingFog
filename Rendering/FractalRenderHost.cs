@@ -460,6 +460,13 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
 
+            // Finding A fix: fire status BEFORE any blocking work so the user
+            // sees "Calculating…" immediately on click. Previously this fired
+            // after Cancel + stale-upload + ApplyView + alt-switch, so under
+            // burst input the status string lagged by tens of ms at 4K, and
+            // on fast frames the calc finished before status even flipped.
+            StatusRequested?.Invoke(this, "Calculating…");
+
             // Buffers are about to be overwritten by Calculate — any cached
             // CDF is stale until the next completion repopulates it.
             InvalidateAdaptiveCdf();
@@ -470,26 +477,6 @@ namespace FracturingFog.Rendering
                 _calcCts?.Cancel();
                 _calcCts = new CancellationTokenSource();
                 cts = _calcCts;
-            }
-
-            // Stale-frame re-upload so the screen shows a correct (if old)
-            // image while the next frame computes. Locked + presented so the
-            // user sees the prev frame immediately even if the next calc
-            // takes seconds. Take _uploadGate around the read because
-            // _lastUploadedBuffer now points at a pooled scratch that an
-            // in-flight slider tick could be rewriting.
-            lock (_uploadGate)
-            {
-                if (_lastUploadedBuffer != null
-                    && _lastUploadedWidth == _calculator.Width
-                    && _lastUploadedHeight == _calculator.Height)
-                {
-                    lock (_d3dGate)
-                    {
-                        _renderer.UpdateTexture(_lastUploadedBuffer, _lastUploadedWidth, _lastUploadedHeight);
-                        _renderer.Render();
-                    }
-                }
             }
 
             ApplyView();
@@ -558,11 +545,37 @@ namespace FracturingFog.Rendering
                 }
             }
 
-            StatusRequested?.Invoke(this, "Calculating…");
             var sw = Stopwatch.StartNew();
+
+            // Snapshot state for the stale-frame upload (runs on the
+            // threadpool so the UI thread doesn't block on a 5-15 ms GPU
+            // upload before Calculate even starts — Finding A render-start
+            // lag fix).
+            uint[]? staleBuf = _lastUploadedBuffer;
+            int staleW = _lastUploadedWidth;
+            int staleH = _lastUploadedHeight;
+            int calcW = _calculator.Width;
+            int calcH = _calculator.Height;
 
             Task.Run(() =>
             {
+                // Stale-frame re-upload so the screen shows a correct (if
+                // old) image while the next frame computes. Serialised
+                // against the calc-completion upload via _d3dGate, so the
+                // new frame in the continuation always paints over the
+                // stale here (never the reverse).
+                if (staleBuf != null && staleW == calcW && staleH == calcH)
+                {
+                    lock (_uploadGate)
+                    {
+                        lock (_d3dGate)
+                        {
+                            _renderer.UpdateTexture(staleBuf, staleW, staleH);
+                            _renderer.Render();
+                        }
+                    }
+                }
+
                 if (useAlt) altCalc!.Calculate(token);
                 else calc.Calculate(token);
                 return sw.ElapsedMilliseconds;
