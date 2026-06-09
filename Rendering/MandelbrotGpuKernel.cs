@@ -1,15 +1,28 @@
-// MandelbrotGpuKernel.cs — T3.1 phase 1
+// MandelbrotGpuKernel.cs — T3.1 phase 1+2+4
 //
 // HLSL compute shader for the SP (double-precision) Mandelbrot escape-time
-// inner loop. Writes back two buffers per pixel:
-//   • iter      : int   — escape iteration (or maxIter if in-set)
-//   • smooth    : float — log-log smoothed continuous iter for palettes
+// inner loop. Writes back per-pixel buffers — iter, smooth, finalZD, and
+// (T3.1 phase 4) packed BGRA color when a GPU palette is active.
+//
+// Two compiled shader variants kept:
+//   • _csBase   — iter + smooth + finalZD only (palette done on CPU).
+//   • _csColor  — same plus emitted EvalPalette and a gColor UAV write.
+//                 Compiled on demand and cached per-theme by PaletteId
+//                 (IGpuHlslPalette opt-in).
 //
 // Phase 1 scope (matches Performance-DevelopmentPlan.md):
 //   • SP path only (zoom < ~1e15). HP DD/QD stays CPU.
-//   • Palette evaluation stays CPU — we copy iter+smooth back to host buffers
-//     and run the existing IColorMap.Map() pass on the CPU. End-to-end GPU
-//     palette is phase 2 (ColorGen → HLSL emit).
+//
+// Phase 2 (this revision):
+//   • IColorMap impls that also implement IGpuHlslPalette ship a HLSL Map
+//     body. SetPalette splices it into the compute shader and caches the
+//     compiled CS by PaletteId. Run(... colorDst) fills colorDst direct
+//     from the GPU, letting the calculator skip its CPU palette pass.
+//
+// Phase 4 (this revision):
+//   • New RWStructuredBuffer<uint> gColor : register(u3) — packed BGRA
+//     output. Allocated only when a palette is active. Calculator's
+//     ColorBuffer is filled in-place via Map+memcpy from a staging buffer.
 //   • No FP64 lanes assumed — HLSL `double` works on most consumer GPUs but
 //     isn't accelerated. SP `float` lanes for the iteration math; CenterX/Y
 //     are passed split into hi+lo floats so we can run a "doubledouble-lite"
@@ -39,6 +52,7 @@
 //     on CPU. Else current Parallel.ForEach path.
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Vortice.D3DCompiler;
 using Vortice.Direct3D;
@@ -54,7 +68,7 @@ namespace FracturingFog.Rendering;
 /// </summary>
 public sealed class MandelbrotGpuKernel : IDisposable
 {
-    // ── HLSL ──────────────────────────────────────────────────────────────
+    // ── HLSL builder ──────────────────────────────────────────────────────
     //
     // Per-pixel kernel: classic z² + c escape-time with a cheap whole-
     // cardioid/period-2 bulb early-out (same predicate the CPU SIMD path
@@ -64,7 +78,53 @@ public sealed class MandelbrotGpuKernel : IDisposable
     //     cx = cxHi + (px - 0.5*W) * scale + cxLo
     // keeps a few extra digits past the FP32 mantissa relative to a single
     // float centre. Not full DD — just enough to lift the FP32 zoom floor.
-    private const string Hlsl = @"
+    //
+    // Two emit modes:
+    //   • emitColor = false → base shader, writes iter/smooth/finalZD only.
+    //   • emitColor = true  → also invokes EvalPalette(…) with the
+    //     IGpuHlslPalette body spliced in + helpers prepended.
+    //     gColor : register(u3) gets packed BGRA.
+    //
+    // The palette body assumes the canonical 15-input EvalPalette signature
+    // (see GpuPaletteInputOrder in IGpuHlslPalette.cs) — the kernel composes
+    // the function head/tail so the IGpuHlslPalette implementation only
+    // ships the body.
+    private static string BuildHlsl(string? paletteBody, string? paletteHelpers, bool emitColor)
+    {
+        var sb = new System.Text.StringBuilder(8192);
+        sb.AppendLine(HlslBase);
+        if (emitColor)
+        {
+            // Helpers (cg_mods, cg_palette_N, etc.) declared at file scope so
+            // EvalPalette can reference them.
+            if (!string.IsNullOrEmpty(paletteHelpers)) sb.AppendLine(paletteHelpers);
+            sb.AppendLine(@"
+RWStructuredBuffer<uint> gColor : register(u3);
+
+uint cg_pack_bgra(float3 c)
+{
+    c = saturate(c);
+    uint r = (uint)(c.r * 255.0 + 0.5);
+    uint g = (uint)(c.g * 255.0 + 0.5);
+    uint b = (uint)(c.b * 255.0 + 0.5);
+    return 0xFF000000u | (r << 16) | (g << 8) | b;
+}
+
+float3 EvalPalette(
+    float in_smooth, float in_dist, float in_iter, float in_maxIter,
+    float in_t, float in_nx, float in_ny, float in_zr, float in_zi,
+    float in_dzr, float in_dzi, float in_arg, float in_mag,
+    float in_isInSet, float in_pxScale)
+{");
+            sb.AppendLine(paletteBody ?? "    return float3(0.0, 0.0, 0.0);");
+            sb.AppendLine("}");
+        }
+        sb.AppendLine(HlslEntry(emitColor));
+        return sb.ToString();
+    }
+
+    // ── HLSL header (cbuffer + IO bindings + shared helpers) ──────────────
+    private const string HlslBase = @"
 cbuffer Params : register(b0)
 {
     int   gWidth;
@@ -112,10 +172,41 @@ bool InPeriod2Bulb(float cx, float cy)
     float dx = cx + 1.0;
     return dx * dx + cy * cy <= 0.0625;
 }
+";
 
+    // Per-emit CSMain. Distinguishes color vs non-color path by inserting
+    // EvalPalette + gColor writes after the iter/smooth/finalZD computation.
+    private static string HlslEntry(bool emitColor)
+    {
+        // Color-write helper invocations spliced into the in-set and escape
+        // branches. Distance + normal aren't computed in-shader (phase 1
+        // CPU-writes them from finalZD), so the GPU palette gets dist=0,
+        // nx=ny=0 for now — themes that depend on those degrade gracefully
+        // (same fallback as the CPU path uses when the calc-thread path
+        // hasn't filled aux buffers).
+        string inSetColor = emitColor ? @"
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0));
+" : "";
+        string escapeColor = emitColor ? @"
+        float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
+        float in_arg = atan2(zi, zr);
+        float in_mag = sqrt(zr * zr + zi * zi);
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            sm, 0.0, (float)it, (float)gMaxIter,
+            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0));
+" : "";
+        string bulbSkipColor = emitColor ? @"
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
+            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0));
+" : "";
+
+        return $@"
 [numthreads(8, 8, 1)]
 void CSMain(uint3 tid : SV_DispatchThreadID)
-{
+{{
     uint x = tid.x;
     uint y = tid.y;
     if ((int)x >= gWidth || (int)y >= gHeight) return;
@@ -132,10 +223,10 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     // the buffer holds 0 for this row (defensive).
     int rowMaxIt = gMaxIter;
     if (gUsePerRow != 0)
-    {
+    {{
         uint rc = gPerRow[y];
         if (rc > 0) rowMaxIt = (int)rc;
-    }
+    }}
 
     // Whole-cardioid + period-2 bulb early-out. Mandelbrot-only — Julia /
     // BurningShip / Tricorn have different in-set shapes. Always writes
@@ -143,90 +234,74 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     // per-row cap. Final z+dz are (0,0,1,0) — matches the CPU bulb-skip
     // writeback.
     if (gFractalKind == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
-    {
+    {{
         gIter[idx]    = (uint)gMaxIter;
         gSmooth[idx]  = 0.0;
         gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
+        {bulbSkipColor}
         return;
-    }
+    }}
 
     // Per-fractal init. Mandelbrot/BurningShip/Tricorn: z_0 = 0, c =
     // pixel coord. Julia: z_0 = pixel coord, c = (gParam0, gParam1) const.
     float zr, zi;
     float cIterR, cIterI;
     if (gFractalKind == 1)
-    {
+    {{
         zr = cx;     zi = cy;
         cIterR = gParam0; cIterI = gParam1;
-    }
+    }}
     else
-    {
+    {{
         zr = 0.0;    zi = 0.0;
         cIterR = cx; cIterI = cy;
-    }
-    // Derivative dz/dc. Init (1, 0) matches the CPU SIMD convention. Note
-    // for Julia the derivative is dz/d(z_0) not dz/dc; same recurrence
-    // since z_0 acts as the perturbation source.
+    }}
     float dr = 1.0;
     float di = 0.0;
     int   it = 0;
     [loop]
     for (; it < rowMaxIt; it++)
-    {
-        // Per-fractal pre-step transform on z.
+    {{
         float fzr = zr;
         float fzi = zi;
-        if (gFractalKind == 2)
-        {
-            // BurningShip: z := |Re(z)| + i|Im(z)|
-            fzr = abs(zr);
-            fzi = abs(zi);
-        }
-        else if (gFractalKind == 3)
-        {
-            // Tricorn: z := conj(z)
-            fzi = -zi;
-        }
+        if (gFractalKind == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
+        else if (gFractalKind == 3) {{ fzi = -zi; }}
 
         float zr2 = fzr * fzr;
         float zi2 = fzi * fzi;
         float mag2 = zr2 + zi2;
         if (mag2 >= gBailout2) break;
 
-        // d_{n+1} = 2 * z_n * d_n + 1  (complex multiply). Same shape
-        // across all four kinds — distance estimate stays usable.
         float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
         float newDi = 2.0 * (fzr * di + fzi * dr);
         dr = newDr;
         di = newDi;
 
-        // z_{n+1} = z^2 + c  (with the pre-transform applied above).
         float zrNew = zr2 - zi2 + cIterR;
         float zi_new_unscaled = fzr * fzi;
         zi = zi_new_unscaled + zi_new_unscaled + cIterI;
         zr = zrNew;
-    }
+    }}
 
     gFinalZD[idx] = float4(zr, zi, dr, di);
     if (it >= rowMaxIt)
-    {
-        // In-set rewrite: row-capped unescaped pixels report as
-        // gMaxIter so the recolor's `iters >= maxIter` gate
-        // classifies them correctly (matches the CPU Phase 2.1
-        // post-row rewrite).
+    {{
         gIter[idx]   = (uint)gMaxIter;
         gSmooth[idx] = 0.0;
-    }
+        {inSetColor}
+    }}
     else
-    {
+    {{
         gIter[idx] = (uint)it;
-        // log-log smoothing for continuous palette index.
         float mag = sqrt(zr * zr + zi * zi);
         float nu = log(log(max(mag, 1.001))) / log(2.0);
-        gSmooth[idx] = (float)it + 1.0 - nu;
-    }
-}
+        float sm = (float)it + 1.0 - nu;
+        gSmooth[idx] = sm;
+        {escapeColor}
+    }}
+}}
 ";
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Params
@@ -264,7 +339,10 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     // (immediate) is not thread-safe; the calc thread (which calls Run)
     // and the threadpool upload (which calls Render) must serialise.
     private readonly object _d3dGate;
-    private ID3D11ComputeShader _cs = null!;
+    // Phase 4: shader cache. _csBase = no-color variant (palette on CPU).
+    // _csByPaletteId[paletteId] = color-emitting variants (one per theme).
+    private ID3D11ComputeShader _csBase = null!;
+    private readonly Dictionary<string, ID3D11ComputeShader> _csByPaletteId = new(StringComparer.Ordinal);
     private ID3D11Buffer _paramsBuf = null!;
     private ID3D11Buffer _iterBuf = null!;
     private ID3D11Buffer _smoothBuf = null!;
@@ -281,6 +359,16 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     private ID3D11Buffer? _perRowBuf;
     private ID3D11ShaderResourceView? _perRowSrv;
     private int _perRowAllocRows;
+    // Phase 4: GPU-resident color buffer + staging. Allocated only when a
+    // palette is active. Output is packed BGRA, matching the CPU
+    // ColorBuffer layout (alpha = 0xFF, then RGB).
+    private ID3D11Buffer? _colorBuf;
+    private ID3D11Buffer? _colorStaging;
+    private ID3D11UnorderedAccessView? _colorUav;
+    private int _colorAllocPixels;
+    // Phase 2: currently active palette state. When non-null, Run() with a
+    // colorDst argument uses the color-emitting variant.
+    private string? _activePaletteId;
     private bool _disposed;
 
     public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
@@ -288,16 +376,18 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         _device = device ?? throw new ArgumentNullException(nameof(device));
         _ctx = context ?? throw new ArgumentNullException(nameof(context));
         _d3dGate = d3dGate ?? throw new ArgumentNullException(nameof(d3dGate));
-        CompileShader();
+        _csBase = CompileShader(BuildHlsl(null, null, emitColor: false), label: "base");
         AllocParamsBuffer();
     }
 
-    private void CompileShader()
+    /// <summary>Compile a CS variant from a fully composed HLSL string.
+    /// Caller is responsible for caching the returned shader.</summary>
+    private ID3D11ComputeShader CompileShader(string hlsl, string label)
     {
         var hr = Compiler.Compile(
-            Hlsl,
+            hlsl,
             entryPoint: "CSMain",
-            sourceName: "MandelbrotGpuKernel.hlsl",
+            sourceName: $"MandelbrotGpuKernel.{label}.hlsl",
             profile: "cs_5_0",
             out var blob,
             out var errBlob);
@@ -306,17 +396,95 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             string msg = errBlob?.AsString() ?? hr.ToString();
             errBlob?.Dispose();
             throw new InvalidOperationException(
-                $"MandelbrotGpuKernel: HLSL compile failed — {msg}");
+                $"MandelbrotGpuKernel: HLSL compile failed ({label}) — {msg}");
         }
         try
         {
-            _cs = _device.CreateComputeShader(blob.AsSpan());
+            return _device.CreateComputeShader(blob.AsSpan());
         }
         finally
         {
             blob.Dispose();
             errBlob?.Dispose();
         }
+    }
+
+    /// <summary>Phase 2: switch active GPU palette. Pass null to clear; the
+    /// next Run-with-color call will use the base shader (CPU palette path).
+    /// Compiles + caches the per-theme shader on first set. PaletteId is
+    /// the cache key — same id → same compiled shader reused.</summary>
+    public void SetPalette(FracturingFog.Interefaces.IGpuHlslPalette? palette)
+    {
+        if (palette == null) { _activePaletteId = null; return; }
+        string id = palette.PaletteId ?? "";
+        if (string.IsNullOrEmpty(id)) { _activePaletteId = null; return; }
+        if (_csByPaletteId.ContainsKey(id))
+        {
+            _activePaletteId = id;
+            return;
+        }
+        try
+        {
+            string hlsl = BuildHlsl(palette.HlslPaletteBody, palette.HlslPrelude, emitColor: true);
+            var cs = CompileShader(hlsl, label: id);
+            _csByPaletteId[id] = cs;
+            _activePaletteId = id;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[MandelbrotGpuKernel] palette '{id}' HLSL compile failed; staying on CPU palette: {ex.Message}");
+            _activePaletteId = null;
+        }
+    }
+
+    /// <summary>Whether the kernel currently has an active GPU palette
+    /// loaded. Read by the calculator to decide between Run-with-color and
+    /// Run-without-color.</summary>
+    public bool HasGpuPalette => _activePaletteId != null && _csByPaletteId.ContainsKey(_activePaletteId);
+
+    private void EnsureColorBuffers(int n)
+    {
+        if (_colorBuf != null && _colorAllocPixels == n) return;
+        AllocColorBuffer(n);
+    }
+
+    private void AllocColorBuffer(int n)
+    {
+        _colorUav?.Dispose();
+        _colorBuf?.Dispose();
+        _colorStaging?.Dispose();
+
+        var desc = new BufferDescription
+        {
+            ByteWidth = (uint)(n * sizeof(uint)),
+            BindFlags = BindFlags.UnorderedAccess | BindFlags.ShaderResource,
+            Usage = ResourceUsage.Default,
+            CPUAccessFlags = CpuAccessFlags.None,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(uint),
+        };
+        _colorBuf = _device.CreateBuffer(desc);
+
+        var stage = new BufferDescription
+        {
+            ByteWidth = (uint)(n * sizeof(uint)),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+            MiscFlags = ResourceOptionFlags.None,
+            StructureByteStride = 0,
+        };
+        _colorStaging = _device.CreateBuffer(stage);
+
+        var uavDesc = new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)n, Flags = 0 },
+        };
+        _colorUav = _device.CreateUnorderedAccessView(_colorBuf, uavDesc);
+        _colorAllocPixels = n;
     }
 
     private void AllocParamsBuffer()
@@ -453,15 +621,22 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         float[] finalDrDst, float[] finalDiDst,
         int[]? perRowMaxIter = null,
         FractalKind kind = FractalKind.Mandelbrot,
-        float param0 = 0f, float param1 = 0f)
+        float param0 = 0f, float param1 = 0f,
+        uint[]? colorDst = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
         if (width <= 0 || height <= 0) return;
+
+        // Phase 2/4: GPU palette path is only taken when a colorDst array is
+        // supplied AND a palette is active. Mandelbrot-only — Julia and the
+        // alt fractals come back through the CPU palette path for now.
+        bool useColorPath = colorDst != null && HasGpuPalette;
 
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureOutputBuffers(width, height);
+            if (useColorPath) EnsureColorBuffers(width * height);
 
             bool usePerRow = perRowMaxIter != null && perRowMaxIter.Length >= height;
             if (usePerRow)
@@ -510,11 +685,17 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             }
             _ctx.Unmap(_paramsBuf, 0);
 
-            _ctx.CSSetShader(_cs);
+            // Pick the right CS variant. Color path uses the cached
+            // per-palette shader; non-color path uses the base.
+            var shader = useColorPath
+                ? _csByPaletteId[_activePaletteId!]
+                : _csBase;
+            _ctx.CSSetShader(shader);
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
             _ctx.CSSetUnorderedAccessView(0, _iterUav);
             _ctx.CSSetUnorderedAccessView(1, _smoothUav);
             _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
+            if (useColorPath) _ctx.CSSetUnorderedAccessView(3, _colorUav);
             if (usePerRow) _ctx.CSSetShaderResource(0, _perRowSrv);
 
             uint groupsX = (uint)((width + 7) / 8);
@@ -524,12 +705,14 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSUnsetUnorderedAccessView(1);
             _ctx.CSUnsetUnorderedAccessView(2);
+            if (useColorPath) _ctx.CSUnsetUnorderedAccessView(3);
             if (usePerRow) _ctx.CSUnsetShaderResource(0);
 
             // Copy default → staging then Map(Read) for CPU readback. Synchronous.
             _ctx.CopyResource(_iterStaging, _iterBuf);
             _ctx.CopyResource(_smoothStaging, _smoothBuf);
             _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
+            if (useColorPath) _ctx.CopyResource(_colorStaging!, _colorBuf!);
 
             // Dispatch + flush cost: the first Map(Read) below blocks until
             // GPU finishes, so dispatch_ms covers cbuffer upload, Dispatch
@@ -593,6 +776,25 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
             }
             finally { _ctx.Unmap(_finalZDStaging, 0); }
 
+            if (useColorPath)
+            {
+                var colMap = _ctx.Map(_colorStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+                try
+                {
+                    unsafe
+                    {
+                        uint* src = (uint*)colMap.DataPointer;
+                        fixed (uint* dst = colorDst!)
+                        {
+                            // Plain memcpy — packed BGRA matches CPU
+                            // ColorBuffer layout (0xAARRGGBB with A=0xFF).
+                            Buffer.MemoryCopy(src, dst, (long)n * sizeof(uint), (long)n * sizeof(uint));
+                        }
+                    }
+                }
+                finally { _ctx.Unmap(_colorStaging!, 0); }
+            }
+
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
             LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
@@ -606,13 +808,24 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         _disposed = true;
         try { _iterUav?.Dispose(); } catch { }
         try { _smoothUav?.Dispose(); } catch { }
+        try { _finalZDUav?.Dispose(); } catch { }
+        try { _colorUav?.Dispose(); } catch { }
         try { _iterBuf?.Dispose(); } catch { }
         try { _smoothBuf?.Dispose(); } catch { }
+        try { _finalZDBuf?.Dispose(); } catch { }
+        try { _colorBuf?.Dispose(); } catch { }
         try { _iterStaging?.Dispose(); } catch { }
         try { _smoothStaging?.Dispose(); } catch { }
+        try { _finalZDStaging?.Dispose(); } catch { }
+        try { _colorStaging?.Dispose(); } catch { }
         try { _perRowSrv?.Dispose(); } catch { }
         try { _perRowBuf?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }
-        try { _cs?.Dispose(); } catch { }
+        try { _csBase?.Dispose(); } catch { }
+        foreach (var cs in _csByPaletteId.Values)
+        {
+            try { cs.Dispose(); } catch { }
+        }
+        _csByPaletteId.Clear();
     }
 }

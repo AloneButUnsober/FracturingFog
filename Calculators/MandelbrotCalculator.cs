@@ -796,6 +796,17 @@ public sealed class MandelbrotCalculator
         {
             try
             {
+                // T3.1 phase 2/4 — pick GPU palette path when the active
+                // colour map ships an IGpuHlslPalette impl AND we're the
+                // Mandelbrot kernel kind (Julia/BurningShip/Tricorn come
+                // through EscapeTimeCalculator and stay on CPU palette
+                // until phase 5 wires them in). Falls back automatically
+                // when SetPalette failed at compile time.
+                var hlslPalette = colorMap as FracturingFog.Interefaces.IGpuHlslPalette;
+                if (hlslPalette != null) GpuKernel.SetPalette(hlslPalette);
+                else GpuKernel.SetPalette(null);
+                bool gpuPalette = hlslPalette != null && GpuKernel.HasGpuPalette;
+
                 GpuKernel.Run(
                     Width, Height,
                     CenterX, CenterY, scale,
@@ -803,7 +814,17 @@ public sealed class MandelbrotCalculator
                     IterationBuffer, SmoothBuffer,
                     FinalZrBuffer, FinalZiBuffer,
                     FinalDrBuffer, FinalDiBuffer,
-                    useTileCap ? perRow : null);
+                    useTileCap ? perRow : null,
+                    colorDst: gpuPalette ? ColorBuffer : null);
+
+                if (gpuPalette)
+                {
+                    // GPU produced the colour buffer end-to-end. Aux
+                    // buffers (distance / normal) stay zeroed — themes
+                    // that need them aren't IGpuHlslPalette eligible
+                    // (or are running through a different path).
+                    return;
+                }
                 // Emit ColorBuffer from the GPU's iter + smooth + final z/dz
                 // outputs. FillAuxAndColorSP would re-derive smooth from z
                 // (which it would clobber to whatever's already in
