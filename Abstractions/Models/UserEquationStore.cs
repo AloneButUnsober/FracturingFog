@@ -15,6 +15,16 @@ using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
 {
+    /// <summary>Which editor tab produced this entry's <see cref="UserEquationEntry.Source"/>.
+    /// UserEquation = C#-style body fed through Roslyn / CalcGen preprocessor.
+    /// Dsl = bare CalcGen DSL fed straight to CalculatorGen. Legacy entries
+    /// (no Kind field) deserialise to UserEquation.</summary>
+    public enum UserEquationKind
+    {
+        UserEquation = 0,
+        Dsl = 1,
+    }
+
     public sealed class UserEquationEntry
     {
         public string Name { get; set; } = string.Empty;
@@ -26,6 +36,11 @@ namespace FracturingFog.Models
         /// Defaults false; missing field in legacy JSON deserialises to false.
         /// </summary>
         public bool Promoted { get; set; }
+
+        /// <summary>Which editor tab this source was authored in. Drives
+        /// which tab a Load restores into. Defaults to UserEquation so
+        /// pre-existing JSON entries remain valid.</summary>
+        public UserEquationKind Kind { get; set; } = UserEquationKind.UserEquation;
     }
 
     public sealed class UserEquationStore
@@ -85,7 +100,7 @@ namespace FracturingFog.Models
         /// Inserts or replaces an entry by Name (case-insensitive). Returns the
         /// stored entry, or null if name is blank.
         /// </summary>
-        public UserEquationEntry? SaveEquation(string name, string source)
+        public UserEquationEntry? SaveEquation(string name, string source, UserEquationKind kind = UserEquationKind.UserEquation)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
 
@@ -94,12 +109,13 @@ namespace FracturingFog.Models
                 if (Equations[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
                     Equations[i].Source = source ?? string.Empty;
+                    Equations[i].Kind = kind;
                     Save();
                     return Equations[i];
                 }
             }
 
-            var entry = new UserEquationEntry { Name = name, Source = source ?? string.Empty };
+            var entry = new UserEquationEntry { Name = name, Source = source ?? string.Empty, Kind = kind };
             Equations.Add(entry);
             Save();
             return entry;

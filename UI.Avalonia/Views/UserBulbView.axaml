@@ -36,7 +36,7 @@
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="TextBlock.error">
-            <Setter Property="Foreground" Value="#FF6464" />
+            <Setter Property="Foreground" Value="#FFCC00" />
             <Setter Property="FontFamily" Value="Consolas, monospace" />
             <Setter Property="FontSize" Value="11" />
         </Style>
@@ -52,7 +52,16 @@
         <!-- ── LEFT COLUMN ──────────────────────────────────────────── -->
         <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="6">
-                <TextBlock Text="{Binding HintText}" Foreground="#B4B4B4" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding HintText}" Foreground="#B4B4B4" TextWrapping="Wrap" />
+                    <Button Grid.Column="1"
+                            Content="?"
+                            Command="{Binding OpenHelpCommand}"
+                            ToolTip.Tip="Help for the User Bulb 3D editor"
+                            Margin="8,0,0,0"
+                            Width="28" Height="28"
+                            VerticalAlignment="Top" />
+                </Grid>
 
                 <!-- Saved row -->
                 <Grid ColumnDefinitions="50,*,Auto,Auto" Margin="0,4,0,0">

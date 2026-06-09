@@ -15,17 +15,25 @@
 
     <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto">
 
-        <!-- Hint -->
-        <TextBlock Grid.Row="0"
-                   TextWrapping="Wrap"
-                   Foreground="#B4B4B4"
-                   Margin="0,0,0,8">
-            <Run Text="Expression returns Complex. Vars: z, c, n. Funcs: sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg pow(a,b)." />
-            <LineBreak />
-            <Run Text="Const: pi, e, i. Ops: + - * / ^ unary-. Ternary: cond ? a : b. Compare: &lt; &gt; &lt;= &gt;= == !=. Logical: &amp;&amp; || !. Let: let x = expr in body." />
-            <LineBreak />
-            <Run Text="Example:  let zz = z*z in zz + c" />
-        </TextBlock>
+        <!-- Hint + help -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0"
+                       TextWrapping="Wrap"
+                       Foreground="#B4B4B4">
+                <Run Text="Expression returns Complex. Vars: z, c, n. Funcs: sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg pow(a,b)." />
+                <LineBreak />
+                <Run Text="Const: pi, e, i. Ops: + - * / ^ unary-. Ternary: cond ? a : b. Compare: &lt; &gt; &lt;= &gt;= == !=. Logical: &amp;&amp; || !. Let: let x = expr in body." />
+                <LineBreak />
+                <Run Text="Example:  let zz = z*z in zz + c" />
+            </TextBlock>
+            <Button Grid.Column="1"
+                    Content="?"
+                    Command="{Binding OpenHelpCommand}"
+                    ToolTip.Tip="Help for the Sandbox equation editor"
+                    Margin="8,0,0,0"
+                    Width="28" Height="28"
+                    VerticalAlignment="Top" />
+        </Grid>
 
         <!-- Saved row + Save/Delete/Export/Import -->
         <Grid Grid.Row="1"
@@ -79,7 +87,7 @@
                    Margin="0,8,0,0">
             <TextBlock.Styles>
                 <Style Selector="TextBlock.error">
-                    <Setter Property="Foreground" Value="#FF6464" />
+                    <Setter Property="Foreground" Value="#FFCC00" />
                 </Style>
             </TextBlock.Styles>
         </TextBlock>

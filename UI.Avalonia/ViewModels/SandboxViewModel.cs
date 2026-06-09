@@ -46,6 +46,8 @@ public sealed class SandboxViewModel : ViewModelBase
             this.WhenAnyValue(x => x.SelectedSavedName).Select(n => !string.IsNullOrEmpty(n)));
         ExportCommand = ReactiveCommand.Create(OnExport);
         ImportCommand = ReactiveCommand.Create(OnImport);
+        OpenHelpCommand = ReactiveCommand.Create(() =>
+            HelpRequested?.Invoke("Avalonia-UserGuide.md", "Sandbox", "Sandbox — Help"));
 
         _params.SandboxSource = _source;
     }
@@ -101,6 +103,10 @@ public sealed class SandboxViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenHelpCommand { get; }
+
+    /// <summary>Args: (docId, anchor, title). View opens HelpViewerView.</summary>
+    public event Action<string, string?, string>? HelpRequested;
 
     public event Action? CompileRequested;
     public event Action? PromotionChanged;

@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.HelpViewerView"
+        x:DataType="vm:HelpViewerViewModel"
+        Title="{Binding Title}"
+        Width="820"
+        Height="640"
+        MinWidth="480"
+        MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#282828"
+        Foreground="White">
+
+    <Grid Margin="12" RowDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Row="0"
+                   Text="{Binding HeadingPath}"
+                   Foreground="#B4B4B4"
+                   FontSize="12"
+                   Margin="0,0,0,8" />
+        <Border Grid.Row="1"
+                BorderBrush="#505050"
+                BorderThickness="1"
+                Background="#1C1C1C">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          Padding="14,10">
+                <!--
+                  Content is a StackPanel of styled TextBlocks emitted by
+                  HelpMarkdownRenderer. Avoids a third-party markdown lib
+                  while still giving headings/code/paragraph distinction.
+                -->
+                <ItemsControl ItemsSource="{Binding Blocks}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+        <Button Grid.Row="2"
+                Content="Close"
+                Command="{Binding CloseCommand}"
+                HorizontalAlignment="Right"
+                Margin="0,8,0,0"
+                Padding="14,4" />
+    </Grid>
+
+</Window>

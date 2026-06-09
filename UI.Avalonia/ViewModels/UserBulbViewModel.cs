@@ -110,6 +110,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         RemoveChainCommand = ReactiveCommand.Create<UserBulbChainStep>(OnRemoveChain);
         TogglePlayCommand = ReactiveCommand.Create(OnTogglePlay);
         ExportMeshCommand = ReactiveCommand.Create(OnExportMesh);
+        OpenHelpCommand = ReactiveCommand.Create(() =>
+            HelpRequested?.Invoke(this, ("UserBulb-Guide.md", null, "User Bulb 3D — Help")));
     }
 
     // ── Source + debounce ──────────────────────────────────────────────
@@ -407,6 +409,12 @@ public sealed class UserBulbViewModel : ViewModelBase
     public ReactiveCommand<UserBulbChainStep, Unit> RemoveChainCommand { get; }
     public ReactiveCommand<Unit, Unit> TogglePlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenHelpCommand { get; }
+
+    /// <summary>Tuple: (docId, anchor, title). View opens HelpViewerView.
+    /// Uses an <see cref="EventHandler{T}"/> to stay consistent with the
+    /// rest of this VM's host-callback shape.</summary>
+    public event EventHandler<(string DocId, string? Anchor, string Title)>? HelpRequested;
 
     // ── Events ─────────────────────────────────────────────────────────
 

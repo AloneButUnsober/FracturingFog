@@ -240,7 +240,7 @@ public static class CalculatorGenUnitTests
                   && msg.Contains("Did you mean 'prev'?"));
 
         // ── EquationPreprocessor: C# Complex.* → DSL ──────────────────
-        string Pre(string src) => EquationPreprocessor.Preprocess(src, out _);
+        string Pre(string src) => EquationPreprocessor.Preprocess(src, out string? _);
         bool PreErr(string src, string contains)
         {
             EquationPreprocessor.Preprocess(src, out string? err);
@@ -282,7 +282,44 @@ public static class CalculatorGenUnitTests
         Check("preproc: rejects Complex.Abs",
             () => PreErr("Complex.Abs(z) + c", "abs(x)"));
         Check("preproc: rejects unknown Complex member",
-            () => PreErr("Complex.Sinh(z) + c", "Complex.Sinh"));
+            () => PreErr("Complex.Asin(z) + c", "Complex.Asin"));
+        Check("preproc: Complex.Sinh → sinh (DSL widening)",
+            () => Pre("Complex.Sinh(z)") == "sinh(z)");
+        Check("preproc: Complex.Sqrt → sqrt (DSL widening)",
+            () => Pre("Complex.Sqrt(z*z + c)") == "sqrt(z*z + c)");
+
+        // ── DSL widening (tan, sinh, cosh, tanh, sqrt, pi, e) ─────────
+        Check("parser: tan(z) parses and round-trips via desugar",
+            () => EquationParser.Parse("tan(z)") is Div { Left: Sin, Right: Cos });
+        Check("parser: sinh(z) desugars to (exp(z)-exp(-z))/2",
+            () => EquationParser.Parse("sinh(z)") is Div
+            { Left: Sub { Left: Exp, Right: Exp { Operand: Neg } }, Right: RealConst { Value: 2.0 } });
+        Check("parser: cosh(z) desugars to (exp(z)+exp(-z))/2",
+            () => EquationParser.Parse("cosh(z)") is Div
+            { Left: Add { Left: Exp, Right: Exp { Operand: Neg } }, Right: RealConst { Value: 2.0 } });
+        Check("parser: tanh(z) is Div(sinh, cosh)",
+            () => EquationParser.Parse("tanh(z)") is Div
+            { Left: Div { Left: Sub }, Right: Div { Left: Add } });
+        Check("parser: sqrt(z) ≡ exp(0.5*log(z))",
+            () => EquationParser.Parse("sqrt(z)") is Exp
+            { Operand: Mul { Left: RealConst { Value: 0.5 }, Right: Log } });
+        Check("parser: pi → RealConst(Math.PI)",
+            () => EquationParser.Parse("pi") is RealConst r && Math.Abs(r.Value - Math.PI) < 1e-15);
+        Check("parser: e → RealConst(Math.E)",
+            () => EquationParser.Parse("e") is RealConst r2 && Math.Abs(r2.Value - Math.E) < 1e-15);
+        Check("parser: pi inside expression composes correctly",
+            () => EquationParser.Parse("z*z + pi*c") is Add { Right: Mul { Left: RealConst } });
+        Check("parser: e^z (e is a constant, ^ requires integer) → throws on caret with e?",
+            () =>
+            {
+                try { EquationParser.Parse("e + z*z + c"); return true; }
+                catch { return false; }
+            });
+        Check("lexer: '1.5e-3' still lexes as a single number (e inside number lexer wins)",
+            () => EquationParser.Parse("1.5e-3") is RealConst rc && Math.Abs(rc.Value - 0.0015) < 1e-9);
+        Check("lexer: 'tnh' suggests 'tanh'",
+            () => TryParseError("tnh(z) + c", out var msg)
+                  && msg.Contains("Did you mean 'tanh'?"));
         Check("preproc: leaves DSL syntax untouched",
             () => Pre("sin(z) + c") == "sin(z) + c");
 
