@@ -56,7 +56,10 @@ z_{n+1} = <expression>
 | Square shortcut  | `sqr(z)`                 | Same as z*z                      |
 | Real / imag      | `re(z)`, `im(z)`         | Real scalar lifted as (n, 0)     |
 | Magnitude        | `abs(z)`                 | \|z\| as (n, 0)                    |
-| Transcendental   | `sin(z) cos(z) exp(z) log(z)` | Holomorphic                |
+| Transcendental   | `sin(z) cos(z) tan(z) exp(z) log(z)` | Holomorphic              |
+| Hyperbolic       | `sinh(z) cosh(z) tanh(z)`| Desugared via exp; holomorphic   |
+| Square root      | `sqrt(z)`                | Desugared as `exp(0.5*log(z))`   |
+| Constants        | `pi`, `e`                | Real literals (Math.PI / Math.E) |
 | Previous iter    | `prev`                   | z_{n-1} — Phoenix coupling       |
 | Iter index       | `iter` (or `n`)          | Real scalar; current index       |
 | Conditional      | `if cond then a else b`  | Cond compares real scalars       |
@@ -204,6 +207,30 @@ sin(z)*cos(c) + c
 0.5*z + sin(z) + c
 ```
 
+#### Tangent
+```
+tan(z) + c
+```
+
+#### Hyperbolic family (desugared via exp internally)
+```
+sinh(z) + c
+cosh(z) - 0.5*c
+tanh(z*z) + c
+```
+
+#### Square root (principal branch)
+```
+sqrt(z) + c
+sqrt(z*z - 1) + c
+```
+
+#### Constants pi / e
+```
+sin(pi*z) + c
+e*z*z + c
+```
+
 ### 4.6 Newton-like patterns
 
 (Newton fractals proper use the dedicated NewtonCalculator, but
@@ -322,7 +349,7 @@ Flags:
 
 | Symptom                                   | Likely cause / fix                                  |
 |-------------------------------------------|------------------------------------------------------|
-| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, exp, log, if/then/else, re, im, abs, prev, iter/n. |
+| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, exp, log, pi, e, if/then/else, re, im, abs, prev, iter/n. |
 | `Unexpected character …`                  | Stray punctuation. `=` alone is not allowed; use `==`.|
 | `Exponent must be 0..16`                  | Use `z*z*z…` or break into factored form.            |
 | `Equation is empty`                       | Editor text is blank after preprocessor strip.       |
@@ -335,14 +362,20 @@ Flags:
 ## 8. Reference card
 
 ```
-Operators       + - * / ^   (^ = integer power 0..16)
+Operators       + - * / ^   (^ = integer power 0..64)
 Comparisons     < <= > >= == !=
 Conditional     if <cmp> then <expr> else <expr>
 Unary           -expr  conj(...) fold(...) abs(...) sqr(...)
 Lifts           re(z), im(z), abs(z)          (real scalar → (n, 0))
-Transcendentals sin cos exp log
+Transcendentals sin cos tan sinh cosh tanh exp log sqrt
+Constants       pi  e
 State           z   c   prev   iter (or n)
 ```
+
+Note: `tan / sinh / cosh / tanh / sqrt` are desugared at parse time
+(`tan→sin/cos`, hyperbolics via `exp`, `sqrt→exp(0.5*log)`), so they
+inherit the same gating as `sin/cos/exp/log` — perturbation / BLA off,
+distance estimate preserved.
 
 Use this guide as the source of truth for the User Equation editor.
 The Sandbox calculator accepts a restricted DSL with no .NET BCL access

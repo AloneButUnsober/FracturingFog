@@ -84,6 +84,14 @@
 
 <ItemGroup>
   <AvaloniaResource Include="Assets\**" />
+  <!--
+    In-app Help viewer loads project markdown docs via the avares: URI scheme.
+    Sibling `Docs\` folder is embedded as Avalonia resources so the viewer
+    works from any deploy layout (no filesystem snooping into ../../../Docs).
+    Resource name preserves "Docs/" so HelpDocId can address each guide by
+    a stable path (e.g. avares://.../Docs/CalcGen-UserGuide.md).
+  -->
+  <AvaloniaResource Include="..\Docs\*.md" Link="Docs\%(Filename)%(Extension)" />
 </ItemGroup>
 
 </Project>

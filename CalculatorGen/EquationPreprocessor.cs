@@ -36,6 +36,21 @@ using System.Text.RegularExpressions;
 
 namespace FracturingFog.CalculatorGen;
 
+/// <summary>Diagnostic info from <see cref="EquationPreprocessor.Preprocess(string, out PreprocessDiagnostic?)"/>.
+/// <see cref="Start"/> + <see cref="Length"/> point at the offending substring
+/// in the ORIGINAL source.
+///
+/// Suggestions are split by editor — applying a DSL form (`abs(z)`, `sin(z)`)
+/// to a Roslyn-compiled C# editor would fail compilation, and vice versa. UI
+/// must pick the field matching the active editor. A null field means there
+/// is no safe in-place fix for that editor; the user must rewrite.</summary>
+public sealed record PreprocessDiagnostic(
+    string Message,
+    int Start,
+    int Length,
+    string? SuggestionCSharp,
+    string? SuggestionDsl);
+
 public static class EquationPreprocessor
 {
     /// <summary>
@@ -47,14 +62,33 @@ public static class EquationPreprocessor
     /// </summary>
     public static string Preprocess(string source, out string? error)
     {
-        error = null;
+        string s = Preprocess(source, out PreprocessDiagnostic? diag);
+        error = diag?.Message;
+        return s;
+    }
+
+    /// <summary>
+    /// Span-aware overload. <paramref name="diagnostic"/>'s Start/Length point
+    /// at the offending substring in the original source (so an editor can
+    /// highlight or select it). Suggestion holds an inline replacement when
+    /// one exists, null otherwise.
+    /// </summary>
+    public static string Preprocess(string source, out PreprocessDiagnostic? diagnostic)
+    {
+        diagnostic = null;
         if (string.IsNullOrWhiteSpace(source)) return string.Empty;
 
-        // Strip surrounding `return ... ;` so the user can paste the
-        // contents of their step function directly.
-        string s = source.Trim();
-        s = Regex.Replace(s, @"^\s*return\s+", "");
-        s = s.TrimEnd(';').Trim();
+        // Track how much of the head we discarded so diagnostic spans can
+        // be mapped back to offsets in the ORIGINAL source. Lead = leading
+        // whitespace + optional `return\s+`. Substring rewrites below
+        // operate on `s`, but every diagnostic Start gets `lead` added so
+        // the editor highlights the right character range.
+        int lead = 0;
+        while (lead < source.Length && char.IsWhiteSpace(source[lead])) lead++;
+        string s = source[lead..];
+        var mReturn = Regex.Match(s, @"^return\s+");
+        if (mReturn.Success) { lead += mReturn.Length; s = s[mReturn.Length..]; }
+        s = s.TrimEnd().TrimEnd(';').TrimEnd();
 
         // Constants — straightforward token substitution. Word-boundary
         // anchored so `Complex.Zero1` (unlikely but possible) isn't hit.
@@ -62,25 +96,114 @@ public static class EquationPreprocessor
         s = Regex.Replace(s, @"\bComplex\.One\b",   "1");
 
         // Hard-reject constructs with no DSL counterpart.
-        if (Regex.IsMatch(s, @"\bComplex\.ImaginaryOne\b"))
+        var mImg = Regex.Match(s, @"\bComplex\.ImaginaryOne\b");
+        if (mImg.Success)
         {
-            error = "Complex.ImaginaryOne ('i') has no representation in the CalcGen DSL — " +
-                    "there is no 'i' literal. Decompose the equation so it uses only " +
-                    "z, c, real literals, and the DSL ops (+, -, *, /, ^Int, sin, cos, exp, log, conj, fold).";
+            // No in-place fix in either editor — CalcGen has no 'i' literal,
+            // and the C# form would still trip the same preprocessor pass.
+            diagnostic = new PreprocessDiagnostic(
+                "Complex.ImaginaryOne ('i') has no representation in the CalcGen DSL — " +
+                "there is no 'i' literal. Decompose the equation so it uses only " +
+                "z, c, real literals, and the DSL ops (+, -, *, /, ^Int, sin, cos, exp, log, conj, fold).",
+                mImg.Index + lead, mImg.Length, SuggestionCSharp: null, SuggestionDsl: null);
             return s;
         }
-        if (Regex.IsMatch(s, @"\bnew\s+Complex\s*\("))
+        var mNew = Regex.Match(s, @"\bnew\s+Complex\s*\(([^)]*)\)");
+        if (mNew.Success)
         {
-            error = "'new Complex(a, b)' has no representation in the CalcGen DSL — " +
-                    "there is no 'i' literal. Use real-only expressions on z and c.";
+            // Special case: `new Complex(<expr>, 0)` is identical to writing
+            // `<expr>` — the user just wrapped a real literal unnecessarily.
+            // DSL form: bare `<expr>` (DSL treats reals as (n, 0)).
+            // C# form: NO automatic suggestion. `<expr>` IS valid C# via the
+            // double→Complex implicit conversion, but proposing a bare
+            // number where the user explicitly wrote `new Complex(...)` is
+            // confusing. Let them rewrite from the explanation.
+            string? dslFix = null;
+            string inner = mNew.Groups[1].Value;
+            string[] args = SplitTopLevelCommas(inner);
+            if (args.Length == 2)
+            {
+                string realPart = args[0].Trim();
+                string imagPart = args[1].Trim();
+                bool imagIsZero = imagPart == "0" || imagPart == "0.0" || imagPart == "0d" || imagPart == "0f";
+                if (imagIsZero && realPart.Length > 0) dslFix = realPart;
+            }
+            diagnostic = new PreprocessDiagnostic(
+                "'new Complex(a, b)' has no representation in the CalcGen DSL — " +
+                "there is no 'i' literal. Use real-only expressions on z and c.",
+                mNew.Index + lead, mNew.Length, SuggestionCSharp: null, SuggestionDsl: dslFix);
             return s;
         }
-        if (Regex.IsMatch(s, @"\bComplex\.Abs\s*\("))
+        var mAbs = Regex.Match(s, @"\bComplex\.Abs\s*\(");
+        if (mAbs.Success)
         {
-            error = "Complex.Abs(x) returns |x| (square root of |x|²). " +
-                    "The CalcGen DSL has only `abs(x)` which means |x|² (squared magnitude). " +
-                    "If you can use the squared form, rewrite as `abs(x)`. " +
-                    "If you genuinely need the sqrt, it's not available.";
+            // Extend match through the balanced argument list so the span
+            // highlights `Complex.Abs(x)` whole, not just the `Complex.Abs(`.
+            int close = FindMatchingParen(s, mAbs.Index + mAbs.Length - 1);
+            int spanLen = close > 0 ? close - mAbs.Index + 1 : mAbs.Length;
+            string? csFix = null;
+            string? dslFix = null;
+            if (close > 0)
+            {
+                string innerExpr = s.Substring(mAbs.Index + mAbs.Length, close - (mAbs.Index + mAbs.Length)).Trim();
+                // DSL form: `abs(x)` (squared magnitude, |x|²).
+                dslFix = $"abs({innerExpr})";
+                // C# form: x * Complex.Conjugate(x). Yields |x|² as a Complex
+                // (real part = |x|², imag = 0). Compiles under Roslyn AND
+                // passes the CalcGen preprocessor — the Conjugate call gets
+                // rewritten to `conj(...)` downstream.
+                csFix = $"({innerExpr} * Complex.Conjugate({innerExpr}))";
+            }
+            diagnostic = new PreprocessDiagnostic(
+                "Complex.Abs(x) returns |x| (square root of |x|²). " +
+                "The CalcGen DSL has only `abs(x)` which means |x|² (squared magnitude). " +
+                "If you can use the squared form, rewrite as `abs(x)`. " +
+                "If you genuinely need the sqrt, it's not available.",
+                mAbs.Index + lead, spanLen, SuggestionCSharp: csFix, SuggestionDsl: dslFix);
+            return s;
+        }
+
+        // Surface unsupported `Complex.X` members BEFORE the rewrite loop
+        // mutates the string. Doing it after would mean span offsets here
+        // no longer correspond to the user's typed text (Sin/Cos rewrites
+        // shorten the string). Recognised members are skipped — anything
+        // else short-circuits with a span pointing at the user's character.
+        var known = new HashSet<string>(StringComparer.Ordinal)
+        { "Sin", "Cos", "Tan", "Sinh", "Cosh", "Tanh", "Sqrt",
+          "Exp", "Log", "Conjugate", "Pow",
+          "Zero", "One", "ImaginaryOne", "Abs" };
+        foreach (Match m in Regex.Matches(s, @"\bComplex\.([A-Za-z_][A-Za-z0-9_]*)\b"))
+        {
+            string member = m.Groups[1].Value;
+            if (known.Contains(member)) continue;
+            // Levenshtein-suggest the closest recognised member so a typo
+            // like `Complex.Sni` offers `Complex.Sin` as a one-click fix.
+            // Only the call-shaped members (Sin/Cos/Exp/Log/Conjugate/Pow)
+            // make sense as replacements — Zero/One/ImaginaryOne/Abs are
+            // properties or already-rejected forms.
+            string[] callable = { "Sin", "Cos", "Tan", "Sinh", "Cosh", "Tanh", "Sqrt",
+                                  "Exp", "Log", "Conjugate", "Pow" };
+            string? best = null;
+            int bestD = int.MaxValue;
+            foreach (var k in callable)
+            {
+                int d = Levenshtein(member, k);
+                if (d < bestD) { bestD = d; best = k; }
+            }
+            // C# form: `Complex.Sin` (PascalCase, BCL-shaped).
+            // DSL form: `sin` (lowercase, no namespace) — and `Conjugate`
+            // shortens to `conj` in DSL too.
+            string? csFix  = bestD <= 2 && best != null ? $"Complex.{best}" : null;
+            string? dslFix = bestD <= 2 && best != null
+                ? (best switch { "Conjugate" => "conj", _ => best.ToLowerInvariant() })
+                : null;
+            string hint = csFix != null ? $" Did you mean '{csFix}'?" : "";
+            diagnostic = new PreprocessDiagnostic(
+                $"Unsupported '{m.Value}'.{hint} The CalcGen DSL recognises only " +
+                "Complex.Pow / Sin / Cos / Tan / Sinh / Cosh / Tanh / Sqrt / Exp / Log / " +
+                "Conjugate / Zero / One. " +
+                "Other System.Numerics.Complex members have no DSL equivalent.",
+                m.Index + lead, m.Length, SuggestionCSharp: csFix, SuggestionDsl: dslFix);
             return s;
         }
 
@@ -96,6 +219,11 @@ public static class EquationPreprocessor
             string before = s;
             s = RewriteCall(s, "Complex.Sin",       args => args.Length == 1 ? $"sin({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Cos",       args => args.Length == 1 ? $"cos({args[0].Trim()})"  : null);
+            s = RewriteCall(s, "Complex.Tan",       args => args.Length == 1 ? $"tan({args[0].Trim()})"  : null);
+            s = RewriteCall(s, "Complex.Sinh",      args => args.Length == 1 ? $"sinh({args[0].Trim()})" : null);
+            s = RewriteCall(s, "Complex.Cosh",      args => args.Length == 1 ? $"cosh({args[0].Trim()})" : null);
+            s = RewriteCall(s, "Complex.Tanh",      args => args.Length == 1 ? $"tanh({args[0].Trim()})" : null);
+            s = RewriteCall(s, "Complex.Sqrt",      args => args.Length == 1 ? $"sqrt({args[0].Trim()})" : null);
             s = RewriteCall(s, "Complex.Exp",       args => args.Length == 1 ? $"exp({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Log",       args => args.Length == 1 ? $"log({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Conjugate", args => args.Length == 1 ? $"conj({args[0].Trim()})" : null);
@@ -128,17 +256,6 @@ public static class EquationPreprocessor
             if (s == before) break;
         }
 
-        // Anything still wearing a `Complex.` prefix slipped past every
-        // known translation — flag it explicitly so the user gets a
-        // pointed message instead of a downstream lexer "Unknown identifier
-        // 'Complex'" diagnostic.
-        var leftover = Regex.Match(s, @"\bComplex\.[A-Za-z_][A-Za-z0-9_]*\b");
-        if (leftover.Success)
-        {
-            error = $"Unsupported '{leftover.Value}'. The CalcGen DSL recognises only " +
-                    "Complex.Pow / Sin / Cos / Exp / Log / Conjugate / Zero / One. " +
-                    "Other System.Numerics.Complex members have no DSL equivalent.";
-        }
         return s;
     }
 
@@ -204,6 +321,30 @@ public static class EquationPreprocessor
             }
         }
         return -1;
+    }
+
+    // Tiny iterative Levenshtein for member-name suggestions (same logic
+    // as EquationLexer.Levenshtein — duplicated here so this file has no
+    // dependency on the lexer module).
+    private static int Levenshtein(string a, string b)
+    {
+        int n = a.Length, m = b.Length;
+        if (n == 0) return m;
+        if (m == 0) return n;
+        var prev = new int[m + 1];
+        var curr = new int[m + 1];
+        for (int j = 0; j <= m; j++) prev[j] = j;
+        for (int i = 1; i <= n; i++)
+        {
+            curr[0] = i;
+            for (int j = 1; j <= m; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                curr[j] = Math.Min(Math.Min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            (prev, curr) = (curr, prev);
+        }
+        return prev[m];
     }
 
     private static string[] SplitTopLevelCommas(string s)

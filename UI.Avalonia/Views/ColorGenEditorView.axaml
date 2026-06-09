@@ -97,7 +97,7 @@
                    Margin="0,8,0,0">
             <TextBlock.Styles>
                 <Style Selector="TextBlock.error">
-                    <Setter Property="Foreground" Value="#FF6464" />
+                    <Setter Property="Foreground" Value="#FFCC00" />
                 </Style>
             </TextBlock.Styles>
         </TextBlock>

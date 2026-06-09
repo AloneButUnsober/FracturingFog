@@ -74,8 +74,15 @@ public sealed class EquationParser
         TokenKind.Sqr    => "sqr(...)",
         TokenKind.Sin    => "sin(...)",
         TokenKind.Cos    => "cos(...)",
+        TokenKind.Tan    => "tan(...)",
+        TokenKind.Sinh   => "sinh(...)",
+        TokenKind.Cosh   => "cosh(...)",
+        TokenKind.Tanh   => "tanh(...)",
+        TokenKind.Sqrt   => "sqrt(...)",
         TokenKind.Exp    => "exp(...)",
         TokenKind.Log    => "log(...)",
+        TokenKind.PiConst => "'pi'",
+        TokenKind.EConst => "'e'",
         TokenKind.If     => "'if'",
         TokenKind.Then   => "'then'",
         TokenKind.Else   => "'else'",
@@ -228,6 +235,15 @@ public sealed class EquationParser
         }
     }
 
+    // sinh / cosh expand into a binary op-pair that uses the operand twice
+    // (once positive, once negated). Helpers keep ParseAtom readable and
+    // ensure the same expansion is reused from Tanh.
+    private static AstNode BuildSinh(AstNode x) =>
+        new Div(new Sub(new Exp(x), new Exp(new Neg(x))), new RealConst(2.0));
+
+    private static AstNode BuildCosh(AstNode x) =>
+        new Div(new Add(new Exp(x), new Exp(new Neg(x))), new RealConst(2.0));
+
     private AstNode ParseAtom()
     {
         var t = Peek();
@@ -300,6 +316,50 @@ public sealed class EquationParser
                 var logArg = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new Log(logArg);
+            case TokenKind.Tan:
+                // tan(x) ≡ sin(x) / cos(x). Desugaring keeps every downstream
+                // stage unchanged. Pole behaviour at cos(x)==0 is handled by
+                // the emitted Div like any other division.
+                Advance();
+                Expect(TokenKind.LParen);
+                var tanArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Div(new Sin(tanArg), new Cos(tanArg));
+            case TokenKind.Sinh:
+                // sinh(x) ≡ (exp(x) - exp(-x)) / 2.
+                Advance();
+                Expect(TokenKind.LParen);
+                var sinhArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return BuildSinh(sinhArg);
+            case TokenKind.Cosh:
+                // cosh(x) ≡ (exp(x) + exp(-x)) / 2.
+                Advance();
+                Expect(TokenKind.LParen);
+                var coshArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return BuildCosh(coshArg);
+            case TokenKind.Tanh:
+                // tanh(x) ≡ sinh(x) / cosh(x).
+                Advance();
+                Expect(TokenKind.LParen);
+                var tanhArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Div(BuildSinh(tanhArg), BuildCosh(tanhArg));
+            case TokenKind.Sqrt:
+                // sqrt(x) ≡ exp(0.5 * log(x)). The principal branch matches
+                // System.Numerics.Complex.Sqrt (Im(log(x)) ∈ (-π, π]).
+                Advance();
+                Expect(TokenKind.LParen);
+                var sqrtArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Exp(new Mul(new RealConst(0.5), new Log(sqrtArg)));
+            case TokenKind.PiConst:
+                Advance();
+                return new RealConst(Math.PI);
+            case TokenKind.EConst:
+                Advance();
+                return new RealConst(Math.E);
             default:
                 throw new FormatException(
                     $"Unexpected {Describe(t.Kind)} ('{t.Lexeme}') at {t.Where}.");
