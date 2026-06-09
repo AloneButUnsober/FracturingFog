@@ -44,6 +44,18 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private const int PanStopDebounceMs = 300;
     private bool _renderHintFastInFlight;
 
+    // Finding B fix: wheel / key-repeat coalesce. RenderHint.Full fired in
+    // rapid succession (multiple wheel ticks within ~50 ms) triggers cancel
+    // + re-Calculate per click; at shallow zoom each calc is fast so the
+    // queue thrashes through 5-10 redundant frames. Leading-edge fire +
+    // trailing coalesce: first Full triggers immediately, subsequent Fulls
+    // inside the window arm a trailing timer that fires one final Trigger
+    // when the burst settles.
+    private readonly System.Threading.Timer _fullCoalesceTimer;
+    private const int FullCoalesceWindowMs = 50;
+    private long _lastFullEmitTicks;
+    private int _fullCoalescePending;
+
     // Adaptive slider fires RepaintWithAdaptive on every tick, which runs a
     // full histogram-equalization pass against the cached escape buffers.
     // Coalesce rapid drags into one render at ~30 Hz to stop the pipeline
@@ -127,6 +139,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 {
                     _adaptiveRepaintDebounce!.Change(AdaptiveRepaintDebounceMs, System.Threading.Timeout.Infinite);
                 }
+            }
+        }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+
+        _fullCoalesceTimer = new System.Threading.Timer(_ =>
+        {
+            // Trailing edge of a Full burst. If a coalesce was pending, fire
+            // one final Trigger so the last wheel/key state is rendered. Reset
+            // the emit timestamp so the *next* Full also fires immediately.
+            if (System.Threading.Interlocked.Exchange(ref _fullCoalescePending, 0) == 1)
+            {
+                System.Threading.Volatile.Write(ref _lastFullEmitTicks, 0);
+                _renderHintFastInFlight = false;
+                _renderHost.Trigger();
             }
         }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
     }
@@ -727,9 +752,30 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         switch (e.Hint)
         {
             case RenderHint.Full:
-                _renderHintFastInFlight = false;
                 _panStopDebounce.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
-                _renderHost.Trigger();
+
+                long now = Environment.TickCount64;
+                long prev = System.Threading.Volatile.Read(ref _lastFullEmitTicks);
+                long delta = now - prev;
+                if (prev != 0 && delta < FullCoalesceWindowMs)
+                {
+                    // Inside the burst window — defer to a single trailing
+                    // Trigger. State is already mutated by the input
+                    // controller; we just need to render the final state once.
+                    System.Threading.Volatile.Write(ref _fullCoalescePending, 1);
+                    _fullCoalesceTimer.Change(FullCoalesceWindowMs, System.Threading.Timeout.Infinite);
+                }
+                else
+                {
+                    // First click of a (possibly new) burst — render now.
+                    System.Threading.Volatile.Write(ref _lastFullEmitTicks, now);
+                    _renderHintFastInFlight = false;
+                    _renderHost.Trigger();
+                    // Re-arm trailing timer in case more clicks arrive within
+                    // the window — the trailing fire then renders the final
+                    // accumulated state.
+                    _fullCoalesceTimer.Change(FullCoalesceWindowMs, System.Threading.Timeout.Infinite);
+                }
                 break;
             case RenderHint.Fast:
                 _renderHintFastInFlight = true;
@@ -769,5 +815,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _renderHost.ColorMapChanged -= OnRenderHostColorMapChanged;
         _panStopDebounce.Dispose();
         _adaptiveRepaintDebounce.Dispose();
+        _fullCoalesceTimer.Dispose();
     }
 }

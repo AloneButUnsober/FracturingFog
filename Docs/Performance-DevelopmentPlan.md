@@ -455,3 +455,151 @@ needs roughly:
 Phases 2-5 (HLSL palette codegen, GPU-resident colour buffer, kernel
 extension to Julia/BurningShip/Tricorn/Multibrot, FP64 ILGPU/CUDA path)
 each get their own follow-up branches once phase 1 is verified.
+
+---
+
+## Empirical findings — post-Tier 1-3 land (2026-06-09)
+
+Mixed results from BAB's hands-on testing at 1280x763. Quality and
+slideshow good across the board; specific regressions / pain points below.
+
+### Finding A — Status-bar `Calculating...` lag *and* render-start lag
+
+**Symptom:** Sporadic delay between user-initiated region pick / manual
+zoom and (a) the `"Calculating..."` status string appearing, **and** (b)
+the render itself starting. Both lag, not just the status indicator.
+
+**Likely cause:** Both lags point to dispatch-path latency, not just a
+display-thread issue. Candidates:
+- `_d3dGate` semaphore held by prior frame's GPU upload → next `Trigger`
+  waits before even setting status.
+- `_calcCts.Cancel()` on the prior calc blocks until prior `Parallel.For`
+  unrolls (cancellation is cooperative; row workers check token mid-loop).
+  Heavy frames at deep zoom can sit 50-200 ms before cancel observed.
+- Status update + render start both fire from the same
+  `Dispatcher.UIThread.Post` continuation — UI thread queue backlog
+  delays both together.
+
+**Next steps (separate branch):**
+1. Audit `FractalRenderHost.Trigger` / `Hosting/AvaloniaShellBootstrap`
+   for the order of (a) status-string assignment, (b) calc dispatch,
+   (c) `Dispatcher.UIThread.Post`.
+2. Move status flip to a synchronous UI-thread set *before* `Trigger`.
+3. Add a `_calcInFlight` int + `Interlocked.Increment/Decrement` so the
+   status binding shows `Calculating...` while count > 0, hides at 0.
+
+### Finding B — Shallow-zoom manual-wheel choppiness
+
+**Symptom:** Multiple wheel clicks at the surface / shallow zoom feel
+choppy. User suspects renderer thrash from queued wheel events triggering
+back-to-back calcs.
+
+**Likely cause:** Wheel handler calls `Trigger()` per click without
+coalescing. Each click cancels the in-flight calc (CancellationToken from
+`_calcCts`) and restarts. At shallow zoom the calc itself is fast (~5-20 ms),
+so the wasted work isn't iters — it's `Task.Run` + ContinueWith + GPU
+upload + present cycling 5-10x in a 200 ms window.
+
+**Next steps (separate branch):**
+1. Add a wheel-event debouncer: accumulate `Δzoom` over a sliding
+   ~30-50 ms window, fire one `Trigger()` on debounce expiry.
+2. Or: keep per-click trigger but skip the GPU upload + present on cancelled
+   calcs (currently the cancelled calc still falls through to the upload
+   path because the cancel signal arrives after the row loop bails but
+   before the present logic gates on it).
+3. T2.4 (dedicated calc thread + bounded queue cap 1, latest-only) would
+   collapse the queued work naturally — currently moot per the earlier
+   determination because the video loop is single-threaded, but the
+   interactive path *does* benefit from queue coalescing under burst input.
+   Reconsider T2.4 scope.
+
+### Finding C — Video zoom choppiness varies by region (Feigenbaum point)
+
+**Symptom:**
+- Region "Blackhole Sun" → visually/empirically smoother video zoom; some
+  choppy frames; overall good.
+- Region "Feigenbaum Point" → very choppy video zoom; overall poor.
+
+**User hypothesis:** Large inset count (minibrots + cardioids) drives the
+slowdown — Feigenbaum-point neighbourhood has dense small-feature structure
+at every zoom level, Blackhole-Sun-class regions are mostly inside-set
+(black) with sparser features.
+
+**Likely cause (matches hypothesis):**
+1. Inside-set pixels short-circuit on cardioid-skip; minibrot interiors
+   *don't* — period-doubling cascades around the Feigenbaum point produce
+   dense families of minibrots whose interiors run the full maxIter loop.
+2. Block periodicity detection only kicks in mid-loop; small minibrots
+   below the block threshold pay full iter cost.
+3. BLA/SA at deep zoom: small minibrots near the Feigenbaum point have
+   tight BLA-validity radii, so the BLA-skip rate drops — more pixels fall
+   back to per-iteration perturbation.
+
+**Next steps (separate branch / Tier 3 scope):**
+1. Profile a 5 s capture of the Feigenbaum-point video zoom with PerfView /
+   dotnet-trace. Hot spots expected: `ComputeRowPT8` inner iteration loop +
+   colour map evaluation.
+2. T3.1 GPU compute is the natural fix — moves the per-pixel inner loop
+   off CPU entirely. Bumps the budget so dense-feature regions stay above
+   30 fps.
+3. Interim: investigate adaptive maxIter — drop maxIter dynamically during
+   video record when frame budget runs hot, fade back up when budget
+   recovers. Visual cost is mild iter-banding at the edges of minibrots
+   during fast pan; acceptable for live preview, not for final encode.
+4. Investigate per-tile maxIter heuristic: track per-tile escape histogram
+   from prior frame, cap maxIter at p99 of the previous frame's
+   actual-iter histogram. Saves wasted iters on the inside-set lake.
+
+### Findings A/B/C — landed 2026-06-09
+
+- **A (status + render-start lag)** — `FractalRenderHost.Trigger` reordered.
+  `StatusRequested` now fires at the very top of `Trigger`, before
+  `InvalidateAdaptiveCdf` / cancel / `ApplyView` / alt-switch. The
+  stale-frame re-upload moved off the UI thread into the same `Task.Run`
+  that owns `Calculate` (runs before the calc on the threadpool slot),
+  so the calling thread doesn't block on a 5-15 ms GPU upload before
+  the calc kicks off. Order vs the calc-completion upload is still
+  guaranteed by `_d3dGate`.
+- **B (wheel / key-repeat coalesce)** — `MainViewModel.OnInputViewChanged`
+  rate-limits `RenderHint.Full` hints. First Full in a burst fires
+  immediately (instant feedback); subsequent Fulls within a 50 ms
+  window arm a trailing `_fullCoalesceTimer` that fires one final
+  `Trigger()` after the burst settles. Covers wheel-zoom AND keyboard
+  W/S key-repeat at shallow zoom. Single-click feedback unaffected
+  because the leading edge always fires.
+- **C (Feigenbaum-class chop interim)** — `FractalRenderHost.Video.cs`
+  added `_videoIterCap` adaptive multiplier (range
+  `VideoIterCapMin`=0.40 to `VideoIterCapMax`=1.00). Each
+  `RenderVideoFrame` measures elapsed and ratchets the cap by
+  `VideoIterCapDown`=0.92 if over 1.5× a 33 ms budget, or by
+  `VideoIterCapUp`=1.05 if under 0.9× budget. `ApplyVideoFrameState`
+  applies the cap to the computed iter count (with a 64-iter floor)
+  when iter is not user-locked. Ratchet is gentle so iter banding
+  ramps smoothly across the frame sequence rather than snapping.
+  Master switch `VideoAdaptiveIterEnabled` (public bool, default true);
+  wire to UI later if banding becomes a complaint.
+
+### Finding D — Adaptive HE applies in one shot at end of slideshow crossfade
+
+**Symptom:** When Adaptive Histogram Equalisation strength > 0, the
+adaptive-HE effect is applied to the colour theme *once it is fully
+faded-in* in a single jump — a jarring "just on" visual snap. User
+expects Adaptive HE to apply continuously during the crossfade, ramping
+with the fade.
+
+**Status:** **Documented + deferred.** Not a perf bug; it's a
+visual-correctness bug in the slideshow crossfade pipeline. Captured here
+to avoid losing track; will be addressed in its own branch.
+
+**Likely cause (to verify):** Adaptive-HE strength is read from the
+*incoming* slide's settings and applied unconditionally at the end of the
+crossfade transition, instead of being lerped from the outgoing slide's
+strength to the incoming slide's strength across the crossfade `t`.
+
+**Next steps (separate branch):**
+1. Locate the crossfade tick path in `UI.Avalonia/` slideshow code.
+2. Find where Adaptive-HE strength is fetched per frame.
+3. Lerp `heStrength = Lerp(prev.heStrength, next.heStrength, fadeT)` for
+   `fadeT ∈ [0,1]` across the crossfade window.
+4. Verify visually: Adaptive-HE strength should ramp continuously across
+   the crossfade with no "snap-on" at the end.
