@@ -615,6 +615,51 @@ out of scope for the polynomial path).
 The cbuffer grew from 64 to 64 bytes — the four new ints fit in the
 existing pad slots.
 
+### T3.1 — FP32 zoom-ceiling fix + future precision uplifts
+
+`MandelbrotCalculator.MaxGpuZoom = 1e4` gates GPU dispatch off above the
+band where the shader's split-centre + split-scale FP32 reconstruction
+hits catastrophic cancellation. `cx = cxHi + fx*scaleHi + cxLo + fx*scaleLo`
+needs an FP32 ULP smaller than the pixel-size; pixel-size at zoom 1e4
+≈ 4.8e-7 already brushes the ULP of centres near 1, so 1e4 is the
+conservative ceiling before users see pixelation + cardioid/bulb
+mispredicates that paint the whole frame as in-set. CPU SP path
+(double precision) handles cleanly through ~1e12 and HP (DD/QD) takes
+over from there. HUD precision label drops the `(GPU)` suffix when the
+gate engages so the user sees the path switch.
+
+**Deferred precision-uplift options** (only land if profiling shows GPU
+matters at deep zoom on real user HW):
+
+1. **Full double-double in HLSL.** Re-emit the centre reconstruction
+   + every iteration's z² + c step as DD arithmetic (Dekker TwoSum +
+   Veltkamp split, two FP32 components per scalar). Lifts the ceiling
+   toward the CPU's ~1e12 limit. Cost: roughly 5× shader work — every
+   add becomes a 6-op TwoSum, every multiply becomes a 17-op DD mul.
+   Likely loses GPU throughput against the calc-thread CPU SIMD path
+   for the maxIter ranges modest HW runs, so the user-visible win is
+   only on the small zoom band 1e4..1e8 where CPU SP still works but
+   slower than DD-GPU. Implementation = full new HLSL file + DD helper
+   inline; ~400 lines of careful shader code. Verify against the CPU
+   path bit-for-bit before shipping.
+
+2. **GPU perturbation.** Mirror the CPU HP path: one reference orbit
+   computed CPU-side in DD/QD, uploaded as a `StructuredBuffer<float2>`
+   of (refZr, refZi) per iteration; shader iterates only the FP32
+   delta `δ_n = z_n − Z_n` against the reference. Lifts the ceiling
+   past 1e15 to wherever the reference orbit precision holds. Cost is
+   high: needs the BLA table + series-approximation prelude ported
+   too (or the CPU computes them and ships skip tables to GPU); also
+   needs glitch detection per-pixel to spot pixels whose δ_n diverges
+   from the reference and re-iterate them with a fresh nearby
+   reference. ~800 lines of new HLSL + CPU-side orbit-upload pipeline.
+   Real engineering month, not a session-scoped task.
+
+Neither option is scheduled. Phase 2 (HLSL palette emit) and phase 4
+(GPU-resident ColorBuffer) are the next worthwhile GPU lifts — they
+cut the per-frame readback cost regardless of zoom and benefit every
+GPU-eligible frame.
+
 ### T3.1 GPU compute (phase 2-5) — deferred
 
 **Why deferred:** new HLSL compute shader + new D3D11 dispatch path + new
