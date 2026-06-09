@@ -532,19 +532,43 @@ for the iter + smooth outputs. `Run()` is synchronous: Dispatch →
 `int[]` + `float[]`. 8×8 threadgroup, one thread per pixel,
 whole-cardioid + period-2 bulb early-out matches the CPU SIMD path.
 
-What's NOT wired yet (the rest of phase 1):
-- DirectXRenderer needs to expose its `ID3D11Device` + immediate
-  context so `FractalRenderHost` can construct one `MandelbrotGpuKernel`
-  per session. Currently the device is `private` and there's no
-  accessor on `IFractalRenderer`. Add an optional accessor (cast at
-  runtime in the host).
-- `MandelbrotCalculator.UseGpuCompute` toggle. When true (+ kernel
-  present, + not high-precision, + maxIter sane), `CalculateDoublePrecision`
-  branches to `_gpuKernel.Run(...)` then runs the existing IColorMap
-  pass on CPU over the returned iter+smooth buffers.
-- UI toggle: extend the Adaptive iter-cap ComboBox in both Video
-  dialogs to a tri-state row with a separate "GPU compute" checkbox
-  (default off until validated on a few drivers).
+Phase 1 host integration — landed.
+- `DirectXRenderer.TryGetD3D11(out device, out context)` exposes the
+  device + immediate context the swap chain is bound to. Returns false
+  on non-Windows / non-D3D11 backends (GL / Skia) — caller falls back
+  to CPU.
+- `MandelbrotCalculator.UseGpuCompute` + `GpuKernel` properties.
+  `CalculateDoublePrecision` branches to `GpuKernel.Run(...)` when the
+  toggle is on + kernel present + `PerRowMaxIter` null. The CPU palette
+  stage runs as a `Parallel.ForEach` over rows with `FillAuxAndColorSP`
+  per pixel (consuming the GPU's iter + smooth writeback). On kernel
+  exception the call falls through to the CPU SIMD path with a
+  `Debug.WriteLine` — user still gets a frame.
+- `IFractalRenderHost.UseGpuCompute` lazy-constructs the kernel on
+  first true assignment; null when the renderer isn't D3D11. Cleaned
+  up in `Dispose` before tearing the renderer down.
+- `MandelbrotGpuKernel` ctor takes the host's `_d3dGate` lock; `Run()`
+  wraps its entire dispatch + readback in `lock (_d3dGate)` so the
+  kernel never overlaps the swap-chain Render. ID3D11DeviceContext
+  (immediate) is not thread-safe.
+- UI: Ctrl+G toggles GPU compute. `MainViewModel.UseGpuCompute`
+  delegates to the host and re-reads after assignment so the property
+  reflects "didn't engage" when the renderer isn't D3D11. Perf HUD's
+  precision label appends "(GPU)" when the kernel actually ran this
+  frame.
+
+Phase 1.b open items:
+- PerRowMaxIter integration. PerTile mode currently forces CPU
+  fallback. Wire per-row caps into the cbuffer (as an SRV with one
+  int per row, or a packed band-count + caps array) so PerTile works
+  alongside GPU compute.
+- Split GPU-dispatch vs GPU-readback timing in PerfStats so the HUD
+  can diagnose bus-saturation vs occupancy issues on weak IGPs (the
+  existing calc-ms already counts the kernel call but doesn't split).
+- Orbit-aware themes: `CalculateOrbitAware` keeps CPU dispatch
+  unconditionally — the kernel doesn't sample z per iteration. Per-
+  orbit reductions inside the shader (stripe sum, TIA accumulator)
+  are a phase 2 candidate.
 
 ### T3.1 GPU compute (phase 2-5) — deferred
 

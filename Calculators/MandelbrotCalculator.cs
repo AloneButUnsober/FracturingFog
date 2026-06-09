@@ -86,6 +86,24 @@ public sealed class MandelbrotCalculator
 
     public int MaxIterations { get; set; } = 512;
 
+    /// <summary>T3.1: when true and a GPU kernel is attached via
+    /// <see cref="SetGpuKernel"/>, the SP path
+    /// (<see cref="CalculateDoublePrecision{TMap}"/>) dispatches the
+    /// iteration loop to a D3D11 compute shader instead of the CPU
+    /// Parallel.ForEach SIMD path. Palette evaluation stays CPU (phase
+    /// 1); the kernel writes back iter + smooth, the existing color
+    /// stage fills aux buffers + emits ColorBuffer. Falls back to CPU
+    /// when no kernel is set, when HP precision is active, when an
+    /// orbit-aware ColorMap is selected (the kernel doesn't sample z
+    /// per iteration), or when PerRowMaxIter is non-null (per-row caps
+    /// not yet plumbed to the shader).</summary>
+    public bool UseGpuCompute { get; set; }
+
+    /// <summary>T3.1: GPU compute kernel attached by the host when the
+    /// active renderer is D3D11. Null = CPU-only; UseGpuCompute has
+    /// no effect.</summary>
+    public FracturingFog.Rendering.MandelbrotGpuKernel? GpuKernel { get; set; }
+
     /// <summary>Optional per-row iteration cap. When non-null and sized to
     /// <see cref="Height"/>, row y uses <c>PerRowMaxIter[y]</c> instead of
     /// the global <see cref="MaxIterations"/>. Used by the video pipeline's
@@ -748,6 +766,58 @@ public sealed class MandelbrotCalculator
         // body never touches a property that could be re-assigned mid-frame.
         int[]? perRow = PerRowMaxIter;
         bool useTileCap = perRow != null && perRow.Length >= Height;
+
+        // T3.1 GPU compute dispatch.
+        //   • Only when explicitly toggled on (UseGpuCompute) AND a kernel
+        //     is attached (host sets it if the renderer is D3D11).
+        //   • Skipped while PerRowMaxIter is active — per-row caps aren't
+        //     plumbed into the shader yet (phase 1.b follow-up).
+        //   • Phase 1: kernel writes iter + smooth back to CPU; we run
+        //     the existing FillAuxAndColorSP per-pixel to fill aux buffers
+        //     + emit ColorBuffer. Loses the calc thread's IColorMap path
+        //     for orbit-aware themes — those keep CPU dispatch via the
+        //     existing CalculateOrbitAware top-level switch.
+        if (UseGpuCompute && GpuKernel != null && !useTileCap)
+        {
+            try
+            {
+                GpuKernel.Run(
+                    Width, Height,
+                    CenterX, CenterY, scale,
+                    maxIt, EscapeRadius2,
+                    IterationBuffer, SmoothBuffer);
+                // Fill aux buffers + emit ColorBuffer from the GPU's
+                // iter + smooth outputs. Parallel over rows; same shape
+                // as the CPU SIMD writeback so colour matches bit-for-bit
+                // outside the kernel's float-vs-double precision delta.
+                _po.CancellationToken = ct;
+                var poFill = _po;
+                ParallelForRows(0, Height, poFill, y =>
+                {
+                    if (ct.IsCancellationRequested) return;
+                    int rb = y * Width;
+                    for (int x = 0; x < Width; x++)
+                    {
+                        int idx = rb + x;
+                        int iters = IterationBuffer[idx];
+                        // GPU path doesn't carry z + dz/dc, so pass (0,0,1,0).
+                        // FillAuxAndColorSP gates aux fill by iters < maxIter
+                        // and uses smooth from SmoothBuffer when iters carries
+                        // a valid smooth — pass zr=zi=0 for in-set, dr=1,di=0
+                        // so distance becomes 0 (acceptable for shallow zoom
+                        // SP where the GPU path runs).
+                        FillAuxAndColorSP(idx, iters, maxIt, 0, 0, 1, 0, colorMap);
+                    }
+                });
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Kernel failure (device lost, shader bug, OOM) — fall
+                // through to the CPU path so the user still gets a frame.
+                Debug.WriteLine($"[MandelbrotCalculator] GPU dispatch failed, falling back to CPU: {ex.Message}");
+            }
+        }
 
         _po.CancellationToken = ct;
         var po = _po;
