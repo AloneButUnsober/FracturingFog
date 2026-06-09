@@ -16,6 +16,7 @@
 // here because it lives on MandelbrotCalculator itself.
 
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Runtime.CompilerServices;
@@ -140,6 +141,53 @@ namespace FracturingFog.Rendering
 
         private bool _disposed;
 
+        // T2.4: dedicated calc thread + latest-only queue. Replaces the
+        // per-Trigger Task.Run + ContinueWith pair (4+ allocations per frame)
+        // with a single long-lived background Thread that owns the
+        // stale-upload + Calculate pass. Bounded capacity 1 with a drain on
+        // each enqueue gives "latest only" semantics: bursts of Triggers
+        // collapse to the most recent job before the calc thread ever sees
+        // them. The calc-completion (CDF build + UploadProcessedBuffer +
+        // FrameCompleted) is dispatched onto the threadpool so the calc
+        // thread turns around immediately for the next job.
+        private readonly BlockingCollection<FrameJob> _calcQueue =
+            new BlockingCollection<FrameJob>(boundedCapacity: 1);
+        private Thread? _calcThread;
+
+        private readonly struct FrameJob
+        {
+            public readonly CancellationToken Token;
+            public readonly MandelbrotCalculator Calc;
+            public readonly IFractalCalculator? AltCalc;
+            public readonly Stopwatch Sw;
+            public readonly uint[]? StaleBuf;
+            public readonly int StaleW;
+            public readonly int StaleH;
+            public readonly int CalcW;
+            public readonly int CalcH;
+
+            public FrameJob(CancellationToken token, MandelbrotCalculator calc,
+                IFractalCalculator? altCalc, Stopwatch sw,
+                uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH)
+            {
+                Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
+                StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
+                CalcW = calcW; CalcH = calcH;
+            }
+        }
+
+        private readonly struct UploadCtx
+        {
+            public readonly FractalRenderHost Host;
+            public readonly FrameJob Job;
+            public readonly long Ms;
+            public UploadCtx(FractalRenderHost host, FrameJob job, long ms)
+            { Host = host; Job = job; Ms = ms; }
+        }
+
+        private static readonly Action<UploadCtx> s_uploadCallback =
+            static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms);
+
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
         {
             _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
@@ -193,6 +241,13 @@ namespace FracturingFog.Rendering
                 _generatedTricornCalculator.ColorMap     = initialColorMap;
                 _generatedBurningShipCalculator.ColorMap = initialColorMap;
             }
+
+            _calcThread = new Thread(CalcThreadLoop)
+            {
+                IsBackground = true,
+                Name = "FractalCalc",
+            };
+            _calcThread.Start();
         }
 
         public FractalViewState ViewState { get; }
@@ -557,108 +612,160 @@ namespace FracturingFog.Rendering
             int calcW = _calculator.Width;
             int calcH = _calculator.Height;
 
-            Task.Run(() =>
+            // T2.4: enqueue onto the dedicated calc thread (latest-only).
+            // Drain any queued-but-unstarted job first so a burst of Triggers
+            // (wheel zoom, key-repeat) collapses to the freshest job before
+            // the calc thread can pick a stale one up.
+            var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
+                staleBuf, staleW, staleH, calcW, calcH);
+            while (_calcQueue.TryTake(out _)) { }
+            try { _calcQueue.Add(job); }
+            catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
+        }
+
+        // Long-lived background thread. Owns the stale-frame re-upload + the
+        // Calculate() call. After Calculate the upload step is handed off to
+        // the threadpool so this thread immediately becomes available for the
+        // next queued frame, preserving the calc↔upload overlap the old
+        // Task.Run+ContinueWith path got for free.
+        private void CalcThreadLoop()
+        {
+            try
             {
-                // Stale-frame re-upload so the screen shows a correct (if
-                // old) image while the next frame computes. Serialised
-                // against the calc-completion upload via _d3dGate, so the
-                // new frame in the continuation always paints over the
-                // stale here (never the reverse).
-                if (staleBuf != null && staleW == calcW && staleH == calcH)
+                foreach (var job in _calcQueue.GetConsumingEnumerable())
                 {
-                    lock (_uploadGate)
+                    try { RunFrameJobCalc(in job); }
+                    catch (OperationCanceledException) { }
+                    catch { /* swallow — token-driven cancellation is the only
+                              expected failure mode; surface anything else via
+                              the calc's own error path if it has one. */ }
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
+        }
+
+        private void RunFrameJobCalc(in FrameJob job)
+        {
+            var token = job.Token;
+            var calc = job.Calc;
+            var altCalc = job.AltCalc;
+            bool useAlt = altCalc != null;
+
+            // Stale-frame re-upload so the screen shows a correct (if
+            // old) image while the next frame computes. Serialised
+            // against the calc-completion upload via _d3dGate, so the
+            // new frame in the continuation always paints over the
+            // stale here (never the reverse).
+            if (job.StaleBuf != null && job.StaleW == job.CalcW && job.StaleH == job.CalcH)
+            {
+                lock (_uploadGate)
+                {
+                    lock (_d3dGate)
                     {
-                        lock (_d3dGate)
-                        {
-                            _renderer.UpdateTexture(staleBuf, staleW, staleH);
-                            _renderer.Render();
-                        }
+                        _renderer.UpdateTexture(job.StaleBuf, job.StaleW, job.StaleH);
+                        _renderer.Render();
                     }
                 }
+            }
 
+            try
+            {
                 if (useAlt) altCalc!.Calculate(token);
                 else calc.Calculate(token);
-                return sw.ElapsedMilliseconds;
-            }, token)
-            .ContinueWith(t =>
+            }
+            catch (OperationCanceledException) { }
+
+            long ms = job.Sw.ElapsedMilliseconds;
+
+            // Hand the post-calc upload to the threadpool so this calc
+            // thread loops back for the next queued frame without blocking
+            // on UploadProcessedBuffer (post-FX + GPU upload).
+            ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
+                new UploadCtx(this, job, ms), preferLocal: false);
+        }
+
+        private void RunFrameJobUpload(FrameJob job, long ms)
+        {
+            var token = job.Token;
+            var calc = job.Calc;
+            var altCalc = job.AltCalc;
+            bool useAlt = altCalc != null;
+
+            if (token.IsCancellationRequested)
             {
-                if (t.IsCanceled || token.IsCancellationRequested)
-                {
-                    // Cancelled render still counts as "done" for animation
-                    // gating — otherwise a mid-animation cancel would leave
-                    // the gate stuck.
-                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-                    return;
-                }
-                if (_disposed) return;
-
-                long ms = t.IsCompletedSuccessfully ? t.Result : -1;
-
-                // Adaptive contrast — Mandelbrot only. Build the CDF and
-                // cache it so subsequent live-slider / sweep ticks can skip
-                // the (serial) histogram build and just re-apply with the new
-                // strength. Even at HistogramEq == 0 we build the CDF here so
-                // the first slider movement off zero is instant.
-                if (!useAlt)
-                {
-                    if (calc.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
-                    {
-                        lock (_adaptiveCdfLock)
-                        {
-                            _cachedAdaptiveCdf = cdf;
-                            _cachedAdaptiveBins = bins;
-                            _cachedAdaptiveSourceMaxIter = srcMaxIter;
-                            _adaptiveCdfValid = true;
-                        }
-                        if (ViewState.HistogramEq > 0)
-                            calc.ApplyHistogramEqualizationWithCdf(cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
-                    }
-                    else if (ViewState.HistogramEq > 0)
-                    {
-                        // No escaped pixels (e.g. fully in-set) — leave the
-                        // ColorBuffer alone; Calculate already coloured it.
-                    }
-                }
-
-                if (useAlt)
-                    UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
-                else
-                    UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
-
-                // Pull the richer LastPrecisionLabel from the generated calcs
-                // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
-                // path actually ran — essential for diagnosing perf at
-                // deep zoom. Legacy MandelbrotCalculator exposes only a
-                // boolean (IsHighPrecisionActive); collapse to "DD"/"SP"
-                // for the status string in that case.
-                string? lbl = useAlt
-                    ? altCalc switch
-                    {
-                        FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g2 => g2.LastPrecisionLabel,
-                        FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g3 => g3.LastPrecisionLabel,
-                        FracturingFog.Calculators.Generated.MandelbrotZ4Calculator g4 => g4.LastPrecisionLabel,
-                        FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g5 => g5.LastPrecisionLabel,
-                        FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
-                        FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
-                        _ => null
-                    }
-                    : (calc.IsHighPrecisionActive ? "DD" : "SP");
-                bool hp = useAlt
-                    ? (lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD")))
-                    : calc.IsHighPrecisionActive;
-                int curW = useAlt ? altCalc!.Width : calc.Width;
-                int curH = useAlt ? altCalc!.Height : calc.Height;
-                int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
-                double curCx = useAlt ? altCalc!.CenterX : calc.CenterX;
-                double curCy = useAlt ? altCalc!.CenterY : calc.CenterY;
-                double curZoom = useAlt ? altCalc!.Zoom : calc.Zoom;
-
-                FrameCompleted?.Invoke(this, new RenderFrameInfo(
-                    curCx, curCy, curZoom, curIter, ms, curW, curH,
-                    hp, ViewState.IterLocked, ViewState.FractalType, lbl));
-
+                // Cancelled render still counts as "done" for animation
+                // gating — otherwise a mid-animation cancel would leave
+                // the gate stuck.
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-            }, TaskScheduler.Default);
+                return;
+            }
+            if (_disposed) return;
+
+            // Adaptive contrast — Mandelbrot only. Build the CDF and
+            // cache it so subsequent live-slider / sweep ticks can skip
+            // the (serial) histogram build and just re-apply with the new
+            // strength. Even at HistogramEq == 0 we build the CDF here so
+            // the first slider movement off zero is instant.
+            if (!useAlt)
+            {
+                if (calc.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
+                {
+                    lock (_adaptiveCdfLock)
+                    {
+                        _cachedAdaptiveCdf = cdf;
+                        _cachedAdaptiveBins = bins;
+                        _cachedAdaptiveSourceMaxIter = srcMaxIter;
+                        _adaptiveCdfValid = true;
+                    }
+                    if (ViewState.HistogramEq > 0)
+                        calc.ApplyHistogramEqualizationWithCdf(cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
+                }
+                else if (ViewState.HistogramEq > 0)
+                {
+                    // No escaped pixels (e.g. fully in-set) — leave the
+                    // ColorBuffer alone; Calculate already coloured it.
+                }
+            }
+
+            if (useAlt)
+                UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
+            else
+                UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+
+            // Pull the richer LastPrecisionLabel from the generated calcs
+            // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
+            // path actually ran — essential for diagnosing perf at
+            // deep zoom. Legacy MandelbrotCalculator exposes only a
+            // boolean (IsHighPrecisionActive); collapse to "DD"/"SP"
+            // for the status string in that case.
+            string? lbl = useAlt
+                ? altCalc switch
+                {
+                    FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g2 => g2.LastPrecisionLabel,
+                    FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g3 => g3.LastPrecisionLabel,
+                    FracturingFog.Calculators.Generated.MandelbrotZ4Calculator g4 => g4.LastPrecisionLabel,
+                    FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g5 => g5.LastPrecisionLabel,
+                    FracturingFog.Calculators.Generated.TricornCalculator     tc => tc.LastPrecisionLabel,
+                    FracturingFog.Calculators.Generated.BurningShipCalculator bs => bs.LastPrecisionLabel,
+                    _ => null
+                }
+                : (calc.IsHighPrecisionActive ? "DD" : "SP");
+            bool hp = useAlt
+                ? (lbl != null && (lbl.StartsWith("DD") || lbl.StartsWith("QD")))
+                : calc.IsHighPrecisionActive;
+            int curW = useAlt ? altCalc!.Width : calc.Width;
+            int curH = useAlt ? altCalc!.Height : calc.Height;
+            int curIter = useAlt ? altCalc!.MaxIterations : calc.MaxIterations;
+            double curCx = useAlt ? altCalc!.CenterX : calc.CenterX;
+            double curCy = useAlt ? altCalc!.CenterY : calc.CenterY;
+            double curZoom = useAlt ? altCalc!.Zoom : calc.Zoom;
+
+            FrameCompleted?.Invoke(this, new RenderFrameInfo(
+                curCx, curCy, curZoom, curIter, ms, curW, curH,
+                hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+
+            AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
         }
 
         // ── Resize ────────────────────────────────────────────────────────────
@@ -1023,32 +1130,39 @@ namespace FracturingFog.Rendering
                 // it scaled with window area, which is why the sweep
                 // visibly stuttered at larger window sizes. SIMD inner loop
                 // (Vector256, 8 BGRA pixels per step) gives another 4-8×.
-                Parallel.For(0, h, y =>
+                // T2.5: chunked Partitioner — one dispatch per worker chunk
+                // (procCount * 4 total) instead of one per row.
+                int chunk = h / (Environment.ProcessorCount * 4);
+                if (chunk < 1) chunk = 1;
+                Parallel.ForEach(Partitioner.Create(0, h, chunk), range =>
                 {
-                    int rowBase = y * w;
-                    int end = rowBase + w;
-                    int i = rowBase;
-                    if (Vector256.IsHardwareAccelerated)
+                    for (int y = range.Item1; y < range.Item2; y++)
                     {
-                        i = ProcessRowSimd(src, dst, i, end,
-                                           contrastFactor, brightnessOffset255);
-                    }
-                    // Scalar tail (and full fallback when SIMD unavailable).
-                    for (; i < end; i++)
-                    {
-                        uint p = src[i];
-                        float r = ((p >> 16) & 0xFF);
-                        float g = ((p >> 8) & 0xFF);
-                        float b = (p & 0xFF);
+                        int rowBase = y * w;
+                        int end = rowBase + w;
+                        int i = rowBase;
+                        if (Vector256.IsHardwareAccelerated)
+                        {
+                            i = ProcessRowSimd(src, dst, i, end,
+                                               contrastFactor, brightnessOffset255);
+                        }
+                        // Scalar tail (and full fallback when SIMD unavailable).
+                        for (; i < end; i++)
+                        {
+                            uint p = src[i];
+                            float r = ((p >> 16) & 0xFF);
+                            float g = ((p >> 8) & 0xFF);
+                            float b = (p & 0xFF);
 
-                        r = (r - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
-                        g = (g - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
-                        b = (b - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                            r = (r - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                            g = (g - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                            b = (b - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
 
-                        byte R = (byte)Math.Clamp(r, 0f, 255f);
-                        byte G = (byte)Math.Clamp(g, 0f, 255f);
-                        byte B = (byte)Math.Clamp(b, 0f, 255f);
-                        dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                            byte R = (byte)Math.Clamp(r, 0f, 255f);
+                            byte G = (byte)Math.Clamp(g, 0f, 255f);
+                            byte B = (byte)Math.Clamp(b, 0f, 255f);
+                            dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                        }
                     }
                 });
             }
@@ -1277,6 +1391,14 @@ namespace FracturingFog.Rendering
                 _videoSlideshowLegCts?.Cancel();
             }
             lock (_calcLock) _calcCts?.Cancel();
+
+            // T2.4: stop the dedicated calc thread before tearing down the
+            // renderer so a running Calculate doesn't try to use a disposed
+            // device on its way out.
+            try { _calcQueue.CompleteAdding(); } catch { }
+            try { _calcThread?.Join(2000); } catch { }
+            try { _calcQueue.Dispose(); } catch { }
+
             lock (_d3dGate) _renderer.Dispose();
         }
     }

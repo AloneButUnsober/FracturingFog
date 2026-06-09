@@ -374,6 +374,31 @@ Sandbox hot-load).
 
 ---
 
+## Tier 2 landed-so-far
+
+- **T2.4** — `FractalRenderHost` now owns a dedicated background `Thread`
+  ("FractalCalc") + a `BlockingCollection<FrameJob>` with `boundedCapacity: 1`.
+  `Trigger()` drains any queued-but-unstarted job and enqueues the freshest
+  one (latest-only semantics), so bursts of wheel / key-repeat triggers
+  collapse before the calc thread sees them. The thread runs the
+  stale-frame re-upload + `Calculate(token)` inline, then hands the
+  post-calc upload (CDF build + `UploadProcessedBuffer` + `FrameCompleted`)
+  off to the threadpool via `ThreadPool.UnsafeQueueUserWorkItem` + cached
+  `Action<UploadCtx>`. Removes the per-frame `Task.Run` + `ContinueWith`
+  pair (~4 allocs/frame) and removes the per-trigger threadpool dispatch
+  hops. `Dispose()` calls `CompleteAdding()` + `Join(2000)` before tearing
+  down the renderer.
+- **T2.5** — chunked `Partitioner.Create(0, h, chunk)` replaces
+  `Parallel.For(0, h, ...)` everywhere in `MandelbrotCalculator` (7 sites),
+  `EscapeTimeCalculator` (3 sites), and `FractalRenderHost.UploadProcessedBuffer`
+  (1 site). `chunk = max(1, h / (procCount * 4))` so workers grab
+  contiguous row blocks instead of single rows — collapses scheduling
+  dispatch count from `h` to `~procCount * 4` per Calculate. Three stray
+  `new ParallelOptions()` sites in `MandelbrotCalculator` (Adaptive HE,
+  band-dither recolor, plain recolor) now use the cached `_po` field.
+  Largest win on small frames + low maxIter where scheduling overhead
+  dominated row body cost.
+
 ## Tier 3 landed-so-far
 
 - **T3.3 (light)** — pinned LOH alloc via `GC.AllocateUninitializedArray<T>(n, pinned: true)`
