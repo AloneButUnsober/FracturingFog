@@ -23,6 +23,26 @@ public sealed partial class SlideshowSettingsView : Window
     public SlideshowSettingsView()
     {
         AvaloniaXamlLoader.Load(this);
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnDataContextChanged(object? sender, System.EventArgs e)
+    {
+        if (DataContext is SlideshowSettingsViewModel vm)
+        {
+            vm.StartRequestedRaised -= OnStartRequestedRaised;
+            vm.StartRequestedRaised += OnStartRequestedRaised;
+            vm.NameFocusRequested -= OnNameFocusRequested;
+            vm.NameFocusRequested += OnNameFocusRequested;
+        }
+    }
+
+    private void OnStartRequestedRaised(object? sender, System.EventArgs e) => Close(true);
+
+    private void OnNameFocusRequested(object? sender, System.EventArgs e)
+    {
+        var combo = this.FindControl<ComboBox>("NameCombo");
+        combo?.Focus();
     }
 
     private void OnOkClicked(object? sender, RoutedEventArgs e) => Close(true);

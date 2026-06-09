@@ -201,6 +201,18 @@ namespace FracturingFog.Models
         /// filter the theme pool to themes recommended at that depth.</summary>
         double GetRegionZoom(string regionName);
 
+        /// <summary>Fractal-type of the named region as a serialized enum name
+        /// (e.g. "Mandelbrot"). Returns empty when the region is unknown.
+        /// Used by the slideshow engine to apply the
+        /// <c>SlideshowConfig.FilterFractalTypes</c> filter.</summary>
+        string GetRegionFractalTypeName(string regionName);
+
+        /// <summary>Quality-preset name of the named region (e.g. "Standard").
+        /// Returns empty when the region is unknown. Used by the slideshow
+        /// engine to apply the <c>SlideshowConfig.FilterQualityPresets</c>
+        /// filter.</summary>
+        string GetRegionQualityPresetName(string regionName);
+
         /// <summary>Theme names recommended for the given zoom level — themes
         /// whose max-recommended-zoom is below <paramref name="zoom"/> are
         /// excluded so a deep-zoom region doesn't get a washed-out palette.</summary>

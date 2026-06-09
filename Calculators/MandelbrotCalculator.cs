@@ -323,6 +323,26 @@ public sealed class MandelbrotCalculator
             case OrbitTrapGridMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapPinwheelMap m: CalculateOrbitAware(m, ct); return;
             case OrbitTrapPolarRoseMap m: CalculateOrbitAware(m, ct); return;
+            // 3D-lit orbit-trap variants (OrbitTrap3DThemes.cs)
+            case OrbitTrapPointPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCrossPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCirclePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapLinePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapStarPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapSquarePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapRingPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHyperbolaPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapLemniscatePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapCardioidPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapDiagonalCrossPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapTrianglePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHexagonPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapHeartPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapSineWavePhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapConcentricPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapGridPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapPinwheelPhong3DMap m: CalculateOrbitAware(m, ct); return;
+            case OrbitTrapPolarRosePhong3DMap m: CalculateOrbitAware(m, ct); return;
             case StripeAverageClassicMap m: CalculateOrbitAware(m, ct); return;
             case TriangleInequalityMap m: CalculateOrbitAware(m, ct); return;
             case StripeTiaBlendMap m: CalculateOrbitAware(m, ct); return;
@@ -693,6 +713,19 @@ public sealed class MandelbrotCalculator
         Span<double> cxBuf = stackalloc double[VecLen];
         Span<double> iterCntBuf = stackalloc double[VecLen];
 
+        // Hoisted out of column loop to avoid CA2014 stack growth.
+        // Only used when VecLen == 4 and vMap != null, but cheap to allocate
+        // unconditionally — single 16 B span × 9 = 144 B once per row.
+        Span<float> sm   = stackalloc float[4];
+        Span<float> ds   = stackalloc float[4];
+        Span<float> nxs  = stackalloc float[4];
+        Span<float> nys  = stackalloc float[4];
+        Span<float> fzrS = stackalloc float[4];
+        Span<float> fziS = stackalloc float[4];
+        Span<float> fdrS = stackalloc float[4];
+        Span<float> fdiS = stackalloc float[4];
+        Span<int>   colors = stackalloc int[4];
+
         int x = 0;
 
         // ── Vectorized lanes ──────────────────────────────────────────────────
@@ -793,14 +826,7 @@ public sealed class MandelbrotCalculator
             var vMap = colorMap as IVectorColorMap;
             if (vMap != null && VecLen == 4)
             {
-                Span<float> sm = stackalloc float[4];
-                Span<float> ds = stackalloc float[4];
-                Span<float> nxs = stackalloc float[4];
-                Span<float> nys = stackalloc float[4];
-                Span<float> fzrS = stackalloc float[4];
-                Span<float> fziS = stackalloc float[4];
-                Span<float> fdrS = stackalloc float[4];
-                Span<float> fdiS = stackalloc float[4];
+                // Scratch spans hoisted above loop (see CA2014 fix).
                 int inSetBits = 0;
 
                 for (int k = 0; k < 4; k++)
@@ -825,7 +851,6 @@ public sealed class MandelbrotCalculator
                 var fdiV = Vector128.Create(fdiS[0], fdiS[1], fdiS[2], fdiS[3]);
                 var colorV = vMap.MapV(smV, dsV, maxIter, nxV, nyV, fzrV, fziV, fdrV, fdiV);
 
-                Span<int> colors = stackalloc int[4];
                 colorV.CopyTo(colors);
                 uint inSetColor = colorMap.InSetColor;
                 for (int k = 0; k < 4; k++)
@@ -1841,6 +1866,13 @@ public sealed class MandelbrotCalculator
         long rowSaIterSaved = 0;
         int x = 0;
 
+        // Hoisted out of column loop to avoid CA2014 stack growth.
+        Span<double> icSpan  = stackalloc double[4];
+        Span<double> drSpan  = stackalloc double[4];
+        Span<double> diSpan  = stackalloc double[4];
+        Span<double> drvSpan = stackalloc double[4];
+        Span<double> divSpan = stackalloc double[4];
+
         for (; x + 4 <= Width; x += 4)
         {
             double dcR0 = (x - halfW) * scale;
@@ -2008,11 +2040,7 @@ public sealed class MandelbrotCalculator
             // Bulk-extract lanes via Vector256.CopyTo (one vmovupd per vector)
             // instead of five GetElement(k) calls per k (each costs a lane-
             // extract). ~5× fewer cross-domain transitions for the tail.
-            Span<double> icSpan = stackalloc double[4];
-            Span<double> drSpan = stackalloc double[4];
-            Span<double> diSpan = stackalloc double[4];
-            Span<double> drvSpan = stackalloc double[4];
-            Span<double> divSpan = stackalloc double[4];
+            // Scratch spans hoisted above loop (see CA2014 fix).
             iterCount.CopyTo(icSpan);
             dr.CopyTo(drSpan);
             di.CopyTo(diSpan);
@@ -2116,6 +2144,13 @@ public sealed class MandelbrotCalculator
         long rowSaApplied = 0;
         long rowSaIterSaved = 0;
         int x = 0;
+
+        // Hoisted out of column loop to avoid CA2014 stack growth.
+        Span<double> icSpan  = stackalloc double[8];
+        Span<double> drSpan  = stackalloc double[8];
+        Span<double> diSpan  = stackalloc double[8];
+        Span<double> drvSpan = stackalloc double[8];
+        Span<double> divSpan = stackalloc double[8];
 
         for (; x + 8 <= Width; x += 8)
         {
@@ -2276,11 +2311,7 @@ public sealed class MandelbrotCalculator
                 di = BlendActive512(di, newDi, active);
             }
 
-            Span<double> icSpan = stackalloc double[8];
-            Span<double> drSpan = stackalloc double[8];
-            Span<double> diSpan = stackalloc double[8];
-            Span<double> drvSpan = stackalloc double[8];
-            Span<double> divSpan = stackalloc double[8];
+            // Scratch spans hoisted above loop (see CA2014 fix).
             iterCount.CopyTo(icSpan);
             dr.CopyTo(drSpan);
             di.CopyTo(diSpan);

@@ -24,6 +24,7 @@
 //   File.WriteAllText(...colorthemes.json, hand-edited JSON);
 //   ColorPalette.LoadUserThemes();              // re-reads file
 
+using FracturingFog.Abstractions;
 using FracturingFog.Interefaces;
 using FracturingFog.Views;
 using System;
@@ -55,10 +56,7 @@ namespace FracturingFog.Models
 
         // ── Storage paths ─────────────────────────────────────────────────────
 
-        private static string SettingsDir =>
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "FracturingFog");
+        private static string SettingsDir => AppDataPaths.Root;
 
         private static string ThemesFile =>
             Path.Combine(SettingsDir, "colorthemes.json");

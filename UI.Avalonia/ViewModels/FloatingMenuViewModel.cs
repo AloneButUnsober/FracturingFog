@@ -63,6 +63,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
         EditWatermarkCommand    = MakeCmd(() => EditWatermarkClick?.Invoke(this, EventArgs.Empty));
         FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
+        AppDataLocationCommand  = MakeCmd(() => AppDataLocationClick?.Invoke(this, EventArgs.Empty));
     }
 
     private static ReactiveCommand<Unit, Unit> MakeCmd(Action a) => ReactiveCommand.Create(a);
@@ -121,7 +122,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private IColorThemeService? _themeService;
     private ThemeSortMode _themeSort = ThemeSortMode.Default;
     private string? _themeKind;
-    private bool _themeEditableOnly;
+    private const bool _themeEditableOnly = false;
     private RegionSortMode _regionSort = RegionSortMode.Default;
     private FractalType _regionType = FractalType.Mandelbrot;
 
@@ -756,6 +757,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
     public ReactiveCommand<Unit, Unit> EditWatermarkCommand { get; }
     public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
+    public ReactiveCommand<Unit, Unit> AppDataLocationCommand { get; }
 
     // ── Events ────────────────────────────────────────────────────────────
 
@@ -785,6 +787,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? ClientClick;
     public event EventHandler? EditWatermarkClick;
     public event EventHandler? FfmpegSetupClick;
+    public event EventHandler? AppDataLocationClick;
 
     public event EventHandler<string>? RegionComboChanged;
     public event EventHandler<string>? ColorThemeChanged;

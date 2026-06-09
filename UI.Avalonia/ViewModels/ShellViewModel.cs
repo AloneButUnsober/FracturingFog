@@ -508,9 +508,30 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Reload persisted user-tunable timings each toggle so changes made
-        // in the Slideshow Settings dialog take effect on the next run.
-        var settings = SlideshowSettingsStore.Load();
+        // Reload the active SlideshowConfig each toggle so any preset edits
+        // made in the unified Slideshow Settings dialog take effect on the
+        // next run. Timing values are pulled out of the active config; the
+        // legacy SlideshowSettings store stays the single timing source the
+        // engine constructor accepts.
+        var configFile = SlideshowConfigLibrary.Load();
+        var activeConfig = SlideshowConfigLibrary.GetActive(configFile);
+        StartSlideshowWithConfig(activeConfig);
+    }
+
+    /// <summary>Start the image slideshow from an explicit in-memory
+    /// <see cref="SlideshowConfig"/>. Used by the host when the user clicked
+    /// Start in the unified dialog with unsaved edits — drives the run from
+    /// the dialog's working copy without touching the on-disk preset.</summary>
+    public void StartSlideshowFromConfig(SlideshowConfig config)
+    {
+        if (config == null) return;
+        if (_slideshow is { IsRunning: true }) return;
+        StartSlideshowWithConfig(config);
+    }
+
+    private void StartSlideshowWithConfig(SlideshowConfig activeConfig)
+    {
+        var settings = activeConfig.Timing;
 
         if (_slideshow == null)
         {
@@ -555,6 +576,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // user changes to TotalDisplayMsPerRegion / FadeSteps / fade durations
         // would never reach the running loop.
         _slideshow.ApplySettings(settings);
+        _slideshow.Config = activeConfig;
+        _slideshow.AdaptiveValueSink = v => Dispatcher.UIThread.Post(() => FloatingMenu.Adaptive = v);
+
+        // Push the Post-FX snapshot before kicking the loop so the first leg
+        // already renders with the preset's look. Adaptive Sweep will override
+        // the Adaptive value per-tick when enabled.
+        if (activeConfig.PostFx.Enabled && activeConfig.PostFx.Values != null)
+        {
+            var v = activeConfig.PostFx.Values;
+            if (v.TryGetValue("brightness", out var b)) FloatingMenu.Brightness = (int)Math.Round(b);
+            if (v.TryGetValue("contrast", out var c)) FloatingMenu.Contrast = (int)Math.Round(c);
+            if (v.TryGetValue("adaptive", out var a)) FloatingMenu.Adaptive = (int)Math.Round(a);
+        }
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
@@ -1320,7 +1354,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>FloatingMenu's Dimensions combo picked a new render size.
     /// Host resizes the MainWindow to (Width, Height). No-op when the
     /// requested size exceeds the working area — host clamps as needed.</summary>
+#pragma warning disable CS0067 // raised by host subscribing via reflection / future wiring
     public event EventHandler<(int Width, int Height)>? ResizeRequested;
+#pragma warning restore CS0067
 
     /// <summary>Render a high-resolution poster. Host pops the poster-size
     /// dialog + a SaveFilePicker, then runs the shared PosterRenderer.</summary>
@@ -1356,6 +1392,51 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             _video.StartVideo(request);
         }
+    }
+
+    /// <summary>Build a <see cref="VideoZoomRequest"/> from the unified
+    /// <see cref="SlideshowConfig"/> + active <see cref="VideoSettingsConfig"/>
+    /// and start the auto video slideshow. Pushes adaptive-sweep schedule onto
+    /// the controller so per-leg ramps fire as requested.</summary>
+    /// <summary>True while the video engine is running (single-shot or slideshow).</summary>
+    public bool IsVideoRunning => _video is { IsRunning: true };
+
+    /// <summary>Stop the running video engine (single-shot or slideshow). No-op when idle.</summary>
+    public void StopVideo() => _video?.Stop();
+
+    public void StartVideoSlideshowFromConfig(SlideshowConfig config)
+    {
+        if (_video == null || config == null) return;
+        if (_video.IsRunning) return;
+
+        var v = config.Video ?? new VideoSettingsConfig();
+        double secs = v.SecondsPerLeg > 0 ? v.SecondsPerLeg : 30.0;
+
+        var req = new VideoZoomRequest
+        {
+            IsSlideshow = true,
+            Seconds = secs,
+            SlideshowSecondsOverride = secs,
+            IsConstantRate = v.ConstantRate,
+            IsReverse = v.Reverse,
+            TaaSmoothing = v.TaaSmoothing,
+            BandDither = v.BandDither,
+            BandDitherStrength = v.BandDitherStrength,
+            UseRegionWatermark = config.Timing.UseRegionWatermark,
+        };
+
+        _video.VideoSweepConfig = config.AdaptiveSweep;
+        _video.VideoAdaptiveValueSink = val => Dispatcher.UIThread.Post(() => FloatingMenu.Adaptive = val);
+
+        if (config.PostFx.Enabled && config.PostFx.Values != null)
+        {
+            var pv = config.PostFx.Values;
+            if (pv.TryGetValue("brightness", out var b)) FloatingMenu.Brightness = (int)Math.Round(b);
+            if (pv.TryGetValue("contrast", out var c)) FloatingMenu.Contrast = (int)Math.Round(c);
+            if (pv.TryGetValue("adaptive", out var a)) FloatingMenu.Adaptive = (int)Math.Round(a);
+        }
+
+        StartVideoFromRequest(req);
     }
 
     /// <summary>Re-pull region names from the service into the menu combo.

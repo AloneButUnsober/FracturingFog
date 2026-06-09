@@ -15,6 +15,17 @@ namespace FracturingFog
         Newton,
         Nova,
         BuddhaBrot,
+        /// <summary>3-band escape-orbit replay (low/mid/high iteration windows
+        /// → R/G/B channels). Same Monte Carlo sampler as Buddhabrot but emits
+        /// the classic Nebulabrot composite directly.</summary>
+        Nebulabrot,
+        /// <summary>Buddhabrot's complement — replays orbits of points that
+        /// stay bounded (do NOT escape within MaxIter). Single-channel
+        /// histogram driven through the active ColorMap.</summary>
+        AntiBuddhabrot,
+        /// <summary>3-band variant of AntiBuddhabrot. Bands split by orbit
+        /// length within MaxIter; channel selection mirrors Nebulabrot.</summary>
+        AntiNebulabrot,
         IFS,
         LSystem,
         StrangeAttractor,

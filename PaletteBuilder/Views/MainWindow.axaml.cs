@@ -320,7 +320,8 @@ public sealed partial class MainWindow : Window
         if (paths.Count == 0) return;
         if (paths.Count > 1)
         {
-            if (!_service.TryLoadImages(paths, out var err))
+            string? err = null;
+            if (_service is null || !_service.TryLoadImages(paths, out err))
             {
                 _ = ShowInfoAsync(err ?? "Failed to load images.");
                 return;

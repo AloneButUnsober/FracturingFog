@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Reactive;
+using global::Avalonia.Threading;
 using FracturingFog;
 using FracturingFog.Models;
 using ReactiveUI;
@@ -60,13 +61,33 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _buddhaIterLow = _p.BuddhaIterLow;
         _buddhaIterMid = _p.BuddhaIterMid;
         _buddhaIterHigh = _p.BuddhaIterHigh;
+        _buddhaColorMode = _p.BuddhaColorMode;
+        _buddhaQualityMode = _p.BuddhaQualityMode;
+        _buddhaMetropolis = _p.BuddhaMetropolis;
+        _buddhaProgressive = _p.BuddhaProgressive;
         _bulbPower = _p.BulbPower;
         _bulbIterations = _p.BulbIterations;
         _bulbCameraTheta = _p.BulbCameraTheta;
         _bulbCameraPhi = _p.BulbCameraPhi;
         _bulbCameraDistance = _p.BulbCameraDistance;
 
-        CloseCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        CloseCommand = ReactiveCommand.Create(() =>
+        {
+            StopJuliaAnimate();
+            StopLSystemSweep();
+            CloseRequested?.Invoke(this, EventArgs.Empty);
+        });
+        ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
+        ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
+    }
+
+    /// <summary>Stop any running parameter animation. Host calls this when the
+    /// dialog is closed via the window chrome (not the Close button) so the
+    /// dispatcher timer doesn't leak past dialog lifetime.</summary>
+    public void StopAnimations()
+    {
+        StopJuliaAnimate();
+        StopLSystemSweep();
     }
 
     public FractalType FractalType { get; }
@@ -84,7 +105,10 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
     public bool IsStrangeAttractor => FractalType == FractalType.StrangeAttractor;
-    public bool IsBuddhaBrot => FractalType == FractalType.BuddhaBrot;
+    public bool IsBuddhaBrot => FractalType is FractalType.BuddhaBrot
+        or FractalType.Nebulabrot
+        or FractalType.AntiBuddhabrot
+        or FractalType.AntiNebulabrot;
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsNewtonOrNova || IsIFS
@@ -95,6 +119,141 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double JuliaR { get => _juliaR; set { Set(ref _juliaR, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
     private double _juliaI;
     public double JuliaI { get => _juliaI; set { Set(ref _juliaI, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
+
+    // ── Julia animation ──
+    //
+    // Sweeps the Julia c constant in a circular orbit around the origin of the
+    // complex plane at the current |c| radius. Forward = CCW (positive angular
+    // velocity), Reverse = CW. Speed is radians per second so 6.28 ≈ one full
+    // orbit per second; default 0.2 gives a calm sweep visible in real time.
+    private bool _juliaAnimateForward = true;
+    public bool JuliaAnimateForward
+    {
+        get => _juliaAnimateForward;
+        set => this.RaiseAndSetIfChanged(ref _juliaAnimateForward, value);
+    }
+    public bool JuliaAnimateReverse
+    {
+        get => !_juliaAnimateForward;
+        set { if (value != !_juliaAnimateForward) JuliaAnimateForward = !value; }
+    }
+
+    private double _juliaAnimateSpeed = 0.2;
+    public double JuliaAnimateSpeed
+    {
+        get => _juliaAnimateSpeed;
+        set => this.RaiseAndSetIfChanged(ref _juliaAnimateSpeed, Clamp(value, 0.001, 6.283));
+    }
+
+    private bool _juliaAnimating;
+    public bool JuliaAnimating
+    {
+        get => _juliaAnimating;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _juliaAnimating, value);
+            this.RaisePropertyChanged(nameof(JuliaAnimateButtonText));
+        }
+    }
+
+    public string JuliaAnimateButtonText => _juliaAnimating ? "Stop" : "Animate";
+
+    public ReactiveCommand<Unit, Unit> ToggleJuliaAnimateCommand { get; }
+
+    // Render-pacing gate: the param dialog drives renders via ParamChanged,
+    // and each render can take 10s–100s of ms (deep zoom or high iter). A
+    // free-running 30 Hz timer flooded the renderer with cancel/restart calls
+    // that pegged the UI thread until the app appeared to hang. The fix is to
+    // integrate the angle silently on every tick but only fire ParamChanged
+    // once the previous render reports back via NotifyRenderCompleted. The
+    // host wires that callback while the dialog is open.
+    private DispatcherTimer? _juliaTimer;
+    private DateTime _juliaLastTick;
+    private bool _juliaRenderInFlight;
+
+    /// <summary>Host calls this after each render frame completes. Releases the
+    /// animation gate so the next integrated c value can drive the next
+    /// render.</summary>
+    public void NotifyRenderCompleted()
+    {
+        _juliaRenderInFlight = false;
+    }
+
+    private void ToggleJuliaAnimate()
+    {
+        if (_juliaAnimating) StopJuliaAnimate();
+        else                 StartJuliaAnimate();
+    }
+
+    private void StartJuliaAnimate()
+    {
+        if (_juliaTimer == null)
+        {
+            // Background priority lets the UI thread service input + paint
+            // between integration ticks; Render priority caused visible
+            // stalls when a long render kept stealing the slot.
+            _juliaTimer = new DispatcherTimer(
+                TimeSpan.FromMilliseconds(50),
+                DispatcherPriority.Background,
+                OnJuliaTick);
+        }
+        _juliaLastTick = DateTime.UtcNow;
+        _juliaRenderInFlight = false;
+        _juliaTimer.Start();
+        JuliaAnimating = true;
+    }
+
+    private void StopJuliaAnimate()
+    {
+        _juliaTimer?.Stop();
+        _juliaRenderInFlight = false;
+        JuliaAnimating = false;
+    }
+
+    private void OnJuliaTick(object? sender, EventArgs e)
+    {
+        // Render-completion-gated kick: skip the whole step while the previous
+        // render is still in flight. Earlier revisions integrated dt every
+        // tick and only gated Fire, which made the angle race ahead while
+        // the renderer was warming up — first frame after the gate opened
+        // showed a visible jump. Skipping integration while blocked makes
+        // motion track render cadence instead.
+        if (_juliaRenderInFlight) return;
+
+        var now = DateTime.UtcNow;
+        double dt = (now - _juliaLastTick).TotalSeconds;
+        _juliaLastTick = now;
+        if (dt <= 0) return;
+
+        // Cap per-step dt so a slow first render (cold JIT + cold pixel-scale
+        // cache) can't translate into a single big jump. 0.1 s ≈ two tick
+        // intervals — enough headroom for jitter, low enough that the worst
+        // jump matches a typical mid-zoom render time.
+        if (dt > 0.1) dt = 0.1;
+
+        double r = Math.Sqrt(_juliaR * _juliaR + _juliaI * _juliaI);
+        // Origin is a fixed point under pure rotation — bootstrap to a visible
+        // radius so the user always sees motion even from a fresh dialog.
+        if (r < 1e-6) r = 0.5;
+
+        double theta = Math.Atan2(_juliaI, _juliaR);
+        double dir = _juliaAnimateForward ? 1.0 : -1.0;
+        theta += dir * _juliaAnimateSpeed * dt;
+
+        double nr = r * Math.Cos(theta);
+        double ni = r * Math.Sin(theta);
+
+        _suppress = true;
+        try
+        {
+            JuliaR = nr;
+            JuliaI = ni;
+        }
+        finally { _suppress = false; }
+
+        _juliaRenderInFlight = true;
+        Fire();
+    }
 
     // ── Multibrot ──
     private int _multibrotD;
@@ -139,6 +298,149 @@ public sealed class FractalParamsViewModel : ViewModelBase
     }
     private int _lsystemDepth;
     public int LSystemDepth { get => _lsystemDepth; set { Set(ref _lsystemDepth, (int)Clamp(value, 0, 12)); _p.LSystemDepth = _lsystemDepth; Fire(); } }
+
+    // ── LSystem Depth sweep ──
+    //
+    // Mirrors the AdaptiveSweep pattern in FloatingMenuViewModel but on the
+    // L-System depth integer instead of the post-FX adaptive slider. Each tick
+    // writes through the LSystemDepth setter so the spinner UI and the
+    // underlying FractalParameters stay in sync and a re-render fires.
+    //
+    // Depth's small integer range (0..12) means we round each tick to the
+    // nearest int — a 5 s forward sweep visibly steps through each depth so
+    // the user can watch the curve add detail layer by layer.
+
+    private const int LSystemSweepTickMs = 50;
+    private const int LSystemDepthMin = 0;
+    private const int LSystemDepthMax = 12;
+
+    private AdaptiveSweepMode _lsystemSweepMode = AdaptiveSweepMode.Forward;
+    public AdaptiveSweepMode LSystemSweepMode
+    {
+        get => _lsystemSweepMode;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _lsystemSweepMode, value);
+            this.RaisePropertyChanged(nameof(IsLSystemForwardMode));
+            this.RaisePropertyChanged(nameof(IsLSystemReverseMode));
+            this.RaisePropertyChanged(nameof(IsLSystemPingPongMode));
+        }
+    }
+    public bool IsLSystemForwardMode
+    {
+        get => LSystemSweepMode == AdaptiveSweepMode.Forward;
+        set { if (value) LSystemSweepMode = AdaptiveSweepMode.Forward; }
+    }
+    public bool IsLSystemReverseMode
+    {
+        get => LSystemSweepMode == AdaptiveSweepMode.Reverse;
+        set { if (value) LSystemSweepMode = AdaptiveSweepMode.Reverse; }
+    }
+    public bool IsLSystemPingPongMode
+    {
+        get => LSystemSweepMode == AdaptiveSweepMode.PingPong;
+        set { if (value) LSystemSweepMode = AdaptiveSweepMode.PingPong; }
+    }
+
+    private bool _lsystemSweepLoop;
+    public bool LSystemSweepLoop
+    {
+        get => _lsystemSweepLoop;
+        set => this.RaiseAndSetIfChanged(ref _lsystemSweepLoop, value);
+    }
+
+    private double _lsystemSweepDurationSeconds = 5.0;
+    public double LSystemSweepDurationSeconds
+    {
+        get => _lsystemSweepDurationSeconds;
+        set => this.RaiseAndSetIfChanged(ref _lsystemSweepDurationSeconds, Clamp(value, 0.25, 600.0));
+    }
+
+    private bool _isLSystemSweeping;
+    public bool IsLSystemSweeping
+    {
+        get => _isLSystemSweeping;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _isLSystemSweeping, value);
+            this.RaisePropertyChanged(nameof(LSystemSweepButtonLabel));
+        }
+    }
+    public string LSystemSweepButtonLabel => IsLSystemSweeping ? "Stop Sweep" : "Sweep";
+
+    private DispatcherTimer? _lsystemSweepTimer;
+    private DateTime _lsystemSweepStartedUtc;
+    private double _lsystemSweepDurationMsSnapshot;
+    private AdaptiveSweepMode _lsystemSweepActiveMode;
+    private bool _lsystemSweepActiveLoop;
+
+    public ReactiveCommand<Unit, Unit>? ToggleLSystemSweepCommand { get; private set; }
+
+    private void ToggleLSystemSweep()
+    {
+        if (IsLSystemSweeping) StopLSystemSweep();
+        else                   StartLSystemSweep();
+    }
+
+    private void StartLSystemSweep()
+    {
+        if (IsLSystemSweeping) return;
+        _lsystemSweepDurationMsSnapshot = Math.Max(250.0, LSystemSweepDurationSeconds * 1000.0);
+        _lsystemSweepStartedUtc = DateTime.UtcNow;
+        _lsystemSweepActiveMode = LSystemSweepMode;
+        _lsystemSweepActiveLoop = LSystemSweepLoop;
+        LSystemDepth = _lsystemSweepActiveMode == AdaptiveSweepMode.Reverse ? LSystemDepthMax : LSystemDepthMin;
+        IsLSystemSweeping = true;
+
+        _lsystemSweepTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(LSystemSweepTickMs),
+            DispatcherPriority.Render,
+            OnLSystemSweepTick);
+        _lsystemSweepTimer.Start();
+    }
+
+    private void StopLSystemSweep()
+    {
+        _lsystemSweepTimer?.Stop();
+        _lsystemSweepTimer = null;
+        IsLSystemSweeping = false;
+    }
+
+    private void OnLSystemSweepTick(object? sender, EventArgs e)
+    {
+        double elapsedMs = (DateTime.UtcNow - _lsystemSweepStartedUtc).TotalMilliseconds;
+        double t = elapsedMs / _lsystemSweepDurationMsSnapshot;
+        int span = LSystemDepthMax - LSystemDepthMin;
+
+        if (t >= 1.0)
+        {
+            if (_lsystemSweepActiveLoop)
+            {
+                _lsystemSweepStartedUtc = DateTime.UtcNow;
+                LSystemDepth = _lsystemSweepActiveMode == AdaptiveSweepMode.Reverse ? LSystemDepthMax : LSystemDepthMin;
+                return;
+            }
+            LSystemDepth = _lsystemSweepActiveMode switch
+            {
+                AdaptiveSweepMode.Forward  => LSystemDepthMax,
+                AdaptiveSweepMode.Reverse  => LSystemDepthMin,
+                AdaptiveSweepMode.PingPong => LSystemDepthMin,
+                _ => LSystemDepth,
+            };
+            StopLSystemSweep();
+            return;
+        }
+
+        LSystemDepth = _lsystemSweepActiveMode switch
+        {
+            AdaptiveSweepMode.Forward  => LSystemDepthMin + (int)Math.Round(t * span),
+            AdaptiveSweepMode.Reverse  => LSystemDepthMin + (int)Math.Round((1.0 - t) * span),
+            AdaptiveSweepMode.PingPong => t < 0.5
+                ? LSystemDepthMin + (int)Math.Round(t * 2.0 * span)
+                : LSystemDepthMin + (int)Math.Round((1.0 - t) * 2.0 * span),
+            _ => LSystemDepth,
+        };
+    }
 
     // ── Strange Attractor ──
     private string _attractorPresetName;
@@ -185,6 +487,35 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public int BuddhaIterMid { get => _buddhaIterMid; set { Set(ref _buddhaIterMid, (int)Clamp(value, 100, 200_000)); _p.BuddhaIterMid = _buddhaIterMid; Fire(); } }
     private int _buddhaIterHigh;
     public int BuddhaIterHigh { get => _buddhaIterHigh; set { Set(ref _buddhaIterHigh, (int)Clamp(value, 500, 500_000)); _p.BuddhaIterHigh = _buddhaIterHigh; Fire(); } }
+    private BuddhaColorMode _buddhaColorMode;
+    public BuddhaColorMode BuddhaColorMode
+    {
+        get => _buddhaColorMode;
+        set { Set(ref _buddhaColorMode, value); _p.BuddhaColorMode = value; Fire(); }
+    }
+    public Array BuddhaColorModes => Enum.GetValues(typeof(BuddhaColorMode));
+
+    private BuddhaQualityMode _buddhaQualityMode;
+    public BuddhaQualityMode BuddhaQualityMode
+    {
+        get => _buddhaQualityMode;
+        set { Set(ref _buddhaQualityMode, value); _p.BuddhaQualityMode = value; Fire(); }
+    }
+    public Array BuddhaQualityModes => Enum.GetValues(typeof(BuddhaQualityMode));
+
+    private bool _buddhaMetropolis;
+    public bool BuddhaMetropolis
+    {
+        get => _buddhaMetropolis;
+        set { Set(ref _buddhaMetropolis, value); _p.BuddhaMetropolis = value; Fire(); }
+    }
+
+    private bool _buddhaProgressive;
+    public bool BuddhaProgressive
+    {
+        get => _buddhaProgressive;
+        set { Set(ref _buddhaProgressive, value); _p.BuddhaProgressive = value; Fire(); }
+    }
 
     // ── Mandelbulb ──
     private double _bulbPower;
@@ -196,7 +527,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
     private double _bulbCameraPhi;
     public double BulbCameraPhi { get => _bulbCameraPhi; set { Set(ref _bulbCameraPhi, Clamp(value, 0.01, 3.13)); _p.BulbCameraPhi = _bulbCameraPhi; Fire(); } }
     private double _bulbCameraDistance;
-    public double BulbCameraDistance { get => _bulbCameraDistance; set { Set(ref _bulbCameraDistance, Clamp(value, 1.5, 10)); _p.BulbCameraDistance = _bulbCameraDistance; Fire(); } }
+    public double BulbCameraDistance { get => _bulbCameraDistance; set { Set(ref _bulbCameraDistance, Clamp(value, 0.1, 500)); _p.BulbCameraDistance = _bulbCameraDistance; Fire(); } }
 
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 

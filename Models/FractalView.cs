@@ -106,6 +106,9 @@ namespace FracturingFog.Models
         public static Dictionary<FractalType, string> FractalNameByNameType => new()
         {
             {FractalType.BuddhaBrot, "BuddhaBrot" },
+            {FractalType.Nebulabrot, "Nebulabrot" },
+            {FractalType.AntiBuddhabrot, "AntiBuddhabrot" },
+            {FractalType.AntiNebulabrot, "AntiNebulabrot" },
             {FractalType.BurningShip, "BurningShip" },
             {FractalType.IFS, "IFS" },
             {FractalType.Julia, "Julia" },

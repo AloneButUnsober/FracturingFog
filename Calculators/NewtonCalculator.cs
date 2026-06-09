@@ -65,7 +65,7 @@ public sealed class NewtonCalculator : IFractalCalculator
         const double eps2 = 1e-12;
 
         var newtonMap = ColorMap as INewtonColorMap;
-        if (ColorMap != null) ColorMap.MaxIterations = maxIter;
+        ColorMap.MaxIterations = maxIter;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
