@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 using FracturingFog.Interefaces;
@@ -11,7 +12,7 @@ namespace FracturingFog.Models.FractalKernels
     /// Re∈[-2.5, 1.5], Im∈[-2, 1.5]; conventionally rendered with Im axis
     /// inverted so the "ship" appears upright.
     /// </summary>
-    public readonly struct BurningShipKernel : IFractalKernel
+    public readonly struct BurningShipKernel : ISimdFractalKernel
     {
         public double BailoutRadius2 { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => 512.0 * 512.0; }
         public bool HasCardioidSkip { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => false; }
@@ -39,6 +40,45 @@ namespace FracturingFog.Models.FractalKernels
             dr = newDr; di = newDi;
             double newZr = azr * azr - azi * azi + cx;
             zi = 2.0 * azr * azi + cy;
+            zr = newZr;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void InitStateSimd(
+            Vector<double> cx, Vector<double> cy,
+            out Vector<double> zr, out Vector<double> zi,
+            out Vector<double> dr, out Vector<double> di)
+        {
+            zr = Vector<double>.Zero;
+            zi = Vector<double>.Zero;
+            dr = Vector<double>.One;
+            di = Vector<double>.Zero;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void StepSimd(
+            ref Vector<double> zr, ref Vector<double> zi,
+            ref Vector<double> dr, ref Vector<double> di,
+            Vector<double> cx, Vector<double> cy)
+        {
+            var two = new Vector<double>(2.0);
+            var one = Vector<double>.One;
+            var negOne = new Vector<double>(-1.0);
+            var zero = Vector<double>.Zero;
+
+            var azr = Vector.Abs(zr);
+            var azi = Vector.Abs(zi);
+            // Per-lane sign(+1 / -1) via ConditionalSelect on >= 0 mask.
+            var signMaskR = Vector.GreaterThanOrEqual(zr, zero);
+            var signMaskI = Vector.GreaterThanOrEqual(zi, zero);
+            var sgnR = Vector.ConditionalSelect(signMaskR, one, negOne);
+            var sgnI = Vector.ConditionalSelect(signMaskI, one, negOne);
+
+            var newDr = two * (azr * dr - azi * di) * sgnR + one;
+            var newDi = two * (azr * di + azi * dr) * sgnI;
+            dr = newDr; di = newDi;
+            var newZr = azr * azr - azi * azi + cx;
+            zi = two * azr * azi + cy;
             zr = newZr;
         }
     }

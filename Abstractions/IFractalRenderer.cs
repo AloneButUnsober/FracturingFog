@@ -29,4 +29,12 @@ public interface IFractalRenderer : IDisposable
 
     /// <summary>Human-readable renderer name shown in the System Info dialog.</summary>
     string RendererDescription { get; }
+
+    /// <summary>
+    /// When true (default), Present blocks for vertical blank — caps to
+    /// monitor refresh. Flip false during video recording or a single-image
+    /// blocking render so Present returns immediately and the calc loop is
+    /// not paced by the display.
+    /// </summary>
+    bool VSync { get; set; }
 }

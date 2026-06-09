@@ -48,6 +48,14 @@ public sealed class SkiaCpuRenderer : IFractalRenderer
 
     public string RendererDescription { get; }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Skia CPU path has no swap-chain — the SKImage is handed to the host
+    /// each Render and the host owns presentation pacing. Property tracks
+    /// intent only.
+    /// </remarks>
+    public bool VSync { get; set; } = true;
+
     public SkiaCpuRenderer(int width, int height, SkiaPresent present)
     {
         ArgumentNullException.ThrowIfNull(present);

@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -23,6 +24,7 @@ public sealed partial class SlideshowSettingsView : Window
     public SlideshowSettingsView()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
         DataContextChanged += OnDataContextChanged;
     }
 

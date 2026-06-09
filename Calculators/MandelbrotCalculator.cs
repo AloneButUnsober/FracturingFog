@@ -244,6 +244,14 @@ public sealed class MandelbrotCalculator
     private long _saIterSkippedTotal;
     private bool _loggedSimdPath;
 
+    // Cached ParallelOptions reused across every Parallel.For inside a
+    // single Calculate. Cheaper than `new ParallelOptions { ct }` per row
+    // band (one alloc per band × 6 paths = 6 allocs per Calculate). The
+    // calculator is single-instance per host and Calculate is serialised
+    // by the host's _calcLock, so swapping CancellationToken in-place is
+    // safe.
+    private readonly ParallelOptions _po = new();
+
     // ── Constructor / resize ──────────────────────────────────────────────────
 
     public MandelbrotCalculator(int width, int height) => Resize(width, height);
@@ -284,8 +292,12 @@ public sealed class MandelbrotCalculator
     /// </summary>
     public void Calculate(CancellationToken ct = default)
     {
+#if DEBUG
+        // Stacktrace alloc + reflection. Skipped in Release so the hot
+        // video/preview path does not pay for the diagnostic.
         var callingMethod = new StackTrace().GetFrame(1)?.GetMethod();
         Debug.WriteLine($"Calculate() called from {callingMethod?.DeclaringType?.Name}.{callingMethod?.Name}{Environment.NewLine} with ColorMap={ColorMap.GetType().Name}, MaxIterations={MaxIterations}");
+#endif
         ColorMap.MaxIterations = MaxIterations;
 
         // Update pixel scale so DE-style themes can normalise raw distance
@@ -554,7 +566,8 @@ public sealed class MandelbrotCalculator
         // Period search budget — covers all visible secondary / tertiary bulbs.
         const int maxPeriod = 1024;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, h, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -690,7 +703,8 @@ public sealed class MandelbrotCalculator
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -1078,7 +1092,8 @@ public sealed class MandelbrotCalculator
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -1246,7 +1261,8 @@ public sealed class MandelbrotCalculator
                                                  : "PT path: scalar");
             _loggedSimdPath = true;
         }
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, Height, po, y =>
         {
             if (ct.IsCancellationRequested) return;

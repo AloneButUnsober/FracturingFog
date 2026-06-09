@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -15,6 +16,7 @@ public partial class ServerAdminView : Window
     public ServerAdminView()
     {
         InitializeComponent();
+        EscapeCloseBehavior.Attach(this);
         DataContextChanged += OnDcChanged;
         // Closing is handled by MainWindow.SyncServerAdmin: it cancels the
         // close and flips ShellViewModel.IsServerAdminVisible=false. That

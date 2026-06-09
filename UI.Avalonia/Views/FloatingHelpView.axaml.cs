@@ -1,6 +1,6 @@
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -16,16 +16,11 @@ public sealed partial class FloatingHelpView : Window
     public FloatingHelpView()
     {
         AvaloniaXamlLoader.Load(this);
-        KeyDown += OnKeyDown;
+        EscapeCloseBehavior.Attach(this);
         DataContextChanged += (_, _) =>
         {
             if (DataContext is FloatingHelpViewModel vm)
                 vm.CloseRequested += (_, _) => Close();
         };
-    }
-
-    private void OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape) Close();
     }
 }

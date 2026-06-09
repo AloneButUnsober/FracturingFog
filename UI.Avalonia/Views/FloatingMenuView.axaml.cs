@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
 using FracturingFog.UI.Avalonia.Controls;
+using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -23,6 +24,7 @@ public sealed partial class FloatingMenuView : Window
     public FloatingMenuView()
     {
         AvaloniaXamlLoader.Load(this);
+        EscapeCloseBehavior.Attach(this);
         // Attach right-click sort menus once the window (and its bound VM) is up.
         Opened += (_, _) =>
         {

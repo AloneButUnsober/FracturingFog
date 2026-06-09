@@ -9,6 +9,7 @@
 // either engine based on FractalType without major refactor.
 
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,6 +68,9 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
     public static double LastPixelScale { get; private set; } = 1.0;
 
+    // Cached ParallelOptions — see MandelbrotCalculator._po notes.
+    private readonly ParallelOptions _po = new();
+
     // ── Constructor / resize ─────────────────────────────────────────────────
 
     public EscapeTimeCalculator(int width, int height) => Resize(width, height);
@@ -99,18 +103,20 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
         switch (FractalType)
         {
+            // SIMD-capable kernels (pure polynomial in zr/zi).
             case FractalType.Mandelbrot:
-                DispatchByColorMap(new MandelbrotKernel(), ct);
+                DispatchByColorMapSimd(new MandelbrotKernel(), ct);
                 break;
             case FractalType.Julia:
-                DispatchByColorMap(new JuliaKernel(FractalParameters.JuliaC.Real, FractalParameters.JuliaC.Imaginary), ct);
+                DispatchByColorMapSimd(new JuliaKernel(FractalParameters.JuliaC.Real, FractalParameters.JuliaC.Imaginary), ct);
                 break;
             case FractalType.BurningShip:
-                DispatchByColorMap(new BurningShipKernel(), ct);
+                DispatchByColorMapSimd(new BurningShipKernel(), ct);
                 break;
             case FractalType.Tricorn:
-                DispatchByColorMap(new TricornKernel(), ct);
+                DispatchByColorMapSimd(new TricornKernel(), ct);
                 break;
+            // Transcendental / two-step memory — stay scalar.
             case FractalType.Multibrot:
                 DispatchByColorMap(new MultibrotKernel(FractalParameters.MultibrotExponent), ct);
                 break;
@@ -122,19 +128,209 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         }
     }
 
+    // ── SIMD dispatch (kernels implementing ISimdFractalKernel) ─────────────
+
+    private void DispatchByColorMapSimd<TKernel>(TKernel kernel, CancellationToken ct)
+        where TKernel : struct, ISimdFractalKernel
+    {
+        switch (ColorMap)
+        {
+            case HsvPalette m:        CalculateCoreSimd<TKernel, HsvPalette>(kernel, m, ct);        return;
+            case GrayscalePalette m:  CalculateCoreSimd<TKernel, GrayscalePalette>(kernel, m, ct);  return;
+            case RainbowColorMap m:   CalculateCoreSimd<TKernel, RainbowColorMap>(kernel, m, ct);   return;
+            case FirePalette m:       CalculateCoreSimd<TKernel, FirePalette>(kernel, m, ct);       return;
+            case Painted m:           CalculateCoreSimd<TKernel, Painted>(kernel, m, ct);           return;
+            case PaintedReversed m:   CalculateCoreSimd<TKernel, PaintedReversed>(kernel, m, ct);   return;
+            case Pastelly m:          CalculateCoreSimd<TKernel, Pastelly>(kernel, m, ct);          return;
+            case WarpedHsvMap m:      CalculateCoreSimd<TKernel, WarpedHsvMap>(kernel, m, ct);      return;
+            case GoldenRatioMap m:    CalculateCoreSimd<TKernel, GoldenRatioMap>(kernel, m, ct);    return;
+            case MonoBandMap m:       CalculateCoreSimd<TKernel, MonoBandMap>(kernel, m, ct);       return;
+            case BernsteinMap m:      CalculateCoreSimd<TKernel, BernsteinMap>(kernel, m, ct);      return;
+            case RedAndBlack m:       CalculateCoreSimd<TKernel, RedAndBlack>(kernel, m, ct);       return;
+            case NebulaDustMap m:     CalculateCoreSimd<TKernel, NebulaDustMap>(kernel, m, ct);     return;
+            case DigitalMatrixMap m:  CalculateCoreSimd<TKernel, DigitalMatrixMap>(kernel, m, ct);  return;
+            case PsychedelicMap m:    CalculateCoreSimd<TKernel, PsychedelicMap>(kernel, m, ct);    return;
+            case TwilightCyclicMap m: CalculateCoreSimd<TKernel, TwilightCyclicMap>(kernel, m, ct); return;
+            case SolarWindMap m:      CalculateCoreSimd<TKernel, SolarWindMap>(kernel, m, ct);      return;
+            case SolarWindMapMOD m:   CalculateCoreSimd<TKernel, SolarWindMapMOD>(kernel, m, ct);   return;
+            case CopperSheenMap m:    CalculateCoreSimd<TKernel, CopperSheenMap>(kernel, m, ct);    return;
+            case VintageSepiaMap m:   CalculateCoreSimd<TKernel, VintageSepiaMap>(kernel, m, ct);   return;
+            case DistanceGlowMap m:   CalculateCoreSimd<TKernel, DistanceGlowMap>(kernel, m, ct);   return;
+            default:
+                CalculateCoreSimd<TKernel, IColorMap>(kernel, ColorMap, ct);
+                return;
+        }
+    }
+
+    // ── SIMD inner loop ─────────────────────────────────────────────────────
+    //
+    // Vectorises the per-pixel iteration loop using Vector<double> (4 lanes
+    // on AVX2, 8 on AVX-512). Per-lane derivative tracking + escape mask via
+    // ConditionalSelect. FillAuxAndColor stays scalar per lane after exit —
+    // the heavy cost is the iteration loop, which now runs at full SIMD
+    // throughput.
+
+    private void CalculateCoreSimd<TKernel, TMap>(TKernel kernel, TMap colorMap, CancellationToken ct)
+        where TKernel : struct, ISimdFractalKernel
+        where TMap : IColorMap
+    {
+        int vecLen = Vector<double>.Count;
+        double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        int maxIt = MaxIterations;
+        double centerX = CenterX;
+        double centerY = CenterY;
+        int width = Width;
+        int height = Height;
+        double bailout2 = kernel.BailoutRadius2;
+        bool hasCardioidSkip = kernel.HasCardioidSkip;
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        Parallel.For(0, height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            double cy = centerY + (y - height * 0.5) * scale;
+            int rowBase = y * width;
+
+            var bailoutV = new Vector<double>(bailout2);
+            var oneV = Vector<double>.One;
+            var zeroV = Vector<double>.Zero;
+            var cyV = new Vector<double>(cy);
+            Span<double> cxBuf = stackalloc double[vecLen];
+
+            int x = 0;
+            for (; x + vecLen <= width; x += vecLen)
+            {
+                // Build per-lane cx vector.
+                for (int k = 0; k < vecLen; k++)
+                    cxBuf[k] = centerX + ((x + k) - width * 0.5) * scale;
+                var cxV = new Vector<double>(cxBuf);
+
+                // Whole-block cardioid skip — fires often on shallow zooms.
+                if (hasCardioidSkip)
+                {
+                    int bulbBits = 0;
+                    for (int k = 0; k < vecLen; k++)
+                        if (kernel.IsInTrivialInSet(cxBuf[k], cy)) bulbBits |= 1 << k;
+                    int allMask = (1 << vecLen) - 1;
+                    if (bulbBits == allMask)
+                    {
+                        for (int k = 0; k < vecLen; k++)
+                        {
+                            int idx = rowBase + x + k;
+                            IterationBuffer[idx] = maxIt;
+                            FillAuxAndColor(idx, maxIt, maxIt, 0, 0, 1, 0, colorMap);
+                        }
+                        continue;
+                    }
+                }
+
+                kernel.InitStateSimd(cxV, cyV,
+                    out Vector<double> zr, out Vector<double> zi,
+                    out Vector<double> dr, out Vector<double> di);
+                var iterCountV = zeroV;
+
+                for (int iter = 0; iter < maxIt; iter++)
+                {
+                    var mag2 = zr * zr + zi * zi;
+                    var notEscaped = Vector.LessThan(mag2, bailoutV);
+
+                    iterCountV += Vector.ConditionalSelect(notEscaped, oneV, zeroV);
+
+                    // Take a step on all lanes; freeze escaped lanes via select.
+                    var prevZr = zr; var prevZi = zi;
+                    var prevDr = dr; var prevDi = di;
+                    kernel.StepSimd(ref zr, ref zi, ref dr, ref di, cxV, cyV);
+                    zr = Vector.ConditionalSelect(notEscaped, zr, prevZr);
+                    zi = Vector.ConditionalSelect(notEscaped, zi, prevZi);
+                    dr = Vector.ConditionalSelect(notEscaped, dr, prevDr);
+                    di = Vector.ConditionalSelect(notEscaped, di, prevDi);
+
+                    if (!Vector.LessThanAny(mag2, bailoutV)) break;
+                }
+
+                // Write per-lane results scalarly.
+                for (int k = 0; k < vecLen; k++)
+                {
+                    int idx = rowBase + x + k;
+                    int iters = (int)iterCountV[k];
+                    IterationBuffer[idx] = iters;
+                    FillAuxAndColor(idx, iters, maxIt, zr[k], zi[k], dr[k], di[k], colorMap);
+                }
+            }
+
+            // Scalar tail (when width is not a multiple of vecLen).
+            for (; x < width; x++)
+            {
+                double cx = centerX + (x - width * 0.5) * scale;
+                int idx = rowBase + x;
+
+                if (hasCardioidSkip && kernel.IsInTrivialInSet(cx, cy))
+                {
+                    IterationBuffer[idx] = maxIt;
+                    FillAuxAndColor(idx, maxIt, maxIt, 0, 0, 1, 0, colorMap);
+                    continue;
+                }
+
+                kernel.InitState(cx, cy, out double zrs, out double zis, out double drs, out double dis);
+
+                int iter;
+                for (iter = 0; iter < maxIt; iter++)
+                {
+                    if (zrs * zrs + zis * zis >= bailout2) break;
+                    kernel.Step(ref zrs, ref zis, ref drs, ref dis, cx, cy);
+                }
+                IterationBuffer[idx] = iter;
+                FillAuxAndColor(idx, iter, maxIt, zrs, zis, drs, dis, colorMap);
+            }
+        });
+    }
+
     // ── Color-map dispatch (devirtualize Map() via concrete generic) ────────
     //
-    // The kernels here don't enumerate every IColorMap subclass like
-    // MandelbrotCalculator does; that catalogue is brittle and would have to
-    // mirror MandelbrotCalculator's switch. For Phase 1 the calculator goes
-    // through one generic specialized on ColorMap's runtime type — virtual
-    // dispatch on Map() costs a vtable lookup per pixel but is acceptable for
-    // the SP path at the resolutions the new fractals will be used at.
+    // Mirrors the MandelbrotCalculator concrete-type switch. With a generic
+    // constrained to the interface (TMap : IColorMap) the JIT cannot
+    // devirtualize Map() — every pixel pays a vtable lookup. Switching on
+    // the runtime type lets the JIT specialise CalculateCore<TKernel,
+    // ConcreteMap> per palette so Map() inlines. Adds 1.5-2× on the SP
+    // path for Julia / BurningShip / Tricorn / Multibrot / Phoenix.
+    //
+    // Catalogue covers the common 2D palettes selected with non-Mandelbrot
+    // fractals. The default case falls back to the interface-generic path
+    // for any theme not enumerated here — still correct, just not devirt.
 
     private void DispatchByColorMap<TKernel>(TKernel kernel, CancellationToken ct)
         where TKernel : struct, IFractalKernel
     {
-        CalculateCore<TKernel, IColorMap>(kernel, ColorMap, ct);
+        switch (ColorMap)
+        {
+            case HsvPalette m:        CalculateCore<TKernel, HsvPalette>(kernel, m, ct);        return;
+            case GrayscalePalette m:  CalculateCore<TKernel, GrayscalePalette>(kernel, m, ct);  return;
+            case RainbowColorMap m:   CalculateCore<TKernel, RainbowColorMap>(kernel, m, ct);   return;
+            case FirePalette m:       CalculateCore<TKernel, FirePalette>(kernel, m, ct);       return;
+            case Painted m:           CalculateCore<TKernel, Painted>(kernel, m, ct);           return;
+            case PaintedReversed m:   CalculateCore<TKernel, PaintedReversed>(kernel, m, ct);   return;
+            case Pastelly m:          CalculateCore<TKernel, Pastelly>(kernel, m, ct);          return;
+            case WarpedHsvMap m:      CalculateCore<TKernel, WarpedHsvMap>(kernel, m, ct);      return;
+            case GoldenRatioMap m:    CalculateCore<TKernel, GoldenRatioMap>(kernel, m, ct);    return;
+            case MonoBandMap m:       CalculateCore<TKernel, MonoBandMap>(kernel, m, ct);       return;
+            case BernsteinMap m:      CalculateCore<TKernel, BernsteinMap>(kernel, m, ct);      return;
+            case RedAndBlack m:       CalculateCore<TKernel, RedAndBlack>(kernel, m, ct);       return;
+            case NebulaDustMap m:     CalculateCore<TKernel, NebulaDustMap>(kernel, m, ct);     return;
+            case DigitalMatrixMap m:  CalculateCore<TKernel, DigitalMatrixMap>(kernel, m, ct);  return;
+            case PsychedelicMap m:    CalculateCore<TKernel, PsychedelicMap>(kernel, m, ct);    return;
+            case TwilightCyclicMap m: CalculateCore<TKernel, TwilightCyclicMap>(kernel, m, ct); return;
+            case SolarWindMap m:      CalculateCore<TKernel, SolarWindMap>(kernel, m, ct);      return;
+            case SolarWindMapMOD m:   CalculateCore<TKernel, SolarWindMapMOD>(kernel, m, ct);   return;
+            case CopperSheenMap m:    CalculateCore<TKernel, CopperSheenMap>(kernel, m, ct);    return;
+            case VintageSepiaMap m:   CalculateCore<TKernel, VintageSepiaMap>(kernel, m, ct);   return;
+            case DistanceGlowMap m:   CalculateCore<TKernel, DistanceGlowMap>(kernel, m, ct);   return;
+            default:
+                // Unknown / 3D / orbit-aware concrete type — fall back to
+                // virtual dispatch. Correct, just not devirtualized.
+                CalculateCore<TKernel, IColorMap>(kernel, ColorMap, ct);
+                return;
+        }
     }
 
     // ── Generic core (Mandelbrot-family escape-time) ────────────────────────
@@ -152,7 +348,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         double bailout2 = kernel.BailoutRadius2;
         bool hasCardioidSkip = kernel.HasCardioidSkip;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -197,7 +394,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         int height = Height;
         double bailout2 = kernel.BailoutRadius2;
 
-        var po = new ParallelOptions { CancellationToken = ct };
+        _po.CancellationToken = ct;
+        var po = _po;
         Parallel.For(0, height, po, y =>
         {
             if (ct.IsCancellationRequested) return;

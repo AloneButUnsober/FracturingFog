@@ -90,6 +90,9 @@ public sealed class DirectX12Renderer : IFractalRenderer
     // ── IFractalRenderer ──────────────────────────────────────────────────────
     public string RendererDescription => "DirectX 12";
 
+    /// <inheritdoc/>
+    public bool VSync { get; set; } = true;
+
     // ── Availability probe ────────────────────────────────────────────────────
 
     /// <summary>Returns true when D3D12 Feature Level 12.0 is available.</summary>
@@ -378,7 +381,7 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
 
         _cmdList.Close();
         _cmdQueue.ExecuteCommandList(_cmdList);
-        _swapChain.Present(1, PresentFlags.None);
+        _swapChain.Present(VSync ? 1u : 0u, PresentFlags.None);
         SignalFrame(_frameIndex);
     }
 
