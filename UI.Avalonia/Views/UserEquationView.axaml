@@ -51,8 +51,8 @@
                     Padding="14,4" />
         </Grid>
 
-        <!-- Row 1: promote toggle + Compile & Load + Generate via CalcGen + CalcGen Help -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,6">
+        <!-- Row 1: promote toggle + Compile & Load + Generate via CalcGen + Equation Guide + CalcGen Help -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
             <CheckBox Grid.Column="0"
                       Content="Promote to fractal list"
                       IsChecked="{Binding Promote, Mode=TwoWay}"
@@ -69,6 +69,12 @@
                     ToolTip.Tip="Run the active tab's equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
                     Padding="14,4" />
             <Button Grid.Column="3"
+                    Content="Equation Guide"
+                    Command="{Binding OpenEquationGuideCommand}"
+                    ToolTip.Tip="Open the Fractal Equation Design Guide — how equations work, what to change for which result, extensive worked examples across every CalcGen-supported family."
+                    Margin="6,0,0,0"
+                    Padding="10,4" />
+            <Button Grid.Column="4"
                     Content="CalcGen Help"
                     Command="{Binding OpenCalcGenHelpCommand}"
                     ToolTip.Tip="Open the CalcGen User Guide — grammar, operators, examples, gating rules."
