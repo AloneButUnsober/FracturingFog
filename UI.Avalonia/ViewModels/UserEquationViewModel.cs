@@ -22,10 +22,17 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 ///                           Live-validated through EquationParser; no Roslyn,
 ///                           no auto-render. Compile/Generate must be clicked.
 ///
-/// Debounce was 500 ms originally but raised to 1200 ms because the error
-/// span is rendered as a TextBox selection — if validation fires while the
-/// user is still typing, the next keystroke replaces the selection. 1200 ms
-/// gives enough headroom that a quick correction does not get clobbered.
+/// Debounce was 500 ms → 1200 ms → 1800 ms. The error span used to be
+/// applied to the TextBox's <c>SelectionStart/End</c> as soon as it was
+/// produced; if validation fired while the user was still typing, the next
+/// keystroke replaced the selected text. Two fixes are now in place:
+///   1) The view defers applying the selection until the editor loses focus
+///      (see <c>UserEquationView.ApplyErrorSpan</c> / <c>FlushPending</c>).
+///      Status-bar text still updates immediately for live feedback.
+///   2) Debounce raised to 1800 ms so the validator does less work during
+///      bursts of typing.
+/// With (1) in place (2) is no longer strictly necessary, but the longer
+/// window cuts CPU spent on partial-source parses.
 ///
 /// Save/Delete/Promote/Compile/Generate sit ABOVE the TabControl and route to
 /// the active tab. Saved entries carry a <see cref="UserEquationKind"/> so they
@@ -82,6 +89,9 @@ public sealed class UserEquationViewModel : ViewModelBase
                                   "CalcGen Help — DSL grammar"));
         OpenCalcGenHelpCommand = ReactiveCommand.Create(() =>
             HelpRequested?.Invoke("CalcGen-UserGuide.md", null, "CalcGen — User Guide"));
+        OpenEquationGuideCommand = ReactiveCommand.Create(() =>
+            HelpRequested?.Invoke("FractalEquation-DesignGuide.md", null,
+                                  "Fractal Equation Design Guide"));
 
         _params.UserEquationSource = _source;
         _params.UserEquationDslSource = _dslSource;
@@ -292,6 +302,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> OpenUserEquationHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenDslHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCalcGenHelpCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenEquationGuideCommand { get; }
 
     /// <summary>Host opens an in-app help viewer. Args: (docId, anchor, title).
     /// docId is a filename inside the embedded Docs/ resource folder.
@@ -360,7 +371,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     private void ScheduleCompile()
     {
         _debounce.Disposable = Observable
-            .Timer(TimeSpan.FromMilliseconds(1200))
+            .Timer(TimeSpan.FromMilliseconds(1800))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
@@ -439,7 +450,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     private void ScheduleDslValidate()
     {
         _debounce.Disposable = Observable
-            .Timer(TimeSpan.FromMilliseconds(1200))
+            .Timer(TimeSpan.FromMilliseconds(1800))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ => ValidateDslNow());
     }

@@ -114,11 +114,19 @@ public static class CalculatorGenApi
         // companion for prev. Both deferred — gate off when present.
         bool hasPrev  = AstHelpers.Contains<PrevRef>(root);
         // Iteration index `n`/`iter`: real scalar, differentiator returns
-        // 0 → no impact on DE chain. But δ-Taylor doesn't change n
-        // across ref orbit vs pixel → perturbation can't linearise an
-        // iter-dependent step. Gate perturbation off; keep DE on.
+        // 0 directly but the chain rule pulls n into the derivative
+        // (d/dz sin(z*n) = cos(z*n)·n). PerturbDeriv / Avx2Deriv /
+        // Avx512Deriv emitters walk that derivUpdate AST and hit
+        // IterRef, but the template doesn't inject ITER_DECL at the
+        // PERTURB_DERIV_BODY insertion sites, so the emitters throw
+        // "IterRef not bound" during generation. Gate DE off when
+        // iter is present until the template grows iter declarations
+        // at every deriv-body site (a multi-site template change for
+        // a rare equation shape — escape-time render still works,
+        // surface normals just degrade to flat-shaded for iter-
+        // dependent equations).
         bool hasIter  = AstHelpers.Contains<IterRef>(root);
-        bool supportsDe = !(hasConj || hasFolded || hasPrev || hasArg);
+        bool supportsDe = !(hasConj || hasFolded || hasPrev || hasArg || hasIter);
         bool supportsPerturbation = !(hasConj || hasFolded || hasDiv || hasTrans || hasCond || hasPrev || hasIter);
 
         string perturbBody, perturbDdBody, perturbAvx2Body, perturbAvx512Body,
@@ -156,8 +164,24 @@ public static class CalculatorGenApi
             perturbDerivAvx512Body = "                    Vector512<double> drv_new = Vector512<double>.Zero; Vector512<double> div_new = Vector512<double>.Zero;";
         }
 
-        string blaABody = new ScalarEmitter().EmitNewValueBody(dpdz, "A", indent: "                    ");
-        string blaBBody = new ScalarEmitter().EmitNewValueBody(dpdc, "B", indent: "                    ");
+        // BLA bodies emit references to ScalarEmitter's IterRe="iter"
+        // when the derivative chain pulls n into the polynomial (e.g.
+        // d/dz sin(z*n) = cos(z*n)*n). The template doesn't declare
+        // `iter` at the BLA insertion sites — pre-existing latent. Stub
+        // when hasIter so the generated file still compiles; UseBla is
+        // already forced off at the runtime gate path for iter-
+        // dependent equations via supportsPerturbation = false.
+        string blaABody, blaBBody;
+        if (hasIter)
+        {
+            blaABody = "                    double Ar_new = 0.0, Ai_new = 0.0;";
+            blaBBody = "                    double Br_new = 0.0, Bi_new = 0.0;";
+        }
+        else
+        {
+            blaABody = new ScalarEmitter().EmitNewValueBody(dpdz, "A", indent: "                    ");
+            blaBBody = new ScalarEmitter().EmitNewValueBody(dpdc, "B", indent: "                    ");
+        }
 
         string qdZBody = new QdEmitter().EmitQdBody(root, indent: "                ");
         string ddDirectBody = new DdDirectEmitter().EmitDdDirectBody(root, indent: "                    ");
