@@ -35,11 +35,20 @@ public static class UserBulbSandboxEmitter
     /// (animation time) is at <c>__p[Length - 1]</c>, matching
     /// <c>UserBulbCalculator.ParamLocals</c>.</summary>
     public static SbxEmitResult Emit(Sbx3Node? root, IReadOnlyList<string> paramNames, bool quatMode)
+        => Emit(root, paramNames, quatMode, gpuTarget: false);
+
+    /// <summary>GPU-targeted overload. When <paramref name="gpuTarget"/> is
+    /// true, Vec3/Quat helper calls route through <c>Vec3GpuOps.*</c> /
+    /// <c>QuatGpuOps.*</c> mirrors that avoid IL Throw opcodes (ILGPU JIT
+    /// rejects exception flow). Stage 3B added Quat-mode support; Quat-mode
+    /// constants and Hamilton multiply ride the inline operators directly,
+    /// runtime-exponent <c>qpow</c> routes through <c>QuatGpuOps.Pow</c>.</summary>
+    public static SbxEmitResult Emit(Sbx3Node? root, IReadOnlyList<string> paramNames, bool quatMode, bool gpuTarget)
     {
         if (root == null) return new(false, "Empty AST.", null, SbxEmitKind.Real);
         try
         {
-            var ctx = new EmitCtx(paramNames, quatMode);
+            var ctx = new EmitCtx(paramNames, quatMode, gpuTarget);
             var sb = new StringBuilder();
             var kind = ctx.Emit(root, sb);
             return new(true, null, sb.ToString(), kind);
@@ -54,6 +63,11 @@ public static class UserBulbSandboxEmitter
     {
         private readonly IReadOnlyList<string> _paramNames;
         private readonly bool _quat;
+        private readonly bool _gpu;
+        /// <summary>Type prefix for Vec3 helper calls: "Vec3" on CPU,
+        /// "Vec3GpuOps" on GPU. Pow/Rot/BoxFold/SphereFold/Mod/Normalized
+        /// have device-safe mirrors in Vec3GpuOps that avoid Throw.</summary>
+        private string V3 => _gpu ? "Vec3GpuOps" : "Vec3";
         private readonly Dictionary<int, SbxEmitKind> _slotKinds = new();
         /// <summary>Let-bound slot → already-emitted value expression text.
         /// DSL is pure so direct substitution is safe; multiple references
@@ -62,10 +76,11 @@ public static class UserBulbSandboxEmitter
         /// Sandbox sources and avoids a delegate dispatch on the hot path.</summary>
         private readonly Dictionary<int, string> _letSubs = new();
 
-        public EmitCtx(IReadOnlyList<string> paramNames, bool quatMode)
+        public EmitCtx(IReadOnlyList<string> paramNames, bool quatMode, bool gpuTarget = false)
         {
             _paramNames = paramNames;
             _quat = quatMode;
+            _gpu = gpuTarget;
             _slotKinds[SandboxBulbExpression.SlotZ] = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
             _slotKinds[SandboxBulbExpression.SlotC] = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
             _slotKinds[SandboxBulbExpression.SlotN] = SbxEmitKind.Real;
@@ -189,7 +204,7 @@ public static class UserBulbSandboxEmitter
             {
                 if (ak == SbxEmitKind.Vec)
                 {
-                    sb.Append("Vec3.Pow(").Append(sbA).Append(", ").Append(sbB).Append(')');
+                    sb.Append(V3).Append(".Pow(").Append(sbA).Append(", ").Append(sbB).Append(')');
                     return SbxEmitKind.Vec;
                 }
                 if (ak == SbxEmitKind.Quat)
@@ -281,7 +296,7 @@ public static class UserBulbSandboxEmitter
                     EmitAsReal(call.Args[2], sb); sb.Append(')');
                     return SbxEmitKind.Quat;
                 case "triplex":
-                    sb.Append("Vec3.Pow(");
+                    sb.Append(V3).Append(".Pow(");
                     EmitAsVec(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
@@ -301,38 +316,46 @@ public static class UserBulbSandboxEmitter
                     EmitAsVec(call.Args[1], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "normalize":
-                    sb.Append('(');
-                    EmitAsVec(call.Args[0], sb);
-                    sb.Append(").Normalized()");
+                    if (_gpu)
+                    {
+                        sb.Append("Vec3GpuOps.Normalized(");
+                        EmitAsVec(call.Args[0], sb); sb.Append(')');
+                    }
+                    else
+                    {
+                        sb.Append('(');
+                        EmitAsVec(call.Args[0], sb);
+                        sb.Append(").Normalized()");
+                    }
                     return SbxEmitKind.Vec;
                 case "rot":
-                    sb.Append("Vec3.Rot(");
+                    sb.Append(V3).Append(".Rot(");
                     EmitAsVec(call.Args[0], sb); sb.Append(", ");
                     EmitAsVec(call.Args[1], sb); sb.Append(", ");
                     EmitAsReal(call.Args[2], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "boxfold":
-                    sb.Append("Vec3.BoxFold(");
+                    sb.Append(V3).Append(".BoxFold(");
                     EmitAsVec(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "spherefold":
-                    sb.Append("Vec3.SphereFold(");
+                    sb.Append(V3).Append(".SphereFold(");
                     EmitAsVec(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(", ");
                     EmitAsReal(call.Args[2], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "absx": case "absy": case "absz":
-                    sb.Append("Vec3.").Append(char.ToUpper(call.Name[0])).Append(call.Name.AsSpan(1)).Append('(');
+                    sb.Append(V3).Append('.').Append(char.ToUpper(call.Name[0])).Append(call.Name.AsSpan(1)).Append('(');
                     EmitAsVec(call.Args[0], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "mod":
-                    sb.Append("Vec3.Mod(");
+                    sb.Append(V3).Append(".Mod(");
                     EmitAsVec(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(')');
                     return SbxEmitKind.Vec;
                 case "smin":
-                    sb.Append("Vec3.SMin(");
+                    sb.Append(V3).Append(".SMin(");
                     EmitAsReal(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(", ");
                     EmitAsReal(call.Args[2], sb); sb.Append(')');
@@ -347,7 +370,8 @@ public static class UserBulbSandboxEmitter
                 case "min":   return EmitMath2(call.Args[0], call.Args[1], sb, "Min");
                 case "max":   return EmitMath2(call.Args[0], call.Args[1], sb, "Max");
                 case "clamp":
-                    sb.Append("Math.Clamp(");
+                    // GPU mirror skips Math.Clamp's Throw branch for lo>hi.
+                    sb.Append(_gpu ? "Vec3GpuOps.Clamp(" : "Math.Clamp(");
                     EmitAsReal(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(", ");
                     EmitAsReal(call.Args[2], sb); sb.Append(')');
@@ -381,7 +405,7 @@ public static class UserBulbSandboxEmitter
                             return SbxEmitKind.Quat;
                         }
                     }
-                    sb.Append("Quat.Pow(");
+                    sb.Append(_gpu ? "QuatGpuOps.Pow(" : "Quat.Pow(");
                     EmitAsQuat(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(')');
                     return SbxEmitKind.Quat;
