@@ -208,6 +208,11 @@ public sealed class DdDirectEmitter : EmitterBase
                 string reSq = $"(({av.Re}).Hi * ({av.Re}).Hi)";
                 if (av.ImZero) return reSq;
                 return $"({reSq} + ({av.Im}).Hi * ({av.Im}).Hi)";
+            case CondArg ag:
+                var agv = Emit(ag.Of);
+                string agRe = $"((DD)({agv.Re})).Hi";
+                string agIm = agv.ImZero ? "0.0" : $"((DD)({agv.Im})).Hi";
+                return $"Math.Atan2({agIm}, {agRe})";
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

@@ -213,6 +213,15 @@ public sealed class QdEmitter : EmitterBase
                 string reSq = $"(({av.Re}).X0 * ({av.Re}).X0)";
                 if (av.ImZero) return reSq;
                 return $"({reSq} + ({av.Im}).X0 * ({av.Im}).X0)";
+            case CondArg ag:
+                // arg(x) inside a QD cond. atan2 has no QD precision —
+                // collapse to plain double on .X0 limbs (same trade-off
+                // as QD OpLog's imaginary part). Operands wrapped in
+                // ((QD)x).X0 so bare-double RealConst limbs normalise.
+                var agv = Emit(ag.Of);
+                string agRe = $"((QD)({agv.Re})).X0";
+                string agIm = agv.ImZero ? "0.0" : $"((QD)({agv.Im})).X0";
+                return $"Math.Atan2({agIm}, {agRe})";
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

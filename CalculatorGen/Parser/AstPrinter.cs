@@ -145,6 +145,7 @@ public static class AstPrinter
             case CondRe r:    sb.Append("re("); WriteExpr(sb, r.Of, 0); sb.Append(')'); break;
             case CondIm im:   sb.Append("im("); WriteExpr(sb, im.Of, 0); sb.Append(')'); break;
             case CondAbs2 a:  sb.Append("abs("); WriteExpr(sb, a.Of, 0); sb.Append(')'); break;
+            case CondArg ag:  sb.Append("arg("); WriteExpr(sb, ag.Of, 0); sb.Append(')'); break;
             case CondConst k: sb.Append(k.Value.ToString("R", CultureInfo.InvariantCulture)); break;
             default:
                 throw new InvalidOperationException($"AstPrinter: unhandled CondTerm {t.GetType().Name}");

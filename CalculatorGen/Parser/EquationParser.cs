@@ -227,6 +227,16 @@ public sealed class EquationParser
                 var absArg = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new CondAbs2(absArg);
+            case TokenKind.Arg:
+                // arg(x) inside a condition — real-scalar principal angle.
+                // Same syntax as the AstNode-level arg(...) operator; the
+                // parser disambiguates by the surrounding context (cond
+                // terms are parsed by ParseCondTerm only inside if/cmp).
+                Advance();
+                Expect(TokenKind.LParen);
+                var argCondArg = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new CondArg(argCondArg);
             case TokenKind.Number:
                 Advance();
                 return new CondConst(t.NumberValue);
@@ -237,7 +247,7 @@ public sealed class EquationParser
                 return new CondConst(-negTok.NumberValue);
             default:
                 throw new FormatException(
-                    $"Expected condition term (re(...), im(...), abs(...), or number) at " +
+                    $"Expected condition term (re(...), im(...), abs(...), arg(...), or number) at " +
                     $"{t.Where}, got {Describe(t.Kind)} ('{t.Lexeme}').");
         }
     }

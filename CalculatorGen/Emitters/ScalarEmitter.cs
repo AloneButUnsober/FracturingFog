@@ -246,6 +246,12 @@ public sealed class ScalarEmitter : EmitterBase
                 string reSq = $"({av.Re} * {av.Re})";
                 if (av.ImZero) return reSq;
                 return $"({reSq} + {av.Im} * {av.Im})";
+            case CondArg ag:
+                var agv = Emit(ag.Of);
+                // arg(x) = atan2(Im(x), Re(x)). When the operand is
+                // provably real, atan2(0, re) still picks the right
+                // branch (0 for re>=0, π for re<0).
+                return $"Math.Atan2({(agv.ImZero ? "0.0" : agv.Im)}, {agv.Re})";
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
