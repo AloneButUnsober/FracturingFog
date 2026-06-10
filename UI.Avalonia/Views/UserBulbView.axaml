@@ -5,9 +5,9 @@
         x:Class="FracturingFog.UI.Avalonia.Views.UserBulbView"
         x:DataType="vm:UserBulbViewModel"
         Title="User Bulb (3D)"
-        Width="1180"
+        Width="1280"
         Height="940"
-        MinWidth="900"
+        MinWidth="980"
         MinHeight="700"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -47,7 +47,7 @@
         </Style>
     </Window.Styles>
 
-    <Grid Margin="10" ColumnDefinitions="540,12,*">
+    <Grid Margin="10" ColumnDefinitions="600,12,*">
 
         <!-- ── LEFT COLUMN ──────────────────────────────────────────── -->
         <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
@@ -68,7 +68,9 @@
                     <TextBlock Grid.Column="0" Classes="label" Text="Saved:" />
                     <ComboBox  Grid.Column="1"
                                ItemsSource="{Binding SavedNames}"
-                               SelectedItem="{Binding SelectedSavedName, Mode=TwoWay}" />
+                               SelectedItem="{Binding SelectedSavedName, Mode=TwoWay}"
+                               HorizontalAlignment="Stretch"
+                               MinWidth="380" />
                     <Button    Grid.Column="2" Classes="tool" Content="Save…"
                                Command="{Binding SaveCommand}" Margin="6,0,4,0" />
                     <Button    Grid.Column="3" Classes="tool" Content="Delete"
@@ -102,7 +104,7 @@
 
                 <!-- Camera -->
                 <TextBlock Classes="header" Text="Camera" />
-                <Grid ColumnDefinitions="Auto,80,Auto,80,Auto,80,Auto"
+                <Grid ColumnDefinitions="Auto,120,Auto,120,Auto,120"
                       RowDefinitions="Auto,Auto" Margin="0,0,0,4">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Distance:" />
                     <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0.1" Maximum="500" Increment="0.1" FormatString="0.00"
@@ -113,19 +115,20 @@
                     <TextBlock Grid.Row="0" Grid.Column="4" Classes="label" Text="Phi°:" Margin="10,0,6,0" />
                     <NumericUpDown Grid.Row="0" Grid.Column="5" Minimum="1" Maximum="179" Increment="5" FormatString="0.0"
                                    Value="{Binding CamPhiDeg}" />
-                    <Button        Grid.Row="0" Grid.Column="6" Classes="tool" Content="Reset cam"
-                                   Command="{Binding ResetCameraCommand}" Margin="10,0,0,0" />
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Light θ°:" />
                     <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="-360" Maximum="360" Increment="5" FormatString="0.0"
                                    Value="{Binding LightThetaDeg}" />
                     <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Light φ°:" Margin="10,0,6,0" />
                     <NumericUpDown Grid.Row="1" Grid.Column="3" Minimum="1" Maximum="179" Increment="5" FormatString="0.0"
                                    Value="{Binding LightPhiDeg}" />
+                    <Button        Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Classes="tool" Content="Reset cam"
+                                   Command="{Binding ResetCameraCommand}"
+                                   HorizontalAlignment="Right" Margin="10,0,0,0" />
                 </Grid>
 
                 <!-- Render -->
                 <TextBlock Classes="header" Text="Render" />
-                <Grid ColumnDefinitions="Auto,80,Auto,80,Auto,80"
+                <Grid ColumnDefinitions="Auto,120,Auto,120,Auto,120"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Iterations:" />
                     <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="64" Increment="1" FormatString="0"
@@ -205,7 +208,7 @@
                     <ItemsControl ItemsSource="{Binding Params}" MaxHeight="180">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="m:UserBulbParam">
-                                <Grid ColumnDefinitions="60,100,70,70,Auto" Margin="2">
+                                <Grid ColumnDefinitions="80,130,95,95,Auto" Margin="2">
                                     <TextBox       Grid.Column="0" Text="{Binding Name, Mode=TwoWay}" />
                                     <NumericUpDown Grid.Column="1" Value="{Binding Value, Mode=TwoWay}" FormatString="0.0000" />
                                     <NumericUpDown Grid.Column="2" Value="{Binding Min,   Mode=TwoWay}" FormatString="0.000" />
@@ -221,7 +224,7 @@
 
                 <!-- Animation -->
                 <TextBlock Classes="header" Text="Animation (t)" />
-                <Grid ColumnDefinitions="Auto,Auto,80,Auto,120">
+                <Grid ColumnDefinitions="Auto,Auto,110,Auto,170">
                     <Button        Grid.Column="0" Classes="tool" Content="{Binding PlayPauseLabel}"
                                    Command="{Binding TogglePlayCommand}" />
                     <TextBlock     Grid.Column="1" Classes="label" Text="Speed:" Margin="10,0,4,0" />
@@ -234,20 +237,21 @@
 
                 <!-- Julia -->
                 <TextBlock Classes="header" Text="Julia mode" />
-                <Grid ColumnDefinitions="Auto,Auto,70,Auto,70,Auto,70,Auto,70" Margin="0,0,0,8">
-                    <CheckBox      Grid.Column="0" Content="Enable (fix c)"
-                                   IsChecked="{Binding JuliaMode}" />
-                    <TextBlock     Grid.Column="1" Classes="label" Text="c.X:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="2" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                <CheckBox  Content="Enable (fix c)"
+                           IsChecked="{Binding JuliaMode}"
+                           Margin="0,0,0,4" />
+                <Grid ColumnDefinitions="Auto,110,Auto,110,Auto,110,Auto,110" Margin="0,0,0,8">
+                    <TextBlock     Grid.Column="0" Classes="label" Text="c.X:" Margin="0,0,4,0" />
+                    <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
                                    Value="{Binding JuliaCX}" />
-                    <TextBlock     Grid.Column="3" Classes="label" Text="c.Y:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="4" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                    <TextBlock     Grid.Column="2" Classes="label" Text="c.Y:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
                                    Value="{Binding JuliaCY}" />
-                    <TextBlock     Grid.Column="5" Classes="label" Text="c.Z:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="6" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                    <TextBlock     Grid.Column="4" Classes="label" Text="c.Z:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="5" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
                                    Value="{Binding JuliaCZ}" />
-                    <TextBlock     Grid.Column="7" Classes="label" Text="c.W:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="8" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                    <TextBlock     Grid.Column="6" Classes="label" Text="c.W:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="7" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
                                    IsEnabled="{Binding QuatEnabled}"
                                    Value="{Binding JuliaCW}" />
                 </Grid>
@@ -260,7 +264,7 @@
 
                 <!-- Color driver -->
                 <TextBlock Classes="header" Text="Color driver" />
-                <Grid ColumnDefinitions="140,Auto,60,Auto,60,Auto,60,Auto,60">
+                <Grid ColumnDefinitions="160,Auto,90,Auto,90,Auto,90,Auto,Auto">
                     <ComboBox    Grid.Column="0" SelectedIndex="{Binding ColorDriverIndex}">
                         <ComboBoxItem Content="StepDepth" />
                         <ComboBoxItem Content="OrbitTrap" />
@@ -285,7 +289,7 @@
 
                 <!-- Lighting -->
                 <TextBlock Classes="header" Text="Lighting (L1/L2/L3 intensity, AO, fog)" />
-                <Grid ColumnDefinitions="Auto,70,Auto,70,Auto,70,Auto,70,Auto,80">
+                <Grid ColumnDefinitions="Auto,95,Auto,95,Auto,95,Auto,80,Auto,90">
                     <TextBlock     Grid.Column="0" Classes="label" Text="L1:" />
                     <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Value="{Binding Light1}" />
                     <TextBlock     Grid.Column="2" Classes="label" Text="L2:" Margin="10,0,4,0" />
@@ -300,7 +304,7 @@
 
                 <!-- View -->
                 <TextBlock Classes="header" Text="View (FOV / clip / SS)" />
-                <Grid ColumnDefinitions="Auto,70,Auto,Auto,60">
+                <Grid ColumnDefinitions="Auto,100,Auto,Auto,80">
                     <TextBlock     Grid.Column="0" Classes="label" Text="FOV°:" />
                     <NumericUpDown Grid.Column="1" Minimum="5" Maximum="170" Increment="1" FormatString="0.0" Value="{Binding FovDegrees}" />
                     <CheckBox      Grid.Column="2" Content="Clip+Y" Margin="14,0,0,0" IsChecked="{Binding ClipPlane}" />
