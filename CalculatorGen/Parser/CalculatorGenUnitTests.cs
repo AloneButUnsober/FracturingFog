@@ -275,10 +275,17 @@ public static class CalculatorGenUnitTests
             () => Pre("Complex.Pow(z, c)") == "exp((c)*log(z))");
 
         // Reject paths
-        Check("preproc: rejects Complex.ImaginaryOne",
-            () => PreErr("z + Complex.ImaginaryOne", "ImaginaryOne"));
-        Check("preproc: rejects new Complex(a, b)",
-            () => PreErr("z + new Complex(0.1, 0.2)", "no 'i' literal"));
+        // PR8: ImaginaryOne / new Complex are now first-class — rewrites to 'i'.
+        Check("preproc: Complex.ImaginaryOne → i",
+            () => Pre("z + Complex.ImaginaryOne") == "z + i");
+        Check("preproc: new Complex(0, 1) → i",
+            () => Pre("z + new Complex(0, 1)") == "z + i");
+        Check("preproc: new Complex(0.1, 0.2) → ((0.1) + (0.2)*i)",
+            () => Pre("z + new Complex(0.1, 0.2)") == "z + ((0.1) + (0.2)*i)");
+        Check("preproc: new Complex(a, 0) drops to (a)",
+            () => Pre("new Complex(c, 0) + z") == "(c) + z");
+        Check("preproc: new Complex(0, b) → ((b)*i)",
+            () => Pre("z + new Complex(0, c)") == "z + ((c)*i)");
         Check("preproc: rejects Complex.Abs",
             () => PreErr("Complex.Abs(z) + c", "abs(x)"));
         Check("preproc: rejects unknown Complex member",
@@ -383,6 +390,52 @@ public static class CalculatorGenUnitTests
         Check("SA: iter-dependent → 0 (rejected)",
             () => AstSaDetector.DetectZdPlusC(
                 EquationParser.Parse("z*z + c + 0.001*n")) == 0);
+
+        // ── ImagUnit ('i' literal) ───────────────────────────────────
+        Check("parser: bare 'i' parses as ImagUnit",
+            () => EquationParser.Parse("i") is ImagUnit);
+        Check("parser: 'if' still parses as if-expression keyword (not ImagUnit)",
+            () => EquationParser.Parse("if abs(z) > 4 then z else c") is If);
+        Check("parser: 'iter' still lexes as iter (not ImagUnit)",
+            () => EquationParser.Parse("iter") is IterRef);
+        Check("printer: i round-trips",
+            () => PrintSimplified("i*z + c") == "i*z + c");
+        Check("printer: i*c round-trips",
+            () => AstPrinter.Print(EquationParser.Parse("z + i*c")) == "z + i*c");
+        Check("diff: ∂(i*z + c)/∂z = i",
+            () => DpDzOf("i*z + c") == "i");
+        Check("diff: ∂(z*z + i*c)/∂c = i",
+            () => DpDcOf("z*z + i*c") == "i");
+        Check("diff: ∂(i)/∂z = 0 (constant)",
+            () => DpDzOf("i + z*z + c") == "z + z");
+        Check("flags: ImagUnit detected via Contains<ImagUnit>",
+            () => AstHelpers.Contains<ImagUnit>(EquationParser.Parse("z*z + i*c")));
+        Check("flags: plain poly has no ImagUnit",
+            () => !AstHelpers.Contains<ImagUnit>(EquationParser.Parse("z^4 + c")));
+        Check("SA: i*z*z + c → degree 2 (i counts as degree-0 complex const)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("i*z*z + c")).degree == 2);
+        Check("SA: z*z + i + c → polynomial (i is degree-0 const)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("z*z + i + c")).degree == 2);
+        Check("simplify: i + 0 → i",
+            () => PrintSimplified("i + 0") == "i");
+        Check("simplify: 1*i → i",
+            () => PrintSimplified("1*i") == "i");
+        Check("simplify: 0*i → 0",
+            () => PrintSimplified("0*i") == "0");
+        Check("codegen: i*z + c emits without throwing",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("i*z + c", "ImagTest");
+                return r.Ok && r.Source.Contains("zr_new") && r.Source.Contains("zi_new");
+            });
+        Check("codegen: z*z + i emits without throwing",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("z*z + i", "ImagSqTest");
+                return r.Ok;
+            });
+        Check("lexer: 'I' (uppercase) also lexes as ImagUnit",
+            () => EquationParser.Parse("I") is ImagUnit);
 
         // ── feature detection ────────────────────────────────────────
         Check("flags: conj(c) → hasConj true",

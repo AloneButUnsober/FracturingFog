@@ -74,6 +74,19 @@ public abstract class EmitterBase
     /// return <c>ImZero = true</c>.</summary>
     protected abstract ComplexExpr Const(double value);
 
+    /// <summary>Emit the imaginary unit (0, 1) in the emitter's complex
+    /// type. Default reuses <see cref="Const"/> to assemble the (0, 1)
+    /// pair — works for every concrete emitter because each Const already
+    /// produces a valid Re slot in the target type (plain double, DD, QD,
+    /// or Vector256/512 broadcast of a double). ImZero is false because
+    /// the imaginary part is explicitly non-zero.</summary>
+    protected virtual ComplexExpr ImagUnitExpr()
+    {
+        var zero = Const(0.0);
+        var one  = Const(1.0);
+        return new ComplexExpr(zero.Re, one.Re, ImZero: false);
+    }
+
     protected abstract ComplexExpr OpAdd(ComplexExpr a, ComplexExpr b);
     protected abstract ComplexExpr OpSub(ComplexExpr a, ComplexExpr b);
     protected abstract ComplexExpr OpMul(ComplexExpr a, ComplexExpr b);
@@ -150,6 +163,7 @@ public abstract class EmitterBase
         // elide dead-zero terms exactly like RealConst inputs do.
         IterRef     => new ComplexExpr(IterRe,  IterImLiteral, ImZero: true),
         RealConst k => Const(k.Value),
+        ImagUnit    => ImagUnitExpr(),
         Neg n       => OpNeg(Emit(n.Operand)),
         Add a       => OpAdd(Emit(a.Left), Emit(a.Right)),
         Sub s       => OpSub(Emit(s.Left), Emit(s.Right)),

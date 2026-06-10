@@ -114,17 +114,20 @@ public sealed class HelpViewerViewModel : ViewModelBase
 ///   • '# ', '## ', '### '       → headings
 ///   • '```'                      → fenced code block
 ///   • lines starting with `-`, `*` → bullet list
+///   • pipe tables                → Grid (header row + body rows)
 ///   • blank line                 → paragraph break
 ///   • inline `code`              → monospace foreground swap
-/// Anything else falls through as a paragraph. Tables and links render as
-/// plain text — the docs use tables and links but losing the formatting is
-/// acceptable for an in-app contextual viewer.
+/// Links and other constructs render as plain text — the docs use them
+/// sparingly enough that losing the formatting is acceptable for an
+/// in-app contextual viewer.
 /// </summary>
 internal static class HelpMarkdownRenderer
 {
     public static IEnumerable<Control> Render(string md)
     {
-        var lines = md.Replace("\r\n", "\n").Split('\n');
+        var rawLines = md.Replace("\r\n", "\n").Split('\n');
+        // Materialise to a list so the table-detection lookahead can peek.
+        var lines = new List<string>(rawLines);
         var paragraph = new System.Text.StringBuilder();
         bool inCode = false;
         var codeBuf = new System.Text.StringBuilder();
@@ -137,9 +140,9 @@ internal static class HelpMarkdownRenderer
             return BuildInlineText(text, FontWeight.Normal, 14, "#E0E0E0");
         }
 
-        foreach (var raw in lines)
+        for (int idx = 0; idx < lines.Count; idx++)
         {
-            string line = raw;
+            string line = lines[idx];
             if (inCode)
             {
                 if (line.TrimStart().StartsWith("```"))
@@ -187,6 +190,18 @@ internal static class HelpMarkdownRenderer
                 yield return BuildBullet(line[2..]);
                 continue;
             }
+            // Pipe-table detection. Header row + divider + body rows. The
+            // divider must contain only `|`, `-`, `:`, and whitespace. If
+            // any of those checks fail the lines fall through to the
+            // paragraph buffer as before — markdown inside running prose
+            // that happens to contain `|` is not misread as a table.
+            if (LooksLikeTable(lines, idx, out int tableEnd, out var tableRows))
+            {
+                var p = FlushParagraph(); if (p != null) yield return p;
+                yield return BuildTable(tableRows);
+                idx = tableEnd;
+                continue;
+            }
             if (string.IsNullOrWhiteSpace(line))
             {
                 var p = FlushParagraph(); if (p != null) yield return p;
@@ -197,6 +212,127 @@ internal static class HelpMarkdownRenderer
         }
         var tail = FlushParagraph(); if (tail != null) yield return tail;
         if (inCode && codeBuf.Length > 0) yield return BuildCodeBlock(codeBuf.ToString());
+    }
+
+    private static bool LooksLikeTable(List<string> lines, int start,
+        out int endIndex, out List<string[]> rows)
+    {
+        endIndex = start;
+        rows = new List<string[]>();
+        string header = lines[start].Trim();
+        if (!header.StartsWith("|") || start + 1 >= lines.Count) return false;
+        string divider = lines[start + 1].Trim();
+        if (!divider.StartsWith("|")) return false;
+        // Divider cells must be empty or a dash-run with optional colons.
+        foreach (var cell in SplitRow(divider))
+        {
+            string t = cell.Trim();
+            if (t.Length == 0) continue;
+            bool ok = true;
+            foreach (char ch in t)
+                if (ch != '-' && ch != ':') { ok = false; break; }
+            if (!ok) return false;
+        }
+        rows.Add(SplitRow(header));
+        int i = start + 2;
+        while (i < lines.Count)
+        {
+            string t = lines[i].Trim();
+            if (!t.StartsWith("|")) break;
+            rows.Add(SplitRow(t));
+            i++;
+        }
+        endIndex = i - 1;
+        return rows.Count >= 1;
+    }
+
+    private static string[] SplitRow(string row)
+    {
+        // Strip leading/trailing pipe so split doesn't yield empty edges.
+        string inner = row.Trim();
+        if (inner.StartsWith("|")) inner = inner.Substring(1);
+        if (inner.EndsWith("|") && (inner.Length < 2 || inner[inner.Length - 2] != '\\'))
+            inner = inner.Substring(0, inner.Length - 1);
+        // Walk character by character so we can:
+        //   • respect `\|` escapes (literal pipe inside a cell — used in
+        //     the grammar table's "(|zr|, |zi|)" and "\|z\|" notes),
+        //   • respect backtick code spans (literal pipe inside `code`
+        //     should never be treated as a column separator).
+        // After collection we strip the escape backslash so the rendered
+        // cell shows a plain `|`.
+        var parts = new List<string>();
+        var buf = new System.Text.StringBuilder();
+        bool inCodeSpan = false;
+        for (int i = 0; i < inner.Length; i++)
+        {
+            char ch = inner[i];
+            if (ch == '`') { inCodeSpan = !inCodeSpan; buf.Append(ch); continue; }
+            if (ch == '\\' && i + 1 < inner.Length && inner[i + 1] == '|')
+            {
+                buf.Append('|');
+                i++;
+                continue;
+            }
+            if (ch == '|' && !inCodeSpan)
+            {
+                parts.Add(buf.ToString().Trim());
+                buf.Clear();
+                continue;
+            }
+            buf.Append(ch);
+        }
+        parts.Add(buf.ToString().Trim());
+        return parts.ToArray();
+    }
+
+    private static Control BuildTable(List<string[]> rows)
+    {
+        int cols = 0;
+        foreach (var r in rows) if (r.Length > cols) cols = r.Length;
+        var grid = new Grid
+        {
+            Margin = new Thickness(0, 6, 0, 8),
+        };
+        for (int c = 0; c < cols; c++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        // Final column stretches so wide cells (notes column) wrap.
+        if (cols > 0)
+            grid.ColumnDefinitions[cols - 1] = new ColumnDefinition(GridLength.Star);
+        for (int r = 0; r < rows.Count; r++)
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+        for (int r = 0; r < rows.Count; r++)
+        {
+            bool isHeader = r == 0;
+            string bg = isHeader ? "#2A2A2A" : (r % 2 == 0 ? "#222222" : "#1C1C1C");
+            for (int c = 0; c < cols; c++)
+            {
+                string text = c < rows[r].Length ? rows[r][c] : "";
+                var border = new Border
+                {
+                    Background = new SolidColorBrush(Color.Parse(bg)),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#404040")),
+                    BorderThickness = new Thickness(0, 0, 1, 1),
+                    Padding = new Thickness(8, 4),
+                    Child = BuildInlineText(
+                        text,
+                        isHeader ? FontWeight.SemiBold : FontWeight.Normal,
+                        13,
+                        isHeader ? "#FFFFFF" : "#E0E0E0"),
+                };
+                Grid.SetRow(border, r);
+                Grid.SetColumn(border, c);
+                grid.Children.Add(border);
+            }
+        }
+        // Outer frame so the table reads as a single block.
+        return new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.Parse("#404040")),
+            BorderThickness = new Thickness(1, 1, 0, 0),
+            Margin = new Thickness(0, 6, 0, 8),
+            Child = grid,
+        };
     }
 
     private static Control BuildHeading(string text, double size, FontWeight weight, string colorHex, int topPad)

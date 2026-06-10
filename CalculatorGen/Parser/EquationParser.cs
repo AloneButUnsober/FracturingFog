@@ -103,6 +103,7 @@ public sealed class EquationParser
         TokenKind.NotEq  => "'!='",
         TokenKind.Prev   => "'prev'",
         TokenKind.Iter   => "'iter' (or 'n')",
+        TokenKind.ImagUnit => "'i'",
         TokenKind.End    => "end of input",
         _                => k.ToString(),
     };
@@ -408,6 +409,13 @@ public sealed class EquationParser
             case TokenKind.EConst:
                 Advance();
                 return new RealConst(Math.E);
+            case TokenKind.ImagUnit:
+                // Bare 'i' — imaginary unit literal (0, 1). Lets equations
+                // like `z*z + i*c` or `i*z + c` parse without preprocessor
+                // gymnastics. Differentiator returns 0 (constant); the
+                // chain rule still hands back the right value via Mul.
+                Advance();
+                return new ImagUnit();
             default:
                 throw new FormatException(
                     $"Unexpected {Describe(t.Kind)} ('{t.Lexeme}') at {t.Where}.");

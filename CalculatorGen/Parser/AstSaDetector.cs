@@ -79,6 +79,10 @@ public static class AstSaDetector
         {
             case RealConst:
                 degree = 0; return true;
+            // Imaginary unit: complex constant, degree 0 in z. Lets shapes
+            // like `i*z*z + c` qualify for SA exactly like `2*z*z + c`.
+            case ImagUnit:
+                degree = 0; return true;
             case ZRef:
                 degree = 1; return true;
             case CRef:

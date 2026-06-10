@@ -39,6 +39,10 @@ public static class AstDifferentiator
         // Iteration index: real scalar, derivative w.r.t. z or c is 0.
         IterRef    => new RealConst(0.0),
         RealConst  => new RealConst(0.0),
+        // Imaginary unit: complex constant — derivative w.r.t. either real
+        // variable is 0. The chain rule still produces the right value
+        // through Mul: d(i·z)/dz = 0·z + i·1 = i.
+        ImagUnit   => new RealConst(0.0),
         Neg n      => new Neg(Diff(n.Operand, v)),
         Add a      => new Add(Diff(a.Left, v), Diff(a.Right, v)),
         Sub s      => new Sub(Diff(s.Left, v), Diff(s.Right, v)),

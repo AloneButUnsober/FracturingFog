@@ -44,6 +44,7 @@ z_{n+1} = <expression>
 | Variable z       | `z`                      | Current iterate (complex)        |
 | Variable c       | `c`                      | Pixel coordinate (complex)       |
 | Real literal     | `2`, `0.5`, `1.5e-3`     | Treated as `(n, 0)` complex      |
+| Imaginary unit   | `i`                      | Literal `(0, 1)`. Complex constant — holomorphic. Differentiator returns 0, chain rule still hands back `i` via Mul (`d(i·z)/dz = i`). DE / perturbation / BLA / SA all stay on. |
 | Addition         | `z + c`                  | Complex                          |
 | Subtraction      | `z - c`                  | Complex                          |
 | Multiplication   | `z*z`, `2*c`             | Complex                          |
@@ -52,7 +53,7 @@ z_{n+1} = <expression>
 | Parentheses      | `(z + c) * (z - c)`      | Standard precedence              |
 | Unary minus      | `-z`, `-(z*z + c)`       | Complex negation                 |
 | Conjugate        | `conj(z)`                | (zr, -zi) — anti-holomorphic     |
-| Component fold   | `fold(z)`                | (|zr|, |zi|) — Burning Ship      |
+| Component fold   | `fold(z)`                | (\|zr\|, \|zi\|) — Burning Ship  |
 | Square shortcut  | `sqr(z)`                 | Same as z*z                      |
 | Real / imag      | `re(z)`, `im(z)`         | Real scalar lifted as (n, 0)     |
 | Magnitude        | `abs(z)`                 | \|z\| as (n, 0)                    |
@@ -255,6 +256,40 @@ z*z + 0.05*atan2(z, c) + c
 prefer `arg(z)` — the AVX2 emitter cannot vectorise the binary form
 and surfaces a clear error during generation.)
 
+### 4.12 Imaginary unit (`i`)
+
+`i` is the imaginary unit literal — `(0, 1)` as a complex constant. It
+behaves like any other complex constant in the grammar: holomorphic, so
+the distance estimate, perturbation, BLA, and SA paths all stay enabled.
+Use it to inject a complex coefficient without juggling `re()` / `im()`
+decomposition.
+
+The C# editor's `Complex.ImaginaryOne` and `new Complex(a, b)` both
+translate to the DSL form automatically — there is no longer an "i has
+no DSL representation" diagnostic.
+
+#### Multiply by i (90° rotation)
+```
+i*z + c
+```
+
+#### Complex coefficient on the quadratic term
+```
+i*z*z + c
+```
+
+#### Mixed real + imaginary coefficients
+```
+0.5*z*z + 0.3*i*z + c
+```
+
+#### Decompose a hand-written complex constant
+`new Complex(0.4, -0.2)` in the C# editor becomes
+```
+((0.4) + (-0.2)*i)
+```
+in the DSL — same semantics, with both halves explicit.
+
 ### 4.11 Real binary ops (min / max / mod)
 
 `min(a, b)`, `max(a, b)`, `mod(a, b)` all act on the real parts of their
@@ -396,7 +431,7 @@ Flags:
 
 | Symptom                                   | Likely cause / fix                                  |
 |-------------------------------------------|------------------------------------------------------|
-| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, exp, log, arg, atan2, min, max, mod, pi, e, if/then/else, re, im, abs, prev, iter/n. |
+| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, exp, log, arg, atan2, min, max, mod, pi, e, i, if/then/else, re, im, abs, prev, iter/n. |
 | `Unexpected character …`                  | Stray punctuation. `=` alone is not allowed; use `==`.|
 | `Exponent must be 0..16`                  | Use `z*z*z…` or break into factored form.            |
 | `Equation is empty`                       | Editor text is blank after preprocessor strip.       |
@@ -417,7 +452,7 @@ Lifts           re(z), im(z), abs(z)          (real scalar → (n, 0))
 Transcendentals sin cos tan sinh cosh tanh exp log sqrt
 Argument        arg(x)            atan2(y, x)
 Real binary     min(a, b)  max(a, b)  mod(a, b)
-Constants       pi  e
+Constants       pi  e  i              (i = imaginary unit, (0, 1))
 State           z   c   prev   iter (or n)
 ```
 

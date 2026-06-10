@@ -62,6 +62,15 @@ public sealed record PrevRef : AstNode;
 /// <summary>Real-valued numeric literal. Treated as complex (n, 0).</summary>
 public sealed record RealConst(double Value) : AstNode;
 
+/// <summary>Imaginary unit literal. Treated as complex (0, 1). Holomorphic
+/// constant — Wirtinger ∂i/∂z = 0, but the chain rule still works correctly
+/// through Mul (e.g. d(i·z)/dz = i). Distance estimate stays valid. SA
+/// detector accepts it as a degree-0 complex constant — `i·z² + c` is still
+/// degree-2 z polynomial with a complex coefficient. Perturbation Taylor
+/// expansion handles it transparently via the symbolic differentiator
+/// (returns 0, treated like any other constant under δ/ε expansion).</summary>
+public sealed record ImagUnit : AstNode;
+
 /// <summary>Unary negation.</summary>
 public sealed record Neg(AstNode Operand) : AstNode;
 

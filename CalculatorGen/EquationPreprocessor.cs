@@ -9,6 +9,10 @@
 //   return X;             → X
 //   Complex.Zero          → 0
 //   Complex.One           → 1
+//   Complex.ImaginaryOne  → i             (PR8 — DSL has 'i' literal now)
+//   new Complex(a, 0)     → a             (real part only — drop the wrapper)
+//   new Complex(0, b)     → (b)*i
+//   new Complex(a, b)     → (a + (b)*i)
 //   Complex.Sin(x)        → sin(x)
 //   Complex.Cos(x)        → cos(x)
 //   Complex.Exp(x)        → exp(x)
@@ -21,8 +25,6 @@
 //   Complex.Pow(x, expr)  → exp(expr*log(x))    (non-integer exponent)
 //
 // Explicit reject (with crisp error messages)
-//   Complex.ImaginaryOne  — no 'i' literal in DSL
-//   new Complex(a, b)     — same; no 'i' literal
 //   Complex.Abs(x)        — DSL `abs(x)` is |x|² (squared mag), not |x|
 //   Any other Complex.X   — falls through, reported on second pass
 //
@@ -94,45 +96,60 @@ public static class EquationPreprocessor
         // anchored so `Complex.Zero1` (unlikely but possible) isn't hit.
         s = Regex.Replace(s, @"\bComplex\.Zero\b",  "0");
         s = Regex.Replace(s, @"\bComplex\.One\b",   "1");
+        // PR8: 'i' literal is now first-class in the DSL — rewrite the BCL
+        // form directly. No diagnostic (it's no longer a rejected
+        // construct) and downstream consumers see a plain `i` token.
+        s = Regex.Replace(s, @"\bComplex\.ImaginaryOne\b", "i");
 
-        // Hard-reject constructs with no DSL counterpart.
-        var mImg = Regex.Match(s, @"\bComplex\.ImaginaryOne\b");
-        if (mImg.Success)
+        // PR8: `new Complex(a, b)` now translates to a DSL `(a + (b)*i)`
+        // expression. Special cases drop redundant parts:
+        //   (a, 0)  → a
+        //   (0, b)  → (b)*i
+        //   (0, 1)  → i
+        //   (0, -1) → -i
+        // Anything else: full `(a + (b)*i)` form. We do this BEFORE the
+        // function-call rewrites so the trailing `)` of the ctor doesn't
+        // get parsed as part of a Complex.X(...) call.
+        for (int ctorPass = 0; ctorPass < 32; ctorPass++)
         {
-            // No in-place fix in either editor — CalcGen has no 'i' literal,
-            // and the C# form would still trip the same preprocessor pass.
-            diagnostic = new PreprocessDiagnostic(
-                "Complex.ImaginaryOne ('i') has no representation in the CalcGen DSL — " +
-                "there is no 'i' literal. Decompose the equation so it uses only " +
-                "z, c, real literals, and the DSL ops (+, -, *, /, ^Int, sin, cos, exp, log, conj, fold).",
-                mImg.Index + lead, mImg.Length, SuggestionCSharp: null, SuggestionDsl: null);
-            return s;
-        }
-        var mNew = Regex.Match(s, @"\bnew\s+Complex\s*\(([^)]*)\)");
-        if (mNew.Success)
-        {
-            // Special case: `new Complex(<expr>, 0)` is identical to writing
-            // `<expr>` — the user just wrapped a real literal unnecessarily.
-            // DSL form: bare `<expr>` (DSL treats reals as (n, 0)).
-            // C# form: NO automatic suggestion. `<expr>` IS valid C# via the
-            // double→Complex implicit conversion, but proposing a bare
-            // number where the user explicitly wrote `new Complex(...)` is
-            // confusing. Let them rewrite from the explanation.
-            string? dslFix = null;
-            string inner = mNew.Groups[1].Value;
+            var mNew = Regex.Match(s, @"\bnew\s+Complex\s*\(");
+            if (!mNew.Success) break;
+            int openIdx = mNew.Index + mNew.Length - 1;
+            int closeIdx = FindMatchingParen(s, openIdx);
+            if (closeIdx < 0) break; // unbalanced — let downstream error surface
+            string inner = s.Substring(openIdx + 1, closeIdx - openIdx - 1);
             string[] args = SplitTopLevelCommas(inner);
+            string replacement;
             if (args.Length == 2)
             {
                 string realPart = args[0].Trim();
                 string imagPart = args[1].Trim();
                 bool imagIsZero = imagPart == "0" || imagPart == "0.0" || imagPart == "0d" || imagPart == "0f";
-                if (imagIsZero && realPart.Length > 0) dslFix = realPart;
+                bool realIsZero = realPart == "0" || realPart == "0.0" || realPart == "0d" || realPart == "0f";
+                bool imagIsOne  = imagPart == "1" || imagPart == "1.0" || imagPart == "1d" || imagPart == "1f";
+                bool imagIsNegOne = imagPart == "-1" || imagPart == "-1.0" || imagPart == "-1d" || imagPart == "-1f";
+                if (imagIsZero && !realIsZero) replacement = $"({realPart})";
+                else if (realIsZero && imagIsOne) replacement = "i";
+                else if (realIsZero && imagIsNegOne) replacement = "(-i)";
+                else if (realIsZero) replacement = $"(({imagPart})*i)";
+                else replacement = $"(({realPart}) + ({imagPart})*i)";
             }
-            diagnostic = new PreprocessDiagnostic(
-                "'new Complex(a, b)' has no representation in the CalcGen DSL — " +
-                "there is no 'i' literal. Use real-only expressions on z and c.",
-                mNew.Index + lead, mNew.Length, SuggestionCSharp: null, SuggestionDsl: dslFix);
-            return s;
+            else if (args.Length == 1)
+            {
+                // `new Complex(x)` — implicit zero imag in BCL semantics.
+                replacement = $"({args[0].Trim()})";
+            }
+            else
+            {
+                // Bad arity — drop a diagnostic and bail so the downstream
+                // parser produces a clearer error.
+                diagnostic = new PreprocessDiagnostic(
+                    "'new Complex(...)' expects 1 or 2 arguments.",
+                    mNew.Index + lead, closeIdx - mNew.Index + 1,
+                    SuggestionCSharp: null, SuggestionDsl: null);
+                return s;
+            }
+            s = s.Substring(0, mNew.Index) + replacement + s.Substring(closeIdx + 1);
         }
         var mAbs = Regex.Match(s, @"\bComplex\.Abs\s*\(");
         if (mAbs.Success)
