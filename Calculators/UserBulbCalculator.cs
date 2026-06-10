@@ -733,7 +733,6 @@ namespace FracturingFogDyn
         // Falls through to CPU on either failure.
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
-            && !quatMode
             && !juliaMode
             && _analyticPattern.Kind != AnalyticDEKind.None)
         {
@@ -750,11 +749,11 @@ namespace FracturingFogDyn
                 DEIter = deIter, MaxSteps = maxSteps,
                 Eps = eps, Bailout = bailout, CullRadiusSq = cullRadiusSq,
                 Power = analyticPower,
+                QuatSliceW = FractalParameters.UserBulbQuatSliceW,
                 InSetColor = ColorMap.InSetColor,
             };
 
-            // (a) Sandbox path. Only chain-less DSL for now; chain mode would
-            // need a separate emitter that wires SandboxBulbChain into a kernel.
+            // (a) Sandbox path: vec + quat. Chain mode still CPU.
             bool useChainPath = FractalParameters.UserBulbChain != null
                                  && FractalParameters.UserBulbChain.Count > 0;
             if (_compiledCompiler == UserBulbCompilerKind.Sandbox && !useChainPath)
@@ -763,22 +762,25 @@ namespace FracturingFogDyn
                 if (_sandboxGpu.TryCompile(
                         FractalParameters.UserBulbSource ?? string.Empty,
                         _compiledParamNames,
-                        quatMode: false)
+                        quatMode: quatMode)
                     && _sandboxGpu.Render(ColorBuffer, pArr, gp))
                 {
                     return;
                 }
                 LastError = _sandboxGpu.LastError;
-                // Fall through to legacy GPU + then CPU.
+                // Fall through to legacy GPU (vec only) + then CPU.
             }
 
-            // (b) Legacy Roslyn-source path.
-            var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
-            if (trans.Ok)
+            // (b) Legacy Roslyn-source path — vec only.
+            if (!quatMode)
             {
-                _gpu ??= new UserBulbGpuCalculator();
-                if (_gpu.Render(ColorBuffer, gp)) return;
-                LastError = _gpu.LastError;
+                var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
+                if (trans.Ok)
+                {
+                    _gpu ??= new UserBulbGpuCalculator();
+                    if (_gpu.Render(ColorBuffer, gp)) return;
+                    LastError = _gpu.LastError;
+                }
             }
         }
 

@@ -38,14 +38,14 @@ public static class UserBulbSandboxEmitter
         => Emit(root, paramNames, quatMode, gpuTarget: false);
 
     /// <summary>GPU-targeted overload. When <paramref name="gpuTarget"/> is
-    /// true, Vec3 helper calls route through <c>Vec3GpuOps.*</c> mirrors that
-    /// avoid IL Throw opcodes (ILGPU JIT rejects exception flow). Quat mode
-    /// is not supported on GPU and returns Ok=false.</summary>
+    /// true, Vec3/Quat helper calls route through <c>Vec3GpuOps.*</c> /
+    /// <c>QuatGpuOps.*</c> mirrors that avoid IL Throw opcodes (ILGPU JIT
+    /// rejects exception flow). Stage 3B added Quat-mode support; Quat-mode
+    /// constants and Hamilton multiply ride the inline operators directly,
+    /// runtime-exponent <c>qpow</c> routes through <c>QuatGpuOps.Pow</c>.</summary>
     public static SbxEmitResult Emit(Sbx3Node? root, IReadOnlyList<string> paramNames, bool quatMode, bool gpuTarget)
     {
         if (root == null) return new(false, "Empty AST.", null, SbxEmitKind.Real);
-        if (gpuTarget && quatMode)
-            return new(false, "GPU: Quat axis mode not supported.", null, SbxEmitKind.Real);
         try
         {
             var ctx = new EmitCtx(paramNames, quatMode, gpuTarget);
@@ -405,7 +405,7 @@ public static class UserBulbSandboxEmitter
                             return SbxEmitKind.Quat;
                         }
                     }
-                    sb.Append("Quat.Pow(");
+                    sb.Append(_gpu ? "QuatGpuOps.Pow(" : "Quat.Pow(");
                     EmitAsQuat(call.Args[0], sb); sb.Append(", ");
                     EmitAsReal(call.Args[1], sb); sb.Append(')');
                     return SbxEmitKind.Quat;
