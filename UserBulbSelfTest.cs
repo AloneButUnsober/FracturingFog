@@ -369,6 +369,52 @@ namespace FracturingFog
             { Console.WriteLine($"[ubtest] cache hit failed: t1.Ok={t1.Ok} t2.Ok={t2.Ok} same-ref={ReferenceEquals(t1, t2)}"); return 30; }
             Console.WriteLine("[ubtest] Translator cache hit confirmed (same record ref)");
 
+            // Chain analytic DE: abs-fold → triplex chain should detect.
+            Console.WriteLine("[ubtest] Chain analytic detect…");
+            var calcChainAn = new UserBulbCalculator(w, h)
+            {
+                MaxIterations = 96,
+                FractalParameters = new FractalParameters
+                {
+                    UserBulbCompiler = UserBulbCompilerKind.Sandbox,
+                    UserBulbChain = new System.Collections.Generic.List<UserBulbChainStep>
+                    {
+                        new() { OutputName = "folded", Source = "abs(z)" },
+                        new() { OutputName = "out",    Source = "triplex(folded, 8) + c" },
+                    }
+                }
+            };
+            calcChainAn.Compile(string.Empty);
+            Console.WriteLine($"[ubtest] Chain-analytic Pattern={calcChainAn.AnalyticPattern.Kind} power={calcChainAn.AnalyticPattern.Power}");
+            if (calcChainAn.AnalyticPattern.Kind != AnalyticDEKind.MandelbulbN || Math.Abs(calcChainAn.AnalyticPattern.Power - 8) > 1e-9)
+            { Console.WriteLine("[ubtest] Chain-analytic FAILED: expected MandelbulbN(8)"); return 31; }
+            var swCA = System.Diagnostics.Stopwatch.StartNew();
+            calcChainAn.Calculate();
+            swCA.Stop();
+            int hitsCA = 0;
+            for (int i = 0; i < calcChainAn.ColorBuffer.Length; i++)
+                if (calcChainAn.ColorBuffer[i] != bg) hitsCA++;
+            Console.WriteLine($"[ubtest] Chain-analytic done in {swCA.ElapsedMilliseconds} ms, hits={hitsCA}/{calcChainAn.ColorBuffer.Length}");
+
+            // Non-Lipschitz chain prefix (sin) → must NOT detect.
+            var calcChainBad = new UserBulbCalculator(w, h)
+            {
+                MaxIterations = 96,
+                FractalParameters = new FractalParameters
+                {
+                    UserBulbCompiler = UserBulbCompilerKind.Sandbox,
+                    UserBulbChain = new System.Collections.Generic.List<UserBulbChainStep>
+                    {
+                        new() { OutputName = "warped", Source = "sin(z)" },
+                        new() { OutputName = "out",    Source = "triplex(warped, 8) + c" },
+                    }
+                }
+            };
+            calcChainBad.Compile(string.Empty);
+            Console.WriteLine($"[ubtest] Non-Lipschitz chain pattern={calcChainBad.AnalyticPattern.Kind}");
+            if (calcChainBad.AnalyticPattern.Kind != AnalyticDEKind.None)
+            { Console.WriteLine("[ubtest] Non-Lipschitz chain should NOT detect — got false positive"); return 32; }
+
             return (hits > 0 && hits2 > 0 && hits3 > 0 && hits4 > 0 && hits5 > 0 && hitsE2E > 0) ? 0 : 2;
         }
     }

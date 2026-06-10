@@ -26,6 +26,13 @@ namespace FracturingFog.Models
         private SandboxBulbChain(Sbx3Node[] roots, int[] outSlots, int[] extras, int envSize)
         { _stepRoots = roots; _stepOutputSlots = outSlots; _extraSlots = extras; EnvSize = envSize; }
 
+        /// <summary>Read-only view of the per-step AST roots. Exposed so the
+        /// AnalyticDE pattern matcher can walk the chain in compile order.</summary>
+        public IReadOnlyList<Sbx3Node> StepRoots => _stepRoots;
+
+        /// <summary>Output slot index for step i. Aligns with <see cref="StepRoots"/>.</summary>
+        public IReadOnlyList<int> StepOutputSlots => _stepOutputSlots;
+
         public static SandboxBulbChain Parse(IReadOnlyList<UserBulbChainStep> steps, IReadOnlyList<string> extraScalarNames)
         {
             if (steps == null || steps.Count == 0)

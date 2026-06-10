@@ -143,6 +143,119 @@ public static class UserBulbAnalyticDE
         else sink.Add(n);
     }
 
+    /// <summary>Pattern detection on a multi-step Sandbox chain. The analytic
+    /// DE recurrence holds when (a) the final step's expression matches a
+    /// recognised power-map pattern fed by some slot s, and (b) every step
+    /// whose output transitively feeds s is a composition of Lipschitz-≤1
+    /// operations on z (abs, absx/y/z, boxfold, normalize, negation, and
+    /// affine offsets by constants/c). Folds preserve the |dz/dc| bound that
+    /// drives the Hubbard-Douady running-derivative formula, so the same
+    /// power-N recurrence stays correct. Auto mode's AcceptAuto probe
+    /// catches mis-detect and falls back to numerical, so the matcher errs
+    /// on the side of recognising more shapes.</summary>
+    public static AnalyticDEPattern DetectSandboxChain(SandboxBulbChain chain)
+    {
+        if (chain == null) return new(AnalyticDEKind.None, 0);
+        var roots = chain.StepRoots;
+        var outSlots = chain.StepOutputSlots;
+        int n = roots.Count;
+        if (n == 0) return new(AnalyticDEKind.None, 0);
+
+        // Map each step-output slot → its expression AST. Used to walk back
+        // through prior step outputs when verifying the fold-prefix shape.
+        var slotToExpr = new Dictionary<int, Sbx3Node>(n);
+        for (int i = 0; i < n; i++) slotToExpr[outSlots[i]] = roots[i];
+
+        // The final step decides the kind. Reuse the single-expression
+        // matcher but allow the operand inside triplex(<s>, K) / s ^ K to
+        // be ANY slot (not just SlotZ), provided that slot resolves to a
+        // Lipschitz-≤1 fold of z.
+        var last = roots[n - 1];
+
+        if (last is Sbx3Binary { Op: "+" } add)
+        {
+            if (TryMatchTriplexOrPowOfFold(add.A, add.B, slotToExpr, out double p1))
+                return new(AnalyticDEKind.MandelbulbN, p1);
+            if (TryMatchTriplexOrPowOfFold(add.B, add.A, slotToExpr, out double p2))
+                return new(AnalyticDEKind.MandelbulbN, p2);
+        }
+        return new(AnalyticDEKind.None, 0);
+    }
+
+    private static bool TryMatchTriplexOrPowOfFold(
+        Sbx3Node lhs, Sbx3Node rhs,
+        Dictionary<int, Sbx3Node> slotToExpr,
+        out double power)
+    {
+        power = 0;
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+
+        // triplex(<slot>, K) — slot resolves to a fold-of-z.
+        if (lhs is Sbx3Call call && call.Name == "triplex" && call.Args.Length == 2
+            && call.Args[1] is Sbx3Const pc && !pc.V.IsVec && !pc.V.IsQuat
+            && call.Args[0] is Sbx3Slot triSlot
+            && IsLipschitzZ(triSlot.Slot, slotToExpr, new HashSet<int>()))
+        {
+            power = pc.V.X;
+            return true;
+        }
+
+        // <slot> ^ K — same shape via the operator form.
+        if (lhs is Sbx3Binary { Op: "^" } pow
+            && pow.A is Sbx3Slot powSlot
+            && IsLipschitzZ(powSlot.Slot, slotToExpr, new HashSet<int>())
+            && pow.B is Sbx3Const pk && !pk.V.IsVec && !pk.V.IsQuat)
+        {
+            power = pk.V.X;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>True when <paramref name="slot"/> resolves transitively to a
+    /// fold-only function of z. Recursion guarded by <paramref name="seen"/>
+    /// to break self-referential chains (the parser disallows them but
+    /// safety belt costs nothing).</summary>
+    private static bool IsLipschitzZ(int slot, Dictionary<int, Sbx3Node> slotToExpr, HashSet<int> seen)
+    {
+        if (slot == SandboxBulbExpression.SlotZ) return true;
+        if (!seen.Add(slot)) return false;
+        if (!slotToExpr.TryGetValue(slot, out var expr)) return false;
+        return IsLipschitzExpression(expr, slotToExpr, seen);
+    }
+
+    private static bool IsLipschitzExpression(Sbx3Node node, Dictionary<int, Sbx3Node> slotToExpr, HashSet<int> seen)
+    {
+        switch (node)
+        {
+            case Sbx3Slot s:
+                return IsLipschitzZ(s.Slot, slotToExpr, seen);
+            case Sbx3Const:
+                return true;
+            case Sbx3Unary u when u.Op == '-':
+                return IsLipschitzExpression(u.A, slotToExpr, seen);
+            case Sbx3Binary b when b.Op == "+" || b.Op == "-":
+                return IsLipschitzExpression(b.A, slotToExpr, seen) && IsLipschitzExpression(b.B, slotToExpr, seen);
+            case Sbx3Call call:
+                return call.Name switch
+                {
+                    // Componentwise abs is the canonical fold and is Lipschitz=1.
+                    "abs" or "absx" or "absy" or "absz" => IsLipschitzExpression(call.Args[0], slotToExpr, seen),
+                    // BoxFold clamps each component to [-limit, limit] and
+                    // reflects past it — Lipschitz=1 by construction.
+                    "boxfold" => IsLipschitzExpression(call.Args[0], slotToExpr, seen),
+                    // vec(...) of Lipschitz reals → Lipschitz vec.
+                    "vec" => IsLipschitzExpression(call.Args[0], slotToExpr, seen)
+                          && IsLipschitzExpression(call.Args[1], slotToExpr, seen)
+                          && IsLipschitzExpression(call.Args[2], slotToExpr, seen),
+                    _ => false,
+                };
+            default:
+                return false;
+        }
+    }
+
     public static AnalyticDEPattern Detect(string? source)
     {
         if (string.IsNullOrWhiteSpace(source)) return new(AnalyticDEKind.None, 0);

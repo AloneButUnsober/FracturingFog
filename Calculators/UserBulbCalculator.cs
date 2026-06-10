@@ -449,7 +449,10 @@ public sealed class UserBulbCalculator : IFractalCalculator
             _compiledAxisMode = UserBulbAxisModeKind.Vec3;
             _compiledCompiler = UserBulbCompilerKind.Sandbox;
             _compiledParamNames = paramNames;
-            _analyticPattern = new AnalyticDEPattern(AnalyticDEKind.None, 0);
+            // Chain analytic-DE detection: applies when the final step's
+            // power-map operand traces back through Lipschitz-≤1 folds.
+            // AcceptAuto in DE mode = Auto catches mis-detects at runtime.
+            _analyticPattern = UserBulbAnalyticDE.DetectSandboxChain(chain);
             LastError = string.Empty;
         }
         catch (Exception ex)
