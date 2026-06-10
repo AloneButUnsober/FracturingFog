@@ -28,6 +28,9 @@ static class Program
         if (args.Length > 0 && args[0] == "--ubtest")
             return UserBulbSelfTest.Run();
 
+        if (args.Length > 0 && args[0] == "--ubspike")
+            return FracturingFog.Calculators.UserBulbSandboxGpuSpike.Run();
+
         // CalculatorGen-emitted self-tests: validates that the scalar and
         // AVX2 paths of a generated calculator agree on a fixed sample grid.
         // Pass the calculator name (sans "Calculator" suffix) as arg[1].
