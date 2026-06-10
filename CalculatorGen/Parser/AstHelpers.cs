@@ -57,6 +57,7 @@ public static class AstHelpers
         CondRe r  => Contains<T>(r.Of),
         CondIm im => Contains<T>(im.Of),
         CondAbs2 a => Contains<T>(a.Of),
+        CondArg ag => Contains<T>(ag.Of),
         _ => false,
     };
 }

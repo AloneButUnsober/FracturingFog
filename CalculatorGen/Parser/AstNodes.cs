@@ -196,5 +196,14 @@ public sealed record CondIm(AstNode Of) : CondTerm;
 /// users already think in.</summary>
 public sealed record CondAbs2(AstNode Of) : CondTerm;
 
+/// <summary>Principal argument of a complex sub-expression as a real
+/// scalar: <c>arg(x) = atan2(Im(x), Re(x)) ∈ (-π, π]</c>. Lets users
+/// branch by orbit phase, e.g. <c>if arg(z) &gt; 0 then z*z + c else z*z - c</c>.
+/// Lives only inside conditions — the regular <see cref="Arg"/> AstNode
+/// already handles arg as a complex value in normal expression
+/// position. Non-holomorphic, but conditions don't feed the
+/// differentiator chain so this doesn't affect DE gating.</summary>
+public sealed record CondArg(AstNode Of) : CondTerm;
+
 /// <summary>Real literal inside a comparison.</summary>
 public sealed record CondConst(double Value) : CondTerm;

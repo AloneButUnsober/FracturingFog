@@ -199,6 +199,11 @@ public sealed class QdDirectEmitter : EmitterBase
                 string reSq = $"(({av.Re}).X0 * ({av.Re}).X0)";
                 if (av.ImZero) return reSq;
                 return $"({reSq} + ({av.Im}).X0 * ({av.Im}).X0)";
+            case CondArg ag:
+                var agv = Emit(ag.Of);
+                string agRe = $"((QD)({agv.Re})).X0";
+                string agIm = agv.ImZero ? "0.0" : $"((QD)({agv.Im})).X0";
+                return $"Math.Atan2({agIm}, {agRe})";
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

@@ -180,6 +180,9 @@ public sealed class PerturbDerivEmitter : EmitterBase
                 string reSq = $"({av.Re} * {av.Re})";
                 if (av.ImZero) return reSq;
                 return $"({reSq} + {av.Im} * {av.Im})";
+            case CondArg ag:
+                var agv = Emit(ag.Of);
+                return $"Math.Atan2({(agv.ImZero ? "0.0" : agv.Im)}, {agv.Re})";
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

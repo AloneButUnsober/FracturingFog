@@ -437,6 +437,40 @@ public static class CalculatorGenUnitTests
         Check("lexer: 'I' (uppercase) also lexes as ImagUnit",
             () => EquationParser.Parse("I") is ImagUnit);
 
+        // ── CondArg (arg inside if conditions) ───────────────────────
+        Check("parser: if arg(z) > 0 then z*z + c else c parses",
+            () => EquationParser.Parse("if arg(z) > 0 then z*z + c else c") is If
+            { Cond: Cmp { Left: CondArg, Right: CondConst { Value: 0.0 } } });
+        Check("parser: arg in cond accepts nested expression",
+            () => EquationParser.Parse("if arg(z*z + c) >= 1.5 then z else c") is If
+            { Cond: Cmp { Left: CondArg } });
+        Check("printer: arg in cond round-trips",
+            () => AstPrinter.Print(EquationParser.Parse("if arg(z) > 0 then z else c"))
+                  == "if arg(z) > 0 then z else c");
+        Check("codegen: if arg(z) > 0 emits without throwing",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("if arg(z) > 0 then z*z + c else z*z - c", "CondArgSmoke");
+                return r.Ok;
+            });
+        Check("codegen: if arg(z*z + c) < 1 routes through every emitter",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("if arg(z*z + c) < 1 then z*z + c else z + c", "CondArgNestedSmoke");
+                return r.Ok && r.Source.Contains("Math.Atan2");
+            });
+        Check("codegen: atan2(z, c) vectorises on AVX2 per-lane (no throw)",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("z*z + atan2(z, c) + c", "Atan2VectorSmoke");
+                // Per-lane atan2 prelude emits 4× Math.Atan2 calls plus
+                // Vector256.Create assembly — both fingerprints prove the
+                // AVX2 emitter took the per-lane path instead of throwing.
+                return r.Ok
+                    && r.Source.Contains("Math.Atan2")
+                    && System.Text.RegularExpressions.Regex.Matches(r.Source, @"Math\.Atan2").Count >= 4;
+            });
+
         // ── feature detection ────────────────────────────────────────
         Check("flags: conj(c) → hasConj true",
             () => AstHelpers.Contains<Conj>(EquationParser.Parse("z*z + conj(c)")));

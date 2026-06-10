@@ -61,7 +61,7 @@ z_{n+1} = <expression>
 | Hyperbolic       | `sinh(z) cosh(z) tanh(z)`| Desugared via exp; holomorphic   |
 | Square root      | `sqrt(z)`                | Desugared as `exp(0.5*log(z))`   |
 | Argument         | `arg(z)`                 | Real angle in (-π, π], lifted to (arg, 0). Non-holomorphic — disables DE / perturbation / BLA / SA. |
-| Atan2            | `atan2(y, x)`            | Binary; same gating as `arg`. AVX2 main path emits an error — use `arg(z)` when on AVX2. |
+| Atan2            | `atan2(y, x)`            | Binary; same gating as `arg`. Per-lane scalar fallback on AVX2 (4× `Math.Atan2` per body), full vector on Scalar/DD/QD. |
 | Min / Max        | `min(a, b)`, `max(a, b)` | Real-valued, lifted to (result, 0). Imag parts discarded. Vectorised on AVX2 via Vector256.Min/Max. Same gating as `arg`. |
 | Modulo           | `mod(a, b)`              | Real-valued C# `%` on the real parts, lifted. Per-lane scalar on AVX2. Same gating as `arg`. |
 | Constants        | `pi`, `e`                | Real literals (Math.PI / Math.E) |
@@ -242,6 +242,14 @@ e*z*z + c
 as `(arg, 0)`. Non-holomorphic — same gating as `conj`: distance estimate,
 perturbation, BLA, and SA all turn off when the equation contains `arg`.
 
+`arg` is also accepted as a real-scalar condition term inside `if`:
+`if arg(z) > 0 then z*z + c else z*z - c` branches by orbit phase. The
+cond grammar position behaves like `re(...)` / `im(...)` / `abs(...)` —
+the arg's sub-expression can be anything (z, c, or a composite like
+`arg(z*z + c)`). Conditions don't feed the differentiator chain so
+piecewise-by-arg keeps the distance estimate valid inside each branch
+(boundary locus where the cond flips is measure-zero).
+
 #### Spiral by angle
 ```
 z*z + 0.1*arg(z) + c
@@ -252,9 +260,11 @@ z*z + 0.1*arg(z) + c
 z*z + 0.05*atan2(z, c) + c
 ```
 
-(`atan2(y, x)` is real-valued; if you author for the AVX2 main path,
-prefer `arg(z)` — the AVX2 emitter cannot vectorise the binary form
-and surfaces a clear error during generation.)
+(`atan2(y, x)` is real-valued. On AVX2 the binary form falls back to
+per-lane scalar `Math.Atan2` — kept 4-wide so the surrounding pipeline
+stays vectorised, at the cost of 4× scalar atan2 calls per body. Scalar
+and DD/QD paths handle the full form directly. `arg(z)` is the unary
+shortcut when you only need atan2 of a complex value's components.)
 
 ### 4.12 Imaginary unit (`i`)
 
@@ -449,6 +459,7 @@ Comparisons     < <= > >= == !=
 Conditional     if <cmp> then <expr> else <expr>
 Unary           -expr  conj(...) fold(...) abs(...) sqr(...)
 Lifts           re(z), im(z), abs(z)          (real scalar → (n, 0))
+Cond terms      re(...), im(...), abs(...), arg(...)   (inside if cmp)
 Transcendentals sin cos tan sinh cosh tanh exp log sqrt
 Argument        arg(x)            atan2(y, x)
 Real binary     min(a, b)  max(a, b)  mod(a, b)

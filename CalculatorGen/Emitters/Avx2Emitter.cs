@@ -261,15 +261,38 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpExp(ComplexExpr a) => EmitPerLaneTranscendental(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => EmitPerLaneTranscendental(a, "log");
     protected override ComplexExpr OpArg(ComplexExpr a) => EmitPerLaneTranscendental(a, "arg");
-    // Binary atan2 has no AVX2 vector intrinsic and the existing per-lane
-    // helper takes a single complex input. Scalar / DD / QD paths cover
-    // atan2 fully — let the generator surface a clear error here so the
-    // user knows to either rewrite via arg() or accept the scalar-only
-    // path (CalcGen runs the scalar emitter unconditionally as a fallback).
-    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
-        throw new InvalidOperationException(
-            "atan2(y, x) is not implemented on the AVX2 path. Use arg(z) instead, " +
-            "or accept the scalar-only fallback by removing the AVX2 calc registration.");
+    // Binary atan2(y, x) has no AVX2 vector intrinsic, but we can still
+    // keep the surrounding pipeline vectorised by per-lane-scalarising
+    // exactly like OpMod does: extract the 4 lanes of y.Re and x.Re,
+    // call Math.Atan2 four times, repack as a Vector256. Imag parts of
+    // both inputs are dropped (matches the mathematical atan2 semantic
+    // — both arguments are real-valued). ImZero=true on output so
+    // downstream Add/Mul elides the dead-zero imag like RealConst.
+    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x)
+    {
+        string yr = y.Re;
+        string xr = x.Re;
+        string tre = NewTemp("re");
+        string ns = tre;
+        _prelude.Append(_indent).Append("Vector256<double> ").Append(tre).Append(';').Append('\n');
+        _prelude.Append(_indent).Append("{\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double y").Append(k).Append('_').Append(ns)
+                .Append(" = ").Append(yr).Append(".GetElement(").Append(k).Append(");\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double x").Append(k).Append('_').Append(ns)
+                .Append(" = ").Append(xr).Append(".GetElement(").Append(k).Append(");\n");
+        _prelude.Append(_indent).Append("    ").Append(tre).Append(" = Vector256.Create(");
+        for (int k = 0; k < 4; k++)
+        {
+            if (k > 0) _prelude.Append(", ");
+            _prelude.Append("Math.Atan2(y").Append(k).Append('_').Append(ns)
+                .Append(", x").Append(k).Append('_').Append(ns).Append(')');
+        }
+        _prelude.Append(");\n");
+        _prelude.Append(_indent).Append("}\n");
+        return new ComplexExpr(tre, "Vector256<double>.Zero", ImZero: true);
+    }
 
     // min / max have native Vector256<double> intrinsics — emit them
     // directly so the inner loop stays vectorised. Inputs treated as
@@ -357,6 +380,14 @@ public sealed class Avx2Emitter : EmitterBase
                 if (av.ImZero)
                     return NewBoundRe($"Avx.Multiply({av.Re}, {av.Re})");
                 return NewBoundRe($"Fma.MultiplyAdd({av.Re}, {av.Re}, Avx.Multiply({av.Im}, {av.Im}))");
+            case CondArg ag:
+                // arg inside an if condition. atan2 has no AVX2 intrinsic
+                // so we per-lane-scalarise via the same fallback the
+                // OpArg path uses. EmitPerLaneTranscendental returns a
+                // ComplexExpr with the imag temp pinned to 0.0 — discard
+                // it and return only the real vector.
+                var argv = Emit(ag.Of);
+                return EmitPerLaneTranscendental(argv, "arg").Re;
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";
