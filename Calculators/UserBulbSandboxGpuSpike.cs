@@ -70,6 +70,8 @@ public static class UserBulbSandboxGpuSpike
         Console.WriteLine();
         if (!RunT4()) failCount++;
         Console.WriteLine();
+        if (!RunT5()) failCount++;
+        Console.WriteLine();
 
         Console.WriteLine("── Spike summary ──");
         Console.WriteLine(failCount == 0
@@ -324,6 +326,56 @@ namespace FracturingFogDyn.Spike {{
             DEIter = 8, MaxSteps = 64,
             Eps = 1e-3, Bailout = 4.0, CullRadiusSq = 4.0,
             Power = 8.0,
+            InSetColor = 0xFF000000u,
+        };
+        var output = new uint[W * H];
+        if (!compiler.Render(output, Array.Empty<double>(), gp))
+        {
+            Console.WriteLine($"  RENDER_FAIL: {compiler.LastError}");
+            return false;
+        }
+        int hit = 0, bg = 0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (output[i] == gp.InSetColor) bg++;
+            else hit++;
+        }
+        bool ok = hit > 0 && bg > 0;
+        Console.WriteLine(ok
+            ? $"  SUCCESS. hit={hit}, bg={bg}."
+            : $"  FAIL: hit={hit}, bg={bg}.");
+        return ok;
+    }
+
+    // ── T5: end-to-end Quat-mode UserBulbSandboxGpuCompiler smoke (3B) ────
+    private static bool RunT5()
+    {
+        Console.WriteLine("[T5] Quat-mode UserBulbSandboxGpuCompiler on `qpow(z, 2) + c`.");
+        using var compiler = new UserBulbSandboxGpuCompiler();
+        // qpow(z,2) literal-int → emitter unfolds to `z * z` (Hamilton); no
+        // QuatGpuOps.Pow call. Still exercises Quat constants + Hamilton mul
+        // + Quat.Length in the kernel — the 3B kernel-shape surface.
+        if (!compiler.TryCompile("qpow(z, 2) + c", Array.Empty<string>(), quatMode: true))
+        {
+            Console.WriteLine($"  COMPILE_FAIL: {compiler.LastError}");
+            return false;
+        }
+
+        const int W = 32, H = 32;
+        var gp = new GpuRenderParams
+        {
+            Width = W, Height = H,
+            CamX = 0.0, CamY = 0.0, CamZ = -3.0,
+            TargetX = 0.0, TargetY = 0.0, TargetZ = 0.0,
+            FwdX = 0.0, FwdY = 0.0, FwdZ = 1.0,
+            RightX = 1.0, RightY = 0.0, RightZ = 0.0,
+            UpX = 0.0, UpY = 1.0, UpZ = 0.0,
+            FovScale = Math.Tan(0.5 * 60.0 * Math.PI / 180.0), Aspect = 1.0,
+            LightX = 0.577, LightY = 0.577, LightZ = -0.577,
+            DEIter = 12, MaxSteps = 64,
+            Eps = 1e-3, Bailout = 4.0, CullRadiusSq = 4.0,
+            Power = 2.0,
+            QuatSliceW = 0.0,
             InSetColor = 0xFF000000u,
         };
         var output = new uint[W * H];

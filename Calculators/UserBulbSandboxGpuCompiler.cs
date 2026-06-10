@@ -119,14 +119,16 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
             return false;
         }
 
-        // Guard: any Quat ref in emitted body → bail (no GPU support for Quat).
-        if (emit.Body!.Contains("Quat"))
+        // Vec mode: a stray Quat reference would mean a bug in the emitter
+        // (Quat constants in a non-quat tree). Quat mode legitimately emits
+        // Quat references — that's the whole point.
+        if (!quatMode && emit.Body!.Contains("Quat"))
         {
-            LastError = "GPU: emitted body references Quat (not supported on GPU).";
+            LastError = "GPU: vec-mode body unexpectedly references Quat.";
             return false;
         }
 
-        string kernelSrc = BuildKernelSource(emit.Body!, paramNames);
+        string kernelSrc = BuildKernelSource(emit.Body!, paramNames, quatMode);
         Assembly? asm = TryRoslynCompile(kernelSrc, out var rerr);
         if (asm == null) { LastError = $"Roslyn compile failed: {rerr}"; return false; }
 
@@ -229,8 +231,10 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
     /// UserBulbGpuCalculator.BulbKernel: sphere-clip → raymarch SandboxDE →
     /// forward-diff normals → cheap palette shade. SandboxDE replaces the
     /// hard-coded TriplexPowerDE with the user step compiled from the AST.
+    /// In <paramref name="quatMode"/> the step takes Quat z/c (z.W projects
+    /// onto p.QuatSliceW) and the analytic DE loop iterates in 4D.
     /// </summary>
-    private static string BuildKernelSource(string stepBody, IReadOnlyList<string> paramNames)
+    private static string BuildKernelSource(string stepBody, IReadOnlyList<string> paramNames, bool quatMode)
     {
         var sb = new StringBuilder();
         sb.AppendLine("using System;");
@@ -242,7 +246,9 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         sb.AppendLine("public static class SandboxBulbGpu {");
 
         // Step function — body comes verbatim from emitter.
-        sb.AppendLine("    private static Vec3 Step(Vec3 z, Vec3 c, int n, ArrayView<double> __p) {");
+        string stepType = quatMode ? "Quat" : "Vec3";
+        sb.Append("    private static ").Append(stepType).Append(" Step(").Append(stepType).Append(" z, ")
+          .Append(stepType).AppendLine(" c, int n, ArrayView<double> __p) {");
         for (int i = 0; i < paramNames.Count; i++)
             sb.Append("        double ").Append(paramNames[i]).Append(" = __p[").Append(i).AppendLine("];");
         // `t` always last in __p.
@@ -252,7 +258,25 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
 
         // Analytic DE: power map. `power` comes from GpuRenderParams.
         // dr = power * pow(r, power-1) * dr + 1.
-        sb.AppendLine(@"    private static double SandboxDE(double cx, double cy, double cz, int iter, double bailout, double power, ArrayView<double> __p) {
+        if (quatMode)
+        {
+            sb.AppendLine(@"    private static double SandboxDE(double cx, double cy, double cz, int iter, double bailout, double power, double sliceW, ArrayView<double> __p) {
+        var c = new Quat(sliceW, cx, cy, cz);
+        var z = Quat.Zero;
+        double dr = 1.0, r = 0.0;
+        for (int i = 0; i < iter; i++) {
+            r = z.Length;
+            if (r > bailout) break;
+            dr = power * Math.Pow(r, power - 1.0) * dr + 1.0;
+            z = Step(z, c, i, __p);
+        }
+        if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
+        return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
+    }");
+        }
+        else
+        {
+            sb.AppendLine(@"    private static double SandboxDE(double cx, double cy, double cz, int iter, double bailout, double power, double sliceW, ArrayView<double> __p) {
         var c = new Vec3(cx, cy, cz);
         var z = new Vec3(0.0, 0.0, 0.0);
         double dr = 1.0, r = 0.0;
@@ -265,6 +289,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
         return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
     }");
+        }
 
         // Kernel: same shape as UserBulbGpuCalculator.BulbKernel.
         sb.AppendLine(@"    public static void Kernel(Index1D idx, ArrayView<uint> output, ArrayView<double> __p, GpuRenderParams p) {
@@ -297,7 +322,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         int hitStep = 0;
         double hitDist = 0.0;
         for (int step = 0; step < p.MaxSteps; step++) {
-            double d = SandboxDE(px, py, pz, p.DEIter, p.Bailout, p.Power, __p);
+            double d = SandboxDE(px, py, pz, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p);
             if (d < p.Eps) { hit = true; hitStep = step; hitDist = d; break; }
             if (tT > tEx + 1.0) break;
             px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -306,9 +331,9 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         if (!hit) { output[idx] = p.InSetColor; return; }
         double h = p.Eps * 2;
         double invH = 1.0 / h;
-        double n0 = (SandboxDE(px + h, py, pz, p.DEIter, p.Bailout, p.Power, __p) - hitDist) * invH;
-        double n1 = (SandboxDE(px, py + h, pz, p.DEIter, p.Bailout, p.Power, __p) - hitDist) * invH;
-        double n2 = (SandboxDE(px, py, pz + h, p.DEIter, p.Bailout, p.Power, __p) - hitDist) * invH;
+        double n0 = (SandboxDE(px + h, py, pz, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p) - hitDist) * invH;
+        double n1 = (SandboxDE(px, py + h, pz, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p) - hitDist) * invH;
+        double n2 = (SandboxDE(px, py, pz + h, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p) - hitDist) * invH;
         double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
         double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
         double diffuse = Math.Max(0.0, nx * p.LightX + ny * p.LightY + nz * p.LightZ);

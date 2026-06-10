@@ -1,6 +1,6 @@
 # User Bulb Sandbox — Dev Plan
 
-Sandbox-Bulb DSL on the `feature/gpu-compute` branch. Stage 3A shipped 2026-06-10. Stage 3B (Quat GPU) and 3C (interpreter perf) remain.
+Sandbox-Bulb DSL on the `feature/gpu-compute` branch. Stages 3A + 3B shipped 2026-06-10. Stage 3C (interpreter perf) remains, plus chain-mode GPU.
 
 ---
 
@@ -70,11 +70,11 @@ Stage 3A end-to-end runtime path: Sandbox DSL → AST → emitter (`gpuTarget: t
 | File | Role |
 |---|---|
 | [Models/Vec3GpuOps.cs](../Models/Vec3GpuOps.cs) | Device-safe mirrors of `Vec3.Pow`/`Rot`/`BoxFold`/`SphereFold`/`Mod`/`Normalized` using scalar `if`-clamps (no `Math.Clamp` Throw). |
-| [Calculators/UserBulbSandboxEmitter.cs](../Calculators/UserBulbSandboxEmitter.cs) | New `Emit(..., gpuTarget: bool)` overload routes `Vec3.*` → `Vec3GpuOps.*` and `Math.Clamp` → `Vec3GpuOps.Clamp` when true. Rejects Quat axis on GPU. |
+| [Calculators/UserBulbSandboxEmitter.cs](../Calculators/UserBulbSandboxEmitter.cs) | New `Emit(..., gpuTarget: bool)` overload routes `Vec3.*` → `Vec3GpuOps.*` and `Math.Clamp` → `Vec3GpuOps.Clamp` when true. (3B: Quat axis also supported — runtime `qpow` → `QuatGpuOps.Pow`.) |
 | [Calculators/UserBulbSandboxGpuCompiler.cs](../Calculators/UserBulbSandboxGpuCompiler.cs) | Bridge. Parses, emits, wraps in kernel source (mirrors `BulbKernel` shape), Roslyn-compiles, JITs via ILGPU. Caches kernel by `(source, paramNames, axisMode)`. fp64 fallback: catches `CapabilityNotSupportedException` and re-JITs on CPU accelerator. |
 | [Calculators/UserBulbCalculator.cs](../Calculators/UserBulbCalculator.cs) | GPU gate now routes to `UserBulbSandboxGpuCompiler` when `Compiler=Sandbox` and chain-less; falls through to `UserBulbGpuCalculator` on any failure. |
 
-**Smoke (`dotnet run -- --ubspike`):** T1/T2/T3/T4 all pass on this box (Intel UHD OpenCL → CPU-accel fp64 fallback).
+**Smoke (`dotnet run -- --ubspike`):** T1/T2/T3/T4 all pass on this box (Intel UHD OpenCL → CPU-accel fp64 fallback). T5 added in 3B (see below).
 
 | Tier | What | Result |
 |---|---|---|
@@ -83,11 +83,25 @@ Stage 3A end-to-end runtime path: Sandbox DSL → AST → emitter (`gpuTarget: t
 | T3 | `triplex(z, 8) + c` emitter body in DE-loop kernel + spike-inlined `TriplexPowSafe` | **SUCCESS** (parity vs CPU `Vec3.Pow` matches) |
 | T4 | Full `UserBulbSandboxGpuCompiler.TryCompile` + `Render` on `triplex(z, 8) + c` | **SUCCESS** (hit=326, bg=698 on 32×32 with the fp64 fallback) |
 
-**Limitations carried forward:**
+**Limitations carried forward (after 3B):**
 
-- Chain mode (multi-step DSL) not yet GPU-compiled — chain path stays CPU. Tracked under 3B-adjacent work.
-- Quat axis mode not GPU-compiled. Emitter rejects with `Ok=false` on `gpuTarget && quatMode`. Tracked under 3B.
+- Chain mode (multi-step DSL) not yet GPU-compiled — chain path stays CPU.
+- Quat-mode Julia + numerical-Jacobian DE not yet on GPU — current quat GPU path is analytic-DE only (matches the CPU `qpow(z, K) + c` shape). Julia + 5-trajectory DE stays CPU.
 - fp64 fallback to CPU accelerator works but is slower than CUDA/OpenCL; on fp64-capable devices the preferred accelerator is used directly.
+
+### 3B — Sandbox-Quat GPU path (SHIPPED 2026-06-10)
+
+Extends 3A's vec-mode kernel with a Quat-mode variant. Emitter routes Quat constants, Hamilton `*`, `.Conjugate`, `.Length`, and `qpow` through device-safe paths. `QuatGpuOps.Pow` is the throw-free mirror of `Quat.Pow` (runtime exponent — literal int still inlines to chained `*` from Stage 2). Kernel branches on `quatMode` in `BuildKernelSource`: `Step` takes `Quat z/c`, `SandboxDE` projects via `GpuRenderParams.QuatSliceW`.
+
+| File | Role |
+|---|---|
+| [Models/QuatGpuOps.cs](../Models/QuatGpuOps.cs) | `Pow(Quat, double)` mirror — rounds + clamps to `[0, MaxIter]`, loops Hamilton-multiply. No throw on non-integer/negative/non-finite. |
+| [Calculators/UserBulbSandboxEmitter.cs](../Calculators/UserBulbSandboxEmitter.cs) | Drops `gpuTarget && quatMode` early-return. Runtime-exponent `qpow` routes to `QuatGpuOps.Pow` on GPU. |
+| [Calculators/UserBulbSandboxGpuCompiler.cs](../Calculators/UserBulbSandboxGpuCompiler.cs) | `BuildKernelSource(stepBody, paramNames, quatMode)`. Quat branch builds `Quat Step(Quat z, Quat c, …)` + `Quat`-typed analytic DE loop using `p.QuatSliceW` as `c.W`. |
+| [Calculators/UserBulbGpuCalculator.cs](../Calculators/UserBulbGpuCalculator.cs) | `GpuRenderParams.QuatSliceW` added. |
+| [Calculators/UserBulbCalculator.cs](../Calculators/UserBulbCalculator.cs) | GPU gate drops `!quatMode` guard at top, gates only the legacy Roslyn-translator branch on `!quatMode`. Populates `gp.QuatSliceW`. |
+
+**T5 smoke:** `qpow(z, 2) + c` in Quat mode, 32×32, DEIter=12 → hit=284, bg=740 on the fp64-fallback CPU accelerator.
 
 ### 3A spike — VIABILITY CONFIRMED (2026-06-10, retained for context)
 
@@ -105,10 +119,6 @@ Three tiered probes run via `dotnet run -- --ubspike` ([UserBulbSandboxGpuSpike.
 
 - `Vec3.Pow` calls `Math.Clamp`, which lowers to a `Throw` opcode ILGPU rejects (`Not supported IL instruction of type 'Throw'`). Workaround in spike: hand-rolled `TriplexPowSafe` that clamps via two scalar compares. Real fix: add `Models/Vec3GpuOps.cs` with device-safe mirrors of `Vec3.Pow`, `Vec3.Rot`, `Vec3.SphereFold`, `Vec3.BoxFold`, etc., and route the emitter to call those when targeting GPU.
 - Intel UHD OpenCL has no fp64. Existing `UserBulbGpuCalculator` shares this risk; out of scope for 3A. Pivot if it bites: float32 kernel variant.
-
-### 3B. Sandbox-Quat GPU path  (M, ~4 h, unblocked by 3A)
-
-Existing GPU kernel `!quatMode` gated. Once 3A lands, extend kernel to Quat mode with the 5-trajectory numerical Jacobian (matches CPU `UserBulbQuatDE`), or analytic for `qmul(z,z)+c` (the Quat-square case).
 
 ### 3C. Interpreter perf  (M, ~6 h)
 

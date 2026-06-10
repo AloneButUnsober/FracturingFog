@@ -33,6 +33,7 @@ public struct GpuRenderParams
     public int DEIter, MaxSteps;
     public double Eps, Bailout, CullRadiusSq;
     public double Power;          // 2 = square triplex; else generic power-N
+    public double QuatSliceW;     // Quat axis-mode slice plane (z.W when projecting 4D→3D)
     public uint InSetColor;
 }
 
