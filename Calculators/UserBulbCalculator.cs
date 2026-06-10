@@ -117,6 +117,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
     private AnalyticDEPattern _analyticPattern = new(AnalyticDEKind.None, 0);
     private readonly UserBulbTemporalCache _cache = new();
     private UserBulbGpuCalculator? _gpu;
+    private UserBulbSandboxGpuCompiler? _sandboxGpu;
 
     public UserBulbCalculator(int width, int height) => Resize(width, height);
 
@@ -723,35 +724,63 @@ namespace FracturingFogDyn
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Sin(FractalParameters.UserBulbLightTheta));
 
         // GPU path: only when backend=GPU AND source detected as analytic power map.
-        // Translator additionally validates user grammar.
+        // Two routes:
+        //   (a) Sandbox-DSL compiler → UserBulbSandboxGpuCompiler runtime-emits a
+        //       kernel that mirrors UserBulbGpuCalculator.BulbKernel but with the
+        //       DE function generated from the user's DSL.
+        //   (b) Roslyn-source compiler → UserBulbGpuCalculator's hardcoded
+        //       TriplexPowerDE (fast path for power-N triplex Mandelbulb).
+        // Falls through to CPU on either failure.
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
-            && !quatMode
             && !juliaMode
             && _analyticPattern.Kind != AnalyticDEKind.None)
         {
-            var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
-            if (trans.Ok)
+            var gp = new GpuRenderParams
             {
-                _gpu ??= new UserBulbGpuCalculator();
-                var gp = new GpuRenderParams
+                Width = width, Height = height,
+                CamX = camX, CamY = camY, CamZ = camZ,
+                TargetX = targetX, TargetY = targetY, TargetZ = targetZ,
+                FwdX = fwd.X, FwdY = fwd.Y, FwdZ = fwd.Z,
+                RightX = right.X, RightY = right.Y, RightZ = right.Z,
+                UpX = up.X, UpY = up.Y, UpZ = up.Z,
+                FovScale = fovScale, Aspect = aspect,
+                LightX = light.X, LightY = light.Y, LightZ = light.Z,
+                DEIter = deIter, MaxSteps = maxSteps,
+                Eps = eps, Bailout = bailout, CullRadiusSq = cullRadiusSq,
+                Power = analyticPower,
+                QuatSliceW = FractalParameters.UserBulbQuatSliceW,
+                InSetColor = ColorMap.InSetColor,
+            };
+
+            // (a) Sandbox path: vec + quat. Chain mode still CPU.
+            bool useChainPath = FractalParameters.UserBulbChain != null
+                                 && FractalParameters.UserBulbChain.Count > 0;
+            if (_compiledCompiler == UserBulbCompilerKind.Sandbox && !useChainPath)
+            {
+                _sandboxGpu ??= new UserBulbSandboxGpuCompiler();
+                if (_sandboxGpu.TryCompile(
+                        FractalParameters.UserBulbSource ?? string.Empty,
+                        _compiledParamNames,
+                        quatMode: quatMode)
+                    && _sandboxGpu.Render(ColorBuffer, pArr, gp))
                 {
-                    Width = width, Height = height,
-                    CamX = camX, CamY = camY, CamZ = camZ,
-                    TargetX = targetX, TargetY = targetY, TargetZ = targetZ,
-                    FwdX = fwd.X, FwdY = fwd.Y, FwdZ = fwd.Z,
-                    RightX = right.X, RightY = right.Y, RightZ = right.Z,
-                    UpX = up.X, UpY = up.Y, UpZ = up.Z,
-                    FovScale = fovScale, Aspect = aspect,
-                    LightX = light.X, LightY = light.Y, LightZ = light.Z,
-                    DEIter = deIter, MaxSteps = maxSteps,
-                    Eps = eps, Bailout = bailout, CullRadiusSq = cullRadiusSq,
-                    Power = analyticPower,
-                    InSetColor = ColorMap.InSetColor,
-                };
-                if (_gpu.Render(ColorBuffer, gp)) return;
-                // GPU failed → log + fall through to CPU.
-                LastError = _gpu.LastError;
+                    return;
+                }
+                LastError = _sandboxGpu.LastError;
+                // Fall through to legacy GPU (vec only) + then CPU.
+            }
+
+            // (b) Legacy Roslyn-source path — vec only.
+            if (!quatMode)
+            {
+                var trans = UserBulbIlgpuTranslator.Translate(FractalParameters.UserBulbSource);
+                if (trans.Ok)
+                {
+                    _gpu ??= new UserBulbGpuCalculator();
+                    if (_gpu.Render(ColorBuffer, gp)) return;
+                    LastError = _gpu.LastError;
+                }
             }
         }
 

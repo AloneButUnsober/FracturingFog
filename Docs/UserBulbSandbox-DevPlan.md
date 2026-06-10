@@ -1,6 +1,6 @@
 # User Bulb Sandbox — Dev Plan
 
-Sandbox-Bulb DSL on the `feature/gpu-compute` branch. Two stages shipped, one stage remaining. This doc tracks status and the remaining ILGPU JIT work.
+Sandbox-Bulb DSL on the `feature/gpu-compute` branch. Stages 3A + 3B shipped 2026-06-10. Stage 3C (interpreter perf) remains, plus chain-mode GPU.
 
 ---
 
@@ -61,42 +61,64 @@ Files: [Models/SandboxBulbExpression.cs](../Models/SandboxBulbExpression.cs), [M
 
 ---
 
-## Stage 3 — ILGPU JIT (REMAINING)
+## Stage 3 — ILGPU JIT
 
-### 3A. Roslyn-compile emitted C# → ILGPU kernel  (L, ~16 h, high risk)
+### 3A — Sandbox → Roslyn → ILGPU kernel (SHIPPED 2026-06-10)
 
-The emitter from Stage 2 (#13) produces valid C# expressions but nothing consumes them on the GPU side yet. `UserBulbGpuCalculator` hardcodes the triplex formula and is gated by analytic-DE pattern match — Sandbox sources matching Square or MandelbulbN already ride that path correctly. Stage 3 makes the kernel actually JIT-consume the emitted text so non-analytic Sandbox sources can also render on GPU.
+Stage 3A end-to-end runtime path: Sandbox DSL → AST → emitter (`gpuTarget: true`) → Roslyn in-memory asm → ILGPU `LoadAutoGroupedStreamKernel`. Wired into [UserBulbCalculator.cs](../Calculators/UserBulbCalculator.cs) GPU gate ahead of the legacy [UserBulbGpuCalculator.cs](../Calculators/UserBulbGpuCalculator.cs) power-N path.
 
-**Approach**
+| File | Role |
+|---|---|
+| [Models/Vec3GpuOps.cs](../Models/Vec3GpuOps.cs) | Device-safe mirrors of `Vec3.Pow`/`Rot`/`BoxFold`/`SphereFold`/`Mod`/`Normalized` using scalar `if`-clamps (no `Math.Clamp` Throw). |
+| [Calculators/UserBulbSandboxEmitter.cs](../Calculators/UserBulbSandboxEmitter.cs) | New `Emit(..., gpuTarget: bool)` overload routes `Vec3.*` → `Vec3GpuOps.*` and `Math.Clamp` → `Vec3GpuOps.Clamp` when true. (3B: Quat axis also supported — runtime `qpow` → `QuatGpuOps.Pow`.) |
+| [Calculators/UserBulbSandboxGpuCompiler.cs](../Calculators/UserBulbSandboxGpuCompiler.cs) | Bridge. Parses, emits, wraps in kernel source (mirrors `BulbKernel` shape), Roslyn-compiles, JITs via ILGPU. Caches kernel by `(source, paramNames, axisMode)`. fp64 fallback: catches `CapabilityNotSupportedException` and re-JITs on CPU accelerator. |
+| [Calculators/UserBulbCalculator.cs](../Calculators/UserBulbCalculator.cs) | GPU gate now routes to `UserBulbSandboxGpuCompiler` when `Compiler=Sandbox` and chain-less; falls through to `UserBulbGpuCalculator` on any failure. |
 
-1. Take emitter output (currently a C# expression string).
-2. Wrap in a static method via Roslyn scripting (matches existing `UserBulbCalculator.WrapUserSource` shape).
-3. Register the compiled method with ILGPU as a kernel-callable function.
+**Smoke (`dotnet run -- --ubspike`):** T1/T2/T3/T4 all pass on this box (Intel UHD OpenCL → CPU-accel fp64 fallback). T5 added in 3B (see below).
 
-**Open problems**
+| Tier | What | Result |
+|---|---|---|
+| T1 | Minimal kernel in byte[]-loaded asm, no external types | **SUCCESS** |
+| T2 | Kernel + cross-asm `Vec3` reference | **SUCCESS** |
+| T3 | `triplex(z, 8) + c` emitter body in DE-loop kernel + spike-inlined `TriplexPowSafe` | **SUCCESS** (parity vs CPU `Vec3.Pow` matches) |
+| T4 | Full `UserBulbSandboxGpuCompiler.TryCompile` + `Render` on `triplex(z, 8) + c` | **SUCCESS** (hit=326, bg=698 on 32×32 with the fp64 fallback) |
 
-- **ILGPU constraint surface.** No closures, no boxing, struct-only params, no virtual calls, no exception flow. Existing `Vec3`/`Quat` types appear ILGPU-safe (readonly record struct, no reference fields) but each builtin call site needs validation. Spike: emit `triplex(z, 8) + c` through the full pipeline and check ILGPU acceptance.
-- **Vec3 helpers on device.** `Vec3.Pow`, `Vec3.BoxFold`, `Vec3.SphereFold` etc. need to compile under ILGPU's restricted JIT. Some may rely on `Math.*` paths that ILGPU lowers automatically; others (especially anything using `MathF` / SIMD intrinsics) may fail. Audit per call site.
-- **`Quat.Pow` loop.** Iterative Hamilton self-multiply — ILGPU may handle a bounded `for` loop but rejects unbounded or recursive forms. The literal-int unfolded path (#15) sidesteps this on the emit side; runtime `Quat.Pow` is the risk.
-- **Source caching.** Like `UserBulbIlgpuTranslator` (#20), the compiled kernel should be cached per source string.
+**Limitations carried forward (after 3B):**
 
-**Files**
+- Chain mode (multi-step DSL) not yet GPU-compiled — chain path stays CPU.
+- Quat-mode Julia + numerical-Jacobian DE not yet on GPU — current quat GPU path is analytic-DE only (matches the CPU `qpow(z, K) + c` shape). Julia + 5-trajectory DE stays CPU.
+- fp64 fallback to CPU accelerator works but is slower than CUDA/OpenCL; on fp64-capable devices the preferred accelerator is used directly.
 
-- New: `Calculators/UserBulbSandboxGpuCompiler.cs` — Roslyn → ILGPU bridge.
-- Modify: `Calculators/UserBulbCalculator.cs` — when Backend=GPU AND Compiler=Sandbox, call the bridge before falling back to the hardcoded analytic kernel.
-- Possibly: `Models/Vec3GpuOps.cs` — device-safe mirrors of any `Vec3.*` static that ILGPU rejects.
+### 3B — Sandbox-Quat GPU path (SHIPPED 2026-06-10)
 
-**Test plan**
+Extends 3A's vec-mode kernel with a Quat-mode variant. Emitter routes Quat constants, Hamilton `*`, `.Conjugate`, `.Length`, and `qpow` through device-safe paths. `QuatGpuOps.Pow` is the throw-free mirror of `Quat.Pow` (runtime exponent — literal int still inlines to chained `*` from Stage 2). Kernel branches on `quatMode` in `BuildKernelSource`: `Step` takes `Quat z/c`, `SandboxDE` projects via `GpuRenderParams.QuatSliceW`.
 
-1. Spike: emit `triplex(z, 8) + c` → compile via Roslyn → register via ILGPU → render. Accept on success.
-2. Self-test: emitter→Roslyn→ILGPU pixel parity vs CPU Sandbox interpreter for triplex, chain abs→triplex, qmul(z,z)+c.
-3. Perf: target ≥10× CPU Sandbox for the triplex case.
+| File | Role |
+|---|---|
+| [Models/QuatGpuOps.cs](../Models/QuatGpuOps.cs) | `Pow(Quat, double)` mirror — rounds + clamps to `[0, MaxIter]`, loops Hamilton-multiply. No throw on non-integer/negative/non-finite. |
+| [Calculators/UserBulbSandboxEmitter.cs](../Calculators/UserBulbSandboxEmitter.cs) | Drops `gpuTarget && quatMode` early-return. Runtime-exponent `qpow` routes to `QuatGpuOps.Pow` on GPU. |
+| [Calculators/UserBulbSandboxGpuCompiler.cs](../Calculators/UserBulbSandboxGpuCompiler.cs) | `BuildKernelSource(stepBody, paramNames, quatMode)`. Quat branch builds `Quat Step(Quat z, Quat c, …)` + `Quat`-typed analytic DE loop using `p.QuatSliceW` as `c.W`. |
+| [Calculators/UserBulbGpuCalculator.cs](../Calculators/UserBulbGpuCalculator.cs) | `GpuRenderParams.QuatSliceW` added. |
+| [Calculators/UserBulbCalculator.cs](../Calculators/UserBulbCalculator.cs) | GPU gate drops `!quatMode` guard at top, gates only the legacy Roslyn-translator branch on `!quatMode`. Populates `gp.QuatSliceW`. |
 
-**Why spike-first**: The constraint surface is unknown until the bridge attempts to compile a real kernel. A spike (≤4 h) determines whether the approach is viable. If ILGPU refuses to JIT Roslyn-emitted delegates the design pivots to direct SPIR-V emission or a separate compiler tier.
+**T5 smoke:** `qpow(z, 2) + c` in Quat mode, 32×32, DEIter=12 → hit=284, bg=740 on the fp64-fallback CPU accelerator.
 
-### 3B. Sandbox-Quat GPU path  (M, ~4 h, blocked by 3A)
+### 3A spike — VIABILITY CONFIRMED (2026-06-10, retained for context)
 
-Existing GPU kernel `!quatMode` gated. Once 3A lands, extend kernel to Quat mode with the 5-trajectory numerical Jacobian (matches CPU `UserBulbQuatDE`), or analytic for `qmul(z,z)+c` (the Quat-square case).
+Three tiered probes run via `dotnet run -- --ubspike` ([UserBulbSandboxGpuSpike.cs](../Calculators/UserBulbSandboxGpuSpike.cs)) against the CPU accelerator (the OpenCL/Intel UHD device on this box has no fp64).
+
+| Tier | What | Result |
+|---|---|---|
+| T1 | Minimal kernel in byte[]-loaded asm, no external types | **SUCCESS** |
+| T2 | Kernel + cross-asm `Vec3` reference | **SUCCESS** |
+| T3 | `triplex(z, 8) + c` emitter body wrapped in a DE-loop kernel + device-safe `TriplexPow` | **SUCCESS** (1024/1024 finite, 719 inSet / 305 outSet, center pixel parity vs CPU `Vec3.Pow` = 0/0) |
+
+**Confirmed.** Runtime `Assembly.Load(byte[])` outputs are JIT-acceptable to ILGPU. Cross-asm type refs resolve. No need for on-disk staging or for sinking `Vec3` into the runtime asm.
+
+**Blockers found and fixed in-spike.**
+
+- `Vec3.Pow` calls `Math.Clamp`, which lowers to a `Throw` opcode ILGPU rejects (`Not supported IL instruction of type 'Throw'`). Workaround in spike: hand-rolled `TriplexPowSafe` that clamps via two scalar compares. Real fix: add `Models/Vec3GpuOps.cs` with device-safe mirrors of `Vec3.Pow`, `Vec3.Rot`, `Vec3.SphereFold`, `Vec3.BoxFold`, etc., and route the emitter to call those when targeting GPU.
+- Intel UHD OpenCL has no fp64. Existing `UserBulbGpuCalculator` shares this risk; out of scope for 3A. Pivot if it bites: float32 kernel variant.
 
 ### 3C. Interpreter perf  (M, ~6 h)
 
