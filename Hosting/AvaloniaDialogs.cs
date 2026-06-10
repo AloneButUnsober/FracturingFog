@@ -1288,6 +1288,9 @@ namespace FracturingFog.Hosting
                         TargetCYHi = cyHi, TargetCYLo = cyLo, TargetCY2 = cy2, TargetCY3 = cy3,
                         TargetZoom = zoom,
                         TargetIterations = targetIterations,
+                        TargetRegionName = regionCombo.SelectedIndex > 0
+                            ? regionCombo.SelectedItem as string
+                            : null,
                         Seconds = seconds,
                         IsSlideshow = false,
                         IsReverse = chkReverse.IsChecked == true,
@@ -1327,6 +1330,8 @@ namespace FracturingFog.Hosting
                         BandDither = chkBandDither.IsChecked == true,
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
                         UseRegionWatermark = chkUseRegionWatermark.IsChecked == true,
+                        ThemeFadeEnabled = chkThemeFade.IsChecked == true,
+                        ThemesPerLeg = (int)Math.Round(nudThemesPerLeg.Value ?? 3m),
                         IterCapMode = PickIterCapMode(),
                     });
                 };

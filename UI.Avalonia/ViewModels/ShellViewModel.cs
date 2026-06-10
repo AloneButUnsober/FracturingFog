@@ -1445,6 +1445,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             BandDitherStrength = v.BandDitherStrength,
             IterCapMode = v.IterCapMode,
             UseRegionWatermark = config.Timing.UseRegionWatermark,
+            ThemeFadeEnabled = v.ThemeFadeEnabled,
+            ThemesPerLeg = v.ThemesPerLeg,
         };
 
         _video.VideoSweepConfig = config.AdaptiveSweep;
