@@ -74,6 +74,19 @@ public abstract class EmitterBase
     /// return <c>ImZero = true</c>.</summary>
     protected abstract ComplexExpr Const(double value);
 
+    /// <summary>Emit the imaginary unit (0, 1) in the emitter's complex
+    /// type. Default reuses <see cref="Const"/> to assemble the (0, 1)
+    /// pair — works for every concrete emitter because each Const already
+    /// produces a valid Re slot in the target type (plain double, DD, QD,
+    /// or Vector256/512 broadcast of a double). ImZero is false because
+    /// the imaginary part is explicitly non-zero.</summary>
+    protected virtual ComplexExpr ImagUnitExpr()
+    {
+        var zero = Const(0.0);
+        var one  = Const(1.0);
+        return new ComplexExpr(zero.Re, one.Re, ImZero: false);
+    }
+
     protected abstract ComplexExpr OpAdd(ComplexExpr a, ComplexExpr b);
     protected abstract ComplexExpr OpSub(ComplexExpr a, ComplexExpr b);
     protected abstract ComplexExpr OpMul(ComplexExpr a, ComplexExpr b);
@@ -108,6 +121,28 @@ public abstract class EmitterBase
     protected virtual ComplexExpr OpLog(ComplexExpr a) =>
         throw new InvalidOperationException("OpLog not implemented in this emitter");
 
+    /// <summary>Principal argument lifted to complex: (atan2(im, re), 0).
+    /// Non-holomorphic. Output ImZero is true so downstream Add/Mul can
+    /// elide the zero imag part exactly like real-lift nodes.</summary>
+    protected virtual ComplexExpr OpArg(ComplexExpr a) =>
+        throw new InvalidOperationException("OpArg not implemented in this emitter");
+
+    /// <summary>Binary atan2(y, x) lifted to complex. Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
+        throw new InvalidOperationException("OpAtan2 not implemented in this emitter");
+
+    /// <summary>Real minimum lifted to complex (min, 0). Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpMin not implemented in this emitter");
+
+    /// <summary>Real maximum lifted to complex (max, 0). Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpMax not implemented in this emitter");
+
+    /// <summary>Real modulo (C# '%' on doubles) lifted to complex. Non-holomorphic.</summary>
+    protected virtual ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpMod not implemented in this emitter");
+
     /// <summary>Piecewise selection: given a boolean expression and two
     /// pre-evaluated complex branches, return the selected complex value.
     /// Subclasses choose the strategy — scalar uses a C# ternary on the
@@ -128,6 +163,7 @@ public abstract class EmitterBase
         // elide dead-zero terms exactly like RealConst inputs do.
         IterRef     => new ComplexExpr(IterRe,  IterImLiteral, ImZero: true),
         RealConst k => Const(k.Value),
+        ImagUnit    => ImagUnitExpr(),
         Neg n       => OpNeg(Emit(n.Operand)),
         Add a       => OpAdd(Emit(a.Left), Emit(a.Right)),
         Sub s       => OpSub(Emit(s.Left), Emit(s.Right)),
@@ -140,6 +176,11 @@ public abstract class EmitterBase
         Cos c2      => OpCos(Emit(c2.Operand)),
         Exp ex      => OpExp(Emit(ex.Operand)),
         Log lg      => OpLog(Emit(lg.Operand)),
+        Arg ar      => OpArg(Emit(ar.Operand)),
+        Atan2 at    => OpAtan2(Emit(at.Y), Emit(at.X)),
+        Min mn      => OpMin(Emit(mn.Left), Emit(mn.Right)),
+        Max mx      => OpMax(Emit(mx.Left), Emit(mx.Right)),
+        Mod md      => OpMod(Emit(md.Left), Emit(md.Right)),
         // Eager-evaluate both branches so any SSA prelude they emit
         // runs unconditionally — matches SIMD lane semantics where
         // every lane evaluates every branch. The cost is paid in

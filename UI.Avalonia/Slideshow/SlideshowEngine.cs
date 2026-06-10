@@ -267,7 +267,20 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 : null;
 
             if (old.Length > 0 && incoming != null && incoming.Length == old.Length)
+            {
                 await FadeAsync(old, incoming, w, h, steps, stepMs, ct);
+            }
+            else if (old.Length > 0 && w > 0 && h > 0)
+            {
+                // Non-Mandelbrot incoming region — RenderRegionOffscreen returns
+                // null since the slideshow offscreen path is Mandelbrot-only.
+                // Fall back to a fade-to-black on the outgoing buffer so the
+                // transition isn't a hard cut (matches the cross-fade direction
+                // the user already gets going non-Mandelbrot → Mandelbrot).
+                var black = new uint[old.Length];
+                for (int i = 0; i < black.Length; i++) black[i] = 0xFF000000u;
+                await FadeAsync(old, black, w, h, steps, stepMs, ct);
+            }
 
             // Commit the live view to the new region+theme. Set the colour map
             // SILENTLY first (presenting here would recolour + flash the OUTGOING

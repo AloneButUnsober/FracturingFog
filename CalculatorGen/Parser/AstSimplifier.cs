@@ -49,6 +49,11 @@ public static class AstSimplifier
         Cos c2  => new Cos(Simplify(c2.Operand)),
         Exp ex  => new Exp(Simplify(ex.Operand)),
         Log lg  => new Log(Simplify(lg.Operand)),
+        Arg ar  => new Arg(Simplify(ar.Operand)),
+        Atan2 at => new Atan2(Simplify(at.Y), Simplify(at.X)),
+        Min mn  => new Min(Simplify(mn.Left), Simplify(mn.Right)),
+        Max mx  => new Max(Simplify(mx.Left), Simplify(mx.Right)),
+        Mod md  => new Mod(Simplify(md.Left), Simplify(md.Right)),
         // Recurse into both branches; cond is left untouched since
         // CondTerm operands are AstNodes and could carry sub-trees we
         // could in theory simplify, but the emitter handles unsimplified

@@ -16,6 +16,7 @@
 // back gracefully.
 
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 using FracturingFog.Models;
@@ -34,6 +35,227 @@ public sealed record AnalyticDEPattern(AnalyticDEKind Kind, double Power);
 
 public static class UserBulbAnalyticDE
 {
+    /// <summary>Detect closed-form DE pattern from a parsed Sandbox AST.
+    /// Recognises `triplex(z, K) + c` (any side) → MandelbulbN(K), and the
+    /// hand-written canonical Square form
+    ///   `vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c`
+    /// → Square(power=2). Returns None otherwise.</summary>
+    public static AnalyticDEPattern DetectSandbox(Sbx3Node? root)
+    {
+        if (root is not Sbx3Binary { Op: "+" } add) return new(AnalyticDEKind.None, 0);
+        if (TryMatchTriplexPlusC(add.A, add.B, out double p1)) return new(AnalyticDEKind.MandelbulbN, p1);
+        if (TryMatchTriplexPlusC(add.B, add.A, out double p2)) return new(AnalyticDEKind.MandelbulbN, p2);
+        if (TryMatchPowOpPlusC(add.A, add.B, out double p3)) return new(AnalyticDEKind.MandelbulbN, p3);
+        if (TryMatchPowOpPlusC(add.B, add.A, out double p4)) return new(AnalyticDEKind.MandelbulbN, p4);
+        if (TryMatchExplicitSquarePlusC(add.A, add.B)) return new(AnalyticDEKind.Square, 2);
+        if (TryMatchExplicitSquarePlusC(add.B, add.A)) return new(AnalyticDEKind.Square, 2);
+        return new(AnalyticDEKind.None, 0);
+    }
+
+    /// <summary>Match the operator form `z ^ K + c`. `^` on a Vec slot is
+    /// triplex by Sandbox semantics, so this aliases MandelbulbN(K).</summary>
+    private static bool TryMatchPowOpPlusC(Sbx3Node lhs, Sbx3Node rhs, out double power)
+    {
+        power = 0;
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+        if (lhs is not Sbx3Binary { Op: "^" } pow) return false;
+        if (pow.A is not Sbx3Slot { Slot: SandboxBulbExpression.SlotZ }) return false;
+        if (pow.B is not Sbx3Const pc || pc.V.IsVec || pc.V.IsQuat) return false;
+        power = pc.V.X;
+        return true;
+    }
+
+    private static bool TryMatchTriplexPlusC(Sbx3Node lhs, Sbx3Node rhs, out double power)
+    {
+        power = 0;
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+        if (lhs is not Sbx3Call call) return false;
+        if (call.Name != "triplex" || call.Args.Length != 2) return false;
+        if (call.Args[0] is not Sbx3Slot { Slot: SandboxBulbExpression.SlotZ }) return false;
+        if (call.Args[1] is not Sbx3Const pc || pc.V.IsVec) return false;
+        power = pc.V.X;
+        return true;
+    }
+
+    /// <summary>Match `vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z)`
+    /// against lhs and `c` slot against rhs. Component ordering inside the
+    /// vec() call is fixed (X-component first) but each component's product
+    /// chain is associativity-agnostic — `2*z.x*z.y` and `z.x*2*z.y` both
+    /// match.</summary>
+    private static bool TryMatchExplicitSquarePlusC(Sbx3Node lhs, Sbx3Node rhs)
+    {
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+        if (lhs is not Sbx3Call call) return false;
+        if (call.Name != "vec" || call.Args.Length != 3) return false;
+        if (!IsXSquareMinusYSquareMinusZSquare(call.Args[0])) return false;
+        if (!IsCoeffTimesTwoZAxes(call.Args[1], 2.0, 'x', 'y')) return false;
+        if (!IsCoeffTimesTwoZAxes(call.Args[2], 2.0, 'x', 'z')) return false;
+        return true;
+    }
+
+    /// <summary>Parser is left-assoc on `-`, so `z.x*z.x - z.y*z.y - z.z*z.z`
+    /// becomes ((z.x²) - (z.y²)) - (z.z²). Match exactly that shape.</summary>
+    private static bool IsXSquareMinusYSquareMinusZSquare(Sbx3Node n)
+    {
+        if (n is not Sbx3Binary { Op: "-" } outer) return false;
+        if (!IsZAxisSquared(outer.B, 'z')) return false;
+        if (outer.A is not Sbx3Binary { Op: "-" } inner) return false;
+        if (!IsZAxisSquared(inner.A, 'x')) return false;
+        if (!IsZAxisSquared(inner.B, 'y')) return false;
+        return true;
+    }
+
+    private static bool IsZAxisSquared(Sbx3Node n, char axis)
+    {
+        if (n is not Sbx3Binary { Op: "*" } mul) return false;
+        return IsZAxisMember(mul.A, axis) && IsZAxisMember(mul.B, axis);
+    }
+
+    private static bool IsZAxisMember(Sbx3Node n, char axis)
+        => n is Sbx3Member m
+           && m.Axis == axis
+           && m.Target is Sbx3Slot { Slot: SandboxBulbExpression.SlotZ };
+
+    /// <summary>Three-factor product `<coeff> * z.<axA> * z.<axB>` in any
+    /// associative ordering. Flattens the `*`-tree then checks the multiset.</summary>
+    private static bool IsCoeffTimesTwoZAxes(Sbx3Node n, double coeff, char axA, char axB)
+    {
+        var leaves = new List<Sbx3Node>();
+        FlattenMul(n, leaves);
+        if (leaves.Count != 3) return false;
+        bool foundK = false, foundA = false, foundB = false;
+        foreach (var leaf in leaves)
+        {
+            if (!foundK && leaf is Sbx3Const c && !c.V.IsVec && Math.Abs(c.V.X - coeff) < 1e-9)
+                foundK = true;
+            else if (!foundA && IsZAxisMember(leaf, axA))
+                foundA = true;
+            else if (!foundB && IsZAxisMember(leaf, axB))
+                foundB = true;
+            else return false;
+        }
+        return foundK && foundA && foundB;
+    }
+
+    private static void FlattenMul(Sbx3Node n, List<Sbx3Node> sink)
+    {
+        if (n is Sbx3Binary { Op: "*" } mul) { FlattenMul(mul.A, sink); FlattenMul(mul.B, sink); }
+        else sink.Add(n);
+    }
+
+    /// <summary>Pattern detection on a multi-step Sandbox chain. The analytic
+    /// DE recurrence holds when (a) the final step's expression matches a
+    /// recognised power-map pattern fed by some slot s, and (b) every step
+    /// whose output transitively feeds s is a composition of Lipschitz-≤1
+    /// operations on z (abs, absx/y/z, boxfold, normalize, negation, and
+    /// affine offsets by constants/c). Folds preserve the |dz/dc| bound that
+    /// drives the Hubbard-Douady running-derivative formula, so the same
+    /// power-N recurrence stays correct. Auto mode's AcceptAuto probe
+    /// catches mis-detect and falls back to numerical, so the matcher errs
+    /// on the side of recognising more shapes.</summary>
+    public static AnalyticDEPattern DetectSandboxChain(SandboxBulbChain chain)
+    {
+        if (chain == null) return new(AnalyticDEKind.None, 0);
+        var roots = chain.StepRoots;
+        var outSlots = chain.StepOutputSlots;
+        int n = roots.Count;
+        if (n == 0) return new(AnalyticDEKind.None, 0);
+
+        // Map each step-output slot → its expression AST. Used to walk back
+        // through prior step outputs when verifying the fold-prefix shape.
+        var slotToExpr = new Dictionary<int, Sbx3Node>(n);
+        for (int i = 0; i < n; i++) slotToExpr[outSlots[i]] = roots[i];
+
+        // The final step decides the kind. Reuse the single-expression
+        // matcher but allow the operand inside triplex(<s>, K) / s ^ K to
+        // be ANY slot (not just SlotZ), provided that slot resolves to a
+        // Lipschitz-≤1 fold of z.
+        var last = roots[n - 1];
+
+        if (last is Sbx3Binary { Op: "+" } add)
+        {
+            if (TryMatchTriplexOrPowOfFold(add.A, add.B, slotToExpr, out double p1))
+                return new(AnalyticDEKind.MandelbulbN, p1);
+            if (TryMatchTriplexOrPowOfFold(add.B, add.A, slotToExpr, out double p2))
+                return new(AnalyticDEKind.MandelbulbN, p2);
+        }
+        return new(AnalyticDEKind.None, 0);
+    }
+
+    private static bool TryMatchTriplexOrPowOfFold(
+        Sbx3Node lhs, Sbx3Node rhs,
+        Dictionary<int, Sbx3Node> slotToExpr,
+        out double power)
+    {
+        power = 0;
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+
+        // triplex(<slot>, K) — slot resolves to a fold-of-z.
+        if (lhs is Sbx3Call call && call.Name == "triplex" && call.Args.Length == 2
+            && call.Args[1] is Sbx3Const pc && !pc.V.IsVec && !pc.V.IsQuat
+            && call.Args[0] is Sbx3Slot triSlot
+            && IsLipschitzZ(triSlot.Slot, slotToExpr, new HashSet<int>()))
+        {
+            power = pc.V.X;
+            return true;
+        }
+
+        // <slot> ^ K — same shape via the operator form.
+        if (lhs is Sbx3Binary { Op: "^" } pow
+            && pow.A is Sbx3Slot powSlot
+            && IsLipschitzZ(powSlot.Slot, slotToExpr, new HashSet<int>())
+            && pow.B is Sbx3Const pk && !pk.V.IsVec && !pk.V.IsQuat)
+        {
+            power = pk.V.X;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>True when <paramref name="slot"/> resolves transitively to a
+    /// fold-only function of z. Recursion guarded by <paramref name="seen"/>
+    /// to break self-referential chains (the parser disallows them but
+    /// safety belt costs nothing).</summary>
+    private static bool IsLipschitzZ(int slot, Dictionary<int, Sbx3Node> slotToExpr, HashSet<int> seen)
+    {
+        if (slot == SandboxBulbExpression.SlotZ) return true;
+        if (!seen.Add(slot)) return false;
+        if (!slotToExpr.TryGetValue(slot, out var expr)) return false;
+        return IsLipschitzExpression(expr, slotToExpr, seen);
+    }
+
+    private static bool IsLipschitzExpression(Sbx3Node node, Dictionary<int, Sbx3Node> slotToExpr, HashSet<int> seen)
+    {
+        switch (node)
+        {
+            case Sbx3Slot s:
+                return IsLipschitzZ(s.Slot, slotToExpr, seen);
+            case Sbx3Const:
+                return true;
+            case Sbx3Unary u when u.Op == '-':
+                return IsLipschitzExpression(u.A, slotToExpr, seen);
+            case Sbx3Binary b when b.Op == "+" || b.Op == "-":
+                return IsLipschitzExpression(b.A, slotToExpr, seen) && IsLipschitzExpression(b.B, slotToExpr, seen);
+            case Sbx3Call call:
+                return call.Name switch
+                {
+                    // Componentwise abs is the canonical fold and is Lipschitz=1.
+                    "abs" or "absx" or "absy" or "absz" => IsLipschitzExpression(call.Args[0], slotToExpr, seen),
+                    // BoxFold clamps each component to [-limit, limit] and
+                    // reflects past it — Lipschitz=1 by construction.
+                    "boxfold" => IsLipschitzExpression(call.Args[0], slotToExpr, seen),
+                    // vec(...) of Lipschitz reals → Lipschitz vec.
+                    "vec" => IsLipschitzExpression(call.Args[0], slotToExpr, seen)
+                          && IsLipschitzExpression(call.Args[1], slotToExpr, seen)
+                          && IsLipschitzExpression(call.Args[2], slotToExpr, seen),
+                    _ => false,
+                };
+            default:
+                return false;
+        }
+    }
+
     public static AnalyticDEPattern Detect(string? source)
     {
         if (string.IsNullOrWhiteSpace(source)) return new(AnalyticDEKind.None, 0);

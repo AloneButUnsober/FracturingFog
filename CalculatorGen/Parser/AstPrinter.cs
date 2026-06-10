@@ -31,6 +31,7 @@ public static class AstPrinter
             case PrevRef:     sb.Append("prev"); break;
             case IterRef:     sb.Append('n'); break;
             case RealConst k: sb.Append(k.Value.ToString("R", CultureInfo.InvariantCulture)); break;
+            case ImagUnit:    sb.Append('i'); break;
             case Neg n:
                 Wrap(sb, parentPrec, 2, () => { sb.Append('-'); WriteExpr(sb, n.Operand, 2); });
                 break;
@@ -66,6 +67,37 @@ public static class AstPrinter
                 break;
             case Log lg:
                 sb.Append("log("); WriteExpr(sb, lg.Operand, 0); sb.Append(')');
+                break;
+            case Arg ar:
+                sb.Append("arg("); WriteExpr(sb, ar.Operand, 0); sb.Append(')');
+                break;
+            case Atan2 at:
+                sb.Append("atan2(");
+                WriteExpr(sb, at.Y, 0);
+                sb.Append(", ");
+                WriteExpr(sb, at.X, 0);
+                sb.Append(')');
+                break;
+            case Min mn:
+                sb.Append("min(");
+                WriteExpr(sb, mn.Left, 0);
+                sb.Append(", ");
+                WriteExpr(sb, mn.Right, 0);
+                sb.Append(')');
+                break;
+            case Max mx:
+                sb.Append("max(");
+                WriteExpr(sb, mx.Left, 0);
+                sb.Append(", ");
+                WriteExpr(sb, mx.Right, 0);
+                sb.Append(')');
+                break;
+            case Mod md:
+                sb.Append("mod(");
+                WriteExpr(sb, md.Left, 0);
+                sb.Append(", ");
+                WriteExpr(sb, md.Right, 0);
+                sb.Append(')');
                 break;
             case If i:
                 Wrap(sb, parentPrec, 0, () =>
@@ -113,6 +145,7 @@ public static class AstPrinter
             case CondRe r:    sb.Append("re("); WriteExpr(sb, r.Of, 0); sb.Append(')'); break;
             case CondIm im:   sb.Append("im("); WriteExpr(sb, im.Of, 0); sb.Append(')'); break;
             case CondAbs2 a:  sb.Append("abs("); WriteExpr(sb, a.Of, 0); sb.Append(')'); break;
+            case CondArg ag:  sb.Append("arg("); WriteExpr(sb, ag.Of, 0); sb.Append(')'); break;
             case CondConst k: sb.Append(k.Value.ToString("R", CultureInfo.InvariantCulture)); break;
             default:
                 throw new InvalidOperationException($"AstPrinter: unhandled CondTerm {t.GetType().Name}");

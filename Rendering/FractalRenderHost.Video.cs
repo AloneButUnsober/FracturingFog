@@ -261,6 +261,14 @@ namespace FracturingFog.Rendering
 
             _videoTargetIterations = request.TargetIterations;
 
+            // Update the watermark's TopText to the picked region so the
+            // recorded / on-screen overlay reflects the zoom destination
+            // rather than whatever name was on the host when the dialog
+            // opened. Empty/null = leave the current label alone (manual-coord
+            // zoom or reverse from a free-form view).
+            if (!string.IsNullOrEmpty(request.TargetRegionName))
+                RegionName = request.TargetRegionName;
+
             // Capture recorder intent here (UI thread) but defer the actual
             // Media Foundation / PNG writer creation to the background loop
             // thread below. The MF sink writer is apartment-bound: created on
@@ -307,12 +315,15 @@ namespace FracturingFog.Rendering
             bool reverse = request.IsReverse;
 
             // Build the in-zoom theme-fade schedule for single-shot when the
-            // dialog asked for it. Slideshow has its own scheduler.
+            // dialog asked for it. Slideshow has its own scheduler. ThemesPerLeg
+            // ≤ 1 disables the schedule (no in-zoom rotation, leg's starting
+            // theme renders for the full duration).
             _videoLegThemeSchedule = null;
             _videoLegThemeIdx = 0;
-            if (request.ThemeFadeEnabled && _videoThemeService != null)
+            int requestedThemesPerLeg = Math.Clamp(request.ThemesPerLeg, 1, 12);
+            if (request.ThemeFadeEnabled && requestedThemesPerLeg >= 2 && _videoThemeService != null)
             {
-                int n = Math.Clamp(request.ThemesPerLeg, 2, 12);
+                int n = requestedThemesPerLeg;
                 var pool = _videoThemeService.EnumerateThemeNamesForZoom(reverse ? startZoom : targetZoom);
                 if (pool != null && pool.Count >= 2)
                 {
@@ -380,7 +391,7 @@ namespace FracturingFog.Rendering
                 cts = _videoSlideshowCts;
             }
 
-            Task.Run(() => VideoSlideshowLoop(seconds, constantRate, reverse, request.UseRegionWatermark, cts.Token), cts.Token)
+            Task.Run(() => VideoSlideshowLoop(seconds, constantRate, reverse, request.UseRegionWatermark, request.ThemeFadeEnabled, request.ThemesPerLeg, cts.Token), cts.Token)
                 .ContinueWith(t =>
                 {
                     _videoSlideshowRunning = false;
@@ -746,6 +757,11 @@ namespace FracturingFog.Rendering
             if (!_videoThemeService.ApplyThemeSilent(newTheme)) return;
             var toMap = ColorMap;
             if (fromMap == null || toMap == null || ReferenceEquals(fromMap, toMap)) return;
+
+            // Push the new theme onto the host so the overlay watermark's
+            // TopText follows the in-leg fade. ApplyThemeSilent only rebinds
+            // the calculator's colour map; ThemeName is a separate label.
+            ThemeName = newTheme;
 
             var blended = new BlendedColorMap(fromMap, toMap, 0f);
             ColorMap = blended;
@@ -1414,7 +1430,7 @@ namespace FracturingFog.Rendering
         // Video slideshow (Mandelbrot-only legs, cross-faded)
         // ──────────────────────────────────────────────────────────────────
 
-        private void VideoSlideshowLoop(double seconds, bool constantRate, bool reverse, bool useRegionWatermark, CancellationToken ct)
+        private void VideoSlideshowLoop(double seconds, bool constantRate, bool reverse, bool useRegionWatermark, bool themeFadeEnabled, int themesPerLegRequested, CancellationToken ct)
         {
             var svc = _videoThemeService;
             if (svc == null) return;
@@ -1552,16 +1568,25 @@ namespace FracturingFog.Rendering
                 }
 
                 svc.ApplyThemeSilent(theme);
+                // Push region + theme labels onto the host so the overlay
+                // compositor's watermark top line carries the current leg's
+                // identity (default path renders "{RegionName} - {ThemeName}").
+                // Without this the slideshow's first composited frame — and
+                // every subsequent frame until a theme cross-fade fires —
+                // has an empty TopText and the watermark renders only the
+                // program/version sub-line.
+                RegionName = region.Name;
+                ThemeName = theme;
 
-                // Build the in-leg theme-fade schedule. Default 3 themes per
-                // leg (matches the image slideshow's Region-Focus cadence);
-                // schedule swaps at t = 1/3 and 2/3 of the leg so each theme
-                // gets roughly equal screen time. Skip when the leg pool is
-                // too small to pick distinct themes.
+                // Build the in-leg theme-fade schedule from the user's
+                // ThemeFadeEnabled checkbox + ThemesPerLeg setting. Schedule
+                // swaps fire at t = k / themesPerLeg for k = 1..N-1. Disabled
+                // checkbox or themesPerLeg ≤ 1 = no in-leg theme rotation
+                // (the leg's starting theme renders for the full duration).
                 _videoLegThemeSchedule = null;
                 _videoLegThemeIdx = 0;
-                const int themesPerLeg = 3;
-                if (legThemes.Count >= 2)
+                int themesPerLeg = Math.Clamp(themesPerLegRequested, 1, 12);
+                if (themeFadeEnabled && themesPerLeg >= 2 && legThemes.Count >= 2)
                 {
                     var schedule = new List<(double T, string Theme)>(themesPerLeg - 1);
                     int prev = ti;

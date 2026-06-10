@@ -1388,6 +1388,16 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
 
                         // Derivative
                         {
+                            // c at pixel = (ref centre Cr/Ci scalars in outer
+                            // scope) broadcast across the SIMD lanes. Equations
+                            // whose derivative references c (e.g. CondArg over
+                            // a c-containing sub-expression) read Cr_v/Ci_v
+                            // through the AVX-512 deriv emitter's CRef binding.
+                            // Per-lane ε offset isn't added — the perturbation
+                            // δ is in deriv space already; mathematically this
+                            // approximates c ≈ C for the deriv chain.
+                            Vector512<double> Cr_v = Vector512.Create(Cr);
+                            Vector512<double> Ci_v = Vector512.Create(Ci);
 {{PERTURB_DERIV_AVX512_BODY}}
                             Vector512<double> keep = activeMask.AsDouble();
                             drv = Avx512F.BlendVariable(drv, drv_new, keep);
@@ -1623,6 +1633,11 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
 
                         // Derivative
                         {
+                            // c at pixel = (ref centre Cr/Ci scalars in outer
+                            // scope) broadcast across the AVX-2 lanes. See
+                            // the AVX-512 deriv block above for the rationale.
+                            Vector256<double> Cr_v = Vector256.Create(Cr);
+                            Vector256<double> Ci_v = Vector256.Create(Ci);
 {{PERTURB_DERIV_AVX2_BODY}}
                             Vector256<double> keep = activeMask.AsDouble();
                             drv = Avx.BlendVariable(drv, drv_new, keep);
@@ -2355,6 +2370,14 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
                 goto rebDone;
             }
             {
+                // Per-pixel c = ref-orbit centre. TryIterateRebasePixel
+                // doesn't carry the rebase centre into scope; declare 0
+                // so the emitted Cr/Ci references compile. Equations
+                // whose derivative actually depends on c approximate the
+                // derivative chain through c≈0 inside the rebase path —
+                // for polynomial-derivative-of-c-independent equations
+                // this is exact (the references aren't emitted at all).
+                double Cr = 0.0, Ci = 0.0;
 {{PERTURB_DERIV_BODY}}
                 drv = drv_new; div = div_new;
             }

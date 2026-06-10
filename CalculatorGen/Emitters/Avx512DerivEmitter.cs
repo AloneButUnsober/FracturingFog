@@ -194,6 +194,7 @@ public sealed class Avx512DerivEmitter : EmitterBase
         "cos" => $"{rOut} = Math.Cos({re}) * Math.Cosh({im}); {iOut} = -(Math.Sin({re}) * Math.Sinh({im}));",
         "exp" => $"{{ double ex = Math.Exp({re}); {rOut} = ex * Math.Cos({im}); {iOut} = ex * Math.Sin({im}); }}",
         "log" => $"{rOut} = 0.5 * Math.Log({re} * {re} + {im} * {im}); {iOut} = Math.Atan2({im}, {re});",
+        "arg" => $"{rOut} = Math.Atan2({im}, {re}); {iOut} = 0.0;",
         _ => throw new InvalidOperationException($"Avx512DerivEmitter: unknown transcendental {op}"),
     };
 
@@ -252,6 +253,13 @@ public sealed class Avx512DerivEmitter : EmitterBase
                     return NewBoundRe($"Avx512F.Multiply({av.Re}, {av.Re})");
                 return NewBoundRe(
                     $"Avx512F.FusedMultiplyAdd({av.Re}, {av.Re}, Avx512F.Multiply({av.Im}, {av.Im}))");
+            case CondArg ag:
+                // atan2 has no AVX-512 intrinsic — per-lane scalarise via
+                // the same fallback OpArg-equivalent uses. Discard the
+                // imag temp the helper binds; the cond term only consumes
+                // the real vector.
+                var argv = Emit(ag.Of);
+                return EmitPerLaneTranscendental(argv, "arg").Re;
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

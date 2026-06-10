@@ -38,6 +38,21 @@ namespace FracturingFog.Models
         public double UserEquationRotationDegrees { get; set; } = 0.0;
 
         /// <summary>
+        /// Bare CalcGen DSL source bound to the User Equation editor's "DSL" tab.
+        /// Independent of <see cref="UserEquationSource"/> (the C#-style tab) so
+        /// switching tabs does not destroy the other tab's content.
+        /// Routed straight to CalculatorGen without C#→DSL preprocessing.
+        /// </summary>
+        public string? UserEquationDslSource { get; set; }
+
+        /// <summary>
+        /// Last-active tab index in the User Equation editor. 0 = User Equation,
+        /// 1 = DSL. Persisted so the modal reopens to the tab the user was last
+        /// editing. Compile / Generate buttons route by this value.
+        /// </summary>
+        public int UserEquationActiveTab { get; set; } = 0;
+
+        /// <summary>
         /// Source for the Sandbox fractal — a restricted expression DSL parsed by
         /// <see cref="SandboxExpression"/>. Safe to evaluate in untrusted contexts:
         /// no BCL access, no IO, no reflection.
@@ -142,6 +157,9 @@ namespace FracturingFog.Models
         public UserBulbBackendKind UserBulbBackend { get; set; } = UserBulbBackendKind.CPU;
         /// <summary>Algebra mode: Vec3 (3D triplex) or Quat (4D Hamilton). Affects step signature.</summary>
         public UserBulbAxisModeKind UserBulbAxisMode { get; set; } = UserBulbAxisModeKind.Vec3;
+        /// <summary>Step-function compiler. Roslyn = full C# body (default).
+        /// Sandbox = restricted DSL (no BCL, shareable, Vec3-only).</summary>
+        public UserBulbCompilerKind UserBulbCompiler { get; set; } = UserBulbCompilerKind.Roslyn;
         /// <summary>W component of 4D slice plane (Quat mode only). c.W = this value.</summary>
         public double UserBulbQuatSliceW { get; set; } = 0.0;
         /// <summary>Named scalar params exposed in compiled step source. Live-tweakable.</summary>
@@ -204,6 +222,8 @@ namespace FracturingFog.Models
                 UserEquationSource = UserEquationSource,
                 UserEquationName = UserEquationName,
                 UserEquationRotationDegrees = UserEquationRotationDegrees,
+                UserEquationDslSource = UserEquationDslSource,
+                UserEquationActiveTab = UserEquationActiveTab,
                 SandboxSource = SandboxSource,
                 SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,
@@ -250,6 +270,7 @@ namespace FracturingFog.Models
                 UserBulbTemporalReuse = UserBulbTemporalReuse,
                 UserBulbBackend = UserBulbBackend,
                 UserBulbAxisMode = UserBulbAxisMode,
+                UserBulbCompiler = UserBulbCompiler,
                 UserBulbQuatSliceW = UserBulbQuatSliceW,
                 UserBulbParams = UserBulbParams.ConvertAll(p => p.Clone()),
                 UserBulbTime = UserBulbTime,
@@ -316,6 +337,16 @@ namespace FracturingFog.Models
     {
         Vec3,
         Quat,
+    }
+
+    /// <summary>Step-function compiler. Roslyn = full C# expression body with
+    /// BCL access (legacy default, GPU-translatable). Sandbox = restricted
+    /// DSL parsed by SandboxBulbExpression — no BCL, safe to share, but
+    /// CPU-only and slightly slower per Step call.</summary>
+    public enum UserBulbCompilerKind
+    {
+        Roslyn,
+        Sandbox,
     }
 
     /// <summary>Output blend for the Buddhabrot family.</summary>

@@ -63,6 +63,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         _cullRadius   = _params.UserBulbCullRadius;
         _deModeIndex  = (int)_params.UserBulbDEMode;
         _backendIndex = (int)_params.UserBulbBackend;
+        _compilerIndex = (int)_params.UserBulbCompiler;
         _axisModeIndex = (int)_params.UserBulbAxisMode;
         _quatSliceW   = _params.UserBulbQuatSliceW;
 
@@ -110,6 +111,13 @@ public sealed class UserBulbViewModel : ViewModelBase
         RemoveChainCommand = ReactiveCommand.Create<UserBulbChainStep>(OnRemoveChain);
         TogglePlayCommand = ReactiveCommand.Create(OnTogglePlay);
         ExportMeshCommand = ReactiveCommand.Create(OnExportMesh);
+        OpenHelpCommand = ReactiveCommand.Create(() =>
+        {
+            // Jump directly to the Sandbox DSL chapter when the Sandbox
+            // compiler is active — otherwise show the whole guide from top.
+            string? anchor = IsSandbox ? "Sandbox DSL Compiler" : null;
+            HelpRequested?.Invoke(this, ("UserBulb-Guide.md", anchor, "User Bulb 3D — Help"));
+        });
     }
 
     // ── Source + debounce ──────────────────────────────────────────────
@@ -131,14 +139,40 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     private void ScheduleCompile()
     {
+        // 1200 ms debounce matches the User Equation editor — shorter values
+        // let the selection-based error-span highlight clobber the next
+        // keystroke during fast typing. See [[feedback_validation_debounce]].
         _debounce.Disposable = Observable
-            .Timer(TimeSpan.FromMilliseconds(500))
+            .Timer(TimeSpan.FromMilliseconds(1200))
             .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 _params.UserBulbSource = _source;
                 CompileRequested?.Invoke(this, EventArgs.Empty);
             });
+    }
+
+    // ── Error span (consumed by code-behind to set TextBox.Selection) ─────
+
+    private int _errorSpanStart;
+    private int _errorSpanLength;
+    public int ErrorSpanStart { get => _errorSpanStart; private set => this.RaiseAndSetIfChanged(ref _errorSpanStart, value); }
+    public int ErrorSpanLength { get => _errorSpanLength; private set => this.RaiseAndSetIfChanged(ref _errorSpanLength, value); }
+
+    /// <summary>Raised after error-span changes so the view can apply the
+    /// span to the source TextBox.</summary>
+    public event EventHandler? ErrorSpanChanged;
+
+    /// <summary>Host calls this with the parser-reported position + length.
+    /// Pass (-1, 0) to clear.</summary>
+    public void SetErrorSpan(int position, int length)
+    {
+        int clampedStart = Math.Max(0, position);
+        int clampedLen = position < 0 ? 0 : Math.Max(0, length);
+        bool changed = clampedStart != _errorSpanStart || clampedLen != _errorSpanLength;
+        ErrorSpanStart = clampedStart;
+        ErrorSpanLength = clampedLen;
+        if (changed) ErrorSpanChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public string HintText => HintFor((UserBulbAxisModeKind)_axisModeIndex);
@@ -243,6 +277,32 @@ public sealed class UserBulbViewModel : ViewModelBase
     private int _backendIndex;
     public int BackendIndex { get => _backendIndex; set => SetRender(ref _backendIndex, Math.Clamp(value, 0, 1), () => _params.UserBulbBackend = (UserBulbBackendKind)_backendIndex); }
 
+    private int _compilerIndex;
+    /// <summary>0 = Roslyn (full C#), 1 = Sandbox (restricted DSL). Toggling triggers recompile.</summary>
+    public int CompilerIndex
+    {
+        get => _compilerIndex;
+        set
+        {
+            int clamped = Math.Clamp(value, 0, 1);
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _compilerIndex, clamped))
+            {
+                _params.UserBulbCompiler = (UserBulbCompilerKind)clamped;
+                this.RaisePropertyChanged(nameof(IsSandbox));
+                if (!_suppressRender) CompileRequested?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>True when the Sandbox DSL compiler is active. Reserved for
+    /// future UI affordances; algebra combobox is no longer gated since
+    /// Sandbox supports Quat via `qmul`/`qpow`/`qvec`/`.w`.</summary>
+    public bool IsSandbox => _compilerIndex == (int)UserBulbCompilerKind.Sandbox;
+
+    /// <summary>Retained for binding compatibility. Sandbox now supports Quat
+    /// so the algebra combobox is always enabled.</summary>
+    public bool AxisModeComboEnabled => true;
+
     private int _axisModeIndex;
     public int AxisModeIndex
     {
@@ -261,6 +321,39 @@ public sealed class UserBulbViewModel : ViewModelBase
     }
 
     public bool QuatEnabled => _axisModeIndex == (int)UserBulbAxisModeKind.Quat;
+
+    // ── Analytic-DE badge (set after each compile by the host) ────────────
+
+    private string _analyticBadgeText = "Numerical only";
+    public string AnalyticBadgeText
+    {
+        get => _analyticBadgeText;
+        private set => this.RaiseAndSetIfChanged(ref _analyticBadgeText, value);
+    }
+
+    private bool _analyticBadgeOk;
+    /// <summary>True when an analytic DE pattern was recognised on the
+    /// current source. View uses this to pick green (#64FF64) vs dim grey.</summary>
+    public bool AnalyticBadgeOk
+    {
+        get => _analyticBadgeOk;
+        private set => this.RaiseAndSetIfChanged(ref _analyticBadgeOk, value);
+    }
+
+    /// <summary>Host calls this after each compile with the calculator's
+    /// detected analytic-DE pattern. Pass <paramref name="label"/>=null or
+    /// empty for "Numerical only" (numerical-Jacobian DE will be used).</summary>
+    public void SetAnalyticBadge(string? label)
+    {
+        if (string.IsNullOrEmpty(label))
+        {
+            AnalyticBadgeText = "Numerical only";
+            AnalyticBadgeOk = false;
+            return;
+        }
+        AnalyticBadgeText = label;
+        AnalyticBadgeOk = true;
+    }
 
     private double _quatSliceW;
     public double QuatSliceW { get => _quatSliceW; set => SetRender(ref _quatSliceW, Math.Clamp(value, -10.0, 10.0), () => _params.UserBulbQuatSliceW = _quatSliceW); }
@@ -407,6 +500,12 @@ public sealed class UserBulbViewModel : ViewModelBase
     public ReactiveCommand<UserBulbChainStep, Unit> RemoveChainCommand { get; }
     public ReactiveCommand<Unit, Unit> TogglePlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenHelpCommand { get; }
+
+    /// <summary>Tuple: (docId, anchor, title). View opens HelpViewerView.
+    /// Uses an <see cref="EventHandler{T}"/> to stay consistent with the
+    /// rest of this VM's host-callback shape.</summary>
+    public event EventHandler<(string DocId, string? Anchor, string Title)>? HelpRequested;
 
     // ── Events ─────────────────────────────────────────────────────────
 

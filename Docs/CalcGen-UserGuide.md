@@ -44,6 +44,7 @@ z_{n+1} = <expression>
 | Variable z       | `z`                      | Current iterate (complex)        |
 | Variable c       | `c`                      | Pixel coordinate (complex)       |
 | Real literal     | `2`, `0.5`, `1.5e-3`     | Treated as `(n, 0)` complex      |
+| Imaginary unit   | `i`                      | Literal `(0, 1)`. Complex constant — holomorphic. Differentiator returns 0, chain rule still hands back `i` via Mul (`d(i·z)/dz = i`). DE / perturbation / BLA / SA all stay on. |
 | Addition         | `z + c`                  | Complex                          |
 | Subtraction      | `z - c`                  | Complex                          |
 | Multiplication   | `z*z`, `2*c`             | Complex                          |
@@ -52,11 +53,18 @@ z_{n+1} = <expression>
 | Parentheses      | `(z + c) * (z - c)`      | Standard precedence              |
 | Unary minus      | `-z`, `-(z*z + c)`       | Complex negation                 |
 | Conjugate        | `conj(z)`                | (zr, -zi) — anti-holomorphic     |
-| Component fold   | `fold(z)`                | (|zr|, |zi|) — Burning Ship      |
+| Component fold   | `fold(z)`                | (\|zr\|, \|zi\|) — Burning Ship  |
 | Square shortcut  | `sqr(z)`                 | Same as z*z                      |
 | Real / imag      | `re(z)`, `im(z)`         | Real scalar lifted as (n, 0)     |
 | Magnitude        | `abs(z)`                 | \|z\| as (n, 0)                    |
-| Transcendental   | `sin(z) cos(z) exp(z) log(z)` | Holomorphic                |
+| Transcendental   | `sin(z) cos(z) tan(z) exp(z) log(z)` | Holomorphic              |
+| Hyperbolic       | `sinh(z) cosh(z) tanh(z)`| Desugared via exp; holomorphic   |
+| Square root      | `sqrt(z)`                | Desugared as `exp(0.5*log(z))`   |
+| Argument         | `arg(z)`                 | Real angle in (-π, π], lifted to (arg, 0). Non-holomorphic — disables DE / perturbation / BLA / SA. |
+| Atan2            | `atan2(y, x)`            | Binary; same gating as `arg`. Per-lane scalar fallback on AVX2 (4× `Math.Atan2` per body), full vector on Scalar/DD/QD. |
+| Min / Max        | `min(a, b)`, `max(a, b)` | Real-valued, lifted to (result, 0). Imag parts discarded. Vectorised on AVX2 via Vector256.Min/Max. Same gating as `arg`. |
+| Modulo           | `mod(a, b)`              | Real-valued C# `%` on the real parts, lifted. Per-lane scalar on AVX2. Same gating as `arg`. |
+| Constants        | `pi`, `e`                | Real literals (Math.PI / Math.E) |
 | Previous iter    | `prev`                   | z_{n-1} — Phoenix coupling       |
 | Iter index       | `iter` (or `n`)          | Real scalar; current index       |
 | Conditional      | `if cond then a else b`  | Cond compares real scalars       |
@@ -204,6 +212,117 @@ sin(z)*cos(c) + c
 0.5*z + sin(z) + c
 ```
 
+#### Tangent
+```
+tan(z) + c
+```
+
+#### Hyperbolic family (desugared via exp internally)
+```
+sinh(z) + c
+cosh(z) - 0.5*c
+tanh(z*z) + c
+```
+
+#### Square root (principal branch)
+```
+sqrt(z) + c
+sqrt(z*z - 1) + c
+```
+
+#### Constants pi / e
+```
+sin(pi*z) + c
+e*z*z + c
+```
+
+### 4.10 Argument-driven (arg / atan2)
+
+`arg(z)` is the principal angle of `z` in (-π, π], lifted back to complex
+as `(arg, 0)`. Non-holomorphic — same gating as `conj`: distance estimate,
+perturbation, BLA, and SA all turn off when the equation contains `arg`.
+
+`arg` is also accepted as a real-scalar condition term inside `if`:
+`if arg(z) > 0 then z*z + c else z*z - c` branches by orbit phase. The
+cond grammar position behaves like `re(...)` / `im(...)` / `abs(...)` —
+the arg's sub-expression can be anything (z, c, or a composite like
+`arg(z*z + c)`). Conditions don't feed the differentiator chain so
+piecewise-by-arg keeps the distance estimate valid inside each branch
+(boundary locus where the cond flips is measure-zero).
+
+#### Spiral by angle
+```
+z*z + 0.1*arg(z) + c
+```
+
+#### Branch by quadrant via atan2
+```
+z*z + 0.05*atan2(z, c) + c
+```
+
+(`atan2(y, x)` is real-valued. On AVX2 the binary form falls back to
+per-lane scalar `Math.Atan2` — kept 4-wide so the surrounding pipeline
+stays vectorised, at the cost of 4× scalar atan2 calls per body. Scalar
+and DD/QD paths handle the full form directly. `arg(z)` is the unary
+shortcut when you only need atan2 of a complex value's components.)
+
+### 4.12 Imaginary unit (`i`)
+
+`i` is the imaginary unit literal — `(0, 1)` as a complex constant. It
+behaves like any other complex constant in the grammar: holomorphic, so
+the distance estimate, perturbation, BLA, and SA paths all stay enabled.
+Use it to inject a complex coefficient without juggling `re()` / `im()`
+decomposition.
+
+The C# editor's `Complex.ImaginaryOne` and `new Complex(a, b)` both
+translate to the DSL form automatically — there is no longer an "i has
+no DSL representation" diagnostic.
+
+#### Multiply by i (90° rotation)
+```
+i*z + c
+```
+
+#### Complex coefficient on the quadratic term
+```
+i*z*z + c
+```
+
+#### Mixed real + imaginary coefficients
+```
+0.5*z*z + 0.3*i*z + c
+```
+
+#### Decompose a hand-written complex constant
+`new Complex(0.4, -0.2)` in the C# editor becomes
+```
+((0.4) + (-0.2)*i)
+```
+in the DSL — same semantics, with both halves explicit.
+
+### 4.11 Real binary ops (min / max / mod)
+
+`min(a, b)`, `max(a, b)`, `mod(a, b)` all act on the real parts of their
+operands (imag is dropped) and lift back to complex as `(result, 0)`.
+Non-holomorphic — same gating as `arg` / `atan2`. `min` / `max` use
+`Vector256.Min` / `Vector256.Max` intrinsics on the AVX2 path so they
+stay vectorised; `mod` falls back to per-lane scalar `%`.
+
+#### Clamp by min/max
+```
+min(z*z, max(z, -1.0)) + c
+```
+
+#### Periodic wrap via mod
+```
+z*z + mod(z, 1.0) + c
+```
+
+#### Hybrid step
+```
+max(z*z, sqr(z)) + c
+```
+
 ### 4.6 Newton-like patterns
 
 (Newton fractals proper use the dedicated NewtonCalculator, but
@@ -322,7 +441,7 @@ Flags:
 
 | Symptom                                   | Likely cause / fix                                  |
 |-------------------------------------------|------------------------------------------------------|
-| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, exp, log, if/then/else, re, im, abs, prev, iter/n. |
+| `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, exp, log, arg, atan2, min, max, mod, pi, e, i, if/then/else, re, im, abs, prev, iter/n. |
 | `Unexpected character …`                  | Stray punctuation. `=` alone is not allowed; use `==`.|
 | `Exponent must be 0..16`                  | Use `z*z*z…` or break into factored form.            |
 | `Equation is empty`                       | Editor text is blank after preprocessor strip.       |
@@ -335,14 +454,23 @@ Flags:
 ## 8. Reference card
 
 ```
-Operators       + - * / ^   (^ = integer power 0..16)
+Operators       + - * / ^   (^ = integer power 0..64)
 Comparisons     < <= > >= == !=
 Conditional     if <cmp> then <expr> else <expr>
 Unary           -expr  conj(...) fold(...) abs(...) sqr(...)
 Lifts           re(z), im(z), abs(z)          (real scalar → (n, 0))
-Transcendentals sin cos exp log
+Cond terms      re(...), im(...), abs(...), arg(...)   (inside if cmp)
+Transcendentals sin cos tan sinh cosh tanh exp log sqrt
+Argument        arg(x)            atan2(y, x)
+Real binary     min(a, b)  max(a, b)  mod(a, b)
+Constants       pi  e  i              (i = imaginary unit, (0, 1))
 State           z   c   prev   iter (or n)
 ```
+
+Note: `tan / sinh / cosh / tanh / sqrt` are desugared at parse time
+(`tan→sin/cos`, hyperbolics via `exp`, `sqrt→exp(0.5*log)`), so they
+inherit the same gating as `sin/cos/exp/log` — perturbation / BLA off,
+distance estimate preserved.
 
 Use this guide as the source of truth for the User Equation editor.
 The Sandbox calculator accepts a restricted DSL with no .NET BCL access

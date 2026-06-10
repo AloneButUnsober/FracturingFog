@@ -424,7 +424,14 @@ Three authoring engines for one-off custom fractals.
 
 ### User Equation (CalcGen)
 
-Roslyn-compiled per-pixel `Complex Step(Complex z, Complex c, int n)`. Full access to System.Numerics.Complex + System.Math. Auto-recompile 500 ms after the last keystroke.
+The User Equation modal is now split into two tabs:
+
+- **User Equation** — Roslyn-compiled per-pixel `Complex Step(Complex z, Complex c, int n)`. Full access to System.Numerics.Complex + System.Math. Auto-recompile 1200 ms after the last keystroke. Optional **Validate for CalcGen** checkbox flags C# constructs the CalcGen DSL can't accept (`Complex.ImaginaryOne`, `Complex.Abs`, `new Complex(a, b)`, unsupported `Complex.*` members) and offers in-place fixes via a status-bar **Apply fix** button (shortcut **Ctrl+.**).
+- **DSL** — bare CalcGen DSL: `z*z + c`, `sin(z)`, etc. Live-validated against the parser; bad tokens are selected and a fix is suggested when the lexer can guess one.
+
+Both tabs share the header row (Saved combo / Save / Delete / Promote / Compile & Load / Generate via CalcGen). The active tab decides which source feeds CalcGen — Save respects the tab, so a DSL-tab entry reopens into the DSL tab and a User Equation entry reopens into the User Equation tab.
+
+Each tab carries a `?` button that opens the in-app Help viewer to the relevant section; a **CalcGen Help** button on the header opens the full CalcGen User Guide.
 
 ```csharp
 return z*z + c;                          // classic Mandelbrot

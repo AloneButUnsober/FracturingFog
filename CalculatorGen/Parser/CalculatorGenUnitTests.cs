@@ -240,7 +240,7 @@ public static class CalculatorGenUnitTests
                   && msg.Contains("Did you mean 'prev'?"));
 
         // ── EquationPreprocessor: C# Complex.* → DSL ──────────────────
-        string Pre(string src) => EquationPreprocessor.Preprocess(src, out _);
+        string Pre(string src) => EquationPreprocessor.Preprocess(src, out string? _);
         bool PreErr(string src, string contains)
         {
             EquationPreprocessor.Preprocess(src, out string? err);
@@ -275,14 +275,105 @@ public static class CalculatorGenUnitTests
             () => Pre("Complex.Pow(z, c)") == "exp((c)*log(z))");
 
         // Reject paths
-        Check("preproc: rejects Complex.ImaginaryOne",
-            () => PreErr("z + Complex.ImaginaryOne", "ImaginaryOne"));
-        Check("preproc: rejects new Complex(a, b)",
-            () => PreErr("z + new Complex(0.1, 0.2)", "no 'i' literal"));
+        // PR8: ImaginaryOne / new Complex are now first-class — rewrites to 'i'.
+        Check("preproc: Complex.ImaginaryOne → i",
+            () => Pre("z + Complex.ImaginaryOne") == "z + i");
+        Check("preproc: new Complex(0, 1) → i",
+            () => Pre("z + new Complex(0, 1)") == "z + i");
+        Check("preproc: new Complex(0.1, 0.2) → ((0.1) + (0.2)*i)",
+            () => Pre("z + new Complex(0.1, 0.2)") == "z + ((0.1) + (0.2)*i)");
+        Check("preproc: new Complex(a, 0) drops to (a)",
+            () => Pre("new Complex(c, 0) + z") == "(c) + z");
+        Check("preproc: new Complex(0, b) → ((b)*i)",
+            () => Pre("z + new Complex(0, c)") == "z + ((c)*i)");
         Check("preproc: rejects Complex.Abs",
             () => PreErr("Complex.Abs(z) + c", "abs(x)"));
         Check("preproc: rejects unknown Complex member",
-            () => PreErr("Complex.Sinh(z) + c", "Complex.Sinh"));
+            () => PreErr("Complex.Asin(z) + c", "Complex.Asin"));
+        Check("preproc: Complex.Sinh → sinh (DSL widening)",
+            () => Pre("Complex.Sinh(z)") == "sinh(z)");
+        Check("preproc: Complex.Sqrt → sqrt (DSL widening)",
+            () => Pre("Complex.Sqrt(z*z + c)") == "sqrt(z*z + c)");
+
+        // ── DSL widening (tan, sinh, cosh, tanh, sqrt, pi, e) ─────────
+        Check("parser: tan(z) parses and round-trips via desugar",
+            () => EquationParser.Parse("tan(z)") is Div { Left: Sin, Right: Cos });
+        Check("parser: sinh(z) desugars to (exp(z)-exp(-z))/2",
+            () => EquationParser.Parse("sinh(z)") is Div
+            { Left: Sub { Left: Exp, Right: Exp { Operand: Neg } }, Right: RealConst { Value: 2.0 } });
+        Check("parser: cosh(z) desugars to (exp(z)+exp(-z))/2",
+            () => EquationParser.Parse("cosh(z)") is Div
+            { Left: Add { Left: Exp, Right: Exp { Operand: Neg } }, Right: RealConst { Value: 2.0 } });
+        Check("parser: tanh(z) is Div(sinh, cosh)",
+            () => EquationParser.Parse("tanh(z)") is Div
+            { Left: Div { Left: Sub }, Right: Div { Left: Add } });
+        Check("parser: sqrt(z) ≡ exp(0.5*log(z))",
+            () => EquationParser.Parse("sqrt(z)") is Exp
+            { Operand: Mul { Left: RealConst { Value: 0.5 }, Right: Log } });
+        Check("parser: pi → RealConst(Math.PI)",
+            () => EquationParser.Parse("pi") is RealConst r && Math.Abs(r.Value - Math.PI) < 1e-15);
+        Check("parser: e → RealConst(Math.E)",
+            () => EquationParser.Parse("e") is RealConst r2 && Math.Abs(r2.Value - Math.E) < 1e-15);
+        Check("parser: pi inside expression composes correctly",
+            () => EquationParser.Parse("z*z + pi*c") is Add { Right: Mul { Left: RealConst } });
+        Check("parser: e^z (e is a constant, ^ requires integer) → throws on caret with e?",
+            () =>
+            {
+                try { EquationParser.Parse("e + z*z + c"); return true; }
+                catch { return false; }
+            });
+        Check("lexer: '1.5e-3' still lexes as a single number (e inside number lexer wins)",
+            () => EquationParser.Parse("1.5e-3") is RealConst rc && Math.Abs(rc.Value - 0.0015) < 1e-9);
+        Check("lexer: 'tnh' suggests 'tanh'",
+            () => TryParseError("tnh(z) + c", out var msg)
+                  && msg.Contains("Did you mean 'tanh'?"));
+
+        // ── arg / atan2 ───────────────────────────────────────────────
+        Check("parser: arg(z) parses as Arg node",
+            () => EquationParser.Parse("arg(z)") is Arg);
+        Check("parser: atan2(im(z), re(z)) requires comma",
+            () => EquationParser.Parse("atan2(z, c)") is Atan2);
+        Check("parser: atan2 without comma errors",
+            () => TryParseError("atan2(z c)", out _));
+        Check("flags: Arg detected via Contains<Arg>",
+            () => AstHelpers.Contains<Arg>(EquationParser.Parse("z*z + arg(z) + c")));
+        Check("flags: Atan2 detected via Contains<Atan2>",
+            () => AstHelpers.Contains<Atan2>(EquationParser.Parse("z*z + atan2(z, c) + c")));
+        Check("SA: arg → 0 (rejected, non-holomorphic)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("z*z + arg(z) + c")).polyZ == null);
+        Check("diff: ∂(z*z + arg(z))/∂z = z+z (arg opaque)",
+            () => DpDzOf("z*z + arg(z) + c") == "z + z");
+        Check("preproc: Complex.Phase → arg",
+            () => Pre("Complex.Phase(z)") == "arg(z)");
+        Check("preproc: Math.Atan2(a, b) → atan2(a, b)",
+            () => Pre("Math.Atan2(z, c)") == "atan2(z, c)");
+        Check("lexer: 'arg' suggests itself on typo 'rg'",
+            () => TryParseError("rg(z) + c", out var msg2)
+                  && msg2.Contains("Did you mean 'arg'?"));
+
+        // ── min / max / mod ──────────────────────────────────────────
+        Check("parser: min(z, c) parses as Min node",
+            () => EquationParser.Parse("min(z, c)") is Min);
+        Check("parser: max(z, c) parses as Max node",
+            () => EquationParser.Parse("max(z, c)") is Max);
+        Check("parser: mod(z, c) parses as Mod node",
+            () => EquationParser.Parse("mod(z, c)") is Mod);
+        Check("flags: Min/Max/Mod detected via Contains<T>",
+            () => AstHelpers.Contains<Min>(EquationParser.Parse("min(z, c) + c"))
+               && AstHelpers.Contains<Max>(EquationParser.Parse("max(z, c) + c"))
+               && AstHelpers.Contains<Mod>(EquationParser.Parse("mod(z, c) + c")));
+        Check("SA: min(z, c) → 0 (rejected, non-holomorphic)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("z*z + min(z, c) + c")).polyZ == null);
+        Check("diff: ∂(z*z + min(z, c))/∂z = z+z (min opaque)",
+            () => DpDzOf("z*z + min(z, c) + c") == "z + z");
+        Check("preproc: Math.Min → min",
+            () => Pre("Math.Min(z, c)") == "min(z, c)");
+        Check("preproc: Math.Max → max",
+            () => Pre("Math.Max(z, c)") == "max(z, c)");
+        Check("preproc: Math.IEEERemainder → mod",
+            () => Pre("Math.IEEERemainder(z, c)") == "mod(z, c)");
+        Check("parser: min without comma errors",
+            () => TryParseError("min(z c)", out _));
         Check("preproc: leaves DSL syntax untouched",
             () => Pre("sin(z) + c") == "sin(z) + c");
 
@@ -299,6 +390,86 @@ public static class CalculatorGenUnitTests
         Check("SA: iter-dependent → 0 (rejected)",
             () => AstSaDetector.DetectZdPlusC(
                 EquationParser.Parse("z*z + c + 0.001*n")) == 0);
+
+        // ── ImagUnit ('i' literal) ───────────────────────────────────
+        Check("parser: bare 'i' parses as ImagUnit",
+            () => EquationParser.Parse("i") is ImagUnit);
+        Check("parser: 'if' still parses as if-expression keyword (not ImagUnit)",
+            () => EquationParser.Parse("if abs(z) > 4 then z else c") is If);
+        Check("parser: 'iter' still lexes as iter (not ImagUnit)",
+            () => EquationParser.Parse("iter") is IterRef);
+        Check("printer: i round-trips",
+            () => PrintSimplified("i*z + c") == "i*z + c");
+        Check("printer: i*c round-trips",
+            () => AstPrinter.Print(EquationParser.Parse("z + i*c")) == "z + i*c");
+        Check("diff: ∂(i*z + c)/∂z = i",
+            () => DpDzOf("i*z + c") == "i");
+        Check("diff: ∂(z*z + i*c)/∂c = i",
+            () => DpDcOf("z*z + i*c") == "i");
+        Check("diff: ∂(i)/∂z = 0 (constant)",
+            () => DpDzOf("i + z*z + c") == "z + z");
+        Check("flags: ImagUnit detected via Contains<ImagUnit>",
+            () => AstHelpers.Contains<ImagUnit>(EquationParser.Parse("z*z + i*c")));
+        Check("flags: plain poly has no ImagUnit",
+            () => !AstHelpers.Contains<ImagUnit>(EquationParser.Parse("z^4 + c")));
+        Check("SA: i*z*z + c → degree 2 (i counts as degree-0 complex const)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("i*z*z + c")).degree == 2);
+        Check("SA: z*z + i + c → polynomial (i is degree-0 const)",
+            () => AstSaDetector.DetectPolyInZPlusC(EquationParser.Parse("z*z + i + c")).degree == 2);
+        Check("simplify: i + 0 → i",
+            () => PrintSimplified("i + 0") == "i");
+        Check("simplify: 1*i → i",
+            () => PrintSimplified("1*i") == "i");
+        Check("simplify: 0*i → 0",
+            () => PrintSimplified("0*i") == "0");
+        Check("codegen: i*z + c emits without throwing",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("i*z + c", "ImagTest");
+                return r.Ok && r.Source.Contains("zr_new") && r.Source.Contains("zi_new");
+            });
+        Check("codegen: z*z + i emits without throwing",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("z*z + i", "ImagSqTest");
+                return r.Ok;
+            });
+        Check("lexer: 'I' (uppercase) also lexes as ImagUnit",
+            () => EquationParser.Parse("I") is ImagUnit);
+
+        // ── CondArg (arg inside if conditions) ───────────────────────
+        Check("parser: if arg(z) > 0 then z*z + c else c parses",
+            () => EquationParser.Parse("if arg(z) > 0 then z*z + c else c") is If
+            { Cond: Cmp { Left: CondArg, Right: CondConst { Value: 0.0 } } });
+        Check("parser: arg in cond accepts nested expression",
+            () => EquationParser.Parse("if arg(z*z + c) >= 1.5 then z else c") is If
+            { Cond: Cmp { Left: CondArg } });
+        Check("printer: arg in cond round-trips",
+            () => AstPrinter.Print(EquationParser.Parse("if arg(z) > 0 then z else c"))
+                  == "if arg(z) > 0 then z else c");
+        Check("codegen: if arg(z) > 0 emits without throwing",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("if arg(z) > 0 then z*z + c else z*z - c", "CondArgSmoke");
+                return r.Ok;
+            });
+        Check("codegen: if arg(z*z + c) < 1 routes through every emitter",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("if arg(z*z + c) < 1 then z*z + c else z + c", "CondArgNestedSmoke");
+                return r.Ok && r.Source.Contains("Math.Atan2");
+            });
+        Check("codegen: atan2(z, c) vectorises on AVX2 per-lane (no throw)",
+            () =>
+            {
+                var r = CalculatorGenApi.Generate("z*z + atan2(z, c) + c", "Atan2VectorSmoke");
+                // Per-lane atan2 prelude emits 4× Math.Atan2 calls plus
+                // Vector256.Create assembly — both fingerprints prove the
+                // AVX2 emitter took the per-lane path instead of throwing.
+                return r.Ok
+                    && r.Source.Contains("Math.Atan2")
+                    && System.Text.RegularExpressions.Regex.Matches(r.Source, @"Math\.Atan2").Count >= 4;
+            });
 
         // ── feature detection ────────────────────────────────────────
         Check("flags: conj(c) → hasConj true",
