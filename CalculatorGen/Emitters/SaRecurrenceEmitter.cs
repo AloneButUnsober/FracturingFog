@@ -88,10 +88,18 @@ public static class SaRecurrenceEmitter
             double inv = 1.0 / Factorial(k);
             AstNode scaled = inv == 1.0 ? partial
                 : AstSimplifier.Simplify(new Mul(new RealConst(inv), partial));
-            // Render. ScalarEmitter walks the AST and returns the
-            // (Re, Im) pair — we drop them into named doubles.
-            string body = scalar.EmitNewValueBody(scaled, $"pk{k}", indent);
-            sb.Append(body).Append('\n');
+            // Render. Emit the AST directly into pk{k}_Re/pk{k}_Im locals
+            // that the convolution unroll below reads. Bypass
+            // EmitNewValueBody's `prefix r_new` / `prefix i_new` naming —
+            // we need `pk{k}_Re` / `pk{k}_Im` to match the references
+            // below (the previous `EmitNewValueBody(scaled, "pk1", ...)`
+            // path emitted `pk1r_new`/`pk1i_new` instead, which never
+            // resolved against the convolution lookup — latent bug
+            // surfaced when PR8's `i*z*z + c` first exercised the
+            // generic SA path).
+            var ev = scalar.Emit(scaled);
+            W(sb, indent, $"double pk{k}_Re = {ev.Re};");
+            W(sb, indent, $"double pk{k}_Im = {ev.Im};");
         }
 
         // ── (δ^m)_k convolutions for m = 2..degree, k = m..order ─────

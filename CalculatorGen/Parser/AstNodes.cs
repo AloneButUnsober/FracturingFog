@@ -62,6 +62,15 @@ public sealed record PrevRef : AstNode;
 /// <summary>Real-valued numeric literal. Treated as complex (n, 0).</summary>
 public sealed record RealConst(double Value) : AstNode;
 
+/// <summary>Imaginary unit literal. Treated as complex (0, 1). Holomorphic
+/// constant — Wirtinger ∂i/∂z = 0, but the chain rule still works correctly
+/// through Mul (e.g. d(i·z)/dz = i). Distance estimate stays valid. SA
+/// detector accepts it as a degree-0 complex constant — `i·z² + c` is still
+/// degree-2 z polynomial with a complex coefficient. Perturbation Taylor
+/// expansion handles it transparently via the symbolic differentiator
+/// (returns 0, treated like any other constant under δ/ε expansion).</summary>
+public sealed record ImagUnit : AstNode;
+
 /// <summary>Unary negation.</summary>
 public sealed record Neg(AstNode Operand) : AstNode;
 
@@ -113,6 +122,36 @@ public sealed record Exp(AstNode Operand) : AstNode;
 /// Holomorphic on C\{0}. See <see cref="Sin"/> for capability notes.</summary>
 public sealed record Log(AstNode Operand) : AstNode;
 
+/// <summary>Principal argument of a complex number, lifted to complex as
+/// (arg, 0). arg(a+bi) = atan2(b, a) ∈ (-π, π]. Non-holomorphic — same
+/// gating as <see cref="Conj"/>: distance estimate disabled, perturbation
+/// Taylor / BLA disabled, SA recurrence rejected. Differentiator treats
+/// it as opaque (∂arg/∂z = 0 in the holomorphic chain rule).</summary>
+public sealed record Arg(AstNode Operand) : AstNode;
+
+/// <summary>Two-argument arctangent, lifted to complex as (atan2(y, x), 0).
+/// Same gating as <see cref="Arg"/>. The unary form `arg(z)` desugars in
+/// downstream visitors that prefer the binary surface — emission for both
+/// goes through the same OpArg path on the emitter base class.</summary>
+public sealed record Atan2(AstNode Y, AstNode X) : AstNode;
+
+/// <summary>Real minimum of two operands, lifted to complex as (min, 0).
+/// Inputs are treated as real-valued — the emitter feeds Re(Left) and
+/// Re(Right) to the underlying Math.Min. Non-holomorphic (subgradient at
+/// the boundary). Distance estimate / perturbation / BLA / SA all gate
+/// off via the same hasArg / hasMinMax flag rolled into hasTrans.</summary>
+public sealed record Min(AstNode Left, AstNode Right) : AstNode;
+
+/// <summary>Real maximum of two operands, lifted to complex. See <see cref="Min"/>.</summary>
+public sealed record Max(AstNode Left, AstNode Right) : AstNode;
+
+/// <summary>Real modulo (IEEE remainder semantics): mod(a, b) = a - trunc(a/b)*b
+/// on the real components, lifted to complex. The emitter uses C#'s `%`
+/// on doubles (matches Math.IEEERemainder for finite arguments after the
+/// trunc-style rounding the spec prescribes; users who need true IEEE
+/// rounding can rewrite explicitly). Same gating as Min / Max.</summary>
+public sealed record Mod(AstNode Left, AstNode Right) : AstNode;
+
 /// <summary>Piecewise complex expression: if <paramref name="Cond"/> then
 /// <paramref name="Then"/> else <paramref name="Else"/>. Holomorphic
 /// piecewise — distance estimate is valid inside each branch but the
@@ -156,6 +195,15 @@ public sealed record CondIm(AstNode Of) : CondTerm;
 /// inequality conditions and matches the bailout-style threshold form
 /// users already think in.</summary>
 public sealed record CondAbs2(AstNode Of) : CondTerm;
+
+/// <summary>Principal argument of a complex sub-expression as a real
+/// scalar: <c>arg(x) = atan2(Im(x), Re(x)) ∈ (-π, π]</c>. Lets users
+/// branch by orbit phase, e.g. <c>if arg(z) &gt; 0 then z*z + c else z*z - c</c>.
+/// Lives only inside conditions — the regular <see cref="Arg"/> AstNode
+/// already handles arg as a complex value in normal expression
+/// position. Non-holomorphic, but conditions don't feed the
+/// differentiator chain so this doesn't affect DE gating.</summary>
+public sealed record CondArg(AstNode Of) : CondTerm;
 
 /// <summary>Real literal inside a comparison.</summary>
 public sealed record CondConst(double Value) : CondTerm;

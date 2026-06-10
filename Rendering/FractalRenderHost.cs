@@ -27,6 +27,7 @@ using System.Threading.Tasks;
 using FracturingFog.Calculators;
 using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
+using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.ViewState;
 
@@ -382,6 +383,19 @@ namespace FracturingFog.Rendering
             return (_userBulbCalculator.IsCompiled,
                 string.IsNullOrEmpty(_userBulbCalculator.LastError) ? null : _userBulbCalculator.LastError);
         }
+
+        /// <summary>Closed-form DE pattern detected for the currently-compiled
+        /// UserBulb source. Routed to the editor as a "Analytic engaged" badge.</summary>
+        public global::FracturingFog.Calculators.AnalyticDEPattern UserBulbAnalyticPattern
+            => _userBulbCalculator.AnalyticPattern;
+
+        /// <summary>0-based character index of the most-recent Sandbox parse
+        /// error. -1 when no error or error has no position.</summary>
+        public int UserBulbLastErrorPosition => _userBulbCalculator.LastErrorPosition;
+
+        /// <summary>Length of the offending substring at
+        /// <see cref="UserBulbLastErrorPosition"/>.</summary>
+        public int UserBulbLastErrorLength => _userBulbCalculator.LastErrorLength;
 
         /// <summary>Distance-estimator sampler for UserBulb mesh export.</summary>
         public double SampleUserBulbDE(double x, double y, double z) => _userBulbCalculator.SampleDE(x, y, z);
@@ -1132,10 +1146,87 @@ namespace FracturingFog.Rendering
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
                 case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
-                case UserEquationCalculator u: u.FractalParameters = ViewState.FractalParameters; break;
+                case UserEquationCalculator u:
+                    u.FractalParameters = ViewState.FractalParameters;
+                    // Plumb the centre's low limbs so deep-zoom pan / box /
+                    // double-click recenter anchors to the right pixel. The
+                    // base sync above only copies the Hi limb; at zoom >
+                    // ~1e15 one Hi ULP is ~100 pixels so the rendered view
+                    // disagrees with where the input controller anchored.
+                    u.CenterXLo = calc.CenterXLo;
+                    u.CenterX2  = calc.CenterX2;
+                    u.CenterX3  = calc.CenterX3;
+                    u.CenterYLo = calc.CenterYLo;
+                    u.CenterY2  = calc.CenterY2;
+                    u.CenterY3  = calc.CenterY3;
+                    break;
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
+            }
+        }
+
+        /// <summary>Render <paramref name="region"/> into an off-screen colour
+        /// buffer at the given size using the live alt-calculator fleet. Used
+        /// by the slideshow cross-fade so non-Mandelbrot region transitions
+        /// get a real fade instead of a hard cut.
+        ///
+        /// Caller must have already applied the region into <see cref="ViewState"/>
+        /// (via <c>IColorThemeService.ApplyRegion</c>) so source-compiled
+        /// types (UserEquation / Sandbox / UserBulb) are compiled and the
+        /// per-engine <c>FractalParameters</c> are populated.
+        ///
+        /// Cancels any in-flight calc, configures the appropriate alt calc
+        /// (Resize + SyncAlt + theme), runs Calculate synchronously on the
+        /// caller's thread, and returns a copy of <c>ColorBuffer</c>. Returns
+        /// null for <see cref="FractalType.Mandelbrot"/> (caller renders that
+        /// path with the standalone MandelbrotCalculator) or when no alt calc
+        /// is registered for the type.</summary>
+        public uint[]? RenderRegionToBuffer(FractalRegion region, IColorMap? map, int w, int h)
+        {
+            if (_disposed || region == null || w <= 0 || h <= 0) return null;
+            if (region.FractalType == FractalType.Mandelbrot) return null;
+
+            var alt = SelectAltCalculator(region.FractalType);
+            if (alt == null) return null;
+
+            // Push region centre/zoom/iter/quality + theme into the primary
+            // Mandelbrot calc so SyncAltStateFromMandel picks the right values
+            // (it copies from _calculator + ViewState).
+            _calculator.CenterX  = region.CenterX;  _calculator.CenterXLo = region.CenterXLo;
+            _calculator.CenterX2 = region.CenterX2; _calculator.CenterX3  = region.CenterX3;
+            _calculator.CenterY  = region.CenterY;  _calculator.CenterYLo = region.CenterYLo;
+            _calculator.CenterY2 = region.CenterY2; _calculator.CenterY3  = region.CenterY3;
+            if (region.Zoom > 0) _calculator.Zoom = region.Zoom;
+            var quality = region.QualityPreset ?? QualityPreset.Standard;
+            _calculator.Quality = quality;
+            _calculator.MaxIterations = region.Iterations > 0
+                ? region.Iterations
+                : quality.ComputeIterations(_calculator.Zoom);
+            if (map != null) _calculator.ColorMap = map;
+
+            // Cancel any queued or in-flight ordinary calc so it can't race
+            // our synchronous Calculate on the same alt instance. Mirrors the
+            // pattern VideoLoop uses for its per-frame Calculate.
+            lock (_calcLock) _calcCts?.Cancel();
+            while (_calcQueue.TryTake(out _)) { }
+
+            try
+            {
+                if (alt.Width != w || alt.Height != h) alt.Resize(w, h);
+                SyncAltStateFromMandel(alt);
+                alt.Calculate(CancellationToken.None);
+
+                var src = alt.ColorBuffer;
+                if (src == null || src.Length == 0) return null;
+                int n = w * h;
+                var copy = new uint[n];
+                Array.Copy(src, copy, Math.Min(src.Length, n));
+                return copy;
+            }
+            catch
+            {
+                return null;
             }
         }
 

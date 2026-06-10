@@ -36,7 +36,7 @@
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="TextBlock.error">
-            <Setter Property="Foreground" Value="#FF6464" />
+            <Setter Property="Foreground" Value="#FFCC00" />
             <Setter Property="FontFamily" Value="Consolas, monospace" />
             <Setter Property="FontSize" Value="11" />
         </Style>
@@ -52,7 +52,16 @@
         <!-- ── LEFT COLUMN ──────────────────────────────────────────── -->
         <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="6">
-                <TextBlock Text="{Binding HintText}" Foreground="#B4B4B4" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding HintText}" Foreground="#B4B4B4" TextWrapping="Wrap" />
+                    <Button Grid.Column="1"
+                            Content="?"
+                            Command="{Binding OpenHelpCommand}"
+                            ToolTip.Tip="Help for the User Bulb 3D editor"
+                            Margin="8,0,0,0"
+                            Width="28" Height="28"
+                            VerticalAlignment="Top" />
+                </Grid>
 
                 <!-- Saved row -->
                 <Grid ColumnDefinitions="50,*,Auto,Auto" Margin="0,4,0,0">
@@ -77,7 +86,8 @@
 
                 <!-- Source editor -->
                 <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#1C1C1C">
-                    <TextBox Classes="code"
+                    <TextBox x:Name="SourceEditor"
+                             Classes="code"
                              AcceptsReturn="True"
                              AcceptsTab="True"
                              MinHeight="200"
@@ -116,7 +126,7 @@
                 <!-- Render -->
                 <TextBlock Classes="header" Text="Render" />
                 <Grid ColumnDefinitions="Auto,80,Auto,80,Auto,80"
-                      RowDefinitions="Auto,Auto,Auto,Auto">
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Iterations:" />
                     <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="64" Increment="1" FormatString="0"
                                    Value="{Binding Iterations}" />
@@ -150,7 +160,8 @@
                     </ComboBox>
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Algebra:" />
-                    <ComboBox    Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding AxisModeIndex}">
+                    <ComboBox    Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding AxisModeIndex}"
+                                 ToolTip.Tip="Vec3 = 3D mandelbulb-style. Quat = 4D quaternion fractal (slice W picks the hyperplane). Sandbox compiler in Quat mode: use qmul, qpow, qconj, qvec(x,y,z,w), .w member access.">
                         <ComboBoxItem Content="Vec3 (3D)" />
                         <ComboBoxItem Content="Quat (4D)" />
                     </ComboBox>
@@ -158,6 +169,30 @@
                     <NumericUpDown Grid.Row="3" Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000"
                                    IsEnabled="{Binding QuatEnabled}"
                                    Value="{Binding QuatSliceW}" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Compiler:" />
+                    <ComboBox    Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="5" SelectedIndex="{Binding CompilerIndex}"
+                                 ToolTip.Tip="Roslyn — full C# step body, all BCL helpers, GPU-translatable. Use for performance and unrestricted math. Sandbox — small DSL (vec, triplex, fold ops, let, ternary, qmul/qpow/qconj/qvec for Quat). Safer for untrusted source and supports compile-time analytic DE detection. CPU-only.">
+                        <ComboBoxItem Content="Roslyn (full C#, BCL, GPU-translatable)" />
+                        <ComboBoxItem Content="Sandbox (safe DSL, Vec3 only, CPU)" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="DE detect:" />
+                    <Grid Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="5"
+                          ToolTip.Tip="Closed-form DE pattern detected on the current source. When 'Analytic engaged', the raymarch runs a single trajectory with the Hubbard-Douady recurrence instead of four-trajectory numerical Jacobian — typically 3-4x faster.">
+                        <TextBlock Text="{Binding AnalyticBadgeText}"
+                                   IsVisible="{Binding AnalyticBadgeOk}"
+                                   Foreground="#64FF64"
+                                   FontFamily="Consolas, monospace"
+                                   FontSize="11"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding AnalyticBadgeText}"
+                                   IsVisible="{Binding !AnalyticBadgeOk}"
+                                   Foreground="#888888"
+                                   FontFamily="Consolas, monospace"
+                                   FontSize="11"
+                                   VerticalAlignment="Center" />
+                    </Grid>
                 </Grid>
 
                 <!-- Params -->

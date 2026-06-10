@@ -52,6 +52,14 @@ namespace FracturingFog.Render
         /// entry → fall back to the quality preset's auto-computed count).</summary>
         public int TargetIterations { get; set; }
 
+        /// <summary>Name of the region the user picked in the VideoDialog
+        /// (single-shot only). Used by the engine to push
+        /// <c>FractalRenderHost.RegionName</c> so the watermark top line
+        /// follows the target, instead of carrying the stale name from
+        /// whatever was on screen when the dialog opened. Null/empty = leave
+        /// RegionName untouched.</summary>
+        public string? TargetRegionName { get; set; }
+
         /// <summary>Total animation duration in seconds (single-shot), or the
         /// per-leg duration override for a slideshow (see
         /// <see cref="SlideshowSecondsOverride"/>).</summary>
@@ -95,16 +103,16 @@ namespace FracturingFog.Render
         /// the slideshow engine's <c>UseRegionWatermark</c> behaviour.</summary>
         public bool UseRegionWatermark { get; set; }
 
-        /// <summary>Single-shot only — cycle the colour palette through several
-        /// themes during the zoom, cross-fading via the BlendedColorMap so the
-        /// zoom keeps advancing across the swap. Ignored for slideshow (the
-        /// slideshow path already drives its own per-leg theme schedule).</summary>
+        /// <summary>Cycle the colour palette through several themes during the
+        /// zoom, cross-fading via the BlendedColorMap so the zoom keeps
+        /// advancing across the swap. Honoured by both single-shot and
+        /// slideshow legs — false disables the in-leg theme rotation entirely.</summary>
         public bool ThemeFadeEnabled { get; set; }
 
-        /// <summary>Themes shown across the single-shot zoom when
-        /// <see cref="ThemeFadeEnabled"/> is true. Swap timings are spaced
-        /// uniformly: schedule fires at t = k / ThemesPerLeg for k = 1..N-1.
-        /// Clamped to [1, 12]; values ≤ 1 disable the schedule.</summary>
+        /// <summary>Themes shown across the zoom (single-shot) or per slideshow
+        /// leg when <see cref="ThemeFadeEnabled"/> is true. Swap timings are
+        /// spaced uniformly: schedule fires at t = k / ThemesPerLeg for
+        /// k = 1..N-1. Clamped to [1, 12]; values ≤ 1 disable the schedule.</summary>
         public int ThemesPerLeg { get; set; } = 3;
 
         /// <summary>Adaptive iteration-cap mode used during playback / record.

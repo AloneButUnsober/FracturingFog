@@ -39,6 +39,10 @@ public static class AstDifferentiator
         // Iteration index: real scalar, derivative w.r.t. z or c is 0.
         IterRef    => new RealConst(0.0),
         RealConst  => new RealConst(0.0),
+        // Imaginary unit: complex constant — derivative w.r.t. either real
+        // variable is 0. The chain rule still produces the right value
+        // through Mul: d(i·z)/dz = 0·z + i·1 = i.
+        ImagUnit   => new RealConst(0.0),
         Neg n      => new Neg(Diff(n.Operand, v)),
         Add a      => new Add(Diff(a.Left, v), Diff(a.Right, v)),
         Sub s      => new Sub(Diff(s.Left, v), Diff(s.Right, v)),
@@ -63,6 +67,16 @@ public static class AstDifferentiator
         // only.
         Conj       => new RealConst(0.0),
         Folded     => new RealConst(0.0),
+        // arg / atan2 are non-holomorphic (Wirtinger-real derivative). Treat
+        // them like Conj/Folded: ∂/∂z arg(u) = 0 in the holomorphic chain.
+        // SupportsDe is gated off by Contains<Arg> / Contains<Atan2> upstream.
+        Arg        => new RealConst(0.0),
+        Atan2      => new RealConst(0.0),
+        // min/max/mod: subgradient at boundary, treated as opaque for the
+        // chain rule. Distance estimate is disabled when present anyway.
+        Min        => new RealConst(0.0),
+        Max        => new RealConst(0.0),
+        Mod        => new RealConst(0.0),
         // Transcendentals — holomorphic chain rules:
         //   d/dv sin(u) =  cos(u) · u'
         //   d/dv cos(u) = -sin(u) · u'

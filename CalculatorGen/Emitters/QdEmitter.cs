@@ -157,6 +157,16 @@ public sealed class QdEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => ScalarComplex(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => ScalarComplex(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => ScalarComplex(a, "log");
+    protected override ComplexExpr OpArg(ComplexExpr a) =>
+        new($"(QD)Math.Atan2({(a.ImZero ? "0.0" : $"((QD)({a.Im})).X0")}, ((QD)({a.Re})).X0)", "(QD)0.0", ImZero: true);
+    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
+        new($"(QD)Math.Atan2(((QD)({y.Re})).X0, ((QD)({x.Re})).X0)", "(QD)0.0", ImZero: true);
+    protected override ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        new($"(((QD)({a.Re})).X0 <= ((QD)({b.Re})).X0 ? ((QD)({a.Re})) : ((QD)({b.Re})))", "(QD)0.0", ImZero: true);
+    protected override ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        new($"(((QD)({a.Re})).X0 >= ((QD)({b.Re})).X0 ? ((QD)({a.Re})) : ((QD)({b.Re})))", "(QD)0.0", ImZero: true);
+    protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
+        new($"(QD)(((QD)({a.Re})).X0 % ((QD)({b.Re})).X0)", "(QD)0.0", ImZero: true);
 
     // Piecewise — compare on QD .X0 (high limb), select via C# ternary.
     // Eager-evaluated branches.
@@ -203,6 +213,15 @@ public sealed class QdEmitter : EmitterBase
                 string reSq = $"(({av.Re}).X0 * ({av.Re}).X0)";
                 if (av.ImZero) return reSq;
                 return $"({reSq} + ({av.Im}).X0 * ({av.Im}).X0)";
+            case CondArg ag:
+                // arg(x) inside a QD cond. atan2 has no QD precision —
+                // collapse to plain double on .X0 limbs (same trade-off
+                // as QD OpLog's imaginary part). Operands wrapped in
+                // ((QD)x).X0 so bare-double RealConst limbs normalise.
+                var agv = Emit(ag.Of);
+                string agRe = $"((QD)({agv.Re})).X0";
+                string agIm = agv.ImZero ? "0.0" : $"((QD)({agv.Im})).X0";
+                return $"Math.Atan2({agIm}, {agRe})";
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

@@ -160,7 +160,12 @@ public sealed class VideoSettingsViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> OkCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelCommand { get; }
 
-    private void Commit()
+    /// <summary>Populate <see cref="Result"/> from the current binding
+    /// fields. Wired to <see cref="OkCommand"/>; the view's Click handler
+    /// also invokes it directly so the close path can read Result before
+    /// the dialog's Closed handler fires (Avalonia raises Click before
+    /// executing Command, so relying on the binding alone races).</summary>
+    public void Commit()
     {
         _working.SpeedPreset = _speedPreset;
         _working.CustomSeconds = _customSeconds;

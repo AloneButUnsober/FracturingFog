@@ -193,6 +193,7 @@ public sealed class Avx2DerivEmitter : EmitterBase
         "cos" => $"{rOut} = Math.Cos({re}) * Math.Cosh({im}); {iOut} = -(Math.Sin({re}) * Math.Sinh({im}));",
         "exp" => $"{{ double ex = Math.Exp({re}); {rOut} = ex * Math.Cos({im}); {iOut} = ex * Math.Sin({im}); }}",
         "log" => $"{rOut} = 0.5 * Math.Log({re} * {re} + {im} * {im}); {iOut} = Math.Atan2({im}, {re});",
+        "arg" => $"{rOut} = Math.Atan2({im}, {re}); {iOut} = 0.0;",
         _ => throw new InvalidOperationException($"Avx2DerivEmitter: unknown transcendental {op}"),
     };
 
@@ -249,6 +250,9 @@ public sealed class Avx2DerivEmitter : EmitterBase
                     return NewBoundRe($"Avx.Multiply({av.Re}, {av.Re})");
                 return NewBoundRe(
                     $"Fma.MultiplyAdd({av.Re}, {av.Re}, Avx.Multiply({av.Im}, {av.Im}))");
+            case CondArg ag:
+                var argv = Emit(ag.Of);
+                return EmitPerLaneTranscendental(argv, "arg").Re;
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

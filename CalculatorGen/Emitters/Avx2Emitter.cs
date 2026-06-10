@@ -251,6 +251,8 @@ public sealed class Avx2Emitter : EmitterBase
         "cos" => $"{rOut} = Math.Cos({re}) * Math.Cosh({im}); {iOut} = -(Math.Sin({re}) * Math.Sinh({im}));",
         "exp" => $"{{ double ex = Math.Exp({re}); {rOut} = ex * Math.Cos({im}); {iOut} = ex * Math.Sin({im}); }}",
         "log" => $"{rOut} = 0.5 * Math.Log({re} * {re} + {im} * {im}); {iOut} = Math.Atan2({im}, {re});",
+        // arg(a+bi) = atan2(b, a). Result lifted to (arg, 0) — iOut = 0.
+        "arg" => $"{rOut} = Math.Atan2({im}, {re}); {iOut} = 0.0;",
         _ => throw new InvalidOperationException($"Avx2Emitter: unknown transcendental {op}"),
     };
 
@@ -258,6 +260,75 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => EmitPerLaneTranscendental(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => EmitPerLaneTranscendental(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => EmitPerLaneTranscendental(a, "log");
+    protected override ComplexExpr OpArg(ComplexExpr a) => EmitPerLaneTranscendental(a, "arg");
+    // Binary atan2(y, x) has no AVX2 vector intrinsic, but we can still
+    // keep the surrounding pipeline vectorised by per-lane-scalarising
+    // exactly like OpMod does: extract the 4 lanes of y.Re and x.Re,
+    // call Math.Atan2 four times, repack as a Vector256. Imag parts of
+    // both inputs are dropped (matches the mathematical atan2 semantic
+    // — both arguments are real-valued). ImZero=true on output so
+    // downstream Add/Mul elides the dead-zero imag like RealConst.
+    protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x)
+    {
+        string yr = y.Re;
+        string xr = x.Re;
+        string tre = NewTemp("re");
+        string ns = tre;
+        _prelude.Append(_indent).Append("Vector256<double> ").Append(tre).Append(';').Append('\n');
+        _prelude.Append(_indent).Append("{\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double y").Append(k).Append('_').Append(ns)
+                .Append(" = ").Append(yr).Append(".GetElement(").Append(k).Append(");\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double x").Append(k).Append('_').Append(ns)
+                .Append(" = ").Append(xr).Append(".GetElement(").Append(k).Append(");\n");
+        _prelude.Append(_indent).Append("    ").Append(tre).Append(" = Vector256.Create(");
+        for (int k = 0; k < 4; k++)
+        {
+            if (k > 0) _prelude.Append(", ");
+            _prelude.Append("Math.Atan2(y").Append(k).Append('_').Append(ns)
+                .Append(", x").Append(k).Append('_').Append(ns).Append(')');
+        }
+        _prelude.Append(");\n");
+        _prelude.Append(_indent).Append("}\n");
+        return new ComplexExpr(tre, "Vector256<double>.Zero", ImZero: true);
+    }
+
+    // min / max have native Vector256<double> intrinsics — emit them
+    // directly so the inner loop stays vectorised. Inputs treated as
+    // real-valued: imag part dropped, output ImZero=true so downstream
+    // Add/Mul elides the dead-zero imag like RealConst.
+    protected override ComplexExpr OpMin(ComplexExpr a, ComplexExpr b) =>
+        new($"Vector256.Min({a.Re}, {b.Re})", "Vector256<double>.Zero", ImZero: true);
+
+    protected override ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
+        new($"Vector256.Max({a.Re}, {b.Re})", "Vector256<double>.Zero", ImZero: true);
+
+    // mod (%) has no SIMD intrinsic — fall back to per-lane scalar via the
+    // existing transcendental infrastructure, but adapted to two inputs.
+    // Materialise both vectors into 4 doubles each, run % per lane, repack.
+    protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b)
+    {
+        string ar = a.Re;
+        string br = b.Re;
+        string tre = NewTemp("re");
+        string ns = tre;
+        _prelude.Append(_indent).Append("Vector256<double> ").Append(tre).Append(';').Append('\n');
+        _prelude.Append(_indent).Append("{\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double a").Append(k).Append("_").Append(ns)
+                .Append(" = ").Append(ar).Append(".GetElement(").Append(k).Append(");\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double b").Append(k).Append("_").Append(ns)
+                .Append(" = ").Append(br).Append(".GetElement(").Append(k).Append(");\n");
+        _prelude.Append(_indent).Append("    ").Append(tre).Append(" = Vector256.Create(")
+            .Append("a0_").Append(ns).Append(" % b0_").Append(ns).Append(", ")
+            .Append("a1_").Append(ns).Append(" % b1_").Append(ns).Append(", ")
+            .Append("a2_").Append(ns).Append(" % b2_").Append(ns).Append(", ")
+            .Append("a3_").Append(ns).Append(" % b3_").Append(ns).Append(");\n");
+        _prelude.Append(_indent).Append("}\n");
+        return new ComplexExpr(tre, "Vector256<double>.Zero", ImZero: true);
+    }
 
     // Piecewise — mask blend via Avx.Compare → Vector256.ConditionalSelect.
     // Compare returns the per-lane mask as Vector256<double> (all-1 bits
@@ -309,6 +380,14 @@ public sealed class Avx2Emitter : EmitterBase
                 if (av.ImZero)
                     return NewBoundRe($"Avx.Multiply({av.Re}, {av.Re})");
                 return NewBoundRe($"Fma.MultiplyAdd({av.Re}, {av.Re}, Avx.Multiply({av.Im}, {av.Im}))");
+            case CondArg ag:
+                // arg inside an if condition. atan2 has no AVX2 intrinsic
+                // so we per-lane-scalarise via the same fallback the
+                // OpArg path uses. EmitPerLaneTranscendental returns a
+                // ComplexExpr with the imag temp pinned to 0.0 — discard
+                // it and return only the real vector.
+                var argv = Emit(ag.Of);
+                return EmitPerLaneTranscendental(argv, "arg").Re;
             case CondConst k:
                 string lit = k.Value.ToString("R", CultureInfo.InvariantCulture);
                 if (!lit.Contains('.') && !lit.Contains('e') && !lit.Contains('E')) lit += ".0";

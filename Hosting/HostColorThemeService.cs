@@ -699,12 +699,20 @@ namespace FracturingFog.Hosting
                     if (string.Equals(r.Name, regionName, StringComparison.Ordinal)) { region = r; break; }
             if (region == null) return null;
 
-            // Cross-fade only supports Mandelbrot regions (the slideshow pool is
-            // Mandelbrot-only); other types fall back to a hard cut.
-            if (region.FractalType != FractalType.Mandelbrot) return null;
-
             var map = ColorPalette.GetPaletteByName(themeName);
             if (map == null) return null;
+
+            // Non-Mandelbrot: render through the live alt-calculator fleet so
+            // the slideshow cross-fade has a real incoming buffer (instead of
+            // falling back to fade-to-black or hard cut). ApplyRegion first
+            // so source-compiled types (UserEquation / Sandbox / UserBulb) get
+            // compiled + FractalParameters populated before Calculate runs.
+            if (region.FractalType != FractalType.Mandelbrot)
+            {
+                if (_renderHost == null) return null;
+                ApplyRegion(regionName, _renderHost.ViewState);
+                return _renderHost.RenderRegionToBuffer(region, map, width, height);
+            }
 
             var quality = region.QualityPreset ?? QualityPreset.Standard;
             int iters = region.Iterations > 0 ? region.Iterations : quality.ComputeIterations(region.Zoom);
