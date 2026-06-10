@@ -31,6 +31,7 @@ public static class AstPrinter
             case PrevRef:     sb.Append("prev"); break;
             case IterRef:     sb.Append('n'); break;
             case RealConst k: sb.Append(k.Value.ToString("R", CultureInfo.InvariantCulture)); break;
+            case ImagUnit:    sb.Append('i'); break;
             case Neg n:
                 Wrap(sb, parentPrec, 2, () => { sb.Append('-'); WriteExpr(sb, n.Operand, 2); });
                 break;

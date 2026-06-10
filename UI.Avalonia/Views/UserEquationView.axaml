@@ -152,7 +152,7 @@
                         <TextBlock Grid.Column="0"
                                    Foreground="#B4B4B4"
                                    TextWrapping="Wrap">
-                            <Run Text="Bare CalcGen DSL — lowercase keywords, no 'Complex.' prefix, no 'return'. Allowed: z c sin cos tan sinh cosh tanh exp log sqrt arg atan2 min max mod conj fold sqr abs re im prev iter pi e, + - * / ^Int." />
+                            <Run Text="Bare CalcGen DSL — lowercase keywords, no 'Complex.' prefix, no 'return'. Allowed: z c sin cos tan sinh cosh tanh exp log sqrt arg atan2 min max mod conj fold sqr abs re im prev iter pi e i, + - * / ^Int." />
                             <LineBreak />
                             <Run Text="Example:  z*z + c" />
                         </TextBlock>

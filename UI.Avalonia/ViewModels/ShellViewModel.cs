@@ -668,14 +668,35 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         else if (l2 != 0.0) n = 3;
         else if (lo != 0.0) n = 2;
 
+        // Any-extra-limb path (n >= 2): the Lo (and L2/L3) limbs carry
+        // precision past decimal's ~29-digit cap. DD pair is ~31 digits,
+        // QD chain is ~62 digits; either case loses bottom limb data
+        // through the G29 sum + textbox round-trip and collapses the
+        // centre to ~29 digits permanently on the next Go. Emit pipe-
+        // delimited limbs whenever any low limb is non-zero so every
+        // limb survives the display + parse.
+        //
+        // Pipe form is uglier than a single decimal string but is the
+        // only honest representation of multi-limb precision in a UI
+        // textbox. Shallow (n=1) coords keep the readable decimal form.
+        if (n >= 2)
+        {
+            string hp = hi.ToString("G17", CultureInfo.InvariantCulture);
+            string p1p = lo.ToString("G17", CultureInfo.InvariantCulture);
+            if (n == 2) return $"{hp}|{p1p}";
+            string p2p = l2.ToString("G17", CultureInfo.InvariantCulture);
+            if (n == 3) return $"{hp}|{p1p}|{p2p}";
+            string p3p = l3.ToString("G17", CultureInfo.InvariantCulture);
+            return $"{hp}|{p1p}|{p2p}|{p3p}";
+        }
+
         try
         {
             decimal acc = (decimal)hi;
-            if (n >= 2) acc += (decimal)lo;
-            if (n >= 3) acc += (decimal)l2;
-            if (n >= 4) acc += (decimal)l3;
-            // "G29" prints up to decimal's full 29-digit precision without
-            // scientific notation for everyday Mandelbrot coords.
+            // Single limb (n == 1) — plain "G29" prints up to decimal's
+            // full 29-digit precision without scientific notation for
+            // everyday Mandelbrot coords. No precision loss possible
+            // because Hi alone fits well inside decimal's range.
             return acc.ToString("G29", CultureInfo.InvariantCulture);
         }
         catch (OverflowException)

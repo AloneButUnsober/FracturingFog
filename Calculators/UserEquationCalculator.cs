@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 
+using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 
@@ -30,6 +31,26 @@ public sealed class UserEquationCalculator : IFractalCalculator
     public double CenterY { get; set; } = 0.0;
     public double Zoom { get; set; } = 1.0;
     public int MaxIterations { get; set; } = 256;
+
+    // ── High-precision centre limbs ─────────────────────────────────────────
+    //
+    // The input controller anchors box-zoom, double-click recenter, and
+    // wheel zoom in DD/QD precision so the cursor pixel stays under the
+    // cursor across the operation. Plain `CenterX` (Hi only) drops the
+    // Lo / L2 / L3 limbs on the way to render — at zoom > ~1e15, one Hi
+    // ULP is ~100 pixels, so the rendered centre snaps to a coarse grid
+    // and clicked-pixel anchoring stops working (the user sees the box
+    // zoom land in a "different nearby location"). These extra limbs let
+    // Calculate() sum the per-pixel coord as DD or QD and cast the Hi
+    // limb back to double for the per-pixel iteration body — the
+    // iteration itself stays plain double (delegate-bound Complex), but
+    // the per-pixel anchor maps correctly into the complex plane.
+    public double CenterXLo { get; set; }
+    public double CenterX2 { get; set; }
+    public double CenterX3 { get; set; }
+    public double CenterYLo { get; set; }
+    public double CenterY2 { get; set; }
+    public double CenterY3 { get; set; }
 
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
     public IColorMap ColorMap { get; set; } = new HsvPalette();
@@ -148,6 +169,20 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
         int height = Height;
         const double bailout2 = 1024.0; // generous bailout for arbitrary maps
 
+        // Precision-tier selection. When the low limbs carry real data
+        // (input controller is anchoring in DD or QD) the per-pixel coord
+        // must be summed in matching precision or the rendered image
+        // disagrees with where the user clicked. Iteration body stays
+        // plain double — only the (cx, cy) starting point benefits.
+        bool useQD = CenterX2 != 0.0 || CenterX3 != 0.0
+                  || CenterY2 != 0.0 || CenterY3 != 0.0;
+        bool useDD = !useQD && (CenterXLo != 0.0 || CenterYLo != 0.0);
+
+        QD cxQd = useQD ? new QD(centerX, CenterXLo, CenterX2, CenterX3) : default;
+        QD cyQd = useQD ? new QD(centerY, CenterYLo, CenterY2, CenterY3) : default;
+        DD cxDd = useDD ? new DD(centerX, CenterXLo) : default;
+        DD cyDd = useDD ? new DD(centerY, CenterYLo) : default;
+
         double rot = FractalParameters.UserEquationRotationDegrees * Math.PI / 180.0;
         double cosA = Math.Cos(rot);
         double sinA = Math.Sin(rot);
@@ -162,8 +197,30 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
             for (int x = 0; x < width; x++)
             {
                 double dx = (x - width * 0.5) * scale;
-                double cx = centerX + dx * cosA - dySin;
-                double cy = centerY + dx * sinA + dyCos;
+                double cx, cy;
+                if (useQD)
+                {
+                    // Sum centre + per-pixel offset in QD, take Hi limb.
+                    // dx and dy are plain doubles (offset within ~1 pixel
+                    // of scale); QD's implicit double promotion handles
+                    // the addition.
+                    var cxFull = cxQd + (dx * cosA - dySin);
+                    var cyFull = cyQd + (dx * sinA + dyCos);
+                    cx = cxFull.X0;
+                    cy = cyFull.X0;
+                }
+                else if (useDD)
+                {
+                    var cxFull = cxDd + (dx * cosA - dySin);
+                    var cyFull = cyDd + (dx * sinA + dyCos);
+                    cx = cxFull.Hi;
+                    cy = cyFull.Hi;
+                }
+                else
+                {
+                    cx = centerX + dx * cosA - dySin;
+                    cy = centerY + dx * sinA + dyCos;
+                }
                 var c = new Complex(cx, cy);
                 var z = Complex.Zero;
                 int iter;

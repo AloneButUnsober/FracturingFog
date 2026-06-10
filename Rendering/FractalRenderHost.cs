@@ -1132,7 +1132,20 @@ namespace FracturingFog.Rendering
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
                 case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
-                case UserEquationCalculator u: u.FractalParameters = ViewState.FractalParameters; break;
+                case UserEquationCalculator u:
+                    u.FractalParameters = ViewState.FractalParameters;
+                    // Plumb the centre's low limbs so deep-zoom pan / box /
+                    // double-click recenter anchors to the right pixel. The
+                    // base sync above only copies the Hi limb; at zoom >
+                    // ~1e15 one Hi ULP is ~100 pixels so the rendered view
+                    // disagrees with where the input controller anchored.
+                    u.CenterXLo = calc.CenterXLo;
+                    u.CenterX2  = calc.CenterX2;
+                    u.CenterX3  = calc.CenterX3;
+                    u.CenterYLo = calc.CenterYLo;
+                    u.CenterY2  = calc.CenterY2;
+                    u.CenterY3  = calc.CenterY3;
+                    break;
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;

@@ -64,6 +64,7 @@ public enum TokenKind
     NotEq,
     Prev,
     Iter,
+    ImagUnit,
     End,
 }
 
@@ -188,12 +189,17 @@ public static class EquationLexer
                 else if (name.Equals("iter", StringComparison.OrdinalIgnoreCase)
                       || name.Equals("n",    StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.Iter, name, start, startLine, startCol));
+                else if (name.Equals("i", StringComparison.OrdinalIgnoreCase))
+                    // Single-char identifier 'i' — imaginary unit literal.
+                    // 'if' and 'iter' match by full name above so they win
+                    // before this branch ever runs. Bare 'i' yields (0, 1).
+                    tokens.Add(new Token(TokenKind.ImagUnit, name, start, startLine, startCol));
                 else
                 {
                     // Suggest the closest valid keyword via Levenshtein-≤2.
                     string[] keywords = { "z", "c", "conj", "fold", "sqr", "sin", "cos", "tan",
                                           "sinh", "cosh", "tanh", "sqrt", "exp", "log", "arg", "atan2",
-                                          "min", "max", "mod", "pi", "e",
+                                          "min", "max", "mod", "pi", "e", "i",
                                           "if", "then", "else", "re", "im", "abs", "prev", "iter", "n" };
                     string? best = null;
                     int bestD = int.MaxValue;
@@ -210,7 +216,7 @@ public static class EquationLexer
                     throw new FormatException(
                         $"Unknown identifier '{name}' at {where}.{suggestion} " +
                         "Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, " +
-                        "exp, log, arg, atan2, min, max, mod, pi, e, " +
+                        "exp, log, arg, atan2, min, max, mod, pi, e, i, " +
                         "if, then, else, re, im, abs, prev, iter (or n).");
                 }
                 continue;
