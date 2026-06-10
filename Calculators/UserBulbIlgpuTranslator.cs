@@ -8,6 +8,7 @@
 // Used by UserBulbGpuCalculator. Validation failure → caller falls back to
 // CPU path.
 
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
@@ -27,11 +28,29 @@ public static class UserBulbIlgpuTranslator
         "Math.", "Vec3.",
     };
 
+    // Translate runs per Calculate() call when Backend=GPU. Source rarely
+    // changes between frames, so a small string-keyed cache eliminates the
+    // regex sweep on the hot path. Capped at MaxCacheEntries; oldest
+    // half is cleared on overflow (not a strict LRU — cheap + sufficient).
+    private const int MaxCacheEntries = 32;
+    private static readonly ConcurrentDictionary<string, IlgpuTranslateResult> s_cache = new();
+
     public static IlgpuTranslateResult Translate(string? source)
     {
         if (string.IsNullOrWhiteSpace(source))
             return new(false, "Empty source.", null);
 
+        if (s_cache.TryGetValue(source, out var hit)) return hit;
+
+        var result = TranslateUncached(source);
+
+        if (s_cache.Count >= MaxCacheEntries) TrimCache();
+        s_cache.TryAdd(source, result);
+        return result;
+    }
+
+    private static IlgpuTranslateResult TranslateUncached(string source)
+    {
         string s = StripComments(source);
 
         // Reject `new` of anything other than Vec3.
@@ -54,6 +73,23 @@ public static class UserBulbIlgpuTranslator
 
         return new(true, null, source);
     }
+
+    private static void TrimCache()
+    {
+        // Drop half the entries — picks whatever ConcurrentDictionary's
+        // enumeration order surfaces first, which is good-enough randomness
+        // for evicting cold sources without paying for real LRU bookkeeping.
+        int target = MaxCacheEntries / 2;
+        int dropped = 0;
+        foreach (var key in s_cache.Keys)
+        {
+            if (dropped >= target) break;
+            if (s_cache.TryRemove(key, out _)) dropped++;
+        }
+    }
+
+    /// <summary>Test-only cache reset.</summary>
+    public static void ResetCacheForTesting() => s_cache.Clear();
 
     private static string StripComments(string src)
     {

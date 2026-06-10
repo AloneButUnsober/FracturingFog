@@ -61,6 +61,19 @@ namespace FracturingFog.Models
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Vec3 ToVec3() => new(X, Y, Z);
 
+        /// <summary>Integer-power Hamilton self-multiply. Non-integer or
+        /// negative exponent throws — matches the Sandbox interpreter's
+        /// SbxVal3.Pow contract.</summary>
+        public static Quat Pow(Quat q, double exp)
+        {
+            int n = (int)Math.Round(exp);
+            if (Math.Abs(exp - n) > 1e-9 || n < 0)
+                throw new InvalidOperationException("Quat power must be a non-negative integer.");
+            var r = Identity;
+            for (int i = 0; i < n; i++) r = r * q;
+            return r;
+        }
+
         public override string ToString() => $"({W:G6}, {X:G6}, {Y:G6}, {Z:G6})";
     }
 }

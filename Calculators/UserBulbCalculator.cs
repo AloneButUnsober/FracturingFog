@@ -64,7 +64,17 @@ public sealed class UserBulbCalculator : IFractalCalculator
     public FractalParameters FractalParameters { get; set; } = new();
 
     public string LastError { get; private set; } = string.Empty;
+    /// <summary>0-based character index into the most-recent source where the
+    /// last parser error occurred. -1 when no error or error has no position.</summary>
+    public int LastErrorPosition { get; private set; } = -1;
+    /// <summary>Length of the offending substring at <see cref="LastErrorPosition"/>.</summary>
+    public int LastErrorLength { get; private set; } = 0;
     public bool IsCompiled => _compiled != null || _compiledQuat != null;
+
+    /// <summary>Closed-form DE pattern detected for the currently-compiled
+    /// source. <see cref="AnalyticDEKind.None"/> when no pattern matched
+    /// (numerical-Jacobian DE is used in that case).</summary>
+    public AnalyticDEPattern AnalyticPattern => _analyticPattern;
 
     /// <summary>Sample DE for mesh export. Uses currently-compiled fn + params.</summary>
     public double SampleDE(double x, double y, double z)
@@ -103,6 +113,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
     private string[] _compiledParamNames = Array.Empty<string>();
     private string _compiledSource = string.Empty;
     private UserBulbAxisModeKind _compiledAxisMode = UserBulbAxisModeKind.Vec3;
+    private UserBulbCompilerKind _compiledCompiler = UserBulbCompilerKind.Roslyn;
     private AnalyticDEPattern _analyticPattern = new(AnalyticDEKind.None, 0);
     private readonly UserBulbTemporalCache _cache = new();
     private UserBulbGpuCalculator? _gpu;
@@ -126,6 +137,8 @@ public sealed class UserBulbCalculator : IFractalCalculator
     /// </summary>
     public void Compile(string source)
     {
+        LastErrorPosition = -1;
+        LastErrorLength = 0;
         var chain = FractalParameters.UserBulbChain;
         bool useChain = chain != null && chain.Count > 0;
         if (!useChain && string.IsNullOrWhiteSpace(source))
@@ -138,6 +151,23 @@ public sealed class UserBulbCalculator : IFractalCalculator
 
         var axisMode = FractalParameters.UserBulbAxisMode;
         var paramNames = ValidateAndExtractParamNames(FractalParameters.UserBulbParams);
+        var compiler = FractalParameters.UserBulbCompiler;
+
+        if (compiler == UserBulbCompilerKind.Sandbox)
+        {
+            if (axisMode == UserBulbAxisModeKind.Quat)
+            {
+                if (useChain) CompileSandboxChainQuat(chain!, paramNames);
+                else CompileSandboxQuat(source, paramNames);
+            }
+            else
+            {
+                if (useChain) CompileSandboxChain(chain!, paramNames);
+                else CompileSandbox(source, paramNames);
+            }
+            return;
+        }
+
         try
         {
             string code;
@@ -251,6 +281,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
             else { _compiled = fn; _compiledQuat = null; }
             _compiledSource = source;
             _compiledAxisMode = axisMode;
+            _compiledCompiler = UserBulbCompilerKind.Roslyn;
             _compiledParamNames = paramNames;
             _analyticPattern = axisMode == UserBulbAxisModeKind.Vec3
                 ? UserBulbAnalyticDE.Detect(source)
@@ -260,6 +291,171 @@ public sealed class UserBulbCalculator : IFractalCalculator
         catch (Exception ex)
         {
             LastError = ex.Message;
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            _compiled = null;
+            _compiledQuat = null;
+        }
+    }
+
+    /// <summary>Compile via SandboxBulbExpression interpreter. Adapter delegate
+    /// matches Roslyn signature so the raymarch loop stays compiler-agnostic.
+    /// Per-thread env scratch avoids per-Step allocation.</summary>
+    private void CompileSandbox(string source, string[] paramNames)
+    {
+        try
+        {
+            var extras = new System.Collections.Generic.List<string>(paramNames.Length + 1);
+            extras.AddRange(paramNames);
+            extras.Add("t");
+            var expr = SandboxBulbExpression.Parse(source, extras);
+            int envSize = expr.EnvSize;
+            var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
+            Func<Vec3, Vec3, int, double[], Vec3> fn = (z, c, n, pp) =>
+                expr.EvalStep(z, c, n, envLocal.Value!, pp.AsSpan());
+
+            // Probe.
+            double[] probeParams = new double[paramNames.Length + 1];
+            Vec3 probe;
+            try { probe = fn(Vec3.Zero, new Vec3(0.5, 0.5, 0.5), 0, probeParams); }
+            catch (Exception probeEx)
+            { LastError = $"Step function threw on probe: {probeEx.Message}"; _compiled = null; _compiledQuat = null; return; }
+            if (!double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
+            { LastError = "Step function returned non-finite components on probe input."; _compiled = null; _compiledQuat = null; return; }
+
+            _compiled = fn;
+            _compiledQuat = null;
+            _compiledSource = source;
+            _compiledAxisMode = UserBulbAxisModeKind.Vec3;
+            _compiledCompiler = UserBulbCompilerKind.Sandbox;
+            _compiledParamNames = paramNames;
+            _analyticPattern = UserBulbAnalyticDE.DetectSandbox(expr.Root);
+            LastError = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            _compiled = null;
+            _compiledQuat = null;
+        }
+    }
+
+    /// <summary>Sandbox compiler for Quat axis mode. Parses the same DSL, but
+    /// evaluates with Quat-tagged z/c slots and returns a Quat→Quat delegate.</summary>
+    private void CompileSandboxQuat(string source, string[] paramNames)
+    {
+        try
+        {
+            var extras = new System.Collections.Generic.List<string>(paramNames.Length + 1);
+            extras.AddRange(paramNames);
+            extras.Add("t");
+            var expr = SandboxBulbExpression.Parse(source, extras);
+            int envSize = expr.EnvSize;
+            var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
+            Func<Quat, Quat, int, double[], Quat> fnQ = (z, c, n, pp) =>
+                expr.EvalStepQuat(z, c, n, envLocal.Value!, pp.AsSpan());
+
+            double[] probeParams = new double[paramNames.Length + 1];
+            Quat probe;
+            try { probe = fnQ(Quat.Zero, new Quat(0.5, 0.5, 0.5, 0.5), 0, probeParams); }
+            catch (Exception probeEx)
+            { LastError = $"Step function threw on probe: {probeEx.Message}"; _compiled = null; _compiledQuat = null; return; }
+            if (!double.IsFinite(probe.W) || !double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
+            { LastError = "Step function returned non-finite components on probe input."; _compiled = null; _compiledQuat = null; return; }
+
+            _compiled = null;
+            _compiledQuat = fnQ;
+            _compiledSource = source;
+            _compiledAxisMode = UserBulbAxisModeKind.Quat;
+            _compiledCompiler = UserBulbCompilerKind.Sandbox;
+            _compiledParamNames = paramNames;
+            _analyticPattern = new AnalyticDEPattern(AnalyticDEKind.None, 0);
+            LastError = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            _compiled = null;
+            _compiledQuat = null;
+        }
+    }
+
+    private void CompileSandboxChainQuat(System.Collections.Generic.List<UserBulbChainStep> steps, string[] paramNames)
+    {
+        try
+        {
+            var extras = new System.Collections.Generic.List<string>(paramNames.Length + 1);
+            extras.AddRange(paramNames);
+            extras.Add("t");
+            var chain = SandboxBulbChain.Parse(steps, extras);
+            int envSize = chain.EnvSize;
+            var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
+            Func<Quat, Quat, int, double[], Quat> fnQ = (z, c, n, pp) =>
+                chain.EvalStepQuat(z, c, n, envLocal.Value!, pp.AsSpan());
+
+            double[] probeParams = new double[paramNames.Length + 1];
+            Quat probe;
+            try { probe = fnQ(Quat.Zero, new Quat(0.5, 0.5, 0.5, 0.5), 0, probeParams); }
+            catch (Exception probeEx)
+            { LastError = $"Step function threw on probe: {probeEx.Message}"; _compiled = null; _compiledQuat = null; return; }
+            if (!double.IsFinite(probe.W) || !double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
+            { LastError = "Step function returned non-finite components on probe input."; _compiled = null; _compiledQuat = null; return; }
+
+            _compiled = null;
+            _compiledQuat = fnQ;
+            _compiledSource = string.Join("\n##\n", steps.ConvertAll(s => s.OutputName + ":" + s.Source));
+            _compiledAxisMode = UserBulbAxisModeKind.Quat;
+            _compiledCompiler = UserBulbCompilerKind.Sandbox;
+            _compiledParamNames = paramNames;
+            _analyticPattern = new AnalyticDEPattern(AnalyticDEKind.None, 0);
+            LastError = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
+            _compiled = null;
+            _compiledQuat = null;
+        }
+    }
+
+    /// <summary>Compile a chain of Sandbox steps. Each step references prior
+    /// step outputs by name. Final z = last step's return.</summary>
+    private void CompileSandboxChain(System.Collections.Generic.List<UserBulbChainStep> steps, string[] paramNames)
+    {
+        try
+        {
+            var extras = new System.Collections.Generic.List<string>(paramNames.Length + 1);
+            extras.AddRange(paramNames);
+            extras.Add("t");
+            var chain = SandboxBulbChain.Parse(steps, extras);
+            int envSize = chain.EnvSize;
+            var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
+            Func<Vec3, Vec3, int, double[], Vec3> fn = (z, c, n, pp) =>
+                chain.EvalStep(z, c, n, envLocal.Value!, pp.AsSpan());
+
+            double[] probeParams = new double[paramNames.Length + 1];
+            Vec3 probe;
+            try { probe = fn(Vec3.Zero, new Vec3(0.5, 0.5, 0.5), 0, probeParams); }
+            catch (Exception probeEx)
+            { LastError = $"Step function threw on probe: {probeEx.Message}"; _compiled = null; _compiledQuat = null; return; }
+            if (!double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
+            { LastError = "Step function returned non-finite components on probe input."; _compiled = null; _compiledQuat = null; return; }
+
+            _compiled = fn;
+            _compiledQuat = null;
+            _compiledSource = string.Join("\n##\n", steps.ConvertAll(s => s.OutputName + ":" + s.Source));
+            _compiledAxisMode = UserBulbAxisModeKind.Vec3;
+            _compiledCompiler = UserBulbCompilerKind.Sandbox;
+            _compiledParamNames = paramNames;
+            _analyticPattern = new AnalyticDEPattern(AnalyticDEKind.None, 0);
+            LastError = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
             _compiled = null;
             _compiledQuat = null;
         }
@@ -385,6 +581,7 @@ namespace FracturingFogDyn
         bool needsCompile =
             (_compiled == null && _compiledQuat == null)
             || _compiledAxisMode != FractalParameters.UserBulbAxisMode
+            || _compiledCompiler != FractalParameters.UserBulbCompiler
             || effectiveSource != _compiledSource;
         if (needsCompile && (!string.IsNullOrWhiteSpace(FractalParameters.UserBulbSource) || !string.IsNullOrEmpty(chainKey)))
         {

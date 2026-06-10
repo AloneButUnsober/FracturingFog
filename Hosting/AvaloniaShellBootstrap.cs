@@ -1378,6 +1378,16 @@ namespace FracturingFog.Hosting
             vm.TriggerCompile();
         }
 
+        private static string? FormatAnalyticBadge(global::FracturingFog.Calculators.AnalyticDEKind kind, double power)
+            => kind switch
+            {
+                global::FracturingFog.Calculators.AnalyticDEKind.None        => null,
+                global::FracturingFog.Calculators.AnalyticDEKind.Square      => "Analytic engaged · Square",
+                global::FracturingFog.Calculators.AnalyticDEKind.PowerN      => $"Analytic engaged · Pow N={power:0.##}",
+                global::FracturingFog.Calculators.AnalyticDEKind.MandelbulbN => $"Analytic engaged · Triplex N={power:0.##}",
+                _                                                           => "Analytic engaged",
+            };
+
         private static void OpenUserBulbEditor(global::FracturingFog.Models.FractalParameters p)
         {
             if (s_renderHost == null) return;
@@ -1388,6 +1398,11 @@ namespace FracturingFog.Hosting
             {
                 var (ok, error) = s_renderHost!.CompileUserBulb(p.UserBulbSource ?? string.Empty);
                 vm.ShowError(error ?? string.Empty);
+                var pat = s_renderHost.UserBulbAnalyticPattern;
+                vm.SetAnalyticBadge(FormatAnalyticBadge(pat.Kind, pat.Power));
+                vm.SetErrorSpan(
+                    ok ? -1 : s_renderHost.UserBulbLastErrorPosition,
+                    ok ? 0  : s_renderHost.UserBulbLastErrorLength);
                 if (ok) s_renderHost.Trigger();
             };
             vm.RenderRequested += (_, _) => s_renderHost!.Trigger();
