@@ -384,6 +384,19 @@ namespace FracturingFog.Rendering
                 string.IsNullOrEmpty(_userBulbCalculator.LastError) ? null : _userBulbCalculator.LastError);
         }
 
+        /// <summary>Closed-form DE pattern detected for the currently-compiled
+        /// UserBulb source. Routed to the editor as a "Analytic engaged" badge.</summary>
+        public global::FracturingFog.Calculators.AnalyticDEPattern UserBulbAnalyticPattern
+            => _userBulbCalculator.AnalyticPattern;
+
+        /// <summary>0-based character index of the most-recent Sandbox parse
+        /// error. -1 when no error or error has no position.</summary>
+        public int UserBulbLastErrorPosition => _userBulbCalculator.LastErrorPosition;
+
+        /// <summary>Length of the offending substring at
+        /// <see cref="UserBulbLastErrorPosition"/>.</summary>
+        public int UserBulbLastErrorLength => _userBulbCalculator.LastErrorLength;
+
         /// <summary>Distance-estimator sampler for UserBulb mesh export.</summary>
         public double SampleUserBulbDE(double x, double y, double z) => _userBulbCalculator.SampleDE(x, y, z);
 

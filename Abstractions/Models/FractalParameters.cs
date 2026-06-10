@@ -157,6 +157,9 @@ namespace FracturingFog.Models
         public UserBulbBackendKind UserBulbBackend { get; set; } = UserBulbBackendKind.CPU;
         /// <summary>Algebra mode: Vec3 (3D triplex) or Quat (4D Hamilton). Affects step signature.</summary>
         public UserBulbAxisModeKind UserBulbAxisMode { get; set; } = UserBulbAxisModeKind.Vec3;
+        /// <summary>Step-function compiler. Roslyn = full C# body (default).
+        /// Sandbox = restricted DSL (no BCL, shareable, Vec3-only).</summary>
+        public UserBulbCompilerKind UserBulbCompiler { get; set; } = UserBulbCompilerKind.Roslyn;
         /// <summary>W component of 4D slice plane (Quat mode only). c.W = this value.</summary>
         public double UserBulbQuatSliceW { get; set; } = 0.0;
         /// <summary>Named scalar params exposed in compiled step source. Live-tweakable.</summary>
@@ -267,6 +270,7 @@ namespace FracturingFog.Models
                 UserBulbTemporalReuse = UserBulbTemporalReuse,
                 UserBulbBackend = UserBulbBackend,
                 UserBulbAxisMode = UserBulbAxisMode,
+                UserBulbCompiler = UserBulbCompiler,
                 UserBulbQuatSliceW = UserBulbQuatSliceW,
                 UserBulbParams = UserBulbParams.ConvertAll(p => p.Clone()),
                 UserBulbTime = UserBulbTime,
@@ -333,6 +337,16 @@ namespace FracturingFog.Models
     {
         Vec3,
         Quat,
+    }
+
+    /// <summary>Step-function compiler. Roslyn = full C# expression body with
+    /// BCL access (legacy default, GPU-translatable). Sandbox = restricted
+    /// DSL parsed by SandboxBulbExpression — no BCL, safe to share, but
+    /// CPU-only and slightly slower per Step call.</summary>
+    public enum UserBulbCompilerKind
+    {
+        Roslyn,
+        Sandbox,
     }
 
     /// <summary>Output blend for the Buddhabrot family.</summary>

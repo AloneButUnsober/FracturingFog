@@ -16,6 +16,7 @@
 // back gracefully.
 
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 using FracturingFog.Models;
@@ -34,6 +35,114 @@ public sealed record AnalyticDEPattern(AnalyticDEKind Kind, double Power);
 
 public static class UserBulbAnalyticDE
 {
+    /// <summary>Detect closed-form DE pattern from a parsed Sandbox AST.
+    /// Recognises `triplex(z, K) + c` (any side) → MandelbulbN(K), and the
+    /// hand-written canonical Square form
+    ///   `vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c`
+    /// → Square(power=2). Returns None otherwise.</summary>
+    public static AnalyticDEPattern DetectSandbox(Sbx3Node? root)
+    {
+        if (root is not Sbx3Binary { Op: "+" } add) return new(AnalyticDEKind.None, 0);
+        if (TryMatchTriplexPlusC(add.A, add.B, out double p1)) return new(AnalyticDEKind.MandelbulbN, p1);
+        if (TryMatchTriplexPlusC(add.B, add.A, out double p2)) return new(AnalyticDEKind.MandelbulbN, p2);
+        if (TryMatchPowOpPlusC(add.A, add.B, out double p3)) return new(AnalyticDEKind.MandelbulbN, p3);
+        if (TryMatchPowOpPlusC(add.B, add.A, out double p4)) return new(AnalyticDEKind.MandelbulbN, p4);
+        if (TryMatchExplicitSquarePlusC(add.A, add.B)) return new(AnalyticDEKind.Square, 2);
+        if (TryMatchExplicitSquarePlusC(add.B, add.A)) return new(AnalyticDEKind.Square, 2);
+        return new(AnalyticDEKind.None, 0);
+    }
+
+    /// <summary>Match the operator form `z ^ K + c`. `^` on a Vec slot is
+    /// triplex by Sandbox semantics, so this aliases MandelbulbN(K).</summary>
+    private static bool TryMatchPowOpPlusC(Sbx3Node lhs, Sbx3Node rhs, out double power)
+    {
+        power = 0;
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+        if (lhs is not Sbx3Binary { Op: "^" } pow) return false;
+        if (pow.A is not Sbx3Slot { Slot: SandboxBulbExpression.SlotZ }) return false;
+        if (pow.B is not Sbx3Const pc || pc.V.IsVec || pc.V.IsQuat) return false;
+        power = pc.V.X;
+        return true;
+    }
+
+    private static bool TryMatchTriplexPlusC(Sbx3Node lhs, Sbx3Node rhs, out double power)
+    {
+        power = 0;
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+        if (lhs is not Sbx3Call call) return false;
+        if (call.Name != "triplex" || call.Args.Length != 2) return false;
+        if (call.Args[0] is not Sbx3Slot { Slot: SandboxBulbExpression.SlotZ }) return false;
+        if (call.Args[1] is not Sbx3Const pc || pc.V.IsVec) return false;
+        power = pc.V.X;
+        return true;
+    }
+
+    /// <summary>Match `vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z)`
+    /// against lhs and `c` slot against rhs. Component ordering inside the
+    /// vec() call is fixed (X-component first) but each component's product
+    /// chain is associativity-agnostic — `2*z.x*z.y` and `z.x*2*z.y` both
+    /// match.</summary>
+    private static bool TryMatchExplicitSquarePlusC(Sbx3Node lhs, Sbx3Node rhs)
+    {
+        if (rhs is not Sbx3Slot { Slot: SandboxBulbExpression.SlotC }) return false;
+        if (lhs is not Sbx3Call call) return false;
+        if (call.Name != "vec" || call.Args.Length != 3) return false;
+        if (!IsXSquareMinusYSquareMinusZSquare(call.Args[0])) return false;
+        if (!IsCoeffTimesTwoZAxes(call.Args[1], 2.0, 'x', 'y')) return false;
+        if (!IsCoeffTimesTwoZAxes(call.Args[2], 2.0, 'x', 'z')) return false;
+        return true;
+    }
+
+    /// <summary>Parser is left-assoc on `-`, so `z.x*z.x - z.y*z.y - z.z*z.z`
+    /// becomes ((z.x²) - (z.y²)) - (z.z²). Match exactly that shape.</summary>
+    private static bool IsXSquareMinusYSquareMinusZSquare(Sbx3Node n)
+    {
+        if (n is not Sbx3Binary { Op: "-" } outer) return false;
+        if (!IsZAxisSquared(outer.B, 'z')) return false;
+        if (outer.A is not Sbx3Binary { Op: "-" } inner) return false;
+        if (!IsZAxisSquared(inner.A, 'x')) return false;
+        if (!IsZAxisSquared(inner.B, 'y')) return false;
+        return true;
+    }
+
+    private static bool IsZAxisSquared(Sbx3Node n, char axis)
+    {
+        if (n is not Sbx3Binary { Op: "*" } mul) return false;
+        return IsZAxisMember(mul.A, axis) && IsZAxisMember(mul.B, axis);
+    }
+
+    private static bool IsZAxisMember(Sbx3Node n, char axis)
+        => n is Sbx3Member m
+           && m.Axis == axis
+           && m.Target is Sbx3Slot { Slot: SandboxBulbExpression.SlotZ };
+
+    /// <summary>Three-factor product `<coeff> * z.<axA> * z.<axB>` in any
+    /// associative ordering. Flattens the `*`-tree then checks the multiset.</summary>
+    private static bool IsCoeffTimesTwoZAxes(Sbx3Node n, double coeff, char axA, char axB)
+    {
+        var leaves = new List<Sbx3Node>();
+        FlattenMul(n, leaves);
+        if (leaves.Count != 3) return false;
+        bool foundK = false, foundA = false, foundB = false;
+        foreach (var leaf in leaves)
+        {
+            if (!foundK && leaf is Sbx3Const c && !c.V.IsVec && Math.Abs(c.V.X - coeff) < 1e-9)
+                foundK = true;
+            else if (!foundA && IsZAxisMember(leaf, axA))
+                foundA = true;
+            else if (!foundB && IsZAxisMember(leaf, axB))
+                foundB = true;
+            else return false;
+        }
+        return foundK && foundA && foundB;
+    }
+
+    private static void FlattenMul(Sbx3Node n, List<Sbx3Node> sink)
+    {
+        if (n is Sbx3Binary { Op: "*" } mul) { FlattenMul(mul.A, sink); FlattenMul(mul.B, sink); }
+        else sink.Add(n);
+    }
+
     public static AnalyticDEPattern Detect(string? source)
     {
         if (string.IsNullOrWhiteSpace(source)) return new(AnalyticDEKind.None, 0);

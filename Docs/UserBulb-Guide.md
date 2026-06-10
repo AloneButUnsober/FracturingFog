@@ -1,8 +1,8 @@
 # User Bulb 3D — Guide
 
-Fracturing Fog's User Bulb engine is the 3D analogue of User Equation. Author a Roslyn-compiled per-iteration step function in C#; the engine handles raymarching, distance estimation, lighting, AO, fog, and surface normals.
+Fracturing Fog's User Bulb engine is the 3D analogue of User Equation. Author a per-iteration step function in either full C# (Roslyn) or a restricted DSL (Sandbox); the engine handles raymarching, distance estimation, lighting, AO, fog, and surface normals.
 
-This guide covers the dialog, the Vec3 / Quat APIs, distance-estimation tradeoffs, the chain editor, mesh export, and 14 ready-to-paste example bodies.
+This guide covers the dialog, the Vec3 / Quat APIs, distance-estimation tradeoffs, the chain editor, mesh export, the Sandbox DSL grammar, and 14 ready-to-paste example bodies.
 
 ---
 
@@ -26,6 +26,7 @@ This guide covers the dialog, the Vec3 / Quat APIs, distance-estimation tradeoff
 16. [Mesh Export (OBJ)](#16-mesh-export-obj)
 17. [Example Gallery](#17-example-gallery)
 18. [Pitfalls + Troubleshooting](#18-pitfalls--troubleshooting)
+19. [Sandbox DSL Compiler](#19-sandbox-dsl-compiler)
 
 ---
 
@@ -511,6 +512,151 @@ Drag sliders to morph live (no recompile).
 **Banding / tile boundaries.** DE mode may be wrong — force Numerical. Toggle re-compile (edit source and revert) to flush the temporal cache.
 
 **Unbearably slow render.** Drop Iterations to 4, Max steps to 48 for exploration. Switch Backend → GPU for plain `Vec3.Pow` bodies. Set SS back to 1. Resize window smaller.
+
+---
+
+## 19. Sandbox DSL Compiler
+
+The **Compiler** combobox (Render group) toggles between two source compilers:
+
+| Mode | Source language | Algebra | Backend | Speed | Safety |
+|---|---|---|---|---|---|
+| Roslyn (default) | full C# | Vec3 + Quat | CPU + GPU | fastest | trusts source |
+| Sandbox | small DSL | Vec3 only | CPU | ~10–15× slower than Roslyn | parse-only, no BCL |
+
+Pick **Roslyn** for performance, GPU rendering, or when you want the BCL (`Math.Atan2`, `Math.Truncate`, etc.). Pick **Sandbox** when the source comes from untrusted input, when you want the editor to detect closed-form DE patterns on the AST, or when you want a tighter grammar that fails fast on typos.
+
+### 19.1 Source signature (Sandbox)
+
+The Sandbox compiler does NOT wrap your source in a `Step` method. Write an **expression** that evaluates to `Vec3`:
+
+```dsl
+// Mandelbulb N=8
+triplex(z, 8) + c
+```
+
+```dsl
+// Square triplex (explicit)
+vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c
+```
+
+```dsl
+// Let-binding for clarity
+let p = triplex(z, 8) in
+let q = z * 2 in
+p + q + c
+```
+
+There is no `return` keyword and no semicolon. The whole source is one expression. Use `let NAME = EXPR in EXPR` for intermediate variables.
+
+### 19.2 Identifiers
+
+| Name | Type | Description |
+|---|---|---|
+| `z` | Vec3 | Previous iterate. `Vec3.Zero` on iter 0. |
+| `c` | Vec3 | Per-pixel constant. Replaced with Julia c in Julia mode. |
+| `n` | Real | 0-based iteration index. |
+| `t` | Real | Global animation time (always available). |
+| `<param-name>` | Real | Each Params row adds an identifier. |
+| `pi`, `e` | Real | Constants. |
+
+Member access on a Vec3: `.x`, `.y`, `.z`. Member access on a scalar broadcasts (e.g. `n.x == n`).
+
+### 19.3 Grammar
+
+```
+expr     := let_expr
+let_expr := 'let' IDENT '=' expr 'in' expr | ternary
+ternary  := or ('?' expr ':' expr)?
+or       := and ('||' and)*
+and      := not ('&&' not)*
+not      := '!' not | cmp
+cmp      := add (('<'|'>'|'<='|'>='|'=='|'!=') add)?
+add      := mul (('+'|'-') mul)*
+mul      := pow (('*'|'/') pow)*
+pow      := unary ('^' pow)?           ; right-assoc
+unary    := '-' unary | primary
+primary  := NUMBER | IDENT (member|call)* | '(' expr ')' member*
+member   := '.' ('x'|'y'|'z')
+call     := '(' (expr (',' expr)*)? ')'
+```
+
+### 19.4 Operators
+
+| Op | Vec / Vec | Vec / Real | Real / Real |
+|---|---|---|---|
+| `+`, `-` | componentwise | broadcast | scalar |
+| `*` | Hadamard (componentwise) | broadcast | scalar |
+| `/` | componentwise | broadcast | scalar |
+| `^` | **triplex** Mandelbulb power | scalar Math.Pow | scalar Math.Pow |
+| unary `-` | componentwise | – | scalar |
+| `&&`, `\|\|`, `!`, comparisons | reduce to real (1.0 / 0.0) | – | scalar |
+
+Note `^` is **triplex** power when the LHS is a Vec — `z ^ 8` is shorthand for `triplex(z, 8)`.
+
+### 19.5 Functions
+
+Single-arg (scalar or componentwise on Vec):
+`sin`, `cos`, `tan`, `sinh`, `cosh`, `tanh`, `exp`, `log`, `sqrt`, `abs`
+
+Vec3 specific:
+- `vec(x, y, z)` — construct Vec3 from three reals.
+- `length(v)` — Vec → real.
+- `dot(a, b)`, `cross(a, b)`, `normalize(v)`
+- `triplex(v, n)` — Mandelbulb spherical power.
+- `rot(v, axis, angle)` — Rodrigues rotation.
+- `boxfold(v, limit)` — Mandelbox box-fold.
+- `spherefold(v, rmin, rmax)` — Mandelbox sphere-fold.
+- `absx(v)`, `absy(v)`, `absz(v)` — fold a single axis.
+- `mod(v, period)` — periodic space.
+
+Scalar-only:
+- `pow(a, b)`, `floor(s)`, `sign(s)`, `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)`, `smin(a, b, k)`.
+
+### 19.6 Chains in Sandbox
+
+The Chain editor works identically to Roslyn mode. Each step is its own Sandbox expression. Prior step output names become Vec3 identifiers in later steps.
+
+```dsl
+step0 (output: folded)
+    vec(abs(z.x), abs(z.y), abs(z.z))
+
+step1 (output: out)
+    triplex(folded, 8) + c
+```
+
+The above is a "Burning Bulb" variant — abs-fold each axis before the triplex power.
+
+### 19.7 Analytic DE detection
+
+When the Sandbox compiles, the AST is walked to look for closed-form patterns the engine can render with a single trajectory instead of a four-trajectory numerical Jacobian. The detected pattern is shown in the **DE detect** badge (green when engaged, grey when numerical).
+
+Currently recognised patterns:
+
+| Pattern | Source shape | DE algorithm | Speedup |
+|---|---|---|---|
+| MandelbulbN | `triplex(z, K) + c` | Hubbard-Douady power-N | ~3-4× |
+| Square | `vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c` | Hubbard-Douady N=2 | ~3-4× |
+
+Chains never engage analytic DE — they always run numerical.
+
+### 19.8 Limitations
+
+- **No Quat (4D) mode** — Sandbox is Vec3-only. The algebra combobox disables Quat when Sandbox is selected; switching to Sandbox while Quat is active forces back to Vec3.
+- **No GPU backend** — Sandbox always runs on CPU. Backend combobox selection is honoured only for Roslyn sources.
+- **No BCL** — `Math.Atan2`, `Math.Round`, `Quaternion.*`, etc. are not in scope. Use the built-in functions table above.
+- **Performance hit** — interpreter dispatch is roughly 10–15× slower than Roslyn-compiled per-iter. Mitigated when an analytic-DE pattern is detected.
+
+### 19.9 When to use Sandbox vs Roslyn
+
+| Decide for | Choose |
+|---|---|
+| Maximum framerate at any cost | **Roslyn** |
+| GPU acceleration | **Roslyn** (Sandbox CPU-only) |
+| Untrusted source / shared presets | **Sandbox** |
+| Want compile-time error spans | **Sandbox** (parser positions are surfaced) |
+| Pre-recognised Mandelbulb N=K | either (Roslyn faster on iter, Sandbox detects pattern too) |
+| 4D / quaternion fractals | **Roslyn** until Sandbox-Quat support lands |
 
 ---
 
