@@ -75,6 +75,7 @@ internal static class Program
             string title = ExtractTitle(md, page.RelativePath);
             string body = Markdown.ToHtml(md, pipeline);
             body = RewriteMdLinksToHtml(body, page.RelativePath, pages);
+            body = RewriteTocAnchors(body);
             string html = WrapShell(title, body, sidebar, page.RelativePath, pages);
 
             string outPath = Path.Combine(outDir,
@@ -185,7 +186,9 @@ internal static class Program
         onload='renderMathInElement(document.body, {{
             delimiters: [
               {{left: ""$$"", right: ""$$"", display: true}},
-              {{left: ""$"",  right: ""$"",  display: false}}
+              {{left: ""\\["", right: ""\\]"", display: true}},
+              {{left: ""$"",  right: ""$"",  display: false}},
+              {{left: ""\\("", right: ""\\)"", display: false}}
             ],
             throwOnError: false
         }});'></script>
@@ -287,6 +290,55 @@ internal static class Program
             // Nothing matched — fall back to the literal swap and let the
             // 404 surface as a visible authoring error.
             return $"href=\"{href}.html{anchor}\"";
+        });
+    }
+
+    // Hand-authored TOCs use `[label](#N-some-thing)` where N is a step
+    // number. Markdig's GFM auto-identifier strips leading non-letter
+    // characters AND collapses punctuation runs, so `### 8. Camera + Lighting`
+    // becomes `id="camera-lighting"`, not `#8-camera--lighting`. Result: every
+    // numbered TOC link 404s.
+    //
+    // Fix: collect every heading id on the page, then for each `<a href="#X">`
+    // that doesn't resolve, try (a) stripping leading-digit-dash prefix and
+    // (b) collapsing `--` to `-`. If the transformed target exists, rewrite.
+    // Falls back to the literal anchor when no candidate matches so authoring
+    // errors stay visible.
+    private static readonly Regex HeadingIdRegex = new(
+        @"<h\d+\s+id=""(?<id>[^""]+)""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex AnchorHrefRegex = new(
+        @"href=""#(?<anchor>[^""]+)""",
+        RegexOptions.Compiled);
+
+    private static string RewriteTocAnchors(string html)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in HeadingIdRegex.Matches(html))
+            ids.Add(m.Groups["id"].Value);
+
+        return AnchorHrefRegex.Replace(html, m =>
+        {
+            string anchor = m.Groups["anchor"].Value;
+            if (ids.Contains(anchor)) return m.Value;
+
+            string candidate = anchor;
+            // Markdig's GFM auto-id strips ALL leading non-letter characters
+            // (digits, dashes, dots), then slugifies. `### 7. 3D Lighting` →
+            // `d-lighting-...` because both `7` and `3` get peeled before the
+            // first letter. Mirror by stripping every leading `[\d-]` run.
+            int i = 0;
+            while (i < candidate.Length && (char.IsDigit(candidate[i]) || candidate[i] == '-')) i++;
+            candidate = candidate[i..];
+            // Collapse consecutive dashes (TOC author writes `+ ` as `--`).
+            while (candidate.Contains("--")) candidate = candidate.Replace("--", "-");
+            candidate = candidate.Trim('-');
+
+            if (candidate.Length > 0 && ids.Contains(candidate))
+                return $"href=\"#{candidate}\"";
+
+            return m.Value;
         });
     }
 
