@@ -58,6 +58,9 @@
         <Style Selector="Border.resultRow.selected">
             <Setter Property="Background" Value="#283C28" />
         </Style>
+        <Style Selector="GridSplitter.splitter">
+            <Setter Property="Background" Value="#C8C864"/>
+        </Style>
     </Window.Styles>
 
     <Window.KeyBindings>
@@ -110,7 +113,7 @@
             </MenuItem>
         </Menu>
 
-        <Grid Grid.Row="1" Margin="12,12,12,4" RowDefinitions="Auto,*,5,*,Auto">
+        <Grid Grid.Row="1" Margin="12,12,12,4" RowDefinitions="Auto,Auto,5,*,Auto,Auto">
 
             <TextBlock Grid.Row="0"
                        Classes="section"
@@ -118,21 +121,21 @@
                        Text="Palette Builder"
                        Margin="0,0,0,10" />
 
-            <Grid Grid.Row="1" ColumnDefinitions="474,5,*" RowDefinitions="*" Margin="0,0,0,10">
-                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="4">
+            <Grid Grid.Row="1" ColumnDefinitions="474,5,*" RowDefinitions="*" Margin="0,0,0,4">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="2" Margin="0,0,6,0">
                     <Border Grid.Column="0"
                             Grid.Row="0"
                             Background="#1E1E1E"
                             BorderBrush="#505050"
                             BorderThickness="1"
-                            Height="35">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                            Height="70">
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto">
                             <CheckBox Content="Grid"
                                       Grid.Column="0"
                                       IsChecked="{Binding ShowGrid}"
                                       Foreground="#DCDCDC"
                                       VerticalAlignment="Center"
-                                      Margin="4"/>
+                                      Margin="4,0,0,0"/>
                             <CheckBox Content="Snap"
                                       Grid.Column="1"
                                       IsChecked="{Binding SnapToGrid}"
@@ -142,30 +145,67 @@
                                       Margin="8,0,0,0"/>
                             <TextBlock Text="Rows:" Foreground="#B4B4B4"
                                        VerticalAlignment="Center"
-                                       Grid.Column="2"
+                                       Grid.Column="3"
                                        Margin="4,0,4,0"/>
                             <NumericUpDown Minimum="1" Maximum="16" Increment="1"
                                            Value="{Binding GridRows}"
                                            FormatString="0"
                                            Width="105"
-                                           Height="10" 
-                                           Grid.Column="3"
+                                           Height="10"
+                                           Grid.Column="4"
                                            IsEnabled="{Binding ShowGrid}"/>
                             <TextBlock Text="Cols:" Foreground="#B4B4B4"
                                        VerticalAlignment="Center"
-                                       Grid.Column="4"
+                                       Grid.Column="5"
                                        Margin="4,0,4,0" />
                             <NumericUpDown Minimum="1" Maximum="16" Increment="1"
                                            Value="{Binding GridCols}"
                                            FormatString="0"
                                            Width="105"
                                            Height="10"
-                                           Grid.Column="5"
+                                           Grid.Column="6"
                                            IsEnabled="{Binding ShowGrid}"/>
+                            
+                            <Button Grid.Column="6" Grid.Row="1" Content="Clear" Margin="0,4,0,0"
+                                        Click="OnMenuClearRoi" Padding="8,2" />
                         </Grid>
                     </Border>
-                    <Border Grid.Column="0"
+                    <!--<Border Grid.Column="0"
                             Grid.Row="1"
+                            Background="#1E1E1E"
+                            BorderBrush="#505050"
+                            BorderThickness="1"
+                            Height="70">
+                        <Grid RowDefinitions="*,*" ColumnDefinitions="*,*">
+                            --><!--<TextBlock Grid.Row="7" Grid.ColumnSpan="2"
+                            Text="ROI (normalised 0..1, all zero = full image):"
+                            Classes="label" Margin="0,8,0,2" />--><!--
+                            <Grid Grid.Row="0" Grid.ColumnSpan="2"
+                                  ColumnDefinitions="Auto,Auto,Auto,Auto" HorizontalAlignment="Right">
+                                <TextBlock Grid.Column="0" Classes="label" Text="X:" Margin="0,0,4,0" />
+                                <NumericUpDown Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiX}" />
+                                <TextBlock Grid.Column="2" Classes="label" Text="Y:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="3" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiY}" />
+                            </Grid>
+
+                            <Grid Grid.Row="1" Grid.ColumnSpan="2"
+                                  ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" HorizontalAlignment="Right">
+                                <Button Grid.Column="0" Content="Clear" Margin="6,0,0,0"
+                                        Click="OnMenuClearRoi" Padding="8,2" />
+                                <TextBlock Grid.Column="1" Classes="label" Text="W:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="2" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiWidth}" />
+                                <TextBlock Grid.Column="3" Classes="label" Text="H:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="4" Minimum="0" Maximum="1" Increment="0.05"
+                                               FormatString="0.00" Value="{Binding RoiHeight}" />
+                            </Grid>
+                        </Grid>
+
+                    </Border>-->
+                    <Border Grid.Column="0"
+                            Grid.Row="2"
                             Background="#1E1E1E"
                             BorderBrush="#505050"
                             BorderThickness="1"
@@ -221,212 +261,45 @@
                         </Grid>
                     </Border>
                     <Border Grid.Column="0"
-                            Grid.Row="2"
+                            Grid.Row="3"
                             Background="#1E1E1E"
                             BorderBrush="#505050"
                             BorderThickness="1"
                             Height="95">
-                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="250,*" ColumnSpacing="4"
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" ColumnSpacing="4"
                               RowSpacing="2">
-                                <CheckBox Grid.Row="0" Grid.Column="0"
-                                          Content="Weight stop positions by cluster size"
-                                          IsChecked="{Binding WeightedPositions}"
-                                          Margin="0,5"/>
+                            <CheckBox Grid.Row="0" Grid.Column="0"
+                                      Content="Weight stop positions by cluster size"
+                                      IsChecked="{Binding WeightedPositions}"
+                                      Margin="0,5"/>
 
-                                <CheckBox Grid.Row="0" Grid.Column="1"
-                                          Content="Exclude near-black pixels"
-                                          IsChecked="{Binding ExcludeNearBlack}" />
+                            <CheckBox Grid.Row="0" Grid.Column="1"
+                                      Content="Exclude near-black pixels"
+                                      IsChecked="{Binding ExcludeNearBlack}" />
 
-                                <CheckBox Grid.Row="1" Grid.Column="1"
-                                          Content="Exclude near-white pixels"
-                                          IsChecked="{Binding ExcludeNearWhite}" />
+                            <CheckBox Grid.Row="1" Grid.Column="1"
+                                      Content="Exclude near-white pixels"
+                                      IsChecked="{Binding ExcludeNearWhite}" />
 
-                                <CheckBox Grid.Row="1" Grid.Column="0"
-                                          Content="Gamma-correct (linearise RGB before clustering)"
-                                          IsChecked="{Binding GammaCorrect}" />
+                            <CheckBox Grid.Row="1" Grid.Column="0"
+                                      Content="Gamma-correct (linearise RGB before clustering)"
+                                      IsChecked="{Binding GammaCorrect}" />
                         </Grid>
                     </Border>
                 </Grid>
                 <GridSplitter Grid.Column="1"
                               ResizeDirection="Columns"
-                              Background="#3C3C3C"
-                              HorizontalAlignment="Stretch" />
+                              Classes="splitter"
+                              HorizontalAlignment="Stretch"
+                              Margin="0,0,0,0"/>
                 <Grid Grid.Column="2"
-                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                      ColumnDefinitions="140,*">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Method:" Margin="0,2" />
-                    <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2"
-                              ItemsSource="{Binding MethodNames}"
-                              SelectedIndex="{Binding MethodIndex}" />
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Color count:" Margin="0,2" />
-                    <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
-                                   Minimum="4" Maximum="32" Increment="1"
-                                   Value="{Binding ColorCount}"
-                                   FormatString="0" />
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Color space:" Margin="0,2" />
-                    <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,2"
-                              SelectedIndex="{Binding SpaceIndex}">
-                        <ComboBoxItem Content="RGB" />
-                        <ComboBoxItem Content="Lab (perceptual)" />
-                        <ComboBoxItem Content="HSL" />
-                        <ComboBoxItem Content="OkLab (perceptual)" />
-                    </ComboBox>
-
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Downsample max:" Margin="0,2" />
-                    <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
-                                   Minimum="64" Maximum="1024" Increment="64"
-                                   Value="{Binding DownsampleMax}"
-                                   FormatString="0" />
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Sort:" Margin="0,2" />
-                    <ComboBox Grid.Row="4" Grid.Column="1" Margin="0,2"
-                              SelectedIndex="{Binding SortIndex}">
-                        <ComboBoxItem Content="Nearest-Neighbor Chain" />
-                        <ComboBoxItem Content="Hue" />
-                        <ComboBoxItem Content="Luminance" />
-                        <ComboBoxItem Content="Cluster Size" />
-                    </ComboBox>
-
-                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Dedup ΔE:" Margin="0,2" />
-                    <NumericUpDown Grid.Row="5" Grid.Column="1" Margin="0,2"
-                                   Minimum="0" Maximum="30" Increment="0.5"
-                                   Value="{Binding DedupDeltaE}"
-                                   FormatString="0.0" />
-
-                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Dedup metric:" Margin="0,2" />
-                    <ComboBox Grid.Row="6" Grid.Column="1" Margin="0,2"
-                              SelectedIndex="{Binding DedupMetricIndex}">
-                        <ComboBoxItem Content="ΔE76 (fast)" />
-                        <ComboBoxItem Content="ΔE2000 (accurate)" />
-                    </ComboBox>
-
-                    <!--<CheckBox Grid.Row="7" Grid.ColumnSpan="2"
-                    Content="Weight stop positions by cluster size"
-                    IsChecked="{Binding WeightedPositions}"
-                    Margin="0,4,0,0" />
-
-                    <CheckBox Grid.Row="8" Grid.ColumnSpan="2"
-                    Content="Exclude near-black pixels"
-                    IsChecked="{Binding ExcludeNearBlack}"
-                    Margin="0,2,0,0" />
-
-                    <CheckBox Grid.Row="9" Grid.ColumnSpan="2"
-                    Content="Exclude near-white pixels"
-                    IsChecked="{Binding ExcludeNearWhite}"
-                    Margin="0,2,0,0" />
-
-                    <CheckBox Grid.Row="10" Grid.ColumnSpan="2"
-                    Content="Gamma-correct (linearise RGB before clustering)"
-                    IsChecked="{Binding GammaCorrect}"
-                    Margin="0,2,0,0" />-->
-
-                    <Expander Grid.Row="11" Grid.ColumnSpan="2"
-                              Header="Preprocessing filters"
-                              Margin="0,6,0,0">
-                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                              ColumnDefinitions="140,*">
-                            <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
-                                      Content="Exclude transparent pixels"
-                                      IsChecked="{Binding ExcludeTransparent}" />
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
-                                       Text="Min saturation:" Margin="0,2" />
-                            <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
-                                           Minimum="0" Maximum="1" Increment="0.05"
-                                           Value="{Binding MinSaturation}"
-                                           FormatString="0.00" />
-                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
-                                       Text="Max saturation:" Margin="0,2" />
-                            <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
-                                           Minimum="0" Maximum="1" Increment="0.05"
-                                           Value="{Binding MaxSaturation}"
-                                           FormatString="0.00" />
-                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
-                                       Text="Min lightness:" Margin="0,2" />
-                            <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
-                                           Minimum="0" Maximum="1" Increment="0.05"
-                                           Value="{Binding MinLightness}"
-                                           FormatString="0.00" />
-                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="label"
-                                       Text="Max lightness:" Margin="0,2" />
-                            <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
-                                           Minimum="0" Maximum="1" Increment="0.05"
-                                           Value="{Binding MaxLightness}"
-                                           FormatString="0.00" />
-                            <CheckBox Grid.Row="5" Grid.ColumnSpan="2"
-                                      Content="Use saliency (focus on subject)"
-                                      IsChecked="{Binding UseSaliency}"
-                                      ToolTip.Tip="Spectral-residual saliency. Drops pixels below threshold so palette is drawn from interesting regions, not background." />
-                            <TextBlock Grid.Row="6" Grid.Column="0" Classes="label"
-                                       Text="Saliency threshold:" Margin="0,2" />
-                            <NumericUpDown Grid.Row="6" Grid.Column="1" Margin="0,2"
-                                           Minimum="0" Maximum="1" Increment="0.05"
-                                           Value="{Binding SaliencyThreshold}"
-                                           FormatString="0.00" />
-
-                            <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
-                                       Text="ROI (normalised 0..1, all zero = full image):"
-                                       Classes="label" Margin="0,8,0,2" />
-                            <Grid Grid.Row="8" Grid.ColumnSpan="2"
-                                  ColumnDefinitions="Auto,*,Auto,*,Auto,*,Auto,*,Auto">
-                                <TextBlock Grid.Column="0" Classes="label" Text="X:" Margin="0,0,4,0" />
-                                <NumericUpDown Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05"
-                                               FormatString="0.00" Value="{Binding RoiX}" />
-                                <TextBlock Grid.Column="2" Classes="label" Text="Y:" Margin="6,0,4,0" />
-                                <NumericUpDown Grid.Column="3" Minimum="0" Maximum="1" Increment="0.05"
-                                               FormatString="0.00" Value="{Binding RoiY}" />
-                                <TextBlock Grid.Column="4" Classes="label" Text="W:" Margin="6,0,4,0" />
-                                <NumericUpDown Grid.Column="5" Minimum="0" Maximum="1" Increment="0.05"
-                                               FormatString="0.00" Value="{Binding RoiWidth}" />
-                                <TextBlock Grid.Column="6" Classes="label" Text="H:" Margin="6,0,4,0" />
-                                <NumericUpDown Grid.Column="7" Minimum="0" Maximum="1" Increment="0.05"
-                                               FormatString="0.00" Value="{Binding RoiHeight}" />
-                                <Button Grid.Column="8" Content="Clear" Margin="6,0,0,0"
-                                        Click="OnMenuClearRoi" Padding="8,2" />
-                            </Grid>
-                        </Grid>
-                    </Expander>
-
-                    <Expander Grid.Row="12" Grid.ColumnSpan="2"
-                              Header="Algorithm-specific tuning"
-                              Margin="0,6,0,0">
-                        <Grid RowDefinitions="Auto,Auto,Auto,Auto"
-                              ColumnDefinitions="140,*">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label"
-                                       Text="Bandwidth (MeanShift):" Margin="0,2" />
-                            <NumericUpDown Grid.Row="0" Grid.Column="1" Margin="0,2"
-                                           Minimum="1" Maximum="100" Increment="1"
-                                           Value="{Binding Bandwidth}"
-                                           FormatString="0.0" />
-
-                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
-                                       Text="ε (DBSCAN):" Margin="0,2" />
-                            <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
-                                           Minimum="0.5" Maximum="100" Increment="0.5"
-                                           Value="{Binding DbscanEpsilon}"
-                                           FormatString="0.0" />
-
-                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
-                                       Text="MinPts (DBSCAN):" Margin="0,2" />
-                            <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
-                                           Minimum="1" Maximum="5000" Increment="1"
-                                           Value="{Binding DbscanMinPts}"
-                                           FormatString="0" />
-
-                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
-                                       Text="Spatial weight (Spatial-K-Means):" Margin="0,2" />
-                            <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
-                                           Minimum="0" Maximum="1" Increment="0.05"
-                                           Value="{Binding SpatialWeight}"
-                                           FormatString="0.00" />
-                        </Grid>
-                    </Expander>
-
-                    <StackPanel Grid.Row="13" Grid.ColumnSpan="2"
+                      RowDefinitions="Auto,Auto,Auto"
+                      ColumnDefinitions="*,Auto"
+                      Margin="6,0,0,0">
+                    <StackPanel Grid.Row="0" Grid.ColumnSpan="2"
                                 Orientation="Horizontal"
                                 Spacing="10"
-                                Margin="0,12,0,0">
+                                Margin="0,0,0,12">
                         <Button Classes="primary"
                                 Content="Extract"
                                 Command="{Binding ExtractCommand}" />
@@ -438,18 +311,389 @@
                                   IsChecked="{Binding AutoExtract, Mode=TwoWay}"
                                   VerticalAlignment="Center" />
                     </StackPanel>
+
+                    <TabControl Grid.Row="1" TabStripPlacement="Top"
+                                >
+                        <TabItem Header="Settings" FontSize="14">
+                            <Grid Grid.Column="2"
+                                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                                  ColumnDefinitions="140,*">
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                                           Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,2"
+                                          ItemsSource="{Binding MethodNames}"
+                                          SelectedIndex="{Binding MethodIndex}"
+                                          HorizontalAlignment="Left"
+                                          Width="130"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                                           Text="Color count:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                                <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
+                                               Minimum="4" Maximum="32" Increment="1"
+                                               Value="{Binding ColorCount}"
+                                               FormatString="0"
+                                               HorizontalAlignment="Left"
+                                               Width="130"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
+                                           Text="Color space:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                                <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,2"
+                                          SelectedIndex="{Binding SpaceIndex}"
+                                          HorizontalAlignment="Left"
+                                          Width="175">
+                                    <ComboBoxItem Content="RGB" />
+                                    <ComboBoxItem Content="Lab (perceptual)" />
+                                    <ComboBoxItem Content="HSL" />
+                                    <ComboBoxItem Content="OkLab (perceptual)" />
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Classes="label"
+                                           Text="Downsample max:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                                <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
+                                               Minimum="64" Maximum="1024" Increment="64"
+                                               Value="{Binding DownsampleMax}"
+                                               FormatString="0"
+                                               HorizontalAlignment="Left"
+                                               Width="175" />
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Classes="label"
+                                           Text="Sort:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                                <ComboBox Grid.Row="5" Grid.Column="1" Margin="0,2"
+                                          SelectedIndex="{Binding SortIndex}"
+                                          HorizontalAlignment="Left"
+                                          Width="225">
+                                    <ComboBoxItem Content="Nearest-Neighbor Chain" />
+                                    <ComboBoxItem Content="Hue" />
+                                    <ComboBoxItem Content="Luminance" />
+                                    <ComboBoxItem Content="Cluster Size" />
+                                </ComboBox>
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Classes="label"
+                                           Text="Dedup ΔE:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                                <NumericUpDown Grid.Row="6" Grid.Column="1" Margin="0,2"
+                                               Minimum="0" Maximum="30" Increment="0.5"
+                                               Value="{Binding DedupDeltaE}"
+                                               FormatString="0.0"
+                                               HorizontalAlignment="Left"
+                                               Width="135" />
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Classes="label"
+                                           Text="Dedup metric:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                                <ComboBox Grid.Row="7" Grid.Column="1" Margin="0,2"
+                                          SelectedIndex="{Binding DedupMetricIndex}"
+                                          HorizontalAlignment="Left"
+                                          Width="135">
+                                    <ComboBoxItem Content="ΔE76 (fast)" />
+                                    <ComboBoxItem Content="ΔE2000 (accurate)" />
+                                </ComboBox>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Preprocessing" FontSize="14">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                                  ColumnDefinitions="140,*">
+                                <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
+                                          Content="Exclude transparent pixels"
+                                          IsChecked="{Binding ExcludeTransparent}" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                                           Text="Min saturation:" Margin="0,2" />
+                                <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
+                                               Minimum="0" Maximum="1" Increment="0.05"
+                                               Value="{Binding MinSaturation}"
+                                               FormatString="0.00" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                                           Text="Max saturation:" Margin="0,2" />
+                                <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
+                                               Minimum="0" Maximum="1" Increment="0.05"
+                                               Value="{Binding MaxSaturation}"
+                                               FormatString="0.00" />
+                                <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
+                                           Text="Min lightness:" Margin="0,2" />
+                                <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
+                                               Minimum="0" Maximum="1" Increment="0.05"
+                                               Value="{Binding MinLightness}"
+                                               FormatString="0.00" />
+                                <TextBlock Grid.Row="4" Grid.Column="0" Classes="label"
+                                           Text="Max lightness:" Margin="0,2" />
+                                <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
+                                               Minimum="0" Maximum="1" Increment="0.05"
+                                               Value="{Binding MaxLightness}"
+                                               FormatString="0.00" />
+                                <CheckBox Grid.Row="5" Grid.ColumnSpan="2"
+                                          Content="Use saliency (focus on subject)"
+                                          IsChecked="{Binding UseSaliency}"
+                                          ToolTip.Tip="Spectral-residual saliency. Drops pixels below threshold so palette is drawn from interesting regions, not background." />
+                                <TextBlock Grid.Row="6" Grid.Column="0" Classes="label"
+                                           Text="Saliency threshold:" Margin="0,2" />
+                                <NumericUpDown Grid.Row="6" Grid.Column="1" Margin="0,2"
+                                               Minimum="0" Maximum="1" Increment="0.05"
+                                               Value="{Binding SaliencyThreshold}"
+                                               FormatString="0.00" />
+
+                                <!--<TextBlock Grid.Row="7" Grid.ColumnSpan="2"
+                                Text="ROI (normalised 0..1, all zero = full image):"
+                                Classes="label" Margin="0,8,0,2" />
+                                <Grid Grid.Row="8" Grid.ColumnSpan="2"
+                                ColumnDefinitions="Auto,*,Auto,*,Auto,*,Auto,*,Auto">
+                                <TextBlock Grid.Column="0" Classes="label" Text="X:" Margin="0,0,4,0" />
+                                <NumericUpDown Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05"
+                                FormatString="0.00" Value="{Binding RoiX}" />
+                                <TextBlock Grid.Column="2" Classes="label" Text="Y:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="3" Minimum="0" Maximum="1" Increment="0.05"
+                                FormatString="0.00" Value="{Binding RoiY}" />
+                                <TextBlock Grid.Column="4" Classes="label" Text="W:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="5" Minimum="0" Maximum="1" Increment="0.05"
+                                FormatString="0.00" Value="{Binding RoiWidth}" />
+                                <TextBlock Grid.Column="6" Classes="label" Text="H:" Margin="6,0,4,0" />
+                                <NumericUpDown Grid.Column="7" Minimum="0" Maximum="1" Increment="0.05"
+                                FormatString="0.00" Value="{Binding RoiHeight}" />
+                                <Button Grid.Column="8" Content="Clear" Margin="6,0,0,0"
+                                Click="OnMenuClearRoi" Padding="8,2" />
+                                </Grid>-->
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Algorithmic Tuning" FontSize="14">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                                  ColumnDefinitions="*,*">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="label"
+                                           Text="Bandwidth (MeanShift):" Margin="0,2,4,0"
+                                           HorizontalAlignment="Right"/>
+                                <NumericUpDown Grid.Row="0" Grid.Column="1" Margin="4,0"
+                                               Minimum="1" Maximum="100" Increment="1"
+                                               Value="{Binding Bandwidth}"
+                                               FormatString="0.0"
+                                               HorizontalAlignment="Left" MinWidth="135"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                                           Text="ε (DBSCAN):" Margin="0,2,4,0"
+                                           HorizontalAlignment="Right" />
+                                <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="4,2"
+                                               Minimum="0.5" Maximum="100" Increment="0.5"
+                                               Value="{Binding DbscanEpsilon}"
+                                               FormatString="0.0"
+                                               HorizontalAlignment="Left" MinWidth="135" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                                           Text="MinPts (DBSCAN):" Margin="0,2,4,0"
+                                           HorizontalAlignment="Right"  />
+                                <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="4,2"
+                                               Minimum="1" Maximum="5000" Increment="1"
+                                               Value="{Binding DbscanMinPts}"
+                                               FormatString="0"
+                                               HorizontalAlignment="Left" MinWidth="135" />
+                                <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Vertical">
+                                    <TextBlock Classes="label"
+                                               Text="Spatial weight" Margin="0,2,4,0"
+                                               HorizontalAlignment="Right"  />
+                                    <TextBlock Classes="label"
+                                               Text="(Spatial-K-Means):"
+                                               HorizontalAlignment="Right"  Margin="0,2,4,0" />
+                                </StackPanel>
+                                <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="4,2"
+                                               Minimum="0" Maximum="1" Increment="0.05"
+                                               Value="{Binding SpatialWeight}"
+                                               FormatString="0.00"
+                                               HorizontalAlignment="Left" MinWidth="135" />
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                    <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                    Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,2"
+                    ItemsSource="{Binding MethodNames}"
+                    SelectedIndex="{Binding MethodIndex}"
+                    HorizontalAlignment="Left"
+                    Width="130"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                    Text="Color count:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
+                    Minimum="4" Maximum="32" Increment="1"
+                    Value="{Binding ColorCount}"
+                    FormatString="0"
+                    HorizontalAlignment="Left"
+                    Width="130"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
+                    Text="Color space:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                    <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,2"
+                    SelectedIndex="{Binding SpaceIndex}"
+                    HorizontalAlignment="Left"
+                    Width="175">
+                    <ComboBoxItem Content="RGB" />
+                    <ComboBoxItem Content="Lab (perceptual)" />
+                    <ComboBoxItem Content="HSL" />
+                    <ComboBoxItem Content="OkLab (perceptual)" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label"
+                    Text="Downsample max:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                    <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
+                    Minimum="64" Maximum="1024" Increment="64"
+                    Value="{Binding DownsampleMax}"
+                    FormatString="0"
+                    HorizontalAlignment="Left"
+                    Width="175" />
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label"
+                    Text="Sort:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                    <ComboBox Grid.Row="5" Grid.Column="1" Margin="0,2"
+                    SelectedIndex="{Binding SortIndex}"
+                    HorizontalAlignment="Left"
+                    Width="225">
+                    <ComboBoxItem Content="Nearest-Neighbor Chain" />
+                    <ComboBoxItem Content="Hue" />
+                    <ComboBoxItem Content="Luminance" />
+                    <ComboBoxItem Content="Cluster Size" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="label"
+                    Text="Dedup ΔE:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                    <NumericUpDown Grid.Row="6" Grid.Column="1" Margin="0,2"
+                    Minimum="0" Maximum="30" Increment="0.5"
+                    Value="{Binding DedupDeltaE}"
+                    FormatString="0.0"
+                    HorizontalAlignment="Left"
+                    Width="135" />
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="label"
+                    Text="Dedup metric:" Margin="0,2,4,0" HorizontalAlignment="Right" />
+                    <ComboBox Grid.Row="7" Grid.Column="1" Margin="0,2"
+                    SelectedIndex="{Binding DedupMetricIndex}"
+                    HorizontalAlignment="Left"
+                    Width="135">
+                    <ComboBoxItem Content="ΔE76 (fast)" />
+                    <ComboBoxItem Content="ΔE2000 (accurate)" />
+                    </ComboBox>-->
+
+                    <!--<Expander Grid.Row="11" Grid.ColumnSpan="2"
+                    Header="Preprocessing filters"
+                    Margin="0,6,0,0">
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                    ColumnDefinitions="140,*">
+                    <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
+                    Content="Exclude transparent pixels"
+                    IsChecked="{Binding ExcludeTransparent}" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                    Text="Min saturation:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
+                    Minimum="0" Maximum="1" Increment="0.05"
+                    Value="{Binding MinSaturation}"
+                    FormatString="0.00" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                    Text="Max saturation:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
+                    Minimum="0" Maximum="1" Increment="0.05"
+                    Value="{Binding MaxSaturation}"
+                    FormatString="0.00" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
+                    Text="Min lightness:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
+                    Minimum="0" Maximum="1" Increment="0.05"
+                    Value="{Binding MinLightness}"
+                    FormatString="0.00" />
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label"
+                    Text="Max lightness:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
+                    Minimum="0" Maximum="1" Increment="0.05"
+                    Value="{Binding MaxLightness}"
+                    FormatString="0.00" />
+                    <CheckBox Grid.Row="5" Grid.ColumnSpan="2"
+                    Content="Use saliency (focus on subject)"
+                    IsChecked="{Binding UseSaliency}"
+                    ToolTip.Tip="Spectral-residual saliency. Drops pixels below threshold so palette is drawn from interesting regions, not background." />
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="label"
+                    Text="Saliency threshold:" Margin="0,2" />
+                    <NumericUpDown Grid.Row="6" Grid.Column="1" Margin="0,2"
+                    Minimum="0" Maximum="1" Increment="0.05"
+                    Value="{Binding SaliencyThreshold}"
+                    FormatString="0.00" />
+
+                    <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
+                    Text="ROI (normalised 0..1, all zero = full image):"
+                    Classes="label" Margin="0,8,0,2" />
+                    <Grid Grid.Row="8" Grid.ColumnSpan="2"
+                    ColumnDefinitions="Auto,*,Auto,*,Auto,*,Auto,*,Auto">
+                    <TextBlock Grid.Column="0" Classes="label" Text="X:" Margin="0,0,4,0" />
+                    <NumericUpDown Grid.Column="1" Minimum="0" Maximum="1" Increment="0.05"
+                    FormatString="0.00" Value="{Binding RoiX}" />
+                    <TextBlock Grid.Column="2" Classes="label" Text="Y:" Margin="6,0,4,0" />
+                    <NumericUpDown Grid.Column="3" Minimum="0" Maximum="1" Increment="0.05"
+                    FormatString="0.00" Value="{Binding RoiY}" />
+                    <TextBlock Grid.Column="4" Classes="label" Text="W:" Margin="6,0,4,0" />
+                    <NumericUpDown Grid.Column="5" Minimum="0" Maximum="1" Increment="0.05"
+                    FormatString="0.00" Value="{Binding RoiWidth}" />
+                    <TextBlock Grid.Column="6" Classes="label" Text="H:" Margin="6,0,4,0" />
+                    <NumericUpDown Grid.Column="7" Minimum="0" Maximum="1" Increment="0.05"
+                    FormatString="0.00" Value="{Binding RoiHeight}" />
+                    <Button Grid.Column="8" Content="Clear" Margin="6,0,0,0"
+                    Click="OnMenuClearRoi" Padding="8,2" />
+                    </Grid>
+                    </Grid>
+                    </Expander>-->
+
+                    <!--<Expander Grid.Row="12" Grid.ColumnSpan="2"
+                    Header="Algorithm-specific tuning"
+                    Margin="0,6,0,0">
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+                    ColumnDefinitions="140,*">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label"
+                    Text="Bandwidth (MeanShift):" Margin="0,2" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Margin="0,2"
+                    Minimum="1" Maximum="100" Increment="1"
+                    Value="{Binding Bandwidth}"
+                    FormatString="0.0" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
+                    Text="ε (DBSCAN):" Margin="0,2" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1" Margin="0,2"
+                    Minimum="0.5" Maximum="100" Increment="0.5"
+                    Value="{Binding DbscanEpsilon}"
+                    FormatString="0.0" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label"
+                    Text="MinPts (DBSCAN):" Margin="0,2" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1" Margin="0,2"
+                    Minimum="1" Maximum="5000" Increment="1"
+                    Value="{Binding DbscanMinPts}"
+                    FormatString="0" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label"
+                    Text="Spatial weight (Spatial-K-Means):" Margin="0,2" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
+                    Minimum="0" Maximum="1" Increment="0.05"
+                    Value="{Binding SpatialWeight}"
+                    FormatString="0.00" />
+                    </Grid>
+                    </Expander>-->
+
+                    <!--<StackPanel Grid.Row="13" Grid.ColumnSpan="2"
+                    Orientation="Horizontal"
+                    Spacing="10"
+                    Margin="0,12,0,0">
+                    <Button Classes="primary"
+                    Content="Extract"
+                    Command="{Binding ExtractCommand}" />
+                    <Button Classes="secondary"
+                    Content="Compare All"
+                    Command="{Binding CompareAllCommand}" />
+                    <CheckBox Content="Auto"
+                    ToolTip.Tip="Re-extract automatically when an option changes"
+                    IsChecked="{Binding AutoExtract, Mode=TwoWay}"
+                    VerticalAlignment="Center" />
+                    </StackPanel>-->
                 </Grid>
             </Grid>
 
             <GridSplitter Grid.Row="2"
                           ResizeDirection="Rows"
-                          Background="#3C3C3C"
-                          HorizontalAlignment="Stretch" />
+                          Classes="splitter"
+                          HorizontalAlignment="Stretch"/>
 
             <Border Grid.Row="3"
                     Background="#1C1C1C"
                     BorderBrush="#505050"
-                    BorderThickness="1">
+                    BorderThickness="1"
+                    Margin="0,4,0,0">
                 <Grid>
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Auto">
@@ -511,28 +755,44 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="4" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
-                <!-- Temp / tint sliders -->
-                <Grid Grid.Column="0" ColumnDefinitions="Auto,*,Auto,Auto,*,Auto">
-                    <TextBlock Grid.Column="0" Classes="label" Text="Temp:" Margin="0,0,6,0" />
-                    <Slider Grid.Column="1" Minimum="-1" Maximum="1" Value="{Binding Temperature}"
-                            TickFrequency="0.1" />
-                    <Button Grid.Column="2" Content="↺" Padding="6,2" Margin="4,0,0,0"
-                            Click="OnResetTemperature"
-                            ToolTip.Tip="Reset temperature" />
-                    <TextBlock Grid.Column="3" Classes="label" Text="Tint:" Margin="12,0,6,0" />
-                    <Slider Grid.Column="4" Minimum="-1" Maximum="1" Value="{Binding Tint}"
-                            TickFrequency="0.1" />
-                    <Button Grid.Column="5" Content="↺" Padding="6,2" Margin="4,0,0,0"
-                            Click="OnResetTint"
-                            ToolTip.Tip="Reset tint" />
-                </Grid>
+            <!-- Temp / tint sliders -->
+            <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto,Auto,*,Auto">
+                <TextBlock Grid.Column="0" Classes="label" Text="Temp:" Margin="0,0,6,0" />
+                <Slider Grid.Column="1" Minimum="-1" Maximum="1" Value="{Binding Temperature}"
+                        TickFrequency="0.1" />
+                <Button Grid.Column="2" Content="↺" Padding="6,2" Margin="4,0,0,0"
+                        Click="OnResetTemperature"
+                        ToolTip.Tip="Reset temperature" />
+                <TextBlock Grid.Column="3" Classes="label" Text="Tint:" Margin="12,0,6,0" />
+                <Slider Grid.Column="4" Minimum="-1" Maximum="1" Value="{Binding Tint}"
+                        TickFrequency="0.1" />
+                <Button Grid.Column="5" Content="↺" Padding="6,2" Margin="4,0,0,0"
+                        Click="OnResetTint"
+                        ToolTip.Tip="Reset tint" />
+            </Grid>
 
-                <StackPanel Grid.Column="1"
+            <Grid Grid.Row="5" Margin="0,3,0,0" ColumnDefinitions="*,Auto">
+                <!-- Temp / tint sliders --><!--
+                <Grid Grid.Column="0" ColumnDefinitions="Auto,*,Auto,Auto,*,Auto">
+                <TextBlock Grid.Column="0" Classes="label" Text="Temp:" Margin="0,0,6,0" />
+                <Slider Grid.Column="1" Minimum="-1" Maximum="1" Value="{Binding Temperature}"
+                TickFrequency="0.1" />
+                <Button Grid.Column="2" Content="↺" Padding="6,2" Margin="4,0,0,0"
+                Click="OnResetTemperature"
+                ToolTip.Tip="Reset temperature" />
+                <TextBlock Grid.Column="3" Classes="label" Text="Tint:" Margin="12,0,6,0" />
+                <Slider Grid.Column="4" Minimum="-1" Maximum="1" Value="{Binding Tint}"
+                TickFrequency="0.1" />
+                <Button Grid.Column="5" Content="↺" Padding="6,2" Margin="4,0,0,0"
+                Click="OnResetTint"
+                ToolTip.Tip="Reset tint" />
+                </Grid>-->
+
+                <StackPanel Grid.Column="0"
                             Orientation="Horizontal"
-                            HorizontalAlignment="Right"
+                            HorizontalAlignment="Left"
                             Spacing="8"
-                            Margin="12,0,0,0">
+                            Margin="0,0,0,0">
                     <!-- Common controls — visible in both modes. Gradient
                     space + Inspect are useful whether the user wants
                     to export or apply the palette to the host. -->
@@ -552,7 +812,8 @@
                     <!-- Standalone-mode trailing controls: Export to file
                     picker + Close. -->
                     <TextBlock Classes="label" Text="Format:"
-                               IsVisible="{Binding StandaloneMode}" />
+                               IsVisible="{Binding StandaloneMode}"
+                               Margin="58,0,0,0"/>
                     <ComboBox Width="200"
                               ItemsSource="{Binding ExportFormats}"
                               SelectedItem="{Binding SelectedExportFormat}"

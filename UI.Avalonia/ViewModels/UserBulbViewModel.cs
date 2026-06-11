@@ -116,7 +116,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             // Jump directly to the Sandbox DSL chapter when the Sandbox
             // compiler is active — otherwise show the whole guide from top.
             string? anchor = IsSandbox ? "Sandbox DSL Compiler" : null;
-            HelpRequested?.Invoke(this, ("UserBulb-Guide.md", anchor, "User Bulb 3D — Help"));
+            HelpRequested?.Invoke(this, ("User/UserBulb-Guide.md", anchor, "User Bulb 3D — Help"));
         });
     }
 

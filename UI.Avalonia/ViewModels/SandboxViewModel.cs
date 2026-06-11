@@ -47,7 +47,7 @@ public sealed class SandboxViewModel : ViewModelBase
         ExportCommand = ReactiveCommand.Create(OnExport);
         ImportCommand = ReactiveCommand.Create(OnImport);
         OpenHelpCommand = ReactiveCommand.Create(() =>
-            HelpRequested?.Invoke("Avalonia-UserGuide.md", "Sandbox", "Sandbox — Help"));
+            HelpRequested?.Invoke("User/Avalonia-UserGuide.md", "Sandbox", "Sandbox — Help"));
 
         _params.SandboxSource = _source;
     }

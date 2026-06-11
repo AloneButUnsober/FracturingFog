@@ -39,6 +39,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private int _regionFadeMs;
     private int _fadeSteps;
     private bool _useRegionWatermark;
+    private bool _recordSlideshow;
+    private string _recordEncodePreset = "HighQualityH264Mp4";
     private SlideshowType _type;
     private string _activeName = "Default";
     private bool _isDirty;
@@ -358,6 +360,27 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _useRegionWatermark, value); MarkDirty(); }
     }
 
+    /// <summary>Master "capture the slideshow to video" toggle. When on the
+    /// engine streams every cross-fade + dwell frame into a PNG sequence and
+    /// the shell prompts Convert / Save / Cancel after Stop.</summary>
+    public bool RecordSlideshow
+    {
+        get => _recordSlideshow;
+        set { this.RaiseAndSetIfChanged(ref _recordSlideshow, value); MarkDirty(); }
+    }
+
+    /// <summary>ffmpeg preset applied when the user picks Convert: matches the
+    /// names in <see cref="FracturingFog.FfmpegEncoder.Preset"/> (string-keyed
+    /// so this DTO doesn't depend on the WinExe).</summary>
+    public string RecordEncodePreset
+    {
+        get => _recordEncodePreset;
+        set { this.RaiseAndSetIfChanged(ref _recordEncodePreset, value ?? "HighQualityH264Mp4"); MarkDirty(); }
+    }
+
+    public IReadOnlyList<string> AllRecordEncodePresets { get; } =
+        new[] { "HighQualityH264Mp4", "LosslessH264Mp4", "Ffv1Mkv" };
+
     public bool IsDirty
     {
         get => _isDirty;
@@ -487,6 +510,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.Timing.RegionFadeMs = _regionFadeMs;
         _working.Timing.FadeSteps = _fadeSteps;
         _working.Timing.UseRegionWatermark = _useRegionWatermark;
+        _working.Timing.RecordSlideshow = _recordSlideshow;
+        _working.Timing.RecordEncodePreset = _recordEncodePreset;
         _working.AudioReactive = _audioReactive;
 
         _working.IncludedRegions = AvailableRegions.Where(i => i.IsChecked).Select(i => i.Name).ToList();
@@ -518,6 +543,9 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _regionFadeMs = _working.Timing.RegionFadeMs;
         _fadeSteps = _working.Timing.FadeSteps;
         _useRegionWatermark = _working.Timing.UseRegionWatermark;
+        _recordSlideshow = _working.Timing.RecordSlideshow;
+        _recordEncodePreset = string.IsNullOrWhiteSpace(_working.Timing.RecordEncodePreset)
+            ? "HighQualityH264Mp4" : _working.Timing.RecordEncodePreset;
         _sweepEnabled = _working.AdaptiveSweep.Enabled;
         _sweepStart = Math.Clamp(_working.AdaptiveSweep.Start, 0, 100);
         _sweepEnd = Math.Clamp(_working.AdaptiveSweep.End, 0, 100);
@@ -549,6 +577,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(RegionFadeMs));
         this.RaisePropertyChanged(nameof(FadeSteps));
         this.RaisePropertyChanged(nameof(UseRegionWatermark));
+        this.RaisePropertyChanged(nameof(RecordSlideshow));
+        this.RaisePropertyChanged(nameof(RecordEncodePreset));
         this.RaisePropertyChanged(nameof(AdaptiveSweepEnabled));
         this.RaisePropertyChanged(nameof(AdaptiveSweepStart));
         this.RaisePropertyChanged(nameof(AdaptiveSweepEnd));

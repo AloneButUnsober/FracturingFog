@@ -152,7 +152,7 @@
         </StackPanel>
 
         <!-- Bottom button row -->
-        <Grid Grid.Row="1" Margin="0,14,0,0" ColumnDefinitions="Auto,*,Auto,Auto">
+        <Grid Grid.Row="1" Margin="0,14,0,0" ColumnDefinitions="Auto,Auto,*,Auto,Auto">
             <Button Grid.Column="0"
                     Content="{Binding SlideshowButtonText}"
                     Command="{Binding ToggleSlideshowCommand}"
@@ -160,7 +160,16 @@
                     Padding="14,6"
                     Background="#283728"
                     Foreground="White" />
-            <Button Grid.Column="2"
+            <Button Grid.Column="1"
+                    Content="?"
+                    Click="OnHelpClick"
+                    ToolTip.Tip="Open the Audio-Reactive Slideshow guide"
+                    Padding="10,6"
+                    Margin="6,0,0,0"
+                    Background="#283C50"
+                    Foreground="#FFCC00"
+                    FontWeight="Bold" />
+            <Button Grid.Column="3"
                     Content="OK"
                     Command="{Binding OkCommand}"
                     IsDefault="True"
@@ -168,7 +177,7 @@
                     Background="#284632"
                     Foreground="White"
                     Margin="0,0,6,0" />
-            <Button Grid.Column="3"
+            <Button Grid.Column="4"
                     Content="Cancel"
                     Command="{Binding CancelCommand}"
                     IsCancel="True"

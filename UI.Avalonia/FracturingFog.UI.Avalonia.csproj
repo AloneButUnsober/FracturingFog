@@ -91,7 +91,17 @@
     Resource name preserves "Docs/" so HelpDocId can address each guide by
     a stable path (e.g. avares://.../Docs/CalcGen-UserGuide.md).
   -->
-  <AvaloniaResource Include="..\Docs\*.md" Link="Docs\%(Filename)%(Extension)" />
+  <!--
+    `**\*.md` walks subdirs (Docs\User\, Docs\Technical\, …). RecursiveDir
+    expands to the matched subpath so the embedded resource keeps its
+    folder layout — HelpViewerViewModel addresses docs as e.g.
+      avares://FracturingFog.UI.Avalonia/Docs/User/CalcGen-UserGuide.md
+  -->
+  <AvaloniaResource Include="..\Docs\**\*.md" Link="Docs\%(RecursiveDir)%(Filename)%(Extension)" />
+  <!-- Inline images referenced from the docs via standard ![](path) markdown. -->
+  <AvaloniaResource Include="..\Docs\Images\**\*.png" Link="Docs\Images\%(RecursiveDir)%(Filename)%(Extension)" />
+  <AvaloniaResource Include="..\Docs\Images\**\*.svg" Link="Docs\Images\%(RecursiveDir)%(Filename)%(Extension)" />
+  <AvaloniaResource Include="..\Docs\Images\**\*.jpg" Link="Docs\Images\%(RecursiveDir)%(Filename)%(Extension)" />
 </ItemGroup>
 
 </Project>

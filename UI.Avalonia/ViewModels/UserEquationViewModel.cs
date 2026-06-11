@@ -81,16 +81,17 @@ public sealed class UserEquationViewModel : ViewModelBase
         HotLoadViaCalcGenCommand = ReactiveCommand.Create(OnHotLoadViaCalcGen);
         ApplyFixCommand = ReactiveCommand.Create(OnApplyFix,
             this.WhenAnyValue(x => x.SuggestedFix).Select(f => !string.IsNullOrEmpty(f)));
+        // Docs were re-rooted under User/ + Technical/ — see Docs/Documentation-Plan.md.
         OpenUserEquationHelpCommand = ReactiveCommand.Create(() =>
-            HelpRequested?.Invoke("CalcGen-UserGuide.md", "User Equation editor",
+            HelpRequested?.Invoke("User/CalcGen-UserGuide.md", "User Equation editor",
                                   "CalcGen Help — User Equation tab"));
         OpenDslHelpCommand = ReactiveCommand.Create(() =>
-            HelpRequested?.Invoke("CalcGen-UserGuide.md", "Grammar at a glance",
+            HelpRequested?.Invoke("User/CalcGen-UserGuide.md", "Grammar at a glance",
                                   "CalcGen Help — DSL grammar"));
         OpenCalcGenHelpCommand = ReactiveCommand.Create(() =>
-            HelpRequested?.Invoke("CalcGen-UserGuide.md", null, "CalcGen — User Guide"));
+            HelpRequested?.Invoke("User/CalcGen-UserGuide.md", null, "CalcGen — User Guide"));
         OpenEquationGuideCommand = ReactiveCommand.Create(() =>
-            HelpRequested?.Invoke("FractalEquation-DesignGuide.md", null,
+            HelpRequested?.Invoke("Technical/FractalEquation-DesignGuide.md", null,
                                   "Fractal Equation Design Guide"));
 
         _params.UserEquationSource = _source;

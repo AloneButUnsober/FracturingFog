@@ -6,6 +6,7 @@
 // AvaloniaShellBootstrap (HotLoad / Generate / NamePrompt / ConfirmDelete).
 
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
 using FracturingFog.UI.Avalonia.Input;
@@ -21,4 +22,10 @@ public partial class ColorGenEditorView : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/ColorGen-UserGuide.md",
+            null,
+            "ColorGen Editor — Help");
 }

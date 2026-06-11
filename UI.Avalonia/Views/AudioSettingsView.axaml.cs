@@ -28,4 +28,10 @@ public sealed partial class AudioSettingsView : Window
     }
 
     private void OnCloseRequested(object? sender, bool result) => Close(result);
+
+    private void OnHelpClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/Slideshow-AudioReactive-Guide.md",
+            "Audio-Reactive Engine",
+            "Audio-Reactive Slideshow — Help");
 }

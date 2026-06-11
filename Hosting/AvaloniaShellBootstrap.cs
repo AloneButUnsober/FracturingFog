@@ -262,6 +262,13 @@ namespace FracturingFog.Hosting
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
 
+            // Wire the slideshow-record sink factory. ShellViewModel asks for
+            // one when the active SlideshowConfig has RecordSlideshow=true;
+            // factory wraps PngSequenceWriter so UI.Avalonia stays free of
+            // System.Drawing.
+            s_shell.SlideshowRecorderFactory = (folder, w, h) =>
+                new PngSlideshowFrameRecorder(folder, w, h);
+
             // Window title: "{ProgramName} v{Version}  —  {renderer description}"
             // (legacy MainForm parity, MainForm.cs:917). RebuildWindowTitle()
             // fires after each setter assignment.
@@ -932,6 +939,14 @@ namespace FracturingFog.Hosting
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] ImportRegions failed: {ex.Message}");
                 }
+            };
+
+            // Recorded slideshow stopped — pop Convert / Save / Cancel.
+            // ShellViewModel owns the temp PNG folder lifetime and the
+            // RecordEncodePreset string; we own the ffmpeg call + folder copy.
+            shell.SlideshowRecordingReady += async (_, args) =>
+            {
+                await HandleSlideshowRecordingReadyAsync(args);
             };
 
             // Slideshow settings — load persisted settings, pop the dialog,
@@ -1790,6 +1805,114 @@ namespace FracturingFog.Hosting
             //    optionally encode with ffmpeg.
             if (!string.IsNullOrEmpty(result.PngFolder) && System.IO.Directory.Exists(result.PngFolder))
                 await PromptSaveLossless(result.PngFolder!, result.Encode);
+        }
+
+        // Recorded image-slideshow stopped. The engine handed us a temp PNG
+        // folder; pop Convert / Save Frames / Cancel and act accordingly.
+        private static async Task HandleSlideshowRecordingReadyAsync(
+            FracturingFog.UI.Avalonia.ViewModels.SlideshowRecordingReadyEventArgs args)
+        {
+            string pngFolder = args.FolderPath;
+            if (string.IsNullOrEmpty(pngFolder) || !System.IO.Directory.Exists(pngFolder)) return;
+
+            var choice = await AvaloniaDialogs.ShowSlideshowRecordingPromptAsync(
+                args.FrameCount, args.Width, args.Height, args.EncodePreset);
+
+            if (choice == AvaloniaDialogs.SlideshowRecordingChoice.Cancel)
+            {
+                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                SetStatus("Slideshow recording discarded.");
+                return;
+            }
+
+            if (choice == AvaloniaDialogs.SlideshowRecordingChoice.SaveFrames)
+            {
+                string? dest = await AvaloniaDialogs.PickFolderAsync(
+                    "Choose a folder to keep the PNG sequence");
+                if (string.IsNullOrEmpty(dest))
+                {
+                    try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                    SetStatus("Slideshow recording discarded.");
+                    return;
+                }
+
+                string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string finalFolder = System.IO.Path.Combine(dest, $"FracturingFog_Slideshow_{stamp}");
+                try
+                {
+                    System.IO.Directory.CreateDirectory(finalFolder);
+                    foreach (string src in System.IO.Directory.EnumerateFiles(pngFolder))
+                    {
+                        string dst = System.IO.Path.Combine(finalFolder, System.IO.Path.GetFileName(src));
+                        System.IO.File.Move(src, dst, overwrite: true);
+                    }
+                    try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                    SetStatus($"Slideshow PNG sequence saved: {finalFolder}");
+                }
+                catch (Exception ex)
+                {
+                    try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "Save Frames", $"Failed to move PNG sequence:\n{ex.Message}", expectsConfirmation: false);
+                }
+                return;
+            }
+
+            // Convert — encode with ffmpeg, then drop the temp folder.
+            if (!FfmpegEncoder.IsEnabledForUser())
+            {
+                string msg = FfmpegEncoder.IsAvailable()
+                    ? "Video encoding is disabled (Continue Without Video selected). " +
+                      "Open the FFmpeg setup dialog from the floating menu to re-enable it. " +
+                      "Keeping PNG sequence in temp folder."
+                    : "ffmpeg.exe is not available — install it from the floating menu's FFmpeg Setup. " +
+                      "Keeping PNG sequence in temp folder.";
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Convert Slideshow", msg + "\n\n" + pngFolder, expectsConfirmation: false);
+                return;
+            }
+
+            var preset = args.EncodePreset switch
+            {
+                "LosslessH264Mp4" => FfmpegEncoder.Preset.LosslessH264Mp4,
+                "Ffv1Mkv" => FfmpegEncoder.Preset.Ffv1Mkv,
+                _ => FfmpegEncoder.Preset.HighQualityH264Mp4,
+            };
+            string ext = FfmpegEncoder.DefaultExtensionFor(preset);
+            string suggested = $"FracturingFog_Slideshow_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+            string? outPath = await AvaloniaDialogs.PickSaveFileAsync(
+                "Save Slideshow Video", suggested, $"Video (*.{ext})|*.{ext}");
+            if (string.IsNullOrEmpty(outPath))
+            {
+                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                SetStatus("Slideshow recording discarded.");
+                return;
+            }
+
+            SetStatus("Encoding slideshow video…");
+            try
+            {
+                var (ok, log) = await FfmpegEncoder.EncodeAsync(
+                    pngFolder, outPath, preset, fps: 30,
+                    onProgressLine: line => SetStatus("ffmpeg: " + line));
+                if (!ok)
+                {
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "Convert Slideshow",
+                        $"ffmpeg encode failed.\n\n{log}\n\nThe PNG sequence is still in:\n{pngFolder}",
+                        expectsConfirmation: false);
+                    return;
+                }
+                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
+                SetStatus($"Slideshow video saved: {System.IO.Path.GetFileName(outPath)}");
+            }
+            catch (Exception ex)
+            {
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Convert Slideshow",
+                    $"ffmpeg encode crashed:\n{ex.Message}\n\nThe PNG sequence is still in:\n{pngFolder}",
+                    expectsConfirmation: false);
+            }
         }
 
         private static async Task PromptSaveMp4(string tempPath)
