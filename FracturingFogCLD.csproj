@@ -90,6 +90,16 @@
     <Compile Remove="CalculatorGen\**" />
     <Compile Remove="ColorGen\**" />
     <!--
+      Tools/ holds sibling console projects (DocSiteGen) that have their own
+      ImplicitUsings + obj/ trees. Without this exclude the WinExe glob slurps
+      Tools/DocSiteGen/**/*.cs *and* its generated GlobalUsings.cs — which
+      injects `global using System.Threading;` into this project and makes
+      every legacy WinForms `Timer` reference ambiguous against
+      System.Threading.Timer (CS0104). Also duplicates the AssemblyInfo
+      attributes (CS0579) and demands Markdig (CS0246).
+    -->
+    <Compile Remove="Tools\**" />
+    <!--
       The palette-extraction engine (extractors + BitmapSampler + stop
       builder + types under namespace FracturingFog.Imaging.PaletteExtraction)
       now lives in PaletteBuilder.Lib.dll. Stripping the in-tree copy here
@@ -110,6 +120,7 @@
     <None Remove="Client\**" />
     <None Remove="CalculatorGen\**" />
     <None Remove="ColorGen\**" />
+    <None Remove="Tools\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
     <EmbeddedResource Remove="PaletteBuilder\**" />
@@ -121,6 +132,7 @@
     <EmbeddedResource Remove="Client\**" />
     <EmbeddedResource Remove="CalculatorGen\**" />
     <EmbeddedResource Remove="ColorGen\**" />
+    <EmbeddedResource Remove="Tools\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
     <Content Remove="PaletteBuilder\**" />
@@ -132,6 +144,7 @@
     <Content Remove="Client\**" />
     <Content Remove="CalculatorGen\**" />
     <Content Remove="ColorGen\**" />
+    <Content Remove="Tools\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
       items automatically from anywhere under the project root. Strip the UI

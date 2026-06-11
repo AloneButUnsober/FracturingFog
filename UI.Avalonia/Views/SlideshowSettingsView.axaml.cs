@@ -50,4 +50,10 @@ public sealed partial class SlideshowSettingsView : Window
     private void OnOkClicked(object? sender, RoutedEventArgs e) => Close(true);
 
     private void OnCancelClicked(object? sender, RoutedEventArgs e) => Close(false);
+
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/Slideshow-AudioReactive-Guide.md",
+            null,
+            "Slideshow Settings — Help");
 }

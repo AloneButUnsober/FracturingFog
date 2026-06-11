@@ -32,5 +32,16 @@ namespace FracturingFog.Models
         /// whatever active watermark MainViewModel has resolved (the master
         /// "Use Custom Watermark" toggle still applies).</summary>
         public bool UseRegionWatermark { get; set; }
+
+        /// <summary>When true, the slideshow engine captures every cross-fade
+        /// step + dwell frame to a PNG sequence in a temp folder and offers
+        /// Convert / Save / Cancel on Stop. ffmpeg post-encode reuses the same
+        /// pipeline as Video Zoom's lossless flow.</summary>
+        public bool RecordSlideshow { get; set; }
+
+        /// <summary>Encode preset applied when the user picks Convert after a
+        /// recorded slideshow: "HighQualityH264Mp4" | "LosslessH264Mp4" |
+        /// "Ffv1Mkv". Default = HighQualityH264Mp4 (CRF 18, yuv420p).</summary>
+        public string RecordEncodePreset { get; set; } = "HighQualityH264Mp4";
     }
 }

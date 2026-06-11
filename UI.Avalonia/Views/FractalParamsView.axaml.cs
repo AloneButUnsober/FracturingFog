@@ -35,4 +35,10 @@ public sealed partial class FractalParamsView : Window
     }
 
     private void OnVmCloseRequested(object? sender, System.EventArgs e) => Close();
+
+    private void OnHelpClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/Avalonia-UserGuide.md",
+            "Params",
+            "Fractal Params — Help");
 }

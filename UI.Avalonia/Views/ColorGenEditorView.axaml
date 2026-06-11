@@ -51,7 +51,7 @@
         </Grid>
 
         <!-- Row 3: compile/generate -->
-        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
             <TextBox Grid.Column="0"
                      Watermark="Description (optional)"
                      Text="{Binding Description, Mode=TwoWay}" />
@@ -66,6 +66,15 @@
                     Command="{Binding GenerateCommand}"
                     ToolTip.Tip="Render the DSL to a C# file under Models/ColorSchemes/Generated/. Rebuild the app to pick it up."
                     Padding="14,4" />
+            <Button Grid.Column="3"
+                    Content="?"
+                    Click="OnHelpClick"
+                    ToolTip.Tip="Open the ColorGen DSL guide"
+                    Margin="6,0,0,0"
+                    Padding="10,4"
+                    Background="#283C50"
+                    Foreground="#FFCC00"
+                    FontWeight="Bold" />
         </Grid>
 
         <!-- Row 4: editor (fills) -->
