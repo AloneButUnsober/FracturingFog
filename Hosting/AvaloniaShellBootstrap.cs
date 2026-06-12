@@ -702,8 +702,16 @@ namespace FracturingFog.Hosting
             // cursor and routes the colour into the editor instead of
             // starting a pan. Hook stays installed for the program lifetime
             // and is a no-op when no editor is open or Inspect is unchecked.
+            //
+            // Phase X.3 / Slice 3.1: `OperatingSystem.IsWindows()` guard so the
+            // CA1416 analyzer can prove `ClientToScreen` is unreachable on
+            // non-Win hosts. NativeMouseForwarder only attaches on Windows
+            // (early-out at NativeMouseForwarder.Attach) so the hook itself
+            // never fires off-Windows in practice — the guard makes the
+            // contract explicit for cross-platform Hosting readers.
             FracturingFog.Hosting.NativeMouseForwarder.InspectClickHook = (clientX, clientY) =>
             {
+                if (!OperatingSystem.IsWindows()) return false;
                 var editor = s_shell?.ColorThemeEditor;
                 if (editor == null || !editor.AnyInspectActive) return false;
                 if (s_surface == null) return false;
