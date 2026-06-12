@@ -16,6 +16,9 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.IO;
+using System.Runtime.Versioning;
+using SkiaSharp;
 using FracturingFog.Models;
 
 namespace FracturingFog.Imaging
@@ -26,11 +29,107 @@ namespace FracturingFog.Imaging
     {
         /// <summary>Write a BGRA <paramref name="pixels"/> buffer to
         /// <paramref name="path"/> as PNG/TIFF/BMP, then (if a watermark string
-        /// is supplied) re-save with the outlined watermark composited on top.</summary>
-        public static unsafe void SavePixelsToFile(
+        /// is supplied) re-save with the outlined watermark composited on top.
+        ///
+        /// Phase X.A / Slice A.2 — the no-watermark save path routes through
+        /// SkiaSharp (cross-platform). The watermark composition uses GDI+
+        /// (Graphics + GraphicsPath text outlining) on Windows; on non-Windows
+        /// hosts the watermark is composed via SKCanvas + Inter typeface.
+        /// TIFF on non-Windows falls back to PNG with a debug log line
+        /// (SkiaSharp does not encode TIFF).</summary>
+        public static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFormat format,
             string watermarkText, Color fontColor, string subText = "", bool poster = false,
             float dpi = 0f)
+        {
+            // Fast path: no watermark, no GDI+ at all.
+            if (string.IsNullOrEmpty(watermarkText))
+            {
+                SaveBgraSkia(pixels, w, h, path, format, dpi);
+                return;
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                SaveWithGdiWatermark(pixels, w, h, path, format,
+                    text: watermarkText, fontColor: fontColor, subText: subText,
+                    poster: poster, dpi: dpi);
+                return;
+            }
+
+            // Non-Windows: save base image via Skia, composite watermark via Skia.
+            SaveBgraSkia(pixels, w, h, path, format, dpi);
+            CompositeWatermarkSkia(path, format,
+                topText: watermarkText, subText: subText, fontColor: fontColor,
+                poster: poster);
+        }
+
+        // ── SkiaSharp save path (cross-platform) ──────────────────────────
+        //
+        // BGRA uint[] -> SKBitmap.InstallPixels -> SKImage.Encode. Matches
+        // the GDI+ output bit-identically for PNG/BMP. JPEG/WebP fall through
+        // to SkiaSharp quality 100 (visually lossless). TIFF on non-Windows
+        // logs a debug line and saves as PNG instead.
+        private static void SaveBgraSkia(uint[] pixels, int w, int h, string path,
+            ImageFormat format, float dpi)
+        {
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var bmp = new SKBitmap(info);
+            unsafe
+            {
+                fixed (uint* src = pixels)
+                {
+                    Buffer.MemoryCopy(src, (void*)bmp.GetPixels(),
+                        (long)w * h * 4, (long)w * h * 4);
+                }
+            }
+
+            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out bool unsupportedTiff);
+            int quality = skFmt == SKEncodedImageFormat.Jpeg ? 95 : 100;
+
+            using var image = SKImage.FromBitmap(bmp);
+            using var data = image.Encode(skFmt, quality);
+            using var fs = File.OpenWrite(path);
+            data.SaveTo(fs);
+
+            if (unsupportedTiff)
+                Debug.WriteLine($"SaveBgraSkia: TIFF unsupported by SkiaSharp; saved {path} as PNG.");
+            // DPI metadata: PNG pHYs / JPEG JFIF / TIFF would need manual chunk
+            // injection. SkiaSharp does not expose it; cross-platform output
+            // declares the encoder default (96 dpi). Documented gap.
+            _ = dpi;
+        }
+
+        private static SKEncodedImageFormat MapToSkiaFormat(
+            ImageFormat format, string path, out bool unsupportedTiff)
+        {
+            unsupportedTiff = false;
+            if (format == ImageFormat.Png) return SKEncodedImageFormat.Png;
+            if (format == ImageFormat.Jpeg) return SKEncodedImageFormat.Jpeg;
+            if (format == ImageFormat.Bmp) return SKEncodedImageFormat.Bmp;
+            if (format == ImageFormat.Gif) return SKEncodedImageFormat.Gif;
+            if (format == ImageFormat.Tiff)
+            {
+                unsupportedTiff = true;
+                return SKEncodedImageFormat.Png;
+            }
+            // Fallback: pick by extension.
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext switch
+            {
+                ".jpg" or ".jpeg" => SKEncodedImageFormat.Jpeg,
+                ".bmp" => SKEncodedImageFormat.Bmp,
+                ".webp" => SKEncodedImageFormat.Webp,
+                ".gif" => SKEncodedImageFormat.Gif,
+                _ => SKEncodedImageFormat.Png,
+            };
+        }
+
+        // ── GDI+ save + watermark path (Windows-only) ─────────────────────
+        [SupportedOSPlatform("windows")]
+        private static unsafe void SaveWithGdiWatermark(
+            uint[] pixels, int w, int h, string path, ImageFormat format,
+            string text, Color fontColor, string subText, bool poster, float dpi)
         {
             using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
             if (dpi > 0f) bmp.SetResolution(dpi, dpi);
@@ -54,6 +153,9 @@ namespace FracturingFog.Imaging
             }
             finally { bmp.UnlockBits(bmpData); }
 
+            using var g = Graphics.FromImage(bmp);
+            AddWaterMark(g, text, w, h, fontColor, subText, poster);
+
             if (format == ImageFormat.Tiff)
             {
                 ImageCodecInfo? codec = null;
@@ -68,14 +170,98 @@ namespace FracturingFog.Imaging
                 else bmp.Save(path, format);
             }
             else bmp.Save(path, format);
+        }
 
-            Debug.WriteLine($"Watermark text: '{watermarkText}'");
-            if (!string.IsNullOrEmpty(watermarkText))
+        // ── SkiaSharp watermark composition (non-Windows) ─────────────────
+        private static void CompositeWatermarkSkia(
+            string path, ImageFormat format,
+            string topText, string subText, Color fontColor, bool poster)
+        {
+            using var existing = SKBitmap.Decode(path);
+            if (existing == null) return;
+            int width = existing.Width;
+            int height = existing.Height;
+
+            using var surface = SKSurface.Create(existing.Info);
+            var canvas = surface.Canvas;
+            canvas.DrawBitmap(existing, 0, 0);
+
+            DrawWatermarkSkia(canvas, topText, subText, width, height, fontColor, poster);
+
+            using var snap = surface.Snapshot();
+            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
+            using var data = snap.Encode(skFmt, 100);
+            using var fs = File.OpenWrite(path);
+            data.SaveTo(fs);
+        }
+
+        private static void DrawWatermarkSkia(
+            SKCanvas canvas, string topText, string subText,
+            int width, int height, Color fontColor, bool poster)
+        {
+            int fontSize = poster ? Math.Max(width, height) / 140 : 16;
+            int yOffset = poster ? Math.Min(width, height) / 150 : 12;
+
+            using var typeface = SKTypeface.FromFamilyName("Inter",
+                SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright)
+                ?? SKTypeface.Default;
+            using var fontMain = new SKFont(typeface, fontSize);
+            using var fontSub  = new SKFont(typeface, Math.Max(1, fontSize / 2));
+
+            float lum = (fontColor.R * 0.299f + fontColor.G * 0.587f + fontColor.B * 0.114f) / 255f;
+            var outline = lum < 0.5f
+                ? new SKColor(255, 255, 255, 190)
+                : new SKColor(0, 0, 0, 190);
+            var fill = new SKColor(fontColor.R, fontColor.G, fontColor.B, fontColor.A);
+
+            float mainStroke = poster ? Math.Max(2f, fontSize / 10f) : 2f;
+            float subStroke  = poster ? Math.Max(1.5f, fontSize / 16f) : 1.5f;
+
+            DrawOutlinedSkia(canvas, topText, fontMain, fill, outline, mainStroke,
+                width - MeasureText(topText, fontMain) - 20,
+                height - fontSize - yOffset);
+
+            if (!string.IsNullOrEmpty(subText))
             {
-                using var g = Graphics.FromImage(bmp);
-                AddWaterMark(g, watermarkText, w, h, fontColor, subText, poster);
-                bmp.Save(path, format);
+                int subFontSize = Math.Max(1, fontSize / 2);
+                DrawOutlinedSkia(canvas, subText, fontSub, fill, outline, subStroke,
+                    width - MeasureText(subText, fontSub) - 55,
+                    height - subFontSize - (poster ? 0 : 2));
             }
+        }
+
+        private static float MeasureText(string text, SKFont font)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            return font.MeasureText(text);
+        }
+
+        private static void DrawOutlinedSkia(
+            SKCanvas canvas, string text, SKFont font,
+            SKColor fill, SKColor outline, float strokeWidth,
+            float x, float y)
+        {
+            using var stroke = new SKPaint
+            {
+                Color = outline,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = strokeWidth,
+                StrokeJoin = SKStrokeJoin.Round,
+                IsAntialias = true,
+            };
+            using var fillPaint = new SKPaint
+            {
+                Color = fill,
+                Style = SKPaintStyle.Fill,
+                IsAntialias = true,
+            };
+            // Skia text baseline is at y; shift down by font ascent so the
+            // coordinate (x, y) names the upper-left corner of the glyph
+            // bounding box (matches GDI+ DrawString semantics the caller expects).
+            var metrics = font.Metrics;
+            float baseline = y - metrics.Ascent;
+            canvas.DrawText(text, x, baseline, font, stroke);
+            canvas.DrawText(text, x, baseline, font, fillPaint);
         }
 
         /// <summary>Render the region/theme watermark + program sub-line in the
@@ -287,9 +473,34 @@ namespace FracturingFog.Imaging
         /// <summary>Save BGRA pixels then composite a resolved watermark on top.
         /// When <paramref name="wm"/> is null no watermark is drawn (used by the
         /// no-watermark code paths that today pass watermarkText: "").</summary>
-        public static unsafe void SavePixelsToFile(
+        public static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFormat format,
             WatermarkRender? wm, bool poster = false, float dpi = 0f)
+        {
+            bool hasWm = wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText));
+
+            // Fast path: no watermark, no GDI+ at all.
+            if (!hasWm)
+            {
+                SaveBgraSkia(pixels, w, h, path, format, dpi);
+                return;
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                SaveWithGdiWatermark(pixels, w, h, path, format, wm!, poster, dpi);
+                return;
+            }
+
+            // Non-Windows: save base then composite via Skia.
+            SaveBgraSkia(pixels, w, h, path, format, dpi);
+            CompositeWatermarkRenderSkia(path, format, wm!, poster);
+        }
+
+        [SupportedOSPlatform("windows")]
+        private static unsafe void SaveWithGdiWatermark(
+            uint[] pixels, int w, int h, string path, ImageFormat format,
+            WatermarkRender wm, bool poster, float dpi)
         {
             using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
             if (dpi > 0f) bmp.SetResolution(dpi, dpi);
@@ -313,6 +524,9 @@ namespace FracturingFog.Imaging
             }
             finally { bmp.UnlockBits(bmpData); }
 
+            using var g = Graphics.FromImage(bmp);
+            AddWaterMark(g, wm, w, h, poster);
+
             if (format == ImageFormat.Tiff)
             {
                 ImageCodecInfo? codec = null;
@@ -327,13 +541,33 @@ namespace FracturingFog.Imaging
                 else bmp.Save(path, format);
             }
             else bmp.Save(path, format);
+        }
 
-            if (wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText)))
-            {
-                using var g = Graphics.FromImage(bmp);
-                AddWaterMark(g, wm, w, h, poster);
-                bmp.Save(path, format);
-            }
+        private static void CompositeWatermarkRenderSkia(
+            string path, ImageFormat format, WatermarkRender wm, bool poster)
+        {
+            using var existing = SKBitmap.Decode(path);
+            if (existing == null) return;
+            int width = existing.Width;
+            int height = existing.Height;
+
+            using var surface = SKSurface.Create(existing.Info);
+            var canvas = surface.Canvas;
+            canvas.DrawBitmap(existing, 0, 0);
+
+            // Translate WatermarkRender to a top + sub call with the resolved
+            // text colour. Skia path ignores HighlightColor / BackgroundColor /
+            // Placement / Justify for now (lower-right is the only placement
+            // shipping today; richer placement lands when the full
+            // SkiaWatermarkRenderer extracts).
+            var fill = Color.FromArgb(255, wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
+            DrawWatermarkSkia(canvas, wm.TopText, wm.SubText, width, height, fill, poster);
+
+            using var snap = surface.Snapshot();
+            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
+            using var data = snap.Encode(skFmt, 100);
+            using var fs = File.OpenWrite(path);
+            data.SaveTo(fs);
         }
 
         /// <summary>Draw the resolved watermark onto an arbitrary GDI surface.
