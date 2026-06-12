@@ -681,9 +681,10 @@ namespace FracturingFog.Hosting
             if (_renderHost == null || string.IsNullOrEmpty(themeName)) return null;
             var map = ColorPalette.GetPaletteByName(themeName);
             if (map == null) return null;
-            // Recolours the live Mandelbrot frame in place + returns a copy.
-            // Returns null for alt calculators (no cheap recolor).
-            return _renderHost.RecolorActiveToBuffer(map);
+            // Forward the caller's dims so the alt path can resize its
+            // buffer to match the slideshow's snapshot — without this the
+            // FadeAsync length check fails and the engine hard-cuts.
+            return _renderHost.RecolorActiveToBuffer(map, width, height);
         }
 
         /// <inheritdoc/>

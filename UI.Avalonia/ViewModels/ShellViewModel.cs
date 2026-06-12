@@ -410,6 +410,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ToggleMiniMapCommand = ReactiveCommand.Create(() => IsMiniMapVisible = !IsMiniMapVisible);
         ToggleMiniDepthCommand = ReactiveCommand.Create(() => IsMiniDepthVisible = !IsMiniDepthVisible);
         ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
+        ToggleToyModeCommand   = ReactiveCommand.Create(() => IsToyMode  = !IsToyMode);
 
         // Push live view-state into the MiniMap VM on every frame so the
         // indicator tracks the user's pan/zoom. Mirrors legacy MainForm's
@@ -528,14 +529,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Reload the active SlideshowConfig each toggle so any preset edits
-        // made in the unified Slideshow Settings dialog take effect on the
-        // next run. Timing values are pulled out of the active config; the
-        // legacy SlideshowSettings store stays the single timing source the
-        // engine constructor accepts.
-        var configFile = SlideshowConfigLibrary.Load();
-        var activeConfig = SlideshowConfigLibrary.GetActive(configFile);
-        StartSlideshowWithConfig(activeConfig);
+        // Context-menu + Floating Menu "Slideshow" buttons run an unnamed
+        // ad-hoc session: built-in defaults, independent of whatever is
+        // saved as the active preset (which the user may have renamed,
+        // deleted, or never saved). The Slideshow Settings dialog's own
+        // Start button still honours the user's explicit preset choice via
+        // StartSlideshowFromConfig.
+        StartSlideshowWithConfig(new SlideshowConfig());
     }
 
     /// <summary>Start the image slideshow from an explicit in-memory
@@ -1219,6 +1219,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public event EventHandler<bool>? MiniModeToggleRequested;
 
     public ReactiveCommand<Unit, bool> ToggleMiniModeCommand { get; private set; } = null!;
+
+    // ── Toy Mode ────────────────────────────────────────────────────────
+    // Tighter than Mini Mode: borderless, no toolbar, no status bar, on
+    // top, and left-click-drag moves the window (pan is sacrificed). Lives
+    // alongside Mini Mode but is mutually exclusive — entering Toy exits
+    // Mini and vice versa (the host handles the switch).
+    private bool _isToyMode;
+    public bool IsToyMode
+    {
+        get => _isToyMode;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _isToyMode, value))
+                ToyModeToggleRequested?.Invoke(this, value);
+        }
+    }
+
+    public event EventHandler<bool>? ToyModeToggleRequested;
+
+    public ReactiveCommand<Unit, bool> ToggleToyModeCommand { get; private set; } = null!;
 
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar

@@ -59,6 +59,16 @@ namespace FracturingFog.Hosting
         // when the editor closes.
         public static Func<int, int, bool>? InspectClickHook;
 
+        // ── Window-drag hook (Toy Mode) ─────────────────────────────────────
+        // When non-null, a WM_LBUTTONDOWN over the swap-chain HWND is handed
+        // off to this callback instead of starting a fractal pan. Toy Mode
+        // sets this to a delegate that initiates an OS-driven window move on
+        // the top-level frame (SendMessage WM_NCLBUTTONDOWN HTCAPTION), so
+        // the user can drag the borderless toy window from anywhere on the
+        // render surface. Returning true signals "consumed" — the forwarder
+        // swallows the click so no pan starts underneath.
+        public static Func<bool>? LeftDragWindowHook;
+
         private static DateTime s_rightDownUtc;
         private static int s_rightDownX, s_rightDownY;
         private const int RightHoldSuppressMs = 1000;
@@ -127,7 +137,21 @@ namespace FracturingFog.Hosting
                 switch (msg)
                 {
                     case WM_LBUTTONDOWN:
-                        // Inspect-click hook gets first shot. If it returns
+                        // Toy-Mode window-drag hook gets the very first shot.
+                        // When installed, every left-click on the surface
+                        // becomes a window move; no pan starts. Returning
+                        // false lets the click fall through to the normal
+                        // inspect/pan handlers.
+                        {
+                            var dragHook = LeftDragWindowHook;
+                            if (dragHook != null)
+                            {
+                                bool consumed = false;
+                                try { consumed = dragHook(); } catch { /* UI errors must not crash native callback */ }
+                                if (consumed) return IntPtr.Zero;
+                            }
+                        }
+                        // Inspect-click hook gets next shot. If it returns
                         // true the click was a probe, not a pan — pull
                         // keyboard focus but don't notify the controller.
                         {
