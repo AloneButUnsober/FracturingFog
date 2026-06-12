@@ -24,6 +24,7 @@
 
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -43,6 +44,7 @@ namespace FracturingFog;
 /// Owns a D3D11 device, DXGI swap chain bound to a WinForms HWND, and a
 /// dynamic CPU-writable texture that is blitted to the screen each frame.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class DirectXRenderer : IFractalRenderer
 {
     // ── Embedded HLSL ─────────────────────────────────────────────────────────

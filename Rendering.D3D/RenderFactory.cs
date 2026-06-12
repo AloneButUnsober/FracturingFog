@@ -5,6 +5,7 @@
 // initialisation fails for any reason.
 
 using System;
+using System.Runtime.Versioning;
 using FracturingFog.Abstractions;
 
 namespace FracturingFog;
@@ -12,6 +13,13 @@ namespace FracturingFog;
 /// <summary>
 /// Factory that creates the highest-capability renderer available.
 /// Usage: var renderer = RendererFactory.Create(hwnd, w, h);
+///
+/// Phase X.3 / Slice 3.3: the IntPtr overload + <see cref="ProbeDescription"/>
+/// directly construct DX12/DX11 renderers so they are annotated
+/// [SupportedOSPlatform("windows")]. The surface-aware <see
+/// cref="Create(IGpuSurface, bool)"/> overload stays cross-platform — it
+/// dispatches to <see cref="NonWin32Backend"/> on non-Win32 surface kinds and
+/// is the canonical entry point from <c>FracturingFog.Hosting</c>.
 /// </summary>
 public static class RendererFactory
 {
@@ -19,6 +27,7 @@ public static class RendererFactory
     /// Creates a DirectX 12 renderer if the GPU supports FL 12.0+, otherwise
     /// creates a DirectX 11 renderer.  Never throws — falls back silently.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public static IFractalRenderer Create(IntPtr hwnd, int width, int height, bool force_D3D11 = false)
     {
         if (!force_D3D11 && DirectX12Renderer.IsAvailable())
@@ -83,6 +92,16 @@ public static class RendererFactory
                 "IGpuSurface.Handle is null — the native control has not been created yet. " +
                 "Subscribe to GpuSurfaceControl.SurfaceReady before calling Create.");
 
+        // Phase X.3 / Slice 3.3: explicit OS gate so the CA1416 analyzer accepts
+        // the IntPtr Create overload (annotated [SupportedOSPlatform("windows")]).
+        // A Win32Hwnd surface kind implies Windows, but the analyzer cannot infer
+        // that from surface.Kind alone — make the OS check explicit.
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException(
+                "Win32Hwnd surface received on a non-Windows host. " +
+                "Register RendererFactory.NonWin32Backend so non-HWND surfaces " +
+                "are dispatched before reaching the DX path.");
+
         // Surfaces start out at the control's logical size before the first
         // layout pass. Clamp to >=1 so swap chain creation does not fail with
         // an invalid description; the first Resized event will correct the size.
@@ -107,6 +126,7 @@ public static class RendererFactory
     /// Returns a short description of which API will be used on this machine,
     /// useful for the title bar or System Info dialog before a renderer is created.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public static string ProbeDescription()
         => DirectX12Renderer.IsAvailable() ? "DirectX 12" : "DirectX 11";
 }

@@ -24,6 +24,7 @@ using System;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 using Vortice.D3DCompiler;
 using Vortice.Direct3D;
@@ -40,6 +41,7 @@ namespace FracturingFog;
 /// DirectX 12 renderer implementing IFractalRenderer.
 /// Preferred over DirectXRenderer when the GPU supports Feature Level 12.0+.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class DirectX12Renderer : IFractalRenderer
 {
     // ── Constants ─────────────────────────────────────────────────────────────
