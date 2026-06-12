@@ -8,42 +8,64 @@
 // the native HWND on top of every Avalonia control regardless of XAML
 // Z-order, so an Avalonia.Media overlay above the surface is invisible.
 //
-// Uses System.Drawing.Graphics over a pinned in-memory Bitmap; Pen / Brush /
-// Font instances are cached on the compositor so per-frame allocation stays
-// small. The compositor itself is single-threaded — FractalRenderHost only
-// calls it from the calculator continuation, behind the same _d3dGate lock.
+// Phase X.A / Slice A.4: ported off GDI+ (Graphics / Font / Pen / SolidBrush)
+// onto SkiaSharp. SKBitmap.InstallPixels wraps the pinned BGRA buffer; SKCanvas
+// draws onto the pixels in place. SKFont + SKPaint instances are cached on
+// the compositor so per-frame allocation stays small (one SKPaint per stroke /
+// fill colour change). The compositor itself is single-threaded — FractalRenderHost
+// only calls it from the calculator continuation, behind the same _d3dGate lock.
 
 using System;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.Drawing.Text;
+using System.Drawing; // Color, RectangleF — System.Drawing.Primitives (portable)
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 
 using FracturingFog.Imaging;
 using FracturingFog.Models;
 using FracturingFog.ViewState;
 
+using SkiaSharp;
+
 namespace FracturingFog.Rendering
 {
     /// <summary>
-    /// CPU-side overlay (grid + watermark) compositor. Lives in the main
-    /// project alongside FractalRenderHost; runs synchronously on whatever
+    /// CPU-side overlay (grid + watermark) compositor. Lives in the engine
+    /// assembly alongside FractalRenderHost; runs synchronously on whatever
     /// thread the host invokes it from. Not thread-safe.
     /// </summary>
-    [SupportedOSPlatform("windows")]
     internal sealed class FractalOverlayCompositor
     {
-        // Cached drawing resources. Created lazily on first use; reused for
-        // every frame. None are disposed until the host shuts down — the
-        // OS GDI handles cap is high enough that a handful of pens + brushes
-        // is comfortably below any realistic limit.
+        // Cached fonts. Created lazily on first use; reused for every frame.
+        // SKFont owns an SKTypeface — both stay alive for the lifetime of the
+        // compositor instance. Family-name lookups fall back via the platform
+        // SKFontManager when "Courier New" / "Arial" aren't installed (Linux,
+        // macOS — Skia maps to DejaVu Sans Mono / Helvetica respectively).
 
-        private readonly Font _labelFont = new(new FontFamily(GenericFontFamilies.Monospace), 9f, FontStyle.Regular);
-        private readonly Font _zeroFont  = new(new FontFamily(GenericFontFamilies.Monospace), 11f, FontStyle.Bold);
-        private readonly Font _mainFont  = new(new FontFamily(GenericFontFamilies.SansSerif), 14f, FontStyle.Bold);
-        private readonly Font _subFont   = new(new FontFamily(GenericFontFamilies.SansSerif), 9f, FontStyle.Regular);
+        private readonly SKFont _labelFont = MakeFont("Courier New", 9f,  SKFontStyle.Normal);
+        private readonly SKFont _zeroFont  = MakeFont("Courier New", 11f, SKFontStyle.Bold);
+        private readonly SKFont _mainFont  = MakeFont("Arial",       14f, SKFontStyle.Bold);
+        private readonly SKFont _subFont   = MakeFont("Arial",        9f, SKFontStyle.Normal);
+
+        private readonly SKFont _hudHeader = MakeFont("Courier New", 10f, SKFontStyle.Bold);
+        private readonly SKFont _hudBody   = MakeFont("Courier New",  9f, SKFontStyle.Normal);
+
+        private static SKFont MakeFont(string family, float sizePx, SKFontStyle style)
+        {
+            var tf = SKTypeface.FromFamilyName(family, style) ?? SKTypeface.Default;
+            var f = new SKFont(tf, sizePx) { Edging = SKFontEdging.SubpixelAntialias };
+            return f;
+        }
+
+        // Skia's DrawText positions at the baseline; GDI+ DrawString positions
+        // at the top-left. The compositor's existing math computes top-left
+        // y-coordinates, so we shift every text draw by (-ascent) to match.
+        private static float Baseline(SKFont f) => -f.Metrics.Ascent;
+
+        // Total line height (top-to-top). Matches GDI+ Font.GetHeight() within
+        // ~1px, which the layout tolerates.
+        private static float LineHeight(SKFont f) => f.Metrics.Descent - f.Metrics.Ascent;
+
+        private static SKColor ToSk(Color c) => new SKColor(c.R, c.G, c.B, c.A);
 
         /// <summary>
         /// Blend grid + watermark into <paramref name="bgra"/>. <paramref name="bgra"/>
@@ -76,31 +98,36 @@ namespace FracturingFog.Rendering
             Color halo   = darkBg ? Color.FromArgb(120, 0, 0, 0)
                                   : Color.FromArgb(120, 255, 255, 255);
 
-            // Wrap the pinned BGRA buffer in a Bitmap so GDI+ can draw onto
-            // it directly. Format32bppArgb maps BGRA→ARGB byte-identically on
-            // little-endian, which all our targets are.
-            var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
-            try
+            DrawOnto(bgra, width, height, canvas =>
             {
-                IntPtr ptr = handle.AddrOfPinnedObject();
-                using var bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppArgb, ptr);
-                using var g = Graphics.FromImage(bmp);
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                g.TextRenderingHint = TextRenderingHint.AntiAlias;
-                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
-
                 if (showGrid && state != null)
-                    DrawGrid(g, width, height, state, ink, halo);
+                    DrawGrid(canvas, width, height, state, ink, halo);
 
                 if (showWatermark)
-                    DrawWatermark(g, width, height,
+                    DrawWatermark(canvas, width, height,
                         regionName, themeName, programName, programVersion,
                         activeWatermark, ink, halo);
 
                 if (selectionRect is { } r && r.W > 0 && r.H > 0)
-                    DrawSelectionRect(g, width, height, r.X, r.Y, r.W, r.H, ink, halo);
+                    DrawSelectionRect(canvas, width, height, r.X, r.Y, r.W, r.H, ink, halo);
+            });
+        }
 
-                g.Flush();
+        // Pin the BGRA buffer, wrap it as an SKBitmap, hand a canvas to the
+        // caller. BGRA8888 + Premul matches the renderer's upload format so
+        // no swizzle / unpremul conversion is needed.
+        private static void DrawOnto(uint[] bgra, int width, int height, Action<SKCanvas> draw)
+        {
+            var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+            try
+            {
+                IntPtr ptr = handle.AddrOfPinnedObject();
+                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                using var bmp = new SKBitmap();
+                bmp.InstallPixels(info, ptr, info.RowBytes);
+                using var canvas = new SKCanvas(bmp);
+                draw(canvas);
+                canvas.Flush();
             }
             finally
             {
@@ -110,7 +137,7 @@ namespace FracturingFog.Rendering
 
         // ── Grid ──────────────────────────────────────────────────────────
 
-        private void DrawGrid(Graphics g, int w, int h, FractalViewState s, Color ink, Color halo)
+        private void DrawGrid(SKCanvas canvas, int w, int h, FractalViewState s, Color ink, Color halo)
         {
             double cx = s.CenterX, cy = s.CenterY, zoom = s.Zoom;
             if (zoom <= 0 || double.IsNaN(zoom) || double.IsInfinity(zoom)) return;
@@ -119,13 +146,16 @@ namespace FracturingFog.Rendering
             double xMin = cx - w * scale * 0.5, xMax = cx + w * scale * 0.5;
             double yMin = cy - h * scale * 0.5, yMax = cy + h * scale * 0.5;
 
-            using var gridPen  = new Pen(Color.FromArgb(140, ink), 1.0f);
-            using var axisPen  = new Pen(Color.FromArgb(210, ink), 1.6f);
-            using var lblBrush = new SolidBrush(Color.FromArgb(220, ink));
-            using var shdBrush = new SolidBrush(halo);
+            using var gridPen  = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1.0f, IsAntialias = true, Color = ToSk(Color.FromArgb(140, ink)) };
+            using var axisPen  = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1.6f, IsAntialias = true, Color = ToSk(Color.FromArgb(210, ink)) };
+            using var lblBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(220, ink)) };
+            using var shdBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(halo) };
 
             double gridStep = NiceStep((xMax - xMin) / 7.0);
             if (gridStep <= 0) return;
+
+            float lblHeight = LineHeight(_labelFont);
+            float lblBaseline = Baseline(_labelFont);
 
             // Vertical lines + their x-axis labels along the bottom.
             for (double wx = Math.Ceiling(xMin / gridStep) * gridStep;
@@ -134,15 +164,15 @@ namespace FracturingFog.Rendering
                 double px = (wx - cx) / scale + w * 0.5;
                 if (px < 0 || px > w) continue;
                 bool isAxis = Math.Abs(wx) < gridStep * 0.01;
-                g.DrawLine(isAxis ? axisPen : gridPen, (float)px, 0, (float)px, h);
+                canvas.DrawLine((float)px, 0, (float)px, h, isAxis ? axisPen : gridPen);
 
                 string lbl = FormatCoord(wx);
-                var sz = g.MeasureString(lbl, _labelFont);
-                float lx = (float)px - sz.Width * 0.5f;
-                float ly = h - sz.Height - 2;
+                float lblW = _labelFont.MeasureText(lbl);
+                float lx = (float)px - lblW * 0.5f;
+                float ly = h - lblHeight - 2;
                 if (ly < 0) ly = 2;
-                g.DrawString(lbl, _labelFont, shdBrush, lx + 1, ly + 1);
-                g.DrawString(lbl, _labelFont, lblBrush, lx, ly);
+                canvas.DrawText(lbl, lx + 1, ly + 1 + lblBaseline, _labelFont, shdBrush);
+                canvas.DrawText(lbl, lx,     ly     + lblBaseline, _labelFont, lblBrush);
             }
 
             // Horizontal lines + i-suffixed labels along the left edge.
@@ -152,13 +182,13 @@ namespace FracturingFog.Rendering
                 double py = -(wy - cy) / scale + h * 0.5;
                 if (py < 0 || py > h) continue;
                 bool isAxis = Math.Abs(wy) < gridStep * 0.01;
-                g.DrawLine(isAxis ? axisPen : gridPen, 0, (float)py, w, (float)py);
+                canvas.DrawLine(0, (float)py, w, (float)py, isAxis ? axisPen : gridPen);
                 if (isAxis) continue;
 
                 string lbl = FormatCoord(wy) + "i";
-                var sz = g.MeasureString(lbl, _labelFont);
-                g.DrawString(lbl, _labelFont, shdBrush, 4, (float)py - sz.Height * 0.5f + 1);
-                g.DrawString(lbl, _labelFont, lblBrush, 3, (float)py - sz.Height * 0.5f);
+                float top = (float)py - lblHeight * 0.5f;
+                canvas.DrawText(lbl, 4, top + 1 + lblBaseline, _labelFont, shdBrush);
+                canvas.DrawText(lbl, 3, top     + lblBaseline, _labelFont, lblBrush);
             }
 
             // Origin marker.
@@ -166,8 +196,9 @@ namespace FracturingFog.Rendering
             double oy = -(0 - cy) / scale + h * 0.5;
             if (ox >= 0 && ox <= w && oy >= 0 && oy <= h)
             {
-                g.DrawString("0", _zeroFont, shdBrush, (float)ox + 3, (float)oy + 3);
-                g.DrawString("0", _zeroFont, lblBrush, (float)ox + 2, (float)oy + 2);
+                float zb = Baseline(_zeroFont);
+                canvas.DrawText("0", (float)ox + 3, (float)oy + 3 + zb, _zeroFont, shdBrush);
+                canvas.DrawText("0", (float)ox + 2, (float)oy + 2 + zb, _zeroFont, lblBrush);
             }
         }
 
@@ -191,7 +222,7 @@ namespace FracturingFog.Rendering
 
         // ── Selection rectangle (right-drag zoom rubber band) ────────────
 
-        private static void DrawSelectionRect(Graphics g, int w, int h,
+        private static void DrawSelectionRect(SKCanvas canvas, int w, int h,
             int rx, int ry, int rw, int rh, Color ink, Color halo)
         {
             // Clamp to surface so a partly off-screen drag still draws.
@@ -203,23 +234,24 @@ namespace FracturingFog.Rendering
             int clH = y1 - y0;
             if (clW <= 0 || clH <= 0) return;
 
-            // Halo (1px outset) then ink — keeps the outline legible against
+            var rect = new SKRect(x0, y0, x0 + clW, y0 + clH);
+
+            // Halo (outset) then ink — keeps the outline legible against
             // both bright and dark fractal regions.
-            using var haloPen = new Pen(halo, 3.0f);
-            using var inkPen  = new Pen(Color.FromArgb(230, ink), 1.4f);
-            var rect = new RectangleF(x0, y0, clW, clH);
-            g.DrawRectangle(haloPen, rect.X, rect.Y, rect.Width, rect.Height);
-            g.DrawRectangle(inkPen,  rect.X, rect.Y, rect.Width, rect.Height);
+            using var haloPen = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 3.0f, IsAntialias = true, Color = ToSk(halo) };
+            using var inkPen  = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1.4f, IsAntialias = true, Color = ToSk(Color.FromArgb(230, ink)) };
+            canvas.DrawRect(rect, haloPen);
+            canvas.DrawRect(rect, inkPen);
 
             // Faint interior tint so the selected area reads as "selected"
-            // rather than just "outlined". 32-alpha keeps the fractal visible.
-            using var fillBrush = new SolidBrush(Color.FromArgb(40, ink));
-            g.FillRectangle(fillBrush, rect);
+            // rather than just "outlined". 40-alpha keeps the fractal visible.
+            using var fillBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, Color = ToSk(Color.FromArgb(40, ink)) };
+            canvas.DrawRect(rect, fillBrush);
         }
 
         // ── Watermark ─────────────────────────────────────────────────────
 
-        private void DrawWatermark(Graphics g, int w, int h,
+        private void DrawWatermark(SKCanvas canvas, int w, int h,
             string? region, string? theme,
             string? programName, string? programVersion,
             WatermarkDef? activeWatermark,
@@ -242,22 +274,22 @@ namespace FracturingFog.Rendering
                 defaultTextColor: defaultText);
 
             Color fill = Color.FromArgb(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-            using var mainBrush = new SolidBrush(Color.FromArgb(wm.IsCustom ? 255 : 220, fill));
-            using var subBrush  = new SolidBrush(Color.FromArgb(wm.IsCustom ? 230 : 180, fill));
+            using var mainBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(wm.IsCustom ? 255 : 220, fill)) };
+            using var subBrush  = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(wm.IsCustom ? 230 : 180, fill)) };
             Color haloColor = wm.HighlightColor != null
                 ? Color.FromArgb(wm.HighlightColor.A, wm.HighlightColor.R, wm.HighlightColor.G, wm.HighlightColor.B)
                 : halo;
-            using var shdBrush = new SolidBrush(haloColor);
+            using var shdBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(haloColor) };
 
-            var topSz = string.IsNullOrEmpty(wm.TopText)
-                ? new SizeF(0, 0) : g.MeasureString(wm.TopText, _mainFont);
-            var subSz = string.IsNullOrEmpty(wm.SubText)
-                ? new SizeF(0, 0) : g.MeasureString(wm.SubText, _subFont);
+            float topW_f = string.IsNullOrEmpty(wm.TopText) ? 0f : _mainFont.MeasureText(wm.TopText);
+            float subW_f = string.IsNullOrEmpty(wm.SubText) ? 0f : _subFont.MeasureText(wm.SubText);
+            float topH_f = string.IsNullOrEmpty(wm.TopText) ? 0f : LineHeight(_mainFont);
+            float subH_f = string.IsNullOrEmpty(wm.SubText) ? 0f : LineHeight(_subFont);
 
-            int topW = (int)Math.Ceiling(topSz.Width);
-            int topH = (int)Math.Ceiling(topSz.Height);
-            int subW = (int)Math.Ceiling(subSz.Width);
-            int subH = (int)Math.Ceiling(subSz.Height);
+            int topW = (int)Math.Ceiling(topW_f);
+            int topH = (int)Math.Ceiling(topH_f);
+            int subW = (int)Math.Ceiling(subW_f);
+            int subH = (int)Math.Ceiling(subH_f);
 
             const int edgePad = 6;
             var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
@@ -268,8 +300,8 @@ namespace FracturingFog.Rendering
                 var bg = Color.FromArgb(wm.BackgroundColor.A,
                     wm.BackgroundColor.R, wm.BackgroundColor.G, wm.BackgroundColor.B);
                 const int bgPad = 4;
-                using var bgBrush = new SolidBrush(bg);
-                g.FillRectangle(bgBrush, bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2);
+                using var bgBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, Color = ToSk(bg) };
+                canvas.DrawRect(bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2, bgBrush);
             }
 
             int topX = WatermarkResolver.AlignLineX(bx, bw, topW, wm.Justify);
@@ -277,14 +309,16 @@ namespace FracturingFog.Rendering
 
             if (!string.IsNullOrEmpty(wm.TopText))
             {
-                g.DrawString(wm.TopText, _mainFont, shdBrush, topX + 1, by + 1);
-                g.DrawString(wm.TopText, _mainFont, mainBrush, topX, by);
+                float yb = Baseline(_mainFont);
+                canvas.DrawText(wm.TopText, topX + 1, by + 1 + yb, _mainFont, shdBrush);
+                canvas.DrawText(wm.TopText, topX,     by     + yb, _mainFont, mainBrush);
             }
             if (!string.IsNullOrEmpty(wm.SubText))
             {
                 int subY = by + topH;
-                g.DrawString(wm.SubText, _subFont, shdBrush, subX + 1, subY + 1);
-                g.DrawString(wm.SubText, _subFont, subBrush, subX, subY);
+                float yb = Baseline(_subFont);
+                canvas.DrawText(wm.SubText, subX + 1, subY + 1 + yb, _subFont, shdBrush);
+                canvas.DrawText(wm.SubText, subX,     subY     + yb, _subFont, subBrush);
             }
         }
 
@@ -293,9 +327,6 @@ namespace FracturingFog.Rendering
         // Top-left diagnostic block. Drawn on top of the grid + watermark so
         // it stays readable on dense regions. Translucent black background
         // for legibility against any palette.
-
-        private readonly Font _hudHeader = new(new FontFamily(GenericFontFamilies.Monospace), 10f, FontStyle.Bold);
-        private readonly Font _hudBody   = new(new FontFamily(GenericFontFamilies.Monospace), 9f,  FontStyle.Regular);
 
         /// <summary>
         /// Composite the perf HUD (phase timings + HW summary) into a BGRA
@@ -311,16 +342,8 @@ namespace FracturingFog.Rendering
             if (bgra == null || bgra.Length < width * height) return;
             if (width <= 1 || height <= 1) return;
 
-            var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
-            try
+            DrawOnto(bgra, width, height, canvas =>
             {
-                IntPtr ptr = handle.AddrOfPinnedObject();
-                using var bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppArgb, ptr);
-                using var g = Graphics.FromImage(bmp);
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                g.TextRenderingHint = TextRenderingHint.AntiAlias;
-                g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
-
                 // 12 lines. Sized for monospace at 9pt → roughly 14 px per
                 // line including the header at 10pt bold.
                 // Phase 1.b: optional GPU split row appears only when the
@@ -359,16 +382,16 @@ namespace FracturingFog.Rendering
                 };
 
                 float maxW = 0;
-                float lineH = _hudBody.GetHeight(g);
-                float headerH = _hudHeader.GetHeight(g);
+                float lineH = LineHeight(_hudBody);
+                float headerH = LineHeight(_hudHeader);
                 foreach (var ln in lines)
                 {
                     if (string.IsNullOrEmpty(ln)) continue;
-                    var sz = g.MeasureString(ln, _hudBody);
-                    if (sz.Width > maxW) maxW = sz.Width;
+                    float lw = _hudBody.MeasureText(ln);
+                    if (lw > maxW) maxW = lw;
                 }
-                var hdrSz = g.MeasureString(lines[0], _hudHeader);
-                if (hdrSz.Width > maxW) maxW = hdrSz.Width;
+                float hdrW = _hudHeader.MeasureText(lines[0]);
+                if (hdrW > maxW) maxW = hdrW;
 
                 const int pad = 6;
                 int x0 = 8;
@@ -376,37 +399,34 @@ namespace FracturingFog.Rendering
                 int boxW = (int)Math.Ceiling(maxW) + pad * 2;
                 int boxH = (int)Math.Ceiling(headerH + lineH * (lines.Length - 1)) + pad * 2;
 
-                using var bg = new SolidBrush(Color.FromArgb(170, 0, 0, 0));
-                using var bord = new Pen(Color.FromArgb(180, 80, 200, 255), 1f);
-                using var headBrush = new SolidBrush(Color.FromArgb(255, 120, 220, 255));
-                using var bodyBrush = new SolidBrush(Color.FromArgb(245, 230, 230, 230));
-                using var shadowBrush = new SolidBrush(Color.FromArgb(160, 0, 0, 0));
+                using var bg = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, Color = new SKColor(0, 0, 0, 170) };
+                using var bord = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true, Color = new SKColor(80, 200, 255, 180) };
+                using var headBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(120, 220, 255, 255) };
+                using var bodyBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(230, 230, 230, 245) };
+                using var shadowBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0, 0, 0, 160) };
 
-                g.FillRectangle(bg, x0, y0, boxW, boxH);
-                g.DrawRectangle(bord, x0, y0, boxW, boxH);
+                canvas.DrawRect(x0, y0, boxW, boxH, bg);
+                canvas.DrawRect(x0, y0, boxW, boxH, bord);
+
+                float hdrBase = Baseline(_hudHeader);
+                float bodyBase = Baseline(_hudBody);
 
                 float ty = y0 + pad;
                 // Header line
-                g.DrawString(lines[0], _hudHeader, shadowBrush, x0 + pad + 1, ty + 1);
-                g.DrawString(lines[0], _hudHeader, headBrush, x0 + pad, ty);
+                canvas.DrawText(lines[0], x0 + pad + 1, ty + 1 + hdrBase, _hudHeader, shadowBrush);
+                canvas.DrawText(lines[0], x0 + pad,     ty     + hdrBase, _hudHeader, headBrush);
                 ty += headerH;
                 // Body lines
                 for (int i = 1; i < lines.Length; i++)
                 {
                     if (lines[i].Length > 0)
                     {
-                        g.DrawString(lines[i], _hudBody, shadowBrush, x0 + pad + 1, ty + 1);
-                        g.DrawString(lines[i], _hudBody, bodyBrush, x0 + pad, ty);
+                        canvas.DrawText(lines[i], x0 + pad + 1, ty + 1 + bodyBase, _hudBody, shadowBrush);
+                        canvas.DrawText(lines[i], x0 + pad,     ty     + bodyBase, _hudBody, bodyBrush);
                     }
                     ty += lineH;
                 }
-
-                g.Flush();
-            }
-            finally
-            {
-                handle.Free();
-            }
+            });
         }
 
         private static string Pct(double part, double whole)
