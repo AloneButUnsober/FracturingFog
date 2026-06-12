@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FracturingFog.Rendering.D3D — Windows-only DirectX 11/12 renderer + Media
+    Foundation MP4 writer. Carved out of the WinExe so the cross-platform App
+    can reference it via an OS-conditional ProjectReference.
+
+    Phase X.0 / Slice 0.4: scaffold only. No source files yet. The Vortice
+    package refs land when DirectXRenderer.cs, DirectX12Renderer.cs,
+    RenderFactory.cs and Imaging/MP4Writer.cs move in.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>false</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>FracturingFog.Rendering</RootNamespace>
+    <AssemblyName>FracturingFog.Rendering.D3D</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

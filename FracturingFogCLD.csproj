@@ -90,6 +90,48 @@
     <Compile Remove="CalculatorGen\**" />
     <Compile Remove="ColorGen\**" />
     <!--
+      Phase X.0 cross-platform scaffolding. These sibling projects sit under
+      the WinExe's root folder and the SDK's default Compile glob would slurp
+      their sources into the WinExe build. Engine/, Rendering.D3D/,
+      FracturingFog.Win/, Audio.Win/, FracturingFog.App/ are scaffolding
+      placeholders today (no .cs files yet beyond FracturingFog.App/Program.cs);
+      the excludes stay in place as the file-move slices populate them.
+    -->
+    <Compile Remove="Engine\**" />
+    <Compile Remove="Rendering.D3D\**" />
+    <Compile Remove="FracturingFog.Win\**" />
+    <Compile Remove="Audio.Win\**" />
+    <Compile Remove="FracturingFog.App\**" />
+    <!--
+      Audio/ and Hosting/ stay owned by this WinExe's default Compile glob
+      during Phase X.0 scaffolding (their sibling FracturingFog.Audio.csproj
+      / FracturingFog.Hosting.csproj set EnableDefaultCompileItems=false so
+      they compile nothing). But each sibling project still writes its own
+      obj/<config>/<tfm>/*.AssemblyInfo.cs into Audio\obj\ and Hosting\obj\,
+      which THIS WinExe's glob then slurps -> CS0579 duplicate-attribute
+      cascade. Exclude the sibling obj/ + bin/ subtrees explicitly so the
+      WinExe ignores its neighbours' scratch state. These excludes go away
+      with the file-move slices, which flip both folders to
+      EnableDefaultCompileItems=true on the new projects and drop the WinExe
+      ownership.
+    -->
+    <Compile Remove="Audio\obj\**" />
+    <Compile Remove="Audio\bin\**" />
+    <Compile Remove="Hosting\obj\**" />
+    <Compile Remove="Hosting\bin\**" />
+    <None Remove="Audio\obj\**" />
+    <None Remove="Audio\bin\**" />
+    <None Remove="Hosting\obj\**" />
+    <None Remove="Hosting\bin\**" />
+    <EmbeddedResource Remove="Audio\obj\**" />
+    <EmbeddedResource Remove="Audio\bin\**" />
+    <EmbeddedResource Remove="Hosting\obj\**" />
+    <EmbeddedResource Remove="Hosting\bin\**" />
+    <Content Remove="Audio\obj\**" />
+    <Content Remove="Audio\bin\**" />
+    <Content Remove="Hosting\obj\**" />
+    <Content Remove="Hosting\bin\**" />
+    <!--
       Tools/ holds sibling console projects (DocSiteGen) that have their own
       ImplicitUsings + obj/ trees. Without this exclude the WinExe glob slurps
       Tools/DocSiteGen/**/*.cs *and* its generated GlobalUsings.cs — which
@@ -121,6 +163,11 @@
     <None Remove="CalculatorGen\**" />
     <None Remove="ColorGen\**" />
     <None Remove="Tools\**" />
+    <None Remove="Engine\**" />
+    <None Remove="Rendering.D3D\**" />
+    <None Remove="FracturingFog.Win\**" />
+    <None Remove="Audio.Win\**" />
+    <None Remove="FracturingFog.App\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
     <EmbeddedResource Remove="PaletteBuilder\**" />
@@ -133,6 +180,11 @@
     <EmbeddedResource Remove="CalculatorGen\**" />
     <EmbeddedResource Remove="ColorGen\**" />
     <EmbeddedResource Remove="Tools\**" />
+    <EmbeddedResource Remove="Engine\**" />
+    <EmbeddedResource Remove="Rendering.D3D\**" />
+    <EmbeddedResource Remove="FracturingFog.Win\**" />
+    <EmbeddedResource Remove="Audio.Win\**" />
+    <EmbeddedResource Remove="FracturingFog.App\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
     <Content Remove="PaletteBuilder\**" />
@@ -145,6 +197,11 @@
     <Content Remove="CalculatorGen\**" />
     <Content Remove="ColorGen\**" />
     <Content Remove="Tools\**" />
+    <Content Remove="Engine\**" />
+    <Content Remove="Rendering.D3D\**" />
+    <Content Remove="FracturingFog.Win\**" />
+    <Content Remove="Audio.Win\**" />
+    <Content Remove="FracturingFog.App\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
       items automatically from anywhere under the project root. Strip the UI
