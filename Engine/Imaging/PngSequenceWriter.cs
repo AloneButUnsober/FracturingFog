@@ -1,9 +1,8 @@
 using System;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using SkiaSharp;
 
 namespace FracturingFog
 {
@@ -90,29 +89,25 @@ namespace FracturingFog
             });
         }
 
+        // SkiaSharp PNG save. BGRA8888 + Premul matches the upstream GPU
+        // readback. InstallPixels pins the uint[] into the SKBitmap so we
+        // avoid an extra managed→native copy; encode then writes directly
+        // to the file stream. Per-frame allocation count is unchanged from
+        // the GDI+ path (one bmp + one stream).
         private static unsafe void SavePng(uint[] pixels, int w, int h, string path)
         {
-            using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-            var data = bmp.LockBits(new Rectangle(0, 0, w, h),
-                                    ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            try
+            // Keep the SKBitmap lifetime entirely inside the fixed block so the
+            // pinned pointer stays valid until after the encode completes.
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+            fixed (uint* p = pixels)
             {
-                fixed (uint* src = pixels)
-                {
-                    if (data.Stride == w * 4)
-                        Buffer.MemoryCopy(src, (void*)data.Scan0, (long)w * h * 4, (long)w * h * 4);
-                    else
-                    {
-                        byte* dst = (byte*)data.Scan0;
-                        for (int row = 0; row < h; row++)
-                            Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
-                                              dst + (long)row * data.Stride,
-                                              (long)w * 4, (long)w * 4);
-                    }
-                }
+                using var bmp = new SKBitmap();
+                bmp.InstallPixels(info, (IntPtr)p, info.RowBytes);
+                using var image = SKImage.FromBitmap(bmp);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                using var fs = File.OpenWrite(path);
+                data.SaveTo(fs);
             }
-            finally { bmp.UnlockBits(data); }
-            bmp.Save(path, ImageFormat.Png);
         }
 
         public void Dispose()
