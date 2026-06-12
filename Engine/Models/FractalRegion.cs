@@ -20,8 +20,6 @@ using System.Text.Json.Serialization;
 using FracturingFog.Abstractions;
 using FracturingFog.FFMath;
 
-using Vortice.Direct3D12.Video;
-
 namespace FracturingFog.Models
 {
     // ── Data model ────────────────────────────────────────────────────────────

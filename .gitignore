@@ -363,3 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 # Generated documentation site (regenerate with: dotnet run --project Tools/DocSiteGen)
 Docs/site/
+
+# Claude Code worktrees and session state
+.claude/

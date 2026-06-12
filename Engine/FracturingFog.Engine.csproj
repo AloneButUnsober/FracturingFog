@@ -25,4 +25,46 @@
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      ILGPU is the GPU-compute JIT used by the UserBulb GPU calculator,
+      the Sandbox GPU compiler/spike, MandelbrotGpuKernel and AcceleratorProbe.
+      Cross-platform (CPU fallback when no CUDA/OpenCL device); no Windows
+      native dependency.
+    -->
+    <PackageReference Include="ILGPU" Version="1.5.3" />
+    <!--
+      Roslyn scripting drives UserEquationCalculator and UserBulbCalculator
+      hot-load paths. Cross-platform.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
+    <!--
+      System.Drawing.Common is brought in transitionally for the engine's
+      ColorScheme files (which use System.Drawing.Color as a struct, not GDI+
+      APIs). The Color struct itself lives in System.Drawing.Primitives and
+      is cross-platform; the Common package adds GDI+ which is not.
+      Phase X.A swaps these references to System.Drawing.Primitives (already
+      a BCL transitive ref) and drops the Common package, then swaps the
+      surface that actually touches GDI+ (Imaging/ image save) to SkiaSharp.
+    -->
+    <PackageReference Include="System.Drawing.Common" Version="10.0.8" />
+    <!--
+      TECHNICAL DEBT (Phase X.0 / Slice 0.1): MandelbrotGpuKernel was moved
+      into Engine\Rendering\ but it owns Vortice Direct3D 11 buffers and
+      compute shader handles directly. The cross-platform Engine therefore
+      pulls Vortice transitively here, which leaks Windows-only runtime
+      natives into the cross-platform assembly's NuGet closure.
+      Next slice extracts an IGpuKernel interface in Engine\Rendering\ and
+      relocates the D3D-bound implementation into FracturingFog.Rendering.D3D
+      so Engine no longer references Vortice at all. Until then these
+      references are intentional and gated by the Calculator's UseGpuCompute
+      flag (false on non-Windows hosts at runtime).
+    -->
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DirectX" Version="3.8.3" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+    <PackageReference Include="Vortice.Mathematics" Version="2.1.1" />
+  </ItemGroup>
+
 </Project>
