@@ -213,12 +213,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
                         string? themeName = PickTheme(themes, ref lastTheme);
 
-                        // All-black skip: peek-render the candidate region/theme
-                        // at a tiny thumbnail. If every pixel is opaque black —
-                        // theme paints in-set black + region is fully in-set, or
-                        // iter depth too low at extreme zoom — retry up to one
-                        // pass through the theme pool before giving up.
-                        themeName = PickNonBlackTheme(regionName, themeName, themes, ref lastTheme, ct);
+                        // Solid-frame skip: peek-render the candidate region/theme
+                        // at a tiny thumbnail. If every pixel is the same color —
+                        // in-set black, in-set flat color, or iter depth too low
+                        // at extreme zoom — retry up to one pass through the
+                        // theme pool before giving up.
+                        themeName = PickNonSolidTheme(regionName, themeName, themes, ref lastTheme, ct);
 
                         if (t == 0)
                             await RegionTransitionAsync(regionName, themeName, fadeSteps, regionStepMs, ct);
@@ -312,22 +312,26 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             return themes[ti];
         }
 
-        // Tiny offscreen probe — used by the all-black-leg skip path. Mandelbrot
+        // Tiny offscreen probe — used by the solid-frame-leg skip path. Mandelbrot
         // regions get a 64×36 peek; anything else returns null (engine's
         // offscreen render is Mandelbrot-only) and the caller proceeds without
         // skipping.
         private const int PeekW = 64;
         private const int PeekH = 36;
 
-        private static bool IsAllOpaqueBlack(uint[] buf)
+        // Solid-color frame: all pixels equal the first. Catches in-set black
+        // (the original case) plus themes that paint the in-set a non-black
+        // flat color on a fully in-set region.
+        private static bool IsAllOneColor(uint[] buf)
         {
-            const uint OpaqueBlack = 0xFF000000u;
-            for (int i = 0; i < buf.Length; i++)
-                if (buf[i] != OpaqueBlack) return false;
+            if (buf.Length == 0) return false;
+            uint first = buf[0];
+            for (int i = 1; i < buf.Length; i++)
+                if (buf[i] != first) return false;
             return true;
         }
 
-        private string? PickNonBlackTheme(
+        private string? PickNonSolidTheme(
             string regionName, string? themeName,
             IReadOnlyList<string>? themes, ref int lastTheme,
             CancellationToken ct)
@@ -342,10 +346,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 catch { probe = null; }
                 // Non-Mandelbrot region — no probe path, give up the skip.
                 if (probe == null) return themeName;
-                if (!IsAllOpaqueBlack(probe)) return themeName;
+                if (!IsAllOneColor(probe)) return themeName;
 
                 StatusChanged?.Invoke(this,
-                    $"Slideshow: skipping black {regionName} / {themeName}");
+                    $"Slideshow: skipping solid {regionName} / {themeName}");
                 themeName = PickTheme(themes, ref lastTheme);
                 if (themeName == null) return null;
             }
