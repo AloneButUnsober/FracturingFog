@@ -201,3 +201,16 @@ jobs:
       - name: Run Silk smoke (macOS)
         if: matrix.os == 'macos-latest'
         run: dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
+
+      # ── Compute smoke (every leg) ────────────────────────────────────────
+      # Phase X.5 / Slice 5.1 — ILGPU device probe. Constructs an
+      # ILGPU.Context, picks an accelerator (prefers non-CPU), runs a 64×64
+      # Mandelbrot kernel, asserts the iter histogram looks non-degenerate.
+      # CI logs the selected accelerator kind per RID so regressions in the
+      # device-probe path (e.g. CUDA dropping off the GitHub Linux runner)
+      # show up in the build log before they hit users.
+      - name: Build Compute smoke CLI
+        run: dotnet build Compute.Smoke/FracturingFog.Compute.Smoke.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Run Compute smoke
+        run: dotnet run --project Compute.Smoke/FracturingFog.Compute.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
