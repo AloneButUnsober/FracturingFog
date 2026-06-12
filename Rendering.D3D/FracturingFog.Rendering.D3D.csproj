@@ -27,4 +27,20 @@
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      Phase X.0 / Slice 0.1b: MandelbrotGpuKernel (Direct3D 11 compute shader)
+      relocated here from Engine. Owns Vortice D3D11 buffers + compute shader
+      handles directly. Implements FracturingFog.Rendering.IGpuKernel so the
+      Engine calculators can drive it across a cross-platform interface
+      boundary. MP4Writer (Media Foundation P/Invoke) and the DirectX 11/12
+      renderers themselves land here in Slice 0.4.
+    -->
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DirectX" Version="3.8.3" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+    <PackageReference Include="Vortice.Mathematics" Version="2.1.1" />
+  </ItemGroup>
+
 </Project>
