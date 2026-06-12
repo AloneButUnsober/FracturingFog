@@ -1,19 +1,21 @@
 # Cross-platform build matrix.
 #
 # Validates that the cross-platform assemblies (Abstractions, Engine,
-# Hosting, UI.Avalonia, Rendering.Silk, Rendering.Skia, FracturingFog.App)
-# compile on Linux and macOS in addition to Windows. The Windows-only
-# assemblies (Rendering.D3D, FracturingFog.Win, Audio, Audio.Win, the
-# legacy WinExe FracturingFogCLD) are net10.0-windows TFM by construction
-# and skipped on the Linux/macOS legs.
+# Audio, Hosting, UI.Avalonia, Rendering.Silk, Rendering.Skia,
+# FracturingFog.App) compile on Linux and macOS in addition to Windows.
+# The Windows-only assemblies (Rendering.D3D, FracturingFog.Win,
+# Audio.Win, the legacy WinExe FracturingFogCLD) are net10.0-windows
+# TFM by construction and skipped on the Linux/macOS legs.
 #
-# Phase X.0 carve-out status (2026-06-12):
+# Carve-out status (post-Phase X.B, 2026-06-12):
 #   * Engine, Hosting, App, Audio, Rendering.D3D, Win, Audio.Win all have
-#     populated source trees. The CI matrix exercises every assembly that
+#     populated source trees. The matrix exercises every assembly that
 #     can build on the leg.
-#   * FracturingFog.Audio is temporarily net10.0-windows (NAudio WASAPI /
-#     WinMM); Phase X.B introduces IAudioCaptureBackend and flips this TFM
-#     to net10.0.
+#   * FracturingFog.Audio (BeatAnalyzer, AudioCaptureDriver,
+#     NoopAudioBackend, AudioSettingsStore) is net10.0 cross-platform.
+#     The Windows NAudio capture backend (WASAPI loopback, WaveOutEvent,
+#     WaveInEvent) plus legacy AudioEngine + FractalSynth live in
+#     FracturingFog.Audio.Win.
 
 name: Cross-platform build
 
@@ -71,14 +73,17 @@ jobs:
       - name: Build Hosting
         run: dotnet build Hosting/FracturingFog.Hosting.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
+      # Phase X.B / Slice B.6 — Audio is now net10.0 and cross-platform.
+      # Carries BeatAnalyzer (MathNet FFT), AudioCaptureDriver,
+      # NoopAudioBackend (NAudio file decode), AudioSettingsStore. The
+      # NAudio WASAPI/WinMM bits moved to FracturingFog.Audio.Win.
+      - name: Build FracturingFog.Audio
+        run: dotnet build Audio/FracturingFog.Audio.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
       - name: Build FracturingFog.App
         run: dotnet build FracturingFog.App/FracturingFog.App.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
       # ── Windows-only assemblies (Win leg only) ───────────────────────────
-      - name: Build FracturingFog.Audio
-        if: matrix.build_windows_only
-        run: dotnet build Audio/FracturingFog.Audio.csproj -c Release -r ${{ matrix.rid }} --self-contained false
-
       - name: Build FracturingFog.Audio.Win
         if: matrix.build_windows_only
         run: dotnet build Audio.Win/FracturingFog.Audio.Win.csproj -c Release -r ${{ matrix.rid }} --self-contained false

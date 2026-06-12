@@ -1,10 +1,13 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
 
 namespace FracturingFog.Audio
 {
+    [SupportedOSPlatform("windows")]
     /// <summary>
     /// Owns the active capture source (loopback / file / mic / fractal synth) and
     /// pushes captured PCM samples into a <see cref="BeatAnalyzer"/>. Exposes the
@@ -253,7 +256,43 @@ namespace FracturingFog.Audio
             if (e.BytesRecorded <= 0) return;
             var fmt = _waveIn?.WaveFormat;
             if (fmt == null) return;
-            _analyzer.ProcessRawBytes(e.Buffer.AsSpan(0, e.BytesRecorded), fmt);
+            int bytesPerFrame = fmt.Channels * fmt.BitsPerSample / 8;
+            if (bytesPerFrame <= 0) return;
+            int frames = e.BytesRecorded / bytesPerFrame;
+            if (frames <= 0) return;
+            int sampleCount = frames * fmt.Channels;
+            // Slice B.6: byte → float conversion lives here now that
+            // BeatAnalyzer.ProcessRawBytes (NAudio.Wave.WaveFormat shape) is gone.
+            // ConvertRawToFloat mirrors WindowsNAudioBackend's helper.
+            var floats = new float[sampleCount];
+            if (!ConvertRawToFloat(e.Buffer.AsSpan(0, e.BytesRecorded), fmt, floats)) return;
+            _analyzer.EnsureFormat(fmt.SampleRate, fmt.Channels);
+            _analyzer.ProcessSamples(floats.AsSpan(0, sampleCount));
+        }
+
+        private static bool ConvertRawToFloat(ReadOnlySpan<byte> bytes, WaveFormat fmt, Span<float> dest)
+        {
+            if (fmt.Encoding == WaveFormatEncoding.IeeeFloat && fmt.BitsPerSample == 32)
+            {
+                var src = MemoryMarshal.Cast<byte, float>(bytes);
+                src.Slice(0, Math.Min(src.Length, dest.Length)).CopyTo(dest);
+                return true;
+            }
+            if (fmt.Encoding == WaveFormatEncoding.Pcm && fmt.BitsPerSample == 16)
+            {
+                var src = MemoryMarshal.Cast<byte, short>(bytes);
+                int n = Math.Min(src.Length, dest.Length);
+                for (int i = 0; i < n; i++) dest[i] = src[i] / 32768f;
+                return true;
+            }
+            if (fmt.Encoding == WaveFormatEncoding.Pcm && fmt.BitsPerSample == 32)
+            {
+                var src = MemoryMarshal.Cast<byte, int>(bytes);
+                int n = Math.Min(src.Length, dest.Length);
+                for (int i = 0; i < n; i++) dest[i] = src[i] / (float)int.MaxValue;
+                return true;
+            }
+            return false;
         }
 
         public void Dispose()

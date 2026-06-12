@@ -2,7 +2,6 @@ using System;
 using System.Numerics;
 using System.Threading;
 using MathNet.Numerics.IntegralTransforms;
-using NAudio.Wave;
 
 namespace FracturingFog.Audio
 {
@@ -108,41 +107,6 @@ namespace FracturingFog.Audio
                 _bpm = 0;
                 _lastBeatSampleClock = long.MinValue;
             }
-        }
-
-        /// <summary>Accepts raw bytes in the supplied WaveFormat — converts to mono float[-1,1].</summary>
-        public void ProcessRawBytes(ReadOnlySpan<byte> bytes, WaveFormat fmt)
-        {
-            int frames = bytes.Length / (fmt.Channels * fmt.BitsPerSample / 8);
-            if (frames <= 0) return;
-            Span<float> mono = frames <= 4096 ? stackalloc float[frames] : new float[frames];
-
-            if (fmt.Encoding == WaveFormatEncoding.IeeeFloat && fmt.BitsPerSample == 32)
-            {
-                var src = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(bytes);
-                MixDownToMono(src, mono, fmt.Channels);
-            }
-            else if (fmt.Encoding == WaveFormatEncoding.Pcm && fmt.BitsPerSample == 16)
-            {
-                var src = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(bytes);
-                Span<float> tmp = src.Length <= 8192 ? stackalloc float[src.Length] : new float[src.Length];
-                for (int i = 0; i < src.Length; i++) tmp[i] = src[i] / 32768f;
-                MixDownToMono(tmp, mono, fmt.Channels);
-            }
-            else if (fmt.Encoding == WaveFormatEncoding.Pcm && fmt.BitsPerSample == 32)
-            {
-                var src = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, int>(bytes);
-                Span<float> tmp = src.Length <= 8192 ? stackalloc float[src.Length] : new float[src.Length];
-                for (int i = 0; i < src.Length; i++) tmp[i] = src[i] / (float)int.MaxValue;
-                MixDownToMono(tmp, mono, fmt.Channels);
-            }
-            else
-            {
-                // Unsupported format — silently ignore.
-                return;
-            }
-
-            FeedMono(mono);
         }
 
         /// <summary>Accepts interleaved float samples — mixes down to mono and feeds the FFT.</summary>
