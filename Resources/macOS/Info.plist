@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Phase X.6 / Slice 6.3 — Info.plist template for the macOS .app bundle.
+  Tools/Packaging/build-mac-app.sh copies this file into the bundle's
+  Contents/Info.plist; missing entries fall back to the script's inline
+  stub so a fresh checkout still builds.
+
+  Update CFBundleVersion + CFBundleShortVersionString in the release
+  workflow (Slice 6.4) so each tagged build advertises its semver.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Fracturing Fog</string>
+    <key>CFBundleDisplayName</key>
+    <string>Fracturing Fog</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.dpiserve.fracturingfog</string>
+    <key>CFBundleVersion</key>
+    <string>1.0.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleExecutable</key>
+    <string>FracturingFog.App</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleIconFile</key>
+    <string>FracturingFog</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright Bradley Brown. All rights reserved.</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.graphics-design</string>
+</dict>
+</plist>
