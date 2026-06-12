@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -8,9 +9,12 @@ namespace FracturingFog
 {
     /// <summary>
     /// Encodes a PNG image sequence (frame_NNNNNN.png) into a video file using
-    /// an external ffmpeg.exe. The binary is located by, in order:
-    ///   1. App base directory (and a "Tools" subfolder under it).
-    ///   2. PATH.
+    /// an external ffmpeg binary. The binary is located by, in order:
+    ///   1. App base directory (`ffmpeg.exe` on Win, `ffmpeg` on Linux/macOS).
+    ///   2. App base `Tools/&lt;rid&gt;/ffmpeg{.exe}` (per-RID bundle).
+    ///   3. App base `Tools/ffmpeg{.exe}` (legacy single-binary bundle).
+    ///   4. App base `Resources/ffmpeg{.exe}` (legacy resource bundle).
+    ///   5. PATH.
     /// When ffmpeg is not present, callers should fall back to keeping the
     /// PNG sequence on disk.
     /// </summary>
@@ -26,20 +30,37 @@ namespace FracturingFog
             HighQualityH264Mp4,
         }
 
-        /// <summary>Resolves ffmpeg.exe path or returns null if not found.</summary>
+        /// <summary>
+        /// Phase X.2 / Slice 2.3 — cross-platform binary name. Windows hosts
+        /// resolve `ffmpeg.exe`; every other OS resolves `ffmpeg` (Linux,
+        /// macOS, BSD package managers all install without the .exe suffix).
+        /// </summary>
+        private static string FfmpegFileName =>
+            OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+
+        /// <summary>Resolves the ffmpeg binary path or returns null if not found.</summary>
         public static string? FindFfmpeg()
         {
             string baseDir = AppContext.BaseDirectory;
+            string fileName = FfmpegFileName;
+            string rid = RuntimeInformation.RuntimeIdentifier;
+
             string[] candidates =
             {
-                Path.Combine(baseDir, "ffmpeg.exe"),
-                Path.Combine(baseDir, "Tools", "ffmpeg.exe"),
-                Path.Combine(baseDir, "Resources", "ffmpeg.exe"),
+                Path.Combine(baseDir, fileName),
+                // Per-RID bundle (Slice 2.4). Lets a published app ship a
+                // matched ffmpeg next to the binary for each shipping RID.
+                Path.Combine(baseDir, "Tools", rid, fileName),
+                // Legacy single-binary bundle (pre-X.2 Windows builds dropped
+                // ffmpeg.exe into Tools/ at the App base directly).
+                Path.Combine(baseDir, "Tools", fileName),
+                Path.Combine(baseDir, "Resources", fileName),
             };
             foreach (var c in candidates)
                 if (File.Exists(c)) return c;
 
-            // Look on PATH.
+            // Look on PATH. Path.PathSeparator is ';' on Windows, ':' on
+            // Linux/macOS — System.IO.Path handles both correctly.
             string? pathEnv = Environment.GetEnvironmentVariable("PATH");
             if (!string.IsNullOrEmpty(pathEnv))
             {
@@ -48,7 +69,7 @@ namespace FracturingFog
                     if (string.IsNullOrWhiteSpace(dir)) continue;
                     try
                     {
-                        string p = Path.Combine(dir.Trim(), "ffmpeg.exe");
+                        string p = Path.Combine(dir.Trim(), fileName);
                         if (File.Exists(p)) return p;
                     }
                     catch { /* ignore malformed PATH entries */ }
