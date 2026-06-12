@@ -293,6 +293,14 @@
     -->
     <ProjectReference Include="Audio\FracturingFog.Audio.csproj" />
     <!--
+      Phase X.B / Slice B.4 — Windows-only NAudio IAudioCaptureBackend.
+      Loaded reflectively by AvaloniaShellBootstrap.CreateAudioBackend so
+      Hosting can stay free of Win-only refs once it moves to net10.0;
+      WinExe pulls the project in unconditionally so the dll ships alongside
+      the binary for Assembly.Load to find at runtime.
+    -->
+    <ProjectReference Include="Audio.Win\FracturingFog.Audio.Win.csproj" />
+    <!--
       Phase X.0 / Slice 0.3c — Windows-only-but-not-WinForms host shims.
       Currently holds NativeMouseForwarder (HWND subclass via user32 /
       comctl32) which the Avalonia shell bootstrap installs to bridge
