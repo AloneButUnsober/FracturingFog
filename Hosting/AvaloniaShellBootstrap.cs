@@ -225,6 +225,15 @@ namespace FracturingFog.Hosting
                 }
                 catch { /* swallow — must not crash the native subclass */ }
             };
+            // Bridge "left-button down on render surface" to the Toy-Mode
+            // window-drag hook. When inactive the lambda returns false and
+            // the click falls through to the normal Inspect / pan path; when
+            // active MainWindow's hook kicks off an OS window move.
+            NativeMouseForwarder.LeftDragWindowHook = () =>
+            {
+                try { return FracturingFog.UI.Avalonia.AvaloniaShell.LeftDragWindowHook?.Invoke() ?? false; }
+                catch { return false; }
+            };
 
             // ── Services ─────────────────────────────────────────────────
             // Theme service holds a reference to the render host so its

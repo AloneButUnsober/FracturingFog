@@ -406,10 +406,19 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             // so the next composited frame's watermark reflects the new theme.
             await OnUiAsync(() => { _host.ThemeName = themeName; return 0; }, ct);
 
-            // Recolour happens on the UI thread (mutates the live frame) and
-            // returns the new buffer; null when the active fractal has no cheap
-            // recolor → fall back to a plain apply.
-            uint[]? incoming = await OnUiAsync(() => _service.RenderThemeOffscreen(themeName!, w, h), ct);
+            // Recolour returns the new buffer; null when the active fractal
+            // has no cheap recolor → fall back to a plain apply. Runs on a
+            // background thread (same pattern as RegionTransitionAsync's
+            // RenderRegionOffscreen) so a slow non-Mandelbrot Calculate —
+            // Sandbox / UserEquation / UserBulb can take seconds — does NOT
+            // block the UI thread. When it did, the snapshot stayed frozen
+            // on screen for the duration of the recalc and the fade
+            // finished in the last 160 ms, which the user perceived as a
+            // hard cut. Mandelbrot's Calculate is fast enough that the
+            // pre-fix UI-thread path looked fine, masking the bug for
+            // Mandel themes.
+            uint[]? incoming = await Task.Run(
+                () => _service.RenderThemeOffscreen(themeName!, w, h), ct);
 
             if (incoming == null)
             {
