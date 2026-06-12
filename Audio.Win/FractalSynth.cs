@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.Versioning;
 using NAudio.Wave;
 
 namespace FracturingFog.Audio
@@ -10,6 +11,7 @@ namespace FracturingFog.Audio
     /// Implements <see cref="ISampleProvider"/> so it can drive an NAudio output
     /// device and/or be tapped into the analyzer for closed-loop sync.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public sealed class FractalSynth : ISampleProvider
     {
         private readonly WaveFormat _format = WaveFormat.CreateIeeeFloatWaveFormat(44100, 2);

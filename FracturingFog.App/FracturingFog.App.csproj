@@ -35,12 +35,13 @@
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
     <ProjectReference Include="..\Hosting\FracturingFog.Hosting.csproj" />
     <!--
-      Phase X.0 / Slice 0.6 — FracturingFog.Audio is still net10.0-windows
-      pending the Phase X.B IAudioCaptureBackend split. Cross-platform App
-      cannot reference it until the TFM flips. Once X.B lands, the audio
-      capture driver lives in this assembly's closure and the Win-only
-      NAudio backend rides FracturingFog.Audio.Win via a $(OS) gate.
+      Phase X.B / Slice B.6 — FracturingFog.Audio flipped to net10.0. Hosts
+      the cross-platform AudioCaptureDriver + NoopAudioBackend + BeatAnalyzer.
+      The Win-only NAudio capture backend (WASAPI/WinMM) lives in
+      FracturingFog.Audio.Win and is reflectively loaded by
+      AvaloniaShellBootstrap.CreateAudioBackend on Windows hosts.
     -->
+    <ProjectReference Include="..\Audio\FracturingFog.Audio.csproj" />
   </ItemGroup>
 
   <!--

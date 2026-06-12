@@ -14,16 +14,13 @@
 
   <PropertyGroup>
     <!--
-      Phase X.0 / Slice 0.2 — temporary net10.0-windows TFM. The current
-      AudioEngine + FractalSynth + BeatAnalyzer use NAudio.CoreAudioApi
-      (WASAPI loopback) and WaveOutEvent (WinMM speaker output), both of
-      which only resolve on Windows. Phase X.B introduces IAudioCaptureBackend
-      and splits these files: backend-neutral analyzer driver lands in this
-      assembly (then flips to net10.0), Windows WASAPI/WinMM backend lands
-      in FracturingFog.Audio.Win.
+      Phase X.B / Slice B.6 — TFM flipped to net10.0. AudioEngine + FractalSynth
+      (NAudio WASAPI/WinMM dependents) now live in FracturingFog.Audio.Win.
+      What stays here: BeatAnalyzer (MathNet FFT, no NAudio), AudioCaptureDriver
+      (IAudioCaptureBackend consumer), NoopAudioBackend (NAudio.AudioFileReader
+      is cross-platform for WAV/MP3/AIFF), AudioSettingsStore.
     -->
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWindowsForms>false</UseWindowsForms>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <Platforms>x64</Platforms>
