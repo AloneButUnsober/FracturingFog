@@ -196,6 +196,29 @@ namespace FracturingFog.Hosting
             var viewState = new FractalViewState();
             var initialMap = ColorPalette.GetPaletteByName("HSV");
             s_renderHost = new FractalRenderHost(s_renderer, viewState, w, h, initialMap);
+            // Phase X.0 / Slice 0.1c: install the D3D11-backed IGpuKernel
+            // factory. Engine cannot construct the kernel itself because
+            // MandelbrotGpuKernel lives in Rendering.D3D and owns Vortice
+            // handles; the host knows the live renderer and can downcast.
+            // Non-D3D11 renderers (Silk GL, Skia CPU) return null so
+            // UseGpuCompute stays off silently.
+            s_renderHost.GpuKernelFactory = (renderer, gate) =>
+            {
+                if (renderer is FracturingFog.DirectXRenderer dx
+                    && dx.TryGetD3D11(out var dev, out var ctx))
+                {
+                    return new FracturingFog.Rendering.MandelbrotGpuKernel(dev, ctx, gate);
+                }
+                return null;
+            };
+            // Phase X.0 / Slice 0.1c: Win-only Media Foundation H.264 writer.
+            // Phase X.2 ships an FfmpegVideoWriter alternative the bootstrap
+            // picks per-OS; on Windows MF stays the default when available.
+            s_renderHost.VideoWriterFactory = (path, w, h) =>
+            {
+                try { return new FracturingFog.Mp4Writer(path, w, h); }
+                catch { return null; }
+            };
             s_renderHost.FrameCompleted += (_, info) => s_lastFrame = info;
             s_input = new FractalInputController(viewState);
 

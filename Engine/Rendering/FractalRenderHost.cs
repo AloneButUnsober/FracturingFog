@@ -304,17 +304,44 @@ namespace FracturingFog.Rendering
         public MandelbrotCalculator Mandelbrot => _calculator;
 
         // T3.1: GPU compute kernel constructed lazily on the first Use
-        // request when the renderer is D3D11. Null on non-D3D11 backends or
+        // request when a factory is installed. Null on non-D3D11 backends or
         // when the user has never enabled the feature.
-        private MandelbrotGpuKernel? _gpuKernel;
+        private IGpuKernel? _gpuKernel;
+
+        /// <summary>
+        /// Backend-specific kernel factory installed by the host bootstrap
+        /// (cross-platform App or legacy WinExe). Engine cannot construct an
+        /// IGpuKernel itself because every implementation owns
+        /// renderer-specific handles (ID3D11Device for the D3D11 path, an
+        /// ILGPU accelerator for the future managed path, a Silk.NET context
+        /// for the GL path, etc.). The factory closure receives the active
+        /// renderer + the host's D3D-serialisation gate so it can downcast,
+        /// pull the native handles, and construct the right backend.
+        /// Phase X.0 / Slice 0.1c — broke the direct DirectXRenderer +
+        /// MandelbrotGpuKernel dependency that previously pinned this class
+        /// to the WinExe.
+        /// </summary>
+        public Func<IFractalRenderer, object, IGpuKernel?>? GpuKernelFactory { get; set; }
+
+        /// <summary>
+        /// Backend-specific video-encoder factory installed by the host
+        /// bootstrap. Receives the temp file path + source width/height,
+        /// returns a streaming IVideoWriter. Returning null disables video
+        /// recording with a status banner. Engine cannot construct an
+        /// IVideoWriter itself because every implementation owns
+        /// platform-specific handles (Media Foundation COM on Windows via
+        /// Mp4Writer in Rendering.D3D, an ffmpeg child process on Linux/macOS
+        /// via the Phase X.2 FfmpegVideoWriter).
+        /// </summary>
+        public Func<string, int, int, FracturingFog.Imaging.IVideoWriter?>? VideoWriterFactory { get; set; }
 
         /// <summary>T3.1: toggle the SP-path GPU compute dispatch on the
         /// active MandelbrotCalculator. First true assignment lazily
-        /// constructs the kernel against the renderer's D3D11 device;
+        /// constructs the kernel via <see cref="GpuKernelFactory"/>;
         /// subsequent toggles just flip the calc's
         /// <see cref="MandelbrotCalculator.UseGpuCompute"/> flag. Silently
-        /// stays false when the renderer is not D3D11 — caller should reflect
-        /// that back to the UI by re-reading the property.</summary>
+        /// stays false when no factory is installed or when the factory
+        /// returns null (non-D3D11 renderer).</summary>
         public bool UseGpuCompute
         {
             get => _calculator.UseGpuCompute;
@@ -322,32 +349,25 @@ namespace FracturingFog.Rendering
             {
                 if (value && _gpuKernel == null)
                 {
-                    if (_renderer is DirectXRenderer dx
-                        && dx.TryGetD3D11(out var dev, out var ctx))
+                    if (GpuKernelFactory == null) return;
+                    try
                     {
-                        try
-                        {
-                            // Share _d3dGate so kernel.Run serialises with
-                            // renderer.Render — the immediate context is not
-                            // thread-safe across the calc thread + upload
-                            // threadpool calls.
-                            _gpuKernel = new MandelbrotGpuKernel(dev, ctx, _d3dGate);
-                            _calculator.GpuKernel = _gpuKernel;
-                            _escapeCalculator.GpuKernel = _gpuKernel;
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine(
-                                $"[FractalRenderHost] GPU compute kernel init failed: {ex.Message}");
-                            _gpuKernel = null;
-                            _calculator.GpuKernel = null;
-                            _escapeCalculator.GpuKernel = null;
-                            return; // leave UseGpuCompute false
-                        }
+                        // Share _d3dGate so kernel.Run serialises with
+                        // renderer.Render — the immediate context is not
+                        // thread-safe across the calc thread + upload
+                        // threadpool calls.
+                        _gpuKernel = GpuKernelFactory(_renderer, _d3dGate);
+                        if (_gpuKernel == null) return;
+                        _calculator.GpuKernel = _gpuKernel;
+                        _escapeCalculator.GpuKernel = _gpuKernel;
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        // Non-D3D11 renderer (GL / Skia) — silently stay off.
+                        Console.Error.WriteLine(
+                            $"[FractalRenderHost] GPU compute kernel init failed: {ex.Message}");
+                        _gpuKernel = null;
+                        _calculator.GpuKernel = null;
+                        _escapeCalculator.GpuKernel = null;
                         return;
                     }
                 }

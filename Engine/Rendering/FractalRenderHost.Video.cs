@@ -127,7 +127,11 @@ namespace FracturingFog.Rendering
         private bool _bandStatsValid;
 
         // ── Recorders (single-shot only; slideshow never records) ──────────
-        private Mp4Writer? _videoMp4Writer;
+        // Phase X.0 / Slice 0.1c: typed as the cross-platform IVideoWriter
+        // contract. Construction goes through VideoWriterFactory installed by
+        // the host bootstrap so Engine does not reference Mp4Writer
+        // (Media Foundation P/Invoke, ships in Rendering.D3D).
+        private FracturingFog.Imaging.IVideoWriter? _videoMp4Writer;
         private string? _videoMp4TempPath;
         private Stopwatch? _videoMp4Sw;
         private PngSequenceWriter? _videoPngWriter;
@@ -499,7 +503,12 @@ namespace FracturingFog.Rendering
             try
             {
                 string tempPath = Path.Combine(Path.GetTempPath(), $"fracturingfog_{Guid.NewGuid():N}.mp4");
-                _videoMp4Writer = new Mp4Writer(tempPath, w, h);
+                if (VideoWriterFactory == null)
+                {
+                    RaiseStatus("Video recording disabled — no encoder backend installed.");
+                    return;
+                }
+                _videoMp4Writer = VideoWriterFactory(tempPath, w, h);
                 _videoMp4TempPath = tempPath;
                 _videoMp4Sw = Stopwatch.StartNew();
             }
@@ -527,7 +536,7 @@ namespace FracturingFog.Rendering
             }
         }
 
-        private (Mp4Writer? Writer, string? TempPath) TakeVideoRecordingState()
+        private (FracturingFog.Imaging.IVideoWriter? Writer, string? TempPath) TakeVideoRecordingState()
         {
             var w = _videoMp4Writer;
             var p = _videoMp4TempPath;
