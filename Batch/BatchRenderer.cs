@@ -256,7 +256,7 @@ namespace FracturingFog.Batch
                     // ffmpeg image2 demuxer wants frames numbered starting at 1.
                     string framePath = Path.Combine(pngFolder,
                         string.Format(FrameNameFmt, f + 1));
-                    ImageExport.SavePixelsToFile(
+                    ImageExportGdi.SavePixelsToFile(
                         buffer, outW, outH, framePath, ImageFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
@@ -432,7 +432,7 @@ namespace FracturingFog.Batch
             finally { bmp.UnlockBits(wd); }
 
             using (var g = System.Drawing.Graphics.FromImage(bmp))
-                ImageExport.AddWaterMark(
+                ImageExportGdi.AddWaterMark(
                     g, text, w, h, System.Drawing.Color.White, subText, poster: false);
 
             var rd = bmp.LockBits(

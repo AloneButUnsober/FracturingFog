@@ -39,26 +39,18 @@
     -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
     <!--
-      System.Drawing.Common is brought in transitionally for the engine's
-      ColorScheme files (which use System.Drawing.Color as a struct, not GDI+
-      APIs). The Color struct itself lives in System.Drawing.Primitives and
-      is cross-platform; the Common package adds GDI+ which is not.
-      Phase X.A swaps these references to System.Drawing.Primitives (already
-      a BCL transitive ref) and drops the Common package, then swaps the
-      surface that actually touches GDI+ (Imaging/ image save) to SkiaSharp.
+      Phase X.A / Slice A.7 — System.Drawing.Common dropped. The engine
+      now uses only System.Drawing.Primitives (BCL — Color, Rectangle,
+      Point, PointF, RectangleF, SizeF) which has no GDI+ dependency and
+      is fully cross-platform. The Windows-only GDI+ watermark and
+      ImageFormat-encode pipeline moved to FracturingFog.Imaging.ImageExportGdi
+      in FracturingFog.Win.csproj.
     -->
-    <PackageReference Include="System.Drawing.Common" Version="10.0.8" />
     <!--
       Phase X.A / Slice A.2 — SkiaSharp for the cross-platform image save
       pipeline. Engine.Imaging.ImageExport, PngSequenceWriter, PosterRenderer,
-      and FractalOverlayCompositor all route through SkiaSharp on non-Windows
-      hosts so the engine can write PNG/JPEG/WebP/BMP on Linux + macOS. The
-      System.Drawing.Common reference above survives only because some
-      Models/ColorSchemes files use System.Drawing.Color as a struct (covered
-      by the cross-platform System.Drawing.Primitives BCL assembly) and one
-      orbit-trap theme still does GDI+ pixel sampling (CA1416 — gated by
-      OperatingSystem.IsWindows() at runtime; Slice A.5/A.6 swaps the last
-      consumers and drops the package).
+      and FractalOverlayCompositor all route through SkiaSharp so the engine
+      can write PNG/JPEG/WebP/BMP on Windows + Linux + macOS.
     -->
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <!--
