@@ -1215,9 +1215,9 @@ namespace FracturingFog.Hosting
                     string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
                     var format = ext switch
                     {
-                        ".bmp" => System.Drawing.Imaging.ImageFormat.Bmp,
-                        ".tif" or ".tiff" => System.Drawing.Imaging.ImageFormat.Tiff,
-                        _ => System.Drawing.Imaging.ImageFormat.Png,
+                        ".bmp" => FracturingFog.Imaging.ImageFileFormat.Bmp,
+                        ".tif" or ".tiff" => FracturingFog.Imaging.ImageFileFormat.Tiff,
+                        _ => FracturingFog.Imaging.ImageFileFormat.Png,
                     };
 
                     string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)

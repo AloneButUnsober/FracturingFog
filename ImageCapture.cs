@@ -297,7 +297,7 @@ namespace FracturingFog
                 FractalParameters = _fractalParams,
                 Rotate = isPortrait || rotateImage,
                 Path = path,
-                Format = format,
+                Format = format.ToFileFormat(),
                 Watermark = waterMark,
                 SubText = subText,
             };

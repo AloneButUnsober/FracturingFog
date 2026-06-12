@@ -9,18 +9,22 @@
 // Sample/MapWithOrbit run lock-free on the worker threads.
 //
 //   • OrbitTrapImageRainbowMap — built-in procedural rainbow texture sample.
+//
+// Phase X.A / Slice A.6: the abstract base now takes a flat int[] + dims
+// directly rather than a System.Drawing.Bitmap. The built-in rainbow
+// pinwheel builds the int[] itself, no GDI+ involved. External callers
+// loading a texture from disk should decode via SkiaSharp (SKBitmap →
+// GetPixels) and pass the resulting int[].
 
 using FracturingFog.Interefaces;
 using System;
-using System.Drawing;
-using System.Drawing.Imaging;
 
 namespace FracturingFog.Models
 {
     /// <summary>
-    /// Shared base for image-trap colour maps.  Subclasses supply a bitmap by
-    /// returning a flat pixel buffer and dimensions; the base class handles
-    /// the orbit-trap accumulation, UV mapping, and bilinear sampling.
+    /// Shared base for image-trap colour maps.  Subclasses supply a packed
+    /// 0xFFRRGGBB pixel buffer plus dimensions; the base class handles the
+    /// orbit-trap accumulation, UV mapping, and bilinear sampling.
     /// </summary>
     public abstract class OrbitTrapImageBaseMap : OrbitTrapBaseMap
     {
@@ -38,23 +42,22 @@ namespace FracturingFog.Models
         /// <summary>Whether the bitmap tiles or clamps off-edge UVs.</summary>
         protected virtual bool TileWrap => true;
 
-        protected OrbitTrapImageBaseMap(Bitmap bitmap)
+        /// <summary>
+        /// Construct from a pre-decoded ARGB32 pixel buffer. The buffer is
+        /// assumed to be tightly packed (no stride padding) and is taken by
+        /// reference — callers must not mutate it after construction.
+        /// </summary>
+        protected OrbitTrapImageBaseMap(int[] pixels, int width, int height)
         {
-            ImgWidth  = bitmap.Width;
-            ImgHeight = bitmap.Height;
-            Pixels = new int[ImgWidth * ImgHeight];
+            if (pixels == null) throw new ArgumentNullException(nameof(pixels));
+            if (width <= 0 || height <= 0)
+                throw new ArgumentOutOfRangeException(nameof(width), "Image dimensions must be positive.");
+            if (pixels.Length < width * height)
+                throw new ArgumentException("Pixel buffer too small for the given dimensions.", nameof(pixels));
 
-            // Copy bitmap bytes into Pixels[] once — Bitmap.GetPixel is far too
-            // slow for per-pixel iteration use and is not thread-safe.
-            var rect = new Rectangle(0, 0, ImgWidth, ImgHeight);
-            var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly,
-                                       PixelFormat.Format32bppArgb);
-            try
-            {
-                System.Runtime.InteropServices.Marshal.Copy(
-                    data.Scan0, Pixels, 0, Pixels.Length);
-            }
-            finally { bitmap.UnlockBits(data); }
+            ImgWidth  = width;
+            ImgHeight = height;
+            Pixels    = pixels;
         }
 
         public override void InitOrbit(out OrbitAccumulator acc)
@@ -144,7 +147,7 @@ namespace FracturingFog.Models
         protected override float TrapScale => 1.5f;
         protected override double UvScale  => 1.6;
 
-        public OrbitTrapImageRainbowMap() : base(BuildRainbowPinwheel(256)) { }
+        public OrbitTrapImageRainbowMap() : base(BuildRainbowPinwheel(256), 256, 256) { }
 
         public override void Sample(ref OrbitAccumulator acc,
                                     double zr, double zi,
@@ -159,33 +162,25 @@ namespace FracturingFog.Models
             }
         }
 
-        /// <summary>Generates a polar rainbow pinwheel as a synthetic test bitmap.</summary>
-        private static Bitmap BuildRainbowPinwheel(int size)
+        /// <summary>Generates a polar rainbow pinwheel as a synthetic packed
+        /// 0xFFRRGGBB pixel buffer of dimensions <paramref name="size"/>².</summary>
+        private static int[] BuildRainbowPinwheel(int size)
         {
-            var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
-            var rect = new Rectangle(0, 0, size, size);
-            var data = bmp.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            try
+            var buf = new int[size * size];
+            for (int y = 0; y < size; y++)
             {
-                var buf = new int[size * size];
-                for (int y = 0; y < size; y++)
+                double dy = (y / (double)(size - 1)) * 2.0 - 1.0;
+                for (int x = 0; x < size; x++)
                 {
-                    double dy = (y / (double)(size - 1)) * 2.0 - 1.0;
-                    for (int x = 0; x < size; x++)
-                    {
-                        double dx = (x / (double)(size - 1)) * 2.0 - 1.0;
-                        double ang = Math.Atan2(dy, dx) / (2.0 * Math.PI) + 0.5;
-                        double rad = Math.Min(1.0, Math.Sqrt(dx * dx + dy * dy));
-                        var col = ColorUtils.Hsv((float)ang, 1f, (float)(1.0 - 0.4 * rad));
-                        buf[y * size + x] =
-                            unchecked((int)0xFF000000 | (col.R << 16) | (col.G << 8) | col.B);
-                    }
+                    double dx = (x / (double)(size - 1)) * 2.0 - 1.0;
+                    double ang = Math.Atan2(dy, dx) / (2.0 * Math.PI) + 0.5;
+                    double rad = Math.Min(1.0, Math.Sqrt(dx * dx + dy * dy));
+                    var col = ColorUtils.Hsv((float)ang, 1f, (float)(1.0 - 0.4 * rad));
+                    buf[y * size + x] =
+                        unchecked((int)0xFF000000 | (col.R << 16) | (col.G << 8) | col.B);
                 }
-                System.Runtime.InteropServices.Marshal.Copy(
-                    buf, 0, data.Scan0, buf.Length);
             }
-            finally { bmp.UnlockBits(data); }
-            return bmp;
+            return buf;
         }
     }
 }
