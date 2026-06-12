@@ -19,10 +19,17 @@ namespace FracturingFog.Rendering.Silk;
 
 public sealed class SilkGLRenderer : IFractalRenderer
 {
-    // GLSL 330 core mirror of the DX HLSL. Same SV_VertexID trick: three
-    // vertex IDs span [-1,1] NDC; UV interpolates 0..1 across the visible
-    // screen quad. No vertex buffer needed.
-    private const string VertexShaderSrc = @"#version 330 core
+    // GLSL mirror of the DX HLSL. Same SV_VertexID trick: three vertex IDs
+    // span [-1,1] NDC; UV interpolates 0..1 across the visible screen quad.
+    // No vertex buffer needed.
+    //
+    // Phase X.4 / Slice 4.3 — the #version line is injected at compile time
+    // by CreateProgram so the renderer can retry at #version 410 core when
+    // 330 is rejected (some macOS GL stacks accept only 410 forward-compat).
+    // The shader bodies stay identical between the two versions; the GLSL
+    // features used (in/out, texture(), vec2 swizzles) are the same on 330
+    // and 410 core.
+    private const string VertexShaderBody = @"
 out vec2 vUv;
 void main()
 {
@@ -32,7 +39,7 @@ void main()
 }
 ";
 
-    private const string FragmentShaderSrc = @"#version 330 core
+    private const string FragmentShaderBody = @"
 in vec2 vUv;
 uniform sampler2D uTex;
 out vec4 fColor;
@@ -41,6 +48,8 @@ void main()
     fColor = texture(uTex, vUv);
 }
 ";
+
+    private static readonly string[] s_glslVersions = { "#version 330 core\n", "#version 410 core\n" };
 
     private readonly GL _gl;
     private readonly Action _makeCurrent;
@@ -109,33 +118,59 @@ void main()
 
     private void CreateProgram()
     {
-        uint vs = CompileShader(ShaderType.VertexShader, VertexShaderSrc);
-        uint fs = CompileShader(ShaderType.FragmentShader, FragmentShaderSrc);
+        // Phase X.4 / Slice 4.3 — try every supported #version in order. macOS
+        // GL stacks that reject 330 typically accept 410 core; Linux + Windows
+        // accept 330 universally so the retry path is a no-op there.
+        string? lastLog = null;
+        foreach (var version in s_glslVersions)
+        {
+            if (TryCreateProgramAtVersion(version, out lastLog)) return;
+        }
+        throw new InvalidOperationException(
+            "GL shader compile / link failed at every supported #version " +
+            $"({string.Join(", ", s_glslVersions).Trim()}): {lastLog ?? "(no log)"}");
+    }
 
-        _program = _gl.CreateProgram();
-        _gl.AttachShader(_program, vs);
-        _gl.AttachShader(_program, fs);
-        _gl.LinkProgram(_program);
-        _gl.GetProgram(_program, GLEnum.LinkStatus, out int linked);
+    private bool TryCreateProgramAtVersion(string versionLine, out string? failLog)
+    {
+        failLog = null;
+        uint vs = TryCompileShader(ShaderType.VertexShader, versionLine + VertexShaderBody, out failLog);
+        if (vs == 0) return false;
+
+        uint fs = TryCompileShader(ShaderType.FragmentShader, versionLine + FragmentShaderBody, out failLog);
+        if (fs == 0)
+        {
+            _gl.DeleteShader(vs);
+            return false;
+        }
+
+        uint program = _gl.CreateProgram();
+        _gl.AttachShader(program, vs);
+        _gl.AttachShader(program, fs);
+        _gl.LinkProgram(program);
+        _gl.GetProgram(program, GLEnum.LinkStatus, out int linked);
         if (linked == 0)
         {
-            string log = _gl.GetProgramInfoLog(_program);
-            _gl.DeleteProgram(_program);
+            failLog = _gl.GetProgramInfoLog(program);
+            _gl.DeleteProgram(program);
             _gl.DeleteShader(vs);
             _gl.DeleteShader(fs);
-            throw new InvalidOperationException($"GL program link failed: {log}");
+            return false;
         }
-        _gl.DetachShader(_program, vs);
-        _gl.DetachShader(_program, fs);
+
+        _gl.DetachShader(program, vs);
+        _gl.DetachShader(program, fs);
         _gl.DeleteShader(vs);
         _gl.DeleteShader(fs);
 
+        _program = program;
         _gl.UseProgram(_program);
         int loc = _gl.GetUniformLocation(_program, "uTex");
         if (loc >= 0) _gl.Uniform1(loc, 0);
+        return true;
     }
 
-    private uint CompileShader(ShaderType type, string source)
+    private uint TryCompileShader(ShaderType type, string source, out string? failLog)
     {
         uint id = _gl.CreateShader(type);
         _gl.ShaderSource(id, source);
@@ -143,10 +178,11 @@ void main()
         _gl.GetShader(id, GLEnum.CompileStatus, out int ok);
         if (ok == 0)
         {
-            string log = _gl.GetShaderInfoLog(id);
+            failLog = $"({type}) {_gl.GetShaderInfoLog(id)}";
             _gl.DeleteShader(id);
-            throw new InvalidOperationException($"GL shader compile failed ({type}): {log}");
+            return 0;
         }
+        failLog = null;
         return id;
     }
 
