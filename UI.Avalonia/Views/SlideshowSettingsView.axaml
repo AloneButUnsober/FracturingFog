@@ -275,6 +275,22 @@
                 <CheckBox Content="Loop (restart sweep at leg boundary instead of stopping)"
                           IsChecked="{Binding AdaptiveSweepLoop, Mode=TwoWay}"
                           IsEnabled="{Binding AdaptiveSweepEnabled}" />
+                <Grid ColumnDefinitions="160,*,80">
+                    <TextBlock Grid.Column="0" Text="Beats per cycle:" VerticalAlignment="Center"
+                               IsEnabled="{Binding AdaptiveSweepEnabled}" />
+                    <NumericUpDown Grid.Column="1"
+                                   Minimum="0.0625" Maximum="32" Increment="0.25"
+                                   FormatString="0.##"
+                                   Value="{Binding AdaptiveSweepBeatFraction, Mode=TwoWay}"
+                                   IsEnabled="{Binding AdaptiveSweepEnabled}"
+                                   Width="120" HorizontalAlignment="Left" />
+                    <TextBlock Grid.Column="2" Text="{Binding AdaptiveSweepBeatFractionLabel}"
+                               VerticalAlignment="Center" Margin="6,0,0,0"
+                               Foreground="#969696" FontStyle="Italic" />
+                </Grid>
+                <TextBlock Text="Beat-driven sweep active only when Audio-Reactive is on. Sweep loops automatically for slideshow duration."
+                           Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap"
+                           IsEnabled="{Binding AdaptiveSweepEnabled}" />
             </StackPanel>
         </Expander>
 
