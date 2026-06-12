@@ -367,7 +367,13 @@ namespace FracturingFog.Rendering
         public (bool ok, string? error) CompileUserEquation(string source)
         {
             _userEquationCalculator.Compile(source);
-            _lastUploadedBuffer = null;   // force a fresh recompute on next Trigger
+            // Note: previously cleared _lastUploadedBuffer to "force a fresh
+            // recompute on next Trigger" — but Trigger always recomputes; the
+            // null only disabled the stale-frame re-upload. ApplyRegion calls
+            // CompileX during the slideshow's PickNonBlackTheme probe, and
+            // nulling here made SnapshotFrame return an empty buffer in the
+            // following ThemeTransitionAsync, so the cross-fade gate failed
+            // and every non-Mandelbrot theme change hard-cut.
             return (_userEquationCalculator.IsCompiled,
                 string.IsNullOrEmpty(_userEquationCalculator.LastError) ? null : _userEquationCalculator.LastError);
         }
@@ -376,7 +382,6 @@ namespace FracturingFog.Rendering
         public (bool ok, string? error) CompileSandbox(string source)
         {
             _sandboxCalculator.Compile(source);
-            _lastUploadedBuffer = null;
             return (_sandboxCalculator.IsCompiled,
                 string.IsNullOrEmpty(_sandboxCalculator.LastError) ? null : _sandboxCalculator.LastError);
         }
@@ -385,7 +390,6 @@ namespace FracturingFog.Rendering
         public (bool ok, string? error) CompileUserBulb(string source)
         {
             _userBulbCalculator.Compile(source);
-            _lastUploadedBuffer = null;
             return (_userBulbCalculator.IsCompiled,
                 string.IsNullOrEmpty(_userBulbCalculator.LastError) ? null : _userBulbCalculator.LastError);
         }
@@ -1070,8 +1074,20 @@ namespace FracturingFog.Rendering
         /// post-fade state is consistent. Used by the slideshow theme cross-fade.
         /// </summary>
         public uint[]? RecolorActiveToBuffer(IColorMap map)
+            => RecolorActiveToBuffer(map, _currentTargetWidth, _currentTargetHeight);
+
+        /// <summary>
+        /// Overload that pins the recolor to caller-supplied dimensions.
+        /// Used by the slideshow theme cross-fade: the engine snapshots the
+        /// live frame at <c>(w, h)</c>, and the returned buffer must match
+        /// those dims for <c>FadeAsync</c> to interpolate against the
+        /// snapshot. Mismatched lengths skipped the fade entirely (hard
+        /// cut) — passing the snapshot dims here forces consistency.
+        /// </summary>
+        public uint[]? RecolorActiveToBuffer(IColorMap map, int w, int h)
         {
             if (_disposed || map == null) return null;
+            if (w <= 0 || h <= 0) return null;
             ColorMap = map;
             IFractalCalculator? alt = SelectAltCalculator(ViewState.FractalType);
             // Same gate as ApplyColorMap: themes that need data the cached
@@ -1088,15 +1104,33 @@ namespace FracturingFog.Rendering
                 // reflects the new ColorMap; this fills the post-fade target
                 // so the caller can cross-fade against the snapshot of the
                 // old frame.
+                //
+                // Cancel any queued or in-flight ordinary calc first so it
+                // can't race our synchronous Calculate on the same alt
+                // instance (mirrors RenderRegionToBuffer). And force alt
+                // back to the current surface dims — without this, a race
+                // with a still-in-flight calc that resized the buffer mid-
+                // recolor produces a tiny altCopy. The slideshow then runs
+                // RepaintWithPostFx at the alt's (now-stale) Width/Height,
+                // uploads a sub-surface buffer, the swap chain stretches
+                // it 2-8× to fill, and the watermark — drawn at fixed
+                // 14pt into that small buffer — appears huge on screen.
+                lock (_calcLock) _calcCts?.Cancel();
+                while (_calcQueue.TryTake(out _)) { }
+
+                if (alt.Width != w || alt.Height != h) alt.Resize(w, h);
+
                 SyncAltStateFromMandel(alt);
                 alt.Calculate(System.Threading.CancellationToken.None);
                 var altSrc = alt.ColorBuffer;
-                var altCopy = new uint[altSrc.Length];
-                Array.Copy(altSrc, altCopy, altSrc.Length);
+                int n = w * h;
+                var altCopy = new uint[n];
+                Array.Copy(altSrc, altCopy, Math.Min(altSrc.Length, n));
                 return altCopy;
             }
             if (needsFullRender)
             {
+                if (_calculator.Width != w || _calculator.Height != h) _calculator.Resize(w, h);
                 _calculator.Calculate(System.Threading.CancellationToken.None);
             }
             else
@@ -1104,8 +1138,9 @@ namespace FracturingFog.Rendering
                 _calculator.ApplyBandDitherRecolor(0.0);
             }
             var src = _calculator.ColorBuffer;
-            var copy = new uint[src.Length];
-            Array.Copy(src, copy, src.Length);
+            int mn = w * h;
+            var copy = new uint[mn];
+            Array.Copy(src, copy, Math.Min(src.Length, mn));
             return copy;
         }
 

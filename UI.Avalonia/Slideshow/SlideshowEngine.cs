@@ -22,6 +22,7 @@ using System.Threading.Tasks;
 
 using Avalonia.Threading;
 
+using FracturingFog.Audio;
 using FracturingFog.Models;
 using FracturingFog.Render;
 
@@ -39,6 +40,15 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         private volatile bool _paused;
         private volatile bool _skipRegion;
         private volatile bool _skipTheme;
+
+        // Audio-reactive beat counters — incremented by OnBeat, drained by
+        // the slideshow loop via _skipRegion / _skipTheme. Lock guards both
+        // counters so a region-skip atomically clears the theme counter too
+        // (parity with WinForms MainForm.OnAudioBeat).
+        private IBeatSource? _beatSource;
+        private int _beatsSinceTheme;
+        private int _beatsSinceRegion;
+        private readonly object _beatLock = new();
 
         public SlideshowEngine(IFractalRenderHost host, IColorThemeService service, SlideshowSettings settings)
         {
@@ -68,6 +78,37 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         /// as the per-leg sweep ramp advances. Shell wires this to
         /// <c>FloatingMenu.Adaptive</c>.</summary>
         public Action<int>? AdaptiveValueSink { get; set; }
+
+        /// <summary>Optional live beat source. When set together with
+        /// <see cref="SlideshowConfig.AudioReactive"/>=true on
+        /// <see cref="Config"/>, each detected beat flips the engine's
+        /// <c>_skipTheme</c> / <c>_skipRegion</c> flags once
+        /// <see cref="BeatsPerTheme"/> / <see cref="BeatsPerRegion"/> have
+        /// elapsed (parity with WinForms <c>MainForm.OnAudioBeat</c>). The
+        /// adaptive-sweep tick rate also derives from this source's BPM when
+        /// audio-reactive is on. Setting null detaches the handler.</summary>
+        public IBeatSource? BeatSource
+        {
+            get => _beatSource;
+            set
+            {
+                if (ReferenceEquals(_beatSource, value)) return;
+                if (_beatSource != null) _beatSource.Beat -= OnBeat;
+                _beatSource = value;
+                lock (_beatLock) { _beatsSinceTheme = 0; _beatsSinceRegion = 0; }
+                if (_beatSource != null) _beatSource.Beat += OnBeat;
+            }
+        }
+
+        /// <summary>Number of beats between theme advances when
+        /// audio-reactive is active. Default 8 (~2 bars at 4/4). Mirrors
+        /// <c>AudioSettings.BeatsPerTheme</c>; the shell pushes it on Start.</summary>
+        public int BeatsPerTheme { get; set; } = 8;
+
+        /// <summary>Number of beats between region advances when
+        /// audio-reactive is active. Default 32 (~8 bars). Mirrors
+        /// <c>AudioSettings.BeatsPerRegion</c>; the shell pushes it on Start.</summary>
+        public int BeatsPerRegion { get; set; } = 32;
 
         /// <summary>Optional sink invoked with every BGRA frame the engine
         /// presents (one per cross-fade interpolation step + one per dwell
@@ -172,12 +213,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
                         string? themeName = PickTheme(themes, ref lastTheme);
 
-                        // All-black skip: peek-render the candidate region/theme
-                        // at a tiny thumbnail. If every pixel is opaque black —
-                        // theme paints in-set black + region is fully in-set, or
-                        // iter depth too low at extreme zoom — retry up to one
-                        // pass through the theme pool before giving up.
-                        themeName = PickNonBlackTheme(regionName, themeName, themes, ref lastTheme, ct);
+                        // Solid-frame skip: peek-render the candidate region/theme
+                        // at a tiny thumbnail. If every pixel is the same color —
+                        // in-set black, in-set flat color, or iter depth too low
+                        // at extreme zoom — retry up to one pass through the
+                        // theme pool before giving up.
+                        themeName = PickNonSolidTheme(regionName, themeName, themes, ref lastTheme, ct);
 
                         if (t == 0)
                             await RegionTransitionAsync(regionName, themeName, fadeSteps, regionStepMs, ct);
@@ -271,22 +312,26 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             return themes[ti];
         }
 
-        // Tiny offscreen probe — used by the all-black-leg skip path. Mandelbrot
+        // Tiny offscreen probe — used by the solid-frame-leg skip path. Mandelbrot
         // regions get a 64×36 peek; anything else returns null (engine's
         // offscreen render is Mandelbrot-only) and the caller proceeds without
         // skipping.
         private const int PeekW = 64;
         private const int PeekH = 36;
 
-        private static bool IsAllOpaqueBlack(uint[] buf)
+        // Solid-color frame: all pixels equal the first. Catches in-set black
+        // (the original case) plus themes that paint the in-set a non-black
+        // flat color on a fully in-set region.
+        private static bool IsAllOneColor(uint[] buf)
         {
-            const uint OpaqueBlack = 0xFF000000u;
-            for (int i = 0; i < buf.Length; i++)
-                if (buf[i] != OpaqueBlack) return false;
+            if (buf.Length == 0) return false;
+            uint first = buf[0];
+            for (int i = 1; i < buf.Length; i++)
+                if (buf[i] != first) return false;
             return true;
         }
 
-        private string? PickNonBlackTheme(
+        private string? PickNonSolidTheme(
             string regionName, string? themeName,
             IReadOnlyList<string>? themes, ref int lastTheme,
             CancellationToken ct)
@@ -301,10 +346,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 catch { probe = null; }
                 // Non-Mandelbrot region — no probe path, give up the skip.
                 if (probe == null) return themeName;
-                if (!IsAllOpaqueBlack(probe)) return themeName;
+                if (!IsAllOneColor(probe)) return themeName;
 
                 StatusChanged?.Invoke(this,
-                    $"Slideshow: skipping black {regionName} / {themeName}");
+                    $"Slideshow: skipping solid {regionName} / {themeName}");
                 themeName = PickTheme(themes, ref lastTheme);
                 if (themeName == null) return null;
             }
@@ -406,10 +451,19 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             // so the next composited frame's watermark reflects the new theme.
             await OnUiAsync(() => { _host.ThemeName = themeName; return 0; }, ct);
 
-            // Recolour happens on the UI thread (mutates the live frame) and
-            // returns the new buffer; null when the active fractal has no cheap
-            // recolor → fall back to a plain apply.
-            uint[]? incoming = await OnUiAsync(() => _service.RenderThemeOffscreen(themeName!, w, h), ct);
+            // Recolour returns the new buffer; null when the active fractal
+            // has no cheap recolor → fall back to a plain apply. Runs on a
+            // background thread (same pattern as RegionTransitionAsync's
+            // RenderRegionOffscreen) so a slow non-Mandelbrot Calculate —
+            // Sandbox / UserEquation / UserBulb can take seconds — does NOT
+            // block the UI thread. When it did, the snapshot stayed frozen
+            // on screen for the duration of the recalc and the fade
+            // finished in the last 160 ms, which the user perceived as a
+            // hard cut. Mandelbrot's Calculate is fast enough that the
+            // pre-fix UI-thread path looked fine, masking the bug for
+            // Mandel themes.
+            uint[]? incoming = await Task.Run(
+                () => _service.RenderThemeOffscreen(themeName!, w, h), ct);
 
             if (incoming == null)
             {
@@ -536,6 +590,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         // <see cref="AdaptiveValueSink"/> to <c>FloatingMenu.Adaptive</c>.
         // Returns a CTS that the caller should dispose to abort the sweep
         // when the leg ends early (skip / stop).
+        //
+        // Audio-reactive mode (Config.AudioReactive=true + BeatSource set):
+        //   • Cycle duration = BeatFraction × beatPeriodMs (recomputed each
+        //     tick so BPM drift updates live; falls back to legMs when BPM
+        //     is still 0).
+        //   • Loop is forced true for the slideshow's lifetime — user spec.
         private CancellationTokenSource StartAdaptiveSweep(int legMs, CancellationToken parentCt)
         {
             var legCts = CancellationTokenSource.CreateLinkedTokenSource(parentCt);
@@ -546,7 +606,9 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             int start = Math.Clamp(cfg.Start, 0, 100);
             int end = Math.Clamp(cfg.End, 0, 100);
             var mode = cfg.Mode;
-            bool loop = cfg.Loop;
+            bool audioReactive = Config?.AudioReactive == true && _beatSource != null;
+            bool loop = audioReactive || cfg.Loop;
+            double beatFrac = Math.Clamp(cfg.BeatFraction, 0.0625, 32.0);
             var sink = AdaptiveValueSink;
             var ct = legCts.Token;
 
@@ -554,14 +616,22 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             {
                 const int tickMs = 50;
                 int elapsed = 0;
+                int currentCycleMs = ResolveSweepCycleMs(legMs, audioReactive, beatFrac);
                 while (!ct.IsCancellationRequested)
                 {
-                    double phase = legMs > 0 ? Math.Clamp(elapsed / (double)legMs, 0.0, 1.0) : 1.0;
+                    // Recompute the cycle duration each tick so audio-reactive
+                    // mode tracks live BPM drift without waiting for the next
+                    // leg boundary. Cheap (one BeatSource read + one divide).
+                    currentCycleMs = ResolveSweepCycleMs(legMs, audioReactive, beatFrac);
+
+                    double phase = currentCycleMs > 0
+                        ? Math.Clamp(elapsed / (double)currentCycleMs, 0.0, 1.0)
+                        : 1.0;
                     int v = ComputeSweepValue(phase, start, end, mode);
                     try { await OnUiAsync(() => sink(v), ct).ConfigureAwait(false); }
                     catch (OperationCanceledException) { return; }
 
-                    if (elapsed >= legMs)
+                    if (elapsed >= currentCycleMs)
                     {
                         if (!loop) return;
                         elapsed = 0;
@@ -573,6 +643,56 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             }, ct);
 
             return legCts;
+        }
+
+        // Resolve full-sweep cycle duration. Audio-reactive: beatFrac × beatPeriod
+        // (clamped to a sane floor so wild BPM jumps don't cause runaway ticks).
+        // Wall-clock fallback (or BPM not yet detected): the legMs envelope.
+        private int ResolveSweepCycleMs(int legMs, bool audioReactive, double beatFrac)
+        {
+            if (audioReactive && _beatSource != null)
+            {
+                double bpm = _beatSource.EstimatedBpm;
+                if (bpm > 0)
+                {
+                    double beatMs = 60_000.0 / bpm;
+                    return Math.Max(50, (int)Math.Round(beatMs * beatFrac));
+                }
+            }
+            return legMs;
+        }
+
+        // ── Beat → skip-flag bridge ───────────────────────────────────────
+        //
+        // Fires on a capture / analyzer thread. Increments per-leg counters
+        // and trips _skipTheme / _skipRegion when the configured beat counts
+        // elapse; the slideshow loop's WaitAsync consumes those flags on its
+        // next 50 ms tick. Region-skip wins over theme-skip and clears both
+        // counters (matches WinForms MainForm.OnAudioBeat semantics).
+        private void OnBeat(object? sender, BeatEventArgs e)
+        {
+            if (Config?.AudioReactive != true) return;
+            int bTheme, bRegion;
+            lock (_beatLock)
+            {
+                _beatsSinceTheme++;
+                _beatsSinceRegion++;
+                bTheme = _beatsSinceTheme;
+                bRegion = _beatsSinceRegion;
+            }
+            int perRegion = Math.Max(1, BeatsPerRegion);
+            int perTheme = Math.Max(1, Math.Min(BeatsPerTheme, perRegion));
+            if (bRegion >= perRegion)
+            {
+                lock (_beatLock) { _beatsSinceRegion = 0; _beatsSinceTheme = 0; }
+                _skipRegion = true;
+                return;
+            }
+            if (bTheme >= perTheme)
+            {
+                lock (_beatLock) _beatsSinceTheme = 0;
+                _skipTheme = true;
+            }
         }
 
         private static int ComputeSweepValue(double phase, int start, int end, AdaptiveSweepMode mode)

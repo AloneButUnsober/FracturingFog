@@ -51,6 +51,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private int _sweepEnd;
     private FracturingFog.Models.AdaptiveSweepMode _sweepMode;
     private bool _sweepLoop;
+    private double _sweepBeatFraction;
     private bool _postFxEnabled;
     private double _postFxBrightness;
     private double _postFxContrast;
@@ -155,6 +156,18 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         get => _sweepLoop;
         set { this.RaiseAndSetIfChanged(ref _sweepLoop, value); MarkDirty(); }
     }
+
+    /// <summary>Beats per full sweep cycle when audio-reactive is on.
+    /// 1.0 = one beat, 0.5 = half beat, 4.0 = four-beat cycle. Mirrors the
+    /// FadeBeatFraction control in the Audio Settings dialog. Ignored
+    /// when audio-reactive is off (wall-clock legMs envelope used instead).</summary>
+    public double AdaptiveSweepBeatFraction
+    {
+        get => _sweepBeatFraction;
+        set { this.RaiseAndSetIfChanged(ref _sweepBeatFraction, Math.Clamp(value, 0.0625, 32.0)); MarkDirty(); this.RaisePropertyChanged(nameof(AdaptiveSweepBeatFractionLabel)); }
+    }
+
+    public string AdaptiveSweepBeatFractionLabel => $"{_sweepBeatFraction:F2}× beat";
 
     public bool PostFxEnabled
     {
@@ -524,6 +537,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.AdaptiveSweep.End = _sweepEnd;
         _working.AdaptiveSweep.Mode = _sweepMode;
         _working.AdaptiveSweep.Loop = _sweepLoop;
+        _working.AdaptiveSweep.BeatFraction = _sweepBeatFraction;
 
         _working.PostFx.Enabled = _postFxEnabled;
         _working.PostFx.Values ??= new Dictionary<string, double>();
@@ -551,6 +565,9 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _sweepEnd = Math.Clamp(_working.AdaptiveSweep.End, 0, 100);
         _sweepMode = _working.AdaptiveSweep.Mode;
         _sweepLoop = _working.AdaptiveSweep.Loop;
+        _sweepBeatFraction = Math.Clamp(
+            _working.AdaptiveSweep.BeatFraction > 0 ? _working.AdaptiveSweep.BeatFraction : 1.0,
+            0.0625, 32.0);
         _postFxEnabled = _working.PostFx.Enabled;
         var pv = _working.PostFx.Values;
         _postFxBrightness = pv != null && pv.TryGetValue(PostFxKeyBrightness, out var br) ? br : 100.0;
@@ -584,6 +601,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(AdaptiveSweepEnd));
         this.RaisePropertyChanged(nameof(AdaptiveSweepMode_));
         this.RaisePropertyChanged(nameof(AdaptiveSweepLoop));
+        this.RaisePropertyChanged(nameof(AdaptiveSweepBeatFraction));
+        this.RaisePropertyChanged(nameof(AdaptiveSweepBeatFractionLabel));
         this.RaisePropertyChanged(nameof(PostFxEnabled));
         this.RaisePropertyChanged(nameof(PostFxBrightness));
         this.RaisePropertyChanged(nameof(PostFxContrast));
