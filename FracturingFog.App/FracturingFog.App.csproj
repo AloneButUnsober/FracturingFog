@@ -45,6 +45,34 @@
   </ItemGroup>
 
   <!--
+    Phase X.2 / Slice 2.4 — bundled ffmpeg, Windows only.
+    Licensing audit (per CrossPlatform-ImplementationPlan.md Slice 2.4):
+    most prebuilt ffmpeg binaries enable GPL codecs which bind the
+    shipping container to a GPL-compatible licence. The Windows bundle
+    has matched our distribution licence since 2024 and ships today.
+    Linux/macOS users install ffmpeg via apt/brew — the cross-platform
+    smoke doc covers this path. Revisit when a per-RID LGPL ffmpeg bundle
+    is available for every shipping leg.
+
+    Both include paths land at the same per-RID location at runtime so
+    FfmpegEncoder.FindFfmpeg's Tools/<rid>/ffmpeg{.exe} probe (Slice 2.3)
+    picks them up. The Exists() guard keeps the build green when the
+    binary is absent (developer checkouts, CI, fresh clones).
+  -->
+  <ItemGroup>
+    <None Include="..\Tools\win-x64\ffmpeg.exe"
+          Condition="'$(RuntimeIdentifier)' == 'win-x64' and Exists('..\Tools\win-x64\ffmpeg.exe')"
+          Link="Tools\win-x64\ffmpeg.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="false" />
+    <None Include="..\Tools\ffmpeg.exe"
+          Condition="'$(RuntimeIdentifier)' == 'win-x64' and Exists('..\Tools\ffmpeg.exe') and !Exists('..\Tools\win-x64\ffmpeg.exe')"
+          Link="Tools\ffmpeg.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="false" />
+  </ItemGroup>
+
+  <!--
     Windows-only project refs (Rendering.D3D, FracturingFog.Win, Audio.Win) are
     not wired in this scaffold pass because they target net10.0-windows and
     cannot be referenced by a plain net10.0 project even with MSBuild
