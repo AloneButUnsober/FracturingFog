@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FracturingFog.Audio — cross-platform audio capture driver + beat analyzer.
+    The Win-only NAudio WASAPI backend lives in the sibling FracturingFog.Audio.Win
+    project. Phase X.B introduces the IAudioCaptureBackend abstraction; until
+    then this csproj is a scaffold.
+
+    Phase X.0 / Slice 0.2: scaffold only. EnableDefaultCompileItems=false so
+    the in-folder Audio/*.cs files keep compiling inside FracturingFogCLD.csproj
+    (the WinExe) via its default SDK glob. File ownership flips to this csproj
+    when the audio-abstraction slices land.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>FracturingFog.Audio</RootNamespace>
+    <AssemblyName>FracturingFog.Audio</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

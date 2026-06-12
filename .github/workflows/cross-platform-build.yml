@@ -55,6 +55,36 @@ jobs:
       - name: Build Rendering.Skia
         run: dotnet build Rendering.Skia/FracturingFog.Rendering.Skia.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
+      # Phase X.0 cross-platform scaffolds. These are empty placeholders today
+      # (no .cs files in Engine/, Rendering.D3D/, FracturingFog.Win/, Audio.Win/;
+      # Audio/ and Hosting/ have EnableDefaultCompileItems=false so their csprojs
+      # produce empty assemblies). Building them now in CI proves the geometry
+      # is wired and catches regressions when the file-move slices land.
+      - name: Build FracturingFog.Engine (scaffold)
+        run: dotnet build Engine/FracturingFog.Engine.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build FracturingFog.Audio (scaffold)
+        run: dotnet build Audio/FracturingFog.Audio.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build FracturingFog.Hosting (scaffold)
+        run: dotnet build Hosting/FracturingFog.Hosting.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build FracturingFog.App (scaffold)
+        run: dotnet build FracturingFog.App/FracturingFog.App.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      # net10.0-windows TFM projects only build on the Windows leg.
+      - name: Build FracturingFog.Rendering.D3D (scaffold)
+        if: matrix.build_winexe
+        run: dotnet build Rendering.D3D/FracturingFog.Rendering.D3D.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build FracturingFog.Win (scaffold)
+        if: matrix.build_winexe
+        run: dotnet build FracturingFog.Win/FracturingFog.Win.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build FracturingFog.Audio.Win (scaffold)
+        if: matrix.build_winexe
+        run: dotnet build Audio.Win/FracturingFog.Audio.Win.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
       # WinForms WinExe only builds on Windows (net10.0-windows TFM + Vortice).
       - name: Build WinExe
         if: matrix.build_winexe

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FracturingFog.Win — Windows-only-but-not-WinForms surface. Holds
+    NativeMouseForwarder (HWND subclass via user32/comctl32) and any other
+    Win-only host shims that should not drag WinForms into the cross-platform
+    binary. The legacy WinExe (FracturingFogCLD) keeps the WinForms shell;
+    this project is referenced only by the cross-platform App on Windows.
+
+    Phase X.0 / Slice 0.5: scaffold only. No source files yet.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>false</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>FracturingFog.Hosting</RootNamespace>
+    <AssemblyName>FracturingFog.Win</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
