@@ -124,6 +124,73 @@ Procedures land with Phase X.2 implementation. Outline:
 
 ---
 
+## Phase X.6 — Packaging
+
+### 6.S1 — `dotnet publish` per RID
+
+Run from a clean checkout:
+
+```
+dotnet publish FracturingFog.App -c Release -p:PublishProfile=linux-x64
+dotnet publish FracturingFog.App -c Release -p:PublishProfile=linux-arm64
+dotnet publish FracturingFog.App -c Release -p:PublishProfile=osx-arm64
+dotnet publish FracturingFog.App -c Release -p:PublishProfile=osx-x64
+dotnet publish FracturingFog.App -c Release -p:PublishProfile=win-x64
+```
+
+Each command emits a self-contained single-file archive under
+`FracturingFog.App/publish/<rid>/`. Confirm:
+
+1. Archive present + non-empty (Win archives bundle ffmpeg.exe per
+   Slice 2.4).
+2. Quick sanity launch on the matching host: `./FracturingFog.App`
+   opens the Avalonia shell; `./FracturingFog.App --batch --image
+   --out /tmp/smoke.png --width 320 --height 240` round-trips a PNG.
+
+**Known publish blocker (CalculatorGen + ColorGen NETSDK1150).**
+
+Until CalculatorGen and ColorGen are split into Lib + Cli sibling
+projects, the App's self-contained publish trips NETSDK1150 because both
+Exe projects are referenced transitively as libraries via UI.Avalonia.
+The follow-up that fixes this:
+
+1. Add `CalculatorGen.Lib` + `ColorGen.Lib` library projects holding the
+   `*Api`, `*HotLoad`, and template-resolver source.
+2. Slim `CalculatorGen` + `ColorGen` Exes to a thin `Program.cs` Main
+   that dispatches into the Lib.
+3. Retarget `UI.Avalonia.csproj` ProjectReferences at the new `*Lib`
+   projects so the App publish chain only ever sees library refs.
+
+Tracked separately; publish artifacts ship via the CI release workflow
+(Slice 6.4) where the GitHub runner builds against a clean restore and
+the publish profile drives a fresh single-RID closure.
+
+### 6.S2 — Linux AppImage
+
+After `dotnet publish -p:PublishProfile=linux-x64`:
+
+```
+Tools/Packaging/build-appimage.sh linux-x64
+```
+
+Confirm `dist/FracturingFog-linux-x64.AppImage` exists and is executable
+(`./dist/FracturingFog-linux-x64.AppImage` opens the shell).
+
+### 6.S3 — macOS `.app` bundle
+
+After `dotnet publish -p:PublishProfile=osx-arm64`:
+
+```
+Tools/Packaging/build-mac-app.sh osx-arm64
+```
+
+Confirm `dist/FracturingFog.app/Contents/MacOS/FracturingFog.App` is
+executable and Info.plist parses (`plutil -lint
+dist/FracturingFog.app/Contents/Info.plist`). Code-signing is a separate
+manual step until Apple Developer cert lands.
+
+---
+
 ## Reporting failures
 
 When a smoke test fails:
