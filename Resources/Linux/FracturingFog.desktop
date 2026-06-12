@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Fracturing Fog
+GenericName=Mandelbrot Explorer
+Comment=Mandelbrot set explorer with audio-reactive slideshow and palette tools
+Exec=FracturingFog.App %F
+Icon=FracturingFog
+Categories=Graphics;Science;Math;
+Terminal=false
+StartupNotify=true
+StartupWMClass=FracturingFog.App
+Keywords=fractal;mandelbrot;palette;slideshow;
