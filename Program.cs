@@ -238,6 +238,41 @@ static class Program
         if (args.Length > 0 && args[0] == "--server")
             return ServerEntry.Run(args);
 
+        // Phase X.4 / Slice 4.1 — --renderer override. Default is RendererBackend.Auto
+        // (DX on Win, Silk on Linux/macOS, picked by RendererFactory.Create
+        // from the surface kind). Explicit values let the user parity-test
+        // Silk or Skia on a Windows host or downgrade from DX12 to Silk when
+        // the discrete GPU is busy:
+        //   --renderer dx     → force DX (Win only).
+        //   --renderer silk   → force Silk.NET OpenGL.
+        //   --renderer skia   → force SkiaSharp CPU.
+        //   --renderer auto   → default; same as omitting the flag.
+        // The selection is set on the RendererFactory before either shell
+        // boots so OnSurfaceReady picks it up the first time a surface
+        // arrives.
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (!string.Equals(args[i], "--renderer", StringComparison.OrdinalIgnoreCase))
+                continue;
+            string val = args[i + 1];
+            RendererBackend? backend = val.ToLowerInvariant() switch
+            {
+                "auto" => RendererBackend.Auto,
+                "dx"   => RendererBackend.Dx,
+                "silk" => RendererBackend.Silk,
+                "skia" => RendererBackend.Skia,
+                _      => null,
+            };
+            if (backend == null)
+            {
+                Console.Error.WriteLine(
+                    $"--renderer expects one of: auto | dx | silk | skia (got '{val}').");
+                return 2;
+            }
+            RendererFactory.PreferredBackend = backend.Value;
+            break;
+        }
+
         // --winforms forces the legacy WinForms shell. Default path is the
         // Avalonia shell. WinForms is DEPRECATED — see CLAUDE.md. New UI
         // work must land in UI.Avalonia/, not MainForm.cs.

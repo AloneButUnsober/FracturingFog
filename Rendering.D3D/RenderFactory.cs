@@ -21,8 +21,35 @@ namespace FracturingFog;
 /// dispatches to <see cref="NonWin32Backend"/> on non-Win32 surface kinds and
 /// is the canonical entry point from <c>FracturingFog.Hosting</c>.
 /// </summary>
+/// <summary>
+/// Phase X.4 / Slice 4.1 — Renderer backend override.
+/// </summary>
+public enum RendererBackend
+{
+    /// <summary>Pick the best backend for the host: DX on Windows with a
+    /// Win32 HWND surface, <see cref="RendererFactory.NonWin32Backend"/>
+    /// (Silk.NET OpenGL) elsewhere.</summary>
+    Auto,
+    /// <summary>Force the DirectX 11 / 12 backend. Throws on non-Win32 surfaces.</summary>
+    Dx,
+    /// <summary>Force the Silk.NET OpenGL backend. Routes through
+    /// <see cref="RendererFactory.NonWin32Backend"/> even for Win32 HWND surfaces.</summary>
+    Silk,
+    /// <summary>Force the SkiaSharp CPU backend. Routes through
+    /// <see cref="RendererFactory.SkiaBackend"/>.</summary>
+    Skia,
+}
+
 public static class RendererFactory
 {
+    /// <summary>
+    /// Phase X.4 / Slice 4.1 — caller-supplied backend override. Program.cs
+    /// sets this from the <c>--renderer</c> CLI flag before the Avalonia shell
+    /// boots so <see cref="Create(IGpuSurface, bool)"/> sees the request the
+    /// first time a surface arrives.
+    /// </summary>
+    public static RendererBackend PreferredBackend { get; set; } = RendererBackend.Auto;
+
     /// <summary>
     /// Creates a DirectX 12 renderer if the GPU supports FL 12.0+, otherwise
     /// creates a DirectX 11 renderer.  Never throws — falls back silently.
@@ -52,8 +79,22 @@ public static class RendererFactory
     /// OpenGL backend here (see <c>FracturingFog.Rendering.Silk</c>); the
     /// WinForms shell leaves it null. When null and a non-HWND surface arrives
     /// the factory throws — same behaviour as before Phase 2.4.
+    ///
+    /// Phase X.4 / Slice 4.1 — this hook is also used when
+    /// <see cref="PreferredBackend"/> is <see cref="RendererBackend.Silk"/>
+    /// regardless of the surface kind, so the user can force GL on a Windows
+    /// host for parity testing.
     /// </summary>
     public static Func<IGpuSurface, IFractalRenderer?>? NonWin32Backend { get; set; }
+
+    /// <summary>
+    /// Phase X.4 / Slice 4.1 — host-supplied SkiaSharp CPU backend.
+    /// Bootstrap registers a callback that constructs a
+    /// <c>SkiaCpuRenderer</c> with a host-owned present delegate; left null
+    /// here so the Skia override is a no-op on hosts that have not wired
+    /// the SkiaPresent callback.
+    /// </summary>
+    public static Func<IGpuSurface, IFractalRenderer?>? SkiaBackend { get; set; }
 
     /// <summary>
     /// Phase 2 surface-aware overload. Accepts an <see cref="IGpuSurface"/> from
@@ -69,17 +110,36 @@ public static class RendererFactory
     {
         ArgumentNullException.ThrowIfNull(surface);
 
+        // Phase X.4 / Slice 4.1 — honour the --renderer override before the
+        // default Win32-vs-NonWin32 dispatch. Explicit Silk / Skia bypass the
+        // DX path even when the surface is a Win32 HWND so the user can
+        // parity-test the cross-platform backends on Windows.
+        switch (PreferredBackend)
+        {
+            case RendererBackend.Silk:
+            {
+                IFractalRenderer? silk = NonWin32Backend?.Invoke(surface);
+                if (silk is not null) return WireLifecycle(surface, silk);
+                throw new PlatformNotSupportedException(
+                    "--renderer silk requested but no Silk.NET backend is registered. " +
+                    "AvaloniaShellBootstrap populates RendererFactory.NonWin32Backend " +
+                    "in its static ctor; ensure the bootstrap has loaded.");
+            }
+            case RendererBackend.Skia:
+            {
+                IFractalRenderer? skia = SkiaBackend?.Invoke(surface);
+                if (skia is not null) return WireLifecycle(surface, skia);
+                throw new PlatformNotSupportedException(
+                    "--renderer skia requested but no Skia backend is registered. " +
+                    "Wire RendererFactory.SkiaBackend before requesting this backend.");
+            }
+            // Dx and Auto fall through to the legacy dispatch below.
+        }
+
         if (surface.Kind != GpuSurfaceKind.Win32Hwnd)
         {
             IFractalRenderer? alt = NonWin32Backend?.Invoke(surface);
-            if (alt is not null)
-            {
-                surface.Resized += (_, _) =>
-                    alt.Resize(System.Math.Max(1, surface.PixelWidth),
-                               System.Math.Max(1, surface.PixelHeight));
-                surface.HandleLost += (_, _) => alt.Dispose();
-                return alt;
-            }
+            if (alt is not null) return WireLifecycle(surface, alt);
 
             throw new PlatformNotSupportedException(
                 $"DirectX renderer requires a Win32 HWND surface; got {surface.Kind}. " +
@@ -129,4 +189,13 @@ public static class RendererFactory
     [SupportedOSPlatform("windows")]
     public static string ProbeDescription()
         => DirectX12Renderer.IsAvailable() ? "DirectX 12" : "DirectX 11";
+
+    private static IFractalRenderer WireLifecycle(IGpuSurface surface, IFractalRenderer renderer)
+    {
+        surface.Resized += (_, _) =>
+            renderer.Resize(System.Math.Max(1, surface.PixelWidth),
+                            System.Math.Max(1, surface.PixelHeight));
+        surface.HandleLost += (_, _) => renderer.Dispose();
+        return renderer;
+    }
 }
