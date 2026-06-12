@@ -1467,9 +1467,9 @@
               "target": "Package",
               "version": "[5.0.0, )"
             },
-            "PDFsharp-gdi": {
+            "QuestPDF": {
               "target": "Package",
-              "version": "[6.2.4, )"
+              "version": "[2025.1.0, )"
             },
             "ReactiveUI.Avalonia": {
               "target": "Package",
@@ -1478,10 +1478,6 @@
             "SkiaSharp": {
               "target": "Package",
               "version": "[3.119.4, )"
-            },
-            "System.Drawing.Common": {
-              "target": "Package",
-              "version": "[10.0.8, )"
             }
           },
           "imports": [
