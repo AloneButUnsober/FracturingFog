@@ -26,13 +26,13 @@
 
 using FracturingFog.Abstractions;
 using FracturingFog.Interefaces;
-using FracturingFog.Views;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -61,7 +61,7 @@ namespace FracturingFog.Models
         private static string ThemesFile =>
             Path.Combine(SettingsDir, "colorthemes.json");
 
-        private static string ThemesFileHash => FormHelpers.GetFileHash(ThemesFile);
+        private static string ThemesFileHash => GetFileHash(ThemesFile);
 
         // ── New Pallets file paths ─────────────────────────────────────────────────────
         // Source ships read-only inside the install dir. Use AppContext.BaseDirectory
@@ -72,7 +72,22 @@ namespace FracturingFog.Models
 
         private static string NewPalletsFile => Path.Combine(ColorThemesDir, "colorthemes.json");
 
-        private static string NewPalletsFileHash => FormHelpers.GetFileHash(NewPalletsFile);
+        private static string NewPalletsFileHash => GetFileHash(NewPalletsFile);
+
+        // SHA-256 of the file's text content as base64. Empty when the file
+        // is missing. Inlined from Views\Controls.cs!FormHelpers.GetFileHash
+        // during the Phase X.0 carve-out so this engine type does not depend
+        // on the WinForms shell.
+        private static string GetFileHash(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                return string.Empty;
+            using StreamReader sr = new StreamReader(filePath);
+            string fHash = sr.ReadToEnd();
+            byte[] bHash = Encoding.UTF8.GetBytes(fHash);
+            bHash = SHA256.HashData(bHash);
+            return Convert.ToBase64String(bHash);
+        }
 
         // Per-user marker that records the hash of the source palette file we
         // already merged. Lives in AppData (writable); avoids re-merging every
@@ -152,7 +167,7 @@ namespace FracturingFog.Models
 
         // ── JSON options ──────────────────────────────────────────────────────
 
-        internal static JsonSerializerOptions BuildJsonOptions()
+        public static JsonSerializerOptions BuildJsonOptions()
         {
             var opts = new JsonSerializerOptions
             {

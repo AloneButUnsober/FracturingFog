@@ -242,6 +242,17 @@
     <!-- Shared UI-free contracts (IGpuSurface and future siblings). -->
     <ProjectReference Include="Abstractions\FracturingFog.Abstractions.csproj" />
     <!--
+      Phase X.0 / Slice 0.1 — cross-platform engine assembly. Owns the
+      calculator fleet, model types (color schemes, kernels, palettes),
+      interface contracts, and FFMath (BLA + SA series). Moved out of the
+      WinExe so a non-Windows host can reference it without dragging
+      net10.0-windows / WinForms. WinExe continues to consume the same
+      types through this ProjectReference; downstream sibling projects
+      (UI.Avalonia, PaletteBuilder.Lib, Server) gain Engine references in
+      later slices as they need them.
+    -->
+    <ProjectReference Include="Engine\FracturingFog.Engine.csproj" />
+    <!--
       Phase 2 Avalonia shell. Referenced so the avalonia CLI flag launches
       the new UI from the same WinExe during the migration. Remove when
       Phase 2.3 swaps to Avalonia as the primary entry point.
