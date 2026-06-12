@@ -17,13 +17,34 @@
 
         <StackPanel Grid.Row="0" Spacing="6">
 
+            <!-- Capability banner — visible only when backend lacks a source kind.
+                 Yellow (#FFCC00) chosen for red/green colourblindness — see user memory. -->
+            <Border IsVisible="{Binding ShowCapabilityBanner}"
+                    Background="#3C2D14"
+                    BorderBrush="#FFCC00"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Padding="8,4"
+                    Margin="0,0,0,4">
+                <TextBlock Text="{Binding CapabilityBannerText}"
+                           Foreground="#FFCC00"
+                           TextWrapping="Wrap" />
+            </Border>
+
             <!-- Source -->
             <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Source:" VerticalAlignment="Center" />
                 <ComboBox Grid.Row="0" Grid.Column="1"
                           ItemsSource="{Binding Sources}"
                           SelectedIndex="{Binding SourceIndex, Mode=TwoWay}"
-                          HorizontalAlignment="Stretch" Margin="0,2" />
+                          HorizontalAlignment="Stretch" Margin="0,2">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayLabel}"
+                                       Opacity="{Binding IsAvailable, Converter={x:Static vm:AudioSettingsViewModel.AvailabilityOpacity}}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="File path:" VerticalAlignment="Center" />
                 <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto">
                     <TextBox Grid.Column="0"

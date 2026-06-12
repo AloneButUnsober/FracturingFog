@@ -85,7 +85,13 @@ namespace FracturingFog.Hosting
         // slideshow start, reused across toggles. Stopped (not disposed) when
         // the slideshow ends so the meter timer in any open Audio Settings
         // dialog still shows live BPM until the user explicitly closes it.
-        private static AudioEngine? s_audioEngine;
+        // Phase X.B / Slice B.4: swapped from AudioEngine to the
+        // IAudioCaptureBackend + AudioCaptureDriver split. The Win-only
+        // WindowsNAudioBackend keeps WASAPI loopback + WaveOutEvent in play
+        // here; future cross-platform App bootstrap will pick NoopAudioBackend
+        // (analyzer-only) on Linux/macOS.
+        private static IAudioCaptureBackend? s_audioBackend;
+        private static AudioCaptureDriver? s_audioDriver;
 
         private static readonly object s_gate = new();
 
@@ -321,10 +327,10 @@ namespace FracturingFog.Hosting
             // user can edit AudioSettings mid-session.
             s_shell.StartAudioReactive = () =>
             {
-                EnsureAudioEngineStarted();
-                return s_audioEngine?.BeatSource;
+                EnsureAudioCaptureStarted();
+                return s_audioDriver?.BeatSource;
             };
-            s_shell.StopAudioReactive = StopAudioEngine;
+            s_shell.StopAudioReactive = StopAudioCapture;
             s_shell.GetAudioBeatCadence = () =>
             {
                 var s = AudioSettingsStore.Load();
@@ -2372,8 +2378,10 @@ namespace FracturingFog.Hosting
                 try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;
                 try { s_sandboxWin?.Close(); }  catch { /* ignore */ } s_sandboxWin = null;
                 try { s_userBulbWin?.Close(); } catch { /* ignore */ } s_userBulbWin = null;
-                try { s_audioEngine?.Dispose(); } catch { /* ignore */ }
-                s_audioEngine = null;
+                try { s_audioDriver?.Dispose(); } catch { /* ignore */ }
+                s_audioDriver = null;
+                // Driver disposes the backend, but null the field for clarity.
+                s_audioBackend = null;
                 try { s_shell?.Dispose(); } catch { /* ignore */ }
                 s_shell = null;
                 try { s_renderHost?.Dispose(); } catch { /* renderer disposed via host */ }
@@ -2384,42 +2392,100 @@ namespace FracturingFog.Hosting
             }
         }
 
-        // ── AudioEngine lifecycle ─────────────────────────────────────────
+        // ── AudioCaptureDriver lifecycle ──────────────────────────────────
         //
         // Created lazily on first audio-reactive slideshow. Reconfigure picks
         // up settings edits the user made via the Audio Settings dialog. Stop
         // (not Dispose) so the singleton stays warm across slideshow toggles.
-        private static void EnsureAudioEngineStarted()
+        //
+        // Backend selection (Phase X.B / Slice B.4): WindowsNAudioBackend on
+        // Windows hosts (WASAPI loopback + mic + file + synth via NAudio),
+        // NoopAudioBackend otherwise (file decode + analyzer-only synth).
+        // Reflection-loaded so this assembly can stay net10.0-windows-free
+        // when the Hosting csproj eventually flips. Today the file lives only
+        // in FracturingFogCLD.csproj (net10.0-windows), so the Windows branch
+        // is always taken — but write the gate so the cross-platform App
+        // bootstrap reuses the same helper.
+        private static void EnsureAudioCaptureStarted()
         {
             try
             {
                 var settings = AudioSettingsStore.Load();
-                if (s_audioEngine == null)
+                if (s_audioDriver == null)
                 {
-                    s_audioEngine = new AudioEngine(settings);
+                    s_audioBackend = CreateAudioBackend();
+                    s_audioDriver = new AudioCaptureDriver(s_audioBackend, settings);
                 }
                 else
                 {
-                    s_audioEngine.Reconfigure(settings);
+                    s_audioDriver.Reconfigure(settings);
                 }
-                if (!s_audioEngine.IsRunning) s_audioEngine.Start();
+                if (!s_audioDriver.IsRunning) s_audioDriver.Start();
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioEngine start failed: {ex.Message}");
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] Audio capture start failed: {ex.Message}");
             }
         }
 
-        private static void StopAudioEngine()
+        private static void StopAudioCapture()
         {
             try
             {
-                if (s_audioEngine is { IsRunning: true }) s_audioEngine.Stop();
+                if (s_audioDriver is { IsRunning: true }) s_audioDriver.Stop();
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioEngine stop failed: {ex.Message}");
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] Audio capture stop failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Backend capability flags for the live driver, or
+        /// <see cref="AudioBackendCapabilities.None"/> when the driver hasn't
+        /// been constructed yet. AvaloniaDialogs queries this when opening the
+        /// Audio Settings dialog so the source picker can grey unsupported
+        /// options on Linux / macOS.
+        /// </summary>
+        public static AudioBackendCapabilities AudioCapabilities
+            => s_audioDriver?.Capabilities ?? DetectAudioCapabilities();
+
+        /// <summary>
+        /// Probe capabilities without constructing the driver. Returns the same
+        /// flags <see cref="CreateAudioBackend"/> would produce — used by the
+        /// settings dialog opened before the first slideshow start.
+        /// </summary>
+        private static AudioBackendCapabilities DetectAudioCapabilities()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return AudioBackendCapabilities.SystemLoopback
+                     | AudioBackendCapabilities.Microphone
+                     | AudioBackendCapabilities.FilePlayback
+                     | AudioBackendCapabilities.SynthPlayback;
+            }
+            return AudioBackendCapabilities.FilePlayback
+                 | AudioBackendCapabilities.SynthPlayback;
+        }
+
+        private static IAudioCaptureBackend CreateAudioBackend()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    var asm = System.Reflection.Assembly.Load("FracturingFog.Audio.Win");
+                    var t = asm.GetType("FracturingFog.Audio.Win.WindowsNAudioBackend");
+                    if (t != null && Activator.CreateInstance(t) is IAudioCaptureBackend win)
+                        return win;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"[AvaloniaShellBootstrap] WindowsNAudioBackend load failed, falling back to noop: {ex.Message}");
+                }
+            }
+            return new NoopAudioBackend();
         }
     }
 }
