@@ -114,6 +114,12 @@
     <Compile Remove="Hosting\ColorThemeDefAdapter.cs" />
     <Compile Remove="Hosting\PngSlideshowFrameRecorder.cs" />
     <!--
+      Phase X.0 / Slice 0.2 — Audio files now owned by FracturingFog.Audio
+      (temporary net10.0-windows TFM until Phase X.B introduces the backend
+      abstraction). WinExe consumes them across the ProjectReference below.
+    -->
+    <Compile Remove="Audio\**" />
+    <!--
       Audio/ and Hosting/ stay owned by this WinExe's default Compile glob
       during Phase X.0 scaffolding (their sibling FracturingFog.Audio.csproj
       / FracturingFog.Hosting.csproj set EnableDefaultCompileItems=false so
@@ -279,6 +285,12 @@
       the SDK default glob.
     -->
     <ProjectReference Include="Hosting\FracturingFog.Hosting.csproj" />
+    <!--
+      Phase X.0 / Slice 0.2 — audio capture + beat analyzer + fractal synth.
+      Temporary net10.0-windows TFM; Phase X.B flips to net10.0 after the
+      backend abstraction lands.
+    -->
+    <ProjectReference Include="Audio\FracturingFog.Audio.csproj" />
     <!--
       Phase 2 Avalonia shell. Referenced so the avalonia CLI flag launches
       the new UI from the same WinExe during the migration. Remove when
