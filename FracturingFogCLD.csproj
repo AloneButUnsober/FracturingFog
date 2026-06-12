@@ -111,6 +111,7 @@
       rationale).
     -->
     <Compile Remove="Hosting\HostColorThemeService.cs" />
+    <Compile Remove="Hosting\HostHelpContentProvider.cs" />
     <Compile Remove="Hosting\ColorThemeDefAdapter.cs" />
     <Compile Remove="Hosting\PngSlideshowFrameRecorder.cs" />
     <!--
