@@ -13,20 +13,31 @@
   -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      Phase X.0 / Slice 0.2 — temporary net10.0-windows TFM. The current
+      AudioEngine + FractalSynth + BeatAnalyzer use NAudio.CoreAudioApi
+      (WASAPI loopback) and WaveOutEvent (WinMM speaker output), both of
+      which only resolve on Windows. Phase X.B introduces IAudioCaptureBackend
+      and splits these files: backend-neutral analyzer driver lands in this
+      assembly (then flips to net10.0), Windows WASAPI/WinMM backend lands
+      in FracturingFog.Audio.Win.
+    -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>false</UseWindowsForms>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <RootNamespace>FracturingFog.Audio</RootNamespace>
     <AssemblyName>FracturingFog.Audio</AssemblyName>
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
-    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.3.0" />
   </ItemGroup>
 
 </Project>
