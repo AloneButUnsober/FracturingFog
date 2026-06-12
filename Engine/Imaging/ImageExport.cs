@@ -1,115 +1,71 @@
 // Imaging/ImageExport.cs
 //
 // Shell-neutral image-IO + contrast helpers extracted verbatim from the
-// MainForm WinForms partials (ImageCapture.cs / MainForm.cs). Both the legacy
-// WinForms shell and the Avalonia shell call these, so the System.Drawing
-// save pipeline (BGRA uint[] → Bitmap → PNG/TIFF/BMP), the outlined watermark
-// renderer, and the pixel-sampled contrast-colour picker live in exactly one
-// place.
+// MainForm WinForms partials (ImageCapture.cs / MainForm.cs). Both shells
+// (the legacy WinForms WinExe and the Avalonia App) call these.
 //
-// Pure static. No WinForms / no MainForm field dependencies. System.Drawing is
-// the only UI-framework reference and it is Windows-only today; when the
-// cross-platform image backend lands (Phase 2.4) this is the single file that
-// swaps to ImageSharp/Skia.
+// Phase X.A / Slice A.7 — fully cross-platform. All System.Drawing.Common
+// dependencies (Bitmap, Graphics, Font, Pen, Brush, ImageFormat) have moved
+// to FracturingFog.Imaging.ImageExportGdi in the Windows-only
+// FracturingFog.Win assembly. This file uses only:
+//   * SkiaSharp for pixel save + watermark composition (cross-platform)
+//   * System.Drawing.Primitives (Color struct) which ships with the BCL
+//     and has no GDI+ dependency.
 
 using System;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
-using System.Runtime.Versioning;
 using SkiaSharp;
 using FracturingFog.Models;
 
 namespace FracturingFog.Imaging
 {
-    /// <summary>Shared BGRA-buffer → file save pipeline + watermark + contrast
-    /// colour helpers. Extracted from MainForm so every shell reuses one copy.</summary>
+    /// <summary>Cross-platform BGRA-buffer → file save pipeline + watermark +
+    /// contrast colour helpers. Uses SkiaSharp end-to-end. Windows-only legacy
+    /// callers that need the System.Drawing.Imaging.ImageFormat overloads
+    /// should use <see cref="ImageExportGdi"/> in FracturingFog.Win.</summary>
     public static class ImageExport
     {
+        // ── Public Save overloads (portable ImageFileFormat path) ─────────
+
         /// <summary>Write a BGRA <paramref name="pixels"/> buffer to
-        /// <paramref name="path"/> as PNG/TIFF/BMP, then (if a watermark string
-        /// is supplied) re-save with the outlined watermark composited on top.
-        ///
-        /// Phase X.A / Slice A.2 — the no-watermark save path routes through
-        /// SkiaSharp (cross-platform). The watermark composition uses GDI+
-        /// (Graphics + GraphicsPath text outlining) on Windows; on non-Windows
-        /// hosts the watermark is composed via SKCanvas + Inter typeface.
-        /// TIFF on non-Windows falls back to PNG with a debug log line
-        /// (SkiaSharp does not encode TIFF).
-        ///
-        /// Phase X.A / Slice A.6 — this <see cref="ImageFormat"/>-taking
-        /// overload is now marked Windows-only; engine callers should use the
-        /// <see cref="ImageFileFormat"/> overload below. WinExe callers can
-        /// still use this overload because their entire process is Windows.</summary>
-        [SupportedOSPlatform("windows")]
+        /// <paramref name="path"/> using the portable <see cref="ImageFileFormat"/>
+        /// token. When a string watermark is supplied it is composited via
+        /// SkiaSharp on every platform (consistent rendering).</summary>
         public static void SavePixelsToFile(
-            uint[] pixels, int w, int h, string path, ImageFormat format,
+            uint[] pixels, int w, int h, string path, ImageFileFormat format,
             string watermarkText, Color fontColor, string subText = "", bool poster = false,
             float dpi = 0f)
         {
-            // Fast path: no watermark, no GDI+ at all.
-            if (string.IsNullOrEmpty(watermarkText))
-            {
-                SaveBgraSkia(pixels, w, h, path, format, dpi);
-                return;
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                SaveWithGdiWatermark(pixels, w, h, path, format,
-                    text: watermarkText, fontColor: fontColor, subText: subText,
-                    poster: poster, dpi: dpi);
-                return;
-            }
-
-            // Non-Windows: save base image via Skia, composite watermark via Skia.
             SaveBgraSkia(pixels, w, h, path, format, dpi);
+            if (string.IsNullOrEmpty(watermarkText)) return;
             CompositeWatermarkSkia(path, format,
                 topText: watermarkText, subText: subText, fontColor: fontColor,
                 poster: poster);
         }
 
-        // ── SkiaSharp save path (cross-platform) ──────────────────────────
-        //
-        // BGRA uint[] -> SKBitmap.InstallPixels -> SKImage.Encode. Matches
-        // the GDI+ output bit-identically for PNG/BMP. JPEG/WebP fall through
-        // to SkiaSharp quality 100 (visually lossless). TIFF on non-Windows
-        // logs a debug line and saves as PNG instead.
-        [SupportedOSPlatform("windows")]
-        private static void SaveBgraSkia(uint[] pixels, int w, int h, string path,
-            ImageFormat format, float dpi)
+        /// <summary>Save BGRA pixels then composite a resolved watermark on
+        /// top via SkiaSharp.</summary>
+        public static void SavePixelsToFile(
+            uint[] pixels, int w, int h, string path, ImageFileFormat format,
+            WatermarkRender? wm, bool poster = false, float dpi = 0f)
         {
-            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-            using var bmp = new SKBitmap(info);
-            unsafe
-            {
-                fixed (uint* src = pixels)
-                {
-                    Buffer.MemoryCopy(src, (void*)bmp.GetPixels(),
-                        (long)w * h * 4, (long)w * h * 4);
-                }
-            }
+            SaveBgraSkia(pixels, w, h, path, format, dpi);
 
-            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out bool unsupportedTiff);
-            int quality = skFmt == SKEncodedImageFormat.Jpeg ? 95 : 100;
+            bool hasWm = wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText));
+            if (!hasWm) return;
 
-            using var image = SKImage.FromBitmap(bmp);
-            using var data = image.Encode(skFmt, quality);
-            using var fs = File.OpenWrite(path);
-            data.SaveTo(fs);
-
-            if (unsupportedTiff)
-                Debug.WriteLine($"SaveBgraSkia: TIFF unsupported by SkiaSharp; saved {path} as PNG.");
-            // DPI metadata: PNG pHYs / JPEG JFIF / TIFF would need manual chunk
-            // injection. SkiaSharp does not expose it; cross-platform output
-            // declares the encoder default (96 dpi). Documented gap.
-            _ = dpi;
+            CompositeWatermarkRenderSkia(path, format, wm!, poster);
         }
 
-        // Cross-platform BGRA save — ImageFileFormat overload. Used by engine
-        // callers that should not reference System.Drawing.Imaging.ImageFormat
-        // directly (its static accessors are [SupportedOSPlatform("windows")]).
+        // ── SkiaSharp save path ───────────────────────────────────────────
+        //
+        // BGRA uint[] -> SKBitmap.InstallPixels -> SKImage.Encode. Matches
+        // GDI+ output bit-identically for PNG/BMP. JPEG/WebP fall through to
+        // SkiaSharp quality 95 (visually lossless). TIFF logs a debug line
+        // and saves as PNG instead (SkiaSharp does not encode TIFF).
+
         private static void SaveBgraSkia(uint[] pixels, int w, int h, string path,
             ImageFileFormat format, float dpi)
         {
@@ -134,30 +90,13 @@ namespace FracturingFog.Imaging
 
             if (unsupportedTiff)
                 Debug.WriteLine($"SaveBgraSkia: TIFF unsupported by SkiaSharp; saved {path} as PNG.");
+            // DPI metadata: PNG pHYs / JPEG JFIF / TIFF would need manual
+            // chunk injection. SkiaSharp does not expose it; output declares
+            // the encoder default (96 dpi). Documented gap.
             _ = dpi;
         }
 
-        [SupportedOSPlatform("windows")]
-        private static SKEncodedImageFormat MapToSkiaFormat(
-            ImageFormat format, string path, out bool unsupportedTiff)
-        {
-            unsupportedTiff = false;
-            if (format == ImageFormat.Png) return SKEncodedImageFormat.Png;
-            if (format == ImageFormat.Jpeg) return SKEncodedImageFormat.Jpeg;
-            if (format == ImageFormat.Bmp) return SKEncodedImageFormat.Bmp;
-            if (format == ImageFormat.Gif) return SKEncodedImageFormat.Gif;
-            if (format == ImageFormat.Tiff)
-            {
-                unsupportedTiff = true;
-                return SKEncodedImageFormat.Png;
-            }
-            // Fallback: pick by extension.
-            return MapExtToSkiaFormat(path);
-        }
-
-        // Portable ImageFileFormat → SKEncodedImageFormat mapping. Used by the
-        // cross-platform Save overloads that take ImageFileFormat rather than
-        // System.Drawing.Imaging.ImageFormat.
+        // Portable ImageFileFormat → SKEncodedImageFormat mapping.
         private static SKEncodedImageFormat MapToSkiaFormat(
             ImageFileFormat format, string path, out bool unsupportedTiff)
         {
@@ -191,57 +130,10 @@ namespace FracturingFog.Imaging
             };
         }
 
-        // ── GDI+ save + watermark path (Windows-only) ─────────────────────
-        [SupportedOSPlatform("windows")]
-        private static unsafe void SaveWithGdiWatermark(
-            uint[] pixels, int w, int h, string path, ImageFormat format,
-            string text, Color fontColor, string subText, bool poster, float dpi)
-        {
-            using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-            if (dpi > 0f) bmp.SetResolution(dpi, dpi);
-            var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
-                                    ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                fixed (uint* src = pixels)
-                {
-                    if (bmpData.Stride == w * 4)
-                        Buffer.MemoryCopy(src, (void*)bmpData.Scan0, (long)w * h * 4, (long)w * h * 4);
-                    else
-                    {
-                        byte* dst = (byte*)bmpData.Scan0;
-                        for (int row = 0; row < h; row++)
-                            Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
-                                              dst + (long)row * bmpData.Stride,
-                                              (long)w * 4, (long)w * 4);
-                    }
-                }
-            }
-            finally { bmp.UnlockBits(bmpData); }
+        // ── SkiaSharp watermark composition ───────────────────────────────
 
-            using var g = Graphics.FromImage(bmp);
-            AddWaterMark(g, text, w, h, fontColor, subText, poster);
-
-            if (format == ImageFormat.Tiff)
-            {
-                ImageCodecInfo? codec = null;
-                foreach (var c in ImageCodecInfo.GetImageEncoders())
-                    if (c.MimeType == "image/tiff") { codec = c; break; }
-                if (codec != null)
-                {
-                    using var ep = new EncoderParameters(1);
-                    ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Compression, (long)EncoderValue.CompressionLZW);
-                    bmp.Save(path, codec, ep);
-                }
-                else bmp.Save(path, format);
-            }
-            else bmp.Save(path, format);
-        }
-
-        // ── SkiaSharp watermark composition (non-Windows) ─────────────────
-        [SupportedOSPlatform("windows")]
         private static void CompositeWatermarkSkia(
-            string path, ImageFormat format,
+            string path, ImageFileFormat format,
             string topText, string subText, Color fontColor, bool poster)
         {
             using var existing = SKBitmap.Decode(path);
@@ -254,6 +146,28 @@ namespace FracturingFog.Imaging
             canvas.DrawBitmap(existing, 0, 0);
 
             DrawWatermarkSkia(canvas, topText, subText, width, height, fontColor, poster);
+
+            using var snap = surface.Snapshot();
+            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
+            using var data = snap.Encode(skFmt, 100);
+            using var fs = File.OpenWrite(path);
+            data.SaveTo(fs);
+        }
+
+        private static void CompositeWatermarkRenderSkia(
+            string path, ImageFileFormat format, WatermarkRender wm, bool poster)
+        {
+            using var existing = SKBitmap.Decode(path);
+            if (existing == null) return;
+            int width = existing.Width;
+            int height = existing.Height;
+
+            using var surface = SKSurface.Create(existing.Info);
+            var canvas = surface.Canvas;
+            canvas.DrawBitmap(existing, 0, 0);
+
+            var fill = Color.FromArgb(255, wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
+            DrawWatermarkSkia(canvas, wm.TopText, wm.SubText, width, height, fill, poster);
 
             using var snap = surface.Snapshot();
             SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
@@ -331,109 +245,7 @@ namespace FracturingFog.Imaging
             canvas.DrawText(text, x, baseline, font, fillPaint);
         }
 
-        /// <summary>Render the region/theme watermark + program sub-line in the
-        /// lower-right corner with a contrasting outline.</summary>
-        [SupportedOSPlatform("windows")]
-        public static void AddWaterMark(
-            Graphics g,
-            string text,
-            int width,
-            int height,
-            Color fontColor,
-            string subText = "",
-            bool poster = false)
-        {
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            var sz = g.MeasureString(text, font);
-            int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-            var pos = new PointF(width - sz.Width - 20, height - sz.Height - yOffset);
-
-            // Outline colour: opposite luminance of fill, ~75% opacity.
-            float lum = (fontColor.R * 0.299f + fontColor.G * 0.587f + fontColor.B * 0.114f) / 255f;
-            Color outlineColor = lum < 0.5f
-                ? Color.FromArgb(190, 255, 255, 255)
-                : Color.FromArgb(190, 0, 0, 0);
-
-            float mainStroke = poster ? System.Math.Max(2f, fontSize / 10f) : 2f;
-            float subStroke = poster ? System.Math.Max(1.5f, fontSize / 16f) : 1.5f;
-
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-            DrawOutlinedString(g, text, font, pos, fontColor, outlineColor, mainStroke);
-
-            if (!string.IsNullOrEmpty(subText))
-            {
-                using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
-                var sz2 = g.MeasureString(subText, fontSmall);
-                int subTextOffset = poster ? 0 : 2;
-                var subPos = new PointF(width - sz2.Width - 55, height - sz2.Height - subTextOffset);
-                DrawOutlinedString(g, subText, fontSmall, subPos, fontColor, outlineColor, subStroke);
-            }
-        }
-
-        /// <summary>Draw <paramref name="text"/> as a filled glyph path with a
-        /// rounded-join outline pen for legibility over any background.</summary>
-        [SupportedOSPlatform("windows")]
-        public static void DrawOutlinedString(
-            Graphics g, string text, Font font, PointF pos,
-            Color fill, Color outline, float strokeWidth)
-        {
-            using var path = new System.Drawing.Drawing2D.GraphicsPath();
-            path.AddString(text, font.FontFamily, (int)font.Style, font.Size, pos,
-                System.Drawing.StringFormat.GenericDefault);
-            using var pen = new Pen(outline, strokeWidth)
-            {
-                LineJoin = System.Drawing.Drawing2D.LineJoin.Round,
-                MiterLimit = 2f
-            };
-            g.DrawPath(pen, path);
-            using var brush = new SolidBrush(fill);
-            g.FillPath(brush, path);
-        }
-
-        /// <summary>
-        /// Computes the on-image bounding box the watermark will occupy.
-        /// Used by the slideshow overlay to allocate only a small bitmap
-        /// instead of a full-frame one.
-        /// </summary>
-        [SupportedOSPlatform("windows")]
-        public static Rectangle MeasureWatermarkBBox(
-            string text, string subText, int width, int height, bool poster = false)
-        {
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var dummy = new Bitmap(1, 1);
-            using var g = Graphics.FromImage(dummy);
-
-            var sz = g.MeasureString(text, font);
-            int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-            float left = width - sz.Width - 20;
-            float top = height - sz.Height - yOffset;
-            float right = left + sz.Width;
-            float bottom = top + sz.Height;
-
-            if (!string.IsNullOrEmpty(subText))
-            {
-                using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
-                var sz2 = g.MeasureString(subText, fontSmall);
-                int subTextOffset = poster ? 0 : 2;
-                float sLeft = width - sz2.Width - 55;
-                float sTop = height - sz2.Height - subTextOffset;
-                left = System.Math.Min(left, sLeft);
-                top = System.Math.Min(top, sTop);
-                right = System.Math.Max(right, sLeft + sz2.Width);
-                bottom = System.Math.Max(bottom, sTop + sz2.Height);
-            }
-
-            // Pad for outline stroke + AA fringe.
-            const int pad = 6;
-            int x0 = System.Math.Max(0, (int)System.Math.Floor(left) - pad);
-            int y0 = System.Math.Max(0, (int)System.Math.Floor(top) - pad);
-            int x1 = System.Math.Min(width, (int)System.Math.Ceiling(right) + pad);
-            int y1 = System.Math.Min(height, (int)System.Math.Ceiling(bottom) + pad);
-            return new Rectangle(x0, y0, x1 - x0, y1 - y0);
-        }
+        // ── Contrast picker ───────────────────────────────────────────────
 
         /// <summary>
         /// Returns a colour that contrasts well against <paramref name="swatch"/>.
@@ -451,8 +263,6 @@ namespace FracturingFog.Imaging
         {
             Color baseColor = swatch;
 
-            // When in watermark mode and we have pixel data, sample the region
-            // where the watermark text will land (lower-right corner).
             if (watermark && pixels != null && imgW > 0 && imgH > 0)
             {
                 const int regionW = 320;
@@ -483,7 +293,6 @@ namespace FracturingFog.Imaging
                         (int)(sumB / count));
             }
 
-            // Compute complementary + luminance-adjusted colour.
             float r = baseColor.R / 255f, g = baseColor.G / 255f, b = baseColor.B / 255f;
             float cmax = System.Math.Max(r, System.Math.Max(g, b));
             float cmin = System.Math.Min(r, System.Math.Min(g, b));
@@ -516,7 +325,6 @@ namespace FracturingFog.Imaging
                 case 4: rr = xv; gg = 0; bb = cv; break;
                 default: rr = cv; gg = 0; bb = xv; break;
             }
-            // Watermark mode is always fully opaque; fade flag kept for non-watermark uses.
             int alpha = watermark ? 205 : 255;
             return Color.FromArgb(
                 alpha,
@@ -531,300 +339,6 @@ namespace FracturingFog.Imaging
         {
             var c = ComputeContrastColor(swatch);
             return fade ? Color.FromArgb(75, c.R, c.G, c.B) : c;
-        }
-
-        // ── Configurable-watermark overloads ──────────────────────────────────
-        //
-        // These accept a WatermarkRender resolved by WatermarkResolver and honour
-        // its TextColor / HighlightColor / BackgroundColor / Placement / Justify.
-        // The legacy AddWaterMark(string, Color, string) overload above is kept
-        // for callers that haven't been migrated to pass a WatermarkRender yet.
-
-        /// <summary>Save BGRA pixels then composite a resolved watermark on top.
-        /// When <paramref name="wm"/> is null no watermark is drawn (used by the
-        /// no-watermark code paths that today pass watermarkText: "").</summary>
-        [SupportedOSPlatform("windows")]
-        public static void SavePixelsToFile(
-            uint[] pixels, int w, int h, string path, ImageFormat format,
-            WatermarkRender? wm, bool poster = false, float dpi = 0f)
-        {
-            bool hasWm = wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText));
-
-            // Fast path: no watermark, no GDI+ at all.
-            if (!hasWm)
-            {
-                SaveBgraSkia(pixels, w, h, path, format, dpi);
-                return;
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                SaveWithGdiWatermark(pixels, w, h, path, format, wm!, poster, dpi);
-                return;
-            }
-
-            // Non-Windows: save base then composite via Skia.
-            SaveBgraSkia(pixels, w, h, path, format, dpi);
-            CompositeWatermarkRenderSkia(path, format, wm!, poster);
-        }
-
-        /// <summary>Cross-platform BGRA save + optional watermark. Same shape
-        /// as the <see cref="ImageFormat"/> overload but uses the portable
-        /// <see cref="ImageFileFormat"/> token so engine callers do not need
-        /// to reference Windows-only System.Drawing.Imaging accessors.</summary>
-        public static void SavePixelsToFile(
-            uint[] pixels, int w, int h, string path, ImageFileFormat format,
-            WatermarkRender? wm, bool poster = false, float dpi = 0f)
-        {
-            bool hasWm = wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText));
-
-            if (!hasWm)
-            {
-                SaveBgraSkia(pixels, w, h, path, format, dpi);
-                return;
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                // Translate the portable token to GDI+ ImageFormat just for the
-                // Windows-only GDI+ watermark path. Centralised so the rest of
-                // the engine never touches System.Drawing.Imaging static accessors.
-                SaveWithGdiWatermarkPortable(pixels, w, h, path, format, wm!, poster, dpi);
-                return;
-            }
-
-            SaveBgraSkia(pixels, w, h, path, format, dpi);
-            CompositeWatermarkRenderSkiaPortable(path, format, wm!, poster);
-        }
-
-        [SupportedOSPlatform("windows")]
-        private static void SaveWithGdiWatermarkPortable(
-            uint[] pixels, int w, int h, string path, ImageFileFormat format,
-            WatermarkRender wm, bool poster, float dpi)
-        {
-            var gdiFormat = format switch
-            {
-                ImageFileFormat.Jpeg => ImageFormat.Jpeg,
-                ImageFileFormat.Bmp  => ImageFormat.Bmp,
-                ImageFileFormat.Gif  => ImageFormat.Gif,
-                ImageFileFormat.Tiff => ImageFormat.Tiff,
-                ImageFileFormat.Webp => ImageFormat.Png, // GDI+ has no WebP encoder
-                _                    => ImageFormat.Png,
-            };
-            SaveWithGdiWatermark(pixels, w, h, path, gdiFormat, wm, poster, dpi);
-        }
-
-        private static void CompositeWatermarkRenderSkiaPortable(
-            string path, ImageFileFormat format, WatermarkRender wm, bool poster)
-        {
-            using var existing = SKBitmap.Decode(path);
-            if (existing == null) return;
-            int width = existing.Width;
-            int height = existing.Height;
-
-            using var surface = SKSurface.Create(existing.Info);
-            var canvas = surface.Canvas;
-            canvas.DrawBitmap(existing, 0, 0);
-
-            var fill = Color.FromArgb(255, wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-            DrawWatermarkSkia(canvas, wm.TopText, wm.SubText, width, height, fill, poster);
-
-            using var snap = surface.Snapshot();
-            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
-            using var data = snap.Encode(skFmt, 100);
-            using var fs = File.OpenWrite(path);
-            data.SaveTo(fs);
-        }
-
-        [SupportedOSPlatform("windows")]
-        private static unsafe void SaveWithGdiWatermark(
-            uint[] pixels, int w, int h, string path, ImageFormat format,
-            WatermarkRender wm, bool poster, float dpi)
-        {
-            using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-            if (dpi > 0f) bmp.SetResolution(dpi, dpi);
-            var bmpData = bmp.LockBits(new Rectangle(0, 0, w, h),
-                                    ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                fixed (uint* src = pixels)
-                {
-                    if (bmpData.Stride == w * 4)
-                        Buffer.MemoryCopy(src, (void*)bmpData.Scan0, (long)w * h * 4, (long)w * h * 4);
-                    else
-                    {
-                        byte* dst = (byte*)bmpData.Scan0;
-                        for (int row = 0; row < h; row++)
-                            Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
-                                              dst + (long)row * bmpData.Stride,
-                                              (long)w * 4, (long)w * 4);
-                    }
-                }
-            }
-            finally { bmp.UnlockBits(bmpData); }
-
-            using var g = Graphics.FromImage(bmp);
-            AddWaterMark(g, wm, w, h, poster);
-
-            if (format == ImageFormat.Tiff)
-            {
-                ImageCodecInfo? codec = null;
-                foreach (var c in ImageCodecInfo.GetImageEncoders())
-                    if (c.MimeType == "image/tiff") { codec = c; break; }
-                if (codec != null)
-                {
-                    using var ep = new EncoderParameters(1);
-                    ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Compression, (long)EncoderValue.CompressionLZW);
-                    bmp.Save(path, codec, ep);
-                }
-                else bmp.Save(path, format);
-            }
-            else bmp.Save(path, format);
-        }
-
-        [SupportedOSPlatform("windows")]
-        private static void CompositeWatermarkRenderSkia(
-            string path, ImageFormat format, WatermarkRender wm, bool poster)
-        {
-            using var existing = SKBitmap.Decode(path);
-            if (existing == null) return;
-            int width = existing.Width;
-            int height = existing.Height;
-
-            using var surface = SKSurface.Create(existing.Info);
-            var canvas = surface.Canvas;
-            canvas.DrawBitmap(existing, 0, 0);
-
-            // Translate WatermarkRender to a top + sub call with the resolved
-            // text colour. Skia path ignores HighlightColor / BackgroundColor /
-            // Placement / Justify for now (lower-right is the only placement
-            // shipping today; richer placement lands when the full
-            // SkiaWatermarkRenderer extracts).
-            var fill = Color.FromArgb(255, wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-            DrawWatermarkSkia(canvas, wm.TopText, wm.SubText, width, height, fill, poster);
-
-            using var snap = surface.Snapshot();
-            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
-            using var data = snap.Encode(skFmt, 100);
-            using var fs = File.OpenWrite(path);
-            data.SaveTo(fs);
-        }
-
-        /// <summary>Draw the resolved watermark onto an arbitrary GDI surface.
-        /// Honours top-line text + colour, optional background fill, optional
-        /// highlight outline, edge placement and inline justify. Subtext is
-        /// always rendered (program/version is mandatory per spec).</summary>
-        [SupportedOSPlatform("windows")]
-        public static void AddWaterMark(
-            Graphics g,
-            WatermarkRender wm,
-            int width,
-            int height,
-            bool poster = false)
-        {
-            if (wm == null) return;
-
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            int subFontSize = System.Math.Max(1, fontSize / 2);
-            int edgePad = poster ? System.Math.Min(width, height) / 150 : 12;
-
-            using var fontMain = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var fontSub  = new Font("Segoe UI", subFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-
-            var fill = Color.FromArgb(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-
-            // Default outline = luminance-opposite halo (matches legacy behaviour).
-            // When user supplied an explicit HighlightColor, honour it instead.
-            Color outline;
-            if (wm.HighlightColor != null)
-            {
-                outline = Color.FromArgb(wm.HighlightColor.A, wm.HighlightColor.R, wm.HighlightColor.G, wm.HighlightColor.B);
-            }
-            else
-            {
-                float lum = (fill.R * 0.299f + fill.G * 0.587f + fill.B * 0.114f) / 255f;
-                outline = lum < 0.5f
-                    ? Color.FromArgb(190, 255, 255, 255)
-                    : Color.FromArgb(190, 0, 0, 0);
-            }
-
-            float mainStroke = poster ? System.Math.Max(2f, fontSize / 10f) : 2f;
-            float subStroke = poster ? System.Math.Max(1.5f, fontSize / 16f) : 1.5f;
-
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-            var szTop = string.IsNullOrEmpty(wm.TopText)
-                ? new SizeF(0, 0)
-                : g.MeasureString(wm.TopText, fontMain);
-            var szSub = string.IsNullOrEmpty(wm.SubText)
-                ? new SizeF(0, 0)
-                : g.MeasureString(wm.SubText, fontSub);
-
-            int topW = (int)System.Math.Ceiling(szTop.Width);
-            int topH = (int)System.Math.Ceiling(szTop.Height);
-            int subW = (int)System.Math.Ceiling(szSub.Width);
-            int subH = (int)System.Math.Ceiling(szSub.Height);
-
-            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
-                wm, width, height, topW, topH, subW, subH, edgePad);
-
-            // Optional background fill — covers the full block + a few px pad so
-            // anti-aliased glyph edges don't fringe past the rect.
-            if (wm.BackgroundColor != null)
-            {
-                var bg = Color.FromArgb(wm.BackgroundColor.A,
-                    wm.BackgroundColor.R, wm.BackgroundColor.G, wm.BackgroundColor.B);
-                const int bgPad = 4;
-                using var bgBrush = new SolidBrush(bg);
-                g.FillRectangle(bgBrush, bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2);
-            }
-
-            // Subtext stacks below top line in reading order.
-            int topX = WatermarkResolver.AlignLineX(bx, bw, topW, wm.Justify);
-            int subX = WatermarkResolver.AlignLineX(bx, bw, subW, wm.Justify);
-            int topY = by;
-            int subY = by + topH;
-
-            if (!string.IsNullOrEmpty(wm.TopText))
-                DrawOutlinedString(g, wm.TopText, fontMain, new PointF(topX, topY), fill, outline, mainStroke);
-
-            if (!string.IsNullOrEmpty(wm.SubText))
-                DrawOutlinedString(g, wm.SubText, fontSub, new PointF(subX, subY), fill, outline, subStroke);
-        }
-
-        /// <summary>Measure the on-image bounding rectangle the resolved
-        /// watermark will occupy. Used by overlay surfaces that allocate
-        /// scratch bitmaps the size of just the watermark band.</summary>
-        [SupportedOSPlatform("windows")]
-        public static Rectangle MeasureWatermarkBBox(
-            WatermarkRender wm, int width, int height, bool poster = false)
-        {
-            if (wm == null) return Rectangle.Empty;
-
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            int subFontSize = System.Math.Max(1, fontSize / 2);
-            int edgePad = poster ? System.Math.Min(width, height) / 150 : 12;
-
-            using var fontMain = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var fontSub  = new Font("Segoe UI", subFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var dummy = new Bitmap(1, 1);
-            using var g = Graphics.FromImage(dummy);
-
-            int topW = string.IsNullOrEmpty(wm.TopText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.TopText, fontMain).Width);
-            int topH = string.IsNullOrEmpty(wm.TopText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.TopText, fontMain).Height);
-            int subW = string.IsNullOrEmpty(wm.SubText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.SubText, fontSub).Width);
-            int subH = string.IsNullOrEmpty(wm.SubText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.SubText, fontSub).Height);
-
-            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
-                wm, width, height, topW, topH, subW, subH, edgePad);
-
-            // Pad for outline stroke + AA fringe + optional background pad.
-            const int pad = 8;
-            int x0 = System.Math.Max(0, bx - pad);
-            int y0 = System.Math.Max(0, by - pad);
-            int x1 = System.Math.Min(width, bx + bw + pad);
-            int y1 = System.Math.Min(height, by + bh + pad);
-            return new Rectangle(x0, y0, x1 - x0, y1 - y0);
         }
     }
 }

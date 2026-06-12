@@ -432,7 +432,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                     }
 
                     string framePath = Path.Combine(pngFolder, $"frame_{f + 1:D6}.png");
-                    ImageExport.SavePixelsToFile(
+                    ImageExportGdi.SavePixelsToFile(
                         buffer, outW, outH, framePath, ImageFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
