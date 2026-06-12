@@ -253,6 +253,15 @@
     -->
     <ProjectReference Include="Engine\FracturingFog.Engine.csproj" />
     <!--
+      Phase X.0 / Slice 0.1b — Windows-only D3D11 compute backend that owns
+      MandelbrotGpuKernel. Required so FractalRenderHost (still in this
+      WinExe) can construct the kernel from a live ID3D11Device + immediate
+      context. Slice 0.4 lands DirectXRenderer / DirectX12Renderer /
+      RenderFactory + MP4Writer in this same assembly; until then it's
+      MandelbrotGpuKernel-only.
+    -->
+    <ProjectReference Include="Rendering.D3D\FracturingFog.Rendering.D3D.csproj" />
+    <!--
       Phase 2 Avalonia shell. Referenced so the avalonia CLI flag launches
       the new UI from the same WinExe during the migration. Remove when
       Phase 2.3 swaps to Avalonia as the primary entry point.

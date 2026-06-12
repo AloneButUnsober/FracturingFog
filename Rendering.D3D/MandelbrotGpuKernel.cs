@@ -66,7 +66,7 @@ namespace FracturingFog.Rendering;
 /// runs the existing IColorMap pass after Run() returns. Thread-affine: a
 /// single immediate context, single-threaded use from the calc thread.
 /// </summary>
-public sealed class MandelbrotGpuKernel : IDisposable
+public sealed class MandelbrotGpuKernel : IGpuKernel
 {
     // ── HLSL builder ──────────────────────────────────────────────────────
     //
@@ -323,13 +323,10 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     /// <summary>Phase 3 fractal selector. Matches the shader's
     /// <c>gFractalKind</c> switch order. Mandelbrot is the default; other
     /// kinds pass appropriate per-pixel <c>cIter</c> + <c>z_0</c> init.</summary>
-    public enum FractalKind
-    {
-        Mandelbrot = 0,
-        Julia = 1,
-        BurningShip = 2,
-        Tricorn = 3,
-    }
+    // FractalKind enum moved to FracturingFog.Rendering.IGpuKernel (top-level)
+    // in Phase X.0 / Slice 0.1b so the interface boundary can name it without
+    // referencing this D3D-bound class. Existing in-file references compile
+    // unchanged because the enum is in the same namespace.
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;

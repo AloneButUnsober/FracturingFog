@@ -115,7 +115,7 @@ public sealed class MandelbrotCalculator
     /// <summary>T3.1: GPU compute kernel attached by the host when the
     /// active renderer is D3D11. Null = CPU-only; UseGpuCompute has
     /// no effect.</summary>
-    public FracturingFog.Rendering.MandelbrotGpuKernel? GpuKernel { get; set; }
+    public FracturingFog.Rendering.IGpuKernel? GpuKernel { get; set; }
 
     /// <summary>Optional per-row iteration cap. When non-null and sized to
     /// <see cref="Height"/>, row y uses <c>PerRowMaxIter[y]</c> instead of

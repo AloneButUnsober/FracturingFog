@@ -51,7 +51,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
     /// <summary>T3.1 phase 3: shared GPU kernel. Same instance used by
     /// the Mandelbrot path (set by the host).</summary>
-    public FracturingFog.Rendering.MandelbrotGpuKernel? GpuKernel { get; set; }
+    public FracturingFog.Rendering.IGpuKernel? GpuKernel { get; set; }
 
     /// <summary>Phase 2.1 per-row maxIter cap. See
     /// <see cref="MandelbrotCalculator.PerRowMaxIter"/> for the policy.
@@ -185,23 +185,23 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
     /// a frame.</summary>
     private bool TryDispatchGpu(CancellationToken ct)
     {
-        FracturingFog.Rendering.MandelbrotGpuKernel.FractalKind kind;
+        FracturingFog.Rendering.FractalKind kind;
         float p0 = 0f, p1 = 0f;
         switch (FractalType)
         {
             case FractalType.Mandelbrot:
-                kind = FracturingFog.Rendering.MandelbrotGpuKernel.FractalKind.Mandelbrot;
+                kind = FracturingFog.Rendering.FractalKind.Mandelbrot;
                 break;
             case FractalType.Julia:
-                kind = FracturingFog.Rendering.MandelbrotGpuKernel.FractalKind.Julia;
+                kind = FracturingFog.Rendering.FractalKind.Julia;
                 p0 = (float)FractalParameters.JuliaC.Real;
                 p1 = (float)FractalParameters.JuliaC.Imaginary;
                 break;
             case FractalType.BurningShip:
-                kind = FracturingFog.Rendering.MandelbrotGpuKernel.FractalKind.BurningShip;
+                kind = FracturingFog.Rendering.FractalKind.BurningShip;
                 break;
             case FractalType.Tricorn:
-                kind = FracturingFog.Rendering.MandelbrotGpuKernel.FractalKind.Tricorn;
+                kind = FracturingFog.Rendering.FractalKind.Tricorn;
                 break;
             default:
                 return false;  // Multibrot / Phoenix etc. — CPU only.
