@@ -18,8 +18,14 @@ namespace FracturingFog
     /// source dimensions are silently rounded down by one pixel and the right /
     /// bottom edge is dropped during the per-frame copy.
     /// </summary>
-    public sealed class Mp4Writer : IDisposable
+    public sealed class Mp4Writer : FracturingFog.Imaging.IVideoWriter
     {
+        // IVideoWriter surface (Phase X.0 / Slice 0.1c)
+        public int SourceWidth  => _srcW;
+        public int SourceHeight => _srcH;
+        public int EncodedWidth  => _encW;
+        public int EncodedHeight => _encH;
+
         // ── Win32 P/Invoke ────────────────────────────────────────────────
         [DllImport("mfplat.dll", ExactSpelling = true)]
         private static extern int MFStartup(uint version, uint flags);
