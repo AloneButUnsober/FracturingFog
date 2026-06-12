@@ -69,6 +69,13 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         /// <c>FloatingMenu.Adaptive</c>.</summary>
         public Action<int>? AdaptiveValueSink { get; set; }
 
+        /// <summary>Optional sink invoked with every BGRA frame the engine
+        /// presents (one per cross-fade interpolation step + one per dwell
+        /// commit). Shell sets this to feed a <c>PngSequenceWriter</c> when
+        /// <c>SlideshowSettings.RecordSlideshow</c> is on. Buffer must be
+        /// snapshotted by the sink — the engine reuses its blend array.</summary>
+        public Action<uint[], int, int>? FrameSink { get; set; }
+
         public event EventHandler<string>? StatusChanged;
         public event EventHandler? Stopped;
 
@@ -165,6 +172,13 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
                         string? themeName = PickTheme(themes, ref lastTheme);
 
+                        // All-black skip: peek-render the candidate region/theme
+                        // at a tiny thumbnail. If every pixel is opaque black —
+                        // theme paints in-set black + region is fully in-set, or
+                        // iter depth too low at extreme zoom — retry up to one
+                        // pass through the theme pool before giving up.
+                        themeName = PickNonBlackTheme(regionName, themeName, themes, ref lastTheme, ct);
+
                         if (t == 0)
                             await RegionTransitionAsync(regionName, themeName, fadeSteps, regionStepMs, ct);
                         else
@@ -257,6 +271,46 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             return themes[ti];
         }
 
+        // Tiny offscreen probe — used by the all-black-leg skip path. Mandelbrot
+        // regions get a 64×36 peek; anything else returns null (engine's
+        // offscreen render is Mandelbrot-only) and the caller proceeds without
+        // skipping.
+        private const int PeekW = 64;
+        private const int PeekH = 36;
+
+        private static bool IsAllOpaqueBlack(uint[] buf)
+        {
+            const uint OpaqueBlack = 0xFF000000u;
+            for (int i = 0; i < buf.Length; i++)
+                if (buf[i] != OpaqueBlack) return false;
+            return true;
+        }
+
+        private string? PickNonBlackTheme(
+            string regionName, string? themeName,
+            IReadOnlyList<string>? themes, ref int lastTheme,
+            CancellationToken ct)
+        {
+            if (themes == null || themes.Count == 0 || themeName == null) return themeName;
+            int budget = Math.Max(1, themes.Count);
+            for (int i = 0; i < budget; i++)
+            {
+                if (ct.IsCancellationRequested) return themeName;
+                uint[]? probe;
+                try { probe = _service.RenderRegionOffscreen(regionName, themeName, PeekW, PeekH); }
+                catch { probe = null; }
+                // Non-Mandelbrot region — no probe path, give up the skip.
+                if (probe == null) return themeName;
+                if (!IsAllOpaqueBlack(probe)) return themeName;
+
+                StatusChanged?.Invoke(this,
+                    $"Slideshow: skipping black {regionName} / {themeName}");
+                themeName = PickTheme(themes, ref lastTheme);
+                if (themeName == null) return null;
+            }
+            return themeName;
+        }
+
         /// <summary>Region change: offscreen-render incoming, cross-fade, commit live.</summary>
         private async Task RegionTransitionAsync(string regionName, string? themeName, int steps, int stepMs, CancellationToken ct)
         {
@@ -280,6 +334,19 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 var black = new uint[old.Length];
                 for (int i = 0; i < black.Length; i++) black[i] = 0xFF000000u;
                 await FadeAsync(old, black, w, h, steps, stepMs, ct);
+            }
+            else if (incoming != null && w > 0 && h > 0 && incoming.Length == w * h)
+            {
+                // Cold start — no frame uploaded yet (slideshow auto-launched
+                // before the first interactive render landed). Fade in from
+                // black to the offscreen-rendered incoming so the first leg
+                // doesn't pop onto the screen. CommitRegionAsync's Trigger()
+                // afterwards will re-present the production calc result; in
+                // practice it matches the offscreen render closely enough
+                // that the user sees a smooth fade-in.
+                var black = new uint[incoming.Length];
+                for (int i = 0; i < black.Length; i++) black[i] = 0xFF000000u;
+                await FadeAsync(black, incoming, w, h, steps, stepMs, ct);
             }
 
             // Commit the live view to the new region+theme. Set the colour map
@@ -354,7 +421,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             if (old.Length > 0 && incoming.Length == old.Length)
                 await FadeAsync(old, incoming, w, h, steps, stepMs, ct);
             else
+            {
                 await OnUiAsync(() => { _host.PresentBuffer(incoming, w, h); return 0; }, ct);
+                EmitFrame(incoming, w, h);
+            }
 
             // PresentBuffer / FadeAsync upload the recoloured buffer without
             // the watermark+grid overlay composite. Re-upload via
@@ -373,6 +443,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             if (from.Length < n || to.Length < n)
             {
                 await OnUiAsync(() => { _host.PresentBuffer(to, w, h); return 0; }, ct);
+                EmitFrame(to, w, h);
                 return;
             }
 
@@ -385,6 +456,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 {
                     // Final frame = exact target (stable reference for snapshots).
                     await OnUiAsync(() => { _host.PresentBuffer(to, w, h); return 0; }, ct);
+                    EmitFrame(to, w, h);
                     return;
                 }
 
@@ -400,8 +472,23 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 }
 
                 await OnUiAsync(() => { _host.PresentBuffer(blend, w, h); return 0; }, ct);
+                EmitFrame(blend, w, h);
                 try { await Task.Delay(stepMs, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
+            }
+        }
+
+        // Forward presented buffer to the optional recording sink. Sink owns
+        // the snapshot — engine reuses the blend array on the next step, so
+        // PngSequenceWriter.WriteFrame must copy before the next call.
+        private void EmitFrame(uint[] bgra, int w, int h)
+        {
+            var sink = FrameSink;
+            if (sink == null) return;
+            try { sink(bgra, w, h); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[SlideshowEngine] FrameSink failed: {ex.Message}");
             }
         }
 

@@ -93,6 +93,12 @@ namespace FracturingFog.Rendering
         private uint[]? _lastUploadedBuffer;
         private int _lastUploadedWidth;
         private int _lastUploadedHeight;
+        // Tracks the renderer's CURRENT back-buffer size (last value passed to
+        // Resize). Survives _lastUploadedBuffer being nulled by Resize, so the
+        // slideshow cold-start path can build a black source buffer at the right
+        // dimensions before any frame has been uploaded.
+        private int _currentTargetWidth;
+        private int _currentTargetHeight;
         // Pre-overlay snapshot. Mirrors _lastUploadedBuffer but is captured
         // before grid+watermark composite, so file-save paths can paint a
         // fresh watermark (via ImageExport.AddWaterMark) without double-
@@ -876,6 +882,8 @@ namespace FracturingFog.Rendering
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
             _lastUploadedBuffer = null;
+            _currentTargetWidth = w;
+            _currentTargetHeight = h;
             // Buffer dimensions changing → old CDF is sized for old buffers.
             InvalidateAdaptiveCdf();
 
@@ -1520,7 +1528,12 @@ namespace FracturingFog.Rendering
                 var buf = _lastUploadedBuffer;
                 if (buf == null)
                 {
-                    width = 0; height = 0;
+                    // No frame uploaded yet — still surface the renderer's
+                    // current target size so callers (slideshow cold start)
+                    // can size a fade-in source. Buffer stays empty so
+                    // length-guarded cross-fade paths fall through.
+                    width = _currentTargetWidth;
+                    height = _currentTargetHeight;
                     return Array.Empty<uint>();
                 }
                 width = _lastUploadedWidth;

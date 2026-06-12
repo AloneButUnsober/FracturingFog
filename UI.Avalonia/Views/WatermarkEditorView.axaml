@@ -55,10 +55,13 @@
                        FontSize="14"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
+            <!-- Phase D: scoped markdown help. VM HelpCommand retained for any
+                 legacy host hooks but the visible button now opens the user guide. -->
             <Button Grid.Column="1"
                     Classes="action help"
                     Content="?"
-                    Command="{Binding HelpCommand}"
+                    Click="OnHelpClick"
+                    ToolTip.Tip="Open the Watermark section of the Avalonia user guide"
                     Width="32" />
         </Grid>
 

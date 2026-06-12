@@ -7,6 +7,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 
@@ -69,6 +70,12 @@ public partial class FFClientView : Window
         });
         if (open is { Count: > 0 }) assign(open[0].Path.LocalPath);
     }
+
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/ClientServer-UserGuide.md",
+            "First-time server setup",
+            "Client / Server — Help");
 
     private async Task SaveBytesAsync(SaveBytesEventArgs args)
     {

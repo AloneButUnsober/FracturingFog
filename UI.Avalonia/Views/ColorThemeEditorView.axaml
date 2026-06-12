@@ -58,10 +58,13 @@
                        FontSize="14"
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
+            <!-- Phase D: scoped markdown help. HelpCommand still raises HelpRequested
+                 for legacy host hooks (ShellViewModel listens), so VM contract unchanged. -->
             <Button Grid.Column="1"
                     Classes="action help"
                     Content="?"
-                    Command="{Binding HelpCommand}"
+                    Click="OnHelpClick"
+                    ToolTip.Tip="Open the Colour Theme Editor guide"
                     Width="32" />
         </Grid>
 

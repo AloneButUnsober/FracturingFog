@@ -32,4 +32,10 @@ public sealed partial class VideoSettingsView : Window
     }
 
     private void OnCancelClicked(object? sender, RoutedEventArgs e) => Close(false);
+
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/Capture-Guide.md",
+            "Video Zoom",
+            "Video Settings — Help");
 }

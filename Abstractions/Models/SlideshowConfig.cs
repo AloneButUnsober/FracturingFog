@@ -203,6 +203,8 @@ namespace FracturingFog.Models
                     RegionFadeMs = Timing.RegionFadeMs,
                     FadeSteps = Timing.FadeSteps,
                     UseRegionWatermark = Timing.UseRegionWatermark,
+                    RecordSlideshow = Timing.RecordSlideshow,
+                    RecordEncodePreset = Timing.RecordEncodePreset,
                 },
                 AudioReactive = AudioReactive,
                 IncludedRegions = new List<string>(IncludedRegions ?? new()),

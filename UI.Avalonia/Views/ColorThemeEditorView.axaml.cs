@@ -109,6 +109,12 @@ public sealed partial class ColorThemeEditorView : Window
         _sortMenusAttached = true;
     }
 
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/ColorThemeEditor-Guide.md",
+            null,
+            "Colour Theme Editor — Help");
+
     private void OnAnyPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not ColorThemeEditorViewModel vm) return;

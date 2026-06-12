@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
 using FracturingFog.UI.Avalonia.Input;
@@ -18,4 +19,10 @@ public sealed partial class WatermarkEditorView : Window
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
     }
+
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/Avalonia-UserGuide.md",
+            "Watermark",
+            "Watermark Editor — Help");
 }

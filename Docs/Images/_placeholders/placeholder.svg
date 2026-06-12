@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" role="img" aria-label="Image placeholder">
+  <defs>
+    <pattern id="diag" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="20" height="20" fill="#161616"/>
+      <line x1="0" y1="0" x2="0" y2="20" stroke="#2a2a2a" stroke-width="3"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="450" fill="url(#diag)"/>
+  <rect x="6" y="6" width="788" height="438" fill="none" stroke="#FFCC00" stroke-width="3" stroke-dasharray="14 8"/>
+  <g font-family="Consolas, monospace" text-anchor="middle">
+    <text x="400" y="200" font-size="42" fill="#FFCC00" font-weight="bold">Image Placeholder</text>
+    <text x="400" y="245" font-size="20" fill="#DCDCDC">Replace with the captured PNG / SVG.</text>
+    <text x="400" y="285" font-size="16" fill="#9CDCFE">See Docs/Images/README.md for capture protocol.</text>
+    <text x="400" y="320" font-size="14" fill="#888888">Listed in Docs/Documentation-Plan.md → Pending Image Captures</text>
+  </g>
+</svg>
