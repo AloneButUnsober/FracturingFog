@@ -1,6 +1,7 @@
 using System;
+using System.Numerics;
 using System.Threading;
-using NAudio.Dsp;
+using MathNet.Numerics.IntegralTransforms;
 using NAudio.Wave;
 
 namespace FracturingFog.Audio
@@ -198,27 +199,31 @@ namespace FracturingFog.Audio
 
         private void AnalyzeWindow()
         {
-            // Apply window + pack into NAudio Complex[].
+            // Apply Hann window + pack into a System.Numerics.Complex[] (MathNet's
+            // Fourier API consumes this directly; replaces the old NAudio.Dsp
+            // Complex/FastFourierTransform pair so the engine can drop NAudio.Dsp
+            // entirely). FourierOptions.NoScaling matches NAudio's behaviour
+            // (no 1/N or 1/sqrt(N) factor) so existing flux thresholds stay
+            // numerically equivalent up to floating-point round-off.
             var fft = new Complex[FftSize];
             float rmsSum = 0f;
             for (int i = 0; i < FftSize; i++)
             {
                 float s = _ring[i] * _windowFn[i];
-                fft[i].X = s;
-                fft[i].Y = 0f;
+                fft[i] = new Complex(s, 0.0);
                 rmsSum += s * s;
             }
             float rms = (float)System.Math.Sqrt(rmsSum / FftSize);
             _rmsEma = Lerp(_rmsEma, rms, 0.15f);
 
-            FastFourierTransform.FFT(true, FftSizeLog2, fft);
+            Fourier.Forward(fft, FourierOptions.NoScaling);
 
             // Magnitude spectrum.
             int half = FftSize / 2;
             Span<float> mag = stackalloc float[half];
             for (int i = 0; i < half; i++)
             {
-                float re = fft[i].X, im = fft[i].Y;
+                double re = fft[i].Real, im = fft[i].Imaginary;
                 mag[i] = (float)System.Math.Sqrt(re * re + im * im);
             }
 
