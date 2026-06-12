@@ -51,6 +51,13 @@ namespace FracturingFog.Hosting
             {
                 Result pending = Result.Cancelled;
 
+                // Phase X.2 / Slice 2.5 — auto-download targets a Windows
+                // `ffmpeg.exe` from BtbN/FFmpeg-Builds, so the Win flow keeps
+                // its existing UX. Linux/macOS hosts install via apt / brew
+                // and only need a rescan button to re-detect a freshly
+                // installed binary on PATH; both copy blocks branch on this.
+                bool isWindows = OperatingSystem.IsWindows();
+
                 bool isInstalled = FfmpegInstaller.IsInstalled();
                 string? installedVersion = FfmpegInstaller.TryReadInstalledVersion();
 
@@ -64,12 +71,16 @@ namespace FracturingFog.Hosting
 
                 var explainBlock = new TextBlock
                 {
-                    Text =
-                        "ffmpeg.exe is used to encode video (Lossless H.264 / FFV1 / " +
-                        "visually-lossless MP4) from the rendered PNG frame sequence. " +
-                        "It is GPL-licensed and not bundled with this app. You can let " +
-                        "FracturingFog download a current GPL build from BtbN's GitHub " +
-                        "releases, install one yourself, or skip video saving entirely.",
+                    Text = isWindows
+                        ? "ffmpeg.exe is used to encode video (Lossless H.264 / FFV1 / " +
+                          "visually-lossless MP4) from the rendered PNG frame sequence. " +
+                          "It is GPL-licensed and not bundled with this app. You can let " +
+                          "FracturingFog download a current GPL build from BtbN's GitHub " +
+                          "releases, install one yourself, or skip video saving entirely."
+                        : "ffmpeg is used to encode video (Lossless H.264 / FFV1 / " +
+                          "visually-lossless MP4) from the rendered PNG frame sequence. " +
+                          "On Linux / macOS install it via your package manager and " +
+                          "FracturingFog will pick it up off PATH automatically.",
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = Brushes.LightGray,
                     Margin = new Thickness(0, 0, 0, 10),
@@ -77,10 +88,15 @@ namespace FracturingFog.Hosting
 
                 var noticeBlock = new TextBlock
                 {
-                    Text =
-                        "Download source: github.com/BtbN/FFmpeg-Builds (GPL build). " +
-                        "The download is verified against the SHA-256 digest published " +
-                        "by GitHub for the release asset before it is extracted.",
+                    Text = isWindows
+                        ? "Download source: github.com/BtbN/FFmpeg-Builds (GPL build). " +
+                          "The download is verified against the SHA-256 digest published " +
+                          "by GitHub for the release asset before it is extracted."
+                        : "Suggested install commands:\n" +
+                          "  Ubuntu / Debian:  sudo apt install ffmpeg\n" +
+                          "  Fedora:           sudo dnf install ffmpeg\n" +
+                          "  Arch:             sudo pacman -S ffmpeg\n" +
+                          "  macOS (Homebrew): brew install ffmpeg",
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = new SolidColorBrush(Color.FromRgb(160, 160, 110)),
                     FontStyle = FontStyle.Italic,
@@ -90,9 +106,9 @@ namespace FracturingFog.Hosting
 
                 var btnDownload = new Button
                 {
-                    Content = isInstalled
-                        ? "Download Latest (Update)"
-                        : "Download FFmpeg Now",
+                    Content = isWindows
+                        ? (isInstalled ? "Download Latest (Update)" : "Download FFmpeg Now")
+                        : "Rescan PATH",
                     MinWidth = 220,
                     Margin = new Thickness(0, 0, 0, 6),
                     HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -158,15 +174,24 @@ namespace FracturingFog.Hosting
                 };
                 manualPanel.Children.Add(new TextBlock
                 {
-                    Text =
-                        "To install ffmpeg.exe manually:\n" +
-                        "  1. Download a Windows GPL build (recommended:\n" +
-                        "     https://github.com/BtbN/FFmpeg-Builds/releases ).\n" +
-                        "  2. Extract bin\\ffmpeg.exe from the archive.\n" +
-                        "  3. Copy it into the Tools folder next to FracturingFog.exe:\n" +
-                        $"        {FfmpegInstaller.TargetPath}\n" +
-                        "  4. Close and re-open FracturingFog. Video controls will\n" +
-                        "     enable automatically once the binary is detected.",
+                    Text = isWindows
+                        ? "To install ffmpeg.exe manually:\n" +
+                          "  1. Download a Windows GPL build (recommended:\n" +
+                          "     https://github.com/BtbN/FFmpeg-Builds/releases ).\n" +
+                          "  2. Extract bin\\ffmpeg.exe from the archive.\n" +
+                          "  3. Copy it into the Tools folder next to FracturingFog.exe:\n" +
+                          $"        {FfmpegInstaller.TargetPath}\n" +
+                          "  4. Close and re-open FracturingFog. Video controls will\n" +
+                          "     enable automatically once the binary is detected."
+                        : "To install ffmpeg manually:\n" +
+                          "  • Ubuntu / Debian:  sudo apt install ffmpeg\n" +
+                          "  • Fedora:           sudo dnf install ffmpeg\n" +
+                          "  • Arch:             sudo pacman -S ffmpeg\n" +
+                          "  • macOS (Homebrew): brew install ffmpeg\n" +
+                          "\n" +
+                          "After the install completes, click 'Rescan PATH' in the\n" +
+                          "main dialog (or restart FracturingFog) and video controls\n" +
+                          "will enable automatically.",
                     Foreground = Brushes.LightGray,
                     FontFamily = new FontFamily("Consolas, monospace"),
                     FontSize = 12,
@@ -236,6 +261,26 @@ namespace FracturingFog.Hosting
 
                 btnDownload.Click += async (_, _) =>
                 {
+                    // Non-Win path: rescan PATH (and the per-RID Tools probe)
+                    // for a freshly installed ffmpeg binary. No download
+                    // pipeline; FfmpegInstaller is Windows-only by construction.
+                    if (!isWindows)
+                    {
+                        bool nowInstalled = FfmpegInstaller.IsInstalled();
+                        string? nowVersion = FfmpegInstaller.TryReadInstalledVersion();
+                        UpdateStatus(statusBlock, nowInstalled, nowVersion);
+                        if (nowInstalled)
+                        {
+                            FfmpegPreferences.Instance.Election = FfmpegUserElection.Manual;
+                            FfmpegPreferences.Instance.LastInstalledVersion = nowVersion;
+                            FfmpegPreferences.Instance.LastInstalledUtc = DateTime.UtcNow;
+                            FfmpegPreferences.Instance.Save();
+                            pending = Result.Installed;
+                            win.Close();
+                        }
+                        return;
+                    }
+
                     actionPanel.IsVisible = false;
                     manualPanel.IsVisible = false;
                     progressPanel.IsVisible = true;

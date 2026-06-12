@@ -149,6 +149,25 @@ namespace FracturingFog.Imaging
             IProgress<InstallProgress>? progress,
             CancellationToken ct)
         {
+            // Phase X.2 / Slice 2.5 — the auto-installer targets a Windows
+            // `ffmpeg.exe` from the BtbN/FFmpeg-Builds win64-gpl release.
+            // Linux/macOS hosts use the OS package manager (apt / brew) so
+            // this code path is Win-only by construction. FfmpegSetupDialog
+            // hides the Download button on non-Win and routes users to the
+            // package-manager instructions panel; this early-out is a safety
+            // net for any other caller that reaches the installer directly.
+            if (!OperatingSystem.IsWindows())
+            {
+                return new InstallResult
+                {
+                    Outcome = InstallOutcome.DownloadFailed,
+                    ErrorDetail = "Auto-install is Windows-only. " +
+                                  "Use 'sudo apt install ffmpeg' on Linux or " +
+                                  "'brew install ffmpeg' on macOS, then click " +
+                                  "the rescan button in the FFmpeg Setup dialog.",
+                };
+            }
+
             string? previousVersion = TryReadInstalledVersion();
 
             using var http = new HttpClient();
