@@ -217,13 +217,34 @@ namespace FracturingFog.Hosting
                 }
                 return null;
             };
-            // Phase X.0 / Slice 0.1c: Win-only Media Foundation H.264 writer.
-            // Phase X.2 ships an FfmpegVideoWriter alternative the bootstrap
-            // picks per-OS; on Windows MF stays the default when available.
+            // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
+            //   * Windows: try Media Foundation Mp4Writer first (zero deps,
+            //     built into Windows 8+). Fall through to ffmpeg if MF init
+            //     fails (driver edge case, locked-down Server SKU).
+            //   * Linux/macOS: probe ffmpeg via FfmpegEncoder.FindFfmpeg and
+            //     return an FfmpegVideoWriter when present; null otherwise.
+            // VideoWriterFactory's null return propagates to the UI which
+            // surfaces "ffmpeg required" via the existing IsEnabledForUser
+            // gating + FfmpegSetupDialog rescan flow (Slice 2.5).
             s_renderHost.VideoWriterFactory = (path, w, h) =>
             {
-                try { return new FracturingFog.Mp4Writer(path, w, h); }
-                catch { return null; }
+                if (OperatingSystem.IsWindows())
+                {
+                    try { return new FracturingFog.Mp4Writer(path, w, h); }
+                    catch { /* MF init failed, fall through to ffmpeg */ }
+                }
+                if (FracturingFog.FfmpegEncoder.IsAvailable())
+                {
+                    try
+                    {
+                        return new FracturingFog.Imaging.FfmpegVideoWriter(
+                            path, w, h,
+                            fps: 30,
+                            preset: FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4);
+                    }
+                    catch { return null; }
+                }
+                return null;
             };
             s_renderHost.FrameCompleted += (_, info) => s_lastFrame = info;
             s_input = new FractalInputController(viewState);
