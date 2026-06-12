@@ -57,6 +57,7 @@ namespace FracturingFog.Batch
                 {
                     BatchMode.Image => BatchRenderer.RenderImage(opts),
                     BatchMode.Video => BatchRenderer.RenderVideo(opts),
+                    BatchMode.Slideshow => BatchRenderer.RenderSlideshow(opts),
                     _ => 2,
                 };
             }
@@ -107,7 +108,22 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --verbose, -v               Print extra diagnostics");
             Console.WriteLine();
             Console.WriteLine("Mode:");
-            Console.WriteLine("  --mode image|video, -m ...  Default: image");
+            Console.WriteLine("  --mode image|video|slideshow, -m ...  Default: image");
+            Console.WriteLine();
+            Console.WriteLine("Slideshow options (--mode slideshow):");
+            Console.WriteLine("  --slideshow NAME            Name of a saved SlideshowConfig preset to drive");
+            Console.WriteLine("                              region/theme/timing (implies --mode slideshow).");
+            Console.WriteLine("                              When omitted, the active preset is used.");
+            Console.WriteLine("  --seconds N                 Total encoded duration in seconds (default 60).");
+            Console.WriteLine("  --fps N                     Output frame rate (default 30).");
+            Console.WriteLine("  --encode TYPE               Output encode preset (requires ffmpeg.exe):");
+            Console.WriteLine("                                h264hq  — libx264 CRF 18 yuv420p MP4 (default)");
+            Console.WriteLine("                                h264    — libx264 -qp 0 lossless yuv444p MP4");
+            Console.WriteLine("                                ffv1    — FFV1 v3 lossless MKV");
+            Console.WriteLine("  --more-colors               Color Focus cadence (8 themes per region, shorter");
+            Console.WriteLine("                              per-theme dwell). Synonym of the \"Slideshow: More");
+            Console.WriteLine("                              Colors\" context-menu item.");
+            Console.WriteLine("  --out PATH                  Output video file (extension implied by --encode).");
             Console.WriteLine();
             Console.WriteLine("Video options (--mode video):");
             Console.WriteLine("  --seconds VAL               Duration (default 20.0)");
@@ -121,6 +137,11 @@ namespace FracturingFog.Batch
             Console.WriteLine("                                h264hq  — libx264 CRF 18 visually lossless MP4");
             Console.WriteLine("  --keep-frames               Keep PNG frame folder after encode");
             Console.WriteLine("  --no-keep-frames            Delete PNG frame folder after encode");
+            Console.WriteLine();
+            Console.WriteLine("Common options:");
+            Console.WriteLine("  --watermark                 Composite region/theme + program watermark into every");
+            Console.WriteLine("                              emitted frame across image / video / slideshow modes");
+            Console.WriteLine("                              (image mode already watermarks unconditionally).");
             Console.WriteLine();
             Console.WriteLine("Remote rendering (uses a saved FFClient connection + render preset):");
             Console.WriteLine("  --remote                    Route this batch through a remote FracturingFog server");
@@ -138,6 +159,10 @@ namespace FracturingFog.Batch
             Console.WriteLine();
             Console.WriteLine("  FracturingFog --batch --mode video --region \"Mini Mandelbrot\" \\");
             Console.WriteLine("                --theme Plasma --lossless ffv1 --seconds 30 --out C:\\out\\");
+            Console.WriteLine();
+            Console.WriteLine("  FracturingFog --batch --slideshow \"Default\" --seconds 90 \\");
+            Console.WriteLine("                --width 1920 --height 1080 --fps 30 --encode h264hq \\");
+            Console.WriteLine("                --out C:\\out\\slideshow.mp4");
             Console.WriteLine();
             Console.WriteLine("  Remote image (preset Mode = image):");
             Console.WriteLine("  FracturingFog --batch --remote --connection render-box \\");

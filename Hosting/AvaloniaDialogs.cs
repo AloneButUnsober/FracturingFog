@@ -1557,6 +1557,94 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
+        // ── Slideshow recording prompt ───────────────────────────────────────
+
+        /// <summary>User decision after a recorded slideshow stops.</summary>
+        public enum SlideshowRecordingChoice
+        {
+            /// <summary>Encode the PNG sequence to a video via ffmpeg.</summary>
+            Convert,
+            /// <summary>Keep the PNG sequence + move it under a user-picked folder.</summary>
+            SaveFrames,
+            /// <summary>Discard the temp folder.</summary>
+            Cancel,
+        }
+
+        public static Task<SlideshowRecordingChoice> ShowSlideshowRecordingPromptAsync(
+            int frameCount, int width, int height, string encodePreset)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<SlideshowRecordingChoice>();
+
+            void Run()
+            {
+                var win = new Window
+                {
+                    Title = "Slideshow Recorded",
+                    Width = 520,
+                    MinWidth = 360,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+
+                var bodyText = new TextBlock
+                {
+                    Text =
+                        $"Captured {frameCount} frame{(frameCount == 1 ? "" : "s")} at {width}×{height}.\n\n" +
+                        $"• Convert — run ffmpeg ({encodePreset}) and save a video file.\n" +
+                        $"• Save Frames — pick a folder and keep the PNG sequence.\n" +
+                        $"• Cancel — discard the captured frames.",
+                    Foreground = Brushes.White,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(16, 16, 16, 8),
+                };
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(16, 8, 16, 16),
+                    Spacing = 8,
+                };
+
+                SlideshowRecordingChoice pending = SlideshowRecordingChoice.Cancel;
+                void Close(SlideshowRecordingChoice r) { pending = r; win.Close(); }
+
+                var convert = new Button { Content = "Convert", MinWidth = 100 };
+                convert.Click += (_, _) => Close(SlideshowRecordingChoice.Convert);
+                var save = new Button { Content = "Save Frames", MinWidth = 110 };
+                save.Click += (_, _) => Close(SlideshowRecordingChoice.SaveFrames);
+                var cancel = new Button { Content = "Cancel", MinWidth = 90 };
+                cancel.Click += (_, _) => Close(SlideshowRecordingChoice.Cancel);
+                buttonRow.Children.Add(convert);
+                buttonRow.Children.Add(save);
+                buttonRow.Children.Add(cancel);
+
+                win.Closed += (_, _) =>
+                {
+                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending);
+                };
+
+                var grid = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+                Grid.SetRow(bodyText, 0);
+                Grid.SetRow(buttonRow, 1);
+                grid.Children.Add(bodyText);
+                grid.Children.Add(buttonRow);
+
+                win.Content = grid;
+                if (owner != null) _ = win.ShowDialog(owner);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── Image-palette picker ─────────────────────────────────────────────
 
         /// <summary>

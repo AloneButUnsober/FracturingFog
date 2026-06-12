@@ -108,6 +108,13 @@
                         HorizontalAlignment="Right"
                         Spacing="8"
                         Margin="0,16,0,0">
+                <Button Content="?"
+                        Click="OnHelpClick"
+                        ToolTip.Tip="Open the Capture / Video guide"
+                        Padding="10,6"
+                        Background="#283C50"
+                        Foreground="#FFCC00"
+                        FontWeight="Bold" />
                 <Button Content="OK"
                         Command="{Binding OkCommand}"
                         IsDefault="True"

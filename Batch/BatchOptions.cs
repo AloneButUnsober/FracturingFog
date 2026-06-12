@@ -8,7 +8,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog.Batch
 {
-    public enum BatchMode { Image, Video }
+    public enum BatchMode { Image, Video, Slideshow }
 
     /// <summary>
     /// Mirrors VideoDialog.LosslessEncodeChoice so the CL batch path offers
@@ -60,12 +60,40 @@ namespace FracturingFog.Batch
         // Lossless encoding preset for video mode. None → built-in WMF MP4 writer.
         public BatchLossless Lossless { get; set; } = BatchLossless.None;
 
+        // ── Slideshow mode ────────────────────────────────────────────────
+        /// <summary>Name of a saved SlideshowConfig preset in the library to
+        /// drive timing + filters. When null, the active config is used.</summary>
+        public string? SlideshowConfigName { get; set; }
+        /// <summary>Cap the headless slideshow's total wall-clock duration in
+        /// seconds (encoded playback length). 0 = single full pass over the
+        /// resolved region/theme set without looping.</summary>
+        public double SlideshowSeconds { get; set; } = 60.0;
+        /// <summary>ffmpeg preset for the final encode in slideshow mode.
+        /// Defaults to HighQualityH264Mp4 (CRF 18, broad-compat).</summary>
+        public BatchLossless SlideshowEncode { get; set; } = BatchLossless.HighQualityH264Mp4;
+        /// <summary>Synonym of the "Slideshow: More Colors" context-menu item:
+        /// when true the cycler runs 8 themes per region (Color Focus, shorter
+        /// per-theme duration) instead of the default 3 (Region Focus). Affects
+        /// batch slideshow cadence only; interactive slideshow honours the
+        /// shell-level FocusRegion toggle.</summary>
+        public bool MoreColors { get; set; }
+        /// <summary>When true, paint the watermark + program-name sub-line into
+        /// every emitted frame across image / video / slideshow batch modes.
+        /// Image mode already watermarks unconditionally for parity with the
+        /// interactive Save flow; the flag also gates Video + Slideshow.</summary>
+        public bool Watermark { get; set; }
+
         // Keep PNG frame folder after successful video encode. Defaults to false
         // when --lossless is used (frames are intermediate), true otherwise.
         public bool KeepFrames { get; set; }
         public bool KeepFramesSpecified { get; set; }
 
         public bool Verbose { get; set; }
+
+        // Optional fractal-parameter overrides plumbed into FractalParameters.
+        // Default null means "leave the FractalParameters default in place".
+        public double? BulbPower { get; set; }
+        public int? MultibrotExponent { get; set; }
 
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
@@ -96,7 +124,35 @@ namespace FracturingFog.Batch
                         if (!Next(args, ref i, a, out string mv, out error)) return false;
                         if (string.Equals(mv, "image", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Image;
                         else if (string.Equals(mv, "video", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Video;
-                        else { error = $"Unknown --mode '{mv}'. Use image|video."; return false; }
+                        else if (string.Equals(mv, "slideshow", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Slideshow;
+                        else { error = $"Unknown --mode '{mv}'. Use image|video|slideshow."; return false; }
+                        break;
+
+                    case "--slideshow":
+                        if (!Next(args, ref i, a, out string sname, out error)) return false;
+                        opts.Mode = BatchMode.Slideshow;
+                        opts.SlideshowConfigName = sname;
+                        break;
+
+                    case "--encode":
+                        if (!Next(args, ref i, a, out string evl, out error)) return false;
+                        switch (evl.ToLowerInvariant())
+                        {
+                            case "h264hq":
+                            case "hq":
+                            case "highqualityh264mp4":
+                                opts.SlideshowEncode = BatchLossless.HighQualityH264Mp4; break;
+                            case "h264":
+                            case "lossless-h264":
+                            case "losslessh264mp4":
+                                opts.SlideshowEncode = BatchLossless.LosslessH264Mp4; break;
+                            case "ffv1":
+                            case "ffv1mkv":
+                                opts.SlideshowEncode = BatchLossless.Ffv1Mkv; break;
+                            default:
+                                error = $"Unknown --encode '{evl}'. Use h264hq|h264|ffv1.";
+                                return false;
+                        }
                         break;
 
                     case "--region":
@@ -223,6 +279,15 @@ namespace FracturingFog.Batch
                         opts.KeepFramesSpecified = true;
                         break;
 
+                    case "--more-colors":
+                    case "--more-colours":
+                        opts.MoreColors = true;
+                        break;
+
+                    case "--watermark":
+                        opts.Watermark = true;
+                        break;
+
                     case "--no-keep-frames":
                         opts.KeepFrames = false;
                         opts.KeepFramesSpecified = true;
@@ -231,6 +296,17 @@ namespace FracturingFog.Batch
                     case "--verbose":
                     case "-v":
                         opts.Verbose = true;
+                        break;
+
+                    case "--bulb-power":
+                        if (!NextDouble(args, ref i, a, out double bpv, out error)) return false;
+                        opts.BulbPower = bpv;
+                        break;
+
+                    case "--multibrot-exp":
+                    case "--multibrot-power":
+                        if (!NextInt(args, ref i, a, out int mev, out error)) return false;
+                        opts.MultibrotExponent = mev;
                         break;
 
                     case "--remote":
@@ -272,7 +348,9 @@ namespace FracturingFog.Batch
                 return true;
             }
 
-            if (string.IsNullOrWhiteSpace(opts.RegionName))
+            // Slideshow mode pulls its region/theme set from the named config —
+            // no region/coord requirement.
+            if (opts.Mode != BatchMode.Slideshow && string.IsNullOrWhiteSpace(opts.RegionName))
             {
                 if (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null)
                 {
@@ -291,6 +369,16 @@ namespace FracturingFog.Batch
             {
                 error = "Width/height must be at least 16.";
                 return false;
+            }
+
+            if (opts.Mode == BatchMode.Slideshow)
+            {
+                // VideoSeconds reuses --seconds parser; mirror into slideshow.
+                opts.SlideshowSeconds = opts.VideoSeconds;
+                if (opts.SlideshowSeconds < 0.0 || opts.SlideshowSeconds > 7_200.0)
+                    { error = "--seconds for slideshow must be 0..7200 (2 hours)."; return false; }
+                if (opts.VideoFps < 1 || opts.VideoFps > 240)
+                    { error = "--fps must be 1..240."; return false; }
             }
 
             if (opts.Mode == BatchMode.Video)

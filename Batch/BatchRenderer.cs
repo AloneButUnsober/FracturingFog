@@ -34,6 +34,10 @@ namespace FracturingFog.Batch
 
             ImageFormat format = GuessImageFormat(outPath);
 
+            var fp = new FractalParameters();
+            if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
+            if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
+
             var req = new PosterRequest
             {
                 FractalType = frType,
@@ -45,7 +49,7 @@ namespace FracturingFog.Batch
                 MaxIterations = iter,
                 ColorMap = theme,
                 Quality = quality,
-                FractalParameters = new FractalParameters(),
+                FractalParameters = fp,
                 Rotate = false,
                 Path = outPath,
                 Format = format,
@@ -229,6 +233,14 @@ namespace FracturingFog.Batch
                     uint[] buffer = RenderOneFrame(
                         frType, outW, outH, cx, cy, frameZoom, iter, theme, quality);
 
+                    // --watermark bakes the region/theme + program sub-line
+                    // into every emitted frame so the WMF Mp4Writer path AND
+                    // the PNG sequence both carry the watermark.
+                    if (opts.Watermark)
+                        ApplyWatermarkInPlace(buffer, outW, outH,
+                            regionDispName ?? frType.ToString(),
+                            "Fracturing Fog batch render");
+
                     if (mp4 != null)
                     {
                         try { mp4.WriteFrame(buffer, (long)f * ticksPerFrame); }
@@ -366,6 +378,19 @@ namespace FracturingFog.Batch
             return CopyBuffer(calc.ColorBuffer, w, h);
         }
 
+        // True when every pixel in the buffer is opaque black (0xFF000000).
+        // Used by the batch slideshow loop to drop region/theme combinations
+        // that render as a hole (full in-set under a black-in-set palette,
+        // or insufficient iter depth at extreme zoom).
+        private static bool IsAllBlack(uint[] pixels, int n)
+        {
+            const uint OpaqueBlack = 0xFF000000u;
+            int len = Math.Min(pixels.Length, n);
+            for (int i = 0; i < len; i++)
+                if (pixels[i] != OpaqueBlack) return false;
+            return true;
+        }
+
         private static uint[] CopyBuffer(uint[] src, int w, int h)
         {
             int n = w * h;
@@ -373,6 +398,319 @@ namespace FracturingFog.Batch
             var dst = new uint[n];
             Array.Copy(src, dst, Math.Min(src.Length, n));
             return dst;
+        }
+
+        // In-place watermark composite for batch video + slideshow buffers.
+        // Wraps the BGRA buffer in a System.Drawing.Bitmap, calls the shared
+        // ImageExport.AddWaterMark, and copies the painted pixels back into
+        // the buffer. Windows-only (System.Drawing); the batch host is
+        // already Windows-only.
+        private static unsafe void ApplyWatermarkInPlace(
+            uint[] pixels, int w, int h, string text, string subText)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            using var bmp = new System.Drawing.Bitmap(w, h, PixelFormat.Format32bppArgb);
+            var wd = bmp.LockBits(
+                new System.Drawing.Rectangle(0, 0, w, h),
+                ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                fixed (uint* src = pixels)
+                {
+                    if (wd.Stride == w * 4)
+                        Buffer.MemoryCopy(src, (void*)wd.Scan0, (long)w * h * 4, (long)w * h * 4);
+                    else
+                    {
+                        byte* dst = (byte*)wd.Scan0;
+                        for (int row = 0; row < h; row++)
+                            Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
+                                              dst + (long)row * wd.Stride,
+                                              (long)w * 4, (long)w * 4);
+                    }
+                }
+            }
+            finally { bmp.UnlockBits(wd); }
+
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
+                ImageExport.AddWaterMark(
+                    g, text, w, h, System.Drawing.Color.White, subText, poster: false);
+
+            var rd = bmp.LockBits(
+                new System.Drawing.Rectangle(0, 0, w, h),
+                ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                fixed (uint* dst = pixels)
+                {
+                    if (rd.Stride == w * 4)
+                        Buffer.MemoryCopy((void*)rd.Scan0, dst, (long)w * h * 4, (long)w * h * 4);
+                    else
+                    {
+                        byte* src = (byte*)rd.Scan0;
+                        for (int row = 0; row < h; row++)
+                            Buffer.MemoryCopy(src + (long)row * rd.Stride,
+                                              (byte*)dst + (long)row * w * 4,
+                                              (long)w * 4, (long)w * 4);
+                    }
+                }
+            }
+            finally { bmp.UnlockBits(rd); }
+        }
+
+        // ── Slideshow ─────────────────────────────────────────────────────────
+        //
+        // Headless image-slideshow render. Loads a SlideshowConfig from the
+        // library, builds a region/theme pool that honours the preset's filters,
+        // and walks legs picking a random region+theme each time. Per leg a CPU
+        // cross-fade interpolates from the previous frame to the new frame
+        // (matching the interactive engine's FadeAsync); dwell extends the leg
+        // by holding the final frame for the remaining theme budget. Frames are
+        // pushed into a PngSequenceWriter and post-encoded with ffmpeg.
+        //
+        // First cut limits region rendering to Mandelbrot regions — other
+        // fractal types would require per-type calculator dispatch + offscreen
+        // colour map rebuild, which the BatchRenderer doesn't yet do. Mandelbrot
+        // is the entire slideshow default in the legacy WinForms path, so this
+        // matches the headless surface users actually reach for.
+        public static int RenderSlideshow(BatchOptions opts)
+        {
+            var rng = new Random();
+
+            // 1. Load + resolve preset.
+            var configFile = FracturingFog.Models.SlideshowConfigLibrary.Load();
+            FracturingFog.Models.SlideshowConfig cfg;
+            if (!string.IsNullOrWhiteSpace(opts.SlideshowConfigName))
+            {
+                cfg = configFile.Configs.Find(c =>
+                    string.Equals(c.Name, opts.SlideshowConfigName, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidOperationException(
+                        $"Slideshow preset '{opts.SlideshowConfigName}' not found in slideshow-configs.json. " +
+                        $"Available: {string.Join(", ", configFile.Configs.ConvertAll(c => c.Name))}");
+            }
+            else
+            {
+                cfg = FracturingFog.Models.SlideshowConfigLibrary.GetActive(configFile);
+            }
+
+            // 2. Build region pool (Mandelbrot-only for v1).
+            var regionPool = new System.Collections.Generic.List<FractalRegion>();
+            var incRegions = cfg.IncludedRegions != null && cfg.IncludedRegions.Count > 0
+                ? new System.Collections.Generic.HashSet<string>(cfg.IncludedRegions, StringComparer.OrdinalIgnoreCase)
+                : null;
+            var incQuality = cfg.FilterQualityPresets != null && cfg.FilterQualityPresets.Count > 0
+                ? new System.Collections.Generic.HashSet<string>(cfg.FilterQualityPresets, StringComparer.OrdinalIgnoreCase)
+                : null;
+            foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
+            {
+                if (r.FractalType != FractalType.Mandelbrot) continue;
+                if (incRegions != null && !incRegions.Contains(r.Name)) continue;
+                if (incQuality != null && !incQuality.Contains(r.QualityPreset?.Name ?? "Standard")) continue;
+                regionPool.Add(r);
+            }
+            if (regionPool.Count == 0)
+                throw new InvalidOperationException(
+                    "No Mandelbrot regions available after applying preset filters. " +
+                    "Headless slideshow rendering only supports Mandelbrot regions in v1.");
+
+            // 3. Build theme pool.
+            var themeAll = FracturingFog.Models.ColorPalette.GetPaletteNames();
+            var themePool = new System.Collections.Generic.List<string>();
+            var incThemes = cfg.IncludedColorThemes != null && cfg.IncludedColorThemes.Count > 0
+                ? new System.Collections.Generic.HashSet<string>(cfg.IncludedColorThemes, StringComparer.OrdinalIgnoreCase)
+                : null;
+            foreach (var n in themeAll)
+            {
+                if (incThemes != null && !incThemes.Contains(n)) continue;
+                themePool.Add(n);
+            }
+            if (themePool.Count == 0) themePool.AddRange(themeAll);
+            if (themePool.Count == 0)
+                throw new InvalidOperationException("No color themes available.");
+
+            // 4. Frame budget + temp output folder.
+            int outW = opts.Width & ~1;
+            int outH = opts.Height & ~1;
+            if (outW < 16) outW = 16;
+            if (outH < 16) outH = 16;
+            int fps = opts.VideoFps > 0 ? opts.VideoFps : 30;
+            int totalFrames = (int)Math.Round(opts.SlideshowSeconds * fps);
+            if (totalFrames < fps) totalFrames = fps; // 1s minimum
+
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "FracturingFog",
+                "batch-slideshow",
+                DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+            Directory.CreateDirectory(tempRoot);
+
+            // 5. Compute cadence from preset timing.
+            // --more-colors flips the cadence to FocusRegion=false (Color Focus,
+            // 8 themes/region, shorter per-theme dwell) — synonym of the
+            // "Slideshow: More Colors" context-menu item in the interactive UI.
+            int fadeSteps = Math.Clamp(cfg.Timing.FadeSteps, 2, 200);
+            int themesPerRegion = opts.MoreColors ? 8 : 3;
+            int totalRegionMs = Math.Max(3_000, cfg.Timing.TotalDisplayMsPerRegion);
+            int themeDurationMs = Math.Max(800, totalRegionMs / themesPerRegion);
+            int themeDurationFrames = Math.Max(fadeSteps, (int)Math.Round(themeDurationMs / 1000.0 * fps));
+
+            FfmpegEncoder.Preset encodePreset = opts.SlideshowEncode switch
+            {
+                BatchLossless.LosslessH264Mp4 => FfmpegEncoder.Preset.LosslessH264Mp4,
+                BatchLossless.Ffv1Mkv => FfmpegEncoder.Preset.Ffv1Mkv,
+                _ => FfmpegEncoder.Preset.HighQualityH264Mp4,
+            };
+
+            Console.WriteLine($"Batch slideshow render");
+            Console.WriteLine($"  preset    : {cfg.Name}");
+            Console.WriteLine($"  regions   : {regionPool.Count}  themes: {themePool.Count}");
+            Console.WriteLine($"  size      : {outW}x{outH}  fps: {fps}  duration: {opts.SlideshowSeconds:G4}s ({totalFrames} frames)");
+            Console.WriteLine($"  fade      : {fadeSteps} steps, {themeDurationFrames} frames/theme");
+            Console.WriteLine($"  temp      : {tempRoot}");
+            Console.WriteLine($"  encode    : {encodePreset}");
+            Console.WriteLine($"  out       : {opts.OutputPath}");
+
+            // 6. Render loop.
+            using var pngWriter = new PngSequenceWriter(tempRoot, outW, outH);
+            uint[]? prevFrame = null;
+            int framesWritten = 0;
+            int lastRegion = -1, lastTheme = -1;
+
+            while (framesWritten < totalFrames)
+            {
+                int ri;
+                do { ri = rng.Next(regionPool.Count); }
+                while (regionPool.Count > 1 && ri == lastRegion);
+                lastRegion = ri;
+                var region = regionPool[ri];
+
+                int ti;
+                do { ti = rng.Next(themePool.Count); }
+                while (themePool.Count > 1 && ti == lastTheme);
+                lastTheme = ti;
+                var theme = ResolveTheme(themePool[ti]);
+
+                Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / {themePool[ti]} … ");
+
+                // Calculate the Mandelbrot frame.
+                int iter = region.Iterations > 0 ? region.Iterations : 1000;
+                var calc = new MandelbrotCalculator(outW, outH)
+                {
+                    CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                    CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                    CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                    CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                    Zoom = region.Zoom,
+                    MaxIterations = iter,
+                    ColorMap = theme,
+                    Quality = region.QualityPreset ?? QualityPreset.Standard,
+                };
+                var sw = Stopwatch.StartNew();
+                calc.Calculate(CancellationToken.None);
+                sw.Stop();
+
+                uint[] currFrame = calc.ColorBuffer;
+
+                // Skip legs where the region+theme combination produced an
+                // entirely black frame (theme renders to black at this iter
+                // depth, or the region is fully in-set with a colour map that
+                // paints in-set black). Picking again gives the user another
+                // theme without spending budget on a hole.
+                if (IsAllBlack(currFrame, outW * outH))
+                {
+                    Console.WriteLine($"all-black; skip ({sw.ElapsedMilliseconds} ms)");
+                    continue;
+                }
+
+                if (opts.Watermark)
+                    ApplyWatermarkInPlace(currFrame, outW, outH,
+                        region.Name, $"Theme: {themePool[ti]}");
+
+                int legFramesWritten = 0;
+
+                // Cross-fade from prev → curr (skip on first leg).
+                if (prevFrame != null && prevFrame.Length == currFrame.Length)
+                {
+                    var blend = new uint[currFrame.Length];
+                    int n = outW * outH;
+                    for (int s = 1; s <= fadeSteps && framesWritten + legFramesWritten < totalFrames; s++)
+                    {
+                        float a = s / (float)fadeSteps;
+                        float ia = 1f - a;
+                        for (int i = 0; i < n; i++)
+                        {
+                            uint o = prevFrame[i], nw = currFrame[i];
+                            byte rB = (byte)(((o >> 16) & 0xFF) * ia + ((nw >> 16) & 0xFF) * a);
+                            byte gB = (byte)(((o >> 8) & 0xFF) * ia + ((nw >> 8) & 0xFF) * a);
+                            byte bB = (byte)((o & 0xFF) * ia + (nw & 0xFF) * a);
+                            blend[i] = 0xFF000000u | ((uint)rB << 16) | ((uint)gB << 8) | bB;
+                        }
+                        pngWriter.WriteFrame(blend);
+                        legFramesWritten++;
+                    }
+                }
+
+                // Dwell — hold the final frame to fill the leg budget.
+                int holdFrames = Math.Max(0, themeDurationFrames - legFramesWritten);
+                int remaining = totalFrames - (framesWritten + legFramesWritten);
+                if (holdFrames > remaining) holdFrames = remaining;
+                for (int s = 0; s < holdFrames; s++)
+                {
+                    pngWriter.WriteFrame(currFrame);
+                    legFramesWritten++;
+                }
+
+                framesWritten += legFramesWritten;
+                prevFrame = currFrame;
+                Console.WriteLine($"{legFramesWritten} frames in {sw.ElapsedMilliseconds} ms");
+            }
+
+            pngWriter.Dispose();
+            Console.WriteLine($"Captured {framesWritten} frames.");
+
+            // 7. Encode + emit.
+            if (string.IsNullOrWhiteSpace(opts.OutputPath))
+            {
+                Console.WriteLine($"No --out given; PNG sequence kept at: {tempRoot}");
+                return 0;
+            }
+
+            string outPath = opts.OutputPath;
+            string outExt = Path.GetExtension(outPath).ToLowerInvariant();
+            string presetExt = "." + FfmpegEncoder.DefaultExtensionFor(encodePreset);
+            if (string.IsNullOrEmpty(outExt))
+                outPath = Path.Combine(outPath, $"FracturingFog_Slideshow_{DateTime.Now:yyyyMMdd_HHmmss}{presetExt}");
+            EnsureDirectoryForFile(outPath);
+
+            if (!FfmpegEncoder.IsAvailable())
+            {
+                Console.Error.WriteLine($"ffmpeg.exe not found — keeping PNG sequence at {tempRoot}.");
+                return 1;
+            }
+
+            Console.Write($"Encoding {Path.GetFileName(outPath)} with ffmpeg … ");
+            var encSw = Stopwatch.StartNew();
+            var (ok, log) = FfmpegEncoder
+                .EncodeAsync(tempRoot, outPath, encodePreset, fps: fps)
+                .GetAwaiter().GetResult();
+            encSw.Stop();
+            if (!ok)
+            {
+                Console.WriteLine($"FAILED ({encSw.ElapsedMilliseconds} ms)");
+                Console.Error.WriteLine(log);
+                Console.Error.WriteLine($"PNG sequence kept at: {tempRoot}");
+                return 1;
+            }
+            Console.WriteLine($"done ({encSw.ElapsedMilliseconds} ms)");
+
+            if (!opts.KeepFrames)
+            {
+                try { Directory.Delete(tempRoot, recursive: true); } catch { }
+            }
+            else
+            {
+                Console.WriteLine($"PNG sequence kept at: {tempRoot}");
+            }
+            return 0;
         }
 
         private static (double cx, double cy, double zoom, int iter,

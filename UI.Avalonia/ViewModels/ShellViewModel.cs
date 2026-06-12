@@ -53,6 +53,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Avalonia slideshow cycler. Lazily created on first Start.</summary>
     private SlideshowEngine? _slideshow;
 
+    /// <summary>Live recorder when the active slideshow config has
+    /// <c>RecordSlideshow</c> on. Null otherwise. Disposed (and the folder
+    /// surfaced via <see cref="SlideshowRecordingReady"/>) when the engine
+    /// signals Stopped.</summary>
+    private FracturingFog.UI.Avalonia.Slideshow.ISlideshowFrameRecorder? _slideshowRecorder;
+    private string? _slideshowRecordPreset;
+
+    /// <summary>Host-supplied factory: builds an <see cref="ISlideshowFrameRecorder"/>
+    /// for a given temp folder + dimensions. Null = recording not available
+    /// (e.g. legacy WinForms host); the engine will skip the sink and the
+    /// settings checkbox becomes a no-op at runtime.</summary>
+    public Func<string, int, int, FracturingFog.UI.Avalonia.Slideshow.ISlideshowFrameRecorder>?
+        SlideshowRecorderFactory { get; set; }
+
+    /// <summary>Raised on the UI thread after a recorded slideshow stops.
+    /// Host listens to prompt Convert / Save / Cancel. <c>FolderPath</c> is
+    /// the PNG-sequence directory; <c>EncodePreset</c> matches a name in
+    /// <c>FfmpegEncoder.Preset</c>.</summary>
+    public event EventHandler<SlideshowRecordingReadyEventArgs>? SlideshowRecordingReady;
+
     /// <summary>Video Zoom engine — the same concrete object as the render
     /// host (FractalRenderHost implements both IFractalRenderHost and
     /// IVideoZoomController). Null only if the host doesn't implement it.</summary>
@@ -544,6 +564,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             {
                 IsSlideshowVcrVisible = false;
                 this.RaisePropertyChanged(nameof(IsSlideshowRunning));
+                FinalizeSlideshowRecording();
             };
             // Mirror engine-driven region jumps into the toolbar combos so the
             // displayed region name + quality preset match what's actually
@@ -590,10 +611,124 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (v.TryGetValue("adaptive", out var a)) FloatingMenu.Adaptive = (int)Math.Round(a);
         }
 
+        // Bring up the PNG-sequence recorder before Start so the very first
+        // fade frame is captured. Dimensions snapped from the current render
+        // host; a Resize mid-run will be ignored (recorder is fixed-size).
+        StartSlideshowRecordingIfRequested(activeConfig);
+
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
         _slideshow.Start();
         this.RaisePropertyChanged(nameof(IsSlideshowRunning));
+    }
+
+    private void StartSlideshowRecordingIfRequested(SlideshowConfig cfg)
+    {
+        // Always clear stale state first — re-entering Start without a Stop
+        // would otherwise leak the previous writer.
+        DisposeSlideshowRecorder();
+
+        if (_slideshow == null) return;
+        if (!cfg.Timing.RecordSlideshow) { _slideshow.FrameSink = null; return; }
+
+        var factory = SlideshowRecorderFactory;
+        if (factory == null)
+        {
+            Console.Error.WriteLine("[ShellViewModel] Slideshow record requested but no recorder factory is wired.");
+            _slideshow.FrameSink = null;
+            return;
+        }
+
+        _slideshowRecordPreset = string.IsNullOrWhiteSpace(cfg.Timing.RecordEncodePreset)
+            ? "HighQualityH264Mp4" : cfg.Timing.RecordEncodePreset;
+
+        // Lazily build the writer on the FIRST frame the engine actually
+        // emits. Sizing off SnapshotHostFrame here was unreliable — the host
+        // buffer is empty before the very first interactive render, and the
+        // recorder's fixed dimensions would mismatch every subsequent fade
+        // frame, silently dropping all of them and yielding an empty capture
+        // (which the Stopped handler then cleans up without prompting).
+        _slideshow.FrameSink = (buf, fw, fh) =>
+        {
+            var rec = _slideshowRecorder;
+            if (rec == null)
+            {
+                if (fw < 2 || fh < 2) return;
+                string root = System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(),
+                    "FracturingFog",
+                    "slideshow-rec",
+                    DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+                try { System.IO.Directory.CreateDirectory(root); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[ShellViewModel] Slideshow record dir create failed: {ex.Message}");
+                    return;
+                }
+                try { rec = factory(root, fw, fh); _slideshowRecorder = rec; }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[ShellViewModel] Slideshow recorder init failed: {ex.Message}");
+                    return;
+                }
+            }
+            // Engine reuses its blend array between steps — sink copies
+            // before returning so this is safe.
+            if (fw != rec.Width || fh != rec.Height) return;
+            try { rec.WriteFrame(buf); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ShellViewModel] Slideshow frame write failed: {ex.Message}");
+            }
+        };
+    }
+
+    private void FinalizeSlideshowRecording()
+    {
+        var rec = _slideshowRecorder;
+        var preset = _slideshowRecordPreset ?? "HighQualityH264Mp4";
+        if (_slideshow != null) _slideshow.FrameSink = null;
+        if (rec == null)
+        {
+            DisposeSlideshowRecorder();
+            return;
+        }
+
+        string folder = rec.Sink;
+        int frames = rec.FrameCount;
+        int w = rec.Width, h = rec.Height;
+        try { rec.Dispose(); } catch { }
+        _slideshowRecorder = null;
+        _slideshowRecordPreset = null;
+
+        // Empty capture (user stopped before any frame landed) — clean up the
+        // temp folder ourselves and don't bother the user with a dialog.
+        if (frames <= 0)
+        {
+            try { System.IO.Directory.Delete(folder, recursive: true); } catch { }
+            return;
+        }
+
+        SlideshowRecordingReady?.Invoke(this,
+            new SlideshowRecordingReadyEventArgs(folder, frames, preset, w, h));
+    }
+
+    private void DisposeSlideshowRecorder()
+    {
+        var rec = _slideshowRecorder;
+        _slideshowRecorder = null;
+        _slideshowRecordPreset = null;
+        if (rec != null) { try { rec.Dispose(); } catch { } }
+    }
+
+    private (uint[] Buffer, int W, int H) SnapshotHostFrame()
+    {
+        try
+        {
+            var b = Main.RenderHost.SnapshotFrame(out int w, out int h);
+            return (b, w, h);
+        }
+        catch { return (Array.Empty<uint>(), 0, 0); }
     }
 
     private void ApplyCoordsFromMenu()

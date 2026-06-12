@@ -4,6 +4,7 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using FracturingFog.UI.Avalonia.Input;
@@ -41,6 +42,12 @@ public partial class ServerAdminView : Window
             Closed += (_, _) => vm.StopPolling();
         }
     }
+
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/ServerAdmin-Guide.md",
+            null,
+            "Server Admin — Help");
 
     private async Task BrowseFolderAsync(string kind, Action<string> assign)
     {

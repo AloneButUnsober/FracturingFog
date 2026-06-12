@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" font-family="Segoe UI, Arial, sans-serif">
+  <title>Fracturing Fog — Render Pipeline Dataflow</title>
+  <desc>Toolchain dataflow from FractalViewState through calculator dispatch, GPU/CPU backends, escape data, color theme, and final raster.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#888"/>
+    </marker>
+    <marker id="arrow-y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FFCC00"/>
+    </marker>
+    <style>
+      .stage    { fill:#222; stroke:#555; stroke-width:1.5; rx:6; ry:6; }
+      .source   { fill:#2a3a52; stroke:#4f7aaa; }
+      .compute  { fill:#3a2c52; stroke:#7a55c0; }
+      .gpu      { fill:#523a2c; stroke:#c08055; }
+      .data     { fill:#1f3a2f; stroke:#4faa70; }
+      .colorize { fill:#52502c; stroke:#c0b055; }
+      .output   { fill:#3a1f3f; stroke:#aa55c0; }
+      .label    { fill:#dcdcdc; font-size:14px; font-weight:600; text-anchor:middle; }
+      .sub      { fill:#aaa; font-size:11px; text-anchor:middle; }
+      .edge     { stroke:#888; stroke-width:1.5; fill:none; }
+      .edge-hot { stroke:#FFCC00; stroke-width:2; fill:none; }
+      .title    { fill:#FFCC00; font-size:20px; font-weight:700; text-anchor:start; }
+      .legend   { fill:#bbb; font-size:11px; }
+    </style>
+  </defs>
+
+  <text x="20" y="34" class="title">Fracturing Fog — Render Pipeline Dataflow</text>
+  <text x="20" y="54" class="legend">Yellow path = fast inner loop driven by zoom / pan / theme change.</text>
+
+  <!-- Row 1: input -->
+  <rect class="stage source" x="40" y="90" width="180" height="80"/>
+  <text class="label" x="130" y="125">FractalViewState</text>
+  <text class="sub"   x="130" y="145">center · zoom · iterations</text>
+  <text class="sub"   x="130" y="160">precision flag · params</text>
+
+  <rect class="stage source" x="260" y="90" width="180" height="80"/>
+  <text class="label" x="350" y="125">Fractal Type</text>
+  <text class="sub"   x="350" y="145">Mandelbrot · Julia · …</text>
+  <text class="sub"   x="350" y="160">Mandelbulb · UserBulb</text>
+
+  <rect class="stage source" x="480" y="90" width="180" height="80"/>
+  <text class="label" x="570" y="125">Color Theme</text>
+  <text class="sub"   x="570" y="145">stops · Phong3D · PBR</text>
+  <text class="sub"   x="570" y="160">cycle speed · steepness</text>
+
+  <!-- Row 2: dispatch -->
+  <rect class="stage compute" x="40" y="230" width="180" height="100"/>
+  <text class="label" x="130" y="265">Precision Promoter</text>
+  <text class="sub"   x="130" y="285">SP → DD → QD</text>
+  <text class="sub"   x="130" y="302">perturbation eligible?</text>
+  <text class="sub"   x="130" y="320">series / BLA active?</text>
+
+  <rect class="stage compute" x="260" y="230" width="180" height="100"/>
+  <text class="label" x="350" y="265">Kernel Dispatcher</text>
+  <text class="sub"   x="350" y="285">IFractalKernel</text>
+  <text class="sub"   x="350" y="302">CPU path · GPU path</text>
+  <text class="sub"   x="350" y="320">ILGPU JIT (User*)</text>
+
+  <!-- Row 3: backends -->
+  <rect class="stage gpu" x="40" y="380" width="180" height="100"/>
+  <text class="label" x="130" y="415">CPU Calculator</text>
+  <text class="sub"   x="130" y="435">EscapeTimeCalculator</text>
+  <text class="sub"   x="130" y="452">parallel tiles</text>
+  <text class="sub"   x="130" y="470">DD / QD arithmetic</text>
+
+  <rect class="stage gpu" x="260" y="380" width="180" height="100"/>
+  <text class="label" x="350" y="415">GPU Kernel</text>
+  <text class="sub"   x="350" y="435">Vortice D3D11/12</text>
+  <text class="sub"   x="350" y="452">Silk.NET compute</text>
+  <text class="sub"   x="350" y="470">ILGPU OpenCL/CUDA</text>
+
+  <!-- Row 4: escape data -->
+  <rect class="stage data" x="150" y="530" width="320" height="80"/>
+  <text class="label" x="310" y="565">Escape Data Buffer</text>
+  <text class="sub"   x="310" y="585">smooth iter count · orbit stats</text>
+  <text class="sub"   x="310" y="602">normal estimate (3D)</text>
+
+  <!-- Right column: colorize + output -->
+  <rect class="stage colorize" x="700" y="230" width="200" height="100"/>
+  <text class="label" x="800" y="265">ColorMap</text>
+  <text class="sub"   x="800" y="285">gradient lookup</text>
+  <text class="sub"   x="800" y="302">Phong shading</text>
+  <text class="sub"   x="800" y="320">PBR realistic mode</text>
+
+  <rect class="stage colorize" x="700" y="380" width="200" height="100"/>
+  <text class="label" x="800" y="415">Imaging Pipeline</text>
+  <text class="sub"   x="800" y="435">PosterRenderer</text>
+  <text class="sub"   x="800" y="452">watermark · grid</text>
+  <text class="sub"   x="800" y="470">tone map</text>
+
+  <rect class="stage output" x="700" y="530" width="200" height="80"/>
+  <text class="label" x="800" y="565">Bitmap</text>
+  <text class="sub"   x="800" y="585">Avalonia WriteableBitmap</text>
+  <text class="sub"   x="800" y="602">→ Skia surface</text>
+
+  <!-- Far right column: capture sinks -->
+  <rect class="stage output" x="950" y="230" width="220" height="100"/>
+  <text class="label" x="1060" y="265">Slideshow Engine</text>
+  <text class="sub"   x="1060" y="285">timing · transitions</text>
+  <text class="sub"   x="1060" y="302">audio-reactive</text>
+  <text class="sub"   x="1060" y="320">video encode</text>
+
+  <rect class="stage output" x="950" y="380" width="220" height="100"/>
+  <text class="label" x="1060" y="415">Image Capture</text>
+  <text class="sub"   x="1060" y="435">PNG · TIFF</text>
+  <text class="sub"   x="1060" y="452">2k / 4k / 8k tiles</text>
+  <text class="sub"   x="1060" y="470">watermark composite</text>
+
+  <rect class="stage output" x="950" y="530" width="220" height="80"/>
+  <text class="label" x="1060" y="565">Batch / Server</text>
+  <text class="sub"   x="1060" y="585">--batch · --server</text>
+  <text class="sub"   x="1060" y="602">FFClient remote</text>
+
+  <!-- Edges row1 → row2 -->
+  <path class="edge" d="M130,170 L130,230" marker-end="url(#arrow)"/>
+  <path class="edge" d="M350,170 L350,230" marker-end="url(#arrow)"/>
+
+  <!-- Theme bypasses compute, jumps to ColorMap -->
+  <path class="edge-hot" d="M570,170 C570,210 720,210 760,230" marker-end="url(#arrow-y)"/>
+
+  <!-- Row2 → Row3 -->
+  <path class="edge" d="M130,330 L130,380" marker-end="url(#arrow)"/>
+  <path class="edge" d="M350,330 L350,380" marker-end="url(#arrow)"/>
+  <path class="edge" d="M220,280 L260,280" marker-end="url(#arrow)"/>
+
+  <!-- Row3 → Row4 -->
+  <path class="edge" d="M130,480 C130,505 220,510 230,530" marker-end="url(#arrow)"/>
+  <path class="edge" d="M350,480 C350,505 380,510 390,530" marker-end="url(#arrow)"/>
+
+  <!-- Row4 → ColorMap -->
+  <path class="edge-hot" d="M470,570 C600,570 670,400 700,330" marker-end="url(#arrow-y)"/>
+
+  <!-- ColorMap → Imaging → Bitmap -->
+  <path class="edge" d="M800,330 L800,380" marker-end="url(#arrow)"/>
+  <path class="edge" d="M800,480 L800,530" marker-end="url(#arrow)"/>
+
+  <!-- Bitmap → sinks -->
+  <path class="edge" d="M900,560 C920,560 940,290 950,290" marker-end="url(#arrow)"/>
+  <path class="edge" d="M900,570 L950,420" marker-end="url(#arrow)"/>
+  <path class="edge" d="M900,580 L950,570" marker-end="url(#arrow)"/>
+
+  <!-- Footnote -->
+  <text x="20" y="670" class="legend">Source: UI.Avalonia/ViewModels/MainViewModel.cs orchestrates the path; Calculators/EscapeTimeCalculator.cs + Rendering/* host the compute backends.</text>
+</svg>

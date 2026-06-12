@@ -152,7 +152,16 @@
                 </StackPanel>
             </Border>
 
-            <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" HorizontalAlignment="Right" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+                <Button Content="?"
+                        Click="OnHelpClick"
+                        ToolTip.Tip="Open the Server Admin guide"
+                        Padding="10,4"
+                        Background="#283C50"
+                        Foreground="#FFCC00"
+                        FontWeight="Bold" />
+                <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Window>
