@@ -54,6 +54,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Vortice.D3DCompiler;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -66,6 +67,7 @@ namespace FracturingFog.Rendering;
 /// runs the existing IColorMap pass after Run() returns. Thread-affine: a
 /// single immediate context, single-threaded use from the calc thread.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class MandelbrotGpuKernel : IGpuKernel
 {
     // ── HLSL builder ──────────────────────────────────────────────────────

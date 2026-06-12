@@ -19,11 +19,13 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 using FracturingFog.Input;
 
 namespace FracturingFog.Hosting
 {
+    [SupportedOSPlatform("windows")]
     public static class NativeMouseForwarder
     {
         // Keep the delegate rooted so the GC never collects the thunk the
@@ -104,7 +106,7 @@ namespace FracturingFog.Hosting
         public static void Attach(IntPtr hwnd, IFractalInputController controller)
         {
             if (hwnd == IntPtr.Zero || controller == null) return;
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+            if (!OperatingSystem.IsWindows()) return;
 
             s_controller = controller;
             s_hwnd = hwnd;

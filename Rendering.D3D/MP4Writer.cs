@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace FracturingFog
 {
@@ -18,6 +19,7 @@ namespace FracturingFog
     /// source dimensions are silently rounded down by one pixel and the right /
     /// bottom edge is dropped during the per-frame copy.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public sealed class Mp4Writer : FracturingFog.Imaging.IVideoWriter
     {
         // IVideoWriter surface (Phase X.0 / Slice 0.1c)
