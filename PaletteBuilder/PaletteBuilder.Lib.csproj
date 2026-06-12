@@ -21,7 +21,16 @@
   -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!--
+      Phase X.1 / Slice 1.2 — TFM flipped net10.0-windows → net10.0. The
+      PDFsharp-gdi + System.Drawing.Common dependencies that pinned the lib
+      to net10.0-windows were removed in Slice 1.1 (QuestPDF + SkiaSharp
+      raster path); the Avalonia + ReactiveUI closure is cross-platform.
+      Parent WinExe projects (PaletteBuilder.csproj, FracturingFogCLD.csproj)
+      continue to reference this lib via net10.0-windows → net10.0 TFM
+      downcompat.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <Platforms>x64</Platforms>
@@ -29,7 +38,6 @@
     <RootNamespace>PaletteBuilder</RootNamespace>
     <AssemblyName>PaletteBuilder.Lib</AssemblyName>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <UseWindowsForms>false</UseWindowsForms>
     <UseWPF>false</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
