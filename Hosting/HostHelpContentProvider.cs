@@ -30,6 +30,14 @@ namespace FracturingFog.Hosting
             _hardwareInfo = hardwareInfo;
         }
 
+        // Phase X.5 / Slice 5.2 — host-supplied probes for the new Hardware tab
+        // sections. Bootstrap sets these once after the audio backend +
+        // ILGPU context come up; left null on hosts that have not populated
+        // them so the Hardware text degrades to a friendly placeholder rather
+        // than crashing on a null deref.
+        public static Func<string?>? AudioBackendProbe { get; set; }
+        public static Func<string?>? IlgpuDeviceProbe { get; set; }
+
         public string ProgramName => "Fracturing Fog";
 
         public string ProgramVersion
@@ -141,7 +149,36 @@ namespace FracturingFog.Hosting
             sb.AppendLine();
             sb.AppendLine($"SIMD vector width (double): {System.Numerics.Vector<double>.Count}");
 
+            // Phase X.5 / Slice 5.2 — GPU compute (ILGPU) section. Bootstrap
+            // populates IlgpuDeviceProbe with a callable that enumerates
+            // ctx.Devices the same way Compute.Smoke does; provider stays
+            // ILGPU-free so this csproj does not need a direct package ref.
+            sb.AppendLine();
+            sb.AppendLine("=== GPU Compute (ILGPU) ===");
+            string? ilgpu = SafeProbe(IlgpuDeviceProbe);
+            sb.AppendLine(string.IsNullOrWhiteSpace(ilgpu)
+                ? "  (ILGPU device enumeration not available on this host.)"
+                : ilgpu);
+
+            // Phase X.5 / Slice 5.2 — Audio capture backend + capability flags.
+            // Bootstrap populates AudioBackendProbe with the active backend's
+            // type name + AudioBackendCapabilities so the user can see why
+            // System loopback might be greyed in the audio settings dialog.
+            sb.AppendLine();
+            sb.AppendLine("=== Audio capture backend ===");
+            string? audio = SafeProbe(AudioBackendProbe);
+            sb.AppendLine(string.IsNullOrWhiteSpace(audio)
+                ? "  (Audio backend has not started on this host yet.)"
+                : audio);
+
             return sb.ToString();
+        }
+
+        private static string? SafeProbe(Func<string?>? probe)
+        {
+            if (probe == null) return null;
+            try { return probe(); }
+            catch (Exception ex) { return $"  (probe failed: {ex.Message})"; }
         }
 
         private void AppendDxgiAdapters(StringBuilder sb)
