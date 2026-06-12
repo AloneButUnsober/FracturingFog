@@ -30,6 +30,7 @@ using System.Linq;
 using System.Reactive;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using FracturingFog.Audio;
 using FracturingFog.Help;
 using FracturingFog.Imaging;
 using FracturingFog.Input;
@@ -66,6 +67,23 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// settings checkbox becomes a no-op at runtime.</summary>
     public Func<string, int, int, FracturingFog.UI.Avalonia.Slideshow.ISlideshowFrameRecorder>?
         SlideshowRecorderFactory { get; set; }
+
+    /// <summary>Host-supplied hook invoked when an audio-reactive slideshow
+    /// starts. The host (main WinExe) owns the AudioEngine lifecycle; this
+    /// callback should start the engine if not already running and return
+    /// its live <see cref="IBeatSource"/>. Null when no audio backend is
+    /// wired (Avalonia-only test hosts) — slideshow falls back to plain
+    /// wall-clock timing in that case.</summary>
+    public Func<IBeatSource?>? StartAudioReactive { get; set; }
+
+    /// <summary>Companion to <see cref="StartAudioReactive"/>: host stops
+    /// the AudioEngine when the slideshow ends.</summary>
+    public Action? StopAudioReactive { get; set; }
+
+    /// <summary>Beat-skip cadence pushed onto the SlideshowEngine when an
+    /// audio-reactive slideshow starts. Host loads from
+    /// <c>AudioSettingsStore</c>; <c>(8, 32)</c> matches the legacy default.</summary>
+    public Func<(int BeatsPerTheme, int BeatsPerRegion)>? GetAudioBeatCadence { get; set; }
 
     /// <summary>Raised on the UI thread after a recorded slideshow stops.
     /// Host listens to prompt Convert / Save / Cancel. <c>FolderPath</c> is
@@ -565,6 +583,27 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 IsSlideshowVcrVisible = false;
                 this.RaisePropertyChanged(nameof(IsSlideshowRunning));
                 FinalizeSlideshowRecording();
+                // Detach beat source + tell the host to spin down its
+                // AudioEngine. Detach BEFORE StopAudioReactive so the engine
+                // doesn't deliver one last late beat into a stopped slideshow.
+                if (_slideshow != null)
+                {
+                    _slideshow.BeatSource = null;
+                    // Null the sink before restoring Adaptive — any in-flight
+                    // sweep tick still queued on the dispatcher becomes a
+                    // no-op instead of clobbering the restored value.
+                    _slideshow.AdaptiveValueSink = null;
+                }
+                try { StopAudioReactive?.Invoke(); } catch { /* host failure must not block VCR */ }
+                // Restore the pre-slideshow Adaptive value. Posted onto the
+                // dispatcher so it lands after any pending sweep tick that
+                // raced the Stopped event.
+                if (_adaptivePreSweepValue >= 0)
+                {
+                    int restore = _adaptivePreSweepValue;
+                    _adaptivePreSweepValue = -1;
+                    Dispatcher.UIThread.Post(() => FloatingMenu.Adaptive = restore);
+                }
             };
             // Mirror engine-driven region jumps into the toolbar combos so the
             // displayed region name + quality preset match what's actually
@@ -598,6 +637,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // would never reach the running loop.
         _slideshow.ApplySettings(settings);
         _slideshow.Config = activeConfig;
+        // Snapshot the live Adaptive value so the Stopped handler can put it
+        // back; only when sweep will actually run, else leave -1 (skip restore).
+        _adaptivePreSweepValue = activeConfig.AdaptiveSweep is { Enabled: true }
+            ? FloatingMenu.Adaptive
+            : -1;
         _slideshow.AdaptiveValueSink = v => Dispatcher.UIThread.Post(() => FloatingMenu.Adaptive = v);
 
         // Push the Post-FX snapshot before kicking the loop so the first leg
@@ -615,6 +659,36 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // fade frame is captured. Dimensions snapped from the current render
         // host; a Resize mid-run will be ignored (recorder is fixed-size).
         StartSlideshowRecordingIfRequested(activeConfig);
+
+        // Audio-reactive wiring: ask the host to spin up its AudioEngine and
+        // hand back a live IBeatSource. The engine's OnBeat then flips
+        // skip-flags per BeatsPerTheme / BeatsPerRegion and drives the
+        // adaptive-sweep tick rate from BPM. Both hooks null when the host
+        // doesn't carry an audio backend — slideshow falls back to plain
+        // wall-clock timing in that case.
+        if (activeConfig.AudioReactive)
+        {
+            try
+            {
+                if (GetAudioBeatCadence != null)
+                {
+                    var cadence = GetAudioBeatCadence();
+                    _slideshow.BeatsPerTheme = cadence.BeatsPerTheme;
+                    _slideshow.BeatsPerRegion = cadence.BeatsPerRegion;
+                }
+                var src = StartAudioReactive?.Invoke();
+                _slideshow.BeatSource = src;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ShellViewModel] AudioReactive start failed: {ex.Message}");
+                _slideshow.BeatSource = null;
+            }
+        }
+        else
+        {
+            _slideshow.BeatSource = null;
+        }
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
@@ -1115,6 +1189,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowLockRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowFocusCommand { get; }
+
+    // Captured FloatingMenu.Adaptive value at slideshow start. Restored when
+    // the engine stops so the user's pre-slideshow Adaptive setting comes
+    // back instead of leaving the slider stuck at whatever value the
+    // adaptive-sweep loop landed on (forced Loop=true under audio-reactive
+    // means the sweep parks mid-cycle on Stop). -1 = no sweep this run, skip restore.
+    private int _adaptivePreSweepValue = -1;
 
     private bool _slideshowLockRegion;
     /// <summary>Mirror of SlideshowEngine.LockRegion — when true the cycler

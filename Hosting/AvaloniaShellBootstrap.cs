@@ -34,6 +34,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Threading;
 
 using FracturingFog.Abstractions;
+using FracturingFog.Audio;
 using FracturingFog.Help;
 using FracturingFog.Imaging;
 using FracturingFog.Input;
@@ -79,6 +80,12 @@ namespace FracturingFog.Hosting
         private static UserBulbView? s_userBulbWin;
         private static ColorGenEditorView? s_colorGenWin;
         private static DispatcherTimer? s_userBulbAnimTimer;
+
+        // Audio-reactive backend — lazily created on first audio-reactive
+        // slideshow start, reused across toggles. Stopped (not disposed) when
+        // the slideshow ends so the meter timer in any open Audio Settings
+        // dialog still shows live BPM until the user explicitly closes it.
+        private static AudioEngine? s_audioEngine;
 
         private static readonly object s_gate = new();
 
@@ -277,6 +284,24 @@ namespace FracturingFog.Hosting
             // System.Drawing.
             s_shell.SlideshowRecorderFactory = (folder, w, h) =>
                 new PngSlideshowFrameRecorder(folder, w, h);
+
+            // Audio-reactive lifecycle. ShellViewModel calls these when a
+            // slideshow with AudioReactive=true starts / stops. The host owns
+            // the AudioEngine instance because UI.Avalonia only references the
+            // IBeatSource abstraction (the NAudio capture stack lives in the
+            // main WinExe). EnsureAudioEngineStarted is reconfig-safe so the
+            // user can edit AudioSettings mid-session.
+            s_shell.StartAudioReactive = () =>
+            {
+                EnsureAudioEngineStarted();
+                return s_audioEngine?.BeatSource;
+            };
+            s_shell.StopAudioReactive = StopAudioEngine;
+            s_shell.GetAudioBeatCadence = () =>
+            {
+                var s = AudioSettingsStore.Load();
+                return (Math.Max(1, s.BeatsPerTheme), Math.Max(1, s.BeatsPerRegion));
+            };
 
             // Window title: "{ProgramName} v{Version}  —  {renderer description}"
             // (legacy MainForm parity, MainForm.cs:917). RebuildWindowTitle()
@@ -978,9 +1003,14 @@ namespace FracturingFog.Hosting
                         if (fm == null) return;
                         capture(fm.Brightness, fm.Contrast, fm.Adaptive);
                     };
+                    // Seed the dialog's AudioReactive checkbox from the active
+                    // preset (each SlideshowConfig carries its own flag) so
+                    // toggling it in the dialog round-trips through the saved
+                    // preset, not a separate per-session bit.
+                    bool initialAudioReactive = SlideshowConfigLibrary.GetActive(file).AudioReactive;
                     var chosen = await AvaloniaDialogs.ShowSlideshowSettingsAsync(
                         file,
-                        audioReactive: false,
+                        audioReactive: initialAudioReactive,
                         regionNames: regionNames,
                         themeNames: themeNames,
                         capturePostFxCallback: captureCallback);
@@ -2314,6 +2344,8 @@ namespace FracturingFog.Hosting
                 try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;
                 try { s_sandboxWin?.Close(); }  catch { /* ignore */ } s_sandboxWin = null;
                 try { s_userBulbWin?.Close(); } catch { /* ignore */ } s_userBulbWin = null;
+                try { s_audioEngine?.Dispose(); } catch { /* ignore */ }
+                s_audioEngine = null;
                 try { s_shell?.Dispose(); } catch { /* ignore */ }
                 s_shell = null;
                 try { s_renderHost?.Dispose(); } catch { /* renderer disposed via host */ }
@@ -2321,6 +2353,44 @@ namespace FracturingFog.Hosting
                 s_renderer = null;
                 s_input = null;
                 s_surface = null;
+            }
+        }
+
+        // ── AudioEngine lifecycle ─────────────────────────────────────────
+        //
+        // Created lazily on first audio-reactive slideshow. Reconfigure picks
+        // up settings edits the user made via the Audio Settings dialog. Stop
+        // (not Dispose) so the singleton stays warm across slideshow toggles.
+        private static void EnsureAudioEngineStarted()
+        {
+            try
+            {
+                var settings = AudioSettingsStore.Load();
+                if (s_audioEngine == null)
+                {
+                    s_audioEngine = new AudioEngine(settings);
+                }
+                else
+                {
+                    s_audioEngine.Reconfigure(settings);
+                }
+                if (!s_audioEngine.IsRunning) s_audioEngine.Start();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioEngine start failed: {ex.Message}");
+            }
+        }
+
+        private static void StopAudioEngine()
+        {
+            try
+            {
+                if (s_audioEngine is { IsRunning: true }) s_audioEngine.Stop();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioEngine stop failed: {ex.Message}");
             }
         }
     }
