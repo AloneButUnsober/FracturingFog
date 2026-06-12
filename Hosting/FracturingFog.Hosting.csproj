@@ -47,7 +47,6 @@
           types; move with Slice 0.2 (audio carve).
     -->
     <Compile Remove="AvaloniaShellBootstrap.cs" />
-    <Compile Remove="NativeMouseForwarder.cs" />
     <Compile Remove="HostPaletteExtractionService.cs" />
     <Compile Remove="FfmpegSetupDialog.cs" />
     <Compile Remove="AvaloniaDialogs.cs" />

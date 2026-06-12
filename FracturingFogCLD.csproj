@@ -293,6 +293,15 @@
     -->
     <ProjectReference Include="Audio\FracturingFog.Audio.csproj" />
     <!--
+      Phase X.0 / Slice 0.3c — Windows-only-but-not-WinForms host shims.
+      Currently holds NativeMouseForwarder (HWND subclass via user32 /
+      comctl32) which the Avalonia shell bootstrap installs to bridge
+      mouse messages from the native swap-chain HWND into the
+      IFractalInputController. Cross-platform App will skip this ref
+      entirely (the bootstrap will branch on OperatingSystem.IsWindows()).
+    -->
+    <ProjectReference Include="FracturingFog.Win\FracturingFog.Win.csproj" />
+    <!--
       Phase 2 Avalonia shell. Referenced so the avalonia CLI flag launches
       the new UI from the same WinExe during the migration. Remove when
       Phase 2.3 swaps to Avalonia as the primary entry point.

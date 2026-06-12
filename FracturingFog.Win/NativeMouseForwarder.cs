@@ -24,7 +24,7 @@ using FracturingFog.Input;
 
 namespace FracturingFog.Hosting
 {
-    internal static class NativeMouseForwarder
+    public static class NativeMouseForwarder
     {
         // Keep the delegate rooted so the GC never collects the thunk the
         // subclass table points at.
