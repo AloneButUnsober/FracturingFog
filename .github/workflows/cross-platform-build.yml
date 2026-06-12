@@ -1,9 +1,19 @@
-# Phase 2.4 cross-platform build matrix.
+# Cross-platform build matrix.
 #
-# Validates that the platform-neutral assemblies (Abstractions, UI.Avalonia,
-# Rendering.Silk) compile on Linux and macOS in addition to Windows. The
-# WinExe project (FracturingFogCLD.csproj, net10.0-windows + WinForms) is
-# Windows-only by construction so it is skipped on the Linux/Mac legs.
+# Validates that the cross-platform assemblies (Abstractions, Engine,
+# Hosting, UI.Avalonia, Rendering.Silk, Rendering.Skia, FracturingFog.App)
+# compile on Linux and macOS in addition to Windows. The Windows-only
+# assemblies (Rendering.D3D, FracturingFog.Win, Audio, Audio.Win, the
+# legacy WinExe FracturingFogCLD) are net10.0-windows TFM by construction
+# and skipped on the Linux/macOS legs.
+#
+# Phase X.0 carve-out status (2026-06-12):
+#   * Engine, Hosting, App, Audio, Rendering.D3D, Win, Audio.Win all have
+#     populated source trees. The CI matrix exercises every assembly that
+#     can build on the leg.
+#   * FracturingFog.Audio is temporarily net10.0-windows (NAudio WASAPI /
+#     WinMM); Phase X.B introduces IAudioCaptureBackend and flips this TFM
+#     to net10.0.
 
 name: Cross-platform build
 
@@ -23,13 +33,13 @@ jobs:
         include:
           - os: windows-latest
             rid: win-x64
-            build_winexe: true
+            build_windows_only: true
           - os: ubuntu-latest
             rid: linux-x64
-            build_winexe: false
+            build_windows_only: false
           - os: macos-latest
             rid: osx-arm64
-            build_winexe: false
+            build_windows_only: false
 
     runs-on: ${{ matrix.os }}
 
@@ -42,58 +52,56 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # Platform-neutral assemblies build on every leg.
+      # ── Cross-platform assemblies (every leg) ────────────────────────────
       - name: Build Abstractions
         run: dotnet build Abstractions/FracturingFog.Abstractions.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build Engine
+        run: dotnet build Engine/FracturingFog.Engine.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
       - name: Build Rendering.Silk
         run: dotnet build Rendering.Silk/FracturingFog.Rendering.Silk.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      - name: Build UI.Avalonia
-        run: dotnet build UI.Avalonia/FracturingFog.UI.Avalonia.csproj -c Release -r ${{ matrix.rid }} --self-contained false
-
       - name: Build Rendering.Skia
         run: dotnet build Rendering.Skia/FracturingFog.Rendering.Skia.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      # Phase X.0 cross-platform scaffolds. These are empty placeholders today
-      # (no .cs files in Engine/, Rendering.D3D/, FracturingFog.Win/, Audio.Win/;
-      # Audio/ and Hosting/ have EnableDefaultCompileItems=false so their csprojs
-      # produce empty assemblies). Building them now in CI proves the geometry
-      # is wired and catches regressions when the file-move slices land.
-      - name: Build FracturingFog.Engine (scaffold)
-        run: dotnet build Engine/FracturingFog.Engine.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+      - name: Build UI.Avalonia
+        run: dotnet build UI.Avalonia/FracturingFog.UI.Avalonia.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      - name: Build FracturingFog.Audio (scaffold)
-        run: dotnet build Audio/FracturingFog.Audio.csproj -c Release -r ${{ matrix.rid }} --self-contained false
-
-      - name: Build FracturingFog.Hosting (scaffold)
+      - name: Build Hosting
         run: dotnet build Hosting/FracturingFog.Hosting.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      - name: Build FracturingFog.App (scaffold)
+      - name: Build FracturingFog.App
         run: dotnet build FracturingFog.App/FracturingFog.App.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      # net10.0-windows TFM projects only build on the Windows leg.
-      - name: Build FracturingFog.Rendering.D3D (scaffold)
-        if: matrix.build_winexe
-        run: dotnet build Rendering.D3D/FracturingFog.Rendering.D3D.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+      # ── Windows-only assemblies (Win leg only) ───────────────────────────
+      - name: Build FracturingFog.Audio
+        if: matrix.build_windows_only
+        run: dotnet build Audio/FracturingFog.Audio.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      - name: Build FracturingFog.Win (scaffold)
-        if: matrix.build_winexe
-        run: dotnet build FracturingFog.Win/FracturingFog.Win.csproj -c Release -r ${{ matrix.rid }} --self-contained false
-
-      - name: Build FracturingFog.Audio.Win (scaffold)
-        if: matrix.build_winexe
+      - name: Build FracturingFog.Audio.Win
+        if: matrix.build_windows_only
         run: dotnet build Audio.Win/FracturingFog.Audio.Win.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      # WinForms WinExe only builds on Windows (net10.0-windows TFM + Vortice).
-      - name: Build WinExe
-        if: matrix.build_winexe
+      - name: Build FracturingFog.Rendering.D3D
+        if: matrix.build_windows_only
+        run: dotnet build Rendering.D3D/FracturingFog.Rendering.D3D.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build FracturingFog.Win
+        if: matrix.build_windows_only
+        run: dotnet build FracturingFog.Win/FracturingFog.Win.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      # Legacy WinExe — net10.0-windows + WinForms + Vortice. Windows-only
+      # by construction; tracks the same Engine / Rendering.D3D / Hosting
+      # assemblies as the cross-platform App until parity is reached.
+      - name: Build WinExe (legacy FracturingFogCLD)
+        if: matrix.build_windows_only
         run: dotnet build FracturingFogCLD.csproj -c Release
 
-      # Smoke test: ensure the Silk assembly publishes without missing native
-      # dependencies on each RID. Avalonia + Silk.NET pull RID-specific
-      # natives (libSkiaSharp, libSilk.NET.OpenGL, etc.); a successful publish
-      # proves the RID matrix in the csprojs covers the platforms we ship.
+      # ── Publish smoke (every leg) ────────────────────────────────────────
+      # Avalonia + Silk.NET pull RID-specific natives (libSkiaSharp,
+      # libSilk.NET.OpenGL, etc.); a successful publish proves the RID
+      # matrix in the csprojs covers the platforms we ship.
       - name: Publish Rendering.Silk
         run: dotnet publish Rendering.Silk/FracturingFog.Rendering.Silk.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/silk-${{ matrix.rid }}
 
@@ -103,11 +111,15 @@ jobs:
       - name: Publish Rendering.Skia
         run: dotnet publish Rendering.Skia/FracturingFog.Rendering.Skia.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/skia-${{ matrix.rid }}
 
-      # Headless GL smoke. Builds the tiny cross-platform smoke CLI and runs
-      # SmokeOneFrameOffscreen by default — opens an invisible GLFW window
-      # solely to obtain a 3.3 core context, renders into an FBO, reads a
-      # pixel back via glReadPixels. Catches broken Silk.NET natives, missing
-      # libGL, or wrong RID resolution before the WinExe ever ships.
+      - name: Publish FracturingFog.App
+        run: dotnet publish FracturingFog.App/FracturingFog.App.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/app-${{ matrix.rid }}
+
+      # ── Headless GL smoke ────────────────────────────────────────────────
+      # Builds the tiny cross-platform smoke CLI and runs SmokeOneFrameOffscreen
+      # by default — opens an invisible GLFW window solely to obtain a 3.3
+      # core context, renders into an FBO, reads a pixel back via glReadPixels.
+      # Catches broken Silk.NET natives, missing libGL, or wrong RID resolution
+      # before the WinExe ever ships.
       #
       # macOS now runs the smoke because invisible GLFW windows do not need
       # an interactive session — the headless WindowServer accepts them.

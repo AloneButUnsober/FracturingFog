@@ -33,8 +33,14 @@
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
-    <ProjectReference Include="..\Audio\FracturingFog.Audio.csproj" />
     <ProjectReference Include="..\Hosting\FracturingFog.Hosting.csproj" />
+    <!--
+      Phase X.0 / Slice 0.6 — FracturingFog.Audio is still net10.0-windows
+      pending the Phase X.B IAudioCaptureBackend split. Cross-platform App
+      cannot reference it until the TFM flips. Once X.B lands, the audio
+      capture driver lives in this assembly's closure and the Win-only
+      NAudio backend rides FracturingFog.Audio.Win via a $(OS) gate.
+    -->
   </ItemGroup>
 
   <!--
