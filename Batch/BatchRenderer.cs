@@ -757,8 +757,83 @@ namespace FracturingFog.Batch
 
         private static IColorMap ResolveTheme(string name)
         {
+            // Exact match first.
             var theme = FracturingFog.Models.ColorPalette.GetPaletteByName(name);
+            if (!IsDefaultHsvFallback(theme, name)) return theme;
+
+            // Case-insensitive retry against the full palette list. Shells often
+            // mangle case (Tab-completion, lower-case habits), so a name like
+            // "hsv" or "chromostereopsis ember/frost" should still hit.
+            var names = FracturingFog.Models.ColorPalette.GetPaletteNames();
+            foreach (var n in names)
+            {
+                if (string.Equals(n, name, StringComparison.OrdinalIgnoreCase))
+                    return FracturingFog.Models.ColorPalette.GetPaletteByName(n);
+            }
+
+            // Miss. Warn loudly so the user notices the silent HSV fallback,
+            // and surface up to 5 nearest matches to catch typos like
+            // "Chromosteropsis" vs "Chromostereopsis".
+            Console.Error.WriteLine($"batch: theme '{name}' not found — falling back to HSV.");
+            var suggestions = NearestThemeNames(name, names, 5);
+            if (suggestions.Count > 0)
+                Console.Error.WriteLine($"  did you mean: {string.Join(", ", suggestions)}");
             return theme;
+        }
+
+        private static bool IsDefaultHsvFallback(IColorMap theme, string requested)
+        {
+            // GetPaletteByName returns a fresh HsvPalette when the name misses.
+            // It also legitimately returns the real HSV palette when the user
+            // asked for "HSV". Distinguish by checking the requested name.
+            if (theme is not FracturingFog.Models.HsvPalette) return false;
+            return !string.Equals(requested, FracturingFog.Models.HsvPalette.Name, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static System.Collections.Generic.List<string> NearestThemeNames(
+            string query, System.Collections.Generic.List<string> names, int max)
+        {
+            string q = query.ToLowerInvariant();
+            var scored = new System.Collections.Generic.List<(int dist, string name)>(names.Count);
+            foreach (var n in names)
+            {
+                int d = LevenshteinDistance(q, n.ToLowerInvariant());
+                scored.Add((d, n));
+            }
+            scored.Sort((a, b) => a.dist.CompareTo(b.dist));
+            // Only keep suggestions that are reasonably close — beyond half the
+            // query length the suggestion is noise.
+            int cutoff = System.Math.Max(3, q.Length / 2);
+            var result = new System.Collections.Generic.List<string>();
+            foreach (var (dist, n) in scored)
+            {
+                if (dist > cutoff) break;
+                result.Add(n);
+                if (result.Count >= max) break;
+            }
+            return result;
+        }
+
+        private static int LevenshteinDistance(string a, string b)
+        {
+            if (a.Length == 0) return b.Length;
+            if (b.Length == 0) return a.Length;
+            var prev = new int[b.Length + 1];
+            var curr = new int[b.Length + 1];
+            for (int j = 0; j <= b.Length; j++) prev[j] = j;
+            for (int i = 1; i <= a.Length; i++)
+            {
+                curr[0] = i;
+                for (int j = 1; j <= b.Length; j++)
+                {
+                    int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    curr[j] = System.Math.Min(
+                        System.Math.Min(curr[j - 1] + 1, prev[j] + 1),
+                        prev[j - 1] + cost);
+                }
+                (prev, curr) = (curr, prev);
+            }
+            return prev[b.Length];
         }
 
         private static string ResolveImageOutputPath(BatchOptions opts, string? regionName, FractalType frType)

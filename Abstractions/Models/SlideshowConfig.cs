@@ -72,6 +72,15 @@ namespace FracturingFog.Models
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public AdaptiveSweepMode Mode { get; set; } = AdaptiveSweepMode.Forward;
         public bool Loop { get; set; }
+
+        /// <summary>When the parent <see cref="SlideshowConfig.AudioReactive"/>
+        /// is on and the slideshow has a live BeatSource, the sweep cycle
+        /// duration becomes <c>BeatFraction × beatPeriodMs</c>. Mirrors the
+        /// <c>FadeBeatFraction</c> knob in AudioSettings: 1.0 = one beat per
+        /// full sweep, 0.5 = half-beat, 4.0 = four-beat cycle. Clamped to
+        /// [0.0625, 32] at consumer-time. Ignored when audio-reactive is off
+        /// (the wall-clock <c>legMs</c> envelope is used instead).</summary>
+        public double BeatFraction { get; set; } = 1.0;
     }
 
     /// <summary>Post-FX block snapshot. Concrete fields kept loose for now
@@ -218,6 +227,7 @@ namespace FracturingFog.Models
                     End = AdaptiveSweep.End,
                     Mode = AdaptiveSweep.Mode,
                     Loop = AdaptiveSweep.Loop,
+                    BeatFraction = AdaptiveSweep.BeatFraction,
                 },
                 PostFx = new PostFxConfig
                 {

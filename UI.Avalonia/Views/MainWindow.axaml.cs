@@ -17,6 +17,7 @@
 
 using System;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
@@ -52,9 +53,27 @@ public sealed partial class MainWindow : Window
     private global::Avalonia.PixelPoint _preMiniPosition;
     private double _preMiniWidth;
     private double _preMiniHeight;
+    private double _preMiniMinWidth;
+    private double _preMiniMinHeight;
     private bool _preMiniTopmost;
     private bool _preMiniToolbar;
     private bool _preMiniStatus;
+    private bool _preMiniVcr;
+
+    // Toy Mode — even smaller than Mini, no chrome at all, left-click-drag
+    // moves the window. Mutually exclusive with Mini Mode.
+    private bool _toyModeActive;
+    private global::Avalonia.Controls.WindowState _preToyState;
+    private global::Avalonia.Controls.WindowDecorations _preToyDecorations;
+    private global::Avalonia.PixelPoint _preToyPosition;
+    private double _preToyWidth;
+    private double _preToyHeight;
+    private double _preToyMinWidth;
+    private double _preToyMinHeight;
+    private bool _preToyTopmost;
+    private bool _preToyToolbar;
+    private bool _preToyStatus;
+    private bool _preToyVcr;
 
     // Set true in OnClosed so per-window Closing handlers stop cancelling
     // the close (otherwise app shutdown leaves child windows orphaned).
@@ -185,9 +204,13 @@ public sealed partial class MainWindow : Window
     private (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
     {
         var menu = new ContextMenu();
-        AddItem(menu, "Toolbar",            () => shell.IsToolbarVisible   = !shell.IsToolbarVisible);
+        var toolbarItem = new MenuItem { Header = "Toolbar" };
+        toolbarItem.Click += (_, _) => shell.IsToolbarVisible = !shell.IsToolbarVisible;
+        menu.Items.Add(toolbarItem);
         AddItem(menu, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
-        AddItem(menu, "Status",             () => shell.IsStatusBarVisible = !shell.IsStatusBarVisible);
+        var statusItem = new MenuItem { Header = "Status" };
+        statusItem.Click += (_, _) => shell.IsStatusBarVisible = !shell.IsStatusBarVisible;
+        menu.Items.Add(statusItem);
         var onTopItem = new MenuItem { Header = "On Top" };
         onTopItem.Click += (_, _) => Topmost = !Topmost;
         menu.Items.Add(onTopItem);
@@ -198,7 +221,12 @@ public sealed partial class MainWindow : Window
         menu.Items.Add(new Separator());
         AddItem(menu, "Mini Map",           () => shell.ToggleMiniMapCommand.Execute().Subscribe());
         AddItem(menu, "Mini Depth",         () => shell.ToggleMiniDepthCommand.Execute().Subscribe());
-        AddItem(menu, "Mini Mode",          () => shell.ToggleMiniModeCommand.Execute().Subscribe());
+        var miniModeItem = new MenuItem { Header = "Mini Mode" };
+        miniModeItem.Click += (_, _) => shell.ToggleMiniModeCommand.Execute().Subscribe();
+        menu.Items.Add(miniModeItem);
+        var toyModeItem = new MenuItem { Header = "Toy Mode" };
+        toyModeItem.Click += (_, _) => shell.ToggleToyModeCommand.Execute().Subscribe();
+        menu.Items.Add(toyModeItem);
         AddItem(menu, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
         // Slideshow-specific items. Header text + enable state updated each
         // time the menu opens (see Opening handler in BuildContextMenu's
@@ -246,6 +274,16 @@ public sealed partial class MainWindow : Window
                 ? "Slideshow: More Colors"
                 : "Slideshow: More Regions";
             onTopItem.Header = (Topmost ? "✓ " : "") + "On Top";
+
+            // Toy Mode hides toolbar + status entirely — toggling them from
+            // the menu would be a no-op (or worse, a confusing surprise on
+            // exit). Greyed out for the duration; mirror Mini Mode handling
+            // for the toolbar item only (Mini keeps the status bar visible
+            // as a drag handle).
+            toolbarItem.IsEnabled = !_toyModeActive && !_miniModeActive;
+            statusItem.IsEnabled  = !_toyModeActive;
+            miniModeItem.Header = (_miniModeActive ? "✓ " : "") + "Mini Mode";
+            toyModeItem.Header  = (_toyModeActive  ? "✓ " : "") + "Toy Mode";
         };
         menu.Opening += (_, _) => sync();
         return (menu, sync);
@@ -265,6 +303,17 @@ public sealed partial class MainWindow : Window
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         if (_shell == null || e.Handled) return;
+
+        // Esc closes an open context menu before anything else looks at the
+        // key. Without this, OnWindowKeyDown routes Esc to HandleCommandKey
+        // (cancel-run) while the menu stays open, surprising the user.
+        if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None
+            && _contextMenu != null && _contextMenu.IsOpen)
+        {
+            _contextMenu.Close();
+            e.Handled = true;
+            return;
+        }
 
         // Backspace = Back: pop the most recent nav snapshot off the shell's
         // history stack. Like Escape, allowed even when a non-text combo has
@@ -405,6 +454,7 @@ public sealed partial class MainWindow : Window
         shell.PropertyChanged += OnShellPropertyChanged;
         shell.Main.PropertyChanged += OnMainPropertyChanged;
         shell.MiniModeToggleRequested += OnMiniModeToggleRequested;
+        shell.ToyModeToggleRequested  += OnToyModeToggleRequested;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
@@ -421,6 +471,8 @@ public sealed partial class MainWindow : Window
         {
             _shell.PropertyChanged -= OnShellPropertyChanged;
             _shell.Main.PropertyChanged -= OnMainPropertyChanged;
+            _shell.MiniModeToggleRequested -= OnMiniModeToggleRequested;
+            _shell.ToyModeToggleRequested  -= OnToyModeToggleRequested;
         }
         _shell = null;
     }
@@ -470,6 +522,18 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(ShellViewModel.IsMiniDepthVisible):
                 SyncMiniDepth();
+                break;
+            case nameof(ShellViewModel.IsSlideshowVcrVisible):
+                // Slideshow start path flips this true unconditionally; in
+                // mini/toy mode we want it suppressed. Capture the intended
+                // visibility so exit restores it, then force false.
+                if ((_miniModeActive || _toyModeActive) && _shell != null
+                    && _shell.IsSlideshowVcrVisible)
+                {
+                    if (_miniModeActive) _preMiniVcr = true;
+                    if (_toyModeActive)  _preToyVcr  = true;
+                    _shell.IsSlideshowVcrVisible = false;
+                }
                 break;
         }
     }
@@ -552,18 +616,32 @@ public sealed partial class MainWindow : Window
     {
         if (_miniModeActive || _shell == null) return;
 
+        // Mutually exclusive with Toy Mode.
+        if (_toyModeActive)
+        {
+            ExitToyMode();
+            _shell.IsToyMode = false;
+        }
+
         _preMiniState       = WindowState;
         _preMiniDecorations = WindowDecorations;
         _preMiniPosition    = Position;
         _preMiniWidth       = Width;
         _preMiniHeight      = Height;
+        _preMiniMinWidth    = MinWidth;
+        _preMiniMinHeight   = MinHeight;
         _preMiniTopmost     = Topmost;
         _preMiniToolbar     = _shell.IsToolbarVisible;
         _preMiniStatus      = _shell.IsStatusBarVisible;
+        _preMiniVcr         = _shell.IsSlideshowVcrVisible;
 
         WindowState        = global::Avalonia.Controls.WindowState.Normal;
         WindowDecorations  = global::Avalonia.Controls.WindowDecorations.None;
         Topmost            = true;
+        // XAML pins MinWidth=640 / MinHeight=400, which would clamp the
+        // mini window back to that size. Drop the floor while in mini mode.
+        MinWidth           = 0;
+        MinHeight          = 0;
         Width              = 320;
         Height             = 240;
         _shell.IsToolbarVisible   = false;
@@ -571,6 +649,9 @@ public sealed partial class MainWindow : Window
         // drag handle for moving the borderless window. Drag is wired on
         // the status Border via OnStatusBarPointerPressed.
         _shell.IsStatusBarVisible = true;
+        // VCR transport eats too much vertical space at mini dims — hide
+        // while in mini mode; original visibility restores on exit.
+        _shell.IsSlideshowVcrVisible = false;
 
         _miniModeActive = true;
     }
@@ -582,14 +663,122 @@ public sealed partial class MainWindow : Window
         WindowState        = _preMiniState;
         WindowDecorations  = _preMiniDecorations;
         Topmost            = _preMiniTopmost;
+        MinWidth           = _preMiniMinWidth;
+        MinHeight          = _preMiniMinHeight;
         Width              = _preMiniWidth;
         Height             = _preMiniHeight;
         Position           = _preMiniPosition;
         _shell.IsToolbarVisible   = _preMiniToolbar;
         _shell.IsStatusBarVisible = _preMiniStatus;
+        _shell.IsSlideshowVcrVisible = _preMiniVcr;
 
         _miniModeActive = false;
     }
+
+    // ── Toy Mode ──────────────────────────────────────────────────────────
+    // Tighter than Mini Mode: no toolbar, no status, smaller default size,
+    // and left-click-drag on the render surface moves the window itself.
+    // The drag is wired through AvaloniaShell.LeftDragWindowHook so
+    // it intercepts the swap-chain HWND's WM_LBUTTONDOWN BEFORE the pan
+    // controller sees it. Right-click still pops the context menu via the
+    // existing ContextMenuRequested path.
+    private void OnToyModeToggleRequested(object? sender, bool enter)
+    {
+        if (enter == _toyModeActive) return;
+        if (enter) EnterToyMode();
+        else        ExitToyMode();
+    }
+
+    private void EnterToyMode()
+    {
+        if (_toyModeActive || _shell == null) return;
+
+        // Mutually exclusive with Mini Mode. If Mini is active, restore
+        // first so the saved geometry stays accurate (otherwise we'd
+        // overwrite "pre-mini" geometry with the mini 320x240).
+        if (_miniModeActive)
+        {
+            ExitMiniMode();
+            _shell.IsMiniMode = false;
+        }
+
+        _preToyState       = WindowState;
+        _preToyDecorations = WindowDecorations;
+        _preToyPosition    = Position;
+        _preToyWidth       = Width;
+        _preToyHeight      = Height;
+        _preToyMinWidth    = MinWidth;
+        _preToyMinHeight   = MinHeight;
+        _preToyTopmost     = Topmost;
+        _preToyToolbar     = _shell.IsToolbarVisible;
+        _preToyStatus      = _shell.IsStatusBarVisible;
+        _preToyVcr         = _shell.IsSlideshowVcrVisible;
+
+        WindowState        = global::Avalonia.Controls.WindowState.Normal;
+        WindowDecorations  = global::Avalonia.Controls.WindowDecorations.None;
+        Topmost            = true;
+        // XAML MinWidth=640 / MinHeight=400 would clamp the toy window back
+        // up to that size. Drop the floor for the duration of toy mode.
+        MinWidth           = 0;
+        MinHeight          = 0;
+        Width              = 200;
+        Height             = 150;
+        _shell.IsToolbarVisible   = false;
+        _shell.IsStatusBarVisible = false;
+        _shell.IsSlideshowVcrVisible = false;
+
+        AvaloniaShell.LeftDragWindowHook = ToyDragWindow;
+        _toyModeActive = true;
+    }
+
+    private void ExitToyMode()
+    {
+        if (!_toyModeActive || _shell == null) return;
+
+        AvaloniaShell.LeftDragWindowHook = null;
+
+        WindowState        = _preToyState;
+        WindowDecorations  = _preToyDecorations;
+        Topmost            = _preToyTopmost;
+        MinWidth           = _preToyMinWidth;
+        MinHeight          = _preToyMinHeight;
+        Width              = _preToyWidth;
+        Height             = _preToyHeight;
+        Position           = _preToyPosition;
+        _shell.IsToolbarVisible   = _preToyToolbar;
+        _shell.IsStatusBarVisible = _preToyStatus;
+        _shell.IsSlideshowVcrVisible = _preToyVcr;
+
+        _toyModeActive = false;
+    }
+
+    // Win32 window-move kick. Called from NativeMouseForwarder when a
+    // left-click lands on the swap-chain HWND while Toy Mode is active.
+    // ReleaseCapture undoes whatever the OS auto-set on WM_LBUTTONDOWN;
+    // SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) then tells Windows to
+    // treat the press as if it had landed on the title bar — the OS does
+    // the rest of the drag.
+    private bool ToyDragWindow()
+    {
+        try
+        {
+            var handle = TryGetPlatformHandle();
+            if (handle == null) return false;
+            ReleaseCapture();
+            SendMessage(handle.Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private const uint WM_NCLBUTTONDOWN = 0x00A1;
+    private const int  HTCAPTION        = 2;
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     private void SyncMiniMap()
     {
@@ -812,6 +1001,7 @@ public sealed partial class MainWindow : Window
         _shuttingDown = true;
         AvaloniaShell.ContextMenuRequested = null;
         AvaloniaShell.RenderSurfaceFocusRequested = null;
+        AvaloniaShell.LeftDragWindowHook = null;
         _inputAdapter?.Dispose();
         _inputAdapter = null;
 

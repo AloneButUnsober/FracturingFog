@@ -48,6 +48,17 @@ public static class AvaloniaShell
     /// </summary>
     public static Action? RenderSurfaceFocusRequested { get; set; }
 
+    /// <summary>
+    /// Toy Mode hook. When non-null, a left-click on the render surface is
+    /// routed here instead of starting a fractal pan; the implementation
+    /// (MainWindow code-behind) initiates an OS-driven window move on the
+    /// top-level frame. Returns <c>true</c> if the click was consumed.
+    /// Mirrors <see cref="ContextMenuRequested"/> in shape so the host
+    /// bridge (NativeMouseForwarder via AvaloniaShellBootstrap) keeps the
+    /// platform-specific P/Invoke out of UI.Avalonia.
+    /// </summary>
+    public static Func<bool>? LeftDragWindowHook { get; set; }
+
     public static int Run(string[] args)
     {
         return BuildAvaloniaApp()
