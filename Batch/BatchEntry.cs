@@ -28,7 +28,12 @@ namespace FracturingFog.Batch
 
         public static int Run(string[] args)
         {
-            AttachOrAllocConsole();
+            // Phase X.3 / Slice 3.2: gate Win32 console-attach so the call is
+            // unreachable on non-Win hosts once this file follows the entry
+            // point into FracturingFog.App (net10.0). On Linux/macOS
+            // stdout/stderr are already wired to the launching terminal.
+            if (OperatingSystem.IsWindows())
+                AttachOrAllocConsole();
 
             if (args.Length == 1 || (args.Length > 1 && (args[1] == "--help" || args[1] == "-?")))
             {
@@ -70,6 +75,7 @@ namespace FracturingFog.Batch
             }
         }
 
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         private static void AttachOrAllocConsole()
         {
             if (!AttachConsole(ATTACH_PARENT_PROCESS))
