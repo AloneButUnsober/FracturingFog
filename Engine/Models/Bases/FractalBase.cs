@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
+using SkiaSharp;
 //using FracturingFog.Enums;
 
 namespace FracturingFog.Models
@@ -244,15 +243,21 @@ namespace FracturingFog.Models
         {
             if (File.Exists(path)) File.Delete(path);
 
-            using Bitmap bmp = new Bitmap(renderSettings.Width, renderSettings.Height, PixelFormat.Format32bppArgb);
-            BitmapData data = bmp.LockBits(new Rectangle(0, 0, renderSettings.Width, renderSettings.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            int w = renderSettings.Width;
+            int h = renderSettings.Height;
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
             unsafe
             {
-                int* ptr = (int*)data.Scan0;
-                for (int i = 0; i < colorBuffer.Length; i++)
-                    ptr[i] = colorBuffer[i];
+                fixed (int* src = colorBuffer)
+                {
+                    using var bmp = new SKBitmap();
+                    bmp.InstallPixels(info, (IntPtr)src, info.RowBytes);
+                    using var image = SKImage.FromBitmap(bmp);
+                    using var data = image.Encode(SKEncodedImageFormat.Bmp, 100);
+                    using var fs = File.OpenWrite(path);
+                    data.SaveTo(fs);
+                }
             }
-            bmp.UnlockBits(data); bmp.Save(path, ImageFormat.Bmp);
 
             return File.Exists(path);
         }

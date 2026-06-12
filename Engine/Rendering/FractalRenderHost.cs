@@ -18,7 +18,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Drawing.Imaging;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Threading;
@@ -523,7 +522,7 @@ namespace FracturingFog.Rendering
         /// </summary>
         public PosterRequest CreatePosterRequest(
             int width, int height, bool rotate,
-            string path, ImageFormat format, string watermark, string subText,
+            string path, FracturingFog.Imaging.ImageFileFormat format, string watermark, string subText,
             FracturingFog.Models.WatermarkDef? customWatermark = null)
         {
             var s = ViewState;
@@ -1665,7 +1664,7 @@ namespace FracturingFog.Rendering
                 defaultTextColor: defaultText);
 
             FracturingFog.Imaging.ImageExport.SavePixelsToFile(
-                buf, w, h, path, System.Drawing.Imaging.ImageFormat.Png,
+                buf, w, h, path, FracturingFog.Imaging.ImageFileFormat.Png,
                 wm);
         }
 

@@ -14,7 +14,6 @@
 
 using System;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Threading;
 
 using FracturingFog.Interefaces;
@@ -55,7 +54,7 @@ namespace FracturingFog.Imaging
         public bool Rotate { get; init; }
 
         public string Path { get; init; } = "";
-        public ImageFormat Format { get; init; } = ImageFormat.Png;
+        public ImageFileFormat Format { get; init; } = ImageFileFormat.Png;
         public string Watermark { get; init; } = "";
         public string SubText { get; init; } = "";
 

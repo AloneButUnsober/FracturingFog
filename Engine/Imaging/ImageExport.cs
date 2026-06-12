@@ -36,7 +36,13 @@ namespace FracturingFog.Imaging
         /// (Graphics + GraphicsPath text outlining) on Windows; on non-Windows
         /// hosts the watermark is composed via SKCanvas + Inter typeface.
         /// TIFF on non-Windows falls back to PNG with a debug log line
-        /// (SkiaSharp does not encode TIFF).</summary>
+        /// (SkiaSharp does not encode TIFF).
+        ///
+        /// Phase X.A / Slice A.6 — this <see cref="ImageFormat"/>-taking
+        /// overload is now marked Windows-only; engine callers should use the
+        /// <see cref="ImageFileFormat"/> overload below. WinExe callers can
+        /// still use this overload because their entire process is Windows.</summary>
+        [SupportedOSPlatform("windows")]
         public static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFormat format,
             string watermarkText, Color fontColor, string subText = "", bool poster = false,
@@ -70,6 +76,7 @@ namespace FracturingFog.Imaging
         // the GDI+ output bit-identically for PNG/BMP. JPEG/WebP fall through
         // to SkiaSharp quality 100 (visually lossless). TIFF on non-Windows
         // logs a debug line and saves as PNG instead.
+        [SupportedOSPlatform("windows")]
         private static void SaveBgraSkia(uint[] pixels, int w, int h, string path,
             ImageFormat format, float dpi)
         {
@@ -100,6 +107,37 @@ namespace FracturingFog.Imaging
             _ = dpi;
         }
 
+        // Cross-platform BGRA save — ImageFileFormat overload. Used by engine
+        // callers that should not reference System.Drawing.Imaging.ImageFormat
+        // directly (its static accessors are [SupportedOSPlatform("windows")]).
+        private static void SaveBgraSkia(uint[] pixels, int w, int h, string path,
+            ImageFileFormat format, float dpi)
+        {
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using var bmp = new SKBitmap(info);
+            unsafe
+            {
+                fixed (uint* src = pixels)
+                {
+                    Buffer.MemoryCopy(src, (void*)bmp.GetPixels(),
+                        (long)w * h * 4, (long)w * h * 4);
+                }
+            }
+
+            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out bool unsupportedTiff);
+            int quality = skFmt == SKEncodedImageFormat.Jpeg ? 95 : 100;
+
+            using var image = SKImage.FromBitmap(bmp);
+            using var data = image.Encode(skFmt, quality);
+            using var fs = File.OpenWrite(path);
+            data.SaveTo(fs);
+
+            if (unsupportedTiff)
+                Debug.WriteLine($"SaveBgraSkia: TIFF unsupported by SkiaSharp; saved {path} as PNG.");
+            _ = dpi;
+        }
+
+        [SupportedOSPlatform("windows")]
         private static SKEncodedImageFormat MapToSkiaFormat(
             ImageFormat format, string path, out bool unsupportedTiff)
         {
@@ -114,6 +152,34 @@ namespace FracturingFog.Imaging
                 return SKEncodedImageFormat.Png;
             }
             // Fallback: pick by extension.
+            return MapExtToSkiaFormat(path);
+        }
+
+        // Portable ImageFileFormat → SKEncodedImageFormat mapping. Used by the
+        // cross-platform Save overloads that take ImageFileFormat rather than
+        // System.Drawing.Imaging.ImageFormat.
+        private static SKEncodedImageFormat MapToSkiaFormat(
+            ImageFileFormat format, string path, out bool unsupportedTiff)
+        {
+            unsupportedTiff = false;
+            switch (format)
+            {
+                case ImageFileFormat.Png:  return SKEncodedImageFormat.Png;
+                case ImageFileFormat.Jpeg: return SKEncodedImageFormat.Jpeg;
+                case ImageFileFormat.Bmp:  return SKEncodedImageFormat.Bmp;
+                case ImageFileFormat.Gif:  return SKEncodedImageFormat.Gif;
+                case ImageFileFormat.Webp: return SKEncodedImageFormat.Webp;
+                case ImageFileFormat.Tiff:
+                    unsupportedTiff = true;
+                    return SKEncodedImageFormat.Png;
+                case ImageFileFormat.Auto:
+                default:
+                    return MapExtToSkiaFormat(path);
+            }
+        }
+
+        private static SKEncodedImageFormat MapExtToSkiaFormat(string path)
+        {
             string ext = Path.GetExtension(path).ToLowerInvariant();
             return ext switch
             {
@@ -173,6 +239,7 @@ namespace FracturingFog.Imaging
         }
 
         // ── SkiaSharp watermark composition (non-Windows) ─────────────────
+        [SupportedOSPlatform("windows")]
         private static void CompositeWatermarkSkia(
             string path, ImageFormat format,
             string topText, string subText, Color fontColor, bool poster)
@@ -266,6 +333,7 @@ namespace FracturingFog.Imaging
 
         /// <summary>Render the region/theme watermark + program sub-line in the
         /// lower-right corner with a contrasting outline.</summary>
+        [SupportedOSPlatform("windows")]
         public static void AddWaterMark(
             Graphics g,
             string text,
@@ -306,6 +374,7 @@ namespace FracturingFog.Imaging
 
         /// <summary>Draw <paramref name="text"/> as a filled glyph path with a
         /// rounded-join outline pen for legibility over any background.</summary>
+        [SupportedOSPlatform("windows")]
         public static void DrawOutlinedString(
             Graphics g, string text, Font font, PointF pos,
             Color fill, Color outline, float strokeWidth)
@@ -328,6 +397,7 @@ namespace FracturingFog.Imaging
         /// Used by the slideshow overlay to allocate only a small bitmap
         /// instead of a full-frame one.
         /// </summary>
+        [SupportedOSPlatform("windows")]
         public static Rectangle MeasureWatermarkBBox(
             string text, string subText, int width, int height, bool poster = false)
         {
@@ -473,6 +543,7 @@ namespace FracturingFog.Imaging
         /// <summary>Save BGRA pixels then composite a resolved watermark on top.
         /// When <paramref name="wm"/> is null no watermark is drawn (used by the
         /// no-watermark code paths that today pass watermarkText: "").</summary>
+        [SupportedOSPlatform("windows")]
         public static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFormat format,
             WatermarkRender? wm, bool poster = false, float dpi = 0f)
@@ -495,6 +566,74 @@ namespace FracturingFog.Imaging
             // Non-Windows: save base then composite via Skia.
             SaveBgraSkia(pixels, w, h, path, format, dpi);
             CompositeWatermarkRenderSkia(path, format, wm!, poster);
+        }
+
+        /// <summary>Cross-platform BGRA save + optional watermark. Same shape
+        /// as the <see cref="ImageFormat"/> overload but uses the portable
+        /// <see cref="ImageFileFormat"/> token so engine callers do not need
+        /// to reference Windows-only System.Drawing.Imaging accessors.</summary>
+        public static void SavePixelsToFile(
+            uint[] pixels, int w, int h, string path, ImageFileFormat format,
+            WatermarkRender? wm, bool poster = false, float dpi = 0f)
+        {
+            bool hasWm = wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText));
+
+            if (!hasWm)
+            {
+                SaveBgraSkia(pixels, w, h, path, format, dpi);
+                return;
+            }
+
+            if (OperatingSystem.IsWindows())
+            {
+                // Translate the portable token to GDI+ ImageFormat just for the
+                // Windows-only GDI+ watermark path. Centralised so the rest of
+                // the engine never touches System.Drawing.Imaging static accessors.
+                SaveWithGdiWatermarkPortable(pixels, w, h, path, format, wm!, poster, dpi);
+                return;
+            }
+
+            SaveBgraSkia(pixels, w, h, path, format, dpi);
+            CompositeWatermarkRenderSkiaPortable(path, format, wm!, poster);
+        }
+
+        [SupportedOSPlatform("windows")]
+        private static void SaveWithGdiWatermarkPortable(
+            uint[] pixels, int w, int h, string path, ImageFileFormat format,
+            WatermarkRender wm, bool poster, float dpi)
+        {
+            var gdiFormat = format switch
+            {
+                ImageFileFormat.Jpeg => ImageFormat.Jpeg,
+                ImageFileFormat.Bmp  => ImageFormat.Bmp,
+                ImageFileFormat.Gif  => ImageFormat.Gif,
+                ImageFileFormat.Tiff => ImageFormat.Tiff,
+                ImageFileFormat.Webp => ImageFormat.Png, // GDI+ has no WebP encoder
+                _                    => ImageFormat.Png,
+            };
+            SaveWithGdiWatermark(pixels, w, h, path, gdiFormat, wm, poster, dpi);
+        }
+
+        private static void CompositeWatermarkRenderSkiaPortable(
+            string path, ImageFileFormat format, WatermarkRender wm, bool poster)
+        {
+            using var existing = SKBitmap.Decode(path);
+            if (existing == null) return;
+            int width = existing.Width;
+            int height = existing.Height;
+
+            using var surface = SKSurface.Create(existing.Info);
+            var canvas = surface.Canvas;
+            canvas.DrawBitmap(existing, 0, 0);
+
+            var fill = Color.FromArgb(255, wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
+            DrawWatermarkSkia(canvas, wm.TopText, wm.SubText, width, height, fill, poster);
+
+            using var snap = surface.Snapshot();
+            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
+            using var data = snap.Encode(skFmt, 100);
+            using var fs = File.OpenWrite(path);
+            data.SaveTo(fs);
         }
 
         [SupportedOSPlatform("windows")]
@@ -543,6 +682,7 @@ namespace FracturingFog.Imaging
             else bmp.Save(path, format);
         }
 
+        [SupportedOSPlatform("windows")]
         private static void CompositeWatermarkRenderSkia(
             string path, ImageFormat format, WatermarkRender wm, bool poster)
         {
@@ -574,6 +714,7 @@ namespace FracturingFog.Imaging
         /// Honours top-line text + colour, optional background fill, optional
         /// highlight outline, edge placement and inline justify. Subtext is
         /// always rendered (program/version is mandatory per spec).</summary>
+        [SupportedOSPlatform("windows")]
         public static void AddWaterMark(
             Graphics g,
             WatermarkRender wm,
@@ -654,6 +795,7 @@ namespace FracturingFog.Imaging
         /// <summary>Measure the on-image bounding rectangle the resolved
         /// watermark will occupy. Used by overlay surfaces that allocate
         /// scratch bitmaps the size of just the watermark band.</summary>
+        [SupportedOSPlatform("windows")]
         public static Rectangle MeasureWatermarkBBox(
             WatermarkRender wm, int width, int height, bool poster = false)
         {

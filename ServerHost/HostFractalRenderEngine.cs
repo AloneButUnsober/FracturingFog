@@ -295,7 +295,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             FractalParameters = new FractalParameters(),
             Rotate = posterMode && req.PosterPortrait,
             Path = outPath,
-            Format = ImageFormat.Png,
+            Format = FracturingFog.Imaging.ImageFileFormat.Png,
             Watermark = region?.Name ?? "",
             SubText = "Fracturing Fog server render",
             Dpi = dpiStamp,

@@ -32,7 +32,7 @@ namespace FracturingFog.Batch
 
             EnsureDirectoryForFile(outPath);
 
-            ImageFormat format = GuessImageFormat(outPath);
+            FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
 
             var fp = new FractalParameters();
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
@@ -878,12 +878,15 @@ namespace FracturingFog.Batch
             return s.Replace(' ', '_');
         }
 
-        private static ImageFormat GuessImageFormat(string path) =>
+        private static FracturingFog.Imaging.ImageFileFormat GuessImageFormat(string path) =>
             Path.GetExtension(path).ToLowerInvariant() switch
             {
-                ".bmp" => ImageFormat.Bmp,
-                ".tif" or ".tiff" => ImageFormat.Tiff,
-                _ => ImageFormat.Png,
+                ".bmp" => FracturingFog.Imaging.ImageFileFormat.Bmp,
+                ".tif" or ".tiff" => FracturingFog.Imaging.ImageFileFormat.Tiff,
+                ".jpg" or ".jpeg" => FracturingFog.Imaging.ImageFileFormat.Jpeg,
+                ".gif" => FracturingFog.Imaging.ImageFileFormat.Gif,
+                ".webp" => FracturingFog.Imaging.ImageFileFormat.Webp,
+                _ => FracturingFog.Imaging.ImageFileFormat.Png,
             };
 
         private static void EnsureDirectoryForFile(string filePath)
