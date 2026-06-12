@@ -84,6 +84,7 @@
     <Compile Remove="Rendering.Silk\**" />
     <Compile Remove="Rendering.Silk.Smoke\**" />
     <Compile Remove="Rendering.Skia\**" />
+    <Compile Remove="Compute.Smoke\**" />
     <Compile Remove="Server\**" />
     <Compile Remove="Server.Tests\**" />
     <Compile Remove="Client\**" />
@@ -175,6 +176,7 @@
     <None Remove="Rendering.Silk\**" />
     <None Remove="Rendering.Silk.Smoke\**" />
     <None Remove="Rendering.Skia\**" />
+    <None Remove="Compute.Smoke\**" />
     <None Remove="Server\**" />
     <None Remove="Server.Tests\**" />
     <None Remove="Client\**" />
@@ -192,6 +194,7 @@
     <EmbeddedResource Remove="Rendering.Silk\**" />
     <EmbeddedResource Remove="Rendering.Silk.Smoke\**" />
     <EmbeddedResource Remove="Rendering.Skia\**" />
+    <EmbeddedResource Remove="Compute.Smoke\**" />
     <EmbeddedResource Remove="Server\**" />
     <EmbeddedResource Remove="Server.Tests\**" />
     <EmbeddedResource Remove="Client\**" />
@@ -209,6 +212,7 @@
     <Content Remove="Rendering.Silk\**" />
     <Content Remove="Rendering.Silk.Smoke\**" />
     <Content Remove="Rendering.Skia\**" />
+    <Content Remove="Compute.Smoke\**" />
     <Content Remove="Server\**" />
     <Content Remove="Server.Tests\**" />
     <Content Remove="Client\**" />

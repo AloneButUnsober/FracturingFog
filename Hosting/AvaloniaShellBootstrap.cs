@@ -124,6 +124,42 @@ namespace FracturingFog.Hosting
         static AvaloniaShellBootstrap()
         {
             RendererFactory.NonWin32Backend = TryCreateSilkRenderer;
+
+            // Phase X.5 / Slice 5.2 — register Help → Hardware tab probes.
+            // The callables read live state each time the user opens the
+            // help window so they reflect the audio backend / ILGPU device
+            // list at that moment, not at boot.
+            HostHelpContentProvider.IlgpuDeviceProbe = ProbeIlgpuDevices;
+            HostHelpContentProvider.AudioBackendProbe = ProbeAudioBackend;
+        }
+
+        private static string? ProbeIlgpuDevices()
+        {
+            try
+            {
+                using var ctx = ILGPU.Context.Create(b => b.Default());
+                var devices = ctx.Devices.ToList();
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"  Devices ({devices.Count}):");
+                foreach (var d in devices)
+                    sb.AppendLine($"    {d.AcceleratorType,-12}  {d.Name}");
+                var preferred = devices.FirstOrDefault(
+                                    d => d.AcceleratorType != ILGPU.Runtime.AcceleratorType.CPU)
+                                ?? ctx.GetPreferredDevice(preferCPU: true);
+                sb.Append($"  Preferred: {preferred.AcceleratorType}  {preferred.Name}");
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"  (ILGPU probe failed: {ex.Message})";
+            }
+        }
+
+        private static string? ProbeAudioBackend()
+        {
+            var be = s_audioBackend;
+            if (be == null) return null;
+            return $"  Backend: {be.GetType().Name}\n  Capabilities: {be.Capabilities}";
         }
 
         private static IFractalRenderer? TryCreateSilkRenderer(IGpuSurface surface)
