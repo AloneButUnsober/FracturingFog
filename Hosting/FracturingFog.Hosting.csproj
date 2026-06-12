@@ -51,16 +51,6 @@
     <Compile Remove="HostPaletteExtractionService.cs" />
     <Compile Remove="FfmpegSetupDialog.cs" />
     <Compile Remove="AvaloniaDialogs.cs" />
-    <!--
-      HostHelpContentProvider enumerates DXGI adapters + queries D3D11
-      feature level via Vortice. Both call sites are already gated by
-      OperatingSystem.IsWindows(), but the type references at compile time
-      still pin the file to a Vortice-aware assembly. A follow-up slice
-      extracts the DX queries into a Rendering.D3D-side helper that
-      HostHelpContentProvider calls through an injected delegate; the
-      provider itself then lands in Hosting cleanly.
-    -->
-    <Compile Remove="HostHelpContentProvider.cs" />
   </ItemGroup>
 
   <ItemGroup>

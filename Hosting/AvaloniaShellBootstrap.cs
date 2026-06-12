@@ -274,7 +274,12 @@ namespace FracturingFog.Hosting
             // / ReloadThemes flows.
             s_themeService = new HostColorThemeService(s_renderHost);
             var themeService = s_themeService;
-            var helpProvider = new HostHelpContentProvider();
+            // Phase X.0 / Slice 0.3b — pass the Windows D3D11 hardware probe
+            // so the Hardware tab can enumerate DXGI adapters + report the
+            // D3D11 feature level. Cross-platform App will install a different
+            // probe (or none) depending on the active backend.
+            var helpProvider = new HostHelpContentProvider(
+                new FracturingFog.Rendering.WindowsD3D11HardwareInfoProvider());
 
             // Stamp program name + version onto the render host so the watermark
             // overlay (FractalOverlayCompositor) renders "Fracturing Fog v0.6.1
