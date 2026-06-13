@@ -345,14 +345,14 @@
         }
       }
     },
-    "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen\\CalculatorGen.csproj": {
+    "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen.Lib\\CalculatorGen.Lib.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen\\CalculatorGen.csproj",
-        "projectName": "CalculatorGen",
-        "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen\\CalculatorGen.csproj",
+        "projectUniqueName": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen.Lib\\CalculatorGen.Lib.csproj",
+        "projectName": "CalculatorGen.Lib",
+        "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen.Lib\\CalculatorGen.Lib.csproj",
         "packagesPath": "C:\\Users\\bradley\\.nuget\\packages\\",
-        "outputPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen\\obj\\",
+        "outputPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen.Lib\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -1040,14 +1040,14 @@
         }
       }
     },
-    "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen\\ColorGen.csproj": {
+    "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen.Lib\\ColorGen.Lib.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen\\ColorGen.csproj",
-        "projectName": "ColorGen",
-        "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen\\ColorGen.csproj",
+        "projectUniqueName": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen.Lib\\ColorGen.Lib.csproj",
+        "projectName": "ColorGen.Lib",
+        "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen.Lib\\ColorGen.Lib.csproj",
         "packagesPath": "C:\\Users\\bradley\\.nuget\\packages\\",
-        "outputPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen\\obj\\",
+        "outputPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen.Lib\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -2151,14 +2151,14 @@
               "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\Abstractions\\FracturingFog.Abstractions.csproj": {
                 "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\Abstractions\\FracturingFog.Abstractions.csproj"
               },
-              "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen\\CalculatorGen.csproj": {
-                "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen\\CalculatorGen.csproj"
+              "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen.Lib\\CalculatorGen.Lib.csproj": {
+                "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\CalculatorGen.Lib\\CalculatorGen.Lib.csproj"
               },
               "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\Client\\FracturingFog.Client.csproj": {
                 "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\Client\\FracturingFog.Client.csproj"
               },
-              "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen\\ColorGen.csproj": {
-                "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen\\ColorGen.csproj"
+              "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen.Lib\\ColorGen.Lib.csproj": {
+                "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\ColorGen.Lib\\ColorGen.Lib.csproj"
               },
               "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\Server\\FracturingFog.Server.csproj": {
                 "projectPath": "C:\\NeverEnding\\AloneButUnsober\\MandelbrotExplorer\\Server\\FracturingFog.Server.csproj"
