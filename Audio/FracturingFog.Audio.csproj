@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FracturingFog.Audio — cross-platform audio capture driver + beat analyzer.
+    The Win-only NAudio WASAPI backend lives in the sibling FracturingFog.Audio.Win
+    project. Phase X.B introduces the IAudioCaptureBackend abstraction; until
+    then this csproj is a scaffold.
+
+    Phase X.0 / Slice 0.2: scaffold only. EnableDefaultCompileItems=false so
+    the in-folder Audio/*.cs files keep compiling inside FracturingFogCLD.csproj
+    (the WinExe) via its default SDK glob. File ownership flips to this csproj
+    when the audio-abstraction slices land.
+  -->
+
+  <PropertyGroup>
+    <!--
+      Phase X.B / Slice B.6 — TFM flipped to net10.0. AudioEngine + FractalSynth
+      (NAudio WASAPI/WinMM dependents) now live in FracturingFog.Audio.Win.
+      What stays here: BeatAnalyzer (MathNet FFT, no NAudio), AudioCaptureDriver
+      (IAudioCaptureBackend consumer), NoopAudioBackend (NAudio.AudioFileReader
+      is cross-platform for WAV/MP3/AIFF), AudioSettingsStore.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog.Audio</RootNamespace>
+    <AssemblyName>FracturingFog.Audio</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <!--
+      Phase X.B / Slice B.5 — MathNet.Numerics FFT replaces NAudio.Dsp.Fft.FFT
+      in BeatAnalyzer. Already shipping via PaletteBuilder.Lib's closure, no
+      new RID-specific native lands.
+    -->
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -77,9 +77,9 @@ public sealed class GpuSurfaceControl : NativeControlHost
             _dpi = dpi;
         }
 
-        public GpuSurfaceKind Kind => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        public GpuSurfaceKind Kind => OperatingSystem.IsWindows()
             ? GpuSurfaceKind.Win32Hwnd
-            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            : OperatingSystem.IsMacOS()
                 ? GpuSurfaceKind.CoreAnimationMetalLayer
                 : GpuSurfaceKind.X11Window;
 

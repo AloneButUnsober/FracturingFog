@@ -32,7 +32,7 @@ namespace FracturingFog.Batch
 
             EnsureDirectoryForFile(outPath);
 
-            ImageFormat format = GuessImageFormat(outPath);
+            FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
 
             var fp = new FractalParameters();
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
@@ -256,7 +256,7 @@ namespace FracturingFog.Batch
                     // ffmpeg image2 demuxer wants frames numbered starting at 1.
                     string framePath = Path.Combine(pngFolder,
                         string.Format(FrameNameFmt, f + 1));
-                    ImageExport.SavePixelsToFile(
+                    ImageExportGdi.SavePixelsToFile(
                         buffer, outW, outH, framePath, ImageFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
@@ -432,7 +432,7 @@ namespace FracturingFog.Batch
             finally { bmp.UnlockBits(wd); }
 
             using (var g = System.Drawing.Graphics.FromImage(bmp))
-                ImageExport.AddWaterMark(
+                ImageExportGdi.AddWaterMark(
                     g, text, w, h, System.Drawing.Color.White, subText, poster: false);
 
             var rd = bmp.LockBits(
@@ -878,12 +878,15 @@ namespace FracturingFog.Batch
             return s.Replace(' ', '_');
         }
 
-        private static ImageFormat GuessImageFormat(string path) =>
+        private static FracturingFog.Imaging.ImageFileFormat GuessImageFormat(string path) =>
             Path.GetExtension(path).ToLowerInvariant() switch
             {
-                ".bmp" => ImageFormat.Bmp,
-                ".tif" or ".tiff" => ImageFormat.Tiff,
-                _ => ImageFormat.Png,
+                ".bmp" => FracturingFog.Imaging.ImageFileFormat.Bmp,
+                ".tif" or ".tiff" => FracturingFog.Imaging.ImageFileFormat.Tiff,
+                ".jpg" or ".jpeg" => FracturingFog.Imaging.ImageFileFormat.Jpeg,
+                ".gif" => FracturingFog.Imaging.ImageFileFormat.Gif,
+                ".webp" => FracturingFog.Imaging.ImageFileFormat.Webp,
+                _ => FracturingFog.Imaging.ImageFileFormat.Png,
             };
 
         private static void EnsureDirectoryForFile(string filePath)

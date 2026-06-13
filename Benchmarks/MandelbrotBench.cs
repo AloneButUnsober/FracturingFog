@@ -175,15 +175,12 @@ public static class BenchEntry
 
     public static int Run(string[] args)
     {
-        if (!AttachConsole(ATTACH_PARENT_PROCESS))
-            AllocConsole();
-
-        // Reopen stdout/stderr against the now-attached console handle.
-        // Without this, Console.WriteLine no-ops because the streams were
-        // bound to NUL at process start (WinExe default).
-        var stdout = new System.IO.StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
-        Console.SetOut(stdout);
-        Console.SetError(stdout);
+        // Phase X.3 / Slice 3.2: gate Win32 console-attach so the calls are
+        // unreachable on non-Win hosts once this file follows the entry point
+        // into FracturingFog.App (net10.0). On Linux/macOS stdout/stderr are
+        // already wired to the launching terminal.
+        if (OperatingSystem.IsWindows())
+            AttachOrAllocConsoleAndRebindStreams();
 
         Console.WriteLine("FracturingFog benchmark harness");
         Console.WriteLine($"Args after --bench: [{string.Join(' ', args.AsSpan(1).ToArray())}]");
@@ -207,7 +204,22 @@ public static class BenchEntry
 
         Console.WriteLine("Bench complete. Press any key to exit.");
         if (Console.IsInputRedirected == false) Console.ReadKey();
-        FreeConsole();
+        if (OperatingSystem.IsWindows())
+            FreeConsole();
         return 0;
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void AttachOrAllocConsoleAndRebindStreams()
+    {
+        if (!AttachConsole(ATTACH_PARENT_PROCESS))
+            AllocConsole();
+
+        // Reopen stdout/stderr against the now-attached console handle.
+        // Without this, Console.WriteLine no-ops because the streams were
+        // bound to NUL at process start (WinExe default).
+        var stdout = new System.IO.StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+        Console.SetOut(stdout);
+        Console.SetError(stdout);
     }
 }

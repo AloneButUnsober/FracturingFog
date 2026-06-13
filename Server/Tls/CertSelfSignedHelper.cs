@@ -139,7 +139,7 @@ public static class CertSelfSignedHelper
     {
         try
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (!OperatingSystem.IsWindows())
             {
                 // POSIX: 0700. Best-effort — File.SetUnixFileMode is .NET 8+.
                 File.SetUnixFileMode(dir,

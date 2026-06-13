@@ -85,7 +85,13 @@ namespace FracturingFog.Hosting
         // slideshow start, reused across toggles. Stopped (not disposed) when
         // the slideshow ends so the meter timer in any open Audio Settings
         // dialog still shows live BPM until the user explicitly closes it.
-        private static AudioEngine? s_audioEngine;
+        // Phase X.B / Slice B.4: swapped from AudioEngine to the
+        // IAudioCaptureBackend + AudioCaptureDriver split. The Win-only
+        // WindowsNAudioBackend keeps WASAPI loopback + WaveOutEvent in play
+        // here; future cross-platform App bootstrap will pick NoopAudioBackend
+        // (analyzer-only) on Linux/macOS.
+        private static IAudioCaptureBackend? s_audioBackend;
+        private static AudioCaptureDriver? s_audioDriver;
 
         private static readonly object s_gate = new();
 
@@ -118,6 +124,42 @@ namespace FracturingFog.Hosting
         static AvaloniaShellBootstrap()
         {
             RendererFactory.NonWin32Backend = TryCreateSilkRenderer;
+
+            // Phase X.5 / Slice 5.2 — register Help → Hardware tab probes.
+            // The callables read live state each time the user opens the
+            // help window so they reflect the audio backend / ILGPU device
+            // list at that moment, not at boot.
+            HostHelpContentProvider.IlgpuDeviceProbe = ProbeIlgpuDevices;
+            HostHelpContentProvider.AudioBackendProbe = ProbeAudioBackend;
+        }
+
+        private static string? ProbeIlgpuDevices()
+        {
+            try
+            {
+                using var ctx = ILGPU.Context.Create(b => b.Default());
+                var devices = ctx.Devices.ToList();
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"  Devices ({devices.Count}):");
+                foreach (var d in devices)
+                    sb.AppendLine($"    {d.AcceleratorType,-12}  {d.Name}");
+                var preferred = devices.FirstOrDefault(
+                                    d => d.AcceleratorType != ILGPU.Runtime.AcceleratorType.CPU)
+                                ?? ctx.GetPreferredDevice(preferCPU: true);
+                sb.Append($"  Preferred: {preferred.AcceleratorType}  {preferred.Name}");
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"  (ILGPU probe failed: {ex.Message})";
+            }
+        }
+
+        private static string? ProbeAudioBackend()
+        {
+            var be = s_audioBackend;
+            if (be == null) return null;
+            return $"  Backend: {be.GetType().Name}\n  Capabilities: {be.Capabilities}";
         }
 
         private static IFractalRenderer? TryCreateSilkRenderer(IGpuSurface surface)
@@ -196,6 +238,50 @@ namespace FracturingFog.Hosting
             var viewState = new FractalViewState();
             var initialMap = ColorPalette.GetPaletteByName("HSV");
             s_renderHost = new FractalRenderHost(s_renderer, viewState, w, h, initialMap);
+            // Phase X.0 / Slice 0.1c: install the D3D11-backed IGpuKernel
+            // factory. Engine cannot construct the kernel itself because
+            // MandelbrotGpuKernel lives in Rendering.D3D and owns Vortice
+            // handles; the host knows the live renderer and can downcast.
+            // Non-D3D11 renderers (Silk GL, Skia CPU) return null so
+            // UseGpuCompute stays off silently.
+            s_renderHost.GpuKernelFactory = (renderer, gate) =>
+            {
+                if (renderer is FracturingFog.DirectXRenderer dx
+                    && dx.TryGetD3D11(out var dev, out var ctx))
+                {
+                    return new FracturingFog.Rendering.MandelbrotGpuKernel(dev, ctx, gate);
+                }
+                return null;
+            };
+            // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
+            //   * Windows: try Media Foundation Mp4Writer first (zero deps,
+            //     built into Windows 8+). Fall through to ffmpeg if MF init
+            //     fails (driver edge case, locked-down Server SKU).
+            //   * Linux/macOS: probe ffmpeg via FfmpegEncoder.FindFfmpeg and
+            //     return an FfmpegVideoWriter when present; null otherwise.
+            // VideoWriterFactory's null return propagates to the UI which
+            // surfaces "ffmpeg required" via the existing IsEnabledForUser
+            // gating + FfmpegSetupDialog rescan flow (Slice 2.5).
+            s_renderHost.VideoWriterFactory = (path, w, h) =>
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    try { return new FracturingFog.Mp4Writer(path, w, h); }
+                    catch { /* MF init failed, fall through to ffmpeg */ }
+                }
+                if (FracturingFog.FfmpegEncoder.IsAvailable())
+                {
+                    try
+                    {
+                        return new FracturingFog.Imaging.FfmpegVideoWriter(
+                            path, w, h,
+                            fps: 30,
+                            preset: FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4);
+                    }
+                    catch { return null; }
+                }
+                return null;
+            };
             s_renderHost.FrameCompleted += (_, info) => s_lastFrame = info;
             s_input = new FractalInputController(viewState);
 
@@ -251,7 +337,12 @@ namespace FracturingFog.Hosting
             // / ReloadThemes flows.
             s_themeService = new HostColorThemeService(s_renderHost);
             var themeService = s_themeService;
-            var helpProvider = new HostHelpContentProvider();
+            // Phase X.0 / Slice 0.3b — pass the Windows D3D11 hardware probe
+            // so the Hardware tab can enumerate DXGI adapters + report the
+            // D3D11 feature level. Cross-platform App will install a different
+            // probe (or none) depending on the active backend.
+            var helpProvider = new HostHelpContentProvider(
+                new FracturingFog.Rendering.WindowsD3D11HardwareInfoProvider());
 
             // Stamp program name + version onto the render host so the watermark
             // overlay (FractalOverlayCompositor) renders "Fracturing Fog v0.6.1
@@ -293,10 +384,10 @@ namespace FracturingFog.Hosting
             // user can edit AudioSettings mid-session.
             s_shell.StartAudioReactive = () =>
             {
-                EnsureAudioEngineStarted();
-                return s_audioEngine?.BeatSource;
+                EnsureAudioCaptureStarted();
+                return s_audioDriver?.BeatSource;
             };
-            s_shell.StopAudioReactive = StopAudioEngine;
+            s_shell.StopAudioReactive = StopAudioCapture;
             s_shell.GetAudioBeatCadence = () =>
             {
                 var s = AudioSettingsStore.Load();
@@ -668,8 +759,16 @@ namespace FracturingFog.Hosting
             // cursor and routes the colour into the editor instead of
             // starting a pan. Hook stays installed for the program lifetime
             // and is a no-op when no editor is open or Inspect is unchecked.
+            //
+            // Phase X.3 / Slice 3.1: `OperatingSystem.IsWindows()` guard so the
+            // CA1416 analyzer can prove `ClientToScreen` is unreachable on
+            // non-Win hosts. NativeMouseForwarder only attaches on Windows
+            // (early-out at NativeMouseForwarder.Attach) so the hook itself
+            // never fires off-Windows in practice — the guard makes the
+            // contract explicit for cross-platform Hosting readers.
             FracturingFog.Hosting.NativeMouseForwarder.InspectClickHook = (clientX, clientY) =>
             {
+                if (!OperatingSystem.IsWindows()) return false;
                 var editor = s_shell?.ColorThemeEditor;
                 if (editor == null || !editor.AnyInspectActive) return false;
                 if (s_surface == null) return false;
@@ -1187,9 +1286,9 @@ namespace FracturingFog.Hosting
                     string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
                     var format = ext switch
                     {
-                        ".bmp" => System.Drawing.Imaging.ImageFormat.Bmp,
-                        ".tif" or ".tiff" => System.Drawing.Imaging.ImageFormat.Tiff,
-                        _ => System.Drawing.Imaging.ImageFormat.Png,
+                        ".bmp" => FracturingFog.Imaging.ImageFileFormat.Bmp,
+                        ".tif" or ".tiff" => FracturingFog.Imaging.ImageFileFormat.Tiff,
+                        _ => FracturingFog.Imaging.ImageFileFormat.Png,
                     };
 
                     string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
@@ -2344,8 +2443,10 @@ namespace FracturingFog.Hosting
                 try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;
                 try { s_sandboxWin?.Close(); }  catch { /* ignore */ } s_sandboxWin = null;
                 try { s_userBulbWin?.Close(); } catch { /* ignore */ } s_userBulbWin = null;
-                try { s_audioEngine?.Dispose(); } catch { /* ignore */ }
-                s_audioEngine = null;
+                try { s_audioDriver?.Dispose(); } catch { /* ignore */ }
+                s_audioDriver = null;
+                // Driver disposes the backend, but null the field for clarity.
+                s_audioBackend = null;
                 try { s_shell?.Dispose(); } catch { /* ignore */ }
                 s_shell = null;
                 try { s_renderHost?.Dispose(); } catch { /* renderer disposed via host */ }
@@ -2356,42 +2457,100 @@ namespace FracturingFog.Hosting
             }
         }
 
-        // ── AudioEngine lifecycle ─────────────────────────────────────────
+        // ── AudioCaptureDriver lifecycle ──────────────────────────────────
         //
         // Created lazily on first audio-reactive slideshow. Reconfigure picks
         // up settings edits the user made via the Audio Settings dialog. Stop
         // (not Dispose) so the singleton stays warm across slideshow toggles.
-        private static void EnsureAudioEngineStarted()
+        //
+        // Backend selection (Phase X.B / Slice B.4): WindowsNAudioBackend on
+        // Windows hosts (WASAPI loopback + mic + file + synth via NAudio),
+        // NoopAudioBackend otherwise (file decode + analyzer-only synth).
+        // Reflection-loaded so this assembly can stay net10.0-windows-free
+        // when the Hosting csproj eventually flips. Today the file lives only
+        // in FracturingFogCLD.csproj (net10.0-windows), so the Windows branch
+        // is always taken — but write the gate so the cross-platform App
+        // bootstrap reuses the same helper.
+        private static void EnsureAudioCaptureStarted()
         {
             try
             {
                 var settings = AudioSettingsStore.Load();
-                if (s_audioEngine == null)
+                if (s_audioDriver == null)
                 {
-                    s_audioEngine = new AudioEngine(settings);
+                    s_audioBackend = CreateAudioBackend();
+                    s_audioDriver = new AudioCaptureDriver(s_audioBackend, settings);
                 }
                 else
                 {
-                    s_audioEngine.Reconfigure(settings);
+                    s_audioDriver.Reconfigure(settings);
                 }
-                if (!s_audioEngine.IsRunning) s_audioEngine.Start();
+                if (!s_audioDriver.IsRunning) s_audioDriver.Start();
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioEngine start failed: {ex.Message}");
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] Audio capture start failed: {ex.Message}");
             }
         }
 
-        private static void StopAudioEngine()
+        private static void StopAudioCapture()
         {
             try
             {
-                if (s_audioEngine is { IsRunning: true }) s_audioEngine.Stop();
+                if (s_audioDriver is { IsRunning: true }) s_audioDriver.Stop();
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioEngine stop failed: {ex.Message}");
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] Audio capture stop failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Backend capability flags for the live driver, or
+        /// <see cref="AudioBackendCapabilities.None"/> when the driver hasn't
+        /// been constructed yet. AvaloniaDialogs queries this when opening the
+        /// Audio Settings dialog so the source picker can grey unsupported
+        /// options on Linux / macOS.
+        /// </summary>
+        public static AudioBackendCapabilities AudioCapabilities
+            => s_audioDriver?.Capabilities ?? DetectAudioCapabilities();
+
+        /// <summary>
+        /// Probe capabilities without constructing the driver. Returns the same
+        /// flags <see cref="CreateAudioBackend"/> would produce — used by the
+        /// settings dialog opened before the first slideshow start.
+        /// </summary>
+        private static AudioBackendCapabilities DetectAudioCapabilities()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return AudioBackendCapabilities.SystemLoopback
+                     | AudioBackendCapabilities.Microphone
+                     | AudioBackendCapabilities.FilePlayback
+                     | AudioBackendCapabilities.SynthPlayback;
+            }
+            return AudioBackendCapabilities.FilePlayback
+                 | AudioBackendCapabilities.SynthPlayback;
+        }
+
+        private static IAudioCaptureBackend CreateAudioBackend()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    var asm = System.Reflection.Assembly.Load("FracturingFog.Audio.Win");
+                    var t = asm.GetType("FracturingFog.Audio.Win.WindowsNAudioBackend");
+                    if (t != null && Activator.CreateInstance(t) is IAudioCaptureBackend win)
+                        return win;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"[AvaloniaShellBootstrap] WindowsNAudioBackend load failed, falling back to noop: {ex.Message}");
+                }
+            }
+            return new NoopAudioBackend();
         }
     }
 }

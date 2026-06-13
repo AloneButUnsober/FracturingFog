@@ -9,7 +9,7 @@ using FracturingFog.UI.Avalonia.Slideshow;
 
 namespace FracturingFog.Hosting;
 
-internal sealed class PngSlideshowFrameRecorder : ISlideshowFrameRecorder
+public sealed class PngSlideshowFrameRecorder : ISlideshowFrameRecorder
 {
     private readonly PngSequenceWriter _inner;
     private readonly string _folder;

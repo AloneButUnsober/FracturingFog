@@ -1,0 +1,175 @@
+# Phase X.6 / Slice 6.4 — release workflow.
+#
+# Triggered on push of a v* tag. Publishes FracturingFog.App self-contained
+# per RID via the pubxml profiles (Slice 6.1), wraps the Linux outputs in
+# AppImage (Slice 6.2) and the macOS outputs in .app bundles (Slice 6.3),
+# zips the Windows output, sha256-sums every archive, and drafts a GitHub
+# Release with the lot attached.
+#
+# Cross-publish caveats:
+#   * linux-arm64 publishes from the ubuntu-latest x64 runner. The pubxml
+#     sets PublishReadyToRun=false on that RID because crossgen2 cannot
+#     AOT-codegen arm64 from x64 without the extra toolchain.
+#   * osx-x64 publishes from macos-latest (Apple Silicon). Same R2R caveat
+#     until an Intel Mac runner lands on the matrix.
+#
+# Known blocker:
+#   NETSDK1150 (self-contained App referencing CalculatorGen + ColorGen
+#   Exes transitively) — see Docs/Technical/CrossPlatform-SmokeTests.md.
+#   Publish jobs use `continue-on-error: false` so the failure is loud;
+#   the release job stays a `draft` so the first tagged build can be
+#   triaged before any user sees the artifacts.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            packager: zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            packager: appimage
+          - os: ubuntu-latest
+            rid: linux-arm64
+            packager: appimage
+          - os: macos-latest
+            rid: osx-arm64
+            packager: macapp
+          - os: macos-latest
+            rid: osx-x64
+            packager: macapp
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Stamp version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Tag $TAG → version $VERSION"
+
+      - name: Publish FracturingFog.App
+        run: dotnet publish FracturingFog.App/FracturingFog.App.csproj -c Release -p:PublishProfile=${{ matrix.rid }} -p:Version=${{ steps.version.outputs.version }}
+
+      # ── Packaging (per-OS) ──────────────────────────────────────────────
+
+      - name: Install appimagetool (Linux)
+        if: matrix.packager == 'appimage'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 file
+          curl -L -o /usr/local/bin/appimagetool \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x /usr/local/bin/appimagetool
+
+      - name: Build AppImage (Linux)
+        if: matrix.packager == 'appimage'
+        run: bash Tools/Packaging/build-appimage.sh ${{ matrix.rid }}
+
+      - name: Build .app bundle (macOS)
+        if: matrix.packager == 'macapp'
+        run: bash Tools/Packaging/build-mac-app.sh ${{ matrix.rid }}
+
+      - name: Tar .app bundle (macOS)
+        if: matrix.packager == 'macapp'
+        run: |
+          mkdir -p dist
+          tar -C dist -czf "dist/FracturingFog-${{ matrix.rid }}.tar.gz" FracturingFog.app
+
+      - name: Zip publish output (Windows)
+        if: matrix.packager == 'zip'
+        shell: pwsh
+        run: |
+          $publishDir = "FracturingFog.App/publish/${{ matrix.rid }}"
+          $outDir = "dist"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $archive = "$outDir/FracturingFog-${{ matrix.rid }}.zip"
+          if (Test-Path $archive) { Remove-Item $archive }
+          Compress-Archive -Path "$publishDir/*" -DestinationPath $archive
+
+      # ── Checksums ───────────────────────────────────────────────────────
+
+      - name: SHA-256 (Linux + macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd dist
+          shasum -a 256 FracturingFog-${{ matrix.rid }}.* > "FracturingFog-${{ matrix.rid }}.sha256"
+          cat "FracturingFog-${{ matrix.rid }}.sha256"
+
+      - name: SHA-256 (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cd dist
+          $archive = "FracturingFog-${{ matrix.rid }}.zip"
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          "$hash  $archive" | Set-Content "FracturingFog-${{ matrix.rid }}.sha256"
+          Get-Content "FracturingFog-${{ matrix.rid }}.sha256"
+
+      # ── Upload ──────────────────────────────────────────────────────────
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FracturingFog-${{ matrix.rid }}
+          path: |
+            dist/FracturingFog-${{ matrix.rid }}.*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten artifact tree
+        run: |
+          mkdir -p release
+          find dist -type f \( -name 'FracturingFog-*.AppImage' \
+                            -o -name 'FracturingFog-*.tar.gz' \
+                            -o -name 'FracturingFog-*.zip' \
+                            -o -name 'FracturingFog-*.sha256' \) \
+                -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          name: "Fracturing Fog ${{ github.ref_name }}"
+          files: release/*

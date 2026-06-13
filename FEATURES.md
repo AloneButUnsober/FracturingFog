@@ -39,9 +39,9 @@
 
 ## 1. Overview
 
-Fracturing Fog is a Windows desktop application for exploring the Mandelbrot set and 20+ other fractal families in real time, from a wide view of the entire set all the way down to zooms past **10⁵⁸** — well beyond the resolving power of standard double-precision arithmetic. It combines a hardware-accelerated DirectX renderer, SIMD-vectorized CPU math, extended-precision arithmetic (double-double and quad-double), perturbation theory with series approximation + bilinear approximation (BLA), and a Roslyn-compiled user-equation engine + an algorithmic color-palette DSL.
+Fracturing Fog is a cross-platform desktop application for exploring the Mandelbrot set and 20+ other fractal families in real time, from a wide view of the entire set all the way down to zooms past **10⁵⁸** — well beyond the resolving power of standard double-precision arithmetic. It combines a hardware-accelerated renderer (DirectX on Windows, Silk.NET OpenGL on Linux + macOS, SkiaSharp CPU fallback everywhere), SIMD-vectorized CPU math, extended-precision arithmetic (double-double and quad-double), perturbation theory with series approximation + bilinear approximation (BLA), and a Roslyn-compiled user-equation engine + an algorithmic color-palette DSL.
 
-The shell is **Avalonia 12** — pure MVVM, cross-platform-ready (Windows ships first; macOS / Linux follow Skia / Metal / Vulkan back-ends).
+The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.App` ships on Windows, Linux, and macOS; the legacy WinForms shell stays as a Windows-only fallback during the migration tail. See the platform-support matrix in §1.1 for what lights up per OS.
 
 **Key pillars:**
 
@@ -56,6 +56,52 @@ The shell is **Avalonia 12** — pure MVVM, cross-platform-ready (Windows ships 
 | Automation | Slideshow + animated zoom slideshow + audio-reactive mode |
 | Multi-monitor | Span across all displays, wallpaper-resolution capture |
 | Remote rendering | Mutual-TLS render server + sealed-vault client dialog |
+
+### 1.1 Platform support matrix
+
+Cross-platform parity tracker. **Yes** = full feature. **Limited** =
+ships with a documented caveat (see linked guide). **No** = not on
+this host today.
+
+| Feature                         | Windows | Linux   | macOS   |
+|---------------------------------|:-------:|:-------:|:-------:|
+| Avalonia shell                  | Yes     | Yes     | Yes     |
+| WinForms legacy shell           | Yes     | No      | No      |
+| **Render — DirectX 11 / 12**    | Yes     | No      | No      |
+| **Render — Silk.NET OpenGL**    | Yes (opt-in via `--renderer silk`) | Yes (default) | Yes (default, CGL/GL 4.10 fallback) |
+| **Render — SkiaSharp CPU**      | Yes (opt-in via `--renderer skia`) | Yes | Yes |
+| GPU compute (D3D11 kernel)      | Yes     | No      | No      |
+| GPU compute (ILGPU CUDA / OpenCL) | Yes (when GPU drivers present) | Yes (when GPU drivers present) | Limited (Metal backend pending upstream — CPU fallback) |
+| CPU compute (SIMD AVX2 / 512)   | Yes     | Yes     | Yes     |
+| **Audio — System loopback**     | Yes     | No      | No      |
+| **Audio — Microphone**          | Yes     | No      | No      |
+| **Audio — File playback**       | Yes     | Yes     | Yes     |
+| **Audio — Synth source**        | Yes     | Yes     | Yes     |
+| Audio-reactive slideshow        | Yes     | Yes     | Yes     |
+| Standard slideshow              | Yes     | Yes     | Yes     |
+| **Video export — Media Foundation MP4** | Yes | No | No |
+| **Video export — ffmpeg (H.264 / FFV1)** | Yes (bundled) | Yes (apt / dnf / pacman) | Yes (brew) |
+| Frame-sequence PNG export       | Yes     | Yes     | Yes     |
+| Slideshow PNG capture           | Yes     | Yes     | Yes     |
+| Screenshots + watermark         | Yes     | Yes     | Yes     |
+| Poster mode (tiled multi-render) | Yes    | Yes     | Yes     |
+| **Palette Builder** (Avalonia)  | Yes     | Yes     | Yes     |
+| Palette export — PNG sheet      | Yes     | Yes     | Yes     |
+| Palette export — PDF (QuestPDF) | Yes     | Yes     | Yes     |
+| Color Theme Editor + ColorGen   | Yes     | Yes     | Yes     |
+| CalcGen user-equation engine    | Yes     | Yes     | Yes     |
+| Headless render server (mTLS)   | Yes     | Yes     | Yes     |
+| Client dialog (sealed vault)    | Yes     | Yes     | Yes     |
+| Wayland session (Silk EGL)      | —       | Yes (Limited on NVIDIA) | —       |
+| Toy / Mini-mode window drag     | Yes     | No (Limited — Avalonia event hook pending) | No (same) |
+| First-run FFmpeg auto-download  | Yes     | No (package-manager flow) | No (Homebrew flow) |
+| Code-signed installer           | No (zip ships unsigned) | No (AppImage) | Limited (notarisation pending Apple Developer cert) |
+| Multi-monitor span              | Yes     | Yes     | Yes     |
+
+See [Docs/User/CrossPlatform-UserGuide.md](Docs/User/CrossPlatform-UserGuide.md)
+for the per-OS install and caveat details and
+[Docs/Technical/CrossPlatform-ImplementationPlan.md](Docs/Technical/CrossPlatform-ImplementationPlan.md)
+for the engineering plan + future-work tracking.
 
 ---
 

@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FracturingFog.Hosting — cross-platform host glue. Owns AvaloniaShellBootstrap,
+    HostColorThemeService, HostHelpContentProvider, and friends. Both shells
+    (Avalonia FracturingFog.App and legacy FracturingFogCLD WinExe) reference
+    this project for the boot graph.
+
+    Windows-only host bits (NativeMouseForwarder HWND subclass, the WinForms
+    FfmpegSetupDialog) live in FracturingFog.Win.
+
+    Phase X.0 / Slice 0.3: scaffold only. EnableDefaultCompileItems=false so
+    in-folder Hosting/*.cs keep compiling inside FracturingFogCLD until the
+    file-move slice flips ownership.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog.Hosting</RootNamespace>
+    <AssemblyName>FracturingFog.Hosting</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Phase X.0 / Slice 0.3a — owns the cross-platform-safe Hosting surface.
+      Files that still depend on Win-only types (DirectXRenderer, Mp4Writer,
+      MandelbrotGpuKernel via the bootstrap; comctl32/user32 via the native
+      mouse forwarder), or on the still-net10.0-windows PaletteBuilder.Lib
+      (the palette extraction host adapter) stay behind in the WinExe until
+      later slices.
+
+      Stays in WinExe (FracturingFogCLD.csproj):
+        * AvaloniaShellBootstrap.cs — installs IGpuKernel + IVideoWriter
+          factories that name DirectXRenderer / Mp4Writer /
+          MandelbrotGpuKernel directly. Future slice introduces a
+          WindowsBootstrap layer that augments a cross-platform base.
+        * NativeMouseForwarder.cs — comctl32 HWND subclass; belongs in
+          FracturingFog.Win in a follow-up slice.
+        * HostPaletteExtractionService.cs — depends on PaletteBuilder.Lib
+          (net10.0-windows TFM today; flipped to net10.0 in Phase X.1).
+        * FfmpegSetupDialog.cs / AvaloniaDialogs.cs — pull FracturingFog.Audio
+          types; move with Slice 0.2 (audio carve).
+    -->
+    <Compile Remove="AvaloniaShellBootstrap.cs" />
+    <Compile Remove="HostPaletteExtractionService.cs" />
+    <Compile Remove="FfmpegSetupDialog.cs" />
+    <Compile Remove="AvaloniaDialogs.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+    <ProjectReference Include="..\UI.Avalonia\FracturingFog.UI.Avalonia.csproj">
+      <ExcludeAssets>analyzers</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!--
+    Strip the Avalonia analyzer chain transitively imported via the
+    UI.Avalonia project reference. Same workaround as FracturingFogCLD.csproj.
+  -->
+  <Target Name="StripAvaloniaAnalyzers" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="$([System.String]::Copy('%(Analyzer.Identity)').Contains('Avalonia'))" />
+    </ItemGroup>
+  </Target>
+
+</Project>

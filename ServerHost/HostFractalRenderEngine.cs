@@ -295,7 +295,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             FractalParameters = new FractalParameters(),
             Rotate = posterMode && req.PosterPortrait,
             Path = outPath,
-            Format = ImageFormat.Png,
+            Format = FracturingFog.Imaging.ImageFileFormat.Png,
             Watermark = region?.Name ?? "",
             SubText = "Fracturing Fog server render",
             Dpi = dpiStamp,
@@ -432,7 +432,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                     }
 
                     string framePath = Path.Combine(pngFolder, $"frame_{f + 1:D6}.png");
-                    ImageExport.SavePixelsToFile(
+                    ImageExportGdi.SavePixelsToFile(
                         buffer, outW, outH, framePath, ImageFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 

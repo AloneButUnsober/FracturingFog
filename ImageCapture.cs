@@ -297,7 +297,7 @@ namespace FracturingFog
                 FractalParameters = _fractalParams,
                 Rotate = isPortrait || rotateImage,
                 Path = path,
-                Format = format,
+                Format = format.ToFileFormat(),
                 Watermark = waterMark,
                 SubText = subText,
             };
@@ -351,16 +351,16 @@ namespace FracturingFog
         private static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFormat format,
             string watermarkText, Color fontColor, string subText = "", bool poster = false)
-            => ImageExport.SavePixelsToFile(pixels, w, h, path, format, watermarkText, fontColor, subText, poster);
+            => ImageExportGdi.SavePixelsToFile(pixels, w, h, path, format, watermarkText, fontColor, subText, poster);
 
         private static void AddWaterMark(
             Graphics g, string text, int width, int height,
             Color fontColor, string subText = "", bool poster = false)
-            => ImageExport.AddWaterMark(g, text, width, height, fontColor, subText, poster);
+            => ImageExportGdi.AddWaterMark(g, text, width, height, fontColor, subText, poster);
 
         private static Rectangle MeasureWatermarkBBox(
             string text, string subText, int width, int height, bool poster = false)
-            => ImageExport.MeasureWatermarkBBox(text, subText, width, height, poster);
+            => ImageExportGdi.MeasureWatermarkBBox(text, subText, width, height, poster);
 
         #endregion Screen Capture
     }

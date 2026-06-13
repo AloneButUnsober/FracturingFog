@@ -1,6 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Reactive;
+using Avalonia.Data.Converters;
 using FracturingFog.Audio;
 using ReactiveUI;
 
@@ -19,6 +21,7 @@ public sealed class AudioSettingsViewModel : ViewModelBase
     private readonly IBeatSource? _liveSource;
     private readonly Action? _slideshowToggle;
     private readonly Func<bool>? _slideshowIsRunning;
+    private readonly AudioBackendCapabilities _capabilities;
 
     public static readonly string[] EqBandNames = { "Bass", "LowMid", "Mid", "HighMid", "High" };
     public string Band0Name => EqBandNames[0];
@@ -31,13 +34,19 @@ public sealed class AudioSettingsViewModel : ViewModelBase
         AudioSettings current,
         IBeatSource? liveSource,
         Action? slideshowToggle = null,
-        Func<bool>? slideshowIsRunning = null)
+        Func<bool>? slideshowIsRunning = null,
+        AudioBackendCapabilities capabilities =
+            AudioBackendCapabilities.SystemLoopback |
+            AudioBackendCapabilities.Microphone |
+            AudioBackendCapabilities.FilePlayback |
+            AudioBackendCapabilities.SynthPlayback)
     {
         ArgumentNullException.ThrowIfNull(current);
         _working = Clone(current);
         _liveSource = liveSource;
         _slideshowToggle = slideshowToggle;
         _slideshowIsRunning = slideshowIsRunning;
+        _capabilities = capabilities;
 
         _source = _working.Source;
         _filePath = _working.FilePath ?? string.Empty;
@@ -56,13 +65,18 @@ public sealed class AudioSettingsViewModel : ViewModelBase
         _band0Percent = bw[0]; _band1Percent = bw[1]; _band2Percent = bw[2];
         _band3Percent = bw[3]; _band4Percent = bw[4];
 
-        Sources = new ObservableCollection<string>
+        Sources = new ObservableCollection<AudioSourceOption>
         {
-            "System Loopback (what's currently playing)",
-            "Audio File (MP3/WAV/FLAC/OGG)",
-            "Microphone",
-            "Fractal Synth (closed-loop)"
+            new(AudioSourceKind.SystemLoopback, "System Loopback (what's currently playing)",
+                (_capabilities & AudioBackendCapabilities.SystemLoopback) != 0),
+            new(AudioSourceKind.File, "Audio File (MP3/WAV/FLAC/OGG)",
+                (_capabilities & AudioBackendCapabilities.FilePlayback) != 0),
+            new(AudioSourceKind.Microphone, "Microphone",
+                (_capabilities & AudioBackendCapabilities.Microphone) != 0),
+            new(AudioSourceKind.FractalSynth, "Fractal Synth (closed-loop)",
+                (_capabilities & AudioBackendCapabilities.SynthPlayback) != 0),
         };
+        CapabilityBannerText = BuildCapabilityBanner(_capabilities);
 
         OkCommand = ReactiveCommand.Create(() => { Commit(); CloseRequested?.Invoke(this, true); });
         CancelCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, false));
@@ -86,7 +100,29 @@ public sealed class AudioSettingsViewModel : ViewModelBase
     public AudioSettings Result { get; private set; } = new();
     public bool ShowSlideshowToggle => _slideshowToggle != null && _slideshowIsRunning != null;
 
-    public ObservableCollection<string> Sources { get; }
+    public ObservableCollection<AudioSourceOption> Sources { get; }
+
+    /// <summary>
+    /// Banner shown above the source picker when the active backend lacks one
+    /// or more capabilities. Empty when every source is supported. Settings
+    /// still persist when the user picks an unavailable source — the running
+    /// sweep just receives no beats.
+    /// </summary>
+    public string CapabilityBannerText { get; }
+    public bool ShowCapabilityBanner => !string.IsNullOrEmpty(CapabilityBannerText);
+
+    private static string BuildCapabilityBanner(AudioBackendCapabilities caps)
+    {
+        bool noLoopback = (caps & AudioBackendCapabilities.SystemLoopback) == 0;
+        bool noMic = (caps & AudioBackendCapabilities.Microphone) == 0;
+        if (noLoopback && noMic)
+            return "System audio capture is not supported on this OS. File and Fractal Synth still work.";
+        if (noLoopback)
+            return "System loopback is not supported on this OS.";
+        if (noMic)
+            return "Microphone capture is not supported on this OS.";
+        return string.Empty;
+    }
 
     private int _band0Percent;
     public int Band0Percent { get => _band0Percent; set { this.RaiseAndSetIfChanged(ref _band0Percent, Math.Clamp(value, 0, 200)); this.RaisePropertyChanged(nameof(Band0Label)); } }
@@ -247,6 +283,21 @@ public sealed class AudioSettingsViewModel : ViewModelBase
         _working.FadeBeatFraction = Math.Clamp(_fadeFracPercent / 100.0, 0.1, 2.0);
         Result = _working;
     }
+
+    /// <summary>
+    /// Source option row for the picker ComboBox. <see cref="IsAvailable"/>
+    /// drives a dim opacity (via <see cref="AvailabilityOpacity"/>) on the
+    /// item so unsupported sources render greyed but stay selectable —
+    /// settings still persist.
+    /// </summary>
+    public sealed record AudioSourceOption(AudioSourceKind Kind, string Label, bool IsAvailable)
+    {
+        public string DisplayLabel => IsAvailable ? Label : Label + "  (unavailable)";
+    }
+
+    /// <summary>Bool → opacity converter used by AudioSettingsView's source ItemTemplate.</summary>
+    public static readonly IValueConverter AvailabilityOpacity =
+        new FuncValueConverter<bool, double>(b => b ? 1.0 : 0.45);
 
     private static AudioSettings Clone(AudioSettings s) => new()
     {

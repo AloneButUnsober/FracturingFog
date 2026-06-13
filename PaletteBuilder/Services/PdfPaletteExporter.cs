@@ -1,6 +1,6 @@
 // Services/PdfPaletteExporter.cs
 //
-// Palette → PDF via PDFsharp 6 (-gdi flavour). Honours PdfExportOptions
+// Palette → PDF via QuestPDF (Community licence). Honours PdfExportOptions
 // from context.Extra to tune layout:
 //   • Page size + orientation (Letter / Legal / Tabloid / A4 / A3).
 //   • Column count 1..6.
@@ -14,15 +14,27 @@
 //
 // With no options object the legacy layout (Letter portrait, 2 cols,
 // label-on-swatch only) is preserved.
+//
+// Phase X.1 / Slice 1.1 — was PDFsharp-gdi (System.Drawing.Common chain,
+// net10.0-windows). Rewritten on QuestPDF + SkiaSharp so the exporter
+// builds cross-platform alongside the rest of PaletteBuilder.Lib once the
+// TFM flips (Slice 1.2). Layout primitives + auto-pagination replace the
+// manual point-coord math that the PDFsharp version threaded by hand.
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+
 using FracturingFog.Imaging;
 using FracturingFog.Imaging.PaletteExtraction;
-using PdfSharp.Drawing;
-using PdfSharp.Pdf;
+
+using QuestPDF;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+
+using SkiaSharp;
 
 namespace PaletteBuilder.Services
 {
@@ -32,11 +44,26 @@ namespace PaletteBuilder.Services
         public string DisplayName => "PDF document";
         public string Extension => "pdf";
 
-        private const double Margin = 36;
-        private const double Gutter = 18;
-        private const double RowGap = 12;
-        private const double TitleHeight = 28;
-        private const double LabelPad = 4;
+        // ── QuestPDF licensing ────────────────────────────────────────────────
+        // Community licence is the free tier (open-source projects or
+        // organisations under USD 1M annual revenue). Set process-wide once
+        // in the static constructor — idempotent across multiple instances.
+        // Operators with a paid Professional/Enterprise key can override this
+        // value before constructing the exporter; the last value set wins.
+        static PdfPaletteExporter()
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+        }
+
+        // ── Layout constants ──────────────────────────────────────────────────
+        private const float Margin              = 36f;
+        private const float ThumbnailHeight     = 120f;
+        private const float GradientStripHeight = 30f;
+        private const float BandHeight          = 90f;
+        private const float MetadataBlockHeight = 44f;
+        private const float CvdRowHeight        = 22f;
+        private const int   GradientPngWidth    = 800;
+        private const int   GradientPngHeight   = 40;
 
         public void Export(string path,
                            IReadOnlyList<(byte R, byte G, byte B)> swatches,
@@ -49,366 +76,357 @@ namespace PaletteBuilder.Services
             };
             opts.SourceImagePath ??= context?.SourceImagePath;
 
-            using var doc = new PdfDocument();
             string baseTitle = context?.PaletteName ?? "Palette";
 
-            // ── PDF Info (6.9) ────────────────────────────────────────────
-            doc.Info.Title = baseTitle;
-            doc.Info.Creator = "Palette Builder";
-            doc.Info.Author = Environment.UserName;
-            if (!string.IsNullOrEmpty(context?.MethodName))
-                doc.Info.Subject = "Method: " + context.MethodName;
-            doc.Info.Keywords = string.Join(", ", new[]
-            {
-                "palette",
-                context?.MethodName,
-                context?.PaletteName,
-            }.Where(s => !string.IsNullOrEmpty(s)));
+            // Bake the gradient strip to PNG once. Embedding a single image is
+            // dramatically cheaper than the N>=64 micro-rectangles the PDFsharp
+            // version emitted per page, and SkiaSharp ships cross-platform.
+            byte[]? gradientPng = null;
+            if (opts.IncludeGradientStrip && stops is { Count: > 0 })
+                gradientPng = BakeGradientPng(stops, GradientPngWidth, GradientPngHeight);
 
-            var titleFont = new XFont("Arial", 14, XFontStyleEx.Bold);
-            var subtitleFont = new XFont("Arial", 10, XFontStyleEx.Bold);
-            var labelFont = new XFont("Consolas", 9, XFontStyleEx.Bold);
-            var metaFont = new XFont("Consolas", 7, XFontStyleEx.Regular);
-
-            // ── Cover page (6.8) ─────────────────────────────────────────
-            if (opts.IncludeCoverPage)
-                DrawCoverPage(doc, opts, baseTitle, context, titleFont, subtitleFont, metaFont);
-
-            // ── Comparison page (6.7) ────────────────────────────────────
-            if (opts.IncludeComparisonPage && opts.ComparisonRows is { Count: > 0 })
-                DrawComparisonPage(doc, opts, baseTitle, opts.ComparisonRows, titleFont, subtitleFont, labelFont);
-
-            if (swatches.Count == 0)
-            {
-                var blank = AddSizedPage(doc, opts);
-                using var bg = XGraphics.FromPdfPage(blank);
-                DrawTitle(bg, $"{baseTitle} — (empty)", titleFont, blank.Width.Point);
-                using var s = File.Create(path);
-                doc.Save(s);
-                return;
-            }
-
-            // ── Swatch grid layout ────────────────────────────────────────
-            double pageW, pageH;
-            (pageW, pageH) = PageDimensions(opts);
-            int cols = Math.Clamp(opts.Columns, 1, 6);
-            double colWidth = (pageW - 2 * Margin - Gutter * (cols - 1)) / cols;
-            double tileHeight = ComputeTileHeight(opts);
-            double topUsedFirstPage = Margin + TitleHeight;
-            if (opts.IncludeSourceThumbnail) topUsedFirstPage += ThumbnailHeight + 12;
-            double usableFirst = pageH - topUsedFirstPage - Margin
-                                 - (opts.IncludeGradientStrip ? GradientStripHeight + 8 : 0);
-            double usableOther = pageH - 2 * Margin - TitleHeight
-                                 - (opts.IncludeGradientStrip ? GradientStripHeight + 8 : 0);
-
-            int rowsFirst = Math.Max(1, (int)Math.Floor((usableFirst + RowGap) / (tileHeight + RowGap)));
-            int rowsOther = Math.Max(1, (int)Math.Floor((usableOther + RowGap) / (tileHeight + RowGap)));
-            int tilesFirst = rowsFirst * cols;
-            int tilesOther = rowsOther * cols;
-
-            int written = 0;
-            int pageIndex = 0;
             int maxWeight = MaxWeight(stops);
 
-            while (written < swatches.Count)
+            var metadata = new DocumentMetadata
             {
-                var page = AddSizedPage(doc, opts);
-                double pgW = page.Width.Point;
-                double pgH = page.Height.Point;
-                using var gfx = XGraphics.FromPdfPage(page);
-
-                string title = $"{baseTitle} — {swatches.Count} color{(swatches.Count == 1 ? "" : "s")}";
-                if (pageIndex > 0 || opts.IncludeCoverPage)
-                    title += $" (page {pageIndex + 1})";
-                DrawTitle(gfx, title, titleFont, pgW);
-
-                double y = Margin + TitleHeight;
-                if (pageIndex == 0 && opts.IncludeSourceThumbnail && !string.IsNullOrEmpty(opts.SourceImagePath))
+                Title = baseTitle,
+                Creator = "Palette Builder",
+                Author = Environment.UserName,
+                Subject = string.IsNullOrEmpty(context?.MethodName)
+                    ? string.Empty
+                    : "Method: " + context.MethodName,
+                Keywords = string.Join(", ", new[]
                 {
-                    DrawSourceThumbnail(gfx, opts.SourceImagePath!, Margin, y, pgW - 2 * Margin, ThumbnailHeight);
-                    y += ThumbnailHeight + 12;
-                }
+                    "palette",
+                    context?.MethodName,
+                    context?.PaletteName,
+                }.Where(s => !string.IsNullOrEmpty(s))),
+            };
 
-                int capacity = pageIndex == 0 && opts.IncludeSourceThumbnail ? tilesFirst : tilesOther;
-                int end = Math.Min(written + capacity, swatches.Count);
+            Document.Create(container =>
+            {
+                if (opts.IncludeCoverPage)
+                    container.Page(page => ComposeCoverPage(page, opts, baseTitle, context));
 
-                for (int i = written; i < end; i++)
+                if (opts.IncludeComparisonPage && opts.ComparisonRows is { Count: > 0 })
+                    container.Page(page => ComposeComparisonPage(page, opts, baseTitle, opts.ComparisonRows));
+
+                if (swatches.Count == 0)
                 {
-                    int local = i - written;
-                    int row = local / cols;
-                    int col = local % cols;
-                    double x = Margin + col * (colWidth + Gutter);
-                    double tileY = y + row * (tileHeight + RowGap);
-                    DrawSwatchTile(gfx, x, tileY, colWidth, tileHeight, swatches[i], labelFont, metaFont, opts,
-                                   stops, maxWeight);
+                    container.Page(page =>
+                    {
+                        ApplyPageSize(page, opts);
+                        page.Content().Text($"{baseTitle} — (empty)").FontSize(14).Bold();
+                    });
                 }
-
-                if (opts.IncludeGradientStrip && stops is { Count: > 0 })
+                else
                 {
-                    double stripY = pgH - Margin - GradientStripHeight;
-                    DrawGradientStrip(gfx, Margin, stripY, pgW - 2 * Margin, GradientStripHeight, stops);
+                    container.Page(page => ComposeSwatchPages(
+                        page, opts, baseTitle, swatches, stops, gradientPng, maxWeight));
                 }
-
-                written = end;
-                pageIndex++;
-            }
-
-            using var stream = File.Create(path);
-            doc.Save(stream);
+            })
+            .WithMetadata(metadata)
+            .GeneratePdf(path);
         }
 
-        // ── Static legacy shim ─────────────────────────────────────────────
+        // ── Static legacy shim ────────────────────────────────────────────────
 
         public static void Export(string path, IReadOnlyList<(byte R, byte G, byte B)> swatches)
             => new PdfPaletteExporter().Export(path, swatches, null, null);
 
-        // ── Layout helpers ─────────────────────────────────────────────────
+        // ── Page setup ────────────────────────────────────────────────────────
 
-        private const double ThumbnailHeight = 120;
-        private const double GradientStripHeight = 30;
-
-        private static double ComputeTileHeight(PdfExportOptions opts)
+        private static void ApplyPageSize(PageDescriptor page, PdfExportOptions opts)
         {
-            double h = 90;
-            if (opts.IncludeSwatchMetadata) h += 48;
-            if (opts.IncludeCvdRows) h += 28;
-            return h;
+            var (w, h) = PageDimensionsPoints(opts);
+            page.Size((float)w, (float)h, Unit.Point);
+            page.Margin(Margin, Unit.Point);
+            page.PageColor(Colors.White);
+            page.DefaultTextStyle(t => t.FontSize(10).FontFamily(Fonts.Arial));
         }
 
-        private static (double w, double h) PageDimensions(PdfExportOptions opts)
+        private static (double w, double h) PageDimensionsPoints(PdfExportOptions opts)
         {
             (double pW, double pH) = opts.PageSize switch
             {
-                PdfPageSize.Legal => (612.0, 1008.0),
+                PdfPageSize.Legal   => (612.0, 1008.0),
                 PdfPageSize.Tabloid => (792.0, 1224.0),
-                PdfPageSize.A4 => (595.0, 842.0),
-                PdfPageSize.A3 => (842.0, 1191.0),
-                _ => (612.0, 792.0),  // Letter
+                PdfPageSize.A4      => (595.0, 842.0),
+                PdfPageSize.A3      => (842.0, 1191.0),
+                _                   => (612.0, 792.0), // Letter
             };
             return opts.Orientation == PdfOrientation.Landscape ? (pH, pW) : (pW, pH);
         }
 
-        private static PdfPage AddSizedPage(PdfDocument doc, PdfExportOptions opts)
+        // ── Cover page ────────────────────────────────────────────────────────
+
+        private static void ComposeCoverPage(PageDescriptor page, PdfExportOptions opts,
+                                             string title, PaletteExportContext? context)
         {
-            var page = doc.AddPage();
-            page.Size = opts.PageSize switch
+            ApplyPageSize(page, opts);
+
+            page.Content().Column(col =>
             {
-                PdfPageSize.Legal => PdfSharp.PageSize.Legal,
-                PdfPageSize.Tabloid => PdfSharp.PageSize.Tabloid,
-                PdfPageSize.A4 => PdfSharp.PageSize.A4,
-                PdfPageSize.A3 => PdfSharp.PageSize.A3,
-                _ => PdfSharp.PageSize.Letter,
-            };
-            page.Orientation = opts.Orientation == PdfOrientation.Landscape
-                ? PdfSharp.PageOrientation.Landscape
-                : PdfSharp.PageOrientation.Portrait;
-            return page;
-        }
+                col.Spacing(12);
+                col.Item().Text(title).FontSize(14).Bold();
 
-        private static void DrawTitle(XGraphics gfx, string text, XFont font, double pageWidth)
-        {
-            gfx.DrawString(text, font, XBrushes.Black,
-                new XRect(Margin, Margin, pageWidth - 2 * Margin, TitleHeight),
-                XStringFormats.TopLeft);
-        }
-
-        // ── Cover page ─────────────────────────────────────────────────────
-
-        private static void DrawCoverPage(PdfDocument doc, PdfExportOptions opts, string title,
-                                          PaletteExportContext? context, XFont titleFont,
-                                          XFont subtitleFont, XFont metaFont)
-        {
-            var page = AddSizedPage(doc, opts);
-            double pgW = page.Width.Point;
-            double pgH = page.Height.Point;
-            using var gfx = XGraphics.FromPdfPage(page);
-
-            DrawTitle(gfx, title, titleFont, pgW);
-
-            double y = Margin + TitleHeight + 12;
-            if (!string.IsNullOrEmpty(opts.SourceImagePath))
-            {
-                double thumbH = Math.Min(pgH * 0.45, 400);
-                DrawSourceThumbnail(gfx, opts.SourceImagePath!, Margin, y, pgW - 2 * Margin, thumbH);
-                y += thumbH + 16;
-            }
-
-            if (!string.IsNullOrEmpty(context?.MethodName))
-            {
-                gfx.DrawString("Method: " + context.MethodName, subtitleFont, XBrushes.Black,
-                    new XRect(Margin, y, pgW - 2 * Margin, 16), XStringFormats.TopLeft);
-                y += 20;
-            }
-            if (!string.IsNullOrEmpty(opts.SettingsDump))
-            {
-                gfx.DrawString("Settings:", subtitleFont, XBrushes.Black,
-                    new XRect(Margin, y, pgW - 2 * Margin, 16), XStringFormats.TopLeft);
-                y += 18;
-
-                foreach (var line in opts.SettingsDump.Split('\n'))
+                if (!string.IsNullOrEmpty(opts.SourceImagePath) && File.Exists(opts.SourceImagePath))
                 {
-                    if (y > pgH - Margin) break;
-                    gfx.DrawString(line.TrimEnd('\r'), metaFont, XBrushes.Black,
-                        new XRect(Margin, y, pgW - 2 * Margin, 12), XStringFormats.TopLeft);
-                    y += 11;
+                    col.Item()
+                        .MaxHeight(400, Unit.Point)
+                        .AlignCenter()
+                        .Image(opts.SourceImagePath)
+                        .FitArea();
                 }
-            }
-        }
 
-        // ── Comparison page (6.7) ──────────────────────────────────────────
+                if (!string.IsNullOrEmpty(context?.MethodName))
+                    col.Item().Text("Method: " + context.MethodName).FontSize(10).Bold();
 
-        private static void DrawComparisonPage(PdfDocument doc, PdfExportOptions opts, string baseTitle,
-                                               IReadOnlyList<PdfComparisonRow> rows,
-                                               XFont titleFont, XFont subtitleFont, XFont labelFont)
-        {
-            var page = AddSizedPage(doc, opts);
-            double pgW = page.Width.Point;
-            double pgH = page.Height.Point;
-            using var gfx = XGraphics.FromPdfPage(page);
-            DrawTitle(gfx, baseTitle + " — Method comparison", titleFont, pgW);
-
-            double y = Margin + TitleHeight + 4;
-            double rowW = pgW - 2 * Margin;
-            double labelStripH = 16;
-            double swatchH = 24;
-            double gradientH = 18;
-            double rowH = labelStripH + swatchH + gradientH + 10;
-
-            foreach (var r in rows)
-            {
-                if (y + rowH > pgH - Margin) break;
-
-                gfx.DrawString(r.MethodName + $"  ({r.Swatches.Count})", subtitleFont, XBrushes.Black,
-                    new XRect(Margin, y, rowW, labelStripH), XStringFormats.TopLeft);
-
-                double swY = y + labelStripH;
-                int n = r.Swatches.Count;
-                if (n > 0)
+                if (!string.IsNullOrEmpty(opts.SettingsDump))
                 {
-                    double sw = rowW / n;
-                    for (int i = 0; i < n; i++)
+                    col.Item().Text("Settings:").FontSize(10).Bold();
+                    foreach (var line in opts.SettingsDump.Split('\n'))
                     {
-                        var c = r.Swatches[i];
-                        gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(c.R, c.G, c.B)),
-                            new XRect(Margin + i * sw, swY, sw, swatchH));
+                        col.Item().Text(line.TrimEnd('\r'))
+                            .FontSize(7).FontFamily(Fonts.CourierNew);
                     }
-                    gfx.DrawRectangle(new XPen(XColors.Black, 0.5), new XRect(Margin, swY, rowW, swatchH));
+                }
+            });
+        }
+
+        // ── Comparison page ───────────────────────────────────────────────────
+
+        private static void ComposeComparisonPage(PageDescriptor page, PdfExportOptions opts,
+                                                  string baseTitle,
+                                                  IReadOnlyList<PdfComparisonRow> rows)
+        {
+            ApplyPageSize(page, opts);
+
+            page.Content().Column(col =>
+            {
+                col.Spacing(10);
+                col.Item().Text(baseTitle + " — Method comparison").FontSize(14).Bold();
+
+                foreach (var r in rows)
+                {
+                    col.Item().Column(sub =>
+                    {
+                        sub.Spacing(2);
+                        sub.Item()
+                            .Text(r.MethodName + $"  ({r.Swatches.Count})")
+                            .FontSize(10).Bold();
+
+                        if (r.Swatches.Count > 0)
+                        {
+                            sub.Item()
+                                .Height(24)
+                                .Border(0.5f).BorderColor(Colors.Black)
+                                .Row(rowItems =>
+                                {
+                                    foreach (var c in r.Swatches)
+                                        rowItems.RelativeItem().Background(Hex(c.R, c.G, c.B));
+                                });
+                        }
+
+                        if (r.Stops.Count > 0)
+                        {
+                            var rowPng = BakeGradientPng(r.Stops, GradientPngWidth, GradientPngHeight);
+                            sub.Item().Height(18).Image(rowPng).FitArea();
+                        }
+                    });
+                }
+            });
+        }
+
+        // ── Swatch pages (auto-paginated) ─────────────────────────────────────
+
+        private static void ComposeSwatchPages(PageDescriptor page, PdfExportOptions opts,
+                                               string baseTitle,
+                                               IReadOnlyList<(byte R, byte G, byte B)> swatches,
+                                               IReadOnlyList<PaletteStop>? stops,
+                                               byte[]? gradientPng,
+                                               int maxWeight)
+        {
+            ApplyPageSize(page, opts);
+
+            string headerTitle = baseTitle
+                + $" — {swatches.Count} color{(swatches.Count == 1 ? "" : "s")}";
+
+            page.Header().Row(row =>
+            {
+                row.RelativeItem().Text(headerTitle).FontSize(14).Bold();
+                row.ConstantItem(90, Unit.Point).AlignRight().Text(t =>
+                {
+                    t.DefaultTextStyle(s => s.FontSize(8));
+                    t.Span("page ");
+                    t.CurrentPageNumber();
+                    t.Span(" of ");
+                    t.TotalPages();
+                });
+            });
+
+            int cols = Math.Clamp(opts.Columns, 1, 6);
+
+            page.Content().PaddingTop(6).Column(col =>
+            {
+                col.Spacing(8);
+
+                // First-page-only thumbnail. QuestPDF's Column lays out items
+                // in declaration order across the paginated page run — items
+                // that fit on the first frame stay on the first frame and the
+                // subsequent table picks up on page 2 without the thumbnail
+                // reappearing. Matches the PDFsharp version's tilesFirst /
+                // tilesOther split without the manual capacity math.
+                if (opts.IncludeSourceThumbnail
+                    && !string.IsNullOrEmpty(opts.SourceImagePath)
+                    && File.Exists(opts.SourceImagePath))
+                {
+                    col.Item()
+                        .Height(ThumbnailHeight, Unit.Point)
+                        .AlignCenter()
+                        .Image(opts.SourceImagePath!)
+                        .FitArea();
                 }
 
-                if (r.Stops.Count > 0)
-                    DrawGradientStrip(gfx, Margin, swY + swatchH + 2, rowW, gradientH, r.Stops);
+                col.Item().Table(table =>
+                {
+                    table.ColumnsDefinition(c =>
+                    {
+                        for (int i = 0; i < cols; i++) c.RelativeColumn();
+                    });
 
-                y += rowH;
+                    for (int i = 0; i < swatches.Count; i++)
+                    {
+                        int rowIdx = i / cols;
+                        int colIdx = i % cols;
+                        int captured = i;
+                        table.Cell()
+                            .Row((uint)(rowIdx + 1))
+                            .Column((uint)(colIdx + 1))
+                            .Padding(4)
+                            .Element(cell => DrawSwatchTile(cell, swatches[captured], opts));
+                    }
+                });
+            });
+
+            if (gradientPng != null)
+            {
+                page.Footer()
+                    .Height(GradientStripHeight + 4, Unit.Point)
+                    .PaddingTop(4)
+                    .Image(gradientPng)
+                    .FitArea();
             }
         }
 
-        // ── Swatch tile ────────────────────────────────────────────────────
+        // ── Swatch tile ───────────────────────────────────────────────────────
 
-        private static void DrawSwatchTile(XGraphics gfx,
-                                           double x, double y, double w, double h,
+        private static void DrawSwatchTile(IContainer cell,
                                            (byte R, byte G, byte B) c,
-                                           XFont labelFont, XFont metaFont,
-                                           PdfExportOptions opts,
-                                           IReadOnlyList<PaletteStop>? stops,
-                                           int maxWeight)
+                                           PdfExportOptions opts)
         {
-            // Compute sub-rectangles top-down: colour band → metadata → CVD strip.
-            double cvdH = opts.IncludeCvdRows ? 22 : 0;
-            double metaH = opts.IncludeSwatchMetadata ? 44 : 0;
-            double bandH = h - cvdH - metaH;
+            cell.Column(col =>
+            {
+                col.Item()
+                    .Height(BandHeight, Unit.Point)
+                    .Layers(layers =>
+                    {
+                        layers.PrimaryLayer()
+                            .Background(Hex(c.R, c.G, c.B))
+                            .Border(0.75f).BorderColor(Colors.Black);
+                        layers.Layer()
+                            .AlignCenter().AlignMiddle()
+                            .Element(plate => DrawSwatchPlate(plate, c));
+                    });
 
-            var fillBrush = new XSolidBrush(XColor.FromArgb(c.R, c.G, c.B));
-            var bandRect = new XRect(x, y, w, bandH);
-            gfx.DrawRectangle(fillBrush, bandRect);
-            gfx.DrawRectangle(new XPen(XColors.Black, 0.75), bandRect);
+                if (opts.IncludeSwatchMetadata)
+                {
+                    col.Item()
+                        .Height(MetadataBlockHeight, Unit.Point)
+                        .Background("#F5F5F5")
+                        .Padding(4)
+                        .Element(meta => DrawSwatchMetadata(meta, c));
+                }
 
-            DrawSwatchLabel(gfx, x, y, w, bandH, c, labelFont);
-
-            if (opts.IncludeSwatchMetadata)
-                DrawSwatchMetadata(gfx, x, y + bandH, w, metaH, c, metaFont, stops, maxWeight);
-
-            if (opts.IncludeCvdRows)
-                DrawCvdStrip(gfx, x, y + bandH + metaH, w, cvdH, c, metaFont);
+                if (opts.IncludeCvdRows)
+                {
+                    col.Item()
+                        .Height(CvdRowHeight, Unit.Point)
+                        .Padding(2)
+                        .Element(cvd => DrawCvdStrip(cvd, c));
+                }
+            });
         }
 
-        private static void DrawSwatchLabel(XGraphics gfx, double x, double y, double w, double h,
-                                            (byte R, byte G, byte B) c, XFont font)
+        private static void DrawSwatchPlate(IContainer plate, (byte R, byte G, byte B) c)
         {
-            string label = $"RGB({c.R}, {c.G}, {c.B})   #{c.R:X2}{c.G:X2}{c.B:X2}";
-            var sz = gfx.MeasureString(label, font);
-            double plateW = sz.Width + LabelPad * 2;
-            double plateH = sz.Height + LabelPad * 2;
-            double plateX = x + (w - plateW) / 2;
-            double plateY = y + LabelPad;
-
             double luma = (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255.0;
             bool darkSwatch = luma < 0.5;
-            var plateBrush = new XSolidBrush(darkSwatch
-                ? XColor.FromArgb(220, 255, 255, 255)
-                : XColor.FromArgb(220, 0, 0, 0));
-            var textBrush = darkSwatch ? XBrushes.Black : XBrushes.White;
+            // QuestPDF's hex parser does not preserve alpha consistently across
+            // versions, so the legacy semi-transparent plate is rendered as a
+            // solid contrast colour. The plate occludes a small patch of the
+            // swatch but keeps the RGB / hex label legible on every host.
+            string plateBg = darkSwatch ? Colors.White : Colors.Black;
+            string textFg  = darkSwatch ? Colors.Black : Colors.White;
 
-            gfx.DrawRectangle(plateBrush, new XRect(plateX, plateY, plateW, plateH));
-            gfx.DrawString(label, font, textBrush,
-                new XRect(plateX, plateY, plateW, plateH), XStringFormats.Center);
+            plate
+                .Background(plateBg)
+                .Padding(4)
+                .Text($"RGB({c.R}, {c.G}, {c.B})   #{c.R:X2}{c.G:X2}{c.B:X2}")
+                .FontSize(9).Bold().FontColor(textFg);
         }
 
-        private static void DrawSwatchMetadata(XGraphics gfx, double x, double y, double w, double h,
-                                               (byte R, byte G, byte B) c, XFont font,
-                                               IReadOnlyList<PaletteStop>? stops, int maxWeight)
+        private static void DrawSwatchMetadata(IContainer container, (byte R, byte G, byte B) c)
         {
-            gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(245, 245, 245)), new XRect(x, y, w, h));
-
             ColorSpaces.RgbToHsl(c.R, c.G, c.B, out float hh, out float ss, out float ll);
             ColorSpaces.RgbToLab(c.R, c.G, c.B, out float L, out float A, out float B);
             (byte cmK, byte cmY, byte cmM, byte cmC) = RgbToCmykApprox(c.R, c.G, c.B);
             double whiteRatio = WcagContrast.RatioBetween(c.R, c.G, c.B, 255, 255, 255);
             double blackRatio = WcagContrast.RatioBetween(c.R, c.G, c.B, 0, 0, 0);
 
-            double lineH = 10;
-            double tx = x + 6;
-            double ty = y + 3;
-            gfx.DrawString($"HSL {hh:0}°  {ss * 100:0}%  {ll * 100:0}%", font, XBrushes.Black,
-                new XRect(tx, ty, w - 12, lineH), XStringFormats.TopLeft);
-            gfx.DrawString($"Lab {L:0.0}  {A:0.0}  {B:0.0}", font, XBrushes.Black,
-                new XRect(tx, ty + lineH, w - 12, lineH), XStringFormats.TopLeft);
-            gfx.DrawString($"CMYK {cmC}/{cmM}/{cmY}/{cmK}", font, XBrushes.Black,
-                new XRect(tx, ty + lineH * 2, w - 12, lineH), XStringFormats.TopLeft);
-            gfx.DrawString($"vs white {whiteRatio:0.0}:1   vs black {blackRatio:0.0}:1", font, XBrushes.Black,
-                new XRect(tx, ty + lineH * 3, w - 12, lineH), XStringFormats.TopLeft);
+            container.Column(col =>
+            {
+                col.Item().Text($"HSL {hh:0}°  {ss * 100:0}%  {ll * 100:0}%")
+                    .FontSize(7).FontFamily(Fonts.CourierNew);
+                col.Item().Text($"Lab {L:0.0}  {A:0.0}  {B:0.0}")
+                    .FontSize(7).FontFamily(Fonts.CourierNew);
+                col.Item().Text($"CMYK {cmC}/{cmM}/{cmY}/{cmK}")
+                    .FontSize(7).FontFamily(Fonts.CourierNew);
+                col.Item().Text($"vs white {whiteRatio:0.0}:1   vs black {blackRatio:0.0}:1")
+                    .FontSize(7).FontFamily(Fonts.CourierNew);
+            });
         }
 
-        private static void DrawCvdStrip(XGraphics gfx, double x, double y, double w, double h,
-                                         (byte R, byte G, byte B) c, XFont font)
+        private static void DrawCvdStrip(IContainer container, (byte R, byte G, byte B) c)
         {
-            double cellW = (w - 6) / 3;
             var kinds = new[]
             {
                 (label: "Proto", kind: CvdKind.Protanopia),
                 (label: "Deut",  kind: CvdKind.Deuteranopia),
                 (label: "Trito", kind: CvdKind.Tritanopia),
             };
-            for (int i = 0; i < kinds.Length; i++)
+
+            container.Row(row =>
             {
-                var (label, kind) = kinds[i];
-                var sim = CvdSimulator.Simulate(c.R, c.G, c.B, kind);
-                double cx = x + 3 + i * (cellW + 0);
-                var rect = new XRect(cx, y + 1, cellW, h - 2);
-                gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(sim.R, sim.G, sim.B)), rect);
-                gfx.DrawRectangle(new XPen(XColors.Black, 0.5), rect);
-                double luma = (0.2126 * sim.R + 0.7152 * sim.G + 0.0722 * sim.B) / 255.0;
-                gfx.DrawString(label, font, luma < 0.5 ? XBrushes.White : XBrushes.Black,
-                    rect, XStringFormats.Center);
-            }
+                row.Spacing(2);
+                foreach (var (label, kind) in kinds)
+                {
+                    var sim = CvdSimulator.Simulate(c.R, c.G, c.B, kind);
+                    double luma = (0.2126 * sim.R + 0.7152 * sim.G + 0.0722 * sim.B) / 255.0;
+                    string fg = luma < 0.5 ? Colors.White : Colors.Black;
+                    row.RelativeItem()
+                        .Background(Hex(sim.R, sim.G, sim.B))
+                        .Border(0.5f).BorderColor(Colors.Black)
+                        .AlignCenter().AlignMiddle()
+                        .Text(label).FontSize(7).FontColor(fg);
+                }
+            });
         }
 
-        // ── Gradient strip ─────────────────────────────────────────────────
+        // ── Gradient strip — baked to PNG via SkiaSharp ───────────────────────
 
-        private static void DrawGradientStrip(XGraphics gfx, double x, double y, double w, double h,
-                                              IReadOnlyList<PaletteStop> stops)
+        private static byte[] BakeGradientPng(IReadOnlyList<PaletteStop> stops, int w, int h)
         {
-            int slices = Math.Max(64, (int)w);
-            double sliceW = w / slices;
             var ordered = new List<PaletteStop>(stops);
             ordered.Sort((a, b) => a.Position.CompareTo(b.Position));
             var tuples = new (float Position, byte R, byte G, byte B)[ordered.Count];
@@ -416,38 +434,27 @@ namespace PaletteBuilder.Services
                 tuples[i] = (ordered[i].Position, ordered[i].R, ordered[i].G, ordered[i].B);
 
             var space = GradientRenderSettings.Space;
-            for (int i = 0; i < slices; i++)
+            using var bitmap = new SKBitmap(w, h);
+            using (var canvas = new SKCanvas(bitmap))
             {
-                double t = (i + 0.5) / slices;
-                var c = GradientInterpolation.Sample(tuples, (float)t, space);
-                gfx.DrawRectangle(new XSolidBrush(XColor.FromArgb(c.R, c.G, c.B)),
-                    new XRect(x + i * sliceW, y, sliceW + 0.5, h));
+                using var paint = new SKPaint();
+                for (int x = 0; x < w; x++)
+                {
+                    float t = (x + 0.5f) / w;
+                    var sample = GradientInterpolation.Sample(tuples, t, space);
+                    paint.Color = new SKColor(sample.R, sample.G, sample.B);
+                    canvas.DrawLine(x, 0, x, h, paint);
+                }
+                canvas.Flush();
             }
-            gfx.DrawRectangle(new XPen(XColors.Black, 0.75), new XRect(x, y, w, h));
+            using var img = SKImage.FromBitmap(bitmap);
+            using var data = img.Encode(SKEncodedImageFormat.Png, 90);
+            return data.ToArray();
         }
 
-        // ── Misc helpers ───────────────────────────────────────────────────
+        // ── Misc helpers ──────────────────────────────────────────────────────
 
-        private static void DrawSourceThumbnail(XGraphics gfx, string path, double x, double y, double maxW, double maxH)
-        {
-            try
-            {
-                using var img = XImage.FromFile(path);
-                double ratio = Math.Min(maxW / img.PixelWidth, maxH / img.PixelHeight);
-                double drawW = img.PixelWidth * ratio;
-                double drawH = img.PixelHeight * ratio;
-                double drawX = x + (maxW - drawW) / 2;
-                gfx.DrawImage(img, drawX, y, drawW, drawH);
-                gfx.DrawRectangle(new XPen(XColors.Black, 0.5), new XRect(drawX, y, drawW, drawH));
-            }
-            catch
-            {
-                gfx.DrawRectangle(new XPen(XColors.Gray, 0.5), new XRect(x, y, maxW, maxH));
-                gfx.DrawString("(source image unavailable)",
-                    new XFont("Arial", 10, XFontStyleEx.Italic), XBrushes.Gray,
-                    new XRect(x, y, maxW, maxH), XStringFormats.Center);
-            }
-        }
+        private static string Hex(byte r, byte g, byte b) => $"#{r:X2}{g:X2}{b:X2}";
 
         private static (byte K, byte Y, byte M, byte C) RgbToCmykApprox(byte r, byte g, byte b)
         {
