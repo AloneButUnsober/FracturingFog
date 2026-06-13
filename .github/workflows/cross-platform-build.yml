@@ -230,7 +230,30 @@ jobs:
                     Select-Object -First 1
           if (-not $source) { throw "opengl32.dll not found in extracted Mesa3D archive" }
           Write-Host "Found Mesa opengl32.dll at $($source.FullName) (size: $($source.Length))"
+
+          # Diagnostic: KnownDLLs cache opengl32 at boot would mean a file
+          # replace is futile (cached section wins for new processes). Log
+          # the KnownDLLs registry so a future failure has a clear lead.
+          $knownDlls = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs' -ErrorAction SilentlyContinue
+          if ($knownDlls) {
+            $opengl32Known = $knownDlls.PSObject.Properties |
+                             Where-Object { $_.Value -match 'opengl32' }
+            if ($opengl32Known) {
+              Write-Warning "opengl32.dll is registered in KnownDLLs ($($opengl32Known.Name)); file override may be cached out by Session Manager"
+            } else {
+              Write-Host "opengl32.dll is NOT in KnownDLLs — file override should apply to new processes"
+            }
+          }
+
+          # System32 opengl32.dll is owned by TrustedInstaller with a
+          # restrictive DACL; the GH runner's elevated session still gets
+          # `Access denied` on a plain Copy-Item. Take ownership + grant
+          # Administrators full control first, then replace.
           $target = "C:\Windows\System32\opengl32.dll"
+          $takeown = & takeown.exe /F $target 2>&1
+          Write-Host "takeown: $takeown"
+          $icacls = & icacls.exe $target /grant 'Administrators:(F)' 2>&1
+          Write-Host "icacls: $icacls"
           Copy-Item -Path $source.FullName -Destination $target -Force
           Write-Host "Replaced $target (new size: $((Get-Item $target).Length))"
 
