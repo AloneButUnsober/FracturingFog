@@ -1,46 +1,37 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    CalculatorGen CLI Exe. Thin wrapper around Program.cs that
+    dispatches into CalculatorGen.Lib. Library form lives in the
+    sibling ..\CalculatorGen.Lib\ project; UI.Avalonia + the legacy
+    WinExe reference the Lib so a self-contained publish of
+    FracturingFog.App no longer trips NETSDK1150.
+  -->
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <!--
-      Phase X.6 / Slice 6.1: IsPublishable=false stops the host App's
-      `dotnet publish` from emitting a separate Exe tree for this
-      project. NETSDK1150 still trips when FracturingFog.App publishes
-      self-contained because this Exe is consumed transitively as a
-      library via UI.Avalonia. Resolution is parked behind a follow-up
-      that splits CalculatorGen into a Lib + thin CLI wrapper Exe; for
-      now `dotnet publish` of the App requires the workaround
-      documented in Docs/Technical/CrossPlatform-SmokeTests.md.
-    -->
-    <IsPublishable>false</IsPublishable>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>FracturingFog.CalculatorGen</RootNamespace>
     <AssemblyName>CalculatorGen</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Sibling Lib pulls every other .cs in this directory via a glob
+      Include. Disable the default Compile glob so the Exe consumes
+      ONLY Program.cs here; everything else compiles in the Lib.
+    -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Templates\**" />
-    <Compile Remove="SampleOutput\**" />
-    <None Include="Templates\Calculator.template.cs" />
-    <None Include="Templates\SelfTest.template.cs" />
-    <EmbeddedResource Include="Templates\Calculator.template.cs" />
-    <EmbeddedResource Include="Templates\SelfTest.template.cs" />
+    <Compile Include="Program.cs" />
   </ItemGroup>
 
-  <!--
-    Roslyn compiler — used by CalculatorGenApi.TryCompileAndLoad to
-    Roslyn-compile a freshly-generated calculator into an in-memory
-    assembly so the UserEquation dialog can hot-load it without an
-    app restart. The CLI workflow doesn't need this (it writes a .cs
-    file and exits), so the dependency is technically optional from
-    the CLI's perspective — but it's small and saves a second NuGet
-    resolution from main consumers.
-  -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+    <ProjectReference Include="..\CalculatorGen.Lib\CalculatorGen.Lib.csproj" />
   </ItemGroup>
 
 </Project>

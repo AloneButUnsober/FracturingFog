@@ -989,30 +989,30 @@
           }
         }
       },
-      "CalculatorGen/1.0.0": {
+      "CalculatorGen.Lib/1.0.0": {
         "type": "project",
         "framework": ".NETCoreApp,Version=v10.0",
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "5.3.0"
         },
         "compile": {
-          "bin/placeholder/CalculatorGen.dll": {}
+          "bin/placeholder/CalculatorGen.Lib.dll": {}
         },
         "runtime": {
-          "bin/placeholder/CalculatorGen.dll": {}
+          "bin/placeholder/CalculatorGen.Lib.dll": {}
         }
       },
-      "ColorGen/1.0.0": {
+      "ColorGen.Lib/1.0.0": {
         "type": "project",
         "framework": ".NETCoreApp,Version=v10.0",
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "5.3.0"
         },
         "compile": {
-          "bin/placeholder/ColorGen.dll": {}
+          "bin/placeholder/ColorGen.Lib.dll": {}
         },
         "runtime": {
-          "bin/placeholder/ColorGen.dll": {}
+          "bin/placeholder/ColorGen.Lib.dll": {}
         }
       },
       "FracturingFog.Abstractions/1.0.0": {
@@ -1061,8 +1061,8 @@
           "Avalonia.Desktop": "12.0.4",
           "Avalonia.Fonts.Inter": "12.0.4",
           "Avalonia.Themes.Fluent": "12.0.4",
-          "CalculatorGen": "1.0.0",
-          "ColorGen": "1.0.0",
+          "CalculatorGen.Lib": "1.0.0",
+          "ColorGen.Lib": "1.0.0",
           "FracturingFog.Abstractions": "1.0.0",
           "FracturingFog.Client": "1.0.0",
           "FracturingFog.Server": "1.0.0",
@@ -2449,15 +2449,15 @@
         "tmds.dbus.protocol.nuspec"
       ]
     },
-    "CalculatorGen/1.0.0": {
+    "CalculatorGen.Lib/1.0.0": {
       "type": "project",
-      "path": "../CalculatorGen/CalculatorGen.csproj",
-      "msbuildProject": "../CalculatorGen/CalculatorGen.csproj"
+      "path": "../CalculatorGen.Lib/CalculatorGen.Lib.csproj",
+      "msbuildProject": "../CalculatorGen.Lib/CalculatorGen.Lib.csproj"
     },
-    "ColorGen/1.0.0": {
+    "ColorGen.Lib/1.0.0": {
       "type": "project",
-      "path": "../ColorGen/ColorGen.csproj",
-      "msbuildProject": "../ColorGen/ColorGen.csproj"
+      "path": "../ColorGen.Lib/ColorGen.Lib.csproj",
+      "msbuildProject": "../ColorGen.Lib/ColorGen.Lib.csproj"
     },
     "FracturingFog.Abstractions/1.0.0": {
       "type": "project",

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ColorGen.Lib — library form of ColorGen, holding *Api, *HotLoad,
+    Parser/, Emitters/, and the embedded templates so the
+    ColorGenEditor (UI.Avalonia) and the legacy WinExe can consume
+    a pure library reference. The sibling ColorGen.csproj is the
+    thin CLI Exe wrapper around Program.cs.
+
+    Split lands per Phase X.6 publish blocker fix: NETSDK1150 tripped
+    on `dotnet publish FracturingFog.App` self-contained because an
+    Exe project was referenced transitively as a library via UI.Avalonia.
+    See Docs/Technical/CrossPlatform-SmokeTests.md, Phase X.6 / 6.S1.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog.ColorGen</RootNamespace>
+    <AssemblyName>ColorGen.Lib</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ColorGen\**\*.cs"
+             Exclude="..\ColorGen\Program.cs;..\ColorGen\Templates\**;..\ColorGen\bin\**;..\ColorGen\obj\**" />
+    <None Include="..\ColorGen\Templates\ColorMap.template.cs" Link="Templates\ColorMap.template.cs" />
+    <EmbeddedResource Include="..\ColorGen\Templates\ColorMap.template.cs" Link="Templates\ColorMap.template.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+  </ItemGroup>
+
+</Project>

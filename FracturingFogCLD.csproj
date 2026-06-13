@@ -90,6 +90,8 @@
     <Compile Remove="Client\**" />
     <Compile Remove="CalculatorGen\**" />
     <Compile Remove="ColorGen\**" />
+    <Compile Remove="CalculatorGen.Lib\**" />
+    <Compile Remove="ColorGen.Lib\**" />
     <!--
       Phase X.0 cross-platform scaffolding. These sibling projects sit under
       the WinExe's root folder and the SDK's default Compile glob would slurp
@@ -352,19 +354,20 @@
     -->
     <ProjectReference Include="Client\FracturingFog.Client.csproj" />
     <!--
-      CalculatorGen library reference. The CLI exe is still built
+      CalculatorGen.Lib reference. The CLI Exe is still built
       separately by `dotnet build CalculatorGen\CalculatorGen.csproj`;
-      this reference exposes CalculatorGenApi.Generate() so the
+      this Lib reference exposes CalculatorGenApi.Generate() so the
       UserEquation dialog can render a calculator from inside the app
-      in addition to the CLI workflow.
+      in addition to the CLI workflow. Lib (not Exe) so publish stays
+      NETSDK1150-clean once the WinExe is itself published.
     -->
-    <ProjectReference Include="CalculatorGen\CalculatorGen.csproj" />
+    <ProjectReference Include="CalculatorGen.Lib\CalculatorGen.Lib.csproj" />
     <!--
-      ColorGen library reference. Exposes ColorGenApi.Generate() +
+      ColorGen.Lib reference. Exposes ColorGenApi.Generate() +
       ColorGenHotLoad.TryCompileAndLoad() so the ColorGen editor can
       render an algorithmic colour theme and hot-load it without a rebuild.
     -->
-    <ProjectReference Include="ColorGen\ColorGen.csproj" />
+    <ProjectReference Include="ColorGen.Lib\ColorGen.Lib.csproj" />
     <!--
       Palette Builder lib. Provides the standalone palette UI (MainWindow)
       that the host opens in picker mode for the "From Image…" flow, plus

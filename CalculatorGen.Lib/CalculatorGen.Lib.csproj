@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CalculatorGen.Lib — library form of CalculatorGen, holding *Api,
+    *HotLoad, Parser/, Emitters/, and the embedded templates so the
+    UserEquation dialog (UI.Avalonia) and the legacy WinExe can consume
+    a pure library reference. The sibling CalculatorGen.csproj is the
+    thin CLI Exe wrapper around Program.cs.
+
+    Split lands per Phase X.6 publish blocker fix: NETSDK1150 tripped
+    on `dotnet publish FracturingFog.App` self-contained because an
+    Exe project was referenced transitively as a library via UI.Avalonia.
+    See Docs/Technical/CrossPlatform-SmokeTests.md, Phase X.6 / 6.S1.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog.CalculatorGen</RootNamespace>
+    <AssemblyName>CalculatorGen.Lib</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Sibling Exe csproj sits in ..\CalculatorGen\; isolate intermediate +
+      output dirs so the two projects do not clobber each other's obj/bin
+      when both build under the same solution.
+    -->
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Source lives in the sibling ..\CalculatorGen\ directory and is
+      not physically moved here. The Lib pulls every .cs file in that
+      tree except Program.cs (which belongs to the Exe) and the
+      Templates / SampleOutput dirs (Templates land as EmbeddedResource
+      below; SampleOutput is non-compile artefacts).
+    -->
+    <Compile Include="..\CalculatorGen\**\*.cs"
+             Exclude="..\CalculatorGen\Program.cs;..\CalculatorGen\Templates\**;..\CalculatorGen\SampleOutput\**;..\CalculatorGen\bin\**;..\CalculatorGen\obj\**" />
+    <None Include="..\CalculatorGen\Templates\Calculator.template.cs" Link="Templates\Calculator.template.cs" />
+    <None Include="..\CalculatorGen\Templates\SelfTest.template.cs"   Link="Templates\SelfTest.template.cs" />
+    <EmbeddedResource Include="..\CalculatorGen\Templates\Calculator.template.cs" Link="Templates\Calculator.template.cs" />
+    <EmbeddedResource Include="..\CalculatorGen\Templates\SelfTest.template.cs"   Link="Templates\SelfTest.template.cs" />
+  </ItemGroup>
+
+  <!--
+    Roslyn compiler — used by CalculatorGenApi.TryCompileAndLoad to
+    Roslyn-compile a freshly-generated calculator into an in-memory
+    assembly so the UserEquation dialog can hot-load it without an
+    app restart.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+  </ItemGroup>
+
+</Project>
