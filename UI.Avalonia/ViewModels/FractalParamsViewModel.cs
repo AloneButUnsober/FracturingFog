@@ -107,7 +107,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsPhoenix => FractalType == FractalType.Phoenix;
     public bool IsGlynn => FractalType == FractalType.Glynn;
     public bool IsLogistic => FractalType == FractalType.Logistic;
-    public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova;
+    public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
     public bool IsStrangeAttractor => FractalType == FractalType.StrangeAttractor;

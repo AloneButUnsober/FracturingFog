@@ -74,6 +74,11 @@ namespace FracturingFog
         /// escape-time — handled by a dedicated <c>LogisticCalculator</c>
         /// alongside the Buddhabrot histogram path.</summary>
         Logistic,
+        /// <summary>Halley basins for f(z) = z^d − 1. Cubic-convergence
+        /// root-finding (z := z − 2 f f' / (2 f'² − f f'')). Reuses
+        /// <c>NewtonExponent</c> + <c>NewtonRelaxation</c>; basin
+        /// colouring is identical to Newton.</summary>
+        Halley,
     }
 
     public enum RenderProfile { Preview, Final }

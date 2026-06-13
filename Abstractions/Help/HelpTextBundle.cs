@@ -4267,5 +4267,56 @@ the theme picker's family gating.
   Feigenbaum, M. J. (1978) ""Quantitative universality for a
   class of nonlinear transformations."" J. Stat. Phys. 19, 25–52.
 ";
+
+        public const string MathHalleyText =
+@"=== Halley Basins ===
+
+Edmond Halley (1694).  A root-finding iteration with CUBIC
+convergence — one power higher than Newton's quadratic
+convergence — at the cost of one extra derivative per step:
+
+        zₙ₊₁ = zₙ − R · 2·f(zₙ)·f'(zₙ) /
+                       ( 2·f'(zₙ)² − f(zₙ)·f''(zₙ) )
+
+Fracturing Fog uses the standard f(z) = z^d − 1, the same
+polynomial Newton ships with, so all d-th roots of unity are
+the attractors and basin colouring is reused without change.
+
+=== Newton vs Halley ===
+
+  • Newton:  z := z − R · f / f'
+             ─ quadratic convergence
+             ─ basins meet with the Wada-lakes property
+  • Halley:  z := z − R · 2 f f' / (2 f'² − f f'')
+             ─ cubic convergence
+             ─ basins meet with the same topology, but the
+               boundary has finer filament detail because
+               each iteration step is more accurate.
+
+Halley typically converges in roughly 2/3 the iterations
+Newton needs for the same epsilon, so the iteration-shaded
+colouring lands in an outer band — the picture often looks
+""crisper"" than Newton at the same MaxIterations.
+
+=== Parameters ===
+
+  NewtonExponent   : int      Polynomial degree d.  Default 3.
+                              Shared with the Newton dialog.
+  NewtonRelaxation : double   Relaxation factor R.  Default 1.0.
+                              R = 1 is canonical Halley; R ≠ 1
+                              speeds up or slows convergence.
+
+=== C# Equation ===
+
+  // Halley basins of z^d − 1, d = 3.
+  int d = 3;
+  var zd  = Complex.Pow(z, d);
+  var zd1 = Complex.Pow(z, d - 1);
+  var zd2 = Complex.Pow(z, d - 2);
+  var f   = zd - Complex.One;
+  var fp  = d * zd1;
+  var fpp = d * (d - 1) * zd2;
+  return z - 2 * f * fp / (2 * fp * fp - f * fpp);
+";
     }
 }

@@ -128,7 +128,8 @@ namespace FracturingFog.Models
             {FractalType.Magnet1, "Magnet 1" },
             {FractalType.Magnet2, "Magnet 2" },
             {FractalType.Glynn, "Glynn" },
-            {FractalType.Logistic, "Logistic" }
+            {FractalType.Logistic, "Logistic" },
+            {FractalType.Halley, "Halley" }
         };
     }
 
