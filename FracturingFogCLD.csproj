@@ -376,7 +376,7 @@
       this reference. ExcludeAssets=analyzers blocks the transitive
       Avalonia name-generator (same workaround as UI.Avalonia ref above).
     -->
-    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj" SetPlatform="Platform=x64">
+    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
   </ItemGroup>

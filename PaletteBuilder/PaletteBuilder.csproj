@@ -97,7 +97,7 @@
       ProjectReference comment in PaletteBuilder.Lib.csproj for the full
       reason; this is the matching half on the consumer side.
     -->
-    <ProjectReference Include="PaletteBuilder.Lib.csproj" SetPlatform="Platform=x64" />
+    <ProjectReference Include="PaletteBuilder.Lib.csproj" />
   </ItemGroup>
 
   <!--
