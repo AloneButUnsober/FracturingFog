@@ -85,6 +85,12 @@ namespace FracturingFog
         /// pixel state carries z and z_{n−1}; initial offset is
         /// tunable via <c>SecantInitialOffset</c>.</summary>
         Secant,
+        /// <summary>Spider fractal. Two-state recurrence
+        /// z = z² + c, c = decay·c + z. c mutates per iteration —
+        /// routed through a dedicated <c>CalculateSpider</c> path.
+        /// Decay tunable via <c>SpiderCDecay</c>; 0.5 is classic
+        /// Spider, 1.0 degenerates to Mandelbrot.</summary>
+        Spider,
     }
 
     public enum RenderProfile { Preview, Final }

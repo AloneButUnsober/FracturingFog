@@ -51,6 +51,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _logisticSeed = _p.LogisticSeed;
         _secantOffsetR = _p.SecantInitialOffset.Real;
         _secantOffsetI = _p.SecantInitialOffset.Imaginary;
+        _spiderCDecay = _p.SpiderCDecay;
         _newtonExponent = _p.NewtonExponent;
         _newtonRelaxation = _p.NewtonRelaxation;
         _ifsPresetName = _p.IFSPresetName;
@@ -111,6 +112,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsLogistic => FractalType == FractalType.Logistic;
     public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley or FractalType.Secant;
     public bool IsSecant => FractalType == FractalType.Secant;
+    public bool IsSpider => FractalType == FractalType.Spider;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
     public bool IsStrangeAttractor => FractalType == FractalType.StrangeAttractor;
@@ -120,7 +122,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
         or FractalType.AntiNebulabrot;
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
     public bool HasNoParams =>
-        !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsNewtonOrNova || IsIFS
+        !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb);
 
     // ── Julia ──
@@ -146,6 +148,10 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double SecantOffsetR { get => _secantOffsetR; set { Set(ref _secantOffsetR, Clamp(value, -2, 2)); _p.SecantInitialOffset = new Complex(_secantOffsetR, _secantOffsetI); Fire(); } }
     private double _secantOffsetI;
     public double SecantOffsetI { get => _secantOffsetI; set { Set(ref _secantOffsetI, Clamp(value, -2, 2)); _p.SecantInitialOffset = new Complex(_secantOffsetR, _secantOffsetI); Fire(); } }
+
+    // ── Spider ──
+    private double _spiderCDecay;
+    public double SpiderCDecay { get => _spiderCDecay; set { Set(ref _spiderCDecay, Clamp(value, 0.0, 1.0)); _p.SpiderCDecay = _spiderCDecay; Fire(); } }
 
     // ── Julia animation ──
     //

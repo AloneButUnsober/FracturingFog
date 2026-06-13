@@ -130,7 +130,8 @@ namespace FracturingFog.Models
             {FractalType.Glynn, "Glynn" },
             {FractalType.Logistic, "Logistic" },
             {FractalType.Halley, "Halley" },
-            {FractalType.Secant, "Secant" }
+            {FractalType.Secant, "Secant" },
+            {FractalType.Spider, "Spider" }
         };
     }
 

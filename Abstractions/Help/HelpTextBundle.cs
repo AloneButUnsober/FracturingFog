@@ -4382,5 +4382,66 @@ is the chord-step pattern showing through the basin filaments.
   // FractalType = Secant for the real thing. Approximation:
   return Complex.Pow(z, 3) - Complex.One;
 ";
+
+        public const string MathSpiderText =
+@"=== Spider Fractal ===
+
+A two-state escape-time recurrence where the constant c is
+NOT constant — it drifts each iteration in the direction of z:
+
+        zₙ₊₁ = zₙ² + cₙ
+        cₙ₊₁ = decay · cₙ + zₙ₊₁         (default decay = 0.5)
+
+Pixel coordinate seeds c₀; z₀ = 0 (Mandelbrot convention).  The
+mutating c is what distinguishes Spider from every other
+quadratic-family Mandelbrot-flavoured set — adjacent pixels'
+c values drift apart, producing the namesake spider-leg
+filaments instead of the smooth lobes of Mandelbrot.
+
+=== Decay Spectrum ===
+
+Decay is the only tunable.  Three regimes:
+
+  decay = 1.0   c never mutates → degenerates to Mandelbrot
+                (sanity check: render at decay = 1 and you get
+                the canonical cardioid).
+  decay = 0.5   Canonical Spider.  c bleeds half its previous
+                value plus the new z; orbits flush quickly so
+                in-set behaviour is dominated by the local z
+                dynamics.
+  decay = 0.0   c reseeds to z each step → heavy chaos, the
+                ""set"" becomes a thin Cantor-like dust.
+
+Intermediate values trace a continuous deformation between
+these regimes.  The boundary fractal dimension shifts smoothly
+with decay; this is one of the few standard escape-time
+families with a non-degenerate one-parameter deformation
+space.
+
+=== Implementation ===
+
+c mutates per iteration — that is NOT part of the standard
+IFractalKernel.Step contract (Step takes c by value).
+SpiderKernel exposes a dedicated StepMutatingC(ref zr, ref zi,
+ref cx, ref cy) overload and EscapeTimeCalculator routes
+Spider through its own loop (CalculateSpider) the same way
+Phoenix routes through CalculatePhoenix for its prev-z carry.
+
+No closed-form dz/dc — distance + normal themes fall back to
+the flat-exterior branch in FillAuxAndColor.
+
+=== Parameters ===
+
+  SpiderCDecay : double  c-mutation coefficient.  Default 0.5.
+                         Range [0, 1]; values outside the
+                         range are clamped at the kernel level.
+
+=== C# Equation ===
+
+  // User Equation can't mutate c between steps via the
+  // (z, c, n) → z signature.  Approximation that ignores
+  // the c carry:
+  return z*z + c;       // → Mandelbrot
+";
     }
 }

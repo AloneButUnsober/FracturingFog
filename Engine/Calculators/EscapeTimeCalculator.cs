@@ -182,6 +182,9 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
             case FractalType.Glynn:
                 DispatchByColorMap(new GlynnKernel(FractalParameters.GlynnC.Real, FractalParameters.GlynnC.Imaginary), ct);
                 break;
+            case FractalType.Spider:
+                CalculateSpider(new SpiderKernel(FractalParameters.SpiderCDecay), ct);
+                break;
             default:
                 throw new NotSupportedException($"EscapeTimeCalculator does not handle {FractalType}");
         }
@@ -669,6 +672,64 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
     private void CalculatePhoenix(PhoenixKernel kernel, CancellationToken ct)
         => CalculatePhoenix(kernel, ColorMap, ct);
+
+    // ── Spider (separate path — c mutates per iteration) ────────────────────
+
+    private void CalculateSpider<TMap>(SpiderKernel kernel, TMap colorMap, CancellationToken ct = default)
+        where TMap : IColorMap
+    {
+        double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        int maxIt = MaxIterations;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+        double centerX = CenterX;
+        double centerY = CenterY;
+        int width = Width;
+        int height = Height;
+        double bailout2 = kernel.BailoutRadius2;
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
+            double cy0 = centerY + (y - height * 0.5) * scale;
+            int rowBase = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                double cx0 = centerX + (x - width * 0.5) * scale;
+                int idx = rowBase + x;
+
+                // Per-pixel c starts at the pixel coordinate and then drifts
+                // each iteration via decay·c + z. Local copies are required
+                // because the kernel's StepMutatingC writes back through
+                // ref parameters.
+                double zr = 0, zi = 0, cx = cx0, cy = cy0;
+                int iter;
+                for (iter = 0; iter < rowMaxIt; iter++)
+                {
+                    if (zr * zr + zi * zi >= bailout2) break;
+                    kernel.StepMutatingC(ref zr, ref zi, ref cx, ref cy);
+                }
+                IterationBuffer[idx] = iter;
+                // No closed-form dz/dc (c mutates) — same handling as Phoenix.
+                FillAuxAndColor(idx, iter, maxIt, zr, zi, 0, 0, colorMap);
+            }
+            if (rowMaxIt < maxIt)
+            {
+                for (int xx = 0; xx < width; xx++)
+                {
+                    if (IterationBuffer[rowBase + xx] >= rowMaxIt)
+                        IterationBuffer[rowBase + xx] = maxIt;
+                }
+            }
+        });
+    }
+
+    private void CalculateSpider(SpiderKernel kernel, CancellationToken ct)
+        => CalculateSpider(kernel, ColorMap, ct);
 
     // ── Shared aux + color fill ──────────────────────────────────────────────
 
