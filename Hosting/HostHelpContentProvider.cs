@@ -95,6 +95,7 @@ namespace FracturingFog.Hosting
             new("Logistic",      HelpTextBundle.MathLogisticText),
             new("Halley",        HelpTextBundle.MathHalleyText),
             new("Secant",        HelpTextBundle.MathSecantText),
+            new("Spider",        HelpTextBundle.MathSpiderText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]

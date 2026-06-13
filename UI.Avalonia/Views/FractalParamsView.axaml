@@ -96,6 +96,16 @@
                                Value="{Binding GlynnI, Mode=TwoWay}" Margin="0,2" />
             </Grid>
 
+            <!-- Spider -->
+            <Grid IsVisible="{Binding IsSpider}"
+                  ColumnDefinitions="160,*">
+                <TextBlock Grid.Column="0" Text="c decay:" VerticalAlignment="Center"
+                           ToolTip.Tip="c := decay·c + z each step. 0.5 canonical, 1.0 = Mandelbrot, 0 = c collapses onto z." />
+                <NumericUpDown Grid.Column="1"
+                               Minimum="0" Maximum="1" Increment="0.01" FormatString="F4"
+                               Value="{Binding SpiderCDecay, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
             <!-- Logistic -->
             <Grid IsVisible="{Binding IsLogistic}"
                   ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">

@@ -59,6 +59,7 @@ public static class MiniMapDefaults
         FractalType.Logistic         => new( 3.5,  0.5, 2.0),
         FractalType.Halley           => new( 0.0,  0.0, 0.9),
         FractalType.Secant           => new( 0.0,  0.0, 0.9),
+        FractalType.Spider           => new( 0.0,  0.0, 1.2),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

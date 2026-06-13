@@ -442,6 +442,18 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Secant,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Spider — Canonical",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.2,
+                Iterations  = 512,
+                Description = "Canonical Spider at decay = 0.5. Spider-leg filaments around the origin.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Spider,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

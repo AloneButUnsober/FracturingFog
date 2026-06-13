@@ -154,6 +154,7 @@ namespace FracturingFog.ViewState
                 FractalType.Logistic              => ( 3.5,  0.5, 2.0),
                 FractalType.Halley                => ( 0.0,  0.0, 1.0),
                 FractalType.Secant                => ( 0.0,  0.0, 1.0),
+                FractalType.Spider                => ( 0.0,  0.0, 1.2),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;

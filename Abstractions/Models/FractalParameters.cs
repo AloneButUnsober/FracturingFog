@@ -108,6 +108,13 @@ namespace FracturingFog.Models
         /// chord direction without changing the asymptotic basins.</summary>
         public Complex SecantInitialOffset { get; set; } = new Complex(0.5, 0.0);
 
+        /// <summary>Spider c-decay coefficient. Each iteration
+        /// updates c := decay · c + z. Default 0.5 = canonical
+        /// Spider. decay = 1.0 cancels mutation (degenerates to
+        /// Mandelbrot); decay = 0 reseeds c to z each step
+        /// (heavy chaos). Clamped to [0, 1] in the calculator.</summary>
+        public double SpiderCDecay { get; set; } = 0.5;
+
         public int BuddhaSamples { get; set; } = 500_000;
         public int BuddhaIterLow { get; set; } = 500;
         public int BuddhaIterMid { get; set; } = 5_000;
@@ -266,6 +273,7 @@ namespace FracturingFog.Models
                 NewtonExponent = NewtonExponent,
                 NewtonRelaxation = NewtonRelaxation,
                 SecantInitialOffset = SecantInitialOffset,
+                SpiderCDecay = SpiderCDecay,
                 BuddhaSamples = BuddhaSamples,
                 BuddhaIterLow = BuddhaIterLow,
                 BuddhaIterMid = BuddhaIterMid,

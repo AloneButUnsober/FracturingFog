@@ -1332,6 +1332,7 @@ namespace FracturingFog.Rendering
             FractalType.Magnet1 => _escapeCalculator,
             FractalType.Magnet2 => _escapeCalculator,
             FractalType.Glynn => _escapeCalculator,
+            FractalType.Spider => _escapeCalculator,
             FractalType.Logistic => _logisticCalculator,
             FractalType.Halley => _halleyCalculator,
             FractalType.Secant => _secantCalculator,
