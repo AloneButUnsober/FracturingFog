@@ -19,6 +19,25 @@ namespace FracturingFog.Hosting
     /// <inheritdoc/>
     public sealed class HostHelpContentProvider : IHelpContentProvider
     {
+        // Phase X.0 / Slice 0.3b — optional OS-specific GPU info source.
+        // Host bootstrap installs WindowsD3D11HardwareInfoProvider on
+        // Windows; non-Win hosts leave it null and the system info text
+        // shows a friendly "not available" note.
+        private readonly IHardwareInfoProvider? _hardwareInfo;
+
+        public HostHelpContentProvider(IHardwareInfoProvider? hardwareInfo = null)
+        {
+            _hardwareInfo = hardwareInfo;
+        }
+
+        // Phase X.5 / Slice 5.2 — host-supplied probes for the new Hardware tab
+        // sections. Bootstrap sets these once after the audio backend +
+        // ILGPU context come up; left null on hosts that have not populated
+        // them so the Hardware text degrades to a friendly placeholder rather
+        // than crashing on a null deref.
+        public static Func<string?>? AudioBackendProbe { get; set; }
+        public static Func<string?>? IlgpuDeviceProbe { get; set; }
+
         public string ProgramName => "Fracturing Fog";
 
         public string ProgramVersion
@@ -130,63 +149,56 @@ namespace FracturingFog.Hosting
             sb.AppendLine();
             sb.AppendLine($"SIMD vector width (double): {System.Numerics.Vector<double>.Count}");
 
+            // Phase X.5 / Slice 5.2 — GPU compute (ILGPU) section. Bootstrap
+            // populates IlgpuDeviceProbe with a callable that enumerates
+            // ctx.Devices the same way Compute.Smoke does; provider stays
+            // ILGPU-free so this csproj does not need a direct package ref.
+            sb.AppendLine();
+            sb.AppendLine("=== GPU Compute (ILGPU) ===");
+            string? ilgpu = SafeProbe(IlgpuDeviceProbe);
+            sb.AppendLine(string.IsNullOrWhiteSpace(ilgpu)
+                ? "  (ILGPU device enumeration not available on this host.)"
+                : ilgpu);
+
+            // Phase X.5 / Slice 5.2 — Audio capture backend + capability flags.
+            // Bootstrap populates AudioBackendProbe with the active backend's
+            // type name + AudioBackendCapabilities so the user can see why
+            // System loopback might be greyed in the audio settings dialog.
+            sb.AppendLine();
+            sb.AppendLine("=== Audio capture backend ===");
+            string? audio = SafeProbe(AudioBackendProbe);
+            sb.AppendLine(string.IsNullOrWhiteSpace(audio)
+                ? "  (Audio backend has not started on this host yet.)"
+                : audio);
+
             return sb.ToString();
         }
 
-        private static void AppendDxgiAdapters(StringBuilder sb)
+        private static string? SafeProbe(Func<string?>? probe)
         {
-            // DXGI is Windows-only. Bail with a friendly note on macOS / Linux
-            // so the rest of the system info still renders cleanly.
-            if (!OperatingSystem.IsWindows())
-            {
-                sb.AppendLine("  (DXGI enumeration only available on Windows.)");
-                return;
-            }
-
-            try
-            {
-                using var factory = Vortice.DXGI.DXGI.CreateDXGIFactory1<Vortice.DXGI.IDXGIFactory1>();
-                uint idx = 0;
-                while (factory.EnumAdapters1(idx, out var adapter).Success)
-                {
-                    var desc = adapter.Description1;
-                    sb.AppendLine($"Adapter {idx}: {desc.Description}");
-                    sb.AppendLine($"  Vendor ID:      0x{desc.VendorId:X4}");
-                    sb.AppendLine($"  Device ID:      0x{desc.DeviceId:X4}");
-                    sb.AppendLine($"  Dedicated VRAM: {desc.DedicatedVideoMemory / (1024 * 1024)} MB");
-                    sb.AppendLine($"  Shared RAM:     {desc.SharedSystemMemory / (1024 * 1024)} MB");
-                    adapter.Dispose();
-                    idx++;
-                }
-                if (idx == 0) sb.AppendLine("  (No DXGI adapters reported.)");
-            }
-            catch (Exception ex)
-            {
-                sb.AppendLine($"  (DXGI enumeration failed: {ex.Message})");
-            }
+            if (probe == null) return null;
+            try { return probe(); }
+            catch (Exception ex) { return $"  (probe failed: {ex.Message})"; }
         }
 
-        private static void AppendD3D11FeatureLevel(StringBuilder sb)
+        private void AppendDxgiAdapters(StringBuilder sb)
         {
-            if (!OperatingSystem.IsWindows())
+            if (_hardwareInfo == null)
             {
-                sb.AppendLine("  (D3D11 only available on Windows.)");
+                sb.AppendLine("  (GPU enumeration not available on this host.)");
                 return;
             }
-            try
+            _hardwareInfo.AppendGpuAdapters(sb);
+        }
+
+        private void AppendD3D11FeatureLevel(StringBuilder sb)
+        {
+            if (_hardwareInfo == null)
             {
-                Vortice.Direct3D11.D3D11.D3D11CreateDevice(
-                    null,
-                    Vortice.Direct3D.DriverType.Hardware,
-                    Vortice.Direct3D11.DeviceCreationFlags.None,
-                    null!,
-                    out _, out var fl, out _);
-                sb.AppendLine($"Max Feature Level: {fl}");
+                sb.AppendLine("  (GPU feature-level query not available on this host.)");
+                return;
             }
-            catch (Exception ex)
-            {
-                sb.AppendLine($"  (Could not query D3D11 feature level: {ex.Message})");
-            }
+            _hardwareInfo.AppendGpuFeatureLevel(sb);
         }
     }
 }

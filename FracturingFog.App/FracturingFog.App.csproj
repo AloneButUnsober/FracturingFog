@@ -1,0 +1,97 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FracturingFog.App — cross-platform exe. Builds on win-x64, linux-x64,
+    linux-arm64, osx-arm64, osx-x64. Default Avalonia entry point post-Phase
+    X.0; FracturingFogCLD.csproj (the legacy WinExe) stays as the Windows
+    fallback until parity is reached.
+
+    Phase X.0 / Slice 0.5: scaffold only. Stub Program.cs returns 0. Project
+    references are placeholders; the full closure (Engine, Audio, Hosting,
+    UI.Avalonia, Rendering.Silk/Skia, Server, Client, CalculatorGen, ColorGen)
+    lights up as the file-move slices land.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog.App</RootNamespace>
+    <!--
+      Temporary assembly name during scaffolding so it doesn't collide with
+      the legacy WinExe (which still ships as FracturingFog.exe). Phase X.0
+      file-move tail flips this to FracturingFog once the legacy WinExe is
+      either retired or its AssemblyName is renamed.
+    -->
+    <AssemblyName>FracturingFog.App</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+    <ProjectReference Include="..\Hosting\FracturingFog.Hosting.csproj" />
+    <!--
+      Phase X.B / Slice B.6 — FracturingFog.Audio flipped to net10.0. Hosts
+      the cross-platform AudioCaptureDriver + NoopAudioBackend + BeatAnalyzer.
+      The Win-only NAudio capture backend (WASAPI/WinMM) lives in
+      FracturingFog.Audio.Win and is reflectively loaded by
+      AvaloniaShellBootstrap.CreateAudioBackend on Windows hosts.
+    -->
+    <ProjectReference Include="..\Audio\FracturingFog.Audio.csproj" />
+  </ItemGroup>
+
+  <!--
+    Phase X.2 / Slice 2.4 — bundled ffmpeg, Windows only.
+    Licensing audit (per CrossPlatform-ImplementationPlan.md Slice 2.4):
+    most prebuilt ffmpeg binaries enable GPL codecs which bind the
+    shipping container to a GPL-compatible licence. The Windows bundle
+    has matched our distribution licence since 2024 and ships today.
+    Linux/macOS users install ffmpeg via apt/brew — the cross-platform
+    smoke doc covers this path. Revisit when a per-RID LGPL ffmpeg bundle
+    is available for every shipping leg.
+
+    Both include paths land at the same per-RID location at runtime so
+    FfmpegEncoder.FindFfmpeg's Tools/<rid>/ffmpeg{.exe} probe (Slice 2.3)
+    picks them up. The Exists() guard keeps the build green when the
+    binary is absent (developer checkouts, CI, fresh clones).
+  -->
+  <ItemGroup>
+    <None Include="..\Tools\win-x64\ffmpeg.exe"
+          Condition="'$(RuntimeIdentifier)' == 'win-x64' and Exists('..\Tools\win-x64\ffmpeg.exe')"
+          Link="Tools\win-x64\ffmpeg.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="false" />
+    <None Include="..\Tools\ffmpeg.exe"
+          Condition="'$(RuntimeIdentifier)' == 'win-x64' and Exists('..\Tools\ffmpeg.exe') and !Exists('..\Tools\win-x64\ffmpeg.exe')"
+          Link="Tools\ffmpeg.exe"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="false" />
+  </ItemGroup>
+
+  <!--
+    Windows-only project refs (Rendering.D3D, FracturingFog.Win, Audio.Win) are
+    not wired in this scaffold pass because they target net10.0-windows and
+    cannot be referenced by a plain net10.0 project even with MSBuild
+    conditions (NuGet evaluates TFM compatibility before conditions resolve;
+    NU1201 fires on Windows too).
+
+    The plan's options for re-introducing them:
+      (a) Multi-target the App as <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+          and put the Win-only refs inside <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">.
+          Doubles the build output on Windows but is the cleanest split.
+      (b) Multi-target each Win-only support project as net10.0;net10.0-windows
+          with an empty net10.0 stub and the Win API surface inside <ItemGroup
+          Condition="'$(TargetFramework)' == 'net10.0-windows'">. App stays
+          single-target net10.0.
+      (c) Load the Win-only assemblies via Assembly.LoadFrom at boot. Reflective
+          access; loses compile-time API checks.
+
+    Decision deferred to the file-move slices (X.0 / 0.4 + 0.5). For scaffold
+    verification, the cross-platform closure (Engine + Audio + Hosting) is
+    enough to prove the geometry.
+  -->
+
+
+</Project>

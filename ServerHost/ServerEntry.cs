@@ -24,7 +24,12 @@ public static class ServerEntry
 
     public static int Run(string[] args)
     {
-        AttachOrAllocConsole();
+        // Phase X.3 / Slice 3.2: gate Win32 console-attach so the call is
+        // unreachable on non-Win hosts once this file follows the entry point
+        // into FracturingFog.App (net10.0). On Linux/macOS stdout/stderr are
+        // already wired to the launching terminal so nothing else is needed.
+        if (OperatingSystem.IsWindows())
+            AttachOrAllocConsole();
 
         if (args.Length >= 2 && (args[1] == "--help" || args[1] == "-?"))
         {
@@ -219,6 +224,7 @@ public static class ServerEntry
         return true;
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private static void AttachOrAllocConsole()
     {
         if (!AttachConsole(ATTACH_PARENT_PROCESS)) AllocConsole();

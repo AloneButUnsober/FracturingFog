@@ -752,14 +752,24 @@ public sealed partial class MainWindow : Window
         _toyModeActive = false;
     }
 
-    // Win32 window-move kick. Called from NativeMouseForwarder when a
-    // left-click lands on the swap-chain HWND while Toy Mode is active.
-    // ReleaseCapture undoes whatever the OS auto-set on WM_LBUTTONDOWN;
-    // SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) then tells Windows to
-    // treat the press as if it had landed on the title bar — the OS does
-    // the rest of the drag.
+    // Win32 window-move kick. Called from NativeMouseForwarder (Win-only by
+    // construction) when a left-click lands on the swap-chain HWND while Toy
+    // Mode is active. ReleaseCapture undoes whatever the OS auto-set on
+    // WM_LBUTTONDOWN; SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) then tells
+    // Windows to treat the press as if it had landed on the title bar — the
+    // OS does the rest of the drag.
+    //
+    // Phase X.3 / Slice 3.1: `OperatingSystem.IsWindows()` guard so the CA1416
+    // analyzer can prove the Win32 calls are unreachable on non-Win hosts.
+    // The hook itself is set from EnterToyMode and only consumed by the Win-only
+    // NativeMouseForwarder, but the guard makes the contract explicit for
+    // cross-platform UI.Avalonia readers. Avalonia 11's BeginMoveDrag requires
+    // a PointerPressedEventArgs which the native HWND callback can't synthesise,
+    // so the Win32 trick stays here for Windows; cross-platform toy-mode drag
+    // is parked behind a future Avalonia API.
     private bool ToyDragWindow()
     {
+        if (!OperatingSystem.IsWindows()) return false;
         try
         {
             var handle = TryGetPlatformHandle();

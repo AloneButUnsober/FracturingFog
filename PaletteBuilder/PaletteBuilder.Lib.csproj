@@ -21,15 +21,21 @@
   -->
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!--
+      Phase X.1 / Slice 1.2 — TFM flipped net10.0-windows → net10.0. The
+      PDFsharp-gdi + System.Drawing.Common dependencies that pinned the lib
+      to net10.0-windows were removed in Slice 1.1 (QuestPDF + SkiaSharp
+      raster path); the Avalonia + ReactiveUI closure is cross-platform.
+      Parent WinExe projects (PaletteBuilder.csproj, FracturingFogCLD.csproj)
+      continue to reference this lib via net10.0-windows → net10.0 TFM
+      downcompat.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Platforms>x64</Platforms>
-    <PlatformTarget>x64</PlatformTarget>
     <RootNamespace>PaletteBuilder</RootNamespace>
     <AssemblyName>PaletteBuilder.Lib</AssemblyName>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <UseWindowsForms>false</UseWindowsForms>
     <UseWPF>false</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -85,10 +91,17 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.4">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="PDFsharp-gdi" Version="6.2.4" />
+    <!--
+      Phase X.1 / Slice 1.1 — QuestPDF replaces PDFsharp-gdi for the palette
+      PDF export. PDFsharp-gdi is net10.0-windows-only (drags
+      System.Drawing.Common); QuestPDF renders via SkiaSharp and is fully
+      cross-platform. System.Drawing.Common drops with it. License is
+      Community (free for OSS / sub-USD-1M-revenue) — set in
+      PdfPaletteExporter's static ctor.
+    -->
+    <PackageReference Include="QuestPDF" Version="2025.1.0" />
     <PackageReference Include="ReactiveUI.Avalonia" Version="12.0.3" />
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
-    <PackageReference Include="System.Drawing.Common" Version="10.0.8" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
   </ItemGroup>
 
@@ -112,8 +125,8 @@
     because the Abstractions assembly never gets loaded.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" SetPlatform="Platform=x64" />
-    <ProjectReference Include="..\UI.Avalonia\FracturingFog.UI.Avalonia.csproj" SetPlatform="Platform=x64">
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <ProjectReference Include="..\UI.Avalonia\FracturingFog.UI.Avalonia.csproj">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
   </ItemGroup>

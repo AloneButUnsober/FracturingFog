@@ -84,11 +84,72 @@
     <Compile Remove="Rendering.Silk\**" />
     <Compile Remove="Rendering.Silk.Smoke\**" />
     <Compile Remove="Rendering.Skia\**" />
+    <Compile Remove="Compute.Smoke\**" />
     <Compile Remove="Server\**" />
     <Compile Remove="Server.Tests\**" />
     <Compile Remove="Client\**" />
     <Compile Remove="CalculatorGen\**" />
     <Compile Remove="ColorGen\**" />
+    <!--
+      Phase X.0 cross-platform scaffolding. These sibling projects sit under
+      the WinExe's root folder and the SDK's default Compile glob would slurp
+      their sources into the WinExe build. Engine/, Rendering.D3D/,
+      FracturingFog.Win/, Audio.Win/, FracturingFog.App/ are scaffolding
+      placeholders today (no .cs files yet beyond FracturingFog.App/Program.cs);
+      the excludes stay in place as the file-move slices populate them.
+    -->
+    <Compile Remove="Engine\**" />
+    <Compile Remove="Rendering.D3D\**" />
+    <Compile Remove="FracturingFog.Win\**" />
+    <Compile Remove="Audio.Win\**" />
+    <Compile Remove="FracturingFog.App\**" />
+    <!--
+      Phase X.0 / Slice 0.3a — files moved into FracturingFog.Hosting.csproj.
+      WinExe consumes them across the new assembly boundary via the
+      ProjectReference below. AvaloniaShellBootstrap, NativeMouseForwarder,
+      HostPaletteExtractionService, FfmpegSetupDialog, AvaloniaDialogs stay
+      in WinExe for now (see FracturingFog.Hosting.csproj for the gating
+      rationale).
+    -->
+    <Compile Remove="Hosting\HostColorThemeService.cs" />
+    <Compile Remove="Hosting\HostHelpContentProvider.cs" />
+    <Compile Remove="Hosting\ColorThemeDefAdapter.cs" />
+    <Compile Remove="Hosting\PngSlideshowFrameRecorder.cs" />
+    <!--
+      Phase X.0 / Slice 0.2 — Audio files now owned by FracturingFog.Audio
+      (temporary net10.0-windows TFM until Phase X.B introduces the backend
+      abstraction). WinExe consumes them across the ProjectReference below.
+    -->
+    <Compile Remove="Audio\**" />
+    <!--
+      Audio/ and Hosting/ stay owned by this WinExe's default Compile glob
+      during Phase X.0 scaffolding (their sibling FracturingFog.Audio.csproj
+      / FracturingFog.Hosting.csproj set EnableDefaultCompileItems=false so
+      they compile nothing). But each sibling project still writes its own
+      obj/<config>/<tfm>/*.AssemblyInfo.cs into Audio\obj\ and Hosting\obj\,
+      which THIS WinExe's glob then slurps -> CS0579 duplicate-attribute
+      cascade. Exclude the sibling obj/ + bin/ subtrees explicitly so the
+      WinExe ignores its neighbours' scratch state. These excludes go away
+      with the file-move slices, which flip both folders to
+      EnableDefaultCompileItems=true on the new projects and drop the WinExe
+      ownership.
+    -->
+    <Compile Remove="Audio\obj\**" />
+    <Compile Remove="Audio\bin\**" />
+    <Compile Remove="Hosting\obj\**" />
+    <Compile Remove="Hosting\bin\**" />
+    <None Remove="Audio\obj\**" />
+    <None Remove="Audio\bin\**" />
+    <None Remove="Hosting\obj\**" />
+    <None Remove="Hosting\bin\**" />
+    <EmbeddedResource Remove="Audio\obj\**" />
+    <EmbeddedResource Remove="Audio\bin\**" />
+    <EmbeddedResource Remove="Hosting\obj\**" />
+    <EmbeddedResource Remove="Hosting\bin\**" />
+    <Content Remove="Audio\obj\**" />
+    <Content Remove="Audio\bin\**" />
+    <Content Remove="Hosting\obj\**" />
+    <Content Remove="Hosting\bin\**" />
     <!--
       Tools/ holds sibling console projects (DocSiteGen) that have their own
       ImplicitUsings + obj/ trees. Without this exclude the WinExe glob slurps
@@ -115,36 +176,54 @@
     <None Remove="Rendering.Silk\**" />
     <None Remove="Rendering.Silk.Smoke\**" />
     <None Remove="Rendering.Skia\**" />
+    <None Remove="Compute.Smoke\**" />
     <None Remove="Server\**" />
     <None Remove="Server.Tests\**" />
     <None Remove="Client\**" />
     <None Remove="CalculatorGen\**" />
     <None Remove="ColorGen\**" />
     <None Remove="Tools\**" />
+    <None Remove="Engine\**" />
+    <None Remove="Rendering.D3D\**" />
+    <None Remove="FracturingFog.Win\**" />
+    <None Remove="Audio.Win\**" />
+    <None Remove="FracturingFog.App\**" />
     <EmbeddedResource Remove="Abstractions\**" />
     <EmbeddedResource Remove="UI.Avalonia\**" />
     <EmbeddedResource Remove="PaletteBuilder\**" />
     <EmbeddedResource Remove="Rendering.Silk\**" />
     <EmbeddedResource Remove="Rendering.Silk.Smoke\**" />
     <EmbeddedResource Remove="Rendering.Skia\**" />
+    <EmbeddedResource Remove="Compute.Smoke\**" />
     <EmbeddedResource Remove="Server\**" />
     <EmbeddedResource Remove="Server.Tests\**" />
     <EmbeddedResource Remove="Client\**" />
     <EmbeddedResource Remove="CalculatorGen\**" />
     <EmbeddedResource Remove="ColorGen\**" />
     <EmbeddedResource Remove="Tools\**" />
+    <EmbeddedResource Remove="Engine\**" />
+    <EmbeddedResource Remove="Rendering.D3D\**" />
+    <EmbeddedResource Remove="FracturingFog.Win\**" />
+    <EmbeddedResource Remove="Audio.Win\**" />
+    <EmbeddedResource Remove="FracturingFog.App\**" />
     <Content Remove="Abstractions\**" />
     <Content Remove="UI.Avalonia\**" />
     <Content Remove="PaletteBuilder\**" />
     <Content Remove="Rendering.Silk\**" />
     <Content Remove="Rendering.Silk.Smoke\**" />
     <Content Remove="Rendering.Skia\**" />
+    <Content Remove="Compute.Smoke\**" />
     <Content Remove="Server\**" />
     <Content Remove="Server.Tests\**" />
     <Content Remove="Client\**" />
     <Content Remove="CalculatorGen\**" />
     <Content Remove="ColorGen\**" />
     <Content Remove="Tools\**" />
+    <Content Remove="Engine\**" />
+    <Content Remove="Rendering.D3D\**" />
+    <Content Remove="FracturingFog.Win\**" />
+    <Content Remove="Audio.Win\**" />
+    <Content Remove="FracturingFog.App\**" />
     <!--
       Avalonia's MSBuild targets add *.axaml as AvaloniaResource and AvaloniaXaml
       items automatically from anywhere under the project root. Strip the UI
@@ -184,6 +263,56 @@
   <ItemGroup>
     <!-- Shared UI-free contracts (IGpuSurface and future siblings). -->
     <ProjectReference Include="Abstractions\FracturingFog.Abstractions.csproj" />
+    <!--
+      Phase X.0 / Slice 0.1 — cross-platform engine assembly. Owns the
+      calculator fleet, model types (color schemes, kernels, palettes),
+      interface contracts, and FFMath (BLA + SA series). Moved out of the
+      WinExe so a non-Windows host can reference it without dragging
+      net10.0-windows / WinForms. WinExe continues to consume the same
+      types through this ProjectReference; downstream sibling projects
+      (UI.Avalonia, PaletteBuilder.Lib, Server) gain Engine references in
+      later slices as they need them.
+    -->
+    <ProjectReference Include="Engine\FracturingFog.Engine.csproj" />
+    <!--
+      Phase X.0 / Slice 0.1b — Windows-only D3D11 compute backend that owns
+      MandelbrotGpuKernel. Required so FractalRenderHost (still in this
+      WinExe) can construct the kernel from a live ID3D11Device + immediate
+      context. Slice 0.4 lands DirectXRenderer / DirectX12Renderer /
+      RenderFactory + MP4Writer in this same assembly; until then it's
+      MandelbrotGpuKernel-only.
+    -->
+    <ProjectReference Include="Rendering.D3D\FracturingFog.Rendering.D3D.csproj" />
+    <!--
+      Phase X.0 / Slice 0.3a — cross-platform host glue (HostColorThemeService,
+      HostHelpContentProvider, ColorThemeDefAdapter, PngSlideshowFrameRecorder).
+      The remaining Hosting/*.cs files stay compiled inside this WinExe via
+      the SDK default glob.
+    -->
+    <ProjectReference Include="Hosting\FracturingFog.Hosting.csproj" />
+    <!--
+      Phase X.0 / Slice 0.2 — audio capture + beat analyzer + fractal synth.
+      Temporary net10.0-windows TFM; Phase X.B flips to net10.0 after the
+      backend abstraction lands.
+    -->
+    <ProjectReference Include="Audio\FracturingFog.Audio.csproj" />
+    <!--
+      Phase X.B / Slice B.4 — Windows-only NAudio IAudioCaptureBackend.
+      Loaded reflectively by AvaloniaShellBootstrap.CreateAudioBackend so
+      Hosting can stay free of Win-only refs once it moves to net10.0;
+      WinExe pulls the project in unconditionally so the dll ships alongside
+      the binary for Assembly.Load to find at runtime.
+    -->
+    <ProjectReference Include="Audio.Win\FracturingFog.Audio.Win.csproj" />
+    <!--
+      Phase X.0 / Slice 0.3c — Windows-only-but-not-WinForms host shims.
+      Currently holds NativeMouseForwarder (HWND subclass via user32 /
+      comctl32) which the Avalonia shell bootstrap installs to bridge
+      mouse messages from the native swap-chain HWND into the
+      IFractalInputController. Cross-platform App will skip this ref
+      entirely (the bootstrap will branch on OperatingSystem.IsWindows()).
+    -->
+    <ProjectReference Include="FracturingFog.Win\FracturingFog.Win.csproj" />
     <!--
       Phase 2 Avalonia shell. Referenced so the avalonia CLI flag launches
       the new UI from the same WinExe during the migration. Remove when
@@ -247,7 +376,7 @@
       this reference. ExcludeAssets=analyzers blocks the transitive
       Avalonia name-generator (same workaround as UI.Avalonia ref above).
     -->
-    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj" SetPlatform="Platform=x64">
+    <ProjectReference Include="PaletteBuilder\PaletteBuilder.Lib.csproj">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
   </ItemGroup>

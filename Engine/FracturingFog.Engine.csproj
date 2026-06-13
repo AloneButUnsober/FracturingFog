@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FracturingFog.Engine — cross-platform engine assembly. Carved out of the
+    Windows WinExe so the calculator fleet, FractalRenderHost, and engine-side
+    Imaging surface can build under linux-x64 / osx-arm64.
+
+    Phase X.0 / Slice 0.1: scaffold only. No source files yet. WinExe
+    (FracturingFogCLD.csproj) continues to own the engine source via its
+    default SDK glob until file-move slices land.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog</RootNamespace>
+    <AssemblyName>FracturingFog.Engine</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      ILGPU is the GPU-compute JIT used by the UserBulb GPU calculator,
+      the Sandbox GPU compiler/spike, MandelbrotGpuKernel and AcceleratorProbe.
+      Cross-platform (CPU fallback when no CUDA/OpenCL device); no Windows
+      native dependency.
+    -->
+    <PackageReference Include="ILGPU" Version="1.5.3" />
+    <!--
+      Roslyn scripting drives UserEquationCalculator and UserBulbCalculator
+      hot-load paths. Cross-platform.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
+    <!--
+      Phase X.A / Slice A.7 — System.Drawing.Common dropped. The engine
+      now uses only System.Drawing.Primitives (BCL — Color, Rectangle,
+      Point, PointF, RectangleF, SizeF) which has no GDI+ dependency and
+      is fully cross-platform. The Windows-only GDI+ watermark and
+      ImageFormat-encode pipeline moved to FracturingFog.Imaging.ImageExportGdi
+      in FracturingFog.Win.csproj.
+    -->
+    <!--
+      Phase X.A / Slice A.2 — SkiaSharp for the cross-platform image save
+      pipeline. Engine.Imaging.ImageExport, PngSequenceWriter, PosterRenderer,
+      and FractalOverlayCompositor all route through SkiaSharp so the engine
+      can write PNG/JPEG/WebP/BMP on Windows + Linux + macOS.
+    -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <!--
+      Phase X.0 / Slice 0.1b: Vortice package refs removed. MandelbrotGpuKernel
+      now lives in FracturingFog.Rendering.D3D and is consumed across the
+      Engine boundary only through IGpuKernel (Engine\Interefaces\IGpuKernel.cs).
+      Engine no longer pulls any Windows-specific native dependency.
+    -->
+  </ItemGroup>
+
+</Project>

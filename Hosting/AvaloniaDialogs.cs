@@ -394,7 +394,8 @@ namespace FracturingFog.Hosting
             void Run()
             {
                 var current = AudioSettingsStore.Load();
-                var vm = new AudioSettingsViewModel(current, liveSource: null);
+                var vm = new AudioSettingsViewModel(current, liveSource: null,
+                    capabilities: AvaloniaShellBootstrap.AudioCapabilities);
                 var win = new AudioSettingsView { DataContext = vm };
 
                 // Browse… → Avalonia open-file picker; push the chosen path back.
