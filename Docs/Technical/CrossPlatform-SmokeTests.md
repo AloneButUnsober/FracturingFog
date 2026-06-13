@@ -204,11 +204,15 @@ These Silk smoke runs are marked `continue-on-error: true` in
 still gates merges. Each is a runner-infrastructure gap, not a code
 defect:
 
-* **Windows / Silk smoke** — `GlfwException: ApiUnavailable: WGL: The
-  driver does not appear to support OpenGL`. The `windows-latest`
-  GitHub runner ships without an OpenGL ICD. Fix path: bundle Mesa3D
-  for Windows on the runner before the smoke step (planned, not yet
-  landed).
+* **Windows / Silk smoke** — *resolved* (Phase X.7). Previously failed
+  with `GlfwException: ApiUnavailable: WGL: The driver does not appear
+  to support OpenGL` because the `windows-latest` runner ships no
+  OpenGL ICD. The build workflow now fetches Mesa3D for Windows
+  (pal1000/mesa-dist-win llvmpipe build) and overrides
+  `C:\Windows\System32\opengl32.dll` before invoking the smoke; new
+  processes pick up Mesa's GL 4.6 software path via the normal
+  `LoadLibrary("opengl32.dll")` resolution. `continue-on-error` is off
+  on the Windows leg so the smoke now gates the leg.
 * **Linux Wayland / Silk smoke** — segfault inside the Silk EGL adapter
   while running under `weston --backend=headless`. The Silk smoke
   successfully passes on the same runner under xvfb + GLFW + X11, so
