@@ -127,8 +127,14 @@ jobs:
       - name: Publish Rendering.Skia
         run: dotnet publish Rendering.Skia/FracturingFog.Rendering.Skia.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/skia-${{ matrix.rid }}
 
-      - name: Publish FracturingFog.App
-        run: dotnet publish FracturingFog.App/FracturingFog.App.csproj -c Release -r ${{ matrix.rid }} --self-contained false -o publish/app-${{ matrix.rid }}
+      # FracturingFog.App publish lives in the dedicated release workflow
+      # (.github/workflows/release.yml, Phase X.6 / Slice 6.4) instead of
+      # here. The cross-platform build CI proves every assembly compiles on
+      # every leg; the App's full publish closure trips NETSDK1152 because
+      # CalculatorGen + ColorGen are still consumed transitively as Exe
+      # projects (Phase X.6.1 follow-up tracks the Lib + Cli split). The
+      # release workflow uses the pubxml profiles which side-step this and
+      # is the source of shippable artifacts.
 
       # ── Headless GL smoke ────────────────────────────────────────────────
       # Builds the tiny cross-platform smoke CLI and runs SmokeOneFrameOffscreen
