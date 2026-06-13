@@ -217,7 +217,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $version = "24.3.5"
+          $version = "26.0.8"
           $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$version/mesa3d-$version-release-msvc.7z"
           $zipPath = Join-Path $env:RUNNER_TEMP "mesa3d.7z"
           $extractDir = Join-Path $env:RUNNER_TEMP "mesa3d"
