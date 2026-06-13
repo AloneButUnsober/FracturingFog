@@ -245,17 +245,34 @@ jobs:
             }
           }
 
-          # System32 opengl32.dll is owned by TrustedInstaller with a
-          # restrictive DACL; the GH runner's elevated session still gets
-          # `Access denied` on a plain Copy-Item. Take ownership + grant
-          # Administrators full control first, then replace.
-          $target = "C:\Windows\System32\opengl32.dll"
-          $takeown = & takeown.exe /F $target 2>&1
-          Write-Host "takeown: $takeown"
-          $icacls = & icacls.exe $target /grant 'Administrators:(F)' 2>&1
-          Write-Host "icacls: $icacls"
-          Copy-Item -Path $source.FullName -Destination $target -Force
-          Write-Host "Replaced $target (new size: $((Get-Item $target).Length))"
+          # Mesa3D opengl32.dll is a loader stub; the actual GL implementation
+          # lives in gallium_wgl.dll plus Mesa-specific runtime DLLs in the
+          # same x64 folder. Dropping only opengl32.dll trips
+          #   `WGL: Failed to load opengl32.dll: The specified module could
+          #    not be found`
+          # at runtime because the loader stub fails to resolve its deps.
+          # Copy the entire DLL set into System32 so the dependency walk
+          # finds everything via the standard search order.
+          #
+          # System32 system DLLs (opengl32.dll) are owned by TrustedInstaller
+          # with a DACL that denies write even to the elevated GH runner
+          # session. takeown / icacls only when the target already exists
+          # (Mesa-specific names like gallium_wgl.dll do not collide with
+          # system DLLs and can be Copy-Item'd straight in).
+          $sys32 = "C:\Windows\System32"
+          $x64Dir = Split-Path $source.FullName -Parent
+          $dllCount = 0
+          Get-ChildItem -Path $x64Dir -Filter "*.dll" | ForEach-Object {
+            $tgt = Join-Path $sys32 $_.Name
+            if (Test-Path $tgt) {
+              & takeown.exe /F $tgt 2>&1 | Out-Null
+              & icacls.exe $tgt /grant 'Administrators:(F)' 2>&1 | Out-Null
+            }
+            Copy-Item -Path $_.FullName -Destination $tgt -Force
+            $dllCount++
+            Write-Host "Installed $($_.Name) ($($_.Length) bytes)"
+          }
+          Write-Host "Total Mesa DLLs installed: $dllCount"
 
       - name: Run Silk smoke (Windows)
         if: matrix.os == 'windows-latest'
