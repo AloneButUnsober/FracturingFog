@@ -49,6 +49,7 @@ namespace FracturingFog.Rendering
         private AttractorCalculator _attractorCalculator;
         private BuddhabrotCalculator _buddhabrotCalculator;
         private LogisticCalculator _logisticCalculator;
+        private HalleyCalculator _halleyCalculator;
         private NebulabrotCalculator _nebulabrotCalculator;
         private AntiBuddhabrotCalculator _antiBuddhabrotCalculator;
         private AntiNebulabrotCalculator _antiNebulabrotCalculator;
@@ -209,6 +210,7 @@ namespace FracturingFog.Rendering
             _attractorCalculator = new AttractorCalculator(w, h);
             _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
             _logisticCalculator = new LogisticCalculator(w, h);
+            _halleyCalculator = new HalleyCalculator(w, h);
             _nebulabrotCalculator = new NebulabrotCalculator(w, h);
             _antiBuddhabrotCalculator = new AntiBuddhabrotCalculator(w, h);
             _antiNebulabrotCalculator = new AntiNebulabrotCalculator(w, h);
@@ -234,6 +236,7 @@ namespace FracturingFog.Rendering
                 _attractorCalculator.ColorMap = initialColorMap;
                 _buddhabrotCalculator.ColorMap = initialColorMap;
                 _logisticCalculator.ColorMap = initialColorMap;
+                _halleyCalculator.ColorMap = initialColorMap;
                 _nebulabrotCalculator.ColorMap = initialColorMap;
                 _antiBuddhabrotCalculator.ColorMap = initialColorMap;
                 _antiNebulabrotCalculator.ColorMap = initialColorMap;
@@ -453,6 +456,7 @@ namespace FracturingFog.Rendering
                 _attractorCalculator.ColorMap = value;
                 _buddhabrotCalculator.ColorMap = value;
                 _logisticCalculator.ColorMap = value;
+                _halleyCalculator.ColorMap = value;
                 _nebulabrotCalculator.ColorMap = value;
                 _antiBuddhabrotCalculator.ColorMap = value;
                 _antiNebulabrotCalculator.ColorMap = value;
@@ -928,6 +932,7 @@ namespace FracturingFog.Rendering
             _attractorCalculator.Resize(w, h);
             _buddhabrotCalculator.Resize(w, h);
             _logisticCalculator.Resize(w, h);
+            _halleyCalculator.Resize(w, h);
             _nebulabrotCalculator.Resize(w, h);
             _antiBuddhabrotCalculator.Resize(w, h);
             _antiNebulabrotCalculator.Resize(w, h);
@@ -1231,6 +1236,7 @@ namespace FracturingFog.Rendering
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
+                case HalleyCalculator hc: hc.FractalParameters = ViewState.FractalParameters; break;
             }
         }
 
@@ -1321,6 +1327,7 @@ namespace FracturingFog.Rendering
             FractalType.Magnet2 => _escapeCalculator,
             FractalType.Glynn => _escapeCalculator,
             FractalType.Logistic => _logisticCalculator,
+            FractalType.Halley => _halleyCalculator,
             FractalType.IFS => _ifsCalculator,
             FractalType.LSystem => _lsystemCalculator,
             FractalType.StrangeAttractor => _attractorCalculator,

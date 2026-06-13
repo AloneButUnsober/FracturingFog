@@ -418,6 +418,18 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Logistic,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Halley — z³ − 1 basins",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  =  64,
+                Description = "Halley basins of z³ − 1 — three roots, fine filaments.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Halley,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────
