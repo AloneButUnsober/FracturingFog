@@ -147,21 +147,27 @@ Each command emits a self-contained single-file archive under
    opens the Avalonia shell; `./FracturingFog.App --batch --image
    --out /tmp/smoke.png --width 320 --height 240` round-trips a PNG.
 
-**Known publish blocker (CalculatorGen + ColorGen NETSDK1150).**
+**Resolved publish blocker (CalculatorGen + ColorGen NETSDK1150).**
 
-Until CalculatorGen and ColorGen are split into Lib + Cli sibling
-projects, the App's self-contained publish trips NETSDK1150 because both
-Exe projects are referenced transitively as libraries via UI.Avalonia.
-The follow-up that fixes this:
+Historical: until CalculatorGen and ColorGen were split into Lib + Cli
+sibling projects, the App's self-contained publish tripped NETSDK1150
+because both Exe projects were referenced transitively as libraries
+via UI.Avalonia. The split landed via:
 
-1. Add `CalculatorGen.Lib` + `ColorGen.Lib` library projects holding the
-   `*Api`, `*HotLoad`, and template-resolver source.
-2. Slim `CalculatorGen` + `ColorGen` Exes to a thin `Program.cs` Main
-   that dispatches into the Lib.
-3. Retarget `UI.Avalonia.csproj` ProjectReferences at the new `*Lib`
-   projects so the App publish chain only ever sees library refs.
+1. `CalculatorGen.Lib` + `ColorGen.Lib` sibling library projects hold
+   the `*Api`, `*HotLoad`, Parser/, Emitters/ source plus the embedded
+   templates. Source physically still lives under the original
+   `CalculatorGen/` and `ColorGen/` directories; the Lib csproj pulls
+   it via `Compile Include="..\<dir>\**\*.cs"`.
+2. `CalculatorGen.csproj` + `ColorGen.csproj` are now thin CLI Exes
+   that disable the default Compile glob and pull only `Program.cs`,
+   `ProjectReference` the sibling Lib.
+3. `UI.Avalonia.csproj` + `FracturingFogCLD.csproj` reference the Lib
+   projects, not the Exes.
 
-Tracked separately; publish artifacts ship via the CI release workflow
+`dotnet publish FracturingFog.App -c Release -r linux-x64
+--self-contained true -p:PublishSingleFile=true` now succeeds end-to-end
+on a Windows host. Publish artifacts ship via the CI release workflow
 (Slice 6.4) where the GitHub runner builds against a clean restore and
 the publish profile drives a fresh single-RID closure.
 
