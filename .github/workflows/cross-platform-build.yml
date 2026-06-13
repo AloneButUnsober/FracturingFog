@@ -204,13 +204,38 @@ jobs:
           kill "$WESTON_PID" 2>/dev/null || true
           exit $RC
 
-      # Windows GitHub runner has no OpenGL driver — `WGL: The driver does
-      # not appear to support OpenGL`. Bundling Mesa3D-for-Windows on the
-      # runner is the planned fix; marked non-blocking until that lands so
-      # the leg still gates on the build signal.
+      # Phase X.7 — Windows runner ships no OpenGL ICD; GLFW falls back to
+      # the GDI generic GL 1.1 path and the Silk smoke previously tripped
+      # `GlfwException: ApiUnavailable: WGL: The driver does not appear to
+      # support OpenGL`. pal1000/mesa-dist-win provides an llvmpipe-backed
+      # opengl32.dll that implements GL 4.6 in software. Overriding the
+      # runner's system32 copy makes new processes pick up Mesa via the
+      # standard LoadLibrary("opengl32.dll") path. opengl32 is not in the
+      # default KnownDLLs list on Windows Server 2022, so the override
+      # applies to subsequent processes without a reboot.
+      - name: Bundle Mesa3D for Windows Silk smoke
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $version = "24.3.5"
+          $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$version/mesa3d-$version-release-msvc.7z"
+          $zipPath = Join-Path $env:RUNNER_TEMP "mesa3d.7z"
+          $extractDir = Join-Path $env:RUNNER_TEMP "mesa3d"
+          Write-Host "Fetching Mesa3D $version from $url"
+          Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          7z x $zipPath "-o$extractDir" -y | Out-Null
+          $source = Get-ChildItem -Path $extractDir -Recurse -Filter "opengl32.dll" |
+                    Where-Object { $_.FullName -match "x64" } |
+                    Select-Object -First 1
+          if (-not $source) { throw "opengl32.dll not found in extracted Mesa3D archive" }
+          Write-Host "Found Mesa opengl32.dll at $($source.FullName) (size: $($source.Length))"
+          $target = "C:\Windows\System32\opengl32.dll"
+          Copy-Item -Path $source.FullName -Destination $target -Force
+          Write-Host "Replaced $target (new size: $((Get-Item $target).Length))"
+
       - name: Run Silk smoke (Windows)
         if: matrix.os == 'windows-latest'
-        continue-on-error: true
         run: dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
 
       # macOS Apple Silicon Silk smoke segfaults inside the CGL context init.
