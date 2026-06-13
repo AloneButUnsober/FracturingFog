@@ -251,28 +251,48 @@ jobs:
           #   `WGL: Failed to load opengl32.dll: The specified module could
           #    not be found`
           # at runtime because the loader stub fails to resolve its deps.
-          # Copy the entire DLL set into System32 so the dependency walk
-          # finds everything via the standard search order.
           #
-          # System32 system DLLs (opengl32.dll) are owned by TrustedInstaller
-          # with a DACL that denies write even to the elevated GH runner
-          # session. takeown / icacls only when the target already exists
-          # (Mesa-specific names like gallium_wgl.dll do not collide with
-          # system DLLs and can be Copy-Item'd straight in).
+          # Strategy:
+          #   * opengl32.dll       — REPLACE (takeown + icacls); the whole
+          #                          point of this step.
+          #   * Mesa-only DLLs     — copy into System32 (file does not exist
+          #                          in stock Windows, no conflict).
+          #   * Existing sys DLLs  — SKIP (e.g. d3d10warp.dll, d3d12.dll,
+          #                          dxgi.dll are owned by Windows and held
+          #                          open by system processes; replacing
+          #                          them trips "file is being used by
+          #                          another process" and we do not need
+          #                          Mesa's D3D-backend drivers for the
+          #                          llvmpipe software path the smoke uses).
           $sys32 = "C:\Windows\System32"
           $x64Dir = Split-Path $source.FullName -Parent
-          $dllCount = 0
+          $installed = 0
+          $replaced  = 0
+          $skipped   = 0
           Get-ChildItem -Path $x64Dir -Filter "*.dll" | ForEach-Object {
             $tgt = Join-Path $sys32 $_.Name
-            if (Test-Path $tgt) {
+            if ($_.Name -ieq "opengl32.dll") {
               & takeown.exe /F $tgt 2>&1 | Out-Null
               & icacls.exe $tgt /grant 'Administrators:(F)' 2>&1 | Out-Null
+              Copy-Item -Path $_.FullName -Destination $tgt -Force
+              $replaced++
+              Write-Host "Replaced $($_.Name) ($($_.Length) bytes)"
+            } elseif (Test-Path $tgt) {
+              Write-Host "Skipped $($_.Name) (System32 owns it; Mesa D3D-backend driver not needed for llvmpipe smoke path)"
+              $skipped++
+            } else {
+              Copy-Item -Path $_.FullName -Destination $tgt -Force
+              $installed++
+              Write-Host "Installed $($_.Name) ($($_.Length) bytes)"
             }
-            Copy-Item -Path $_.FullName -Destination $tgt -Force
-            $dllCount++
-            Write-Host "Installed $($_.Name) ($($_.Length) bytes)"
           }
-          Write-Host "Total Mesa DLLs installed: $dllCount"
+          Write-Host "Mesa bundle summary: replaced=$replaced installed=$installed skipped=$skipped"
+
+          # Pin Mesa to its llvmpipe (pure software CPU) gallium driver
+          # so the smoke does not try to probe the D3D12/zink/Vulkan
+          # backends, none of which work on the GH Windows runner.
+          "GALLIUM_DRIVER=llvmpipe"             | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "MESA_LOADER_DRIVER_OVERRIDE=llvmpipe" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Run Silk smoke (Windows)
         if: matrix.os == 'windows-latest'
