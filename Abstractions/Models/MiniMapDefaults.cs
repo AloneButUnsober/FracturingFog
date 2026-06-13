@@ -53,6 +53,10 @@ public static class MiniMapDefaults
         FractalType.TearDrop         => new( 0.0,  0.0, 0.16),
         FractalType.UserEquation     => new( 0.0,  0.0, 0.8),
         FractalType.Sandbox          => new( 0.0,  0.0, 0.8),
+        FractalType.Magnet1          => new( 1.5,  0.0, 0.6),
+        FractalType.Magnet2          => new( 1.5,  0.0, 0.5),
+        FractalType.Glynn            => new(-0.2,  0.0, 0.7),
+        FractalType.Logistic         => new( 3.5,  0.5, 2.0),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

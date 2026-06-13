@@ -173,6 +173,15 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
             case FractalType.Phoenix:
                 CalculatePhoenix(new PhoenixKernel(FractalParameters.PhoenixP.Real, FractalParameters.PhoenixP.Imaginary), ct);
                 break;
+            case FractalType.Magnet1:
+                DispatchByColorMap(new MagnetOneKernel(), ct);
+                break;
+            case FractalType.Magnet2:
+                DispatchByColorMap(new MagnetTwoKernel(), ct);
+                break;
+            case FractalType.Glynn:
+                DispatchByColorMap(new GlynnKernel(FractalParameters.GlynnC.Real, FractalParameters.GlynnC.Imaginary), ct);
+                break;
             default:
                 throw new NotSupportedException($"EscapeTimeCalculator does not handle {FractalType}");
         }

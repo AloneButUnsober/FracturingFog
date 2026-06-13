@@ -54,6 +54,26 @@ namespace FracturingFog
         /// <summary>CalculatorGen-emitted (|Re(z)| + i|Im(z)|)² + c
         /// (BurningShip). Non-holomorphic — DE disabled.</summary>
         GeneratedBurningShip,
+        /// <summary>Magnet 1 (Pickover). Rational map
+        /// z = ((z² + c − 1) / (2z + c − 2))² with a pole-clamped
+        /// denominator. Bailout 10² because the orbit grows more
+        /// slowly than the polynomial families.</summary>
+        Magnet1,
+        /// <summary>Magnet 2 (Pickover). Rational map
+        /// z = ((z³ + 3(c−1)z + (c−1)(c−2)) /
+        ///       (3z² + 3(c−2)z + c² − 3c + 3))²
+        /// with pole-clamped denominator. Bailout 10².</summary>
+        Magnet2,
+        /// <summary>Glynn fractal (Earl Glynn, 1990s). Julia set of
+        /// z → z^1.5 + c at the canonical c ≈ −0.2. Fractional power
+        /// evaluated via polar form; non-holomorphic at the origin
+        /// branch cut.</summary>
+        Glynn,
+        /// <summary>Logistic bifurcation diagram. x_{n+1} = r·x_n·(1−x_n)
+        /// rendered as a per-column density histogram over (r, x). Not
+        /// escape-time — handled by a dedicated <c>LogisticCalculator</c>
+        /// alongside the Buddhabrot histogram path.</summary>
+        Logistic,
     }
 
     public enum RenderProfile { Preview, Final }

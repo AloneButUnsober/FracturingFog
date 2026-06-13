@@ -45,6 +45,10 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _multibrotD = _p.MultibrotExponent;
         _phoenixR = _p.PhoenixP.Real;
         _phoenixI = _p.PhoenixP.Imaginary;
+        _glynnR = _p.GlynnC.Real;
+        _glynnI = _p.GlynnC.Imaginary;
+        _logisticBurnIn = _p.LogisticBurnIn;
+        _logisticSeed = _p.LogisticSeed;
         _newtonExponent = _p.NewtonExponent;
         _newtonRelaxation = _p.NewtonRelaxation;
         _ifsPresetName = _p.IFSPresetName;
@@ -101,6 +105,8 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsJulia => FractalType == FractalType.Julia;
     public bool IsMultibrot => FractalType == FractalType.Multibrot;
     public bool IsPhoenix => FractalType == FractalType.Phoenix;
+    public bool IsGlynn => FractalType == FractalType.Glynn;
+    public bool IsLogistic => FractalType == FractalType.Logistic;
     public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
@@ -111,7 +117,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
         or FractalType.AntiNebulabrot;
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
     public bool HasNoParams =>
-        !(IsJulia || IsMultibrot || IsPhoenix || IsNewtonOrNova || IsIFS
+        !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb);
 
     // ── Julia ──
@@ -119,6 +125,18 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double JuliaR { get => _juliaR; set { Set(ref _juliaR, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
     private double _juliaI;
     public double JuliaI { get => _juliaI; set { Set(ref _juliaI, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
+
+    // ── Glynn ──
+    private double _glynnR;
+    public double GlynnR { get => _glynnR; set { Set(ref _glynnR, Clamp(value, -2, 2)); _p.GlynnC = new Complex(_glynnR, _glynnI); Fire(); } }
+    private double _glynnI;
+    public double GlynnI { get => _glynnI; set { Set(ref _glynnI, Clamp(value, -2, 2)); _p.GlynnC = new Complex(_glynnR, _glynnI); Fire(); } }
+
+    // ── Logistic ──
+    private int _logisticBurnIn;
+    public int LogisticBurnIn { get => _logisticBurnIn; set { Set(ref _logisticBurnIn, Math.Max(0, value)); _p.LogisticBurnIn = _logisticBurnIn; Fire(); } }
+    private double _logisticSeed;
+    public double LogisticSeed { get => _logisticSeed; set { Set(ref _logisticSeed, Clamp(value, 0.001, 0.999)); _p.LogisticSeed = _logisticSeed; Fire(); } }
 
     // ── Julia animation ──
     //
