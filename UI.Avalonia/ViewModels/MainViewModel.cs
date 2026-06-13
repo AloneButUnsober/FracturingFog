@@ -209,6 +209,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.GeneratedMandelbrotZ5, "Mandelbrot Z⁵ (Generated)"),
         (FractalType.GeneratedTricorn,      "Tricorn (Generated)"),
         (FractalType.GeneratedBurningShip,  "Burning Ship (Generated)"),
+        (FractalType.Magnet1,               "Magnet 1"),
+        (FractalType.Magnet2,               "Magnet 2"),
+        (FractalType.Glynn,                 "Glynn"),
+        (FractalType.Logistic,              "Logistic Bifurcation"),
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

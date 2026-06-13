@@ -16,6 +16,24 @@ namespace FracturingFog.Models
 
         public Complex PhoenixP { get; set; } = new Complex(0.56667, 0.0);
 
+        /// <summary>Constant c for the Glynn fractal (Julia set of
+        /// z → z^1.5 + c). Default −0.2 produces the canonical
+        /// dendrite. Real part dominates the dendrite tilt; small
+        /// imaginary tweaks deform it asymmetrically.</summary>
+        public Complex GlynnC { get; set; } = new Complex(-0.2, 0.0);
+
+        /// <summary>Logistic bifurcation burn-in iterations — discarded
+        /// before density accumulation starts so transients don't
+        /// pollute the attractor histogram. Plot count = MaxIterations
+        /// − LogisticBurnIn (clamped &gt;= 1).</summary>
+        public int LogisticBurnIn { get; set; } = 1000;
+
+        /// <summary>Logistic seed x₀ ∈ (0, 1). Default 0.5 — any
+        /// non-fixed-point seed lands on the same attractor after
+        /// burn-in, but extreme values (near 0 or 1) lengthen the
+        /// transient.</summary>
+        public double LogisticSeed { get; set; } = 0.5;
+
         public Complex[]? NewtonPolyCoeffs { get; set; }
 
         public List<AffineMap>? IFSMaps { get; set; }
@@ -217,6 +235,9 @@ namespace FracturingFog.Models
                 JuliaC = JuliaC,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
+                GlynnC = GlynnC,
+                LogisticBurnIn = LogisticBurnIn,
+                LogisticSeed = LogisticSeed,
                 NewtonPolyCoeffs = NewtonPolyCoeffs is null ? null : (Complex[])NewtonPolyCoeffs.Clone(),
                 IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
                 UserEquationSource = UserEquationSource,

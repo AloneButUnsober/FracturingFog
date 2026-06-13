@@ -124,7 +124,11 @@ namespace FracturingFog.Models
             {FractalType.Tricorn, "Tricorn" },
             {FractalType.UserEquation, "UserEquation" },
             {FractalType.UserBulb, "UserBulb" },
-            {FractalType.TearDrop, "Tear Drop" }
+            {FractalType.TearDrop, "Tear Drop" },
+            {FractalType.Magnet1, "Magnet 1" },
+            {FractalType.Magnet2, "Magnet 2" },
+            {FractalType.Glynn, "Glynn" },
+            {FractalType.Logistic, "Logistic" }
         };
     }
 

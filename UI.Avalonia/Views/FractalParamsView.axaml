@@ -83,6 +83,34 @@
                                Value="{Binding PhoenixI, Mode=TwoWay}" Margin="0,2" />
             </Grid>
 
+            <!-- Glynn -->
+            <Grid IsVisible="{Binding IsGlynn}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Glynn c (real):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.001" FormatString="F4"
+                               Value="{Binding GlynnR, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Glynn c (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.001" FormatString="F4"
+                               Value="{Binding GlynnI, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Logistic -->
+            <Grid IsVisible="{Binding IsLogistic}"
+                  ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Burn-in iters:" VerticalAlignment="Center"
+                           ToolTip.Tip="Iterations discarded before density accumulation. Plot = MaxIter − BurnIn." />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="0" Maximum="100000" Increment="100" FormatString="F0"
+                               Value="{Binding LogisticBurnIn, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Seed x₀:" VerticalAlignment="Center"
+                           ToolTip.Tip="Initial value for the logistic map iteration. Any non-fixed-point seed in (0,1) converges to the same attractor." />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="0.001" Maximum="0.999" Increment="0.01" FormatString="F4"
+                               Value="{Binding LogisticSeed, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
             <!-- Newton / Nova -->
             <Grid IsVisible="{Binding IsNewtonOrNova}"
                   ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">

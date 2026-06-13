@@ -370,6 +370,54 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.High
             },
+            new()
+            {
+                Name        = "Magnet 1 — Main Body",
+                CenterX     =  1.5,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  =  512,
+                Description = "Heart-shaped main body of the Magnet 1 rational map.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Magnet1,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Magnet 2 — Triple Lobe",
+                CenterX     =  1.5,
+                CenterY     =  0.0,
+                Zoom        =  0.5,
+                Iterations  =  512,
+                Description = "Three-lobed main body of the cubic Magnet 2 variant.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Magnet2,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Glynn — Canonical",
+                CenterX     = -0.2,
+                CenterY     =  0.0,
+                Zoom        =  0.7,
+                Iterations  =  512,
+                Description = "Canonical Glynn Julia dendrite at c = -0.2.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Glynn,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Logistic — Full Cascade",
+                CenterX     =  3.5,
+                CenterY     =  0.5,
+                Zoom        =  2.0,
+                Iterations  = 4000,
+                Description = "Period-doubling cascade through chaos: r ∈ ~[2.6, 4.4].",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Logistic,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

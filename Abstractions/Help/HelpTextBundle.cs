@@ -4053,5 +4053,219 @@ property change notification and ReactiveCommand for commands.
   Docs\CalculatorGen-Architecture.md Generator internals
   Docs\ServerAdmin-Guide.md          Deployment + cert PKI
 ";
+
+        public const string MathMagnetOneText =
+@"=== Magnet 1 ===
+
+Clifford A. Pickover (1980s).  A rational escape-time map inspired
+by the magnetic-susceptibility partition function from statistical
+physics:
+
+        zₙ₊₁ = ( (zₙ² + c − 1) / (2zₙ + c − 2) )²
+
+z₀ = 0, c = pixel.  Unlike the polynomial Mandelbrot family the
+orbit can converge to TWO finite attractors — infinity (escape)
+AND the fixed point z = 1.  Fracturing Fog treats only the escape
+basin visually; the converged-to-one basin colours as ""in set"".
+
+=== Pole ===
+
+The denominator vanishes along the curve 2z + c − 2 = 0.  Pixels
+whose orbit passes near this curve would blow up to NaN under
+naive evaluation.  The kernel floors |den|² ≥ 1e-12 so the
+quotient stays finite — the resulting cell may still escape on
+the next iteration, but never poisons the buffer.
+
+=== Bailout ===
+
+10² (= 100), not the standard Mandelbrot 2².  The rational map
+grows more slowly than z² + c near the unit circle so a small
+bailout would trap many true escape paths inside the iteration
+budget.
+
+=== Geometry ===
+
+Two main lobes: a heart-shaped main body around c ≈ (1.5, 0) and
+a small companion below.  Filament structure resembles the
+Mandelbrot dendrites but tilts inward toward the z = 1 attractor.
+Default frame: centre (1.5, 0), Zoom 0.6.
+
+=== Parameters ===
+
+None beyond the pixel coordinate.  No tunables in the Params
+dialog.
+
+=== C# Equation ===
+
+  // Magnet 1.
+  var num = z*z + c - Complex.One;
+  var den = 2*z + c - 2;
+  var g   = num / den;
+  return g*g;
+";
+
+        public const string MathMagnetTwoText =
+@"=== Magnet 2 ===
+
+Pickover's cubic Magnet variant.  A higher-degree rational map
+that resolves the Magnet 1 attractor into a richer multi-basin
+structure:
+
+        num  = zₙ³ + 3(c−1)zₙ + (c−1)(c−2)
+        den  = 3zₙ² + 3(c−2)zₙ + c² − 3c + 3
+        zₙ₊₁ = (num / den)²
+
+z₀ = 0, c = pixel.  As with Magnet 1, the kernel uses a denom-
+magnitude floor (1e-12) to keep iterations bounded near the
+pole curve.
+
+=== Bailout ===
+
+10² for the same growth-rate reason given for Magnet 1.
+
+=== Geometry ===
+
+Three-lobed main body around c ≈ (1.5, 0) with finer filament
+detail than Magnet 1.  The convergence-to-z=1 basin is split
+into several disconnected components, giving the structure a
+""shattered"" feel.
+
+=== Parameters ===
+
+None beyond the pixel coordinate.
+
+=== C# Equation ===
+
+  // Magnet 2.
+  var cm1 = c - Complex.One;
+  var cm2 = c - 2;
+  var z2  = z*z;
+  var z3  = z2*z;
+  var num = z3 + 3*cm1*z + cm1*cm2;
+  var den = 3*z2 + 3*cm2*z + c*c - 3*c + 3;
+  var g   = num / den;
+  return g*g;
+";
+
+        public const string MathGlynnText =
+@"=== Glynn Fractal ===
+
+Earl Glynn (1990s).  Julia set of the fractional-power map
+
+        zₙ₊₁ = zₙ^1.5 + c           c ≈ −0.2
+
+The canonical view (c = −0.2 + 0i) produces a single connected
+dendrite often shown as the namesake ""Glynn"" image — a black
+tree-like silhouette against the escape gradient.
+
+=== Fractional Power ===
+
+z^1.5 is multi-valued for complex z; the principal branch is
+evaluated through polar form:
+
+        r     = |z|
+        θ     = arg(z)
+        z^1.5 = r^1.5 · ( cos(1.5θ) + i·sin(1.5θ) )
+
+At the origin (r = 0) the kernel reseeds z to c so the orbit
+does not divide by zero or evaluate log(0).  The branch-cut
+along the negative real axis is therefore preserved on the
+principal sheet — sufficient for this canonical c.
+
+=== Geometry ===
+
+  • Default frame: centre (−0.2, 0), Zoom 0.7.  The dendrite
+    fits inside |z| < 1.5.
+  • Boundary has fractal dimension > 1; tree-like filaments
+    branch off the central trunk at every scale.
+  • Off the canonical c the family generalises continuously into
+    a smooth zoo of Julia variants — Fracturing Fog currently
+    hardcodes c = −0.2.  A user-tunable c slider is planned.
+
+=== Parameters ===
+
+  GlynnC : Complex   Constant c.  Default (−0.2, 0).  Real-part
+                     drag tilts the dendrite; small imaginary
+                     tweaks deform it asymmetrically.  Clamped
+                     to |Re|, |Im| ≤ 2 in the Params dialog.
+
+=== C# Equation ===
+
+  // Glynn: z → z^1.5 + c.
+  return Complex.Pow(z, 1.5) + c;
+";
+
+        public const string MathLogisticText =
+@"=== Logistic Bifurcation ===
+
+The one-dimensional iterated map
+
+        xₙ₊₁ = r · xₙ · (1 − xₙ)             r ∈ (0, 4]
+
+studied since May (1976) as the simplest model of period-doubling
+route to chaos.  Not an escape-time fractal — every pixel column
+in Fracturing Fog corresponds to one value of r and accumulates
+the visited x values into a per-column density histogram.
+
+=== Rendering Pipeline ===
+
+  1. Map screen pixel (px, py) to (r, x) using the standard
+     view-state mapping (CenterX = r, CenterY = x).
+  2. For each r-column:
+       • Seed x = LogisticSeed (default 0.5)
+       • Burn in LogisticBurnIn steps (default 1000) to settle
+         onto the attractor.
+       • Plot next (MaxIterations − BurnIn) steps; each visited
+         x maps to a y-pixel and increments that pixel's hit
+         counter.
+  3. Log-normalise the hit map and feed (1 − norm)·MaxIter
+     into the active IColorMap; alpha-blend toward InSetColor
+     for sparse / empty pixels (matches Buddhabrot tone-map).
+
+Cost is O(W · MaxIter) — Width controls density resolution, not
+sample budget.  4000 iterations is a comfortable default at
+1920×1080.
+
+=== Geometry ===
+
+  • r < 1            x → 0  (extinction)
+  • 1 ≤ r ≤ 3        single stable fixed point
+  • 3 < r ≤ 3.449    period-2 cycle
+  • 3.449 < r ≤ 3.544 period-4
+  • 3.544 < r ≤ 3.564 period-8
+  • δ ≈ 4.669…       Feigenbaum constant — ratio of successive
+                     bifurcation intervals.  Limit point ≈ 3.5699.
+  • r > 3.5699       chaotic regime interspersed with periodic
+                     windows (period-3 at r ≈ 3.8284 is famous).
+
+Default frame: CenterX = 3.5, CenterY = 0.5, Zoom = 2.0 frames
+r ∈ ~[2.6, 4.4], x ∈ ~[0, 1].
+
+=== Parameters ===
+
+  LogisticBurnIn : int     Iterations to discard before density
+                           accumulation.  Default 1000.  Raise
+                           for slowly-converging chaotic windows
+                           where transient orbits leak speckle
+                           into the histogram.
+  LogisticSeed   : double  x₀ ∈ (0, 1).  Default 0.5.  All
+                           non-fixed-point seeds converge to the
+                           same attractor; extreme values
+                           (close to 0 or 1) just lengthen the
+                           transient.
+
+=== Themes ===
+
+Density-histogram themes work.  Interior-cycle themes are
+meaningless (no iter count per pixel) and should be hidden by
+the theme picker's family gating.
+
+=== References ===
+
+  May, R. M. (1976) ""Simple mathematical models with very
+  complicated dynamics."" Nature 261, 459–467.
+  Feigenbaum, M. J. (1978) ""Quantitative universality for a
+  class of nonlinear transformations."" J. Stat. Phys. 19, 25–52.
+";
     }
 }

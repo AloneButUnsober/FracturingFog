@@ -89,6 +89,10 @@ namespace FracturingFog.Hosting
             new("User Bulb 3D",  HelpTextBundle.MathUserBulbText),
             new("Sandbox",       HelpTextBundle.MathSandboxText),
             new("Mandelbrot Z² (Generated)", HelpTextBundle.MathGeneratedZ2Text),
+            new("Magnet 1",      HelpTextBundle.MathMagnetOneText),
+            new("Magnet 2",      HelpTextBundle.MathMagnetTwoText),
+            new("Glynn",         HelpTextBundle.MathGlynnText),
+            new("Logistic",      HelpTextBundle.MathLogisticText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]
