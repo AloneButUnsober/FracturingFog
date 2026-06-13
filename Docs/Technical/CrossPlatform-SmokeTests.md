@@ -147,21 +147,27 @@ Each command emits a self-contained single-file archive under
    opens the Avalonia shell; `./FracturingFog.App --batch --image
    --out /tmp/smoke.png --width 320 --height 240` round-trips a PNG.
 
-**Known publish blocker (CalculatorGen + ColorGen NETSDK1150).**
+**Resolved publish blocker (CalculatorGen + ColorGen NETSDK1150).**
 
-Until CalculatorGen and ColorGen are split into Lib + Cli sibling
-projects, the App's self-contained publish trips NETSDK1150 because both
-Exe projects are referenced transitively as libraries via UI.Avalonia.
-The follow-up that fixes this:
+Historical: until CalculatorGen and ColorGen were split into Lib + Cli
+sibling projects, the App's self-contained publish tripped NETSDK1150
+because both Exe projects were referenced transitively as libraries
+via UI.Avalonia. The split landed via:
 
-1. Add `CalculatorGen.Lib` + `ColorGen.Lib` library projects holding the
-   `*Api`, `*HotLoad`, and template-resolver source.
-2. Slim `CalculatorGen` + `ColorGen` Exes to a thin `Program.cs` Main
-   that dispatches into the Lib.
-3. Retarget `UI.Avalonia.csproj` ProjectReferences at the new `*Lib`
-   projects so the App publish chain only ever sees library refs.
+1. `CalculatorGen.Lib` + `ColorGen.Lib` sibling library projects hold
+   the `*Api`, `*HotLoad`, Parser/, Emitters/ source plus the embedded
+   templates. Source physically still lives under the original
+   `CalculatorGen/` and `ColorGen/` directories; the Lib csproj pulls
+   it via `Compile Include="..\<dir>\**\*.cs"`.
+2. `CalculatorGen.csproj` + `ColorGen.csproj` are now thin CLI Exes
+   that disable the default Compile glob and pull only `Program.cs`,
+   `ProjectReference` the sibling Lib.
+3. `UI.Avalonia.csproj` + `FracturingFogCLD.csproj` reference the Lib
+   projects, not the Exes.
 
-Tracked separately; publish artifacts ship via the CI release workflow
+`dotnet publish FracturingFog.App -c Release -r linux-x64
+--self-contained true -p:PublishSingleFile=true` now succeeds end-to-end
+on a Windows host. Publish artifacts ship via the CI release workflow
 (Slice 6.4) where the GitHub runner builds against a clean restore and
 the publish profile drives a fresh single-RID closure.
 
@@ -198,11 +204,15 @@ These Silk smoke runs are marked `continue-on-error: true` in
 still gates merges. Each is a runner-infrastructure gap, not a code
 defect:
 
-* **Windows / Silk smoke** — `GlfwException: ApiUnavailable: WGL: The
-  driver does not appear to support OpenGL`. The `windows-latest`
-  GitHub runner ships without an OpenGL ICD. Fix path: bundle Mesa3D
-  for Windows on the runner before the smoke step (planned, not yet
-  landed).
+* **Windows / Silk smoke** — *resolved* (Phase X.7). Previously failed
+  with `GlfwException: ApiUnavailable: WGL: The driver does not appear
+  to support OpenGL` because the `windows-latest` runner ships no
+  OpenGL ICD. The build workflow now fetches Mesa3D for Windows
+  (pal1000/mesa-dist-win llvmpipe build) and overrides
+  `C:\Windows\System32\opengl32.dll` before invoking the smoke; new
+  processes pick up Mesa's GL 4.6 software path via the normal
+  `LoadLibrary("opengl32.dll")` resolution. `continue-on-error` is off
+  on the Windows leg so the smoke now gates the leg.
 * **Linux Wayland / Silk smoke** — segfault inside the Silk EGL adapter
   while running under `weston --backend=headless`. The Silk smoke
   successfully passes on the same runner under xvfb + GLFW + X11, so

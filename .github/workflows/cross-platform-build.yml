@@ -204,13 +204,98 @@ jobs:
           kill "$WESTON_PID" 2>/dev/null || true
           exit $RC
 
-      # Windows GitHub runner has no OpenGL driver — `WGL: The driver does
-      # not appear to support OpenGL`. Bundling Mesa3D-for-Windows on the
-      # runner is the planned fix; marked non-blocking until that lands so
-      # the leg still gates on the build signal.
+      # Phase X.7 — Windows runner ships no OpenGL ICD; GLFW falls back to
+      # the GDI generic GL 1.1 path and the Silk smoke previously tripped
+      # `GlfwException: ApiUnavailable: WGL: The driver does not appear to
+      # support OpenGL`. pal1000/mesa-dist-win provides an llvmpipe-backed
+      # opengl32.dll that implements GL 4.6 in software. Overriding the
+      # runner's system32 copy makes new processes pick up Mesa via the
+      # standard LoadLibrary("opengl32.dll") path. opengl32 is not in the
+      # default KnownDLLs list on Windows Server 2022, so the override
+      # applies to subsequent processes without a reboot.
+      - name: Bundle Mesa3D for Windows Silk smoke
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $version = "26.0.8"
+          $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$version/mesa3d-$version-release-msvc.7z"
+          $zipPath = Join-Path $env:RUNNER_TEMP "mesa3d.7z"
+          $extractDir = Join-Path $env:RUNNER_TEMP "mesa3d"
+          Write-Host "Fetching Mesa3D $version from $url"
+          Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+          7z x $zipPath "-o$extractDir" -y | Out-Null
+          $source = Get-ChildItem -Path $extractDir -Recurse -Filter "opengl32.dll" |
+                    Where-Object { $_.FullName -match "x64" } |
+                    Select-Object -First 1
+          if (-not $source) { throw "opengl32.dll not found in extracted Mesa3D archive" }
+          Write-Host "Found Mesa opengl32.dll at $($source.FullName) (size: $($source.Length))"
+
+          # Diagnostic: KnownDLLs cache opengl32 at boot would mean a file
+          # replace is futile (cached section wins for new processes). Log
+          # the KnownDLLs registry so a future failure has a clear lead.
+          $knownDlls = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs' -ErrorAction SilentlyContinue
+          if ($knownDlls) {
+            $opengl32Known = $knownDlls.PSObject.Properties |
+                             Where-Object { $_.Value -match 'opengl32' }
+            if ($opengl32Known) {
+              Write-Warning "opengl32.dll is registered in KnownDLLs ($($opengl32Known.Name)); file override may be cached out by Session Manager"
+            } else {
+              Write-Host "opengl32.dll is NOT in KnownDLLs — file override should apply to new processes"
+            }
+          }
+
+          # Mesa3D opengl32.dll is a loader stub; the actual GL implementation
+          # lives in gallium_wgl.dll plus Mesa-specific runtime DLLs in the
+          # same x64 folder. Dropping only opengl32.dll trips
+          #   `WGL: Failed to load opengl32.dll: The specified module could
+          #    not be found`
+          # at runtime because the loader stub fails to resolve its deps.
+          #
+          # Strategy:
+          #   * opengl32.dll       — REPLACE (takeown + icacls); the whole
+          #                          point of this step.
+          #   * Mesa-only DLLs     — copy into System32 (file does not exist
+          #                          in stock Windows, no conflict).
+          #   * Existing sys DLLs  — SKIP (e.g. d3d10warp.dll, d3d12.dll,
+          #                          dxgi.dll are owned by Windows and held
+          #                          open by system processes; replacing
+          #                          them trips "file is being used by
+          #                          another process" and we do not need
+          #                          Mesa's D3D-backend drivers for the
+          #                          llvmpipe software path the smoke uses).
+          $sys32 = "C:\Windows\System32"
+          $x64Dir = Split-Path $source.FullName -Parent
+          $installed = 0
+          $replaced  = 0
+          $skipped   = 0
+          Get-ChildItem -Path $x64Dir -Filter "*.dll" | ForEach-Object {
+            $tgt = Join-Path $sys32 $_.Name
+            if ($_.Name -ieq "opengl32.dll") {
+              & takeown.exe /F $tgt 2>&1 | Out-Null
+              & icacls.exe $tgt /grant 'Administrators:(F)' 2>&1 | Out-Null
+              Copy-Item -Path $_.FullName -Destination $tgt -Force
+              $replaced++
+              Write-Host "Replaced $($_.Name) ($($_.Length) bytes)"
+            } elseif (Test-Path $tgt) {
+              Write-Host "Skipped $($_.Name) (System32 owns it; Mesa D3D-backend driver not needed for llvmpipe smoke path)"
+              $skipped++
+            } else {
+              Copy-Item -Path $_.FullName -Destination $tgt -Force
+              $installed++
+              Write-Host "Installed $($_.Name) ($($_.Length) bytes)"
+            }
+          }
+          Write-Host "Mesa bundle summary: replaced=$replaced installed=$installed skipped=$skipped"
+
+          # Pin Mesa to its llvmpipe (pure software CPU) gallium driver
+          # so the smoke does not try to probe the D3D12/zink/Vulkan
+          # backends, none of which work on the GH Windows runner.
+          "GALLIUM_DRIVER=llvmpipe"             | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "MESA_LOADER_DRIVER_OVERRIDE=llvmpipe" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Run Silk smoke (Windows)
         if: matrix.os == 'windows-latest'
-        continue-on-error: true
         run: dotnet run --project Rendering.Silk.Smoke/FracturingFog.Rendering.Silk.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
 
       # macOS Apple Silicon Silk smoke segfaults inside the CGL context init.
