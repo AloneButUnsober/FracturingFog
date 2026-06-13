@@ -79,6 +79,12 @@ namespace FracturingFog
         /// <c>NewtonExponent</c> + <c>NewtonRelaxation</c>; basin
         /// colouring is identical to Newton.</summary>
         Halley,
+        /// <summary>Secant basins for f(z) = z^d − 1. Two-point
+        /// recurrence (z_{n+1} = z_n − f(z_n)·(z_n − z_{n−1}) /
+        /// (f(z_n) − f(z_{n−1}))) — derivative-free root-finder. Per-
+        /// pixel state carries z and z_{n−1}; initial offset is
+        /// tunable via <c>SecantInitialOffset</c>.</summary>
+        Secant,
     }
 
     public enum RenderProfile { Preview, Final }

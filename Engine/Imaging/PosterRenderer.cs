@@ -238,6 +238,7 @@ namespace FracturingFog.Imaging
                 FractalType.Glynn            => new EscapeTimeCalculator(w, h),
                 FractalType.Logistic         => new LogisticCalculator(w, h),
                 FractalType.Halley           => new HalleyCalculator(w, h),
+                FractalType.Secant           => new SecantCalculator(w, h),
                 FractalType.IFS              => new IFSCalculator(w, h),
                 FractalType.LSystem          => new LSystemCalculator(w, h),
                 FractalType.StrangeAttractor => new AttractorCalculator(w, h),

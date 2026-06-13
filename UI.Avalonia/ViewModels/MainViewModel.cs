@@ -214,6 +214,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Glynn,                 "Glynn"),
         (FractalType.Logistic,              "Logistic Bifurcation"),
         (FractalType.Halley,                "Halley"),
+        (FractalType.Secant,                "Secant"),
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

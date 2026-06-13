@@ -36,6 +36,7 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.Glynn)]
     [InlineData(FractalType.Logistic)]
     [InlineData(FractalType.Halley)]
+    [InlineData(FractalType.Secant)]
     public void AllowedTypes_AreAllowed(FractalType t)
     {
         Assert.True(FractalTypeAllowlist.IsAllowed(t));

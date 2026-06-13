@@ -4318,5 +4318,69 @@ colouring lands in an outer band — the picture often looks
   var fpp = d * (d - 1) * zd2;
   return z - 2 * f * fp / (2 * fp * fp - f * fpp);
 ";
+
+        public const string MathSecantText =
+@"=== Secant Basins ===
+
+The secant method is the derivative-free cousin of Newton's
+iteration — instead of f'(z), it approximates the slope by the
+chord through the previous two iterates:
+
+        zₙ₊₁ = zₙ − R · f(zₙ) · (zₙ − zₙ₋₁) / (f(zₙ) − f(zₙ₋₁))
+
+Order of convergence ≈ φ ≈ 1.618 (slower than Newton's 2 but
+still superlinear).  Fracturing Fog renders the basins of
+attraction of f(z) = z^d − 1, mirroring the Newton / Halley
+basin maps so the three families render at the same scale and
+colour with the same theme.
+
+=== Two-Point State ===
+
+Per-pixel state is (z, prev_z) instead of just z — the kernel
+must carry the previous iterate to compute the next chord.
+Mathematically equivalent to PhoenixKernel's prev-z slot but
+applied to root-finding instead of escape-time.
+
+The recurrence is undefined when prev_z = z (zero chord
+denominator).  Pixel initialisation:
+    z      = pixel
+    prev_z = pixel + SecantInitialOffset    (default 0.5 + 0i)
+
+A non-zero offset is required.  The offset only seeds the first
+chord; once iteration starts the chord direction tracks the
+local function shape and the asymptotic basins are independent
+of small offset changes.  Large offsets can land iterates in
+different convergence basins than Newton on the same pixel —
+this is a feature, not a bug.
+
+=== Newton vs Halley vs Secant ===
+
+  • Newton:  uses f, f'        (quadratic convergence)
+  • Halley:  uses f, f', f''   (cubic convergence)
+  • Secant:  uses f only       (superlinear, ≈ 1.618)
+
+Secant needs MORE iterations than Newton for the same epsilon
+but each iteration is CHEAPER (no derivative evaluation), so on
+high-degree polynomials Secant can beat Newton overall.  For
+the z^d − 1 family the difference is small; the visual interest
+is the chord-step pattern showing through the basin filaments.
+
+=== Parameters ===
+
+  NewtonExponent      : int      Polynomial degree d.  Default 3.
+                                 Shared with Newton / Halley.
+  NewtonRelaxation    : double   Relaxation factor R.  Default 1.0.
+  SecantInitialOffset : Complex  Initial prev_z displacement.
+                                 Default (0.5, 0).  Magnitude
+                                 floored at 1e-6 to avoid degenerate
+                                 first-step chord.
+
+=== C# Equation ===
+
+  // Secant basins of z^d − 1, d = 3. User Equation cannot carry
+  // prev-z between steps via the (z, c, n) → z signature, so use
+  // FractalType = Secant for the real thing. Approximation:
+  return Complex.Pow(z, 3) - Complex.One;
+";
     }
 }
