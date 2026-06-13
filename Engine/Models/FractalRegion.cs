@@ -430,6 +430,18 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Halley,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Secant — z³ − 1 basins",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  =  64,
+                Description = "Secant-method basins of z³ − 1 — chord-step pattern through Wada lakes.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Secant,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

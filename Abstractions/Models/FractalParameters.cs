@@ -100,6 +100,14 @@ namespace FracturingFog.Models
         public int NewtonExponent { get; set; } = 3;
         public double NewtonRelaxation { get; set; } = 1.0;
 
+        /// <summary>Initial prev-z offset for the Secant basin renderer.
+        /// Secant's two-point recurrence is undefined when prev = z, so
+        /// the first prev is set to (pixel + offset). Default (0.5, 0)
+        /// gives a stable starting chord across the unit-roots
+        /// configuration; the imaginary component biases the early
+        /// chord direction without changing the asymptotic basins.</summary>
+        public Complex SecantInitialOffset { get; set; } = new Complex(0.5, 0.0);
+
         public int BuddhaSamples { get; set; } = 500_000;
         public int BuddhaIterLow { get; set; } = 500;
         public int BuddhaIterMid { get; set; } = 5_000;
@@ -257,6 +265,7 @@ namespace FracturingFog.Models
                 AttractorC = AttractorC, AttractorD = AttractorD,
                 NewtonExponent = NewtonExponent,
                 NewtonRelaxation = NewtonRelaxation,
+                SecantInitialOffset = SecantInitialOffset,
                 BuddhaSamples = BuddhaSamples,
                 BuddhaIterLow = BuddhaIterLow,
                 BuddhaIterMid = BuddhaIterMid,

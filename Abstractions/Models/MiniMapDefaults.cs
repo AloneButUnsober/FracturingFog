@@ -58,6 +58,7 @@ public static class MiniMapDefaults
         FractalType.Glynn            => new(-0.2,  0.0, 0.7),
         FractalType.Logistic         => new( 3.5,  0.5, 2.0),
         FractalType.Halley           => new( 0.0,  0.0, 0.9),
+        FractalType.Secant           => new( 0.0,  0.0, 0.9),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

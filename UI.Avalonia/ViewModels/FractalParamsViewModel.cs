@@ -49,6 +49,8 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _glynnI = _p.GlynnC.Imaginary;
         _logisticBurnIn = _p.LogisticBurnIn;
         _logisticSeed = _p.LogisticSeed;
+        _secantOffsetR = _p.SecantInitialOffset.Real;
+        _secantOffsetI = _p.SecantInitialOffset.Imaginary;
         _newtonExponent = _p.NewtonExponent;
         _newtonRelaxation = _p.NewtonRelaxation;
         _ifsPresetName = _p.IFSPresetName;
@@ -107,7 +109,8 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsPhoenix => FractalType == FractalType.Phoenix;
     public bool IsGlynn => FractalType == FractalType.Glynn;
     public bool IsLogistic => FractalType == FractalType.Logistic;
-    public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley;
+    public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley or FractalType.Secant;
+    public bool IsSecant => FractalType == FractalType.Secant;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
     public bool IsStrangeAttractor => FractalType == FractalType.StrangeAttractor;
@@ -137,6 +140,12 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public int LogisticBurnIn { get => _logisticBurnIn; set { Set(ref _logisticBurnIn, Math.Max(0, value)); _p.LogisticBurnIn = _logisticBurnIn; Fire(); } }
     private double _logisticSeed;
     public double LogisticSeed { get => _logisticSeed; set { Set(ref _logisticSeed, Clamp(value, 0.001, 0.999)); _p.LogisticSeed = _logisticSeed; Fire(); } }
+
+    // ── Secant ──
+    private double _secantOffsetR;
+    public double SecantOffsetR { get => _secantOffsetR; set { Set(ref _secantOffsetR, Clamp(value, -2, 2)); _p.SecantInitialOffset = new Complex(_secantOffsetR, _secantOffsetI); Fire(); } }
+    private double _secantOffsetI;
+    public double SecantOffsetI { get => _secantOffsetI; set { Set(ref _secantOffsetI, Clamp(value, -2, 2)); _p.SecantInitialOffset = new Complex(_secantOffsetR, _secantOffsetI); Fire(); } }
 
     // ── Julia animation ──
     //
