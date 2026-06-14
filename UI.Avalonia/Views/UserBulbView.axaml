@@ -317,10 +317,37 @@
                 </Grid>
 
                 <!-- Chain -->
-                <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,8,0,0">
                     <TextBlock Grid.Column="0" Classes="header" Text="Chain (when non-empty, overrides single source)" Margin="0,0,0,0" />
                     <Button    Grid.Column="1" Classes="tool" Content="+ Step"
                                Command="{Binding AddChainCommand}" />
+                    <Button    Grid.Column="2" Classes="tool" Content="+ Primitive ▾" Margin="6,0,0,0"
+                               ToolTip.Tip="Append a fold/power primitive to the chain">
+                        <Button.Flyout>
+                            <MenuFlyout ItemsSource="{Binding ChainPrimitives}">
+                                <MenuFlyout.ItemTemplate>
+                                    <DataTemplate DataType="m:UserBulbChainPrimitive">
+                                        <MenuItem Header="{Binding DisplayName}"
+                                                  Command="{Binding $parent[Window].((vm:UserBulbViewModel)DataContext).InsertPrimitiveCommand}"
+                                                  CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </MenuFlyout.ItemTemplate>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button    Grid.Column="3" Classes="tool" Content="Hybrid ▾" Margin="6,0,0,0"
+                               ToolTip.Tip="Replace chain with a worked-example hybrid">
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Mandelbox + Mandelbulb"
+                                          Command="{Binding LoadHybridCommand}"
+                                          CommandParameter="mbox+bulb" />
+                                <MenuItem Header="Menger + Mandelbulb"
+                                          Command="{Binding LoadHybridCommand}"
+                                          CommandParameter="menger+bulb" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
                 </Grid>
                 <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323">
                     <ItemsControl ItemsSource="{Binding Chain}" MaxHeight="220">

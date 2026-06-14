@@ -566,6 +566,7 @@ Three authoring engines for one-off custom fractals.
 - 3D analogue of User Equation. Roslyn-compiled `Vec3 Step(Vec3 z, Vec3 c, int n, double[] p)` (or `Quat Step` for 4D mode).
 - Mandelbulb-style raymarching with analytic + numerical DE.
 - Animated `t` parameter; named scalar params; chain editor for multi-step recurrences.
+- Hybrid composition: drop in Mandelbox-fold / KIFS-Menger / KIFS-Sierpinski / Mandelbulb-power primitives from the **+ Primitive** menu, or load a worked-example chain from **Hybrid ▾** (Mandelbox+Mandelbulb, Menger+Mandelbulb).
 - OBJ mesh export.
 - Saved to `%APPDATA%\FracturingFog\userbulbs.json`.
 - See [Docs/UserBulb-Guide.md](Docs/UserBulb-Guide.md).
