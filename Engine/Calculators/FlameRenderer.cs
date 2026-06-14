@@ -314,8 +314,12 @@ public sealed class FlameRenderer : IFractalCalculator
             vy += vy2;
         }
 
-        x = vx;
-        y = vy;
+        // Post-affine — second linear transform applied after the variation
+        // sum (Apophysis convention). The identity post (Pa=Pd=1, rest 0)
+        // is no-op visually; non-trivial posts let a preset rotate, mirror
+        // or scale the variation output without changing the pre-affine.
+        x = m.Pa * vx + m.Pb * vy + m.Pe;
+        y = m.Pc * vx + m.Pd * vy + m.Pf;
     }
 
     /// <summary>Apply a single non-linear variation. Eight Apophysis stock
