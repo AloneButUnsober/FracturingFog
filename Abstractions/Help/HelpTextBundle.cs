@@ -1400,10 +1400,19 @@ GRAPHICS, drawing the fractal curve.
   Hilbert            Space-filling curve.  Axiom: A.
                      A → −BF+AFA+FB−, B → +AF−BFB−FA+
   Koch Snowflake     Axiom: F++F++F.   F → F−F++F−F
+  Koch Curve         Open Koch.  Axiom: F.   F → F+F−−F+F   (60°)
   Dragon Curve       Axiom: FX.        X → X+YF+,   Y → −FX−Y
   Sierpinski Curve   Many variants — F + rotation rules
   Plant              Axiom: X.   X → F[+X][−X]FX,   F → FF
   Penrose            Sub-tiling rules over multiple symbols
+  Pythagoras Tree    Branching binary tree (45°).  Axiom: A.
+                     A → B[+A]−A,   B → BB
+  Peano              Space-filling, 9-segment (90°).  Axiom: X.
+                     X → XFYFX+F+YFXFY−F−XFYFX
+                     Y → YFXFY−F−XFYFX+F+YFXFY
+  Levy C Curve       Self-similar C (45°).  Axiom: F.   F → +F−−F+
+  Pentigree          Five-fold McWorter (36°).  Axiom: F.
+                     F → +F++F−−−−F−−F++F++F−
 
 === Dimension ===
 

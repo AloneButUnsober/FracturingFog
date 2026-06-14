@@ -68,6 +68,43 @@ namespace FracturingFog.Models
                 },
                 60.0,
                 4),
+
+            ["Pythagoras Tree"] = new LSystemDefinition(
+                "A",
+                new() {
+                    { 'A', "B[+A]-A" },
+                    { 'B', "BB" },
+                },
+                45.0,
+                7,
+                StartAngleDegrees: 90.0),
+
+            ["Koch Curve"] = new LSystemDefinition(
+                "F",
+                new() { { 'F', "F+F--F+F" } },
+                60.0,
+                4),
+
+            ["Peano"] = new LSystemDefinition(
+                "X",
+                new() {
+                    { 'X', "XFYFX+F+YFXFY-F-XFYFX" },
+                    { 'Y', "YFXFY-F-XFYFX+F+YFXFY" },
+                },
+                90.0,
+                3),
+
+            ["Levy C"] = new LSystemDefinition(
+                "F",
+                new() { { 'F', "+F--F+" } },
+                45.0,
+                12),
+
+            ["Pentigree"] = new LSystemDefinition(
+                "F",
+                new() { { 'F', "+F++F----F--F++F++F-" } },
+                36.0,
+                4),
         };
     }
 }

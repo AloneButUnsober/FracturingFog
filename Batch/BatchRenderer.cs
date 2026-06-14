@@ -37,6 +37,9 @@ namespace FracturingFog.Batch
             var fp = new FractalParameters();
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
+            if (!string.IsNullOrWhiteSpace(opts.LSystemPresetName))
+                                                  fp.LSystemPresetName  = opts.LSystemPresetName!;
+            if (opts.LSystemDepth.HasValue)       fp.LSystemDepth       = opts.LSystemDepth.Value;
 
             var req = new PosterRequest
             {
