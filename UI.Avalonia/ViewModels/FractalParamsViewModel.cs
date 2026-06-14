@@ -84,6 +84,15 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _mandelboxCameraTheta = _p.MandelboxCameraTheta;
         _mandelboxCameraPhi = _p.MandelboxCameraPhi;
         _mandelboxCameraDistance = _p.MandelboxCameraDistance;
+        _kifsFold = _p.KifsFold;
+        _kifsIterations = _p.KifsIterations;
+        _kifsScale = _p.KifsScale;
+        _kifsOffsetX = _p.KifsOffsetX;
+        _kifsOffsetY = _p.KifsOffsetY;
+        _kifsOffsetZ = _p.KifsOffsetZ;
+        _kifsCameraTheta = _p.KifsCameraTheta;
+        _kifsCameraPhi = _p.KifsCameraPhi;
+        _kifsCameraDistance = _p.KifsCameraDistance;
 
         CloseCommand = ReactiveCommand.Create(() =>
         {
@@ -129,9 +138,10 @@ public sealed class FractalParamsViewModel : ViewModelBase
         or FractalType.AntiNebulabrot;
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
     public bool IsMandelbox => FractalType == FractalType.Mandelbox;
+    public bool IsKifs => FractalType == FractalType.Kifs;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
-          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox);
+          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs);
 
     // ── Julia ──
     private double _juliaR;
@@ -585,6 +595,27 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double MandelboxCameraPhi { get => _mandelboxCameraPhi; set { Set(ref _mandelboxCameraPhi, Clamp(value, 0.01, 3.13)); _p.MandelboxCameraPhi = _mandelboxCameraPhi; Fire(); } }
     private double _mandelboxCameraDistance;
     public double MandelboxCameraDistance { get => _mandelboxCameraDistance; set { Set(ref _mandelboxCameraDistance, Clamp(value, 0.1, 500)); _p.MandelboxCameraDistance = _mandelboxCameraDistance; Fire(); } }
+
+    // ── KIFS ──
+    private KifsFoldKind _kifsFold;
+    public KifsFoldKind KifsFold { get => _kifsFold; set { Set(ref _kifsFold, value); _p.KifsFold = value; Fire(); } }
+    public Array KifsFoldKinds => Enum.GetValues(typeof(KifsFoldKind));
+    private int _kifsIterations;
+    public int KifsIterations { get => _kifsIterations; set { Set(ref _kifsIterations, (int)Clamp(value, 2, 32)); _p.KifsIterations = _kifsIterations; Fire(); } }
+    private double _kifsScale;
+    public double KifsScale { get => _kifsScale; set { Set(ref _kifsScale, Clamp(value, 0.0, 6.0)); _p.KifsScale = _kifsScale; Fire(); } }
+    private double _kifsOffsetX;
+    public double KifsOffsetX { get => _kifsOffsetX; set { Set(ref _kifsOffsetX, Clamp(value, -3, 3)); _p.KifsOffsetX = _kifsOffsetX; Fire(); } }
+    private double _kifsOffsetY;
+    public double KifsOffsetY { get => _kifsOffsetY; set { Set(ref _kifsOffsetY, Clamp(value, -3, 3)); _p.KifsOffsetY = _kifsOffsetY; Fire(); } }
+    private double _kifsOffsetZ;
+    public double KifsOffsetZ { get => _kifsOffsetZ; set { Set(ref _kifsOffsetZ, Clamp(value, -3, 3)); _p.KifsOffsetZ = _kifsOffsetZ; Fire(); } }
+    private double _kifsCameraTheta;
+    public double KifsCameraTheta { get => _kifsCameraTheta; set { Set(ref _kifsCameraTheta, Clamp(value, -10, 10)); _p.KifsCameraTheta = _kifsCameraTheta; Fire(); } }
+    private double _kifsCameraPhi;
+    public double KifsCameraPhi { get => _kifsCameraPhi; set { Set(ref _kifsCameraPhi, Clamp(value, 0.01, 3.13)); _p.KifsCameraPhi = _kifsCameraPhi; Fire(); } }
+    private double _kifsCameraDistance;
+    public double KifsCameraDistance { get => _kifsCameraDistance; set { Set(ref _kifsCameraDistance, Clamp(value, 0.1, 500)); _p.KifsCameraDistance = _kifsCameraDistance; Fire(); } }
 
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 

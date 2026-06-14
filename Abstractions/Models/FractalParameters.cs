@@ -177,6 +177,31 @@ namespace FracturingFog.Models
         public int MandelboxMaxSteps { get; set; } = 128;
         public double MandelboxEpsilon { get; set; } = 0.0015;
 
+        // KIFS (Kaleidoscopic IFS). Repeated reflective fold + scale-from-pivot
+        // DE. KifsFold selects which fold table runs per iter:
+        //   Menger     — Knighty's sort-3 fold, scale 3 from (1,1,1).
+        //   Sierpinski — 3 vertex reflections, scale 2 from (1,1,1).
+        public KifsFoldKind KifsFold { get; set; } = KifsFoldKind.Menger;
+        /// <summary>DE inner iter count. Higher = sharper detail, slower.
+        /// Default 14 — Menger sponge reads as recognisable at this depth.</summary>
+        public int KifsIterations { get; set; } = 14;
+        /// <summary>Per-iter linear scale applied after fold. Defaults are
+        /// fold-specific; the calculator picks 3.0 for Menger and 2.0 for
+        /// Sierpinski when this is left at sentinel 0.</summary>
+        public double KifsScale { get; set; } = 0.0;
+        public double KifsOffsetX { get; set; } = 1.0;
+        public double KifsOffsetY { get; set; } = 1.0;
+        public double KifsOffsetZ { get; set; } = 1.0;
+        /// <summary>Bailout for DE inner loop. |z|² above this exits early.</summary>
+        public double KifsBailout { get; set; } = 1024.0;
+        public double KifsCameraDistance { get; set; } = 4.0;
+        public double KifsCameraTheta { get; set; } = Math.PI * 0.25;
+        public double KifsCameraPhi { get; set; } = Math.PI * 0.35;
+        public double KifsLightTheta { get; set; } = Math.PI * 0.25;
+        public double KifsLightPhi { get; set; } = Math.PI * 0.45;
+        public int KifsMaxSteps { get; set; } = 160;
+        public double KifsEpsilon { get; set; } = 0.0012;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -322,6 +347,20 @@ namespace FracturingFog.Models
                 MandelboxLightPhi = MandelboxLightPhi,
                 MandelboxMaxSteps = MandelboxMaxSteps,
                 MandelboxEpsilon = MandelboxEpsilon,
+                KifsFold = KifsFold,
+                KifsIterations = KifsIterations,
+                KifsScale = KifsScale,
+                KifsOffsetX = KifsOffsetX,
+                KifsOffsetY = KifsOffsetY,
+                KifsOffsetZ = KifsOffsetZ,
+                KifsBailout = KifsBailout,
+                KifsCameraDistance = KifsCameraDistance,
+                KifsCameraTheta = KifsCameraTheta,
+                KifsCameraPhi = KifsCameraPhi,
+                KifsLightTheta = KifsLightTheta,
+                KifsLightPhi = KifsLightPhi,
+                KifsMaxSteps = KifsMaxSteps,
+                KifsEpsilon = KifsEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,
@@ -397,6 +436,18 @@ namespace FracturingFog.Models
     /// Affine map for IFS chaos game. x' = a·x + b·y + e, y' = c·x + d·y + f. Picked with weight.
     /// </summary>
     public readonly record struct AffineMap(double A, double B, double C, double D, double E, double F, double Weight);
+
+    /// <summary>KIFS fold table choice. Each value selects a different
+    /// reflective-fold + scale combination inside KifsCalculator's DE.</summary>
+    public enum KifsFoldKind
+    {
+        /// <summary>Menger sponge fold — Knighty's sort-3 + scale-3
+        /// from (1,1,1). Produces the classic cube-with-holes shape.</summary>
+        Menger,
+        /// <summary>Sierpinski tetrahedron fold — 3 vertex reflections +
+        /// scale-2 from (1,1,1). Produces the tetra gasket.</summary>
+        Sierpinski,
+    }
 
     public enum UserBulbDEModeKind
     {

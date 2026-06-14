@@ -346,6 +346,50 @@
                                Value="{Binding MandelboxCameraDistance, Mode=TwoWay}" Margin="0,2" />
             </Grid>
 
+            <!-- KIFS -->
+            <Grid IsVisible="{Binding IsKifs}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Fold:" VerticalAlignment="Center" />
+                <ComboBox  Grid.Row="0" Grid.Column="1"
+                           ItemsSource="{Binding KifsFoldKinds}"
+                           SelectedItem="{Binding KifsFold, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Menger sponge (sort-3, scale 3) or Sierpinski tetrahedron (3 vertex reflections, scale 2)." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                               Value="{Binding KifsIterations, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Scale (0=auto):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="0" Maximum="6" Increment="0.1" FormatString="F2"
+                               Value="{Binding KifsScale, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Per-iter linear scale after fold. 0 = use the fold's canonical default (3 Menger, 2 Sierpinski)." />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Offset X:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="-3" Maximum="3" Increment="0.05" FormatString="F3"
+                               Value="{Binding KifsOffsetX, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Offset Y:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="4" Grid.Column="1"
+                               Minimum="-3" Maximum="3" Increment="0.05" FormatString="F3"
+                               Value="{Binding KifsOffsetY, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Offset Z:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="5" Grid.Column="1"
+                               Minimum="-3" Maximum="3" Increment="0.05" FormatString="F3"
+                               Value="{Binding KifsOffsetZ, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="6" Grid.Column="1"
+                               Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                               Value="{Binding KifsCameraTheta, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="7" Grid.Column="1"
+                               Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                               Value="{Binding KifsCameraPhi, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="8" Grid.Column="1"
+                               Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                               Value="{Binding KifsCameraDistance, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
             <!-- Empty state -->
             <TextBlock IsVisible="{Binding HasNoParams}"
                        Text="{Binding EmptyStateText}"

@@ -132,7 +132,8 @@ namespace FracturingFog.Models
             {FractalType.Halley, "Halley" },
             {FractalType.Secant, "Secant" },
             {FractalType.Spider, "Spider" },
-            {FractalType.Mandelbox, "Mandelbox" }
+            {FractalType.Mandelbox, "Mandelbox" },
+            {FractalType.Kifs, "KIFS" }
         };
     }
 
