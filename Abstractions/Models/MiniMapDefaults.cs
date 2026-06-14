@@ -67,6 +67,7 @@ public static class MiniMapDefaults
         FractalType.Kifs             => new( 0.0,  0.0, 1.0),
         FractalType.QuaternionJulia  => new( 0.0,  0.0, 1.0),
         FractalType.Plasma           => new( 0.0,  0.0, 1.0),
+        FractalType.Flame            => new( 0.0,  0.0, 1.0),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

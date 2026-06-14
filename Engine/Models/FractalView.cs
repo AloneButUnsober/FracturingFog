@@ -135,7 +135,8 @@ namespace FracturingFog.Models
             {FractalType.Mandelbox, "Mandelbox" },
             {FractalType.Kifs, "KIFS" },
             {FractalType.QuaternionJulia, "Quaternion Julia" },
-            {FractalType.Plasma, "Plasma" }
+            {FractalType.Plasma, "Plasma" },
+            {FractalType.Flame, "Flame" }
         };
     }
 
