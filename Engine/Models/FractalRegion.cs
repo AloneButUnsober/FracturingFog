@@ -574,6 +574,30 @@ namespace FracturingFog.Models
                 FractalType = FractalType.QuaternionMandelbrot,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Apollonian — (−1, 2, 2, 3) Gasket",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  2.0,
+                Iterations  = 12,
+                Description = "Integral Apollonian packing built from the seed curvature quadruple (−1, 2, 2, 3). Outer unit disk, two half-radius circles on the diameter, third-radius circles above and below. Recurse via Vieta jumping until sub-pixel.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Apollonian,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Apollonian — L/R Kissing Cusp",
+                CenterX     =  0.0,
+                CenterY     =  0.4,
+                Zoom        =  6.0,
+                Iterations  = 14,
+                Description = "Off-axis zoom into the curvilinear triangle bounded by L, R, T. The self-similar Vieta-jump chain produces tight clusters of progressively smaller circles approaching each tangency point.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Apollonian,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

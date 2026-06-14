@@ -222,6 +222,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.QuaternionMandelbrot,  "Quaternion Mandelbrot (3D)"),
         (FractalType.Plasma,                "Plasma (Diamond-Square)"),
         (FractalType.Flame,                 "Flame (Apophysis)"),
+        (FractalType.Apollonian,            "Apollonian Gasket"),
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

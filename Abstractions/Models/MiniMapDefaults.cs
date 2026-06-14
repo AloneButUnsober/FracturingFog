@@ -70,6 +70,7 @@ public static class MiniMapDefaults
         FractalType.QuaternionMandelbrot => new( 0.0,  0.0, 1.0),
         FractalType.Plasma           => new( 0.0,  0.0, 1.0),
         FractalType.Flame            => new( 0.0,  0.0, 1.0),
+        FractalType.Apollonian       => new( 0.0,  0.0, 2.0),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

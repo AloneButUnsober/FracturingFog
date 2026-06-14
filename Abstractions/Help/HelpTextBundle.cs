@@ -4828,6 +4828,93 @@ is fed to IColorMap.Map in the same [0, 256) range escape-time
 fractals use.
 ";
 
+        public const string MathApollonianText =
+@"=== Apollonian Gasket ===
+
+A circle packing built recursively from a seed quadruple of
+mutually tangent circles using the Descartes Circle Theorem.
+The gasket is the limit set under repeated tangency
+construction — between any three mutually tangent circles
+there are exactly two further circles tangent to all three,
+and the packing recurses indefinitely.  The resulting fractal
+has Hausdorff dimension ≈ 1.3057.
+
+=== Descartes Circle Theorem ===
+
+For four mutually tangent circles with signed curvatures
+k_i = ±1/r_i (positive for internally tangent / disjoint,
+negative for the unique enclosing circle):
+
+  (k₁ + k₂ + k₃ + k₄)² = 2 · (k₁² + k₂² + k₃² + k₄²)
+
+Given any three of the four, solving for k₄ yields a quadratic
+with the two solutions corresponding to the two circles that
+complete the tangency.  Vieta's formulas reduce this to a
+single linear ""jump"" between the two solutions:
+
+  k₄' = 2(k₁ + k₂ + k₃) − k₄
+
+The complex form, with each circle's centre z_i carried as
+k_i·z_i, gives the position of the new circle by the same
+linear jump on (k·z):
+
+  k₄'·z₄' = 2(k₁z₁ + k₂z₂ + k₃z₃) − k₄·z₄
+
+=== Seed quadruple ===
+
+This implementation ships the integral (−1, 2, 2, 3) gasket:
+
+  outer disk     radius 1     k = −1   (enclosing)
+  two ""kissing""  radius 1/2   k = +2
+  two cusp caps  radius 1/3   k = +3   (above + below diameter)
+
+It is one of the rare quadruples whose entire packing has
+integer curvatures at every depth.
+
+=== Recursion ===
+
+From a quadruple {a, b, c, d}, generate three children by
+Vieta-jumping each of a, b, c through the other three
+(the just-inserted d is skipped to avoid revisiting).  Each
+child quadruple replaces one circle with its Vieta partner
+and recurses with the new circle as 'd'.  Termination:
+
+  • Stop when the next generated circle would draw smaller
+    than ApollonianMinPixelRadius device pixels of radius
+    (the visual cutoff — almost always fires first).
+  • Stop when recursion depth exceeds ApollonianDepth.
+  • Skip Vieta jumps that yield non-positive curvature
+    (would replace an enclosed circle with an enclosing one,
+    bursting the gasket).
+
+The pixel-radius cutoff naturally lets pan / zoom reveal new
+detail — at higher Zoom the world-radius cutoff shrinks, so
+deeper levels of the tree get drawn.
+
+=== Parameters ===
+
+  ApollonianDepth           : int    Max recursion depth.
+                                     Default 12.
+  ApollonianMinPixelRadius  : double Sub-pixel cutoff in device
+                                     pixels.  Default 0.75.
+  ApollonianColorByDepth    : bool   On = palette indexed by
+                                     recursion depth (banded
+                                     rings).  Off = log-radius
+                                     gradient (smooth).
+
+=== Implementation notes ===
+
+Circles are accumulated into a flat list during recursion,
+then sorted by radius descending and painted disk-fill in
+order so that smaller children naturally overwrite the
+interior of their enclosing parent — the nested-disks look
+emerges from overdraw without any explicit annulus
+construction.  The kissing-point cusps where three circles
+meet are rendered as a stack of progressively smaller filled
+disks; the pixel-radius cutoff is what keeps the renderer
+from infinitely chasing those cusps.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 

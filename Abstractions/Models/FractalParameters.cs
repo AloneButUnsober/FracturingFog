@@ -296,6 +296,24 @@ namespace FracturingFog.Models
         public int QMandelMaxSteps { get; set; } = 160;
         public double QMandelEpsilon { get; set; } = 0.0012;
 
+        // Apollonian gasket (Descartes Circle Theorem recursive packing).
+        /// <summary>Maximum recursion depth for the Vieta-jump tree. The
+        /// inside-R sub-gaskets sit several levels deeper than the cusp circles
+        /// around the (−1, 2, 2, 3) seed, so the default is generous enough to
+        /// let those branches finish without the pixel-radius cutoff firing
+        /// before the sub-gasket starts. Default 24.</summary>
+        public int ApollonianDepth { get; set; } = 24;
+        /// <summary>Stop recursing when the next generated circle would draw
+        /// at fewer than this many device pixels of radius. Higher = lighter
+        /// renders, faster; lower = more detail at the cost of pile-up at
+        /// kissing-point cusps. Default 0.75.</summary>
+        public double ApollonianMinPixelRadius { get; set; } = 0.75;
+        /// <summary>When true, each circle is coloured by its recursion depth
+        /// modulo palette size. When false, colour is driven by log(radius)
+        /// — a smoother gradient that emphasises scale instead of generation.
+        /// Default true.</summary>
+        public bool ApollonianColorByDepth { get; set; } = true;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -487,6 +505,9 @@ namespace FracturingFog.Models
                 QMandelLightPhi = QMandelLightPhi,
                 QMandelMaxSteps = QMandelMaxSteps,
                 QMandelEpsilon = QMandelEpsilon,
+                ApollonianDepth = ApollonianDepth,
+                ApollonianMinPixelRadius = ApollonianMinPixelRadius,
+                ApollonianColorByDepth = ApollonianColorByDepth,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

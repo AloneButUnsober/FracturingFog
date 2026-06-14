@@ -111,6 +111,9 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _qmCameraDistance = _p.QMandelCameraDistance;
         _plasmaRoughness = _p.PlasmaRoughness;
         _plasmaSeed = _p.PlasmaSeed;
+        _apolloDepth = _p.ApollonianDepth;
+        _apolloMinPx = _p.ApollonianMinPixelRadius;
+        _apolloColorByDepth = _p.ApollonianColorByDepth;
         _flamePresetName = _p.FlamePresetName;
         _flameIterations = _p.FlameIterations;
         _flameGamma = _p.FlameGamma;
@@ -166,10 +169,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsQuatMandelbrot => FractalType == FractalType.QuaternionMandelbrot;
     public bool IsPlasma => FractalType == FractalType.Plasma;
     public bool IsFlame => FractalType == FractalType.Flame;
+    public bool IsApollonian => FractalType == FractalType.Apollonian;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame);
+          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian);
 
     // ── Julia ──
     private double _juliaR;
@@ -682,6 +686,14 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double PlasmaRoughness { get => _plasmaRoughness; set { Set(ref _plasmaRoughness, Clamp(value, 0.0, 1.0)); _p.PlasmaRoughness = _plasmaRoughness; Fire(); } }
     private int _plasmaSeed;
     public int PlasmaSeed { get => _plasmaSeed; set { Set(ref _plasmaSeed, value); _p.PlasmaSeed = _plasmaSeed; Fire(); } }
+
+    // ── Apollonian ──
+    private int _apolloDepth;
+    public int ApollonianDepth { get => _apolloDepth; set { Set(ref _apolloDepth, (int)Clamp(value, 0, 40)); _p.ApollonianDepth = _apolloDepth; Fire(); } }
+    private double _apolloMinPx;
+    public double ApollonianMinPixelRadius { get => _apolloMinPx; set { Set(ref _apolloMinPx, Clamp(value, 0.25, 16.0)); _p.ApollonianMinPixelRadius = _apolloMinPx; Fire(); } }
+    private bool _apolloColorByDepth;
+    public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
 
     // ── Flame ──
     private string _flamePresetName = "Sierpinski Variation";

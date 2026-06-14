@@ -504,6 +504,26 @@
                                ToolTip.Tip="Highlight saturation 0..1. 0 = linear, 1 = full gamma-on-colour." />
             </Grid>
 
+            <!-- Apollonian -->
+            <Grid IsVisible="{Binding IsApollonian}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Depth:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="0" Maximum="40" Increment="1" FormatString="F0"
+                               Value="{Binding ApollonianDepth, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Maximum Vieta-jump recursion depth. Pixel cutoff usually fires first; raise only when zoomed deep." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Min px radius:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="0.25" Maximum="16.0" Increment="0.25" FormatString="F2"
+                               Value="{Binding ApollonianMinPixelRadius, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Stop recursing when the next circle would draw smaller than this many device pixels." />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Colour by depth:" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="2" Grid.Column="1"
+                          IsChecked="{Binding ApollonianColorByDepth, Mode=TwoWay}" Margin="0,2"
+                          ToolTip.Tip="On = palette indexed by recursion depth (banded). Off = log(radius) gradient (smooth)." />
+            </Grid>
+
             <!-- Empty state -->
             <TextBlock IsVisible="{Binding HasNoParams}"
                        Text="{Binding EmptyStateText}"
