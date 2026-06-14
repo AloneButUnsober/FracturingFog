@@ -40,6 +40,7 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.Spider)]
     [InlineData(FractalType.Mandelbox)]
     [InlineData(FractalType.Kifs)]
+    [InlineData(FractalType.QuaternionJulia)]
     public void AllowedTypes_AreAllowed(FractalType t)
     {
         Assert.True(FractalTypeAllowlist.IsAllowed(t));

@@ -26,6 +26,7 @@ public static class MiniMapDefaults
         FractalType.Mandelbulb => false,
         FractalType.Mandelbox  => false,
         FractalType.Kifs       => false,
+        FractalType.QuaternionJulia => false,
         FractalType.UserBulb   => false,
         _                      => true
     };
@@ -64,6 +65,7 @@ public static class MiniMapDefaults
         FractalType.Spider           => new( 0.0,  0.0, 1.2),
         FractalType.Mandelbox        => new( 0.0,  0.0, 1.0),
         FractalType.Kifs             => new( 0.0,  0.0, 1.0),
+        FractalType.QuaternionJulia  => new( 0.0,  0.0, 1.0),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

@@ -88,17 +88,19 @@ namespace FracturingFog.Input
                 _rightDragStartY = e.Y;
                 _rightDragStartTheta = ViewState.FractalType switch
                 {
-                    FractalType.UserBulb  => ViewState.FractalParameters.UserBulbCameraTheta,
-                    FractalType.Mandelbox => ViewState.FractalParameters.MandelboxCameraTheta,
-                    FractalType.Kifs      => ViewState.FractalParameters.KifsCameraTheta,
-                    _                     => ViewState.FractalParameters.BulbCameraTheta,
+                    FractalType.UserBulb        => ViewState.FractalParameters.UserBulbCameraTheta,
+                    FractalType.Mandelbox       => ViewState.FractalParameters.MandelboxCameraTheta,
+                    FractalType.Kifs            => ViewState.FractalParameters.KifsCameraTheta,
+                    FractalType.QuaternionJulia => ViewState.FractalParameters.QJuliaCameraTheta,
+                    _                           => ViewState.FractalParameters.BulbCameraTheta,
                 };
                 _rightDragStartPhi = ViewState.FractalType switch
                 {
-                    FractalType.UserBulb  => ViewState.FractalParameters.UserBulbCameraPhi,
-                    FractalType.Mandelbox => ViewState.FractalParameters.MandelboxCameraPhi,
-                    FractalType.Kifs      => ViewState.FractalParameters.KifsCameraPhi,
-                    _                     => ViewState.FractalParameters.BulbCameraPhi,
+                    FractalType.UserBulb        => ViewState.FractalParameters.UserBulbCameraPhi,
+                    FractalType.Mandelbox       => ViewState.FractalParameters.MandelboxCameraPhi,
+                    FractalType.Kifs            => ViewState.FractalParameters.KifsCameraPhi,
+                    FractalType.QuaternionJulia => ViewState.FractalParameters.QJuliaCameraPhi,
+                    _                           => ViewState.FractalParameters.BulbCameraPhi,
                 };
                 CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.NoMove2D));
                 return;
@@ -178,6 +180,10 @@ namespace FracturingFog.Input
                     case FractalType.Kifs:
                         ViewState.FractalParameters.KifsCameraTheta = newTheta;
                         ViewState.FractalParameters.KifsCameraPhi = newPhi;
+                        break;
+                    case FractalType.QuaternionJulia:
+                        ViewState.FractalParameters.QJuliaCameraTheta = newTheta;
+                        ViewState.FractalParameters.QJuliaCameraPhi = newPhi;
                         break;
                     default:
                         ViewState.FractalParameters.BulbCameraTheta = newTheta;
@@ -580,6 +586,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kifs)
                 ViewState.FractalParameters.KifsCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.KifsCameraDistance + delta, 0.1, 500.0);
+            else if (ViewState.FractalType == FractalType.QuaternionJulia)
+                ViewState.FractalParameters.QJuliaCameraDistance = Math.Clamp(
+                    ViewState.FractalParameters.QJuliaCameraDistance + delta, 0.1, 500.0);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -594,6 +603,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.MandelboxCameraTheta = NormalizeAngle(ViewState.FractalParameters.MandelboxCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.Kifs)
                 ViewState.FractalParameters.KifsCameraTheta = NormalizeAngle(ViewState.FractalParameters.KifsCameraTheta + delta);
+            else if (ViewState.FractalType == FractalType.QuaternionJulia)
+                ViewState.FractalParameters.QJuliaCameraTheta = NormalizeAngle(ViewState.FractalParameters.QJuliaCameraTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -614,6 +625,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kifs)
                 ViewState.FractalParameters.KifsCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.KifsCameraPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.QuaternionJulia)
+                ViewState.FractalParameters.QJuliaCameraPhi = Math.Clamp(
+                    ViewState.FractalParameters.QJuliaCameraPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -628,6 +642,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.MandelboxLightTheta = NormalizeAngle(ViewState.FractalParameters.MandelboxLightTheta + delta);
             else if (ViewState.FractalType == FractalType.Kifs)
                 ViewState.FractalParameters.KifsLightTheta = NormalizeAngle(ViewState.FractalParameters.KifsLightTheta + delta);
+            else if (ViewState.FractalType == FractalType.QuaternionJulia)
+                ViewState.FractalParameters.QJuliaLightTheta = NormalizeAngle(ViewState.FractalParameters.QJuliaLightTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -648,6 +664,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kifs)
                 ViewState.FractalParameters.KifsLightPhi = Math.Clamp(
                     ViewState.FractalParameters.KifsLightPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.QuaternionJulia)
+                ViewState.FractalParameters.QJuliaLightPhi = Math.Clamp(
+                    ViewState.FractalParameters.QJuliaLightPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }

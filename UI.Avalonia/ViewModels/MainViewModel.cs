@@ -218,6 +218,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Halley,                "Halley"),
         (FractalType.Secant,                "Secant"),
         (FractalType.Spider,                "Spider"),
+        (FractalType.QuaternionJulia,       "Quaternion Julia (3D)"),
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

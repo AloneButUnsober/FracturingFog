@@ -93,6 +93,15 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _kifsCameraTheta = _p.KifsCameraTheta;
         _kifsCameraPhi = _p.KifsCameraPhi;
         _kifsCameraDistance = _p.KifsCameraDistance;
+        _qjCX = _p.QJuliaCX;
+        _qjCY = _p.QJuliaCY;
+        _qjCZ = _p.QJuliaCZ;
+        _qjCW = _p.QJuliaCW;
+        _qjSliceW = _p.QJuliaSliceW;
+        _qjIterations = _p.QJuliaIterations;
+        _qjCameraTheta = _p.QJuliaCameraTheta;
+        _qjCameraPhi = _p.QJuliaCameraPhi;
+        _qjCameraDistance = _p.QJuliaCameraDistance;
 
         CloseCommand = ReactiveCommand.Create(() =>
         {
@@ -139,9 +148,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
     public bool IsMandelbox => FractalType == FractalType.Mandelbox;
     public bool IsKifs => FractalType == FractalType.Kifs;
+    public bool IsQuatJulia => FractalType == FractalType.QuaternionJulia;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
-          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs);
+          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
+          || IsQuatJulia);
 
     // ── Julia ──
     private double _juliaR;
@@ -616,6 +627,26 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double KifsCameraPhi { get => _kifsCameraPhi; set { Set(ref _kifsCameraPhi, Clamp(value, 0.01, 3.13)); _p.KifsCameraPhi = _kifsCameraPhi; Fire(); } }
     private double _kifsCameraDistance;
     public double KifsCameraDistance { get => _kifsCameraDistance; set { Set(ref _kifsCameraDistance, Clamp(value, 0.1, 500)); _p.KifsCameraDistance = _kifsCameraDistance; Fire(); } }
+
+    // ── Quaternion Julia ──
+    private double _qjCX;
+    public double QJuliaCX { get => _qjCX; set { Set(ref _qjCX, Clamp(value, -2, 2)); _p.QJuliaCX = _qjCX; Fire(); } }
+    private double _qjCY;
+    public double QJuliaCY { get => _qjCY; set { Set(ref _qjCY, Clamp(value, -2, 2)); _p.QJuliaCY = _qjCY; Fire(); } }
+    private double _qjCZ;
+    public double QJuliaCZ { get => _qjCZ; set { Set(ref _qjCZ, Clamp(value, -2, 2)); _p.QJuliaCZ = _qjCZ; Fire(); } }
+    private double _qjCW;
+    public double QJuliaCW { get => _qjCW; set { Set(ref _qjCW, Clamp(value, -2, 2)); _p.QJuliaCW = _qjCW; Fire(); } }
+    private double _qjSliceW;
+    public double QJuliaSliceW { get => _qjSliceW; set { Set(ref _qjSliceW, Clamp(value, -2, 2)); _p.QJuliaSliceW = _qjSliceW; Fire(); } }
+    private int _qjIterations;
+    public int QJuliaIterations { get => _qjIterations; set { Set(ref _qjIterations, (int)Clamp(value, 2, 32)); _p.QJuliaIterations = _qjIterations; Fire(); } }
+    private double _qjCameraTheta;
+    public double QJuliaCameraTheta { get => _qjCameraTheta; set { Set(ref _qjCameraTheta, Clamp(value, -10, 10)); _p.QJuliaCameraTheta = _qjCameraTheta; Fire(); } }
+    private double _qjCameraPhi;
+    public double QJuliaCameraPhi { get => _qjCameraPhi; set { Set(ref _qjCameraPhi, Clamp(value, 0.01, 3.13)); _p.QJuliaCameraPhi = _qjCameraPhi; Fire(); } }
+    private double _qjCameraDistance;
+    public double QJuliaCameraDistance { get => _qjCameraDistance; set { Set(ref _qjCameraDistance, Clamp(value, 0.1, 500)); _p.QJuliaCameraDistance = _qjCameraDistance; Fire(); } }
 
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
