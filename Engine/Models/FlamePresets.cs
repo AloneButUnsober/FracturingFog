@@ -116,23 +116,15 @@ namespace FracturingFog.Models
             // strip — dominant brightness band. Julia (0.30) seeds the
             // square-root branch cusps. Tiny Disc (0.15) speckles the
             // background. Polar's Linear secondary keeps the strip from
-            // collapsing onto a thin θ-line.
-            //
-            // The Polar map's post-affine scales the (θ/π, r-1) strip
-            // anisotropically so the Julia cusps land in the same y-band
-            // as the Polar strip, producing a single coherent attractor
-            // instead of two disjoint clouds.
+            // collapsing onto a thin θ-line. Identity post-affines —
+            // the anisotropic-scale experiment crushed the structure.
             ["Polar Julia"] = new List<FlameMap>
             {
                 new(0.60,  0.20, -0.20,  0.60,  0.0,   0.0, 0.55,
                     FlameVariation.Polar,  0.85, 0.10,
-                    FlameVariation.Linear, 0.20,
-                    Pa: 1.2, Pb: 0.0, Pc: 0.0, Pd: 0.7,
-                    Pe: 0.0, Pf: 0.3),
+                    FlameVariation.Linear, 0.20),
                 new(0.50, -0.40,  0.40,  0.50,  0.10, -0.10, 0.30,
-                    FlameVariation.Julia,  1.0,  0.60,
-                    Pa: 0.95, Pb: 0.10, Pc: -0.10, Pd: 0.95,
-                    Pe: 0.0,  Pf: 0.0),
+                    FlameVariation.Julia,  1.0,  0.60),
                 new(0.30,  0.0,   0.0,   0.30, -0.30,  0.30, 0.15,
                     FlameVariation.Disc,   1.0,  0.95),
             },
