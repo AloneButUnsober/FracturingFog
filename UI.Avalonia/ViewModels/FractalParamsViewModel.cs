@@ -28,7 +28,8 @@ public sealed class FractalParamsViewModel : ViewModelBase
         IReadOnlyList<string>? ifsPresets = null,
         IReadOnlyList<string>? lsystemPresets = null,
         IReadOnlyList<string>? attractorPresets = null,
-        Func<string, (double a, double b, double c, double d)>? attractorDefaults = null)
+        Func<string, (double a, double b, double c, double d)>? attractorDefaults = null,
+        IReadOnlyList<string>? flamePresets = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
 
@@ -39,6 +40,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
         IfsPresets = ifsPresets ?? Array.Empty<string>();
         LSystemPresets = lsystemPresets ?? Array.Empty<string>();
         AttractorPresets = attractorPresets ?? new[] { "Clifford", "De Jong", "Hopalong", "Lorenz" };
+        FlamePresets = flamePresets ?? Array.Empty<string>();
 
         _juliaR = _p.JuliaC.Real;
         _juliaI = _p.JuliaC.Imaginary;
@@ -104,6 +106,10 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _qjCameraDistance = _p.QJuliaCameraDistance;
         _plasmaRoughness = _p.PlasmaRoughness;
         _plasmaSeed = _p.PlasmaSeed;
+        _flamePresetName = _p.FlamePresetName;
+        _flameIterations = _p.FlameIterations;
+        _flameGamma = _p.FlameGamma;
+        _flameVibrancy = _p.FlameVibrancy;
 
         CloseCommand = ReactiveCommand.Create(() =>
         {
@@ -128,6 +134,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public IReadOnlyList<string> IfsPresets { get; }
     public IReadOnlyList<string> LSystemPresets { get; }
     public IReadOnlyList<string> AttractorPresets { get; }
+    public IReadOnlyList<string> FlamePresets { get; }
 
     public string Title => $"{FractalType} Parameters";
     public string EmptyStateText => $"{FractalType} has no tunable parameters.";
@@ -657,6 +664,16 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double PlasmaRoughness { get => _plasmaRoughness; set { Set(ref _plasmaRoughness, Clamp(value, 0.0, 1.0)); _p.PlasmaRoughness = _plasmaRoughness; Fire(); } }
     private int _plasmaSeed;
     public int PlasmaSeed { get => _plasmaSeed; set { Set(ref _plasmaSeed, value); _p.PlasmaSeed = _plasmaSeed; Fire(); } }
+
+    // ── Flame ──
+    private string _flamePresetName = "Sierpinski Variation";
+    public string FlamePresetName { get => _flamePresetName; set { if (Set(ref _flamePresetName, value ?? "Sierpinski Variation")) { _p.FlamePresetName = _flamePresetName; _p.FlameMaps = null; Fire(); } } }
+    private int _flameIterations;
+    public int FlameIterations { get => _flameIterations; set { Set(ref _flameIterations, (int)Clamp(value, 100_000, 100_000_000)); _p.FlameIterations = _flameIterations; Fire(); } }
+    private double _flameGamma;
+    public double FlameGamma { get => _flameGamma; set { Set(ref _flameGamma, Clamp(value, 0.5, 5.0)); _p.FlameGamma = _flameGamma; Fire(); } }
+    private double _flameVibrancy;
+    public double FlameVibrancy { get => _flameVibrancy; set { Set(ref _flameVibrancy, Clamp(value, 0.0, 1.0)); _p.FlameVibrancy = _flameVibrancy; Fire(); } }
 
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 

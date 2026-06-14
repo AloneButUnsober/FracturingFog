@@ -46,6 +46,7 @@ public sealed class FlameRenderer : IFractalCalculator
     public FractalParameters FractalParameters { get; set; } = new();
 
     private uint[] _hits = Array.Empty<uint>();
+    private float[] _colorSum = Array.Empty<float>();
 
     public FlameRenderer(int width, int height) => Resize(width, height);
 
@@ -56,11 +57,13 @@ public sealed class FlameRenderer : IFractalCalculator
         int n = width * height;
         ColorBuffer = new uint[n];
         _hits = new uint[n];
+        _colorSum = new float[n];
     }
 
     public void Calculate(CancellationToken ct = default)
     {
         Array.Clear(_hits);
+        Array.Clear(_colorSum);
 
         var maps = FractalParameters.FlameMaps
             ?? (FlamePresets.All.TryGetValue(FractalParameters.FlamePresetName, out var preset)
@@ -99,27 +102,42 @@ public sealed class FlameRenderer : IFractalCalculator
         int threadCount = Math.Max(1, Environment.ProcessorCount);
         int perThread = iterations / threadCount;
 
-        var localBuffers = new uint[threadCount][];
-        for (int t = 0; t < threadCount; t++) localBuffers[t] = new uint[width * height];
+        var localHits = new uint[threadCount][];
+        var localColor = new float[threadCount][];
+        for (int t = 0; t < threadCount; t++)
+        {
+            localHits[t]  = new uint[width * height];
+            localColor[t] = new float[width * height];
+        }
 
         Parallel.For(0, threadCount, new ParallelOptions { CancellationToken = ct }, t =>
         {
             if (ct.IsCancellationRequested) return;
             var rng = new Random(unchecked(Environment.TickCount * 73856093 + t * 19349663));
-            var local = localBuffers[t];
+            var lh = localHits[t];
+            var lc = localColor[t];
 
             double x = 0, y = 0;
-            // Warm-up — settle onto the attractor before recording hits.
+            double cPoint = 0.0;
+
+            // Warm-up — settle onto the attractor and let the colour
+            // recurrence converge to its limit cycle before recording hits.
             for (int i = 0; i < 50; i++)
             {
                 int idx = PickMap(rng, cum, sum);
                 Step(maps[idx], ref x, ref y);
+                cPoint = (cPoint + maps[idx].ColorIndex) * 0.5;
             }
 
             for (int i = 0; i < perThread; i++)
             {
                 int idx = PickMap(rng, cum, sum);
                 Step(maps[idx], ref x, ref y);
+                // Per-Apophysis convention: average the picked map's
+                // colour index into a running per-point colour. The 0.5
+                // weighting makes the colour state a geometric blend of
+                // every map traversed up to this point.
+                cPoint = (cPoint + maps[idx].ColorIndex) * 0.5;
 
                 double worldX = (x - mx) * mapFit;
                 double worldY = -(y - my) * mapFit;
@@ -127,21 +145,41 @@ public sealed class FlameRenderer : IFractalCalculator
                 int ix = (int)((worldX - centerX) / pixelScale + width * 0.5);
                 int iy = (int)((worldY - centerY) / pixelScale + height * 0.5);
                 if ((uint)ix < (uint)width && (uint)iy < (uint)height)
-                    local[iy * width + ix]++;
+                {
+                    int p = iy * width + ix;
+                    lh[p]++;
+                    lc[p] += (float)cPoint;
+                }
             }
         });
 
         for (int t = 0; t < threadCount; t++)
         {
-            var local = localBuffers[t];
-            for (int i = 0; i < _hits.Length; i++) _hits[i] += local[i];
+            var lh = localHits[t];
+            var lc = localColor[t];
+            for (int i = 0; i < _hits.Length; i++)
+            {
+                _hits[i] += lh[i];
+                _colorSum[i] += lc[i];
+            }
         }
 
-        // Slice 1 tone-map: log-density into the active IColorMap. Gamma /
-        // vibrancy blend lands in slice 3.
+        // ── Tone-map ──
+        // Apophysis-style gamma + vibrancy over a log-density histogram.
+        //   alpha   = log(hit + 1) / log(maxHit + 1)              ∈ [0, 1]
+        //   alphaG  = alpha ^ (1 / gamma)                          gamma-boost
+        //   bright  = vibrancy · alphaG + (1 − vibrancy) · alpha   blend
+        //   colour  = palette.Map(avgColorIndex)                   sample
+        //   out     = colour · bright                              modulate
+        // Vibrancy = 1 produces saturated gamma highlights; 0 keeps the
+        // filament tint linear in density.
         uint maxHit = 0;
         for (int i = 0; i < _hits.Length; i++) if (_hits[i] > maxHit) maxHit = _hits[i];
         double invLogMax = maxHit > 1 ? 1.0 / Math.Log(maxHit + 1) : 1.0;
+
+        double gamma = Math.Max(0.1, FractalParameters.FlameGamma);
+        double invGamma = 1.0 / gamma;
+        double vib = Math.Clamp(FractalParameters.FlameVibrancy, 0.0, 1.0);
 
         ColorMap.MaxIterations = 256;
         for (int i = 0; i < _hits.Length; i++)
@@ -152,9 +190,23 @@ public sealed class FlameRenderer : IFractalCalculator
                 ColorBuffer[i] = ColorMap.InSetColor;
                 continue;
             }
-            double norm = Math.Log(h + 1) * invLogMax;
-            float smooth = (float)(norm * 256);
-            ColorBuffer[i] = (uint)ColorMap.Map(smooth, 0f, 256);
+            double alpha = Math.Log(h + 1) * invLogMax;
+            double alphaG = Math.Pow(alpha, invGamma);
+            double bright = vib * alphaG + (1.0 - vib) * alpha;
+
+            double avgColor = Math.Clamp(_colorSum[i] / h, 0.0, 1.0);
+            uint packed = (uint)ColorMap.Map((float)(avgColor * 256.0), 0f, 256);
+
+            // Modulate RGB by brightness, preserve alpha.
+            uint a = packed & 0xFF000000u;
+            uint r = (packed >> 16) & 0xFFu;
+            uint g = (packed >> 8)  & 0xFFu;
+            uint b =  packed        & 0xFFu;
+
+            byte rO = (byte)Math.Clamp((int)(r * bright + 0.5), 0, 255);
+            byte gO = (byte)Math.Clamp((int)(g * bright + 0.5), 0, 255);
+            byte bO = (byte)Math.Clamp((int)(b * bright + 0.5), 0, 255);
+            ColorBuffer[i] = a | ((uint)rO << 16) | ((uint)gO << 8) | bO;
         }
     }
 

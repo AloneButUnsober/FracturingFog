@@ -450,6 +450,33 @@
                                ToolTip.Tip="PRNG seed — same seed + roughness + size = identical field." />
             </Grid>
 
+            <!-- Flame -->
+            <Grid IsVisible="{Binding IsFlame}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Preset:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding FlamePresets}"
+                          SelectedItem="{Binding FlamePresetName, Mode=TwoWay}"
+                          Margin="0,2"
+                          ToolTip.Tip="Built-in Apophysis-style flame map table." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Iterations:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="100000" Maximum="100000000" Increment="500000" FormatString="F0"
+                               Value="{Binding FlameIterations, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Chaos-game sample count. Density quality scales with √N." />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Gamma:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="0.5" Maximum="5.0" Increment="0.1" FormatString="F2"
+                               Value="{Binding FlameGamma, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Tone-map gamma. 2.2 = Apophysis default. Lower = punchier highlights." />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Vibrancy:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="0.0" Maximum="1.0" Increment="0.05" FormatString="F2"
+                               Value="{Binding FlameVibrancy, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Highlight saturation 0..1. 0 = linear, 1 = full gamma-on-colour." />
+            </Grid>
+
             <!-- Empty state -->
             <TextBlock IsVisible="{Binding HasNoParams}"
                        Text="{Binding EmptyStateText}"

@@ -42,6 +42,11 @@ namespace FracturingFog.Batch
             if (opts.LSystemDepth.HasValue)       fp.LSystemDepth       = opts.LSystemDepth.Value;
             if (opts.PlasmaRoughness.HasValue)    fp.PlasmaRoughness    = opts.PlasmaRoughness.Value;
             if (opts.PlasmaSeed.HasValue)         fp.PlasmaSeed         = opts.PlasmaSeed.Value;
+            if (!string.IsNullOrWhiteSpace(opts.FlamePresetName))
+                                                  fp.FlamePresetName    = opts.FlamePresetName!;
+            if (opts.FlameIterations.HasValue)    fp.FlameIterations    = opts.FlameIterations.Value;
+            if (opts.FlameGamma.HasValue)         fp.FlameGamma         = opts.FlameGamma.Value;
+            if (opts.FlameVibrancy.HasValue)      fp.FlameVibrancy      = opts.FlameVibrancy.Value;
 
             var req = new PosterRequest
             {
