@@ -588,6 +588,18 @@ namespace FracturingFog.Models
             },
             new()
             {
+                Name        = "DLA — Default Brownian Tree",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 1,
+                Description = "Witten–Sander diffusion-limited aggregation seeded at the canvas centre. Default 8000 particles produce a recognisable dendrite at 512² in well under a second. Bump DlaParticles for denser growth.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Dla,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
                 Name        = "Bicomplex Mandelbrot — Slice k = 0",
                 CenterX     =  0.0,
                 CenterY     =  0.0,

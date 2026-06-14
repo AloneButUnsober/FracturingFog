@@ -119,6 +119,8 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _kleinCameraTheta = _p.KleinianCameraTheta;
         _kleinCameraPhi = _p.KleinianCameraPhi;
         _kleinCameraDistance = _p.KleinianCameraDistance;
+        _dlaParticles = _p.DlaParticles;
+        _dlaSeed = _p.DlaSeed;
         _bcSliceW = _p.BicomplexSliceW;
         _bcIterations = _p.BicomplexIterations;
         _bcCameraTheta = _p.BicomplexCameraTheta;
@@ -182,11 +184,12 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsApollonian => FractalType == FractalType.Apollonian;
     public bool IsKleinian => FractalType == FractalType.Kleinian;
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
+    public bool IsDla => FractalType == FractalType.Dla;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot);
+          || IsBicomplexMandelbrot || IsDla);
 
     // ── Julia ──
     private double _juliaR;
@@ -707,6 +710,12 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double ApollonianMinPixelRadius { get => _apolloMinPx; set { Set(ref _apolloMinPx, Clamp(value, 0.25, 16.0)); _p.ApollonianMinPixelRadius = _apolloMinPx; Fire(); } }
     private bool _apolloColorByDepth;
     public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
+
+    // ── DLA ──
+    private int _dlaParticles;
+    public int DlaParticles { get => _dlaParticles; set { Set(ref _dlaParticles, (int)Clamp(value, 100, 500_000)); _p.DlaParticles = _dlaParticles; Fire(); } }
+    private int _dlaSeed;
+    public int DlaSeed { get => _dlaSeed; set { Set(ref _dlaSeed, value); _p.DlaSeed = _dlaSeed; Fire(); } }
 
     // ── Bicomplex Mandelbrot ──
     private double _bcSliceW;

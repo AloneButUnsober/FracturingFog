@@ -140,7 +140,8 @@ namespace FracturingFog.Models
             {FractalType.Flame, "Flame" },
             {FractalType.Apollonian, "Apollonian" },
             {FractalType.Kleinian, "Kleinian" },
-            {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" }
+            {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
+            {FractalType.Dla, "DLA" }
         };
     }
 

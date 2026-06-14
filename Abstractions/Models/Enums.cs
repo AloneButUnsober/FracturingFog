@@ -181,6 +181,16 @@ namespace FracturingFog
         /// renderings. Tunables: <c>BicomplexSliceW</c>, plus shared iter /
         /// bailout / camera / light fields.</summary>
         BicomplexMandelbrot,
+        /// <summary>Diffusion-Limited Aggregation (Witten–Sander 1981).
+        /// Stochastic 2D fractal: a seed cell sits at the grid centre;
+        /// particles spawn on a launch circle just outside the current
+        /// aggregate, random-walk one cell per step, and stick the first time
+        /// they land adjacent to the aggregate. The resulting Brownian-tree
+        /// dendrite has fractal dimension ≈ 1.71. Tunables on
+        /// <c>FractalParameters</c>: <c>DlaParticles</c>, <c>DlaSeed</c>.
+        /// Pan/zoom unsupported — the simulation IS the image and pan/zoom
+        /// would invalidate the cached grid.</summary>
+        Dla,
     }
 
     public enum RenderProfile { Preview, Final }
