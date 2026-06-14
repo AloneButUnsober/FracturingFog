@@ -514,6 +514,42 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Kifs,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Quat Julia — Classic Norton (−0.2, 0.4, −0.4, −0.4)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical 4D quaternion Julia slice — Hart 1989 reference c. Filaments and bulbs visible from default camera angle.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionJulia,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Julia — Dendrite (0.0, 1.0, 0.0, 0.0)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Pure-imaginary c — open dendritic structure. Set QJuliaC to (0, 1, 0, 0) before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionJulia,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Julia — Spheroid (−1.0, 0.2, 0.0, 0.0)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Compact spheroid-like quaternion Julia. Set QJuliaC to (−1, 0.2, 0, 0) before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionJulia,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

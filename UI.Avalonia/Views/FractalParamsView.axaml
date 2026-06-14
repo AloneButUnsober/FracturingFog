@@ -390,6 +390,50 @@
                                Value="{Binding KifsCameraDistance, Mode=TwoWay}" Margin="0,2" />
             </Grid>
 
+            <!-- Quaternion Julia -->
+            <Grid IsVisible="{Binding IsQuatJulia}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="c.X:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                               Value="{Binding QJuliaCX, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Constant quaternion c — X (first) component." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="c.Y:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                               Value="{Binding QJuliaCY, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="c.Z:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                               Value="{Binding QJuliaCZ, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="c.W:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                               Value="{Binding QJuliaCW, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Slice w:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="4" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                               Value="{Binding QJuliaSliceW, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="W component of the 3D slice plane through 4D ℍ. Move to see different cross-sections of the same set." />
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="5" Grid.Column="1"
+                               Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                               Value="{Binding QJuliaIterations, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="6" Grid.Column="1"
+                               Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                               Value="{Binding QJuliaCameraTheta, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="7" Grid.Column="1"
+                               Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                               Value="{Binding QJuliaCameraPhi, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="8" Grid.Column="1"
+                               Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                               Value="{Binding QJuliaCameraDistance, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
             <!-- Empty state -->
             <TextBlock IsVisible="{Binding HasNoParams}"
                        Text="{Binding EmptyStateText}"

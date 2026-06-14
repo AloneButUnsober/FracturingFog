@@ -133,7 +133,8 @@ namespace FracturingFog.Models
             {FractalType.Secant, "Secant" },
             {FractalType.Spider, "Spider" },
             {FractalType.Mandelbox, "Mandelbox" },
-            {FractalType.Kifs, "KIFS" }
+            {FractalType.Kifs, "KIFS" },
+            {FractalType.QuaternionJulia, "Quaternion Julia" }
         };
     }
 

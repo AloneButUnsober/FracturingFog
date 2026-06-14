@@ -109,6 +109,16 @@ namespace FracturingFog
         /// light fields. Rendered via distance-estimation raymarching
         /// alongside the Mandelbulb and Mandelbox paths.</summary>
         Kifs,
+        /// <summary>Quaternion Julia (Hart 1989). Iteration
+        /// q = q² + c with q, c ∈ ℍ (Hamilton quaternions). Renderer
+        /// raymarches a 3D slice through the 4D set — pixel coordinate
+        /// (x,y,z) becomes q = (x,y,z, <c>QJuliaSliceW</c>). DE uses the
+        /// Hubbard–Douady estimator <c>0.5·|q|·ln|q| / |dq|</c> with the
+        /// derivative tracked as a quaternion dq through the Hamilton
+        /// product. Tunables: <c>QJuliaCX/Y/Z/W</c> (constant c),
+        /// <c>QJuliaSliceW</c>, plus shared iter / bailout / camera /
+        /// light fields.</summary>
+        QuaternionJulia,
     }
 
     public enum RenderProfile { Preview, Final }

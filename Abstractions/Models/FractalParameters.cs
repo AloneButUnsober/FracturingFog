@@ -202,6 +202,35 @@ namespace FracturingFog.Models
         public int KifsMaxSteps { get; set; } = 160;
         public double KifsEpsilon { get; set; } = 0.0012;
 
+        // Quaternion Julia (Hart 1989). q_{n+1} = q_n² + c with q ∈ ℍ.
+        // Renderer raymarches a 3D slice of the 4D set — pixel maps to
+        // (x,y,z) ∈ ℝ³, the 4th component is pinned to QJuliaSliceW.
+        /// <summary>Constant quaternion c, x component.</summary>
+        public double QJuliaCX { get; set; } = -0.2;
+        /// <summary>Constant quaternion c, y component.</summary>
+        public double QJuliaCY { get; set; } = 0.4;
+        /// <summary>Constant quaternion c, z component.</summary>
+        public double QJuliaCZ { get; set; } = -0.4;
+        /// <summary>Constant quaternion c, w component.</summary>
+        public double QJuliaCW { get; set; } = -0.4;
+        /// <summary>W component of the 3D slice plane through ℍ. Pixel
+        /// (x,y,z) becomes q = (x,y,z, QJuliaSliceW). Sliding this slider
+        /// reveals different 3D cross-sections of the same 4D set.</summary>
+        public double QJuliaSliceW { get; set; } = 0.0;
+        /// <summary>DE inner iteration count. Higher = sharper detail
+        /// but more cycles per ray sample. Default 11 — quaternion Julia
+        /// detail saturates around iter 10–14.</summary>
+        public int QJuliaIterations { get; set; } = 11;
+        /// <summary>|q|² escape threshold. 16 = canonical Hart bailout.</summary>
+        public double QJuliaBailout { get; set; } = 16.0;
+        public double QJuliaCameraDistance { get; set; } = 4.0;
+        public double QJuliaCameraTheta { get; set; } = Math.PI * 0.25;
+        public double QJuliaCameraPhi { get; set; } = Math.PI * 0.35;
+        public double QJuliaLightTheta { get; set; } = Math.PI * 0.25;
+        public double QJuliaLightPhi { get; set; } = Math.PI * 0.45;
+        public int QJuliaMaxSteps { get; set; } = 160;
+        public double QJuliaEpsilon { get; set; } = 0.0012;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -361,6 +390,20 @@ namespace FracturingFog.Models
                 KifsLightPhi = KifsLightPhi,
                 KifsMaxSteps = KifsMaxSteps,
                 KifsEpsilon = KifsEpsilon,
+                QJuliaCX = QJuliaCX,
+                QJuliaCY = QJuliaCY,
+                QJuliaCZ = QJuliaCZ,
+                QJuliaCW = QJuliaCW,
+                QJuliaSliceW = QJuliaSliceW,
+                QJuliaIterations = QJuliaIterations,
+                QJuliaBailout = QJuliaBailout,
+                QJuliaCameraDistance = QJuliaCameraDistance,
+                QJuliaCameraTheta = QJuliaCameraTheta,
+                QJuliaCameraPhi = QJuliaCameraPhi,
+                QJuliaLightTheta = QJuliaLightTheta,
+                QJuliaLightPhi = QJuliaLightPhi,
+                QJuliaMaxSteps = QJuliaMaxSteps,
+                QJuliaEpsilon = QJuliaEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

@@ -4528,6 +4528,75 @@ combination produces sharper-edged surfaces than the Mandelbox
 and the marcher needs finer step granularity near them.
 ";
 
+        public const string MathQuatJuliaText =
+@"=== Quaternion Julia ===
+
+Hart, Sandin & Kauffman (1989) lifted the 2D Julia set into
+the quaternions:
+
+        q ∈ ℍ        (Hamilton quaternions, 4D)
+        q_{n+1} = q_n² + c       with c ∈ ℍ constant
+
+Quaternion squaring is non-commutative in general, but the
+specific product q·q is well-defined and matches the standard
+Hamilton form.  Escape criterion is identical to the complex
+case — |q|² > bailout (default 16).
+
+=== 3D slice ===
+
+The full attractor lives in 4D and is not directly viewable.
+Fracturing Fog raymarches a 3D slice through ℍ — a single
+pixel (x, y, z) becomes:
+
+        q = (x, y, z, QJuliaSliceW)
+
+QJuliaSliceW is a UI slider.  Sliding it reveals different 3D
+cross-sections of the same 4D set; classic visualisations are
+the W = 0 plane (filaments) and small |W| (compact bulbs).
+
+=== Distance estimate ===
+
+Hubbard–Douady estimator generalised to quaternions:
+
+        DE = 0.5 · |q| · ln |q| / |dq|
+
+where dq is the orbital derivative tracked through iteration
+with the chain rule:
+
+        dq_{n+1} = 2 · q_n · dq_n        (Hamilton product)
+        dq_0     = (1, 0, 0, 0)
+
+The same lower-bound argument as the 2D case applies — the
+estimator is a guaranteed under-bound on the distance to the
+boundary, which is what sphere-tracing needs.
+
+=== Parameters ===
+
+  QJuliaCX / Y / Z / W   : double  Constant c ∈ ℍ.
+                                   Defaults (−0.2, 0.4, −0.4, −0.4)
+                                   reproduce the Hart 1989 cover plate.
+  QJuliaSliceW           : double  W of the 3D viewing slice.
+                                   Slide live to re-render new cross-sections.
+  QJuliaIterations       : int     DE inner iter count.  Default 11.
+  QJuliaBailout          : double  |q|² escape threshold.  Default 16.
+  QJuliaMaxSteps         : int     Raymarch step cap.  Default 160.
+  QJuliaEpsilon          : double  DE hit threshold.  Default 0.0012.
+  QJuliaCamera*          : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+Hamilton product is computed inline (no Quat allocation) so the
+per-iter cost is 16 multiplies + 12 adds for q² and the same for
+2·q·dq — comparable to a Mandelbox iteration without the sphere-
+fold divide.  Iteration depth saturates around 10–14: past that
+the DE shrinks below the per-step epsilon faster than the new
+detail it reveals.
+
+The slice-W slider does not invalidate any caches — switching
+it just re-runs the DE with a different starting q.W and the
+existing camera, lighting, theme and post-FX all transfer.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 
