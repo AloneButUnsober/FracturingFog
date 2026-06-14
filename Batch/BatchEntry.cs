@@ -113,6 +113,11 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --width N, -w N             Output width (default: 1920)");
             Console.WriteLine("  --height N, -h N            Output height (default: 1080)");
             Console.WriteLine("  --iter N                    Override iteration count");
+            Console.WriteLine("  --lsystem-preset NAME       L-System preset name (Hilbert|Dragon|Koch Snowflake|");
+            Console.WriteLine("                              Koch Curve|Sierpinski Arrowhead|Plant|Gosper|");
+            Console.WriteLine("                              Pythagoras Tree|Peano|Levy C|Pentigree). Quote names");
+            Console.WriteLine("                              with spaces. Requires --fractal LSystem.");
+            Console.WriteLine("  --lsystem-depth N           L-System generation depth (0..12). Default 5.");
             Console.WriteLine("  --out PATH, -o PATH         Output file (image) or folder (video) — required");
             Console.WriteLine("  --name NAME, -n NAME        Base filename (default derived from region/coords)");
             Console.WriteLine("  --verbose, -v               Print extra diagnostics");

@@ -94,6 +94,8 @@ namespace FracturingFog.Batch
         // Default null means "leave the FractalParameters default in place".
         public double? BulbPower { get; set; }
         public int? MultibrotExponent { get; set; }
+        public string? LSystemPresetName { get; set; }
+        public int? LSystemDepth { get; set; }
 
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
@@ -307,6 +309,17 @@ namespace FracturingFog.Batch
                     case "--multibrot-power":
                         if (!NextInt(args, ref i, a, out int mev, out error)) return false;
                         opts.MultibrotExponent = mev;
+                        break;
+
+                    case "--lsystem-preset":
+                    case "--lsystem":
+                        if (!Next(args, ref i, a, out string lspv, out error)) return false;
+                        opts.LSystemPresetName = lspv;
+                        break;
+
+                    case "--lsystem-depth":
+                        if (!NextInt(args, ref i, a, out int lsdv, out error)) return false;
+                        opts.LSystemDepth = lsdv;
                         break;
 
                     case "--remote":
