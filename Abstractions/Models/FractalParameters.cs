@@ -552,15 +552,19 @@ namespace FracturingFog.Models
 
     /// <summary>
     /// Flame fractal map. Affine pre-transform identical to <see cref="AffineMap"/>,
-    /// extended with a non-linear variation and a per-map colour index
-    /// (Apophysis convention: [0, 1] sample point on the active palette).
+    /// extended with up to two blended non-linear variations and a per-map
+    /// colour index (Apophysis convention: [0, 1] sample point on the active
+    /// palette). When <see cref="VariationAmount2"/> is 0 the secondary
+    /// variation is skipped and behaviour matches a single-variation map.
     /// </summary>
     public readonly record struct FlameMap(
         double A, double B, double C, double D, double E, double F,
         double Weight,
         FlameVariation Variation,
         double VariationAmount,
-        double ColorIndex);
+        double ColorIndex,
+        FlameVariation Variation2 = FlameVariation.Linear,
+        double VariationAmount2 = 0.0);
 
     /// <summary>KIFS fold table choice. Each value selects a different
     /// reflective-fold + scale combination inside KifsCalculator's DE.</summary>
