@@ -26,6 +26,14 @@ namespace FracturingFog.Models
         /// Defaults false; missing field in legacy JSON deserialises to false.
         /// </summary>
         public bool Promoted { get; set; }
+
+        /// <summary>
+        /// Optional multi-step chain. When non-empty, the runtime uses the
+        /// chain in preference to <see cref="Source"/> — see
+        /// <c>FractalParameters.UserBulbChain</c>. Null/empty on legacy
+        /// single-source entries.
+        /// </summary>
+        public List<UserBulbChainStep>? Chain { get; set; }
     }
 
     public sealed class UserBulbStore
@@ -76,6 +84,13 @@ namespace FracturingFog.Models
                     SeedDefaults();
                     Save();
                 }
+                else if (TopUpBuiltins())
+                {
+                    // Pre-existing userbulbs.json was missing newly-shipped
+                    // built-ins (e.g. Phase B.3 hybrids) — persist the merge
+                    // so the user sees them on next load too.
+                    Save();
+                }
             }
             catch
             {
@@ -106,6 +121,87 @@ namespace FracturingFog.Models
                 Source = "return Vec3.Pow(Vec3.AbsY(z), 8) + c;" });
             Equations.Add(new UserBulbEntry { Name = "Reflected triplex",
                 Source = "var w = new Vec3(Math.Abs(z.X), Math.Abs(z.Y), z.Z);\nreturn new Vec3(w.X*w.X - w.Y*w.Y - w.Z*w.Z, 2*w.X*w.Y, 2*w.X*w.Z) + c;" });
+
+            // Phase B.3 hybrid chains. Source kept as a single-pass fallback
+            // for legacy loaders; Chain is the canonical form and overrides
+            // Source at runtime.
+            Equations.Add(new UserBulbEntry
+            {
+                Name = "Hybrid: Mandelbox + Mandelbulb",
+                Source = "return Vec3.Pow(Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0) * 2.0 + c, 8.0) + c;",
+                Chain = UserBulbChainPrimitives.MandelboxBulbHybrid(),
+            });
+            Equations.Add(new UserBulbEntry
+            {
+                Name = "Hybrid: Menger + Mandelbulb",
+                Source = "return Vec3.Pow(z, 8.0) + c;",
+                Chain = UserBulbChainPrimitives.MengerBulbHybrid(),
+            });
+        }
+
+        /// <summary>
+        /// Appends any built-in entry not already present by name. Used to
+        /// merge new built-ins (e.g. Phase B.3 hybrids) into a userbulbs.json
+        /// that predates them. Also repairs hybrid chains shipped in earlier
+        /// builds whose later steps read original pixel `z` instead of the
+        /// prior fold output (rendered identical to a plain Mandelbulb).
+        /// Returns true when at least one entry was added or repaired.
+        /// </summary>
+        private bool TopUpBuiltins()
+        {
+            bool changed = false;
+            void Ensure(string name, Func<UserBulbEntry> factory)
+            {
+                if (GetByName(name) is not null) return;
+                Equations.Add(factory());
+                changed = true;
+            }
+            void Repair(string name, string priorOutputName, Func<List<UserBulbChainStep>> rebuild)
+            {
+                var entry = GetByName(name);
+                if (entry?.Chain == null || entry.Chain.Count < 2) return;
+                // Buggy first cut: step 1 produced <priorOutputName>, step 2
+                // used `z` directly. Detect by absence of the prior name in
+                // step 2's source.
+                if (entry.Chain[1].Source.Contains(priorOutputName)) return;
+                entry.Chain = rebuild();
+                changed = true;
+            }
+
+            Ensure("Hybrid: Mandelbox + Mandelbulb", () => new UserBulbEntry
+            {
+                Name = "Hybrid: Mandelbox + Mandelbulb",
+                Source = "return Vec3.Pow(Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0) * 2.0 + c, 8.0) + c;",
+                Chain = UserBulbChainPrimitives.MandelboxBulbHybrid(),
+            });
+            Ensure("Hybrid: Menger + Mandelbulb", () => new UserBulbEntry
+            {
+                Name = "Hybrid: Menger + Mandelbulb",
+                Source = "return Vec3.Pow(z, 8.0) + c;",
+                Chain = UserBulbChainPrimitives.MengerBulbHybrid(),
+            });
+            Repair("Hybrid: Mandelbox + Mandelbulb",
+                   UserBulbChainPrimitives.IdMandelbox,
+                   UserBulbChainPrimitives.MandelboxBulbHybrid);
+            Repair("Hybrid: Menger + Mandelbulb",
+                   UserBulbChainPrimitives.IdMenger,
+                   UserBulbChainPrimitives.MengerBulbHybrid);
+
+            // Second repair pass: Menger hybrid shipped in an earlier build
+            // composed bulb-pow without contracting the scale-3 fold output,
+            // which escaped past bailout on iter 0 → solid-colour render.
+            // Detect by absence of the contraction factor `* 0.3` in step 2
+            // and re-seed from the current factory.
+            {
+                var entry = GetByName("Hybrid: Menger + Mandelbulb");
+                if (entry?.Chain != null && entry.Chain.Count >= 2
+                    && !entry.Chain[1].Source.Contains("* 0.3"))
+                {
+                    entry.Chain = UserBulbChainPrimitives.MengerBulbHybrid();
+                    changed = true;
+                }
+            }
+            return changed;
         }
 
         public void Save()
@@ -124,23 +220,33 @@ namespace FracturingFog.Models
 
         /// <summary>
         /// Inserts or replaces an entry by Name (case-insensitive). Returns the
-        /// stored entry, or null if name is blank.
+        /// stored entry, or null if name is blank. Chain is cloned per-step
+        /// so the caller can keep mutating its own list afterwards; null/empty
+        /// chain clears any prior chain on a replaced entry.
         /// </summary>
-        public UserBulbEntry? SaveEquation(string name, string source)
+        public UserBulbEntry? SaveEquation(string name, string source, IReadOnlyList<UserBulbChainStep>? chain = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
+
+            List<UserBulbChainStep>? chainCopy = null;
+            if (chain != null && chain.Count > 0)
+            {
+                chainCopy = new List<UserBulbChainStep>(chain.Count);
+                foreach (var s in chain) chainCopy.Add(s.Clone());
+            }
 
             for (int i = 0; i < Equations.Count; i++)
             {
                 if (Equations[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
                     Equations[i].Source = source ?? string.Empty;
+                    Equations[i].Chain = chainCopy;
                     Save();
                     return Equations[i];
                 }
             }
 
-            var entry = new UserBulbEntry { Name = name, Source = source ?? string.Empty };
+            var entry = new UserBulbEntry { Name = name, Source = source ?? string.Empty, Chain = chainCopy };
             Equations.Add(entry);
             Save();
             return entry;

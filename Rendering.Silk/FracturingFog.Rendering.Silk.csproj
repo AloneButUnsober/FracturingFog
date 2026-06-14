@@ -22,7 +22,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Platforms>x64;arm64</Platforms>
+    <Platforms>AnyCPU;x64;arm64</Platforms>
     <RootNamespace>FracturingFog.Rendering.Silk</RootNamespace>
     <AssemblyName>FracturingFog.Rendering.Silk</AssemblyName>
   </PropertyGroup>

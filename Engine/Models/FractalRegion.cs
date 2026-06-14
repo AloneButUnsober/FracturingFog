@@ -370,6 +370,282 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Mandelbrot,
                 QualityPreset = QualityPreset.High
             },
+            new()
+            {
+                Name        = "Magnet 1 — Main Body",
+                CenterX     =  1.5,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  =  512,
+                Description = "Heart-shaped main body of the Magnet 1 rational map.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Magnet1,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Magnet 2 — Triple Lobe",
+                CenterX     =  1.5,
+                CenterY     =  0.0,
+                Zoom        =  0.5,
+                Iterations  =  512,
+                Description = "Three-lobed main body of the cubic Magnet 2 variant.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Magnet2,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Glynn — Canonical",
+                CenterX     = -0.2,
+                CenterY     =  0.0,
+                Zoom        =  0.7,
+                Iterations  =  512,
+                Description = "Canonical Glynn Julia dendrite at c = -0.2.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Glynn,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Logistic — Full Cascade",
+                CenterX     =  3.5,
+                CenterY     =  0.5,
+                Zoom        =  2.0,
+                Iterations  = 4000,
+                Description = "Period-doubling cascade through chaos: r ∈ ~[2.6, 4.4].",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Logistic,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Halley — z³ − 1 basins",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  =  64,
+                Description = "Halley basins of z³ − 1 — three roots, fine filaments.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Halley,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Secant — z³ − 1 basins",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  =  64,
+                Description = "Secant-method basins of z³ − 1 — chord-step pattern through Wada lakes.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Secant,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Spider — Canonical",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.2,
+                Iterations  = 512,
+                Description = "Canonical Spider at decay = 0.5. Spider-leg filaments around the origin.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Spider,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Mandelbox — Canonical (scale 2)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical Mandelbox at scale = 2.0. Vault-and-corridor structure with the classic box footprint.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbox,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Mandelbox — Inverse (scale −1.5)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Juliabox-like inversive Mandelbox at scale = −1.5. Set MandelboxScale before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbox,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Mandelbox — Open Pore (scale 3)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Open-pore Mandelbox at scale = 3.0. Inner spiral structure visible. Set MandelboxScale before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbox,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "KIFS — Menger sponge",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical Menger sponge — sort-3 fold + scale-3 from (1,1,1). Set KifsFold = Menger before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Kifs,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "KIFS — Sierpinski tetra",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Sierpinski tetrahedron gasket — 3 vertex reflections + scale-2 from (1,1,1). Set KifsFold = Sierpinski before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Kifs,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Julia — Classic Norton (−0.2, 0.4, −0.4, −0.4)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical 4D quaternion Julia slice — Hart 1989 reference c. Filaments and bulbs visible from default camera angle.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionJulia,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Julia — Dendrite (0.0, 1.0, 0.0, 0.0)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Pure-imaginary c — open dendritic structure. Set QJuliaC to (0, 1, 0, 0) before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionJulia,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Julia — Spheroid (−1.0, 0.2, 0.0, 0.0)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Compact spheroid-like quaternion Julia. Set QJuliaC to (−1, 0.2, 0, 0) before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionJulia,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Mandelbrot — Slice W = 0",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Quaternion Mandelbrot at the W=0 slice — q=0 orbit, c varies per pixel. The familiar Mandelbrot silhouette extruded into the Z axis.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Mandelbrot — Slice W = 0.5",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Off-axis 4D slice of the quaternion Mandelbrot. Set QMandelSliceW = 0.5 before recall — exposes thin filaments not present in the W=0 plane.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Apollonian — (−1, 2, 2, 3) Gasket",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  2.0,
+                Iterations  = 12,
+                Description = "Integral Apollonian packing built from the seed curvature quadruple (−1, 2, 2, 3). Outer unit disk, two half-radius circles on the diameter, third-radius circles above and below. Recurse via Vieta jumping until sub-pixel.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Apollonian,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "DLA — Default Brownian Tree",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 1,
+                Description = "Witten–Sander diffusion-limited aggregation seeded at the canvas centre. Default 8000 particles produce a recognisable dendrite at 512² in well under a second. Bump DlaParticles for denser growth.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Dla,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Bicomplex Mandelbrot — Slice k = 0",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Bicomplex (tessarine) Mandelbrot at the k = 0 slice. With sliceW = 0 the 3D slab collapses onto the standard 2D Mandelbrot extruded along the j axis.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BicomplexMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Bicomplex Mandelbrot — Slice k = 0.4",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Off-axis bicomplex slice. Set BicomplexSliceW = 0.4 before recall to expose the zero-divisor seam slabs unique to the tessarine algebra.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BicomplexMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Kleinian — Tetrahedral 4-Sphere",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 16,
+                Description = "Schottky-style Kleinian limit set generated by inversion in four mutually tangent spheres at the (±1, ±1, ±1) even-parity corners. The limit set is the 3D cocoon between the spheres where their inversions meet.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Kleinian,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Apollonian — L/R Kissing Cusp",
+                CenterX     =  0.0,
+                CenterY     =  0.4,
+                Zoom        =  6.0,
+                Iterations  = 14,
+                Description = "Off-axis zoom into the curvilinear triangle bounded by L, R, T. The self-similar Vieta-jump chain produces tight clusters of progressively smaller circles approaching each tangency point.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Apollonian,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

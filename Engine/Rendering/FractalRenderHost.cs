@@ -48,12 +48,25 @@ namespace FracturingFog.Rendering
         private LSystemCalculator _lsystemCalculator;
         private AttractorCalculator _attractorCalculator;
         private BuddhabrotCalculator _buddhabrotCalculator;
+        private LogisticCalculator _logisticCalculator;
+        private HalleyCalculator _halleyCalculator;
+        private SecantCalculator _secantCalculator;
         private NebulabrotCalculator _nebulabrotCalculator;
         private AntiBuddhabrotCalculator _antiBuddhabrotCalculator;
         private AntiNebulabrotCalculator _antiNebulabrotCalculator;
         private NewtonCalculator _newtonCalculator;
         private UserEquationCalculator _userEquationCalculator;
         private MandelbulbCalculator _mandelbulbCalculator;
+        private MandelboxCalculator _mandelboxCalculator;
+        private KifsCalculator _kifsCalculator;
+        private QuatJuliaCalculator _quatJuliaCalculator;
+        private QuatMandelbrotCalculator _quatMandelbrotCalculator;
+        private PlasmaCalculator _plasmaCalculator;
+        private ApollonianCalculator _apollonianCalculator;
+        private KleinianCalculator _kleinianCalculator;
+        private BicomplexMandelbrotCalculator _bicomplexCalculator;
+        private DlaCalculator _dlaCalculator;
+        private FlameRenderer _flameCalculator;
         private SandboxCalculator _sandboxCalculator;
         private UserBulbCalculator _userBulbCalculator;
         private TearDropCalculator _tearDropCalculator;
@@ -207,12 +220,25 @@ namespace FracturingFog.Rendering
             _lsystemCalculator = new LSystemCalculator(w, h);
             _attractorCalculator = new AttractorCalculator(w, h);
             _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
+            _logisticCalculator = new LogisticCalculator(w, h);
+            _halleyCalculator = new HalleyCalculator(w, h);
+            _secantCalculator = new SecantCalculator(w, h);
             _nebulabrotCalculator = new NebulabrotCalculator(w, h);
             _antiBuddhabrotCalculator = new AntiBuddhabrotCalculator(w, h);
             _antiNebulabrotCalculator = new AntiNebulabrotCalculator(w, h);
             _newtonCalculator = new NewtonCalculator(w, h);
             _userEquationCalculator = new UserEquationCalculator(w, h);
             _mandelbulbCalculator = new MandelbulbCalculator(w, h);
+            _mandelboxCalculator = new MandelboxCalculator(w, h);
+            _kifsCalculator = new KifsCalculator(w, h);
+            _quatJuliaCalculator = new QuatJuliaCalculator(w, h);
+            _quatMandelbrotCalculator = new QuatMandelbrotCalculator(w, h);
+            _plasmaCalculator = new PlasmaCalculator(w, h);
+            _apollonianCalculator = new ApollonianCalculator(w, h);
+            _kleinianCalculator = new KleinianCalculator(w, h);
+            _bicomplexCalculator = new BicomplexMandelbrotCalculator(w, h);
+            _dlaCalculator = new DlaCalculator(w, h);
+            _flameCalculator = new FlameRenderer(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
             _tearDropCalculator = new TearDropCalculator(w, h);
@@ -231,12 +257,25 @@ namespace FracturingFog.Rendering
                 _lsystemCalculator.ColorMap = initialColorMap;
                 _attractorCalculator.ColorMap = initialColorMap;
                 _buddhabrotCalculator.ColorMap = initialColorMap;
+                _logisticCalculator.ColorMap = initialColorMap;
+                _halleyCalculator.ColorMap = initialColorMap;
+                _secantCalculator.ColorMap = initialColorMap;
                 _nebulabrotCalculator.ColorMap = initialColorMap;
                 _antiBuddhabrotCalculator.ColorMap = initialColorMap;
                 _antiNebulabrotCalculator.ColorMap = initialColorMap;
                 _newtonCalculator.ColorMap = initialColorMap;
                 _userEquationCalculator.ColorMap = initialColorMap;
                 _mandelbulbCalculator.ColorMap = initialColorMap;
+                _mandelboxCalculator.ColorMap = initialColorMap;
+                _kifsCalculator.ColorMap = initialColorMap;
+                _quatJuliaCalculator.ColorMap = initialColorMap;
+                _quatMandelbrotCalculator.ColorMap = initialColorMap;
+                _plasmaCalculator.ColorMap = initialColorMap;
+                _apollonianCalculator.ColorMap = initialColorMap;
+                _kleinianCalculator.ColorMap = initialColorMap;
+                _bicomplexCalculator.ColorMap = initialColorMap;
+                _dlaCalculator.ColorMap = initialColorMap;
+                _flameCalculator.ColorMap = initialColorMap;
                 _sandboxCalculator.ColorMap = initialColorMap;
                 _userBulbCalculator.ColorMap = initialColorMap;
                 _tearDropCalculator.ColorMap = initialColorMap;
@@ -449,12 +488,25 @@ namespace FracturingFog.Rendering
                 _lsystemCalculator.ColorMap = value;
                 _attractorCalculator.ColorMap = value;
                 _buddhabrotCalculator.ColorMap = value;
+                _logisticCalculator.ColorMap = value;
+                _halleyCalculator.ColorMap = value;
+                _secantCalculator.ColorMap = value;
                 _nebulabrotCalculator.ColorMap = value;
                 _antiBuddhabrotCalculator.ColorMap = value;
                 _antiNebulabrotCalculator.ColorMap = value;
                 _newtonCalculator.ColorMap = value;
                 _userEquationCalculator.ColorMap = value;
                 _mandelbulbCalculator.ColorMap = value;
+                _mandelboxCalculator.ColorMap = value;
+                _kifsCalculator.ColorMap = value;
+                _quatJuliaCalculator.ColorMap = value;
+                _quatMandelbrotCalculator.ColorMap = value;
+                _plasmaCalculator.ColorMap = value;
+                _apollonianCalculator.ColorMap = value;
+                _kleinianCalculator.ColorMap = value;
+                _bicomplexCalculator.ColorMap = value;
+                _dlaCalculator.ColorMap = value;
+                _flameCalculator.ColorMap = value;
                 _sandboxCalculator.ColorMap = value;
                 _userBulbCalculator.ColorMap = value;
                 _tearDropCalculator.ColorMap = value;
@@ -923,12 +975,25 @@ namespace FracturingFog.Rendering
             _lsystemCalculator.Resize(w, h);
             _attractorCalculator.Resize(w, h);
             _buddhabrotCalculator.Resize(w, h);
+            _logisticCalculator.Resize(w, h);
+            _halleyCalculator.Resize(w, h);
+            _secantCalculator.Resize(w, h);
             _nebulabrotCalculator.Resize(w, h);
             _antiBuddhabrotCalculator.Resize(w, h);
             _antiNebulabrotCalculator.Resize(w, h);
             _newtonCalculator.Resize(w, h);
             _userEquationCalculator.Resize(w, h);
             _mandelbulbCalculator.Resize(w, h);
+            _mandelboxCalculator.Resize(w, h);
+            _kifsCalculator.Resize(w, h);
+            _quatJuliaCalculator.Resize(w, h);
+            _quatMandelbrotCalculator.Resize(w, h);
+            _plasmaCalculator.Resize(w, h);
+            _apollonianCalculator.Resize(w, h);
+            _kleinianCalculator.Resize(w, h);
+            _bicomplexCalculator.Resize(w, h);
+            _dlaCalculator.Resize(w, h);
+            _flameCalculator.Resize(w, h);
             _sandboxCalculator.Resize(w, h);
             _userBulbCalculator.Resize(w, h);
             _tearDropCalculator.Resize(w, h);
@@ -1223,8 +1288,21 @@ namespace FracturingFog.Rendering
                     u.CenterY3  = calc.CenterY3;
                     break;
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
+                case MandelboxCalculator mb: mb.FractalParameters = ViewState.FractalParameters; break;
+                case KifsCalculator kf: kf.FractalParameters = ViewState.FractalParameters; break;
+                case QuatJuliaCalculator qj: qj.FractalParameters = ViewState.FractalParameters; break;
+                case QuatMandelbrotCalculator qm: qm.FractalParameters = ViewState.FractalParameters; break;
+                case PlasmaCalculator pl: pl.FractalParameters = ViewState.FractalParameters; break;
+                case ApollonianCalculator ap: ap.FractalParameters = ViewState.FractalParameters; break;
+                case KleinianCalculator kl: kl.FractalParameters = ViewState.FractalParameters; break;
+                case BicomplexMandelbrotCalculator bc: bc.FractalParameters = ViewState.FractalParameters; break;
+                case DlaCalculator dl: dl.FractalParameters = ViewState.FractalParameters; break;
+                case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
+                case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
+                case HalleyCalculator hc: hc.FractalParameters = ViewState.FractalParameters; break;
+                case SecantCalculator sc: sc.FractalParameters = ViewState.FractalParameters; break;
             }
         }
 
@@ -1311,6 +1389,13 @@ namespace FracturingFog.Rendering
             FractalType.Tricorn => _escapeCalculator,
             FractalType.Multibrot => _escapeCalculator,
             FractalType.Phoenix => _escapeCalculator,
+            FractalType.Magnet1 => _escapeCalculator,
+            FractalType.Magnet2 => _escapeCalculator,
+            FractalType.Glynn => _escapeCalculator,
+            FractalType.Spider => _escapeCalculator,
+            FractalType.Logistic => _logisticCalculator,
+            FractalType.Halley => _halleyCalculator,
+            FractalType.Secant => _secantCalculator,
             FractalType.IFS => _ifsCalculator,
             FractalType.LSystem => _lsystemCalculator,
             FractalType.StrangeAttractor => _attractorCalculator,
@@ -1322,6 +1407,16 @@ namespace FracturingFog.Rendering
             FractalType.Nova => _newtonCalculator,
             FractalType.UserEquation => _userEquationCalculator,
             FractalType.Mandelbulb => _mandelbulbCalculator,
+            FractalType.Mandelbox => _mandelboxCalculator,
+            FractalType.Kifs => _kifsCalculator,
+            FractalType.QuaternionJulia => _quatJuliaCalculator,
+            FractalType.QuaternionMandelbrot => _quatMandelbrotCalculator,
+            FractalType.Plasma => _plasmaCalculator,
+            FractalType.Apollonian => _apollonianCalculator,
+            FractalType.Kleinian => _kleinianCalculator,
+            FractalType.BicomplexMandelbrot => _bicomplexCalculator,
+            FractalType.Dla => _dlaCalculator,
+            FractalType.Flame => _flameCalculator,
             FractalType.Sandbox => _sandboxCalculator,
             FractalType.UserBulb => _userBulbCalculator,
             FractalType.TearDrop => _tearDropCalculator,

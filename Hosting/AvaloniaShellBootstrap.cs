@@ -1394,7 +1394,8 @@ namespace FracturingFog.Hosting
                         ifsPresets: new List<string>(IFSPresets.All.Keys),
                         lsystemPresets: new List<string>(LSystemPresets.All.Keys),
                         attractorPresets: null,
-                        attractorDefaults: global::FracturingFog.AttractorCalculator.DefaultParams);
+                        attractorDefaults: global::FracturingFog.AttractorCalculator.DefaultParams,
+                        flamePresets: new List<string>(FlamePresets.All.Keys));
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
                     // Render-completion gate for the Julia animation. Without

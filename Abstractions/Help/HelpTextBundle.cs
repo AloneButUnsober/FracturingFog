@@ -1400,10 +1400,19 @@ GRAPHICS, drawing the fractal curve.
   Hilbert            Space-filling curve.  Axiom: A.
                      A → −BF+AFA+FB−, B → +AF−BFB−FA+
   Koch Snowflake     Axiom: F++F++F.   F → F−F++F−F
+  Koch Curve         Open Koch.  Axiom: F.   F → F+F−−F+F   (60°)
   Dragon Curve       Axiom: FX.        X → X+YF+,   Y → −FX−Y
   Sierpinski Curve   Many variants — F + rotation rules
   Plant              Axiom: X.   X → F[+X][−X]FX,   F → FF
   Penrose            Sub-tiling rules over multiple symbols
+  Pythagoras Tree    Branching binary tree (45°).  Axiom: A.
+                     A → B[+A]−A,   B → BB
+  Peano              Space-filling, 9-segment (90°).  Axiom: X.
+                     X → XFYFX+F+YFXFY−F−XFYFX
+                     Y → YFXFY−F−XFYFX+F+YFXFY
+  Levy C Curve       Self-similar C (45°).  Axiom: F.   F → +F−−F+
+  Pentigree          Five-fold McWorter (36°).  Axiom: F.
+                     F → +F++F−−−−F−−F++F++F−
 
 === Dimension ===
 
@@ -4052,6 +4061,1156 @@ property change notification and ReactiveCommand for commands.
   Docs\Architecture-Overview.md      Module-by-module deep dive
   Docs\CalculatorGen-Architecture.md Generator internals
   Docs\ServerAdmin-Guide.md          Deployment + cert PKI
+";
+
+        public const string MathMagnetOneText =
+@"=== Magnet 1 ===
+
+Clifford A. Pickover (1980s).  A rational escape-time map inspired
+by the magnetic-susceptibility partition function from statistical
+physics:
+
+        zₙ₊₁ = ( (zₙ² + c − 1) / (2zₙ + c − 2) )²
+
+z₀ = 0, c = pixel.  Unlike the polynomial Mandelbrot family the
+orbit can converge to TWO finite attractors — infinity (escape)
+AND the fixed point z = 1.  Fracturing Fog treats only the escape
+basin visually; the converged-to-one basin colours as ""in set"".
+
+=== Pole ===
+
+The denominator vanishes along the curve 2z + c − 2 = 0.  Pixels
+whose orbit passes near this curve would blow up to NaN under
+naive evaluation.  The kernel floors |den|² ≥ 1e-12 so the
+quotient stays finite — the resulting cell may still escape on
+the next iteration, but never poisons the buffer.
+
+=== Bailout ===
+
+10² (= 100), not the standard Mandelbrot 2².  The rational map
+grows more slowly than z² + c near the unit circle so a small
+bailout would trap many true escape paths inside the iteration
+budget.
+
+=== Geometry ===
+
+Two main lobes: a heart-shaped main body around c ≈ (1.5, 0) and
+a small companion below.  Filament structure resembles the
+Mandelbrot dendrites but tilts inward toward the z = 1 attractor.
+Default frame: centre (1.5, 0), Zoom 0.6.
+
+=== Parameters ===
+
+None beyond the pixel coordinate.  No tunables in the Params
+dialog.
+
+=== C# Equation ===
+
+  // Magnet 1.
+  var num = z*z + c - Complex.One;
+  var den = 2*z + c - 2;
+  var g   = num / den;
+  return g*g;
+";
+
+        public const string MathMagnetTwoText =
+@"=== Magnet 2 ===
+
+Pickover's cubic Magnet variant.  A higher-degree rational map
+that resolves the Magnet 1 attractor into a richer multi-basin
+structure:
+
+        num  = zₙ³ + 3(c−1)zₙ + (c−1)(c−2)
+        den  = 3zₙ² + 3(c−2)zₙ + c² − 3c + 3
+        zₙ₊₁ = (num / den)²
+
+z₀ = 0, c = pixel.  As with Magnet 1, the kernel uses a denom-
+magnitude floor (1e-12) to keep iterations bounded near the
+pole curve.
+
+=== Bailout ===
+
+10² for the same growth-rate reason given for Magnet 1.
+
+=== Geometry ===
+
+Three-lobed main body around c ≈ (1.5, 0) with finer filament
+detail than Magnet 1.  The convergence-to-z=1 basin is split
+into several disconnected components, giving the structure a
+""shattered"" feel.
+
+=== Parameters ===
+
+None beyond the pixel coordinate.
+
+=== C# Equation ===
+
+  // Magnet 2.
+  var cm1 = c - Complex.One;
+  var cm2 = c - 2;
+  var z2  = z*z;
+  var z3  = z2*z;
+  var num = z3 + 3*cm1*z + cm1*cm2;
+  var den = 3*z2 + 3*cm2*z + c*c - 3*c + 3;
+  var g   = num / den;
+  return g*g;
+";
+
+        public const string MathGlynnText =
+@"=== Glynn Fractal ===
+
+Earl Glynn (1990s).  Julia set of the fractional-power map
+
+        zₙ₊₁ = zₙ^1.5 + c           c ≈ −0.2
+
+The canonical view (c = −0.2 + 0i) produces a single connected
+dendrite often shown as the namesake ""Glynn"" image — a black
+tree-like silhouette against the escape gradient.
+
+=== Fractional Power ===
+
+z^1.5 is multi-valued for complex z; the principal branch is
+evaluated through polar form:
+
+        r     = |z|
+        θ     = arg(z)
+        z^1.5 = r^1.5 · ( cos(1.5θ) + i·sin(1.5θ) )
+
+At the origin (r = 0) the kernel reseeds z to c so the orbit
+does not divide by zero or evaluate log(0).  The branch-cut
+along the negative real axis is therefore preserved on the
+principal sheet — sufficient for this canonical c.
+
+=== Geometry ===
+
+  • Default frame: centre (−0.2, 0), Zoom 0.7.  The dendrite
+    fits inside |z| < 1.5.
+  • Boundary has fractal dimension > 1; tree-like filaments
+    branch off the central trunk at every scale.
+  • Off the canonical c the family generalises continuously into
+    a smooth zoo of Julia variants — Fracturing Fog currently
+    hardcodes c = −0.2.  A user-tunable c slider is planned.
+
+=== Parameters ===
+
+  GlynnC : Complex   Constant c.  Default (−0.2, 0).  Real-part
+                     drag tilts the dendrite; small imaginary
+                     tweaks deform it asymmetrically.  Clamped
+                     to |Re|, |Im| ≤ 2 in the Params dialog.
+
+=== C# Equation ===
+
+  // Glynn: z → z^1.5 + c.
+  return Complex.Pow(z, 1.5) + c;
+";
+
+        public const string MathLogisticText =
+@"=== Logistic Bifurcation ===
+
+The one-dimensional iterated map
+
+        xₙ₊₁ = r · xₙ · (1 − xₙ)             r ∈ (0, 4]
+
+studied since May (1976) as the simplest model of period-doubling
+route to chaos.  Not an escape-time fractal — every pixel column
+in Fracturing Fog corresponds to one value of r and accumulates
+the visited x values into a per-column density histogram.
+
+=== Rendering Pipeline ===
+
+  1. Map screen pixel (px, py) to (r, x) using the standard
+     view-state mapping (CenterX = r, CenterY = x).
+  2. For each r-column:
+       • Seed x = LogisticSeed (default 0.5)
+       • Burn in LogisticBurnIn steps (default 1000) to settle
+         onto the attractor.
+       • Plot next (MaxIterations − BurnIn) steps; each visited
+         x maps to a y-pixel and increments that pixel's hit
+         counter.
+  3. Log-normalise the hit map and feed (1 − norm)·MaxIter
+     into the active IColorMap; alpha-blend toward InSetColor
+     for sparse / empty pixels (matches Buddhabrot tone-map).
+
+Cost is O(W · MaxIter) — Width controls density resolution, not
+sample budget.  4000 iterations is a comfortable default at
+1920×1080.
+
+=== Geometry ===
+
+  • r < 1            x → 0  (extinction)
+  • 1 ≤ r ≤ 3        single stable fixed point
+  • 3 < r ≤ 3.449    period-2 cycle
+  • 3.449 < r ≤ 3.544 period-4
+  • 3.544 < r ≤ 3.564 period-8
+  • δ ≈ 4.669…       Feigenbaum constant — ratio of successive
+                     bifurcation intervals.  Limit point ≈ 3.5699.
+  • r > 3.5699       chaotic regime interspersed with periodic
+                     windows (period-3 at r ≈ 3.8284 is famous).
+
+Default frame: CenterX = 3.5, CenterY = 0.5, Zoom = 2.0 frames
+r ∈ ~[2.6, 4.4], x ∈ ~[0, 1].
+
+=== Parameters ===
+
+  LogisticBurnIn : int     Iterations to discard before density
+                           accumulation.  Default 1000.  Raise
+                           for slowly-converging chaotic windows
+                           where transient orbits leak speckle
+                           into the histogram.
+  LogisticSeed   : double  x₀ ∈ (0, 1).  Default 0.5.  All
+                           non-fixed-point seeds converge to the
+                           same attractor; extreme values
+                           (close to 0 or 1) just lengthen the
+                           transient.
+
+=== Themes ===
+
+Density-histogram themes work.  Interior-cycle themes are
+meaningless (no iter count per pixel) and should be hidden by
+the theme picker's family gating.
+
+=== References ===
+
+  May, R. M. (1976) ""Simple mathematical models with very
+  complicated dynamics."" Nature 261, 459–467.
+  Feigenbaum, M. J. (1978) ""Quantitative universality for a
+  class of nonlinear transformations."" J. Stat. Phys. 19, 25–52.
+";
+
+        public const string MathHalleyText =
+@"=== Halley Basins ===
+
+Edmond Halley (1694).  A root-finding iteration with CUBIC
+convergence — one power higher than Newton's quadratic
+convergence — at the cost of one extra derivative per step:
+
+        zₙ₊₁ = zₙ − R · 2·f(zₙ)·f'(zₙ) /
+                       ( 2·f'(zₙ)² − f(zₙ)·f''(zₙ) )
+
+Fracturing Fog uses the standard f(z) = z^d − 1, the same
+polynomial Newton ships with, so all d-th roots of unity are
+the attractors and basin colouring is reused without change.
+
+=== Newton vs Halley ===
+
+  • Newton:  z := z − R · f / f'
+             ─ quadratic convergence
+             ─ basins meet with the Wada-lakes property
+  • Halley:  z := z − R · 2 f f' / (2 f'² − f f'')
+             ─ cubic convergence
+             ─ basins meet with the same topology, but the
+               boundary has finer filament detail because
+               each iteration step is more accurate.
+
+Halley typically converges in roughly 2/3 the iterations
+Newton needs for the same epsilon, so the iteration-shaded
+colouring lands in an outer band — the picture often looks
+""crisper"" than Newton at the same MaxIterations.
+
+=== Parameters ===
+
+  NewtonExponent   : int      Polynomial degree d.  Default 3.
+                              Shared with the Newton dialog.
+  NewtonRelaxation : double   Relaxation factor R.  Default 1.0.
+                              R = 1 is canonical Halley; R ≠ 1
+                              speeds up or slows convergence.
+
+=== C# Equation ===
+
+  // Halley basins of z^d − 1, d = 3.
+  int d = 3;
+  var zd  = Complex.Pow(z, d);
+  var zd1 = Complex.Pow(z, d - 1);
+  var zd2 = Complex.Pow(z, d - 2);
+  var f   = zd - Complex.One;
+  var fp  = d * zd1;
+  var fpp = d * (d - 1) * zd2;
+  return z - 2 * f * fp / (2 * fp * fp - f * fpp);
+";
+
+        public const string MathSecantText =
+@"=== Secant Basins ===
+
+The secant method is the derivative-free cousin of Newton's
+iteration — instead of f'(z), it approximates the slope by the
+chord through the previous two iterates:
+
+        zₙ₊₁ = zₙ − R · f(zₙ) · (zₙ − zₙ₋₁) / (f(zₙ) − f(zₙ₋₁))
+
+Order of convergence ≈ φ ≈ 1.618 (slower than Newton's 2 but
+still superlinear).  Fracturing Fog renders the basins of
+attraction of f(z) = z^d − 1, mirroring the Newton / Halley
+basin maps so the three families render at the same scale and
+colour with the same theme.
+
+=== Two-Point State ===
+
+Per-pixel state is (z, prev_z) instead of just z — the kernel
+must carry the previous iterate to compute the next chord.
+Mathematically equivalent to PhoenixKernel's prev-z slot but
+applied to root-finding instead of escape-time.
+
+The recurrence is undefined when prev_z = z (zero chord
+denominator).  Pixel initialisation:
+    z      = pixel
+    prev_z = pixel + SecantInitialOffset    (default 0.5 + 0i)
+
+A non-zero offset is required.  The offset only seeds the first
+chord; once iteration starts the chord direction tracks the
+local function shape and the asymptotic basins are independent
+of small offset changes.  Large offsets can land iterates in
+different convergence basins than Newton on the same pixel —
+this is a feature, not a bug.
+
+=== Newton vs Halley vs Secant ===
+
+  • Newton:  uses f, f'        (quadratic convergence)
+  • Halley:  uses f, f', f''   (cubic convergence)
+  • Secant:  uses f only       (superlinear, ≈ 1.618)
+
+Secant needs MORE iterations than Newton for the same epsilon
+but each iteration is CHEAPER (no derivative evaluation), so on
+high-degree polynomials Secant can beat Newton overall.  For
+the z^d − 1 family the difference is small; the visual interest
+is the chord-step pattern showing through the basin filaments.
+
+=== Parameters ===
+
+  NewtonExponent      : int      Polynomial degree d.  Default 3.
+                                 Shared with Newton / Halley.
+  NewtonRelaxation    : double   Relaxation factor R.  Default 1.0.
+  SecantInitialOffset : Complex  Initial prev_z displacement.
+                                 Default (0.5, 0).  Magnitude
+                                 floored at 1e-6 to avoid degenerate
+                                 first-step chord.
+
+=== C# Equation ===
+
+  // Secant basins of z^d − 1, d = 3. User Equation cannot carry
+  // prev-z between steps via the (z, c, n) → z signature, so use
+  // FractalType = Secant for the real thing. Approximation:
+  return Complex.Pow(z, 3) - Complex.One;
+";
+
+        public const string MathMandelboxText =
+@"=== The Mandelbox ===
+
+Tom Lowe (2010).  A 3D escape-time fractal built from two
+piecewise-linear folds plus a uniform scale.  Per iteration:
+
+        z ← scale · sphereFold(boxFold(z)) + c
+
+with c = ray-sample position (Mandelbrot convention).
+
+=== The two folds ===
+
+  Box fold        — reflection across the planes x = ±1, y = ±1,
+                    z = ±1.  Component-wise:
+                      if  z_i >  1   z_i ← 2  − z_i
+                      if  z_i < −1   z_i ← −2 − z_i
+
+  Sphere fold     — radial scaling driven by two radii
+                    R = fixedRadius (≥ minRadius) and m = minRadius:
+
+                      if  |z| <  m    z ← (R/m)² · z      (constant zoom)
+                      if  m ≤ |z| < R z ← (R/|z|)² · z    (inversion band)
+                      else            z is unchanged
+
+Both folds are conformal away from the fold planes / spheres,
+so the linear DE bound stays valid.
+
+=== Distance estimate ===
+
+Track a scalar derivative magnitude dr that mirrors the
+running |dz| (folds multiply both z and dr by the same factor):
+
+  dr ← |scale| · dr + 1            after the linear z ← scale·z + c
+  dr ← f · dr                      inside each sphere-fold branch
+
+  DE(p) ≈ |z| / |dr|
+
+Surface normal is estimated by central differences of DE.  Lit
+with one directional source; ambient = 0.15.
+
+=== Classic scale values ===
+
+  scale =  2.0   The canonical Mandelbox.  Vault-and-corridor
+                 structure with the recognisable box footprint.
+  scale = −1.5   Inversive ""Juliabox-like"" variant.  Smoother,
+                 with central spherical lobes.
+  scale =  3.0   Open-pore high-detail variant — fold cycles
+                 don't close, exposing inner spiral structure.
+
+=== Parameters ===
+
+  MandelboxScale          : double  Per-iter scale.  Default 2.
+  MandelboxFixedRadius    : double  Sphere-fold outer radius.  Default 1.
+  MandelboxMinRadius      : double  Sphere-fold inner radius.  Default 0.5.
+  MandelboxIterations     : int     DE inner iter count.  Default 12.
+  MandelboxBailout        : double  |z|² escape threshold.  Default 1024.
+  MandelboxMaxSteps       : int     Raymarch step cap.  Default 128.
+  MandelboxEpsilon        : double  DE hit threshold.  Default 0.0015.
+  MandelboxCamera*        : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+DE iterations and ray-march step cap are higher than the
+Mandelbulb's because Mandelbox folds are cheaper per iter
+(no transcendental — only branches + multiplies) so the
+budget shifts toward more iters.  Bailout is large (10²·)
+because folds bound z slowly compared to z^p escape.
+
+Scale values near critical points (|scale| ≈ 1) can collapse
+the DE — iter clamp and bailout exit at |z|² > 10⁶ catch this
+before the surface goes degenerate.
+";
+
+        public const string MathKifsText =
+@"=== Kaleidoscopic IFS (KIFS) ===
+
+Knighty (2010), generalising classic 2D IFS attractors to 3D
+distance-estimation raymarching.  Per iteration the point z is
+folded by a reflective table, then linearly scaled away from
+a pivot offset:
+
+        z ← scale · fold(z) − (scale − 1) · offset
+
+Different fold tables produce different attractor shapes.
+Fracturing Fog ships two built-in tables.
+
+=== Menger sponge fold ===
+
+Sort-3 absolute-value fold:
+
+        z ← |z|                         (3 reflections)
+        sort components by descending magnitude
+        z ← scale · z − (scale − 1) · offset
+        smallest component left at scale · z (no offset)
+
+with scale = 3 and offset = (1, 1, 1) reproducing the
+Menger sponge — cube with the centre and the six face-centred
+sub-cubes removed, recursively.
+
+=== Sierpinski tetrahedron fold ===
+
+Vertex-reflection fold:
+
+        if  x + y < 0   swap and negate  (x, y) ← (−y, −x)
+        if  x + z < 0   swap and negate  (x, z) ← (−z, −x)
+        if  y + z < 0   swap and negate  (y, z) ← (−z, −y)
+        z ← scale · z − (scale − 1) · offset
+
+with scale = 2 and offset = (1, 1, 1) reproducing the
+Sierpinski tetrahedron gasket.
+
+=== Distance estimate ===
+
+Each iteration multiplies the running derivative magnitude
+by scale.  After N iterations:
+
+        dr = scaleᴺ
+        DE(p) ≈ (|z_N| − r₀) / dr
+
+where r₀ is the bounding sphere radius of the iterated shape
+(≈ 2 for both built-in tables — generous enough to keep the
+estimate a valid lower bound).
+
+=== Parameters ===
+
+  KifsFold                : Menger | Sierpinski
+  KifsIterations          : int     DE inner iter count.  Default 14.
+  KifsScale               : double  Per-iter scale.  0 = canonical
+                                    default (3 Menger, 2 Sierp).
+  KifsOffsetX / Y / Z     : double  Pivot offset.  Default (1, 1, 1).
+  KifsBailout             : double  |z|² escape threshold.
+  KifsMaxSteps            : int     Raymarch step cap.  Default 160.
+  KifsEpsilon             : double  DE hit threshold.  Default 0.0012.
+  KifsCamera*             : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+KIFS folds are cheaper than Mandelbox sphere-folds (no division,
+no square root inside the fold) so the per-step DE budget is
+spent on more iterations — default 14, vs Mandelbox's 12.  Step
+cap is also bumped to 160 because the recurring offset−scale
+combination produces sharper-edged surfaces than the Mandelbox
+and the marcher needs finer step granularity near them.
+";
+
+        public const string MathQuatJuliaText =
+@"=== Quaternion Julia ===
+
+Hart, Sandin & Kauffman (1989) lifted the 2D Julia set into
+the quaternions:
+
+        q ∈ ℍ        (Hamilton quaternions, 4D)
+        q_{n+1} = q_n² + c       with c ∈ ℍ constant
+
+Quaternion squaring is non-commutative in general, but the
+specific product q·q is well-defined and matches the standard
+Hamilton form.  Escape criterion is identical to the complex
+case — |q|² > bailout (default 16).
+
+=== 3D slice ===
+
+The full attractor lives in 4D and is not directly viewable.
+Fracturing Fog raymarches a 3D slice through ℍ — a single
+pixel (x, y, z) becomes:
+
+        q = (x, y, z, QJuliaSliceW)
+
+QJuliaSliceW is a UI slider.  Sliding it reveals different 3D
+cross-sections of the same 4D set; classic visualisations are
+the W = 0 plane (filaments) and small |W| (compact bulbs).
+
+=== Distance estimate ===
+
+Hubbard–Douady estimator generalised to quaternions:
+
+        DE = 0.5 · |q| · ln |q| / |dq|
+
+where dq is the orbital derivative tracked through iteration
+with the chain rule:
+
+        dq_{n+1} = 2 · q_n · dq_n        (Hamilton product)
+        dq_0     = (1, 0, 0, 0)
+
+The same lower-bound argument as the 2D case applies — the
+estimator is a guaranteed under-bound on the distance to the
+boundary, which is what sphere-tracing needs.
+
+=== Parameters ===
+
+  QJuliaCX / Y / Z / W   : double  Constant c ∈ ℍ.
+                                   Defaults (−0.2, 0.4, −0.4, −0.4)
+                                   reproduce the Hart 1989 cover plate.
+  QJuliaSliceW           : double  W of the 3D viewing slice.
+                                   Slide live to re-render new cross-sections.
+  QJuliaIterations       : int     DE inner iter count.  Default 11.
+  QJuliaBailout          : double  |q|² escape threshold.  Default 16.
+  QJuliaMaxSteps         : int     Raymarch step cap.  Default 160.
+  QJuliaEpsilon          : double  DE hit threshold.  Default 0.0012.
+  QJuliaCamera*          : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+Hamilton product is computed inline (no Quat allocation) so the
+per-iter cost is 16 multiplies + 12 adds for q² and the same for
+2·q·dq — comparable to a Mandelbox iteration without the sphere-
+fold divide.  Iteration depth saturates around 10–14: past that
+the DE shrinks below the per-step epsilon faster than the new
+detail it reveals.
+
+The slice-W slider does not invalidate any caches — switching
+it just re-runs the DE with a different starting q.W and the
+existing camera, lighting, theme and post-FX all transfer.
+";
+
+        public const string MathQuatMandelbrotText =
+@"=== Quaternion Mandelbrot ===
+
+Norton (1982) and Holroyd (early 1990s) extended the
+Mandelbrot membership test from ℂ to ℍ:
+
+        q ∈ ℍ        (Hamilton quaternions, 4D)
+        q_{n+1} = q_n² + c       with c varying per pixel
+
+Same squaring map as Quaternion Julia — the only difference
+is which variable varies.  For Julia, c is constant and
+the orbit's starting q comes from the pixel.  For
+Mandelbrot, q starts at the origin (membership test) and c
+takes the pixel coordinate.
+
+=== 3D slice ===
+
+The Mandelbrot set lives in c-space, which is 4D.  Fracturing
+Fog raymarches a 3D slice through ℍ — a single pixel
+(x, y, z) becomes:
+
+        c = (x, y, z, QMandelSliceW)
+
+QMandelSliceW is a UI slider.  Sliding it reveals different
+3D cross-sections of the same 4D set.  The W = 0 plane shows
+the familiar 2D Mandelbrot silhouette extruded along Z;
+non-zero W exposes thin filaments and bulb dustings that
+have no analogue in the complex case.
+
+=== Distance estimate ===
+
+Hubbard–Douady estimator with the derivative taken wrt c:
+
+        DE = 0.5 · |q| · ln |q| / |dq|
+
+Chain rule on q_{n+1} = q_n² + c gives:
+
+        dq_{n+1} = 2 · q_n · dq_n + 1
+        dq_0     = 0          (q_0 = 0, so dq/dc = 0)
+
+The +1 (identity quaternion) on each step is the partial
+derivative of the additive c term.  Same Hubbard–Douady
+under-bound applies — the estimator is a guaranteed lower
+bound on the distance to the boundary, which is what
+sphere-tracing needs.
+
+=== Parameters ===
+
+  QMandelSliceW           : double  W of the 3D viewing slice.
+                                   Slide live to re-render new cross-sections.
+  QMandelIterations       : int     DE inner iter count.  Default 11.
+  QMandelBailout          : double  |q|² escape threshold.  Default 16.
+  QMandelMaxSteps         : int     Raymarch step cap.  Default 160.
+  QMandelEpsilon          : double  DE hit threshold.  Default 0.0012.
+  QMandelCamera*          : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+Per-iter cost is the same as Quaternion Julia — 16 multiplies
++ 12 adds for q² and the same for 2·q·dq.  The +1 on the
+derivative update costs nothing measurable.
+
+Unlike the complex Mandelbrot, the quaternion variant has no
+known closed-form perturbation series, so the renderer does
+not run the CalcGen 5-path pipeline — every pixel pays full
+DE cost.  Detail saturates around iter 10–14 with the
+default bailout 16, same as Julia.
+
+The slice-W slider does not invalidate any caches — switching
+it just re-runs the DE with a different c.W and the existing
+camera, lighting, theme and post-FX all transfer.
+";
+
+        public const string MathPlasmaText =
+@"=== Plasma (Diamond-Square) ===
+
+Not strictly a fractal — Fournier, Fussell & Carpenter's 1982
+diamond-square algorithm builds a 2D height field whose
+power spectrum is approximately 1/f^β, the same self-similar
+statistics produced by fractional Brownian motion.  Visually
+it's the classic ""cloud"" / terrain noise that ships in
+every fractal generator going back to Apophysis.
+
+=== Construction ===
+
+Choose the smallest power-of-two grid (size 2ⁿ + 1) covering
+the longer image edge.  Seed the four corners with random
+values in [0, 1].  Then for each subdivision level:
+
+  1. Square step.  For every cell centre, average the four
+     surrounding corner heights and add a random jitter in
+     (−amp, +amp).
+  2. Diamond step.  For every edge midpoint, average the
+     (up to four) cardinal neighbours and add the same kind
+     of jitter.
+  3. Halve the step size; multiply amp by 2^(−roughness).
+
+The displacement schedule controls the fractal dimension of
+the resulting surface.  Continuous-everywhere, nowhere-
+differentiable surfaces correspond to roughness ≈ 0.5; lower
+roughness produces visibly smooth gradients, higher
+roughness produces jagged mountain terrain.
+
+After the field is built it's normalised to [0, 1] and
+sampled bilinearly into the output buffer, mapped through
+the active gradient palette.
+
+=== Parameters ===
+
+  PlasmaRoughness : double  0..1.  0 = smooth gradient,
+                            1 = full amplitude (no decay).
+                            Default 0.55 — Apophysis-style cloud.
+  PlasmaSeed      : int     PRNG seed.  Same seed + roughness
+                            + image size = identical field.
+
+=== Implementation notes ===
+
+The field is generated once per render; pan and zoom are
+disabled because the procedural domain has no natural
+notion of coordinates outside the seed grid.  Re-rendering
+with the same seed at a different output size reuses the
+same conceptual surface but resamples the (2ⁿ + 1) grid
+that fits the new dimensions, so the pattern morphs
+slightly with viewport size — not a bug, an artefact of
+the grid quantisation.
+
+Themes that work on density / smooth-iter palettes carry
+over directly: the height value is fed to IColorMap.Map
+in the same [0, 256) range escape-time fractals use.
+";
+
+        public const string MathFlameText =
+@"=== Flame Fractals (Apophysis-style) ===
+
+Draves & Reckase, ""The Fractal Flame Algorithm"" (2003).  A flame
+is an iterated function system (IFS) where each map is the
+composition of an affine pre-transform and a single non-linear
+""variation"".  The result is tone-mapped through a log-density
+histogram with gamma correction and per-map colour blending — the
+visual signature of every Apophysis / Chaotica / Electric Sheep
+flame ever rendered.
+
+=== Construction ===
+
+For each chaos-game step:
+  1. Pick map i with probability w_i / Σ w_j.
+  2. Apply the affine pre-transform
+        p' = A · p + t
+     (six coefficients per map: A is 2×2, t is 2-vector).
+  3. Apply the non-linear variation v_i
+        q = V_{v_i}(p', amount_i).
+  4. Update the running per-point colour
+        c ← (c + colorIndex_i) · 0.5
+     (geometric blend of every map traversed so far).
+  5. Splat the (q, c) sample into the per-pixel hit + colour
+     histograms.
+
+After 8 M (default) samples the histograms drive the tone-map:
+  α     = log(hit + 1) / log(maxHit + 1)            density
+  α_γ   = α ^ (1 / gamma)                            gamma-boost
+  bright = vibrancy · α_γ + (1 − vibrancy) · α       blend
+  rgb   = palette(avgColor) · bright                 modulate
+
+=== Variations (Slice 2) ===
+
+Eight stock variations are wired:
+
+  Linear      identity
+  Sinusoidal  (sin x, sin y)
+  Spherical   (x, y) / (x² + y²)
+  Swirl       rotate by r² about the origin
+  Polar       (θ/π, r − 1)
+  Heart       r · (sin θr, −cos θr)
+  Disc        (θ/π) · (sin πr, cos πr)
+  Julia       √r · (cos φ, sin φ), φ = θ/2 + nπ random
+
+Apophysis ships ~49 variations; the eight here are the ones
+that appear in essentially every gallery flame.  Adding more is
+mechanical — extend FlameVariation + ApplyVariation in
+FlameRenderer.cs.
+
+=== Parameters ===
+
+  FlamePresetName : string  Built-in map table name.
+  FlameMaps       : list    Optional explicit map list (overrides
+                            the preset when non-null).
+  FlameIterations : int     Chaos-game sample count.  Default 8M;
+                            density-quality scales with √N.
+  FlameGamma      : double  Tone-map gamma exponent.  Default 2.2
+                            (Apophysis default).
+  FlameVibrancy   : double  Highlight saturation blend, 0..1.
+                            0 = linear density (preserves filament
+                            tint), 1 = full gamma-on-colour.
+
+=== Built-in presets ===
+
+  Sierpinski Linear     — Sierpinski IFS, Linear variation only.
+                          Identical shape to the IFS preset but
+                          routed through gamma + per-map colour.
+  Sierpinski Variation  — Sinusoidal-warped Sierpinski.
+  Spherical Pair        — 2-map spherical inversion.
+  Swirl Gasket          — 3-leg gasket with r²-swirl rotation.
+  Heart Sierpinski      — Concave Heart-warped Sierpinski.
+  Polar Julia           — Polar + Julia + Disc three-map blend.
+
+=== Implementation notes ===
+
+Spherical clamps to the origin inside a 1e-20 safety bubble to
+avoid NaN at the inversion pole.  Julia's two-branch random
+rotation uses a thread-local Random so the main chaos-game RNG
+stays deterministic across slices.  The attractor-bbox pass
+discards samples whose coordinates have already gone NaN /
+infinity, so a sampler that lands inside a singular pole during
+its 30 k-sample fit doesn't squash the rest of the set into a
+single pixel.
+
+Themes that work on density / smooth-iter palettes feed directly
+through this renderer — average colour index sits in [0, 1] and
+is fed to IColorMap.Map in the same [0, 256) range escape-time
+fractals use.
+";
+
+        public const string MathApollonianText =
+@"=== Apollonian Gasket ===
+
+A circle packing built recursively from a seed quadruple of
+mutually tangent circles using the Descartes Circle Theorem.
+The gasket is the limit set under repeated tangency
+construction — between any three mutually tangent circles
+there are exactly two further circles tangent to all three,
+and the packing recurses indefinitely.  The resulting fractal
+has Hausdorff dimension ≈ 1.3057.
+
+=== Descartes Circle Theorem ===
+
+For four mutually tangent circles with signed curvatures
+k_i = ±1/r_i (positive for internally tangent / disjoint,
+negative for the unique enclosing circle):
+
+  (k₁ + k₂ + k₃ + k₄)² = 2 · (k₁² + k₂² + k₃² + k₄²)
+
+Given any three of the four, solving for k₄ yields a quadratic
+with the two solutions corresponding to the two circles that
+complete the tangency.  Vieta's formulas reduce this to a
+single linear ""jump"" between the two solutions:
+
+  k₄' = 2(k₁ + k₂ + k₃) − k₄
+
+The complex form, with each circle's centre z_i carried as
+k_i·z_i, gives the position of the new circle by the same
+linear jump on (k·z):
+
+  k₄'·z₄' = 2(k₁z₁ + k₂z₂ + k₃z₃) − k₄·z₄
+
+=== Seed quadruple ===
+
+This implementation ships the integral (−1, 2, 2, 3) gasket:
+
+  outer disk     radius 1     k = −1   (enclosing)
+  two ""kissing""  radius 1/2   k = +2
+  two cusp caps  radius 1/3   k = +3   (above + below diameter)
+
+It is one of the rare quadruples whose entire packing has
+integer curvatures at every depth.
+
+=== Recursion ===
+
+From a quadruple {a, b, c, d}, generate three children by
+Vieta-jumping each of a, b, c through the other three
+(the just-inserted d is skipped to avoid revisiting).  Each
+child quadruple replaces one circle with its Vieta partner
+and recurses with the new circle as 'd'.  Termination:
+
+  • Stop when the next generated circle would draw smaller
+    than ApollonianMinPixelRadius device pixels of radius
+    (the visual cutoff — almost always fires first).
+  • Stop when recursion depth exceeds ApollonianDepth.
+  • Skip Vieta jumps that yield non-positive curvature
+    (would replace an enclosed circle with an enclosing one,
+    bursting the gasket).
+
+The pixel-radius cutoff naturally lets pan / zoom reveal new
+detail — at higher Zoom the world-radius cutoff shrinks, so
+deeper levels of the tree get drawn.
+
+=== Parameters ===
+
+  ApollonianDepth           : int    Max recursion depth.
+                                     Default 12.
+  ApollonianMinPixelRadius  : double Sub-pixel cutoff in device
+                                     pixels.  Default 0.75.
+  ApollonianColorByDepth    : bool   On = palette indexed by
+                                     recursion depth (banded
+                                     rings).  Off = log-radius
+                                     gradient (smooth).
+
+=== Implementation notes ===
+
+Circles are accumulated into a flat list during recursion,
+then sorted by radius descending and painted disk-fill in
+order so that smaller children naturally overwrite the
+interior of their enclosing parent — the nested-disks look
+emerges from overdraw without any explicit annulus
+construction.  The kissing-point cusps where three circles
+meet are rendered as a stack of progressively smaller filled
+disks; the pixel-radius cutoff is what keeps the renderer
+from infinitely chasing those cusps.
+";
+
+        public const string MathKleinianText =
+@"=== Kleinian Limit Set ===
+
+A 3D fractal generated by the limit set of a Schottky-style
+Kleinian group — the set of accumulation points reached by
+composing inversions in a family of reflection spheres.  Every
+point in the ambient ℝ³ is iteratively reflected through the
+deepest-containing sphere; orbits that stay trapped between the
+spheres pile up on the limit set, which fills the curvilinear
+region bounded by the inversion mirrors.
+
+=== Sphere inversion ===
+
+Inversion through a sphere with centre c and radius r maps a
+point p to
+
+  p' = c + (p − c) · r² / |p − c|²
+
+The transformation has scalar derivative magnitude r² / |p − c|²
+multiplied by an orthogonal Householder factor of unit length —
+so for distance-estimation purposes only the scalar prefactor
+needs tracking through the iteration chain.
+
+=== Distance estimator ===
+
+  scale := 1
+  for i in 0 .. iter:
+    pick the sphere whose interior most contains p
+    if every signed distance ≥ 0:  break
+    invert p through that sphere
+    scale *= r² / |p − c|²  (chain-rule scalar derivative)
+  DE := nearest-sphere distance / scale
+
+The renderer sphere-traces with this DE, then finite-differences
+it for the surface normal and applies a single-light Phong shade.
+
+=== Tetrahedral seed (first cut) ===
+
+The shipping preset uses four mutually tangent spheres of radius
+√2·s centred at the four even-parity (±s, ±s, ±s) corners — the
+tetrahedral vertex arrangement.  At s = 1 each pair of spheres
+is tangent at the midpoint of the connecting edge and their
+interiors overlap heavily around the origin, so any sample point
+near the origin is inside all four spheres at once.  Iterated
+inversion drives the sample toward the limit set on the
+intersection boundary.
+
+The KleinianSphereScale parameter loosens the packing:  s < 1
+shrinks the configuration so the spheres separate and the
+fundamental domain opens up, splitting the limit set into
+discrete shells around each sphere.
+
+=== Parameters ===
+
+  KleinianIterations  : int    Inversion-iteration cap.  Default
+                               16; deep cusps benefit from 24+.
+  KleinianSphereScale : double Tetrahedral arrangement scale.
+                               Default 1.0 (mutually tangent).
+  KleinianCamera*               Standard 3D orbit camera fields
+                               (theta / phi / distance), shared
+                               with the rest of the 3D family.
+  KleinianLight*                Phong light direction (theta /
+                               phi spherical).
+
+=== Implementation notes ===
+
+The signed-distance picker uses (|p − c| − r), so the deepest
+inversion is the one with the most-negative signed distance.
+The fallback for divergent inversions where |p − c| collapses
+to numerical zero is an early break — keeps the DE finite even
+at the kissing points where the chain rule technically blows up.
+The accumulated scale is read at the end of the loop so the DE
+remains meaningful for both deep-iter and early-break paths.
+
+User-editable sphere lists, alternate Schottky configurations
+(necklace, Klein-bottle, Apollonian-extrusion), and proper
+Möbius-group composition are deferred to a later slice — this
+first cut ships only the tetrahedral preset.
+";
+
+        public const string MathBicomplexText =
+@"=== Bicomplex (Tessarine) Mandelbrot ===
+
+A 3D-rendered slice of the 4D Mandelbrot set built over the
+bicomplex (tessarine) algebra ℂ² — the commutative 4-dimensional
+algebra spanned by (1, i, j, k) under the relations
+
+  i² = j² = −1,   k² = +1,   ij = ji = k
+
+Unlike the Hamilton quaternions, tessarine multiplication is
+commutative.  Unlike split-complex, the algebra has zero divisors:
+anything of the form a + a·k with a ∈ ℂ multiplied by 1 − k gives
+zero, so the multiplicative norm is degenerate on a 2D subspace.
+
+=== Iteration ===
+
+  tₙ₊₁ = tₙ² + c    t, c ∈ ℂ²
+  t₀  = 0           (Mandelbrot membership convention)
+
+Squaring map for t = (t₁ + t₂·i + t₃·j + t₄·k):
+
+  t²₁ = t₁² − t₂² − t₃² + t₄²
+  t²ᵢ = 2·(t₁·t₂ − t₃·t₄)
+  t²ⱼ = 2·(t₁·t₃ − t₂·t₄)
+  t²ₖ = 2·(t₁·t₄ + t₂·t₃)
+
+=== 3D slice convention ===
+
+Pixel coordinate (x, y, z) maps to
+
+  c = (x, y, z, BicomplexSliceW)
+
+so the renderer walks the 1, i, j axes of c through the 3D viewport
+with the k axis pinned to the slider value.  At sliceW = 0 the
+3D slab collapses onto the standard 2D Mandelbrot extruded along
+the j axis — the k coordinate decouples and the iteration projects
+back to the complex squaring map.  Sliding sliceW away from 0
+exposes the zero-divisor seam slabs unique to the tessarine
+algebra; these read as flat slabs rather than the curved DE
+surfaces a Hamilton-algebra rendering would produce.
+
+=== Distance estimator ===
+
+Hubbard–Douady, same as the quaternion variant:
+
+  dtₙ₊₁ = 2 · tₙ · dtₙ + 1      (bicomplex product; 1 is the
+                                  algebra identity)
+  dt₀  = 0
+  DE   = 0.5 · |t| · ln|t| / |dt|
+
+The bicomplex product in the 2·t·dt step uses the commutative
+multiplication table above, not the Hamilton ordering — for a
+tessarine, t·dt equals dt·t, so the two writeable orderings yield
+identical components.
+
+=== Parameters ===
+
+  BicomplexSliceW         : double  k-axis slice constant for c.
+                                    Default 0.
+  BicomplexIterations     : int     DE inner iteration count.
+                                    Default 11.
+  BicomplexBailout        : double  |t|² escape threshold.
+                                    Default 16.
+  BicomplexCamera*                  Standard orbit-camera fields
+                                    shared across the 3D family.
+  BicomplexLight*                   Phong light direction (theta /
+                                    phi spherical).
+
+=== Implementation notes ===
+
+The 4-component DE returns 0 when |t| < 1 to give the surface a
+flat hit inside the closed set, identical to the Hart/Hubbard
+convention used for quaternion Mandelbrot.  Zero-divisor cusps —
+where the inversion derivative collapses because |dt|² < 1e−30 —
+are guarded with an early-return DE = 0; the sphere tracer then
+treats the cusp point as a surface hit instead of stepping past it
+on a numerically-blown distance estimate.
+
+Visually this set overlaps the quaternion Mandelbrot on the
+(i, j = 0, k = 0) plane (both restrict to the standard 2D
+Mandelbrot) but diverges sharply on off-axis slices.  Lower visual
+differentiation against the quaternion family is why this slot
+sits late in the roadmap — it is here mostly for completeness of
+the 4D algebra coverage rather than as a primary user-facing
+fractal.
+";
+
+        public const string MathDlaText =
+@"=== Diffusion-Limited Aggregation (DLA) ===
+
+A stochastic growth model introduced by Witten and Sander (1981).
+A single seed cell sits at the centre of a 2D grid; particles
+spawn on a launch circle just outside the current aggregate
+bounding radius, perform a Brownian random walk, and stick the
+first time they land in a cell adjacent to the aggregate.  Each
+new stuck cell extends the aggregate; the resulting tree has
+empirical fractal dimension D ≈ 1.71 and recognisably dendritic,
+branched structure with screened-off interior regions.
+
+=== Algorithm ===
+
+  init   grid[centre] = 1                (the seed)
+         maxR² = 1                       (bounding radius²)
+  for n = 1 .. DlaParticles:
+    launchR = sqrt(maxR²) + margin
+    killR   = launchR · 3 + 8
+    spawn particle on the launch circle
+    walk:
+      if any 4-neighbour is aggregated:
+        grid[here] = n + 1               (arrival index)
+        update maxR²
+        break
+      step in one of {−x, +x, −y, +y} with equal probability
+      if outside killR or at canvas edge: restart particle
+
+The launch-circle + kill-radius pair is the standard Witten-
+Sander optimisation: spawning at the aggregate boundary collapses
+the long unbiased outbound walks that drive the naive O(N · area)
+implementation down to roughly O(N² · log N).  Particles that
+walk past the kill circle restart from a fresh launch point so
+the joining distribution stays unbiased.
+
+=== Determinism ===
+
+A single System.Random seeded by DlaSeed drives both launch-angle
+and walk-step draws, so (Width, Height, DlaSeed, DlaParticles)
+uniquely determines the produced aggregate.  Reproducing a tree
+just needs the same four values.
+
+=== Colour by arrival ===
+
+Each stuck cell records its arrival index n + 1; the colour pass
+maps arrival/totalArrivals through the active IColorMap.  Early-
+stuck cells therefore get one end of the palette and the outer
+tips get the other — the temporal-growth structure of the
+dendrite becomes the visual.  Vacuum cells stay at the
+ColorBuffer's pre-cleared 0 (transparent black).
+
+=== Parameters ===
+
+  DlaParticles : int   Random-walk particle count.  Aggregate
+                       cell count = DlaParticles + 1.  Default
+                       8000 produces a recognisable dendrite at
+                       512² in well under a second.
+  DlaSeed      : int   PRNG seed for the walk.  Default 12345.
+
+=== Limitations ===
+
+Pan/zoom is unsupported — the simulation IS the image, and
+zooming in would invalidate the per-cell arrival map.  The
+roadmap calls out cached-blit pan/zoom as a future improvement;
+this slice ships only the fixed-grid render.  Very high particle
+counts (>200 k) on small canvases will see the kill-radius
+restart cap kick in as the aggregate fills the available area —
+that is expected and not a defect; bump canvas size in that case.
+";
+
+        public const string MathSpiderText =
+@"=== Spider Fractal ===
+
+A two-state escape-time recurrence where the constant c is
+NOT constant — it drifts each iteration in the direction of z:
+
+        zₙ₊₁ = zₙ² + cₙ
+        cₙ₊₁ = decay · cₙ + zₙ₊₁         (default decay = 0.5)
+
+Pixel coordinate seeds c₀; z₀ = 0 (Mandelbrot convention).  The
+mutating c is what distinguishes Spider from every other
+quadratic-family Mandelbrot-flavoured set — adjacent pixels'
+c values drift apart, producing the namesake spider-leg
+filaments instead of the smooth lobes of Mandelbrot.
+
+=== Decay Spectrum ===
+
+Decay is the only tunable.  Three regimes:
+
+  decay = 1.0   c never mutates → degenerates to Mandelbrot
+                (sanity check: render at decay = 1 and you get
+                the canonical cardioid).
+  decay = 0.5   Canonical Spider.  c bleeds half its previous
+                value plus the new z; orbits flush quickly so
+                in-set behaviour is dominated by the local z
+                dynamics.
+  decay = 0.0   c reseeds to z each step → heavy chaos, the
+                ""set"" becomes a thin Cantor-like dust.
+
+Intermediate values trace a continuous deformation between
+these regimes.  The boundary fractal dimension shifts smoothly
+with decay; this is one of the few standard escape-time
+families with a non-degenerate one-parameter deformation
+space.
+
+=== Implementation ===
+
+c mutates per iteration — that is NOT part of the standard
+IFractalKernel.Step contract (Step takes c by value).
+SpiderKernel exposes a dedicated StepMutatingC(ref zr, ref zi,
+ref cx, ref cy) overload and EscapeTimeCalculator routes
+Spider through its own loop (CalculateSpider) the same way
+Phoenix routes through CalculatePhoenix for its prev-z carry.
+
+No closed-form dz/dc — distance + normal themes fall back to
+the flat-exterior branch in FillAuxAndColor.
+
+=== Parameters ===
+
+  SpiderCDecay : double  c-mutation coefficient.  Default 0.5.
+                         Range [0, 1]; values outside the
+                         range are clamped at the kernel level.
+
+=== C# Equation ===
+
+  // User Equation can't mutate c between steps via the
+  // (z, c, n) → z signature.  Approximation that ignores
+  // the c carry:
+  return z*z + c;       // → Mandelbrot
 ";
     }
 }
