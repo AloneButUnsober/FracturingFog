@@ -64,7 +64,6 @@ public sealed class KifsCalculator : IFractalCalculator
         int deIter = Math.Max(2, FractalParameters.KifsIterations);
         int maxSteps = Math.Max(16, FractalParameters.KifsMaxSteps);
         double eps = Math.Max(1e-5, FractalParameters.KifsEpsilon);
-        double bailout2 = Math.Max(16.0, FractalParameters.KifsBailout);
 
         // KIFS attractor inscribed in a unit-ish cube; with offsets at 1
         // a safe outer-camera distance is ≈ 4. Anchor camera against the
@@ -133,8 +132,8 @@ public sealed class KifsCalculator : IFractalCalculator
                 for (int step = 0; step < maxSteps; step++)
                 {
                     double dist = sierp
-                        ? SierpDE(px, py, pz, scale, ox, oy, oz, bailout2, deIter)
-                        : MengerDE(px, py, pz, scale, ox, oy, oz, bailout2, deIter);
+                        ? SierpDE(px, py, pz, scale, ox, oy, oz, deIter)
+                        : MengerDE(px, py, pz, scale, ox, oy, oz, deIter);
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
                     px += rdx * dist; py += rdy * dist; pz += rdz * dist;
@@ -148,21 +147,21 @@ public sealed class KifsCalculator : IFractalCalculator
                 double n0, n1, n2;
                 if (sierp)
                 {
-                    n0 = SierpDE(px + h, py, pz, scale, ox, oy, oz, bailout2, deIter)
-                       - SierpDE(px - h, py, pz, scale, ox, oy, oz, bailout2, deIter);
-                    n1 = SierpDE(px, py + h, pz, scale, ox, oy, oz, bailout2, deIter)
-                       - SierpDE(px, py - h, pz, scale, ox, oy, oz, bailout2, deIter);
-                    n2 = SierpDE(px, py, pz + h, scale, ox, oy, oz, bailout2, deIter)
-                       - SierpDE(px, py, pz - h, scale, ox, oy, oz, bailout2, deIter);
+                    n0 = SierpDE(px + h, py, pz, scale, ox, oy, oz, deIter)
+                       - SierpDE(px - h, py, pz, scale, ox, oy, oz, deIter);
+                    n1 = SierpDE(px, py + h, pz, scale, ox, oy, oz, deIter)
+                       - SierpDE(px, py - h, pz, scale, ox, oy, oz, deIter);
+                    n2 = SierpDE(px, py, pz + h, scale, ox, oy, oz, deIter)
+                       - SierpDE(px, py, pz - h, scale, ox, oy, oz, deIter);
                 }
                 else
                 {
-                    n0 = MengerDE(px + h, py, pz, scale, ox, oy, oz, bailout2, deIter)
-                       - MengerDE(px - h, py, pz, scale, ox, oy, oz, bailout2, deIter);
-                    n1 = MengerDE(px, py + h, pz, scale, ox, oy, oz, bailout2, deIter)
-                       - MengerDE(px, py - h, pz, scale, ox, oy, oz, bailout2, deIter);
-                    n2 = MengerDE(px, py, pz + h, scale, ox, oy, oz, bailout2, deIter)
-                       - MengerDE(px, py, pz - h, scale, ox, oy, oz, bailout2, deIter);
+                    n0 = MengerDE(px + h, py, pz, scale, ox, oy, oz, deIter)
+                       - MengerDE(px - h, py, pz, scale, ox, oy, oz, deIter);
+                    n1 = MengerDE(px, py + h, pz, scale, ox, oy, oz, deIter)
+                       - MengerDE(px, py - h, pz, scale, ox, oy, oz, deIter);
+                    n2 = MengerDE(px, py, pz + h, scale, ox, oy, oz, deIter)
+                       - MengerDE(px, py, pz - h, scale, ox, oy, oz, deIter);
                 }
                 var nrm = Normalize3(n0, n1, n2);
 
@@ -182,19 +181,23 @@ public sealed class KifsCalculator : IFractalCalculator
     }
 
     /// <summary>
-    /// Menger-sponge DE. Per iter:
-    ///   v = |z|                                       (3 reflections)
-    ///   sort components by descending magnitude       (3 conditional swaps)
-    ///   z = scale·v − (scale−1)·offset, except the smallest component
-    ///   which keeps scale·v (no offset)               (this is Knighty's
-    ///   formulation; the "tile-3" fold).
-    /// Tracking dr = scale^n gives DE = (|z| − r0) / dr.
+    /// Menger-sponge DE (Knighty's formulation). Per iter:
+    ///   z = |z|                                        (octant fold)
+    ///   sort components so |x| >= |y| >= |z|           (3 conditional swaps)
+    ///   z = scale·z − (scale−1)·offset
+    ///   if z.z < -(scale−1)·offset.z/2  →  z.z += (scale−1)·offset.z
+    /// Iteration runs to fixed depth; dr = scale^N is constant. DE is the
+    /// distance to a bounding sphere of radius 2 around the iterated point.
     /// </summary>
     private static double MengerDE(double cx, double cy, double cz,
-        double scale, double ox, double oy, double oz, double bailout2, int iter)
+        double scale, double ox, double oy, double oz, int iter)
     {
         double zx = cx, zy = cy, zz = cz;
-        double dr = 1.0;
+        double k = scale - 1.0;
+        double offX = k * ox;
+        double offY = k * oy;
+        double offZ = k * oz;
+        double mirrorThresh = -0.5 * offZ;
         for (int i = 0; i < iter; i++)
         {
             zx = Math.Abs(zx); zy = Math.Abs(zy); zz = Math.Abs(zz);
@@ -203,32 +206,32 @@ public sealed class KifsCalculator : IFractalCalculator
             if (zx - zz < 0) { t = zx; zx = zz; zz = t; }
             if (zy - zz < 0) { t = zy; zy = zz; zz = t; }
 
-            zx = scale * zx - (scale - 1.0) * ox;
-            zy = scale * zy - (scale - 1.0) * oy;
-            // Smallest component (zz here, after sort) is left at scale·z
-            // — no subtraction — to drive the sponge holes.
+            zx = scale * zx - offX;
+            zy = scale * zy - offY;
             zz = scale * zz;
-            if (zz - (scale - 1.0) * oz * 0.5 < 0) zz -= (scale - 1.0) * oz;
-
-            dr *= scale;
-            if (zx * zx + zy * zy + zz * zz > bailout2) break;
+            // Knighty corner-mirror: when the smallest (post-scale) component
+            // ends up below −offset/2, fold it back by +offset. Reference:
+            // p.z < −0.5·offset·(scale−1) → p.z += offset·(scale−1).
+            if (zz < mirrorThresh) zz += offZ;
         }
         double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        // Subtract bounding sphere of the iterated cube.
-        return (rFinal - 2.0) / Math.Max(Math.Abs(dr), 1e-10);
+        return (rFinal - 2.0) * Math.Pow(scale, -iter);
     }
 
     /// <summary>
-    /// Sierpinski tetrahedron DE. Per iter:
-    ///   3 vertex reflections (Knighty's flip-on-negative-sum trick).
-    ///   scale-2 from (1,1,1).
-    /// dr = scale^n drives the DE divisor.
+    /// Sierpinski tetrahedron DE (Knighty's formulation). Per iter:
+    ///   3 vertex reflections (flip-on-negative-sum across the tetra faces).
+    ///   z = scale·z − (scale−1)·offset.
+    /// Iteration runs to fixed depth; dr = scale^N is constant.
     /// </summary>
     private static double SierpDE(double cx, double cy, double cz,
-        double scale, double ox, double oy, double oz, double bailout2, int iter)
+        double scale, double ox, double oy, double oz, int iter)
     {
         double zx = cx, zy = cy, zz = cz;
-        double dr = 1.0;
+        double k = scale - 1.0;
+        double offX = k * ox;
+        double offY = k * oy;
+        double offZ = k * oz;
         for (int i = 0; i < iter; i++)
         {
             double t;
@@ -236,15 +239,12 @@ public sealed class KifsCalculator : IFractalCalculator
             if (zx + zz < 0) { t = -zz; zz = -zx; zx = t; }
             if (zy + zz < 0) { t = -zz; zz = -zy; zy = t; }
 
-            zx = scale * zx - (scale - 1.0) * ox;
-            zy = scale * zy - (scale - 1.0) * oy;
-            zz = scale * zz - (scale - 1.0) * oz;
-
-            dr *= scale;
-            if (zx * zx + zy * zy + zz * zz > bailout2) break;
+            zx = scale * zx - offX;
+            zy = scale * zy - offY;
+            zz = scale * zz - offZ;
         }
         double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return (rFinal - 2.0) / Math.Max(Math.Abs(dr), 1e-10);
+        return rFinal * Math.Pow(scale, -iter);
     }
 
     private static double[] Normalize3(double x, double y, double z)
