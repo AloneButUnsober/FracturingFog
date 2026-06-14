@@ -46,6 +46,7 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.Apollonian)]
     [InlineData(FractalType.Kleinian)]
     [InlineData(FractalType.BicomplexMandelbrot)]
+    [InlineData(FractalType.Dla)]
     public void AllowedTypes_AreAllowed(FractalType t)
     {
         Assert.True(FractalTypeAllowlist.IsAllowed(t));

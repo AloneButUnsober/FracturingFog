@@ -314,6 +314,17 @@ namespace FracturingFog.Models
         /// Default true.</summary>
         public bool ApollonianColorByDepth { get; set; } = true;
 
+        // Diffusion-Limited Aggregation (Witten–Sander 1981).
+        /// <summary>Number of random-walk particles launched into the
+        /// aggregate. Aggregate cell count = DlaParticles + 1 (initial
+        /// seed). Higher = denser tree, longer render. Default 8000 fills
+        /// a 512² canvas with a recognisable dendrite in well under a
+        /// second.</summary>
+        public int DlaParticles { get; set; } = 8000;
+        /// <summary>PRNG seed for the Witten–Sander walk. Identical (W, H,
+        /// seed, particles) reproduce the same tree. Default 12345.</summary>
+        public int DlaSeed { get; set; } = 12345;
+
         // Kleinian limit set (3D, sphere-inversion Schottky group).
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
@@ -549,6 +560,8 @@ namespace FracturingFog.Models
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
+                DlaParticles = DlaParticles,
+                DlaSeed = DlaSeed,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

@@ -105,6 +105,7 @@ namespace FracturingFog.Hosting
             new("Apollonian",    HelpTextBundle.MathApollonianText),
             new("Kleinian",      HelpTextBundle.MathKleinianText),
             new("Bicomplex Mandelbrot", HelpTextBundle.MathBicomplexText),
+            new("DLA",           HelpTextBundle.MathDlaText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]

@@ -5082,6 +5082,76 @@ the 4D algebra coverage rather than as a primary user-facing
 fractal.
 ";
 
+        public const string MathDlaText =
+@"=== Diffusion-Limited Aggregation (DLA) ===
+
+A stochastic growth model introduced by Witten and Sander (1981).
+A single seed cell sits at the centre of a 2D grid; particles
+spawn on a launch circle just outside the current aggregate
+bounding radius, perform a Brownian random walk, and stick the
+first time they land in a cell adjacent to the aggregate.  Each
+new stuck cell extends the aggregate; the resulting tree has
+empirical fractal dimension D ≈ 1.71 and recognisably dendritic,
+branched structure with screened-off interior regions.
+
+=== Algorithm ===
+
+  init   grid[centre] = 1                (the seed)
+         maxR² = 1                       (bounding radius²)
+  for n = 1 .. DlaParticles:
+    launchR = sqrt(maxR²) + margin
+    killR   = launchR · 3 + 8
+    spawn particle on the launch circle
+    walk:
+      if any 4-neighbour is aggregated:
+        grid[here] = n + 1               (arrival index)
+        update maxR²
+        break
+      step in one of {−x, +x, −y, +y} with equal probability
+      if outside killR or at canvas edge: restart particle
+
+The launch-circle + kill-radius pair is the standard Witten-
+Sander optimisation: spawning at the aggregate boundary collapses
+the long unbiased outbound walks that drive the naive O(N · area)
+implementation down to roughly O(N² · log N).  Particles that
+walk past the kill circle restart from a fresh launch point so
+the joining distribution stays unbiased.
+
+=== Determinism ===
+
+A single System.Random seeded by DlaSeed drives both launch-angle
+and walk-step draws, so (Width, Height, DlaSeed, DlaParticles)
+uniquely determines the produced aggregate.  Reproducing a tree
+just needs the same four values.
+
+=== Colour by arrival ===
+
+Each stuck cell records its arrival index n + 1; the colour pass
+maps arrival/totalArrivals through the active IColorMap.  Early-
+stuck cells therefore get one end of the palette and the outer
+tips get the other — the temporal-growth structure of the
+dendrite becomes the visual.  Vacuum cells stay at the
+ColorBuffer's pre-cleared 0 (transparent black).
+
+=== Parameters ===
+
+  DlaParticles : int   Random-walk particle count.  Aggregate
+                       cell count = DlaParticles + 1.  Default
+                       8000 produces a recognisable dendrite at
+                       512² in well under a second.
+  DlaSeed      : int   PRNG seed for the walk.  Default 12345.
+
+=== Limitations ===
+
+Pan/zoom is unsupported — the simulation IS the image, and
+zooming in would invalidate the per-cell arrival map.  The
+roadmap calls out cached-blit pan/zoom as a future improvement;
+this slice ships only the fixed-grid render.  Very high particle
+counts (>200 k) on small canvases will see the kill-radius
+restart cap kick in as the aggregate fills the available area —
+that is expected and not a defect; bump canvas size in that case.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 

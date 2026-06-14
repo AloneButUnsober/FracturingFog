@@ -504,6 +504,22 @@
                                ToolTip.Tip="Highlight saturation 0..1. 0 = linear, 1 = full gamma-on-colour." />
             </Grid>
 
+            <!-- DLA -->
+            <Grid IsVisible="{Binding IsDla}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Particles:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="100" Maximum="500000" Increment="500" FormatString="F0"
+                               Value="{Binding DlaParticles, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Random-walk particles launched into the aggregate. Higher = denser tree, slower render." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                               Value="{Binding DlaSeed, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="PRNG seed — same seed + particles + canvas size = identical tree." />
+            </Grid>
+
             <!-- Bicomplex Mandelbrot -->
             <Grid IsVisible="{Binding IsBicomplexMandelbrot}"
                   ColumnDefinitions="160,*"
