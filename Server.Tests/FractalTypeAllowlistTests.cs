@@ -41,6 +41,7 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.Mandelbox)]
     [InlineData(FractalType.Kifs)]
     [InlineData(FractalType.QuaternionJulia)]
+    [InlineData(FractalType.QuaternionMandelbrot)]
     [InlineData(FractalType.Plasma)]
     public void AllowedTypes_AreAllowed(FractalType t)
     {

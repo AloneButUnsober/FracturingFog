@@ -4606,6 +4606,79 @@ it just re-runs the DE with a different starting q.W and the
 existing camera, lighting, theme and post-FX all transfer.
 ";
 
+        public const string MathQuatMandelbrotText =
+@"=== Quaternion Mandelbrot ===
+
+Norton (1982) and Holroyd (early 1990s) extended the
+Mandelbrot membership test from ℂ to ℍ:
+
+        q ∈ ℍ        (Hamilton quaternions, 4D)
+        q_{n+1} = q_n² + c       with c varying per pixel
+
+Same squaring map as Quaternion Julia — the only difference
+is which variable varies.  For Julia, c is constant and
+the orbit's starting q comes from the pixel.  For
+Mandelbrot, q starts at the origin (membership test) and c
+takes the pixel coordinate.
+
+=== 3D slice ===
+
+The Mandelbrot set lives in c-space, which is 4D.  Fracturing
+Fog raymarches a 3D slice through ℍ — a single pixel
+(x, y, z) becomes:
+
+        c = (x, y, z, QMandelSliceW)
+
+QMandelSliceW is a UI slider.  Sliding it reveals different
+3D cross-sections of the same 4D set.  The W = 0 plane shows
+the familiar 2D Mandelbrot silhouette extruded along Z;
+non-zero W exposes thin filaments and bulb dustings that
+have no analogue in the complex case.
+
+=== Distance estimate ===
+
+Hubbard–Douady estimator with the derivative taken wrt c:
+
+        DE = 0.5 · |q| · ln |q| / |dq|
+
+Chain rule on q_{n+1} = q_n² + c gives:
+
+        dq_{n+1} = 2 · q_n · dq_n + 1
+        dq_0     = 0          (q_0 = 0, so dq/dc = 0)
+
+The +1 (identity quaternion) on each step is the partial
+derivative of the additive c term.  Same Hubbard–Douady
+under-bound applies — the estimator is a guaranteed lower
+bound on the distance to the boundary, which is what
+sphere-tracing needs.
+
+=== Parameters ===
+
+  QMandelSliceW           : double  W of the 3D viewing slice.
+                                   Slide live to re-render new cross-sections.
+  QMandelIterations       : int     DE inner iter count.  Default 11.
+  QMandelBailout          : double  |q|² escape threshold.  Default 16.
+  QMandelMaxSteps         : int     Raymarch step cap.  Default 160.
+  QMandelEpsilon          : double  DE hit threshold.  Default 0.0012.
+  QMandelCamera*          : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+Per-iter cost is the same as Quaternion Julia — 16 multiplies
++ 12 adds for q² and the same for 2·q·dq.  The +1 on the
+derivative update costs nothing measurable.
+
+Unlike the complex Mandelbrot, the quaternion variant has no
+known closed-form perturbation series, so the renderer does
+not run the CalcGen 5-path pipeline — every pixel pays full
+DE cost.  Detail saturates around iter 10–14 with the
+default bailout 16, same as Julia.
+
+The slice-W slider does not invalidate any caches — switching
+it just re-runs the DE with a different c.W and the existing
+camera, lighting, theme and post-FX all transfer.
+";
+
         public const string MathPlasmaText =
 @"=== Plasma (Diamond-Square) ===
 

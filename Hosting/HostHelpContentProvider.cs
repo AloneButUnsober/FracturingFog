@@ -99,6 +99,7 @@ namespace FracturingFog.Hosting
             new("Mandelbox",     HelpTextBundle.MathMandelboxText),
             new("KIFS",          HelpTextBundle.MathKifsText),
             new("Quaternion Julia", HelpTextBundle.MathQuatJuliaText),
+            new("Quaternion Mandelbrot", HelpTextBundle.MathQuatMandelbrotText),
             new("Plasma",        HelpTextBundle.MathPlasmaText),
             new("Flame",         HelpTextBundle.MathFlameText),
         };

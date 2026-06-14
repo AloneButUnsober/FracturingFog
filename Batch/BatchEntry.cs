@@ -106,7 +106,8 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              AntiNebulabrot|IFS|LSystem|StrangeAttractor|");
             Console.WriteLine("                              UserEquation|Mandelbulb|Mandelbox|Kifs|Sandbox|UserBulb|");
             Console.WriteLine("                              TearDrop|Magnet1|Magnet2|Glynn|Logistic|Halley|");
-            Console.WriteLine("                              Secant|Spider|QuaternionJulia|Plasma|Flame|");
+            Console.WriteLine("                              Secant|Spider|QuaternionJulia|QuaternionMandelbrot|");
+            Console.WriteLine("                              Plasma|Flame|");
             Console.WriteLine("                              GeneratedMandelbrotZ2..Z5|");
             Console.WriteLine("                              GeneratedTricorn|GeneratedBurningShip");
             Console.WriteLine("  --theme NAME, -t NAME       Color theme name (default: HSV)");
