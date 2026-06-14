@@ -252,6 +252,7 @@ namespace FracturingFog.Imaging
                 FractalType.UserEquation     => new UserEquationCalculator(w, h),
                 FractalType.Mandelbulb       => new MandelbulbCalculator(w, h),
                 FractalType.Mandelbox        => new MandelboxCalculator(w, h),
+                FractalType.Kifs             => new KifsCalculator(w, h),
                 FractalType.Sandbox          => new SandboxCalculator(w, h),
                 FractalType.UserBulb         => new UserBulbCalculator(w, h),
                 _                            => null
@@ -279,6 +280,7 @@ namespace FracturingFog.Imaging
                 case UserEquationCalculator u: u.FractalParameters = req.FractalParameters; break;
                 case MandelbulbCalculator m:   m.FractalParameters = req.FractalParameters; break;
                 case MandelboxCalculator mb:   mb.FractalParameters = req.FractalParameters; break;
+                case KifsCalculator kf:        kf.FractalParameters = req.FractalParameters; break;
                 case SandboxCalculator sb:     sb.FractalParameters = req.FractalParameters; break;
                 case UserBulbCalculator ub:    ub.FractalParameters = req.FractalParameters; break;
             }

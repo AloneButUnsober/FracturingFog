@@ -156,6 +156,7 @@ namespace FracturingFog.ViewState
                 FractalType.Secant                => ( 0.0,  0.0, 1.0),
                 FractalType.Spider                => ( 0.0,  0.0, 1.2),
                 FractalType.Mandelbox             => ( 0.0,  0.0, 1.0),
+                FractalType.Kifs                  => ( 0.0,  0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;
@@ -176,6 +177,7 @@ namespace FracturingFog.ViewState
         /// (camera dollies on zoom, right-drag rotates).</summary>
         public bool Is3D => FractalType == FractalType.Mandelbulb
                          || FractalType == FractalType.Mandelbox
+                         || FractalType == FractalType.Kifs
                          || FractalType == FractalType.UserBulb;
     }
 }

@@ -90,12 +90,14 @@ namespace FracturingFog.Input
                 {
                     FractalType.UserBulb  => ViewState.FractalParameters.UserBulbCameraTheta,
                     FractalType.Mandelbox => ViewState.FractalParameters.MandelboxCameraTheta,
+                    FractalType.Kifs      => ViewState.FractalParameters.KifsCameraTheta,
                     _                     => ViewState.FractalParameters.BulbCameraTheta,
                 };
                 _rightDragStartPhi = ViewState.FractalType switch
                 {
                     FractalType.UserBulb  => ViewState.FractalParameters.UserBulbCameraPhi,
                     FractalType.Mandelbox => ViewState.FractalParameters.MandelboxCameraPhi,
+                    FractalType.Kifs      => ViewState.FractalParameters.KifsCameraPhi,
                     _                     => ViewState.FractalParameters.BulbCameraPhi,
                 };
                 CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.NoMove2D));
@@ -172,6 +174,10 @@ namespace FracturingFog.Input
                     case FractalType.Mandelbox:
                         ViewState.FractalParameters.MandelboxCameraTheta = newTheta;
                         ViewState.FractalParameters.MandelboxCameraPhi = newPhi;
+                        break;
+                    case FractalType.Kifs:
+                        ViewState.FractalParameters.KifsCameraTheta = newTheta;
+                        ViewState.FractalParameters.KifsCameraPhi = newPhi;
                         break;
                     default:
                         ViewState.FractalParameters.BulbCameraTheta = newTheta;
@@ -571,6 +577,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Mandelbox)
                 ViewState.FractalParameters.MandelboxCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.MandelboxCameraDistance + delta, 0.1, 500.0);
+            else if (ViewState.FractalType == FractalType.Kifs)
+                ViewState.FractalParameters.KifsCameraDistance = Math.Clamp(
+                    ViewState.FractalParameters.KifsCameraDistance + delta, 0.1, 500.0);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -583,6 +592,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.BulbCameraTheta = NormalizeAngle(ViewState.FractalParameters.BulbCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.Mandelbox)
                 ViewState.FractalParameters.MandelboxCameraTheta = NormalizeAngle(ViewState.FractalParameters.MandelboxCameraTheta + delta);
+            else if (ViewState.FractalType == FractalType.Kifs)
+                ViewState.FractalParameters.KifsCameraTheta = NormalizeAngle(ViewState.FractalParameters.KifsCameraTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -600,6 +611,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Mandelbox)
                 ViewState.FractalParameters.MandelboxCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.MandelboxCameraPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.Kifs)
+                ViewState.FractalParameters.KifsCameraPhi = Math.Clamp(
+                    ViewState.FractalParameters.KifsCameraPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -612,6 +626,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.BulbLightTheta = NormalizeAngle(ViewState.FractalParameters.BulbLightTheta + delta);
             else if (ViewState.FractalType == FractalType.Mandelbox)
                 ViewState.FractalParameters.MandelboxLightTheta = NormalizeAngle(ViewState.FractalParameters.MandelboxLightTheta + delta);
+            else if (ViewState.FractalType == FractalType.Kifs)
+                ViewState.FractalParameters.KifsLightTheta = NormalizeAngle(ViewState.FractalParameters.KifsLightTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -629,6 +645,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Mandelbox)
                 ViewState.FractalParameters.MandelboxLightPhi = Math.Clamp(
                     ViewState.FractalParameters.MandelboxLightPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.Kifs)
+                ViewState.FractalParameters.KifsLightPhi = Math.Clamp(
+                    ViewState.FractalParameters.KifsLightPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }

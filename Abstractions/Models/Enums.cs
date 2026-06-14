@@ -100,6 +100,15 @@ namespace FracturingFog
         /// light fields. Distance estimate tracks a scalar dz
         /// magnitude through folds.</summary>
         Mandelbox,
+        /// <summary>Kaleidoscopic IFS (KIFS) — repeated reflective fold +
+        /// scale-from-pivot. Two built-in fold tables: Menger sponge
+        /// (sort-3 + scale-3) and Sierpinski tetrahedron (3 vertex
+        /// reflections + scale-2). DE: (|z|−κ) / scale^n. Tunables on
+        /// <c>FractalParameters</c>: <c>KifsFold</c>, <c>KifsIterations</c>,
+        /// <c>KifsScale</c>, <c>KifsOffsetX/Y/Z</c>, plus shared camera /
+        /// light fields. Rendered via distance-estimation raymarching
+        /// alongside the Mandelbulb and Mandelbox paths.</summary>
+        Kifs,
     }
 
     public enum RenderProfile { Preview, Final }

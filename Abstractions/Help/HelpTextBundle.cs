@@ -4456,6 +4456,78 @@ the DE — iter clamp and bailout exit at |z|² > 10⁶ catch this
 before the surface goes degenerate.
 ";
 
+        public const string MathKifsText =
+@"=== Kaleidoscopic IFS (KIFS) ===
+
+Knighty (2010), generalising classic 2D IFS attractors to 3D
+distance-estimation raymarching.  Per iteration the point z is
+folded by a reflective table, then linearly scaled away from
+a pivot offset:
+
+        z ← scale · fold(z) − (scale − 1) · offset
+
+Different fold tables produce different attractor shapes.
+Fracturing Fog ships two built-in tables.
+
+=== Menger sponge fold ===
+
+Sort-3 absolute-value fold:
+
+        z ← |z|                         (3 reflections)
+        sort components by descending magnitude
+        z ← scale · z − (scale − 1) · offset
+        smallest component left at scale · z (no offset)
+
+with scale = 3 and offset = (1, 1, 1) reproducing the
+Menger sponge — cube with the centre and the six face-centred
+sub-cubes removed, recursively.
+
+=== Sierpinski tetrahedron fold ===
+
+Vertex-reflection fold:
+
+        if  x + y < 0   swap and negate  (x, y) ← (−y, −x)
+        if  x + z < 0   swap and negate  (x, z) ← (−z, −x)
+        if  y + z < 0   swap and negate  (y, z) ← (−z, −y)
+        z ← scale · z − (scale − 1) · offset
+
+with scale = 2 and offset = (1, 1, 1) reproducing the
+Sierpinski tetrahedron gasket.
+
+=== Distance estimate ===
+
+Each iteration multiplies the running derivative magnitude
+by scale.  After N iterations:
+
+        dr = scaleᴺ
+        DE(p) ≈ (|z_N| − r₀) / dr
+
+where r₀ is the bounding sphere radius of the iterated shape
+(≈ 2 for both built-in tables — generous enough to keep the
+estimate a valid lower bound).
+
+=== Parameters ===
+
+  KifsFold                : Menger | Sierpinski
+  KifsIterations          : int     DE inner iter count.  Default 14.
+  KifsScale               : double  Per-iter scale.  0 = canonical
+                                    default (3 Menger, 2 Sierp).
+  KifsOffsetX / Y / Z     : double  Pivot offset.  Default (1, 1, 1).
+  KifsBailout             : double  |z|² escape threshold.
+  KifsMaxSteps            : int     Raymarch step cap.  Default 160.
+  KifsEpsilon             : double  DE hit threshold.  Default 0.0012.
+  KifsCamera*             : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+KIFS folds are cheaper than Mandelbox sphere-folds (no division,
+no square root inside the fold) so the per-step DE budget is
+spent on more iterations — default 14, vs Mandelbox's 12.  Step
+cap is also bumped to 160 because the recurring offset−scale
+combination produces sharper-edged surfaces than the Mandelbox
+and the marcher needs finer step granularity near them.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 

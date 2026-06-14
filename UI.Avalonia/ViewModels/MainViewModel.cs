@@ -201,6 +201,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.UserEquation,     "User Equation"),
         (FractalType.Mandelbulb,       "Mandelbulb (3D)"),
         (FractalType.Mandelbox,        "Mandelbox (3D)"),
+        (FractalType.Kifs,             "KIFS (3D)"),
         (FractalType.Sandbox,          "Sandbox"),
         (FractalType.UserBulb,         "User Bulb (3D)"),
         (FractalType.TearDrop,         "Tear Drop"),

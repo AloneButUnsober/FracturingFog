@@ -49,7 +49,7 @@ The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.Ap
 |---|---|
 | Real-time interactivity | Pan, zoom, color-cycle with smooth feedback |
 | Extreme zoom depth | Quad-double precision out to ~5 × 10⁵⁸ |
-| 20+ fractal families | Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Buddhabrot, IFS, L-System, Strange Attractor, Mandelbulb (3D), Mandelbox (3D), User Equation, Sandbox, User Bulb (3D), Tear Drop, Magnet 1/2, Glynn, Logistic, Halley, Secant, Spider, + CalcGen Generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship) |
+| 20+ fractal families | Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Buddhabrot, IFS, L-System, Strange Attractor, Mandelbulb (3D), Mandelbox (3D), KIFS (3D), User Equation, Sandbox, User Bulb (3D), Tear Drop, Magnet 1/2, Glynn, Logistic, Halley, Secant, Spider, + CalcGen Generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship) |
 | 200+ color themes | Built-in palettes plus JSON-imported user themes plus algorithmic ColorGen DSL |
 | Full theme editor | Live-preview parameter tweaking with save/export + From-Image kmeans extractor |
 | Capture suite | PNG, multi-tile poster, MP4 video (built-in + ffmpeg lossless), PNG sequence |

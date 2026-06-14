@@ -58,6 +58,7 @@ namespace FracturingFog.Rendering
         private UserEquationCalculator _userEquationCalculator;
         private MandelbulbCalculator _mandelbulbCalculator;
         private MandelboxCalculator _mandelboxCalculator;
+        private KifsCalculator _kifsCalculator;
         private SandboxCalculator _sandboxCalculator;
         private UserBulbCalculator _userBulbCalculator;
         private TearDropCalculator _tearDropCalculator;
@@ -221,6 +222,7 @@ namespace FracturingFog.Rendering
             _userEquationCalculator = new UserEquationCalculator(w, h);
             _mandelbulbCalculator = new MandelbulbCalculator(w, h);
             _mandelboxCalculator = new MandelboxCalculator(w, h);
+            _kifsCalculator = new KifsCalculator(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
             _tearDropCalculator = new TearDropCalculator(w, h);
@@ -249,6 +251,7 @@ namespace FracturingFog.Rendering
                 _userEquationCalculator.ColorMap = initialColorMap;
                 _mandelbulbCalculator.ColorMap = initialColorMap;
                 _mandelboxCalculator.ColorMap = initialColorMap;
+                _kifsCalculator.ColorMap = initialColorMap;
                 _sandboxCalculator.ColorMap = initialColorMap;
                 _userBulbCalculator.ColorMap = initialColorMap;
                 _tearDropCalculator.ColorMap = initialColorMap;
@@ -1243,6 +1246,7 @@ namespace FracturingFog.Rendering
                     break;
                 case MandelbulbCalculator m: m.FractalParameters = ViewState.FractalParameters; break;
                 case MandelboxCalculator mb: mb.FractalParameters = ViewState.FractalParameters; break;
+                case KifsCalculator kf: kf.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
@@ -1353,6 +1357,7 @@ namespace FracturingFog.Rendering
             FractalType.UserEquation => _userEquationCalculator,
             FractalType.Mandelbulb => _mandelbulbCalculator,
             FractalType.Mandelbox => _mandelboxCalculator,
+            FractalType.Kifs => _kifsCalculator,
             FractalType.Sandbox => _sandboxCalculator,
             FractalType.UserBulb => _userBulbCalculator,
             FractalType.TearDrop => _tearDropCalculator,

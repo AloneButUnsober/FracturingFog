@@ -490,6 +490,30 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Mandelbox,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "KIFS — Menger sponge",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical Menger sponge — sort-3 fold + scale-3 from (1,1,1). Set KifsFold = Menger before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Kifs,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "KIFS — Sierpinski tetra",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Sierpinski tetrahedron gasket — 3 vertex reflections + scale-2 from (1,1,1). Set KifsFold = Sierpinski before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Kifs,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────
