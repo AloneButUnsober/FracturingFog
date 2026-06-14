@@ -209,19 +209,103 @@ public sealed class FlameRenderer : IFractalCalculator
         y = vy;
     }
 
-    /// <summary>Apply a single non-linear variation. Slice 1 only implements
-    /// Linear (identity) — all other enum values fall through to Linear
-    /// until the variation library slice lands.</summary>
+    /// <summary>Apply a single non-linear variation. Eight Apophysis stock
+    /// variations — the most-used core — are wired here. Formulae follow
+    /// the canonical Draves &amp; Reckase "Fractal Flame Algorithm" paper
+    /// (2003). Each variation operates on the affine-transformed point;
+    /// <paramref name="amount"/> is a linear weight on the result, identical
+    /// to Apophysis' per-variation Weight field.</summary>
     private static void ApplyVariation(FlameVariation v, double amount,
         double x, double y, out double ox, out double oy)
     {
         switch (v)
         {
+            case FlameVariation.Sinusoidal:
+                ox = amount * Math.Sin(x);
+                oy = amount * Math.Sin(y);
+                return;
+
+            case FlameVariation.Spherical:
+            {
+                // r² = x² + y². Singular at the origin — when the
+                // chaos game lands inside a tiny safety bubble we
+                // collapse the output to the origin instead of NaN.
+                double r2 = x * x + y * y;
+                if (r2 < 1e-20) { ox = 0; oy = 0; return; }
+                double inv = amount / r2;
+                ox = inv * x;
+                oy = inv * y;
+                return;
+            }
+
+            case FlameVariation.Swirl:
+            {
+                double r2 = x * x + y * y;
+                double s = Math.Sin(r2);
+                double c = Math.Cos(r2);
+                ox = amount * (x * s - y * c);
+                oy = amount * (x * c + y * s);
+                return;
+            }
+
+            case FlameVariation.Polar:
+            {
+                double theta = Math.Atan2(x, y);
+                double r = Math.Sqrt(x * x + y * y);
+                ox = amount * (theta / Math.PI);
+                oy = amount * (r - 1.0);
+                return;
+            }
+
+            case FlameVariation.Heart:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                double theta = Math.Atan2(x, y);
+                double tr = theta * r;
+                ox =  amount * r * Math.Sin(tr);
+                oy = -amount * r * Math.Cos(tr);
+                return;
+            }
+
+            case FlameVariation.Disc:
+            {
+                double theta = Math.Atan2(x, y);
+                double r = Math.Sqrt(x * x + y * y);
+                double piR = Math.PI * r;
+                double k = amount * theta / Math.PI;
+                ox = k * Math.Sin(piR);
+                oy = k * Math.Cos(piR);
+                return;
+            }
+
+            case FlameVariation.Julia:
+            {
+                // r = √|z|, φ = ½ arg(z) + nπ (n random ∈ {0,1}).
+                // The two-branch random pick is what gives Apophysis'
+                // julia variation its characteristic split filaments;
+                // a single deterministic branch would only paint half.
+                double r = Math.Sqrt(Math.Sqrt(x * x + y * y));
+                double theta = Math.Atan2(y, x) * 0.5;
+                if ((_juliaBranchRng.Value!.Next() & 1) == 1)
+                    theta += Math.PI;
+                ox = amount * r * Math.Cos(theta);
+                oy = amount * r * Math.Sin(theta);
+                return;
+            }
+
             case FlameVariation.Linear:
             default:
                 ox = amount * x;
                 oy = amount * y;
-                break;
+                return;
         }
     }
+
+    /// <summary>Thread-local RNG for variations whose definition includes a
+    /// per-step coin flip (currently <see cref="FlameVariation.Julia"/>).
+    /// Per-thread isolation avoids contention on a shared Random and
+    /// keeps the chaos-game's main RNG (used for map selection) free of
+    /// extra calls that would shift sample sequences across slices.</summary>
+    private static readonly ThreadLocal<Random> _juliaBranchRng =
+        new(() => new Random(unchecked((int)(Environment.TickCount * 2654435761u) + Environment.CurrentManagedThreadId)));
 }
