@@ -4995,6 +4995,93 @@ Möbius-group composition are deferred to a later slice — this
 first cut ships only the tetrahedral preset.
 ";
 
+        public const string MathBicomplexText =
+@"=== Bicomplex (Tessarine) Mandelbrot ===
+
+A 3D-rendered slice of the 4D Mandelbrot set built over the
+bicomplex (tessarine) algebra ℂ² — the commutative 4-dimensional
+algebra spanned by (1, i, j, k) under the relations
+
+  i² = j² = −1,   k² = +1,   ij = ji = k
+
+Unlike the Hamilton quaternions, tessarine multiplication is
+commutative.  Unlike split-complex, the algebra has zero divisors:
+anything of the form a + a·k with a ∈ ℂ multiplied by 1 − k gives
+zero, so the multiplicative norm is degenerate on a 2D subspace.
+
+=== Iteration ===
+
+  tₙ₊₁ = tₙ² + c    t, c ∈ ℂ²
+  t₀  = 0           (Mandelbrot membership convention)
+
+Squaring map for t = (t₁ + t₂·i + t₃·j + t₄·k):
+
+  t²₁ = t₁² − t₂² − t₃² + t₄²
+  t²ᵢ = 2·(t₁·t₂ − t₃·t₄)
+  t²ⱼ = 2·(t₁·t₃ − t₂·t₄)
+  t²ₖ = 2·(t₁·t₄ + t₂·t₃)
+
+=== 3D slice convention ===
+
+Pixel coordinate (x, y, z) maps to
+
+  c = (x, y, z, BicomplexSliceW)
+
+so the renderer walks the 1, i, j axes of c through the 3D viewport
+with the k axis pinned to the slider value.  At sliceW = 0 the
+3D slab collapses onto the standard 2D Mandelbrot extruded along
+the j axis — the k coordinate decouples and the iteration projects
+back to the complex squaring map.  Sliding sliceW away from 0
+exposes the zero-divisor seam slabs unique to the tessarine
+algebra; these read as flat slabs rather than the curved DE
+surfaces a Hamilton-algebra rendering would produce.
+
+=== Distance estimator ===
+
+Hubbard–Douady, same as the quaternion variant:
+
+  dtₙ₊₁ = 2 · tₙ · dtₙ + 1      (bicomplex product; 1 is the
+                                  algebra identity)
+  dt₀  = 0
+  DE   = 0.5 · |t| · ln|t| / |dt|
+
+The bicomplex product in the 2·t·dt step uses the commutative
+multiplication table above, not the Hamilton ordering — for a
+tessarine, t·dt equals dt·t, so the two writeable orderings yield
+identical components.
+
+=== Parameters ===
+
+  BicomplexSliceW         : double  k-axis slice constant for c.
+                                    Default 0.
+  BicomplexIterations     : int     DE inner iteration count.
+                                    Default 11.
+  BicomplexBailout        : double  |t|² escape threshold.
+                                    Default 16.
+  BicomplexCamera*                  Standard orbit-camera fields
+                                    shared across the 3D family.
+  BicomplexLight*                   Phong light direction (theta /
+                                    phi spherical).
+
+=== Implementation notes ===
+
+The 4-component DE returns 0 when |t| < 1 to give the surface a
+flat hit inside the closed set, identical to the Hart/Hubbard
+convention used for quaternion Mandelbrot.  Zero-divisor cusps —
+where the inversion derivative collapses because |dt|² < 1e−30 —
+are guarded with an early-return DE = 0; the sphere tracer then
+treats the cusp point as a surface hit instead of stepping past it
+on a numerically-blown distance estimate.
+
+Visually this set overlaps the quaternion Mandelbrot on the
+(i, j = 0, k = 0) plane (both restrict to the standard 2D
+Mandelbrot) but diverges sharply on off-axis slices.  Lower visual
+differentiation against the quaternion family is why this slot
+sits late in the roadmap — it is here mostly for completeness of
+the 4D algebra coverage rather than as a primary user-facing
+fractal.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 

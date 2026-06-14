@@ -170,6 +170,17 @@ namespace FracturingFog
         /// <c>KleinianSphereScale</c> (loosens / tightens the tetrahedral
         /// packing), plus shared camera / light fields.</summary>
         Kleinian,
+        /// <summary>Bicomplex (tessarine) Mandelbrot. Iteration t := t² + c
+        /// with t, c in the commutative 4D algebra spanned by (1, i, j, k)
+        /// under i² = j² = −1, k² = +1, ij = ji = k. Renderer raymarches a
+        /// 3D slice — pixel (x, y, z) ↦ c = (x, y, z, <c>BicomplexSliceW</c>).
+        /// Orbit t starts at the origin; derivative dt/dc tracked through
+        /// chain rule for Hubbard–Douady DE. Visually overlaps the quaternion
+        /// Mandelbrot on the (i, j = 0) slice but introduces zero-divisor
+        /// seam slabs (commutativity + k² = +1) absent from Hamilton-algebra
+        /// renderings. Tunables: <c>BicomplexSliceW</c>, plus shared iter /
+        /// bailout / camera / light fields.</summary>
+        BicomplexMandelbrot,
     }
 
     public enum RenderProfile { Preview, Final }

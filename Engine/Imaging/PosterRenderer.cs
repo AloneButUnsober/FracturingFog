@@ -258,6 +258,7 @@ namespace FracturingFog.Imaging
                 FractalType.Plasma           => new PlasmaCalculator(w, h),
                 FractalType.Apollonian       => new ApollonianCalculator(w, h),
                 FractalType.Kleinian         => new KleinianCalculator(w, h),
+                FractalType.BicomplexMandelbrot => new BicomplexMandelbrotCalculator(w, h),
                 FractalType.Flame            => new FlameRenderer(w, h),
                 FractalType.Sandbox          => new SandboxCalculator(w, h),
                 FractalType.UserBulb         => new UserBulbCalculator(w, h),
@@ -292,6 +293,7 @@ namespace FracturingFog.Imaging
                 case PlasmaCalculator pl:      pl.FractalParameters = req.FractalParameters; break;
                 case ApollonianCalculator ap:  ap.FractalParameters = req.FractalParameters; break;
                 case KleinianCalculator kl:    kl.FractalParameters = req.FractalParameters; break;
+                case BicomplexMandelbrotCalculator bc: bc.FractalParameters = req.FractalParameters; break;
                 case FlameRenderer fr:         fr.FractalParameters = req.FractalParameters; break;
                 case SandboxCalculator sb:     sb.FractalParameters = req.FractalParameters; break;
                 case UserBulbCalculator ub:    ub.FractalParameters = req.FractalParameters; break;

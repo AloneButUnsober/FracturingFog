@@ -224,6 +224,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Flame,                 "Flame (Apophysis)"),
         (FractalType.Apollonian,            "Apollonian Gasket"),
         (FractalType.Kleinian,              "Kleinian Limit Set (3D)"),
+        (FractalType.BicomplexMandelbrot,   "Bicomplex Mandelbrot (3D)"),
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

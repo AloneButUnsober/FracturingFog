@@ -588,6 +588,30 @@ namespace FracturingFog.Models
             },
             new()
             {
+                Name        = "Bicomplex Mandelbrot — Slice k = 0",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Bicomplex (tessarine) Mandelbrot at the k = 0 slice. With sliceW = 0 the 3D slab collapses onto the standard 2D Mandelbrot extruded along the j axis.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BicomplexMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Bicomplex Mandelbrot — Slice k = 0.4",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Off-axis bicomplex slice. Set BicomplexSliceW = 0.4 before recall to expose the zero-divisor seam slabs unique to the tessarine algebra.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.BicomplexMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
                 Name        = "Kleinian — Tetrahedral 4-Sphere",
                 CenterX     =  0.0,
                 CenterY     =  0.0,

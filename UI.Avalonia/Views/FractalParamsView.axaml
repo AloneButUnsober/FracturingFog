@@ -504,6 +504,33 @@
                                ToolTip.Tip="Highlight saturation 0..1. 0 = linear, 1 = full gamma-on-colour." />
             </Grid>
 
+            <!-- Bicomplex Mandelbrot -->
+            <Grid IsVisible="{Binding IsBicomplexMandelbrot}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Slice k:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                               Value="{Binding BicomplexSliceW, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="k-component of the 3D slice plane through 4D bicomplex c-space. 0 = extrudes the standard 2D Mandelbrot." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                               Value="{Binding BicomplexIterations, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                               Value="{Binding BicomplexCameraTheta, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                               Value="{Binding BicomplexCameraPhi, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="4" Grid.Column="1"
+                               Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                               Value="{Binding BicomplexCameraDistance, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
             <!-- Kleinian -->
             <Grid IsVisible="{Binding IsKleinian}"
                   ColumnDefinitions="160,*"

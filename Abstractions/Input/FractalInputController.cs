@@ -94,6 +94,7 @@ namespace FracturingFog.Input
                     FractalType.QuaternionJulia => ViewState.FractalParameters.QJuliaCameraTheta,
                     FractalType.QuaternionMandelbrot => ViewState.FractalParameters.QMandelCameraTheta,
                     FractalType.Kleinian        => ViewState.FractalParameters.KleinianCameraTheta,
+                    FractalType.BicomplexMandelbrot => ViewState.FractalParameters.BicomplexCameraTheta,
                     _                           => ViewState.FractalParameters.BulbCameraTheta,
                 };
                 _rightDragStartPhi = ViewState.FractalType switch
@@ -104,6 +105,7 @@ namespace FracturingFog.Input
                     FractalType.QuaternionJulia => ViewState.FractalParameters.QJuliaCameraPhi,
                     FractalType.QuaternionMandelbrot => ViewState.FractalParameters.QMandelCameraPhi,
                     FractalType.Kleinian        => ViewState.FractalParameters.KleinianCameraPhi,
+                    FractalType.BicomplexMandelbrot => ViewState.FractalParameters.BicomplexCameraPhi,
                     _                           => ViewState.FractalParameters.BulbCameraPhi,
                 };
                 CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.NoMove2D));
@@ -196,6 +198,10 @@ namespace FracturingFog.Input
                     case FractalType.Kleinian:
                         ViewState.FractalParameters.KleinianCameraTheta = newTheta;
                         ViewState.FractalParameters.KleinianCameraPhi = newPhi;
+                        break;
+                    case FractalType.BicomplexMandelbrot:
+                        ViewState.FractalParameters.BicomplexCameraTheta = newTheta;
+                        ViewState.FractalParameters.BicomplexCameraPhi = newPhi;
                         break;
                     default:
                         ViewState.FractalParameters.BulbCameraTheta = newTheta;
@@ -607,6 +613,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.KleinianCameraDistance + delta, 0.1, 500.0);
+            else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
+                ViewState.FractalParameters.BicomplexCameraDistance = Math.Clamp(
+                    ViewState.FractalParameters.BicomplexCameraDistance + delta, 0.1, 500.0);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -627,6 +636,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.QMandelCameraTheta = NormalizeAngle(ViewState.FractalParameters.QMandelCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianCameraTheta = NormalizeAngle(ViewState.FractalParameters.KleinianCameraTheta + delta);
+            else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
+                ViewState.FractalParameters.BicomplexCameraTheta = NormalizeAngle(ViewState.FractalParameters.BicomplexCameraTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -656,6 +667,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.KleinianCameraPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
+                ViewState.FractalParameters.BicomplexCameraPhi = Math.Clamp(
+                    ViewState.FractalParameters.BicomplexCameraPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -676,6 +690,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.QMandelLightTheta = NormalizeAngle(ViewState.FractalParameters.QMandelLightTheta + delta);
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianLightTheta = NormalizeAngle(ViewState.FractalParameters.KleinianLightTheta + delta);
+            else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
+                ViewState.FractalParameters.BicomplexLightTheta = NormalizeAngle(ViewState.FractalParameters.BicomplexLightTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -705,6 +721,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Kleinian)
                 ViewState.FractalParameters.KleinianLightPhi = Math.Clamp(
                     ViewState.FractalParameters.KleinianLightPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.BicomplexMandelbrot)
+                ViewState.FractalParameters.BicomplexLightPhi = Math.Clamp(
+                    ViewState.FractalParameters.BicomplexLightPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
