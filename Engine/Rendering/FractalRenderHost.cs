@@ -951,6 +951,7 @@ namespace FracturingFog.Rendering
             _userEquationCalculator.Resize(w, h);
             _mandelbulbCalculator.Resize(w, h);
             _mandelboxCalculator.Resize(w, h);
+            _kifsCalculator.Resize(w, h);
             _sandboxCalculator.Resize(w, h);
             _userBulbCalculator.Resize(w, h);
             _tearDropCalculator.Resize(w, h);
