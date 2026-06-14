@@ -77,6 +77,13 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _bulbCameraTheta = _p.BulbCameraTheta;
         _bulbCameraPhi = _p.BulbCameraPhi;
         _bulbCameraDistance = _p.BulbCameraDistance;
+        _mandelboxScale = _p.MandelboxScale;
+        _mandelboxFixedRadius = _p.MandelboxFixedRadius;
+        _mandelboxMinRadius = _p.MandelboxMinRadius;
+        _mandelboxIterations = _p.MandelboxIterations;
+        _mandelboxCameraTheta = _p.MandelboxCameraTheta;
+        _mandelboxCameraPhi = _p.MandelboxCameraPhi;
+        _mandelboxCameraDistance = _p.MandelboxCameraDistance;
 
         CloseCommand = ReactiveCommand.Create(() =>
         {
@@ -121,9 +128,10 @@ public sealed class FractalParamsViewModel : ViewModelBase
         or FractalType.AntiBuddhabrot
         or FractalType.AntiNebulabrot;
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
+    public bool IsMandelbox => FractalType == FractalType.Mandelbox;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
-          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb);
+          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox);
 
     // ── Julia ──
     private double _juliaR;
@@ -561,6 +569,22 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double BulbCameraPhi { get => _bulbCameraPhi; set { Set(ref _bulbCameraPhi, Clamp(value, 0.01, 3.13)); _p.BulbCameraPhi = _bulbCameraPhi; Fire(); } }
     private double _bulbCameraDistance;
     public double BulbCameraDistance { get => _bulbCameraDistance; set { Set(ref _bulbCameraDistance, Clamp(value, 0.1, 500)); _p.BulbCameraDistance = _bulbCameraDistance; Fire(); } }
+
+    // ── Mandelbox ──
+    private double _mandelboxScale;
+    public double MandelboxScale { get => _mandelboxScale; set { Set(ref _mandelboxScale, Clamp(value, -4, 4)); _p.MandelboxScale = _mandelboxScale; Fire(); } }
+    private double _mandelboxFixedRadius;
+    public double MandelboxFixedRadius { get => _mandelboxFixedRadius; set { Set(ref _mandelboxFixedRadius, Clamp(value, 0.1, 4)); _p.MandelboxFixedRadius = _mandelboxFixedRadius; Fire(); } }
+    private double _mandelboxMinRadius;
+    public double MandelboxMinRadius { get => _mandelboxMinRadius; set { Set(ref _mandelboxMinRadius, Clamp(value, 0.05, 2)); _p.MandelboxMinRadius = _mandelboxMinRadius; Fire(); } }
+    private int _mandelboxIterations;
+    public int MandelboxIterations { get => _mandelboxIterations; set { Set(ref _mandelboxIterations, (int)Clamp(value, 2, 32)); _p.MandelboxIterations = _mandelboxIterations; Fire(); } }
+    private double _mandelboxCameraTheta;
+    public double MandelboxCameraTheta { get => _mandelboxCameraTheta; set { Set(ref _mandelboxCameraTheta, Clamp(value, -10, 10)); _p.MandelboxCameraTheta = _mandelboxCameraTheta; Fire(); } }
+    private double _mandelboxCameraPhi;
+    public double MandelboxCameraPhi { get => _mandelboxCameraPhi; set { Set(ref _mandelboxCameraPhi, Clamp(value, 0.01, 3.13)); _p.MandelboxCameraPhi = _mandelboxCameraPhi; Fire(); } }
+    private double _mandelboxCameraDistance;
+    public double MandelboxCameraDistance { get => _mandelboxCameraDistance; set { Set(ref _mandelboxCameraDistance, Clamp(value, 0.1, 500)); _p.MandelboxCameraDistance = _mandelboxCameraDistance; Fire(); } }
 
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 

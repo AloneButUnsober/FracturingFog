@@ -102,8 +102,12 @@ namespace FracturingFog.Batch
             Console.WriteLine();
             Console.WriteLine("Common options:");
             Console.WriteLine("  --fractal TYPE, -f TYPE     Mandelbrot|Julia|BurningShip|Tricorn|Multibrot|Phoenix|");
-            Console.WriteLine("                              Newton|Nova|BuddhaBrot|IFS|LSystem|StrangeAttractor|");
-            Console.WriteLine("                              UserEquation|Mandelbulb|Sandbox|UserBulb|TearDrop");
+            Console.WriteLine("                              Newton|Nova|BuddhaBrot|Nebulabrot|AntiBuddhabrot|");
+            Console.WriteLine("                              AntiNebulabrot|IFS|LSystem|StrangeAttractor|");
+            Console.WriteLine("                              UserEquation|Mandelbulb|Mandelbox|Sandbox|UserBulb|");
+            Console.WriteLine("                              TearDrop|Magnet1|Magnet2|Glynn|Logistic|Halley|");
+            Console.WriteLine("                              Secant|Spider|GeneratedMandelbrotZ2..Z5|");
+            Console.WriteLine("                              GeneratedTricorn|GeneratedBurningShip");
             Console.WriteLine("  --theme NAME, -t NAME       Color theme name (default: HSV)");
             Console.WriteLine("  --quality NAME, -q NAME     Draft|Standard|High|Ultra|Extreme (default: Standard)");
             Console.WriteLine("  --width N, -w N             Output width (default: 1920)");

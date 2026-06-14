@@ -454,6 +454,42 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Spider,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Mandelbox — Canonical (scale 2)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical Mandelbox at scale = 2.0. Vault-and-corridor structure with the classic box footprint.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbox,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Mandelbox — Inverse (scale −1.5)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Juliabox-like inversive Mandelbox at scale = −1.5. Set MandelboxScale before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbox,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Mandelbox — Open Pore (scale 3)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Open-pore Mandelbox at scale = 3.0. Inner spiral structure visible. Set MandelboxScale before recall.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbox,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

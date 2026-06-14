@@ -86,12 +86,18 @@ namespace FracturingFog.Input
                 _rightDragging = true;
                 _rightDragStartX = e.X;
                 _rightDragStartY = e.Y;
-                _rightDragStartTheta = ViewState.FractalType == FractalType.UserBulb
-                    ? ViewState.FractalParameters.UserBulbCameraTheta
-                    : ViewState.FractalParameters.BulbCameraTheta;
-                _rightDragStartPhi = ViewState.FractalType == FractalType.UserBulb
-                    ? ViewState.FractalParameters.UserBulbCameraPhi
-                    : ViewState.FractalParameters.BulbCameraPhi;
+                _rightDragStartTheta = ViewState.FractalType switch
+                {
+                    FractalType.UserBulb  => ViewState.FractalParameters.UserBulbCameraTheta,
+                    FractalType.Mandelbox => ViewState.FractalParameters.MandelboxCameraTheta,
+                    _                     => ViewState.FractalParameters.BulbCameraTheta,
+                };
+                _rightDragStartPhi = ViewState.FractalType switch
+                {
+                    FractalType.UserBulb  => ViewState.FractalParameters.UserBulbCameraPhi,
+                    FractalType.Mandelbox => ViewState.FractalParameters.MandelboxCameraPhi,
+                    _                     => ViewState.FractalParameters.BulbCameraPhi,
+                };
                 CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.NoMove2D));
                 return;
             }
@@ -147,23 +153,30 @@ namespace FracturingFog.Input
                 double h = Math.Max(1, e.ClientHeight);
                 double dTheta = (e.X - _rightDragStartX) / w * Math.PI;
                 double dPhi = (e.Y - _rightDragStartY) / h * Math.PI;
-                // UserBulb: invert vertical drag — drag down should look up.
-                if (ViewState.FractalType == FractalType.UserBulb) dPhi = -dPhi;
+                // Invert vertical drag for all 3D fractals — drag down looks
+                // up. Matches Docs/User/Keyboard-Shortcuts.md "natural tilt-up
+                // feel" applied across Mandelbulb / Mandelbox / UserBulb.
+                dPhi = -dPhi;
 
                 const double phiMin = 0.01;
                 const double phiMax = Math.PI - 0.01;
                 double newTheta = NormalizeAngle(_rightDragStartTheta + dTheta);
                 double newPhi = Math.Clamp(_rightDragStartPhi + dPhi, phiMin, phiMax);
 
-                if (ViewState.FractalType == FractalType.UserBulb)
+                switch (ViewState.FractalType)
                 {
-                    ViewState.FractalParameters.UserBulbCameraTheta = newTheta;
-                    ViewState.FractalParameters.UserBulbCameraPhi = newPhi;
-                }
-                else
-                {
-                    ViewState.FractalParameters.BulbCameraTheta = newTheta;
-                    ViewState.FractalParameters.BulbCameraPhi = newPhi;
+                    case FractalType.UserBulb:
+                        ViewState.FractalParameters.UserBulbCameraTheta = newTheta;
+                        ViewState.FractalParameters.UserBulbCameraPhi = newPhi;
+                        break;
+                    case FractalType.Mandelbox:
+                        ViewState.FractalParameters.MandelboxCameraTheta = newTheta;
+                        ViewState.FractalParameters.MandelboxCameraPhi = newPhi;
+                        break;
+                    default:
+                        ViewState.FractalParameters.BulbCameraTheta = newTheta;
+                        ViewState.FractalParameters.BulbCameraPhi = newPhi;
+                        break;
                 }
                 RaiseViewChanged(RenderHint.Full);
                 return;
@@ -555,6 +568,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Mandelbulb)
                 ViewState.FractalParameters.BulbCameraDistance = Math.Clamp(
                     ViewState.FractalParameters.BulbCameraDistance + delta, 0.1, 500.0);
+            else if (ViewState.FractalType == FractalType.Mandelbox)
+                ViewState.FractalParameters.MandelboxCameraDistance = Math.Clamp(
+                    ViewState.FractalParameters.MandelboxCameraDistance + delta, 0.1, 500.0);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -565,6 +581,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.UserBulbCameraTheta = NormalizeAngle(ViewState.FractalParameters.UserBulbCameraTheta + delta);
             else if (ViewState.FractalType == FractalType.Mandelbulb)
                 ViewState.FractalParameters.BulbCameraTheta = NormalizeAngle(ViewState.FractalParameters.BulbCameraTheta + delta);
+            else if (ViewState.FractalType == FractalType.Mandelbox)
+                ViewState.FractalParameters.MandelboxCameraTheta = NormalizeAngle(ViewState.FractalParameters.MandelboxCameraTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -579,6 +597,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Mandelbulb)
                 ViewState.FractalParameters.BulbCameraPhi = Math.Clamp(
                     ViewState.FractalParameters.BulbCameraPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.Mandelbox)
+                ViewState.FractalParameters.MandelboxCameraPhi = Math.Clamp(
+                    ViewState.FractalParameters.MandelboxCameraPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -589,6 +610,8 @@ namespace FracturingFog.Input
                 ViewState.FractalParameters.UserBulbLightTheta = NormalizeAngle(ViewState.FractalParameters.UserBulbLightTheta + delta);
             else if (ViewState.FractalType == FractalType.Mandelbulb)
                 ViewState.FractalParameters.BulbLightTheta = NormalizeAngle(ViewState.FractalParameters.BulbLightTheta + delta);
+            else if (ViewState.FractalType == FractalType.Mandelbox)
+                ViewState.FractalParameters.MandelboxLightTheta = NormalizeAngle(ViewState.FractalParameters.MandelboxLightTheta + delta);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
@@ -603,6 +626,9 @@ namespace FracturingFog.Input
             else if (ViewState.FractalType == FractalType.Mandelbulb)
                 ViewState.FractalParameters.BulbLightPhi = Math.Clamp(
                     ViewState.FractalParameters.BulbLightPhi + delta, phiMin, phiMax);
+            else if (ViewState.FractalType == FractalType.Mandelbox)
+                ViewState.FractalParameters.MandelboxLightPhi = Math.Clamp(
+                    ViewState.FractalParameters.MandelboxLightPhi + delta, phiMin, phiMax);
             else return;
             RaiseViewChanged(RenderHint.Full);
         }
