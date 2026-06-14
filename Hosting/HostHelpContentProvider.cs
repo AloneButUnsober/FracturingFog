@@ -99,6 +99,7 @@ namespace FracturingFog.Hosting
             new("Mandelbox",     HelpTextBundle.MathMandelboxText),
             new("KIFS",          HelpTextBundle.MathKifsText),
             new("Quaternion Julia", HelpTextBundle.MathQuatJuliaText),
+            new("Plasma",        HelpTextBundle.MathPlasmaText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]

@@ -90,6 +90,18 @@ namespace FracturingFog.Models
         public string LSystemPresetName { get; set; } = "Hilbert";
         public int LSystemDepth { get; set; } = 5;
 
+        /// <summary>Plasma diamond-square roughness coefficient. Per
+        /// subdivision the displacement amplitude is multiplied by
+        /// 2^(−roughness). roughness=0 collapses to a smooth bilinear
+        /// gradient; roughness=1 preserves full amplitude at every level
+        /// (very rocky terrain). Default 0.55 matches the visually
+        /// "cloudy" Apophysis-style plasma palette.</summary>
+        public double PlasmaRoughness { get; set; } = 0.55;
+
+        /// <summary>PRNG seed for the Plasma calculator. Same (W, H, seed,
+        /// roughness) deterministically produces the same field.</summary>
+        public int PlasmaSeed { get; set; } = 12345;
+
         public string AttractorPresetName { get; set; } = "Clifford";
         public int AttractorIterations { get; set; } = 2_000_000;
         public double AttractorA { get; set; } = -1.4;
@@ -348,6 +360,8 @@ namespace FracturingFog.Models
                 IFSIterations = IFSIterations,
                 LSystemPresetName = LSystemPresetName,
                 LSystemDepth = LSystemDepth,
+                PlasmaRoughness = PlasmaRoughness,
+                PlasmaSeed = PlasmaSeed,
                 AttractorPresetName = AttractorPresetName,
                 AttractorIterations = AttractorIterations,
                 AttractorA = AttractorA, AttractorB = AttractorB,

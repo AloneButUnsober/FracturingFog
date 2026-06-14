@@ -158,6 +158,7 @@ namespace FracturingFog.ViewState
                 FractalType.Mandelbox             => ( 0.0,  0.0, 1.0),
                 FractalType.Kifs                  => ( 0.0,  0.0, 1.0),
                 FractalType.QuaternionJulia       => ( 0.0,  0.0, 1.0),
+                FractalType.Plasma                => ( 0.0,  0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;

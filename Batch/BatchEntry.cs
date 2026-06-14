@@ -106,7 +106,8 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              AntiNebulabrot|IFS|LSystem|StrangeAttractor|");
             Console.WriteLine("                              UserEquation|Mandelbulb|Mandelbox|Kifs|Sandbox|UserBulb|");
             Console.WriteLine("                              TearDrop|Magnet1|Magnet2|Glynn|Logistic|Halley|");
-            Console.WriteLine("                              Secant|Spider|QuaternionJulia|GeneratedMandelbrotZ2..Z5|");
+            Console.WriteLine("                              Secant|Spider|QuaternionJulia|Plasma|");
+            Console.WriteLine("                              GeneratedMandelbrotZ2..Z5|");
             Console.WriteLine("                              GeneratedTricorn|GeneratedBurningShip");
             Console.WriteLine("  --theme NAME, -t NAME       Color theme name (default: HSV)");
             Console.WriteLine("  --quality NAME, -q NAME     Draft|Standard|High|Ultra|Extreme (default: Standard)");
@@ -118,6 +119,9 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              Pythagoras Tree|Peano|Levy C|Pentigree). Quote names");
             Console.WriteLine("                              with spaces. Requires --fractal LSystem.");
             Console.WriteLine("  --lsystem-depth N           L-System generation depth (0..12). Default 5.");
+            Console.WriteLine("  --plasma-roughness F        Plasma diamond-square roughness (0..1). 0 = smooth,");
+            Console.WriteLine("                              1 = jagged. Default 0.55. Requires --fractal Plasma.");
+            Console.WriteLine("  --plasma-seed N             Plasma PRNG seed. Default 12345.");
             Console.WriteLine("  --out PATH, -o PATH         Output file (image) or folder (video) — required");
             Console.WriteLine("  --name NAME, -n NAME        Base filename (default derived from region/coords)");
             Console.WriteLine("  --verbose, -v               Print extra diagnostics");

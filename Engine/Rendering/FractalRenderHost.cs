@@ -60,6 +60,7 @@ namespace FracturingFog.Rendering
         private MandelboxCalculator _mandelboxCalculator;
         private KifsCalculator _kifsCalculator;
         private QuatJuliaCalculator _quatJuliaCalculator;
+        private PlasmaCalculator _plasmaCalculator;
         private SandboxCalculator _sandboxCalculator;
         private UserBulbCalculator _userBulbCalculator;
         private TearDropCalculator _tearDropCalculator;
@@ -225,6 +226,7 @@ namespace FracturingFog.Rendering
             _mandelboxCalculator = new MandelboxCalculator(w, h);
             _kifsCalculator = new KifsCalculator(w, h);
             _quatJuliaCalculator = new QuatJuliaCalculator(w, h);
+            _plasmaCalculator = new PlasmaCalculator(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
             _tearDropCalculator = new TearDropCalculator(w, h);
@@ -255,6 +257,7 @@ namespace FracturingFog.Rendering
                 _mandelboxCalculator.ColorMap = initialColorMap;
                 _kifsCalculator.ColorMap = initialColorMap;
                 _quatJuliaCalculator.ColorMap = initialColorMap;
+                _plasmaCalculator.ColorMap = initialColorMap;
                 _sandboxCalculator.ColorMap = initialColorMap;
                 _userBulbCalculator.ColorMap = initialColorMap;
                 _tearDropCalculator.ColorMap = initialColorMap;
@@ -479,6 +482,7 @@ namespace FracturingFog.Rendering
                 _mandelboxCalculator.ColorMap = value;
                 _kifsCalculator.ColorMap = value;
                 _quatJuliaCalculator.ColorMap = value;
+                _plasmaCalculator.ColorMap = value;
                 _sandboxCalculator.ColorMap = value;
                 _userBulbCalculator.ColorMap = value;
                 _tearDropCalculator.ColorMap = value;
@@ -959,6 +963,7 @@ namespace FracturingFog.Rendering
             _mandelboxCalculator.Resize(w, h);
             _kifsCalculator.Resize(w, h);
             _quatJuliaCalculator.Resize(w, h);
+            _plasmaCalculator.Resize(w, h);
             _sandboxCalculator.Resize(w, h);
             _userBulbCalculator.Resize(w, h);
             _tearDropCalculator.Resize(w, h);
@@ -1256,6 +1261,7 @@ namespace FracturingFog.Rendering
                 case MandelboxCalculator mb: mb.FractalParameters = ViewState.FractalParameters; break;
                 case KifsCalculator kf: kf.FractalParameters = ViewState.FractalParameters; break;
                 case QuatJuliaCalculator qj: qj.FractalParameters = ViewState.FractalParameters; break;
+                case PlasmaCalculator pl: pl.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
@@ -1368,6 +1374,7 @@ namespace FracturingFog.Rendering
             FractalType.Mandelbox => _mandelboxCalculator,
             FractalType.Kifs => _kifsCalculator,
             FractalType.QuaternionJulia => _quatJuliaCalculator,
+            FractalType.Plasma => _plasmaCalculator,
             FractalType.Sandbox => _sandboxCalculator,
             FractalType.UserBulb => _userBulbCalculator,
             FractalType.TearDrop => _tearDropCalculator,

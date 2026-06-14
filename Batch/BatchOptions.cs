@@ -96,6 +96,8 @@ namespace FracturingFog.Batch
         public int? MultibrotExponent { get; set; }
         public string? LSystemPresetName { get; set; }
         public int? LSystemDepth { get; set; }
+        public double? PlasmaRoughness { get; set; }
+        public int? PlasmaSeed { get; set; }
 
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
@@ -320,6 +322,16 @@ namespace FracturingFog.Batch
                     case "--lsystem-depth":
                         if (!NextInt(args, ref i, a, out int lsdv, out error)) return false;
                         opts.LSystemDepth = lsdv;
+                        break;
+
+                    case "--plasma-roughness":
+                        if (!NextDouble(args, ref i, a, out double prv, out error)) return false;
+                        opts.PlasmaRoughness = prv;
+                        break;
+
+                    case "--plasma-seed":
+                        if (!NextInt(args, ref i, a, out int psv, out error)) return false;
+                        opts.PlasmaSeed = psv;
                         break;
 
                     case "--remote":
