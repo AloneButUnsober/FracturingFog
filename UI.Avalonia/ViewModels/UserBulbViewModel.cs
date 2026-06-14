@@ -23,6 +23,7 @@
 // up a UI-thread DispatcherTimer in the VM.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
@@ -107,6 +108,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         ResetCameraCommand = ReactiveCommand.Create(OnResetCamera);
         AddParamCommand = ReactiveCommand.Create(OnAddParam);
         AddChainCommand = ReactiveCommand.Create(OnAddChain);
+        InsertPrimitiveCommand = ReactiveCommand.Create<UserBulbChainPrimitive>(OnInsertPrimitive);
+        LoadHybridCommand = ReactiveCommand.Create<string>(OnLoadHybrid);
         RemoveParamCommand = ReactiveCommand.Create<UserBulbParam>(OnRemoveParam);
         RemoveChainCommand = ReactiveCommand.Create<UserBulbChainStep>(OnRemoveChain);
         TogglePlayCommand = ReactiveCommand.Create(OnTogglePlay);
@@ -496,8 +499,13 @@ public sealed class UserBulbViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ResetCameraCommand { get; }
     public ReactiveCommand<Unit, Unit> AddParamCommand { get; }
     public ReactiveCommand<Unit, Unit> AddChainCommand { get; }
+    public ReactiveCommand<UserBulbChainPrimitive, Unit> InsertPrimitiveCommand { get; }
+    public ReactiveCommand<string, Unit> LoadHybridCommand { get; }
     public ReactiveCommand<UserBulbParam, Unit> RemoveParamCommand { get; }
     public ReactiveCommand<UserBulbChainStep, Unit> RemoveChainCommand { get; }
+
+    /// <summary>Catalog surfaced in the chain editor's "+ Primitive" menu.</summary>
+    public IReadOnlyList<UserBulbChainPrimitive> ChainPrimitives => UserBulbChainPrimitives.All;
     public ReactiveCommand<Unit, Unit> TogglePlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenHelpCommand { get; }
@@ -550,6 +558,21 @@ public sealed class UserBulbViewModel : ViewModelBase
             Source = entry.Source;
             _params.UserBulbSource = entry.Source;
             _params.UserBulbName = entry.Name;
+
+            // Mirror the saved chain into both the params and the bound
+            // ObservableCollection so the chain editor reflects what just
+            // loaded. Empty/null chain clears any prior chain.
+            _params.UserBulbChain.Clear();
+            Chain.Clear();
+            if (entry.Chain != null)
+            {
+                foreach (var s in entry.Chain)
+                {
+                    var clone = s.Clone();
+                    _params.UserBulbChain.Add(clone);
+                    Chain.Add(clone);
+                }
+            }
         }
         finally { _loadingNamedEquation = false; }
 
@@ -626,7 +649,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             if (!confirm.Result) return;
         }
 
-        var entry = UserBulbStore.Instance.SaveEquation(trimmed, _source);
+        var entry = UserBulbStore.Instance.SaveEquation(trimmed, _source, _params.UserBulbChain);
         if (entry is null) return;
 
         _params.UserBulbName = entry.Name;
@@ -725,6 +748,60 @@ public sealed class UserBulbViewModel : ViewModelBase
         _params.UserBulbChain.Remove(s);
         Chain.Remove(s);
         CompileRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnInsertPrimitive(UserBulbChainPrimitive p)
+    {
+        if (p is null) return;
+        var step = p.ToStep();
+        // The chain runner threads original pixel z into every step — to
+        // compose with whatever the prior step produced, rebind `z` in the
+        // primitive body to the prior step's output name.
+        if (_params.UserBulbChain.Count > 0)
+        {
+            string priorName = _params.UserBulbChain[^1].OutputName;
+            if (!string.IsNullOrWhiteSpace(priorName))
+                step.Source = UserBulbChainPrimitives.RebindZ(step.Source, priorName);
+        }
+        // Output names must be unique across the chain — uniquify with a
+        // numeric suffix when the default collides.
+        step.OutputName = UniqueChainName(step.OutputName);
+        _params.UserBulbChain.Add(step);
+        Chain.Add(step);
+        CompileRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnLoadHybrid(string hybridId)
+    {
+        List<UserBulbChainStep>? built = hybridId switch
+        {
+            "mbox+bulb"   => UserBulbChainPrimitives.MandelboxBulbHybrid(),
+            "menger+bulb" => UserBulbChainPrimitives.MengerBulbHybrid(),
+            _ => null,
+        };
+        if (built is null) return;
+
+        _params.UserBulbChain.Clear();
+        Chain.Clear();
+        foreach (var s in built)
+        {
+            _params.UserBulbChain.Add(s);
+            Chain.Add(s);
+        }
+        CompileRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private string UniqueChainName(string baseName)
+    {
+        var used = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in _params.UserBulbChain) used.Add(s.OutputName);
+        if (!used.Contains(baseName)) return baseName;
+        for (int i = 2; i < 1000; i++)
+        {
+            string candidate = $"{baseName}{i}";
+            if (!used.Contains(candidate)) return candidate;
+        }
+        return baseName;
     }
 
     private void OnTogglePlay() => IsPlaying = !_isPlaying;

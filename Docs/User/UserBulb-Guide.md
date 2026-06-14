@@ -85,6 +85,7 @@ absolute-value step makes the map non-smooth.
 12. [Julia Mode](#12-julia-mode)
 13. [Color Drivers](#13-color-drivers)
 14. [Chain Editor](#14-chain-editor)
+    - 14.1 [Hybrid primitives (Mandelbulber-style)](#141-hybrid-primitives-mandelbulber-style)
 15. [Save / Load / Promote](#15-save--load--promote)
 16. [Mesh Export (OBJ)](#16-mesh-export-obj)
 17. [Example Gallery](#17-example-gallery)
@@ -373,6 +374,19 @@ Step 2   name = sq
 ```
 
 Delete every chain row to revert to the single-editor flow.
+
+### 14.1 Hybrid primitives (Mandelbulber-style)
+
+Two toolbar buttons make composing 3D hybrids one click:
+
+| Button | Action |
+|---|---|
+| **+ Primitive ▾** | Appends one named fold/power step to the chain. Options: Mandelbox fold (box+sphere+scale), KIFS Menger fold, KIFS Sierpinski tetra fold, Mandelbulb power. |
+| **Hybrid ▾** | Replaces the chain with a worked-example two-step hybrid: Mandelbox + Mandelbulb, or Menger + Mandelbulb. |
+
+Each primitive is plain `Vec3` source you can edit after dropping it in — change the box-fold limit, the sphere-fold radii, the Mandelbulb power, or the KIFS scale to taste. Output names auto-uniquify on insertion so duplicate primitives compose cleanly.
+
+The two built-in hybrid examples (`Hybrid: Mandelbox + Mandelbulb` and `Hybrid: Menger + Mandelbulb`) are also seeded in the saved-equation dropdown, so you can recall them by name later.
 
 ---
 
