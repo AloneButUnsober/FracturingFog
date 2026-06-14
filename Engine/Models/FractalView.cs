@@ -137,7 +137,8 @@ namespace FracturingFog.Models
             {FractalType.QuaternionJulia, "Quaternion Julia" },
             {FractalType.QuaternionMandelbrot, "Quaternion Mandelbrot" },
             {FractalType.Plasma, "Plasma" },
-            {FractalType.Flame, "Flame" }
+            {FractalType.Flame, "Flame" },
+            {FractalType.Apollonian, "Apollonian" }
         };
     }
 

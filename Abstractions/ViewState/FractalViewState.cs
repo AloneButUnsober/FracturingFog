@@ -161,6 +161,7 @@ namespace FracturingFog.ViewState
                 FractalType.QuaternionMandelbrot  => ( 0.0,  0.0, 1.0),
                 FractalType.Plasma                => ( 0.0,  0.0, 1.0),
                 FractalType.Flame                 => ( 0.0,  0.0, 1.0),
+                FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;

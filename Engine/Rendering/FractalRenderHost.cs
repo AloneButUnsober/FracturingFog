@@ -62,6 +62,7 @@ namespace FracturingFog.Rendering
         private QuatJuliaCalculator _quatJuliaCalculator;
         private QuatMandelbrotCalculator _quatMandelbrotCalculator;
         private PlasmaCalculator _plasmaCalculator;
+        private ApollonianCalculator _apollonianCalculator;
         private FlameRenderer _flameCalculator;
         private SandboxCalculator _sandboxCalculator;
         private UserBulbCalculator _userBulbCalculator;
@@ -230,6 +231,7 @@ namespace FracturingFog.Rendering
             _quatJuliaCalculator = new QuatJuliaCalculator(w, h);
             _quatMandelbrotCalculator = new QuatMandelbrotCalculator(w, h);
             _plasmaCalculator = new PlasmaCalculator(w, h);
+            _apollonianCalculator = new ApollonianCalculator(w, h);
             _flameCalculator = new FlameRenderer(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
@@ -263,6 +265,7 @@ namespace FracturingFog.Rendering
                 _quatJuliaCalculator.ColorMap = initialColorMap;
                 _quatMandelbrotCalculator.ColorMap = initialColorMap;
                 _plasmaCalculator.ColorMap = initialColorMap;
+                _apollonianCalculator.ColorMap = initialColorMap;
                 _flameCalculator.ColorMap = initialColorMap;
                 _sandboxCalculator.ColorMap = initialColorMap;
                 _userBulbCalculator.ColorMap = initialColorMap;
@@ -490,6 +493,7 @@ namespace FracturingFog.Rendering
                 _quatJuliaCalculator.ColorMap = value;
                 _quatMandelbrotCalculator.ColorMap = value;
                 _plasmaCalculator.ColorMap = value;
+                _apollonianCalculator.ColorMap = value;
                 _flameCalculator.ColorMap = value;
                 _sandboxCalculator.ColorMap = value;
                 _userBulbCalculator.ColorMap = value;
@@ -973,6 +977,7 @@ namespace FracturingFog.Rendering
             _quatJuliaCalculator.Resize(w, h);
             _quatMandelbrotCalculator.Resize(w, h);
             _plasmaCalculator.Resize(w, h);
+            _apollonianCalculator.Resize(w, h);
             _flameCalculator.Resize(w, h);
             _sandboxCalculator.Resize(w, h);
             _userBulbCalculator.Resize(w, h);
@@ -1273,6 +1278,7 @@ namespace FracturingFog.Rendering
                 case QuatJuliaCalculator qj: qj.FractalParameters = ViewState.FractalParameters; break;
                 case QuatMandelbrotCalculator qm: qm.FractalParameters = ViewState.FractalParameters; break;
                 case PlasmaCalculator pl: pl.FractalParameters = ViewState.FractalParameters; break;
+                case ApollonianCalculator ap: ap.FractalParameters = ViewState.FractalParameters; break;
                 case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
@@ -1388,6 +1394,7 @@ namespace FracturingFog.Rendering
             FractalType.QuaternionJulia => _quatJuliaCalculator,
             FractalType.QuaternionMandelbrot => _quatMandelbrotCalculator,
             FractalType.Plasma => _plasmaCalculator,
+            FractalType.Apollonian => _apollonianCalculator,
             FractalType.Flame => _flameCalculator,
             FractalType.Sandbox => _sandboxCalculator,
             FractalType.UserBulb => _userBulbCalculator,

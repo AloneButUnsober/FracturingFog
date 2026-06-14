@@ -43,6 +43,7 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.QuaternionJulia)]
     [InlineData(FractalType.QuaternionMandelbrot)]
     [InlineData(FractalType.Plasma)]
+    [InlineData(FractalType.Apollonian)]
     public void AllowedTypes_AreAllowed(FractalType t)
     {
         Assert.True(FractalTypeAllowlist.IsAllowed(t));
