@@ -54,6 +54,143 @@ namespace FracturingFog
         /// <summary>CalculatorGen-emitted (|Re(z)| + i|Im(z)|)² + c
         /// (BurningShip). Non-holomorphic — DE disabled.</summary>
         GeneratedBurningShip,
+        /// <summary>Magnet 1 (Pickover). Rational map
+        /// z = ((z² + c − 1) / (2z + c − 2))² with a pole-clamped
+        /// denominator. Bailout 10² because the orbit grows more
+        /// slowly than the polynomial families.</summary>
+        Magnet1,
+        /// <summary>Magnet 2 (Pickover). Rational map
+        /// z = ((z³ + 3(c−1)z + (c−1)(c−2)) /
+        ///       (3z² + 3(c−2)z + c² − 3c + 3))²
+        /// with pole-clamped denominator. Bailout 10².</summary>
+        Magnet2,
+        /// <summary>Glynn fractal (Earl Glynn, 1990s). Julia set of
+        /// z → z^1.5 + c at the canonical c ≈ −0.2. Fractional power
+        /// evaluated via polar form; non-holomorphic at the origin
+        /// branch cut.</summary>
+        Glynn,
+        /// <summary>Logistic bifurcation diagram. x_{n+1} = r·x_n·(1−x_n)
+        /// rendered as a per-column density histogram over (r, x). Not
+        /// escape-time — handled by a dedicated <c>LogisticCalculator</c>
+        /// alongside the Buddhabrot histogram path.</summary>
+        Logistic,
+        /// <summary>Halley basins for f(z) = z^d − 1. Cubic-convergence
+        /// root-finding (z := z − 2 f f' / (2 f'² − f f'')). Reuses
+        /// <c>NewtonExponent</c> + <c>NewtonRelaxation</c>; basin
+        /// colouring is identical to Newton.</summary>
+        Halley,
+        /// <summary>Secant basins for f(z) = z^d − 1. Two-point
+        /// recurrence (z_{n+1} = z_n − f(z_n)·(z_n − z_{n−1}) /
+        /// (f(z_n) − f(z_{n−1}))) — derivative-free root-finder. Per-
+        /// pixel state carries z and z_{n−1}; initial offset is
+        /// tunable via <c>SecantInitialOffset</c>.</summary>
+        Secant,
+        /// <summary>Spider fractal. Two-state recurrence
+        /// z = z² + c, c = decay·c + z. c mutates per iteration —
+        /// routed through a dedicated <c>CalculateSpider</c> path.
+        /// Decay tunable via <c>SpiderCDecay</c>; 0.5 is classic
+        /// Spider, 1.0 degenerates to Mandelbrot.</summary>
+        Spider,
+        /// <summary>Mandelbox (Tom Lowe, 2010). 3D box-fold +
+        /// sphere-fold + scale iteration rendered via distance-
+        /// estimation raymarching. Tunable via
+        /// <c>MandelboxScale</c> (default 2.0; ≈−1.5, 2.0, 3.0 are
+        /// classics), <c>MandelboxFixedRadius</c>,
+        /// <c>MandelboxMinRadius</c>, plus dedicated camera /
+        /// light fields. Distance estimate tracks a scalar dz
+        /// magnitude through folds.</summary>
+        Mandelbox,
+        /// <summary>Kaleidoscopic IFS (KIFS) — repeated reflective fold +
+        /// scale-from-pivot. Two built-in fold tables: Menger sponge
+        /// (sort-3 + scale-3) and Sierpinski tetrahedron (3 vertex
+        /// reflections + scale-2). DE: (|z|−κ) / scale^n. Tunables on
+        /// <c>FractalParameters</c>: <c>KifsFold</c>, <c>KifsIterations</c>,
+        /// <c>KifsScale</c>, <c>KifsOffsetX/Y/Z</c>, plus shared camera /
+        /// light fields. Rendered via distance-estimation raymarching
+        /// alongside the Mandelbulb and Mandelbox paths.</summary>
+        Kifs,
+        /// <summary>Quaternion Julia (Hart 1989). Iteration
+        /// q = q² + c with q, c ∈ ℍ (Hamilton quaternions). Renderer
+        /// raymarches a 3D slice through the 4D set — pixel coordinate
+        /// (x,y,z) becomes q = (x,y,z, <c>QJuliaSliceW</c>). DE uses the
+        /// Hubbard–Douady estimator <c>0.5·|q|·ln|q| / |dq|</c> with the
+        /// derivative tracked as a quaternion dq through the Hamilton
+        /// product. Tunables: <c>QJuliaCX/Y/Z/W</c> (constant c),
+        /// <c>QJuliaSliceW</c>, plus shared iter / bailout / camera /
+        /// light fields.</summary>
+        QuaternionJulia,
+        /// <summary>Quaternion Mandelbrot (Norton 1982). Same Hamilton-product
+        /// squaring map as <c>QuaternionJulia</c> (q = q² + c), but c varies
+        /// per pixel — the 3D raymarch walks (x, y, z) through the 4D c-space
+        /// with the 4th component pinned to <c>QMandelSliceW</c>. Orbit q
+        /// starts at the origin (membership test). DE uses the Hubbard–Douady
+        /// estimator with derivative dq/dc updated as
+        /// <c>dq := 2·q·dq + 1</c>. Tunables: <c>QMandelSliceW</c>, plus
+        /// shared iter / bailout / camera / light fields.</summary>
+        QuaternionMandelbrot,
+        /// <summary>Plasma (diamond-square midpoint displacement).
+        /// Procedural 2D noise field with fractional-Brownian statistics —
+        /// not strictly a fractal but visually fractal-like. Rendered by
+        /// <c>PlasmaCalculator</c> in a single pass: generate the (2ⁿ+1)²
+        /// height grid, normalise, sample through the active
+        /// <c>IColorMap</c>. Tunables on <c>FractalParameters</c>:
+        /// <c>PlasmaRoughness</c> (0 = smooth gradient, 1 = full
+        /// amplitude / very rough), <c>PlasmaSeed</c>. Pan/zoom is a
+        /// no-op — the generated field IS the image.</summary>
+        Plasma,
+        /// <summary>Flame fractal (Apophysis-style). IFS chaos game with
+        /// per-map non-linear "variation" (linear, sinusoidal, spherical,
+        /// swirl, polar, heart, disc, julia), gamma-corrected log-density
+        /// tone-map, and per-map colour index blended through the active
+        /// gradient palette. Rendered by <c>FlameRenderer</c>. Tunables on
+        /// <c>FractalParameters</c>: <c>FlamePresetName</c>,
+        /// <c>FlameIterations</c>, <c>FlameGamma</c>, <c>FlameVibrancy</c>,
+        /// plus an optional explicit <c>FlameMaps</c> list. Pan/zoom work
+        /// via the standard IFS-style attractor-fit convention.</summary>
+        Flame,
+        /// <summary>Apollonian gasket — recursive circle packing built from the
+        /// integral (−1, 2, 2, 3) seed quadruple. Each child quadruple is
+        /// generated by Vieta jumping (Descartes Circle Theorem reflection) one
+        /// non-enclosing circle through the other three; recursion stops when
+        /// the next circle's radius drops below
+        /// <c>ApollonianMinPixelRadius</c> device pixels or depth exceeds
+        /// <c>ApollonianDepth</c>. Painted big-to-small so the natural nesting
+        /// emerges from overdraw. Tunables on <c>FractalParameters</c>:
+        /// <c>ApollonianDepth</c>, <c>ApollonianMinPixelRadius</c>,
+        /// <c>ApollonianColorByDepth</c>. Pan/zoom supported — deeper detail
+        /// auto-reveals as the device pixel pitch shrinks.</summary>
+        Apollonian,
+        /// <summary>Kleinian limit set — 3D fractal produced by iterated
+        /// inversion in a Schottky-style group of reflection spheres. First
+        /// cut ships a tetrahedral 4-sphere preset (radius √2 at the four
+        /// even-parity ±1 corners). DE = signed nearest-sphere distance /
+        /// accumulated inversion-scale product, raymarched by sphere tracing
+        /// with finite-difference normals and Phong shading. Tunables on
+        /// <c>FractalParameters</c>: <c>KleinianIterations</c>,
+        /// <c>KleinianSphereScale</c> (loosens / tightens the tetrahedral
+        /// packing), plus shared camera / light fields.</summary>
+        Kleinian,
+        /// <summary>Bicomplex (tessarine) Mandelbrot. Iteration t := t² + c
+        /// with t, c in the commutative 4D algebra spanned by (1, i, j, k)
+        /// under i² = j² = −1, k² = +1, ij = ji = k. Renderer raymarches a
+        /// 3D slice — pixel (x, y, z) ↦ c = (x, y, z, <c>BicomplexSliceW</c>).
+        /// Orbit t starts at the origin; derivative dt/dc tracked through
+        /// chain rule for Hubbard–Douady DE. Visually overlaps the quaternion
+        /// Mandelbrot on the (i, j = 0) slice but introduces zero-divisor
+        /// seam slabs (commutativity + k² = +1) absent from Hamilton-algebra
+        /// renderings. Tunables: <c>BicomplexSliceW</c>, plus shared iter /
+        /// bailout / camera / light fields.</summary>
+        BicomplexMandelbrot,
+        /// <summary>Diffusion-Limited Aggregation (Witten–Sander 1981).
+        /// Stochastic 2D fractal: a seed cell sits at the grid centre;
+        /// particles spawn on a launch circle just outside the current
+        /// aggregate, random-walk one cell per step, and stick the first time
+        /// they land adjacent to the aggregate. The resulting Brownian-tree
+        /// dendrite has fractal dimension ≈ 1.71. Tunables on
+        /// <c>FractalParameters</c>: <c>DlaParticles</c>, <c>DlaSeed</c>.
+        /// Pan/zoom unsupported — the simulation IS the image and pan/zoom
+        /// would invalidate the cached grid.</summary>
+        Dla,
     }
 
     public enum RenderProfile { Preview, Final }

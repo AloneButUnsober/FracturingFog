@@ -28,7 +28,8 @@ public sealed class FractalParamsViewModel : ViewModelBase
         IReadOnlyList<string>? ifsPresets = null,
         IReadOnlyList<string>? lsystemPresets = null,
         IReadOnlyList<string>? attractorPresets = null,
-        Func<string, (double a, double b, double c, double d)>? attractorDefaults = null)
+        Func<string, (double a, double b, double c, double d)>? attractorDefaults = null,
+        IReadOnlyList<string>? flamePresets = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
 
@@ -39,12 +40,20 @@ public sealed class FractalParamsViewModel : ViewModelBase
         IfsPresets = ifsPresets ?? Array.Empty<string>();
         LSystemPresets = lsystemPresets ?? Array.Empty<string>();
         AttractorPresets = attractorPresets ?? new[] { "Clifford", "De Jong", "Hopalong", "Lorenz" };
+        FlamePresets = flamePresets ?? Array.Empty<string>();
 
         _juliaR = _p.JuliaC.Real;
         _juliaI = _p.JuliaC.Imaginary;
         _multibrotD = _p.MultibrotExponent;
         _phoenixR = _p.PhoenixP.Real;
         _phoenixI = _p.PhoenixP.Imaginary;
+        _glynnR = _p.GlynnC.Real;
+        _glynnI = _p.GlynnC.Imaginary;
+        _logisticBurnIn = _p.LogisticBurnIn;
+        _logisticSeed = _p.LogisticSeed;
+        _secantOffsetR = _p.SecantInitialOffset.Real;
+        _secantOffsetI = _p.SecantInitialOffset.Imaginary;
+        _spiderCDecay = _p.SpiderCDecay;
         _newtonExponent = _p.NewtonExponent;
         _newtonRelaxation = _p.NewtonRelaxation;
         _ifsPresetName = _p.IFSPresetName;
@@ -70,6 +79,57 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _bulbCameraTheta = _p.BulbCameraTheta;
         _bulbCameraPhi = _p.BulbCameraPhi;
         _bulbCameraDistance = _p.BulbCameraDistance;
+        _mandelboxScale = _p.MandelboxScale;
+        _mandelboxFixedRadius = _p.MandelboxFixedRadius;
+        _mandelboxMinRadius = _p.MandelboxMinRadius;
+        _mandelboxIterations = _p.MandelboxIterations;
+        _mandelboxCameraTheta = _p.MandelboxCameraTheta;
+        _mandelboxCameraPhi = _p.MandelboxCameraPhi;
+        _mandelboxCameraDistance = _p.MandelboxCameraDistance;
+        _kifsFold = _p.KifsFold;
+        _kifsIterations = _p.KifsIterations;
+        _kifsScale = _p.KifsScale;
+        _kifsOffsetX = _p.KifsOffsetX;
+        _kifsOffsetY = _p.KifsOffsetY;
+        _kifsOffsetZ = _p.KifsOffsetZ;
+        _kifsCameraTheta = _p.KifsCameraTheta;
+        _kifsCameraPhi = _p.KifsCameraPhi;
+        _kifsCameraDistance = _p.KifsCameraDistance;
+        _qjCX = _p.QJuliaCX;
+        _qjCY = _p.QJuliaCY;
+        _qjCZ = _p.QJuliaCZ;
+        _qjCW = _p.QJuliaCW;
+        _qjSliceW = _p.QJuliaSliceW;
+        _qjIterations = _p.QJuliaIterations;
+        _qjCameraTheta = _p.QJuliaCameraTheta;
+        _qjCameraPhi = _p.QJuliaCameraPhi;
+        _qjCameraDistance = _p.QJuliaCameraDistance;
+        _qmSliceW = _p.QMandelSliceW;
+        _qmIterations = _p.QMandelIterations;
+        _qmCameraTheta = _p.QMandelCameraTheta;
+        _qmCameraPhi = _p.QMandelCameraPhi;
+        _qmCameraDistance = _p.QMandelCameraDistance;
+        _plasmaRoughness = _p.PlasmaRoughness;
+        _plasmaSeed = _p.PlasmaSeed;
+        _apolloDepth = _p.ApollonianDepth;
+        _apolloMinPx = _p.ApollonianMinPixelRadius;
+        _apolloColorByDepth = _p.ApollonianColorByDepth;
+        _kleinIter = _p.KleinianIterations;
+        _kleinScale = _p.KleinianSphereScale;
+        _kleinCameraTheta = _p.KleinianCameraTheta;
+        _kleinCameraPhi = _p.KleinianCameraPhi;
+        _kleinCameraDistance = _p.KleinianCameraDistance;
+        _dlaParticles = _p.DlaParticles;
+        _dlaSeed = _p.DlaSeed;
+        _bcSliceW = _p.BicomplexSliceW;
+        _bcIterations = _p.BicomplexIterations;
+        _bcCameraTheta = _p.BicomplexCameraTheta;
+        _bcCameraPhi = _p.BicomplexCameraPhi;
+        _bcCameraDistance = _p.BicomplexCameraDistance;
+        _flamePresetName = _p.FlamePresetName;
+        _flameIterations = _p.FlameIterations;
+        _flameGamma = _p.FlameGamma;
+        _flameVibrancy = _p.FlameVibrancy;
 
         CloseCommand = ReactiveCommand.Create(() =>
         {
@@ -94,6 +154,7 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public IReadOnlyList<string> IfsPresets { get; }
     public IReadOnlyList<string> LSystemPresets { get; }
     public IReadOnlyList<string> AttractorPresets { get; }
+    public IReadOnlyList<string> FlamePresets { get; }
 
     public string Title => $"{FractalType} Parameters";
     public string EmptyStateText => $"{FractalType} has no tunable parameters.";
@@ -101,7 +162,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsJulia => FractalType == FractalType.Julia;
     public bool IsMultibrot => FractalType == FractalType.Multibrot;
     public bool IsPhoenix => FractalType == FractalType.Phoenix;
-    public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova;
+    public bool IsGlynn => FractalType == FractalType.Glynn;
+    public bool IsLogistic => FractalType == FractalType.Logistic;
+    public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley or FractalType.Secant;
+    public bool IsSecant => FractalType == FractalType.Secant;
+    public bool IsSpider => FractalType == FractalType.Spider;
     public bool IsIFS => FractalType == FractalType.IFS;
     public bool IsLSystem => FractalType == FractalType.LSystem;
     public bool IsStrangeAttractor => FractalType == FractalType.StrangeAttractor;
@@ -110,15 +175,49 @@ public sealed class FractalParamsViewModel : ViewModelBase
         or FractalType.AntiBuddhabrot
         or FractalType.AntiNebulabrot;
     public bool IsMandelbulb => FractalType == FractalType.Mandelbulb;
+    public bool IsMandelbox => FractalType == FractalType.Mandelbox;
+    public bool IsKifs => FractalType == FractalType.Kifs;
+    public bool IsQuatJulia => FractalType == FractalType.QuaternionJulia;
+    public bool IsQuatMandelbrot => FractalType == FractalType.QuaternionMandelbrot;
+    public bool IsPlasma => FractalType == FractalType.Plasma;
+    public bool IsFlame => FractalType == FractalType.Flame;
+    public bool IsApollonian => FractalType == FractalType.Apollonian;
+    public bool IsKleinian => FractalType == FractalType.Kleinian;
+    public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
+    public bool IsDla => FractalType == FractalType.Dla;
     public bool HasNoParams =>
-        !(IsJulia || IsMultibrot || IsPhoenix || IsNewtonOrNova || IsIFS
-          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb);
+        !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
+          || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
+          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian
+          || IsBicomplexMandelbrot || IsDla);
 
     // ── Julia ──
     private double _juliaR;
     public double JuliaR { get => _juliaR; set { Set(ref _juliaR, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
     private double _juliaI;
     public double JuliaI { get => _juliaI; set { Set(ref _juliaI, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
+
+    // ── Glynn ──
+    private double _glynnR;
+    public double GlynnR { get => _glynnR; set { Set(ref _glynnR, Clamp(value, -2, 2)); _p.GlynnC = new Complex(_glynnR, _glynnI); Fire(); } }
+    private double _glynnI;
+    public double GlynnI { get => _glynnI; set { Set(ref _glynnI, Clamp(value, -2, 2)); _p.GlynnC = new Complex(_glynnR, _glynnI); Fire(); } }
+
+    // ── Logistic ──
+    private int _logisticBurnIn;
+    public int LogisticBurnIn { get => _logisticBurnIn; set { Set(ref _logisticBurnIn, Math.Max(0, value)); _p.LogisticBurnIn = _logisticBurnIn; Fire(); } }
+    private double _logisticSeed;
+    public double LogisticSeed { get => _logisticSeed; set { Set(ref _logisticSeed, Clamp(value, 0.001, 0.999)); _p.LogisticSeed = _logisticSeed; Fire(); } }
+
+    // ── Secant ──
+    private double _secantOffsetR;
+    public double SecantOffsetR { get => _secantOffsetR; set { Set(ref _secantOffsetR, Clamp(value, -2, 2)); _p.SecantInitialOffset = new Complex(_secantOffsetR, _secantOffsetI); Fire(); } }
+    private double _secantOffsetI;
+    public double SecantOffsetI { get => _secantOffsetI; set { Set(ref _secantOffsetI, Clamp(value, -2, 2)); _p.SecantInitialOffset = new Complex(_secantOffsetR, _secantOffsetI); Fire(); } }
+
+    // ── Spider ──
+    private double _spiderCDecay;
+    public double SpiderCDecay { get => _spiderCDecay; set { Set(ref _spiderCDecay, Clamp(value, 0.0, 1.0)); _p.SpiderCDecay = _spiderCDecay; Fire(); } }
 
     // ── Julia animation ──
     //
@@ -528,6 +627,129 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double BulbCameraPhi { get => _bulbCameraPhi; set { Set(ref _bulbCameraPhi, Clamp(value, 0.01, 3.13)); _p.BulbCameraPhi = _bulbCameraPhi; Fire(); } }
     private double _bulbCameraDistance;
     public double BulbCameraDistance { get => _bulbCameraDistance; set { Set(ref _bulbCameraDistance, Clamp(value, 0.1, 500)); _p.BulbCameraDistance = _bulbCameraDistance; Fire(); } }
+
+    // ── Mandelbox ──
+    private double _mandelboxScale;
+    public double MandelboxScale { get => _mandelboxScale; set { Set(ref _mandelboxScale, Clamp(value, -4, 4)); _p.MandelboxScale = _mandelboxScale; Fire(); } }
+    private double _mandelboxFixedRadius;
+    public double MandelboxFixedRadius { get => _mandelboxFixedRadius; set { Set(ref _mandelboxFixedRadius, Clamp(value, 0.1, 4)); _p.MandelboxFixedRadius = _mandelboxFixedRadius; Fire(); } }
+    private double _mandelboxMinRadius;
+    public double MandelboxMinRadius { get => _mandelboxMinRadius; set { Set(ref _mandelboxMinRadius, Clamp(value, 0.05, 2)); _p.MandelboxMinRadius = _mandelboxMinRadius; Fire(); } }
+    private int _mandelboxIterations;
+    public int MandelboxIterations { get => _mandelboxIterations; set { Set(ref _mandelboxIterations, (int)Clamp(value, 2, 32)); _p.MandelboxIterations = _mandelboxIterations; Fire(); } }
+    private double _mandelboxCameraTheta;
+    public double MandelboxCameraTheta { get => _mandelboxCameraTheta; set { Set(ref _mandelboxCameraTheta, Clamp(value, -10, 10)); _p.MandelboxCameraTheta = _mandelboxCameraTheta; Fire(); } }
+    private double _mandelboxCameraPhi;
+    public double MandelboxCameraPhi { get => _mandelboxCameraPhi; set { Set(ref _mandelboxCameraPhi, Clamp(value, 0.01, 3.13)); _p.MandelboxCameraPhi = _mandelboxCameraPhi; Fire(); } }
+    private double _mandelboxCameraDistance;
+    public double MandelboxCameraDistance { get => _mandelboxCameraDistance; set { Set(ref _mandelboxCameraDistance, Clamp(value, 0.1, 500)); _p.MandelboxCameraDistance = _mandelboxCameraDistance; Fire(); } }
+
+    // ── KIFS ──
+    private KifsFoldKind _kifsFold;
+    public KifsFoldKind KifsFold { get => _kifsFold; set { Set(ref _kifsFold, value); _p.KifsFold = value; Fire(); } }
+    public Array KifsFoldKinds => Enum.GetValues(typeof(KifsFoldKind));
+    private int _kifsIterations;
+    public int KifsIterations { get => _kifsIterations; set { Set(ref _kifsIterations, (int)Clamp(value, 2, 32)); _p.KifsIterations = _kifsIterations; Fire(); } }
+    private double _kifsScale;
+    public double KifsScale { get => _kifsScale; set { Set(ref _kifsScale, Clamp(value, 0.0, 6.0)); _p.KifsScale = _kifsScale; Fire(); } }
+    private double _kifsOffsetX;
+    public double KifsOffsetX { get => _kifsOffsetX; set { Set(ref _kifsOffsetX, Clamp(value, -3, 3)); _p.KifsOffsetX = _kifsOffsetX; Fire(); } }
+    private double _kifsOffsetY;
+    public double KifsOffsetY { get => _kifsOffsetY; set { Set(ref _kifsOffsetY, Clamp(value, -3, 3)); _p.KifsOffsetY = _kifsOffsetY; Fire(); } }
+    private double _kifsOffsetZ;
+    public double KifsOffsetZ { get => _kifsOffsetZ; set { Set(ref _kifsOffsetZ, Clamp(value, -3, 3)); _p.KifsOffsetZ = _kifsOffsetZ; Fire(); } }
+    private double _kifsCameraTheta;
+    public double KifsCameraTheta { get => _kifsCameraTheta; set { Set(ref _kifsCameraTheta, Clamp(value, -10, 10)); _p.KifsCameraTheta = _kifsCameraTheta; Fire(); } }
+    private double _kifsCameraPhi;
+    public double KifsCameraPhi { get => _kifsCameraPhi; set { Set(ref _kifsCameraPhi, Clamp(value, 0.01, 3.13)); _p.KifsCameraPhi = _kifsCameraPhi; Fire(); } }
+    private double _kifsCameraDistance;
+    public double KifsCameraDistance { get => _kifsCameraDistance; set { Set(ref _kifsCameraDistance, Clamp(value, 0.1, 500)); _p.KifsCameraDistance = _kifsCameraDistance; Fire(); } }
+
+    // ── Quaternion Julia ──
+    private double _qjCX;
+    public double QJuliaCX { get => _qjCX; set { Set(ref _qjCX, Clamp(value, -2, 2)); _p.QJuliaCX = _qjCX; Fire(); } }
+    private double _qjCY;
+    public double QJuliaCY { get => _qjCY; set { Set(ref _qjCY, Clamp(value, -2, 2)); _p.QJuliaCY = _qjCY; Fire(); } }
+    private double _qjCZ;
+    public double QJuliaCZ { get => _qjCZ; set { Set(ref _qjCZ, Clamp(value, -2, 2)); _p.QJuliaCZ = _qjCZ; Fire(); } }
+    private double _qjCW;
+    public double QJuliaCW { get => _qjCW; set { Set(ref _qjCW, Clamp(value, -2, 2)); _p.QJuliaCW = _qjCW; Fire(); } }
+    private double _qjSliceW;
+    public double QJuliaSliceW { get => _qjSliceW; set { Set(ref _qjSliceW, Clamp(value, -2, 2)); _p.QJuliaSliceW = _qjSliceW; Fire(); } }
+    private int _qjIterations;
+    public int QJuliaIterations { get => _qjIterations; set { Set(ref _qjIterations, (int)Clamp(value, 2, 32)); _p.QJuliaIterations = _qjIterations; Fire(); } }
+    private double _qjCameraTheta;
+    public double QJuliaCameraTheta { get => _qjCameraTheta; set { Set(ref _qjCameraTheta, Clamp(value, -10, 10)); _p.QJuliaCameraTheta = _qjCameraTheta; Fire(); } }
+    private double _qjCameraPhi;
+    public double QJuliaCameraPhi { get => _qjCameraPhi; set { Set(ref _qjCameraPhi, Clamp(value, 0.01, 3.13)); _p.QJuliaCameraPhi = _qjCameraPhi; Fire(); } }
+    private double _qjCameraDistance;
+    public double QJuliaCameraDistance { get => _qjCameraDistance; set { Set(ref _qjCameraDistance, Clamp(value, 0.1, 500)); _p.QJuliaCameraDistance = _qjCameraDistance; Fire(); } }
+
+    // ── Quaternion Mandelbrot ──
+    private double _qmSliceW;
+    public double QMandelSliceW { get => _qmSliceW; set { Set(ref _qmSliceW, Clamp(value, -2, 2)); _p.QMandelSliceW = _qmSliceW; Fire(); } }
+    private int _qmIterations;
+    public int QMandelIterations { get => _qmIterations; set { Set(ref _qmIterations, (int)Clamp(value, 2, 32)); _p.QMandelIterations = _qmIterations; Fire(); } }
+    private double _qmCameraTheta;
+    public double QMandelCameraTheta { get => _qmCameraTheta; set { Set(ref _qmCameraTheta, Clamp(value, -10, 10)); _p.QMandelCameraTheta = _qmCameraTheta; Fire(); } }
+    private double _qmCameraPhi;
+    public double QMandelCameraPhi { get => _qmCameraPhi; set { Set(ref _qmCameraPhi, Clamp(value, 0.01, 3.13)); _p.QMandelCameraPhi = _qmCameraPhi; Fire(); } }
+    private double _qmCameraDistance;
+    public double QMandelCameraDistance { get => _qmCameraDistance; set { Set(ref _qmCameraDistance, Clamp(value, 0.1, 500)); _p.QMandelCameraDistance = _qmCameraDistance; Fire(); } }
+
+    // ── Plasma ──
+    private double _plasmaRoughness;
+    public double PlasmaRoughness { get => _plasmaRoughness; set { Set(ref _plasmaRoughness, Clamp(value, 0.0, 1.0)); _p.PlasmaRoughness = _plasmaRoughness; Fire(); } }
+    private int _plasmaSeed;
+    public int PlasmaSeed { get => _plasmaSeed; set { Set(ref _plasmaSeed, value); _p.PlasmaSeed = _plasmaSeed; Fire(); } }
+
+    // ── Apollonian ──
+    private int _apolloDepth;
+    public int ApollonianDepth { get => _apolloDepth; set { Set(ref _apolloDepth, (int)Clamp(value, 0, 40)); _p.ApollonianDepth = _apolloDepth; Fire(); } }
+    private double _apolloMinPx;
+    public double ApollonianMinPixelRadius { get => _apolloMinPx; set { Set(ref _apolloMinPx, Clamp(value, 0.25, 16.0)); _p.ApollonianMinPixelRadius = _apolloMinPx; Fire(); } }
+    private bool _apolloColorByDepth;
+    public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
+
+    // ── DLA ──
+    private int _dlaParticles;
+    public int DlaParticles { get => _dlaParticles; set { Set(ref _dlaParticles, (int)Clamp(value, 100, 500_000)); _p.DlaParticles = _dlaParticles; Fire(); } }
+    private int _dlaSeed;
+    public int DlaSeed { get => _dlaSeed; set { Set(ref _dlaSeed, value); _p.DlaSeed = _dlaSeed; Fire(); } }
+
+    // ── Bicomplex Mandelbrot ──
+    private double _bcSliceW;
+    public double BicomplexSliceW { get => _bcSliceW; set { Set(ref _bcSliceW, Clamp(value, -2, 2)); _p.BicomplexSliceW = _bcSliceW; Fire(); } }
+    private int _bcIterations;
+    public int BicomplexIterations { get => _bcIterations; set { Set(ref _bcIterations, (int)Clamp(value, 2, 32)); _p.BicomplexIterations = _bcIterations; Fire(); } }
+    private double _bcCameraTheta;
+    public double BicomplexCameraTheta { get => _bcCameraTheta; set { Set(ref _bcCameraTheta, Clamp(value, -10, 10)); _p.BicomplexCameraTheta = _bcCameraTheta; Fire(); } }
+    private double _bcCameraPhi;
+    public double BicomplexCameraPhi { get => _bcCameraPhi; set { Set(ref _bcCameraPhi, Clamp(value, 0.01, 3.13)); _p.BicomplexCameraPhi = _bcCameraPhi; Fire(); } }
+    private double _bcCameraDistance;
+    public double BicomplexCameraDistance { get => _bcCameraDistance; set { Set(ref _bcCameraDistance, Clamp(value, 0.1, 500)); _p.BicomplexCameraDistance = _bcCameraDistance; Fire(); } }
+
+    // ── Kleinian ──
+    private int _kleinIter;
+    public int KleinianIterations { get => _kleinIter; set { Set(ref _kleinIter, (int)Clamp(value, 2, 64)); _p.KleinianIterations = _kleinIter; Fire(); } }
+    private double _kleinScale;
+    public double KleinianSphereScale { get => _kleinScale; set { Set(ref _kleinScale, Clamp(value, 0.25, 4.0)); _p.KleinianSphereScale = _kleinScale; Fire(); } }
+    private double _kleinCameraTheta;
+    public double KleinianCameraTheta { get => _kleinCameraTheta; set { Set(ref _kleinCameraTheta, Clamp(value, -10, 10)); _p.KleinianCameraTheta = _kleinCameraTheta; Fire(); } }
+    private double _kleinCameraPhi;
+    public double KleinianCameraPhi { get => _kleinCameraPhi; set { Set(ref _kleinCameraPhi, Clamp(value, 0.01, 3.13)); _p.KleinianCameraPhi = _kleinCameraPhi; Fire(); } }
+    private double _kleinCameraDistance;
+    public double KleinianCameraDistance { get => _kleinCameraDistance; set { Set(ref _kleinCameraDistance, Clamp(value, 0.1, 500)); _p.KleinianCameraDistance = _kleinCameraDistance; Fire(); } }
+
+    // ── Flame ──
+    private string _flamePresetName = "Sierpinski Variation";
+    public string FlamePresetName { get => _flamePresetName; set { if (Set(ref _flamePresetName, value ?? "Sierpinski Variation")) { _p.FlamePresetName = _flamePresetName; _p.FlameMaps = null; Fire(); } } }
+    private int _flameIterations;
+    public int FlameIterations { get => _flameIterations; set { Set(ref _flameIterations, (int)Clamp(value, 100_000, 100_000_000)); _p.FlameIterations = _flameIterations; Fire(); } }
+    private double _flameGamma;
+    public double FlameGamma { get => _flameGamma; set { Set(ref _flameGamma, Clamp(value, 0.5, 5.0)); _p.FlameGamma = _flameGamma; Fire(); } }
+    private double _flameVibrancy;
+    public double FlameVibrancy { get => _flameVibrancy; set { Set(ref _flameVibrancy, Clamp(value, 0.0, 1.0)); _p.FlameVibrancy = _flameVibrancy; Fire(); } }
 
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 

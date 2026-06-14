@@ -124,7 +124,24 @@ namespace FracturingFog.Models
             {FractalType.Tricorn, "Tricorn" },
             {FractalType.UserEquation, "UserEquation" },
             {FractalType.UserBulb, "UserBulb" },
-            {FractalType.TearDrop, "Tear Drop" }
+            {FractalType.TearDrop, "Tear Drop" },
+            {FractalType.Magnet1, "Magnet 1" },
+            {FractalType.Magnet2, "Magnet 2" },
+            {FractalType.Glynn, "Glynn" },
+            {FractalType.Logistic, "Logistic" },
+            {FractalType.Halley, "Halley" },
+            {FractalType.Secant, "Secant" },
+            {FractalType.Spider, "Spider" },
+            {FractalType.Mandelbox, "Mandelbox" },
+            {FractalType.Kifs, "KIFS" },
+            {FractalType.QuaternionJulia, "Quaternion Julia" },
+            {FractalType.QuaternionMandelbrot, "Quaternion Mandelbrot" },
+            {FractalType.Plasma, "Plasma" },
+            {FractalType.Flame, "Flame" },
+            {FractalType.Apollonian, "Apollonian" },
+            {FractalType.Kleinian, "Kleinian" },
+            {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
+            {FractalType.Dla, "DLA" }
         };
     }
 

@@ -16,6 +16,24 @@ namespace FracturingFog.Models
 
         public Complex PhoenixP { get; set; } = new Complex(0.56667, 0.0);
 
+        /// <summary>Constant c for the Glynn fractal (Julia set of
+        /// z → z^1.5 + c). Default −0.2 produces the canonical
+        /// dendrite. Real part dominates the dendrite tilt; small
+        /// imaginary tweaks deform it asymmetrically.</summary>
+        public Complex GlynnC { get; set; } = new Complex(-0.2, 0.0);
+
+        /// <summary>Logistic bifurcation burn-in iterations — discarded
+        /// before density accumulation starts so transients don't
+        /// pollute the attractor histogram. Plot count = MaxIterations
+        /// − LogisticBurnIn (clamped &gt;= 1).</summary>
+        public int LogisticBurnIn { get; set; } = 1000;
+
+        /// <summary>Logistic seed x₀ ∈ (0, 1). Default 0.5 — any
+        /// non-fixed-point seed lands on the same attractor after
+        /// burn-in, but extreme values (near 0 or 1) lengthen the
+        /// transient.</summary>
+        public double LogisticSeed { get; set; } = 0.5;
+
         public Complex[]? NewtonPolyCoeffs { get; set; }
 
         public List<AffineMap>? IFSMaps { get; set; }
@@ -72,6 +90,44 @@ namespace FracturingFog.Models
         public string LSystemPresetName { get; set; } = "Hilbert";
         public int LSystemDepth { get; set; } = 5;
 
+        /// <summary>Plasma diamond-square roughness coefficient. Per
+        /// subdivision the displacement amplitude is multiplied by
+        /// 2^(−roughness). roughness=0 collapses to a smooth bilinear
+        /// gradient; roughness=1 preserves full amplitude at every level
+        /// (very rocky terrain). Default 0.55 matches the visually
+        /// "cloudy" Apophysis-style plasma palette.</summary>
+        public double PlasmaRoughness { get; set; } = 0.55;
+
+        /// <summary>PRNG seed for the Plasma calculator. Same (W, H, seed,
+        /// roughness) deterministically produces the same field.</summary>
+        public int PlasmaSeed { get; set; } = 12345;
+
+        /// <summary>Optional explicit Flame-fractal map list. When null the
+        /// renderer falls back to <see cref="FlamePresetName"/> from
+        /// <c>FlamePresets.All</c>.</summary>
+        public List<FlameMap>? FlameMaps { get; set; }
+
+        /// <summary>Built-in Flame preset name. Default Sierpinski-Variation
+        /// is the simplest visually-distinct flame (Sierpinski IFS with
+        /// sinusoidal variation per leg).</summary>
+        public string FlamePresetName { get; set; } = "Sierpinski Variation";
+
+        /// <summary>Chaos-game sample count per render. Flames need an order
+        /// of magnitude more samples than plain IFS because variations
+        /// spread density and gamma tone-map needs a fat histogram.</summary>
+        public int FlameIterations { get; set; } = 8_000_000;
+
+        /// <summary>Gamma applied to the log-density before palette lookup.
+        /// Apophysis default 2.2. Lower = punchier highlights, higher = more
+        /// dynamic range in dim regions.</summary>
+        public double FlameGamma { get; set; } = 2.2;
+
+        /// <summary>Vibrancy ∈ [0, 1] (Apophysis term). Blends the gamma-
+        /// corrected colour back toward the linear colour: 1 = full
+        /// gamma-on-colour (saturated highlights), 0 = pure linear
+        /// (preserves filament tint). Default 0.8.</summary>
+        public double FlameVibrancy { get; set; } = 0.8;
+
         public string AttractorPresetName { get; set; } = "Clifford";
         public int AttractorIterations { get; set; } = 2_000_000;
         public double AttractorA { get; set; } = -1.4;
@@ -81,6 +137,21 @@ namespace FracturingFog.Models
 
         public int NewtonExponent { get; set; } = 3;
         public double NewtonRelaxation { get; set; } = 1.0;
+
+        /// <summary>Initial prev-z offset for the Secant basin renderer.
+        /// Secant's two-point recurrence is undefined when prev = z, so
+        /// the first prev is set to (pixel + offset). Default (0.5, 0)
+        /// gives a stable starting chord across the unit-roots
+        /// configuration; the imaginary component biases the early
+        /// chord direction without changing the asymptotic basins.</summary>
+        public Complex SecantInitialOffset { get; set; } = new Complex(0.5, 0.0);
+
+        /// <summary>Spider c-decay coefficient. Each iteration
+        /// updates c := decay · c + z. Default 0.5 = canonical
+        /// Spider. decay = 1.0 cancels mutation (degenerates to
+        /// Mandelbrot); decay = 0 reseeds c to z each step
+        /// (heavy chaos). Clamped to [0, 1] in the calculator.</summary>
+        public double SpiderCDecay { get; set; } = 0.5;
 
         public int BuddhaSamples { get; set; } = 500_000;
         public int BuddhaIterLow { get; set; } = 500;
@@ -115,6 +186,185 @@ namespace FracturingFog.Models
         /// user can cancel mid-render and still get a usable image. Cost is
         /// a few extra composites per render (cheap relative to sampling).</summary>
         public bool BuddhaProgressive { get; set; } = false;
+
+        // Mandelbox (Tom Lowe, 2010). Box-fold + sphere-fold + scale DE.
+        /// <summary>Mandelbox scale parameter. Per iter:
+        /// z = scale · sphereFold(boxFold(z)) + c. Default 2.0;
+        /// −1.5 (Juliabox-like inversion), 2.0 (canonical), 3.0
+        /// (open-pore variants) are classic values.</summary>
+        public double MandelboxScale { get; set; } = 2.0;
+        /// <summary>Fixed radius for the sphere-fold band. Points with
+        /// |z| in [minRadius, fixedRadius] scale by fixedR²/|z|².
+        /// Default 1.0.</summary>
+        public double MandelboxFixedRadius { get; set; } = 1.0;
+        /// <summary>Inner radius for the sphere-fold. Points with
+        /// |z| &lt; minRadius scale uniformly by fixedR²/minR² (a
+        /// constant per-iteration zoom). Default 0.5.</summary>
+        public double MandelboxMinRadius { get; set; } = 0.5;
+        /// <summary>DE inner iteration count. Higher = sharper folds,
+        /// more time per step. Default 12.</summary>
+        public int MandelboxIterations { get; set; } = 12;
+        /// <summary>Bailout for the DE inner loop. |z|² above this exits
+        /// early so deep escape doesn't waste cycles. Default 1024.</summary>
+        public double MandelboxBailout { get; set; } = 1024.0;
+        public double MandelboxCameraDistance { get; set; } = 12.0;
+        public double MandelboxCameraTheta { get; set; } = Math.PI * 0.25;
+        public double MandelboxCameraPhi { get; set; } = Math.PI * 0.35;
+        public double MandelboxLightTheta { get; set; } = Math.PI * 0.25;
+        public double MandelboxLightPhi { get; set; } = Math.PI * 0.45;
+        public int MandelboxMaxSteps { get; set; } = 128;
+        public double MandelboxEpsilon { get; set; } = 0.0015;
+
+        // KIFS (Kaleidoscopic IFS). Repeated reflective fold + scale-from-pivot
+        // DE. KifsFold selects which fold table runs per iter:
+        //   Menger     — Knighty's sort-3 fold, scale 3 from (1,1,1).
+        //   Sierpinski — 3 vertex reflections, scale 2 from (1,1,1).
+        public KifsFoldKind KifsFold { get; set; } = KifsFoldKind.Menger;
+        /// <summary>DE inner iter count. Higher = sharper detail, slower.
+        /// Default 14 — Menger sponge reads as recognisable at this depth.</summary>
+        public int KifsIterations { get; set; } = 14;
+        /// <summary>Per-iter linear scale applied after fold. Defaults are
+        /// fold-specific; the calculator picks 3.0 for Menger and 2.0 for
+        /// Sierpinski when this is left at sentinel 0.</summary>
+        public double KifsScale { get; set; } = 0.0;
+        public double KifsOffsetX { get; set; } = 1.0;
+        public double KifsOffsetY { get; set; } = 1.0;
+        public double KifsOffsetZ { get; set; } = 1.0;
+        /// <summary>Bailout for DE inner loop. |z|² above this exits early.</summary>
+        public double KifsBailout { get; set; } = 1024.0;
+        public double KifsCameraDistance { get; set; } = 4.0;
+        public double KifsCameraTheta { get; set; } = Math.PI * 0.25;
+        public double KifsCameraPhi { get; set; } = Math.PI * 0.35;
+        public double KifsLightTheta { get; set; } = Math.PI * 0.25;
+        public double KifsLightPhi { get; set; } = Math.PI * 0.45;
+        public int KifsMaxSteps { get; set; } = 160;
+        public double KifsEpsilon { get; set; } = 0.0012;
+
+        // Quaternion Julia (Hart 1989). q_{n+1} = q_n² + c with q ∈ ℍ.
+        // Renderer raymarches a 3D slice of the 4D set — pixel maps to
+        // (x,y,z) ∈ ℝ³, the 4th component is pinned to QJuliaSliceW.
+        /// <summary>Constant quaternion c, x component.</summary>
+        public double QJuliaCX { get; set; } = -0.2;
+        /// <summary>Constant quaternion c, y component.</summary>
+        public double QJuliaCY { get; set; } = 0.4;
+        /// <summary>Constant quaternion c, z component.</summary>
+        public double QJuliaCZ { get; set; } = -0.4;
+        /// <summary>Constant quaternion c, w component.</summary>
+        public double QJuliaCW { get; set; } = -0.4;
+        /// <summary>W component of the 3D slice plane through ℍ. Pixel
+        /// (x,y,z) becomes q = (x,y,z, QJuliaSliceW). Sliding this slider
+        /// reveals different 3D cross-sections of the same 4D set.</summary>
+        public double QJuliaSliceW { get; set; } = 0.0;
+        /// <summary>DE inner iteration count. Higher = sharper detail
+        /// but more cycles per ray sample. Default 11 — quaternion Julia
+        /// detail saturates around iter 10–14.</summary>
+        public int QJuliaIterations { get; set; } = 11;
+        /// <summary>|q|² escape threshold. 16 = canonical Hart bailout.</summary>
+        public double QJuliaBailout { get; set; } = 16.0;
+        public double QJuliaCameraDistance { get; set; } = 4.0;
+        public double QJuliaCameraTheta { get; set; } = Math.PI * 0.25;
+        public double QJuliaCameraPhi { get; set; } = Math.PI * 0.35;
+        public double QJuliaLightTheta { get; set; } = Math.PI * 0.25;
+        public double QJuliaLightPhi { get; set; } = Math.PI * 0.45;
+        public int QJuliaMaxSteps { get; set; } = 160;
+        public double QJuliaEpsilon { get; set; } = 0.0012;
+
+        // Quaternion Mandelbrot (Norton 1982 / Holroyd). Same q := q² + c
+        // squaring map as QuatJulia but c varies per pixel — c = (x, y, z,
+        // QMandelSliceW) with the 3D raymarcher walking (x, y, z) through the
+        // 4D c-space. q starts at the origin (membership test). DE uses the
+        // Hubbard–Douady estimator with derivative dq/dc updated as
+        // dq := 2·q·dq + 1 each iter.
+        /// <summary>W component of the 4D slice plane through ℍ in c-space.
+        /// Pixel (x, y, z) becomes c = (x, y, z, QMandelSliceW). Sliding this
+        /// reveals different 3D cross-sections of the same 4D set.</summary>
+        public double QMandelSliceW { get; set; } = 0.0;
+        /// <summary>Reserved — alternate slice plane Z constant when a future
+        /// slice-axis selector lets pixel.z route to c.W instead. Currently
+        /// unused (raymarched z always feeds c.Z).</summary>
+        public double QMandelSliceZ { get; set; } = 0.0;
+        /// <summary>DE inner iteration count. Default 11 — quaternion
+        /// Mandelbrot detail saturates around iter 10–14.</summary>
+        public int QMandelIterations { get; set; } = 11;
+        /// <summary>|q|² escape threshold. 16 = canonical Hart bailout.</summary>
+        public double QMandelBailout { get; set; } = 16.0;
+        public double QMandelCameraDistance { get; set; } = 4.0;
+        public double QMandelCameraTheta { get; set; } = Math.PI * 0.25;
+        public double QMandelCameraPhi { get; set; } = Math.PI * 0.35;
+        public double QMandelLightTheta { get; set; } = Math.PI * 0.25;
+        public double QMandelLightPhi { get; set; } = Math.PI * 0.45;
+        public int QMandelMaxSteps { get; set; } = 160;
+        public double QMandelEpsilon { get; set; } = 0.0012;
+
+        // Apollonian gasket (Descartes Circle Theorem recursive packing).
+        /// <summary>Maximum recursion depth for the Vieta-jump tree. The
+        /// inside-R sub-gaskets sit several levels deeper than the cusp circles
+        /// around the (−1, 2, 2, 3) seed, so the default is generous enough to
+        /// let those branches finish without the pixel-radius cutoff firing
+        /// before the sub-gasket starts. Default 24.</summary>
+        public int ApollonianDepth { get; set; } = 24;
+        /// <summary>Stop recursing when the next generated circle would draw
+        /// at fewer than this many device pixels of radius. Higher = lighter
+        /// renders, faster; lower = more detail at the cost of pile-up at
+        /// kissing-point cusps. Default 0.75.</summary>
+        public double ApollonianMinPixelRadius { get; set; } = 0.75;
+        /// <summary>When true, each circle is coloured by its recursion depth
+        /// modulo palette size. When false, colour is driven by log(radius)
+        /// — a smoother gradient that emphasises scale instead of generation.
+        /// Default true.</summary>
+        public bool ApollonianColorByDepth { get; set; } = true;
+
+        // Diffusion-Limited Aggregation (Witten–Sander 1981).
+        /// <summary>Number of random-walk particles launched into the
+        /// aggregate. Aggregate cell count = DlaParticles + 1 (initial
+        /// seed). Higher = denser tree, longer render. Default 8000 fills
+        /// a 512² canvas with a recognisable dendrite in well under a
+        /// second.</summary>
+        public int DlaParticles { get; set; } = 8000;
+        /// <summary>PRNG seed for the Witten–Sander walk. Identical (W, H,
+        /// seed, particles) reproduce the same tree. Default 12345.</summary>
+        public int DlaSeed { get; set; } = 12345;
+
+        // Kleinian limit set (3D, sphere-inversion Schottky group).
+        /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
+        /// sharper limit-set boundary, slower per ray sample. Default 16
+        /// covers the visible boundary; deep cusps need 24+.</summary>
+        public int KleinianIterations { get; set; } = 16;
+        /// <summary>Tetrahedral sphere arrangement scale. Centres sit at
+        /// (±s, ±s, ±s) with even parity and radius √2·s. At s = 1 the four
+        /// spheres are mutually tangent at the edge midpoints and the
+        /// fundamental domain shrinks to a single point at the origin;
+        /// smaller scales separate the spheres and open the domain.</summary>
+        public double KleinianSphereScale { get; set; } = 1.0;
+        /// <summary>Sphere-trace step cap. Default 160.</summary>
+        public int KleinianMaxSteps { get; set; } = 160;
+        /// <summary>Hit threshold for the sphere-trace DE. Default 0.0012.</summary>
+        public double KleinianEpsilon { get; set; } = 0.0012;
+        public double KleinianCameraDistance { get; set; } = 4.0;
+        public double KleinianCameraTheta { get; set; } = Math.PI * 0.25;
+        public double KleinianCameraPhi { get; set; } = Math.PI * 0.35;
+        public double KleinianLightTheta { get; set; } = Math.PI * 0.25;
+        public double KleinianLightPhi { get; set; } = Math.PI * 0.45;
+
+        // Bicomplex Mandelbrot (tessarine algebra, commutative; i² = j² = −1,
+        // k² = +1, ij = ji = k). Raymarched 3D slice; pixel (x, y, z) routes
+        // to (c.1, c.i, c.j) with c.k pinned to BicomplexSliceW.
+        /// <summary>k-component slice constant for the bicomplex Mandelbrot.
+        /// Pixel (x, y, z) becomes c = (x, y, z, sliceW). 0 collapses the slice
+        /// to a 3D extrusion of the standard 2D Mandelbrot; non-zero values
+        /// expose the zero-divisor seam slabs unique to the tessarine algebra.</summary>
+        public double BicomplexSliceW { get; set; } = 0.0;
+        /// <summary>DE inner iteration count. Default 11.</summary>
+        public int BicomplexIterations { get; set; } = 11;
+        /// <summary>|t|² escape threshold. 16 = canonical Hart bailout.</summary>
+        public double BicomplexBailout { get; set; } = 16.0;
+        public double BicomplexCameraDistance { get; set; } = 4.0;
+        public double BicomplexCameraTheta { get; set; } = Math.PI * 0.25;
+        public double BicomplexCameraPhi { get; set; } = Math.PI * 0.35;
+        public double BicomplexLightTheta { get; set; } = Math.PI * 0.25;
+        public double BicomplexLightPhi { get; set; } = Math.PI * 0.45;
+        public int BicomplexMaxSteps { get; set; } = 160;
+        public double BicomplexEpsilon { get; set; } = 0.0012;
 
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
@@ -217,6 +467,9 @@ namespace FracturingFog.Models
                 JuliaC = JuliaC,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
+                GlynnC = GlynnC,
+                LogisticBurnIn = LogisticBurnIn,
+                LogisticSeed = LogisticSeed,
                 NewtonPolyCoeffs = NewtonPolyCoeffs is null ? null : (Complex[])NewtonPolyCoeffs.Clone(),
                 IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
                 UserEquationSource = UserEquationSource,
@@ -230,12 +483,21 @@ namespace FracturingFog.Models
                 IFSIterations = IFSIterations,
                 LSystemPresetName = LSystemPresetName,
                 LSystemDepth = LSystemDepth,
+                PlasmaRoughness = PlasmaRoughness,
+                PlasmaSeed = PlasmaSeed,
+                FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
+                FlamePresetName = FlamePresetName,
+                FlameIterations = FlameIterations,
+                FlameGamma = FlameGamma,
+                FlameVibrancy = FlameVibrancy,
                 AttractorPresetName = AttractorPresetName,
                 AttractorIterations = AttractorIterations,
                 AttractorA = AttractorA, AttractorB = AttractorB,
                 AttractorC = AttractorC, AttractorD = AttractorD,
                 NewtonExponent = NewtonExponent,
                 NewtonRelaxation = NewtonRelaxation,
+                SecantInitialOffset = SecantInitialOffset,
+                SpiderCDecay = SpiderCDecay,
                 BuddhaSamples = BuddhaSamples,
                 BuddhaIterLow = BuddhaIterLow,
                 BuddhaIterMid = BuddhaIterMid,
@@ -244,6 +506,81 @@ namespace FracturingFog.Models
                 BuddhaQualityMode = BuddhaQualityMode,
                 BuddhaMetropolis = BuddhaMetropolis,
                 BuddhaProgressive = BuddhaProgressive,
+                MandelboxScale = MandelboxScale,
+                MandelboxFixedRadius = MandelboxFixedRadius,
+                MandelboxMinRadius = MandelboxMinRadius,
+                MandelboxIterations = MandelboxIterations,
+                MandelboxBailout = MandelboxBailout,
+                MandelboxCameraDistance = MandelboxCameraDistance,
+                MandelboxCameraTheta = MandelboxCameraTheta,
+                MandelboxCameraPhi = MandelboxCameraPhi,
+                MandelboxLightTheta = MandelboxLightTheta,
+                MandelboxLightPhi = MandelboxLightPhi,
+                MandelboxMaxSteps = MandelboxMaxSteps,
+                MandelboxEpsilon = MandelboxEpsilon,
+                KifsFold = KifsFold,
+                KifsIterations = KifsIterations,
+                KifsScale = KifsScale,
+                KifsOffsetX = KifsOffsetX,
+                KifsOffsetY = KifsOffsetY,
+                KifsOffsetZ = KifsOffsetZ,
+                KifsBailout = KifsBailout,
+                KifsCameraDistance = KifsCameraDistance,
+                KifsCameraTheta = KifsCameraTheta,
+                KifsCameraPhi = KifsCameraPhi,
+                KifsLightTheta = KifsLightTheta,
+                KifsLightPhi = KifsLightPhi,
+                KifsMaxSteps = KifsMaxSteps,
+                KifsEpsilon = KifsEpsilon,
+                QJuliaCX = QJuliaCX,
+                QJuliaCY = QJuliaCY,
+                QJuliaCZ = QJuliaCZ,
+                QJuliaCW = QJuliaCW,
+                QJuliaSliceW = QJuliaSliceW,
+                QJuliaIterations = QJuliaIterations,
+                QJuliaBailout = QJuliaBailout,
+                QJuliaCameraDistance = QJuliaCameraDistance,
+                QJuliaCameraTheta = QJuliaCameraTheta,
+                QJuliaCameraPhi = QJuliaCameraPhi,
+                QJuliaLightTheta = QJuliaLightTheta,
+                QJuliaLightPhi = QJuliaLightPhi,
+                QJuliaMaxSteps = QJuliaMaxSteps,
+                QJuliaEpsilon = QJuliaEpsilon,
+                QMandelSliceW = QMandelSliceW,
+                QMandelSliceZ = QMandelSliceZ,
+                QMandelIterations = QMandelIterations,
+                QMandelBailout = QMandelBailout,
+                QMandelCameraDistance = QMandelCameraDistance,
+                QMandelCameraTheta = QMandelCameraTheta,
+                QMandelCameraPhi = QMandelCameraPhi,
+                QMandelLightTheta = QMandelLightTheta,
+                QMandelLightPhi = QMandelLightPhi,
+                QMandelMaxSteps = QMandelMaxSteps,
+                QMandelEpsilon = QMandelEpsilon,
+                ApollonianDepth = ApollonianDepth,
+                ApollonianMinPixelRadius = ApollonianMinPixelRadius,
+                ApollonianColorByDepth = ApollonianColorByDepth,
+                DlaParticles = DlaParticles,
+                DlaSeed = DlaSeed,
+                KleinianIterations = KleinianIterations,
+                KleinianSphereScale = KleinianSphereScale,
+                KleinianMaxSteps = KleinianMaxSteps,
+                KleinianEpsilon = KleinianEpsilon,
+                KleinianCameraDistance = KleinianCameraDistance,
+                KleinianCameraTheta = KleinianCameraTheta,
+                KleinianCameraPhi = KleinianCameraPhi,
+                KleinianLightTheta = KleinianLightTheta,
+                KleinianLightPhi = KleinianLightPhi,
+                BicomplexSliceW = BicomplexSliceW,
+                BicomplexIterations = BicomplexIterations,
+                BicomplexBailout = BicomplexBailout,
+                BicomplexCameraDistance = BicomplexCameraDistance,
+                BicomplexCameraTheta = BicomplexCameraTheta,
+                BicomplexCameraPhi = BicomplexCameraPhi,
+                BicomplexLightTheta = BicomplexLightTheta,
+                BicomplexLightPhi = BicomplexLightPhi,
+                BicomplexMaxSteps = BicomplexMaxSteps,
+                BicomplexEpsilon = BicomplexEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,
@@ -319,6 +656,65 @@ namespace FracturingFog.Models
     /// Affine map for IFS chaos game. x' = a·x + b·y + e, y' = c·x + d·y + f. Picked with weight.
     /// </summary>
     public readonly record struct AffineMap(double A, double B, double C, double D, double E, double F, double Weight);
+
+    /// <summary>Apophysis-style variation. Each map runs its affine pre-
+    /// transform, then a single non-linear "variation" warps the output.
+    /// Slice 1 ships <see cref="Linear"/> (identity); slices 2–3 add the
+    /// other stock variations and their tone-map / palette glue.</summary>
+    public enum FlameVariation
+    {
+        /// <summary>v0 — identity. f(x,y) = (x, y).</summary>
+        Linear = 0,
+        /// <summary>v1 — sinusoidal. f = (sin x, sin y).</summary>
+        Sinusoidal = 1,
+        /// <summary>v2 — spherical. f = (x, y) / (x² + y²).</summary>
+        Spherical = 2,
+        /// <summary>v3 — swirl. r² = x²+y²; f = (x sin r² − y cos r², x cos r² + y sin r²).</summary>
+        Swirl = 3,
+        /// <summary>v5 — polar. θ = atan2(x,y); r = √(x²+y²); f = (θ/π, r − 1).</summary>
+        Polar = 5,
+        /// <summary>v6 — handkerchief unused; this slot is heart. f = r·(sin(θ·r), −cos(θ·r)).</summary>
+        Heart = 6,
+        /// <summary>v8 — disc. f = (θ/π · sin(π r), θ/π · cos(π r)).</summary>
+        Disc = 8,
+        /// <summary>v13 — julia. r = √(x²+y²); θ = atan2(x,y); φ = θ/2 + nπ;
+        /// f = √r · (cos φ, sin φ).</summary>
+        Julia = 13,
+    }
+
+    /// <summary>
+    /// Flame fractal map. Pre-affine + up to two blended non-linear
+    /// variations + post-affine + per-map colour index. Apophysis-equivalent.
+    ///
+    /// Pre-affine:  p  = A·v + t
+    /// Variations:  q  = Σ amount_i · V_i(p)
+    /// Post-affine: q' = P·q + tp
+    ///
+    /// The post-affine (Pa..Pf) defaults to the identity (1, 0, 0, 1, 0, 0)
+    /// so single-variation legacy presets behave as before.
+    /// </summary>
+    public readonly record struct FlameMap(
+        double A, double B, double C, double D, double E, double F,
+        double Weight,
+        FlameVariation Variation,
+        double VariationAmount,
+        double ColorIndex,
+        FlameVariation Variation2 = FlameVariation.Linear,
+        double VariationAmount2 = 0.0,
+        double Pa = 1.0, double Pb = 0.0, double Pc = 0.0, double Pd = 1.0,
+        double Pe = 0.0, double Pf = 0.0);
+
+    /// <summary>KIFS fold table choice. Each value selects a different
+    /// reflective-fold + scale combination inside KifsCalculator's DE.</summary>
+    public enum KifsFoldKind
+    {
+        /// <summary>Menger sponge fold — Knighty's sort-3 + scale-3
+        /// from (1,1,1). Produces the classic cube-with-holes shape.</summary>
+        Menger,
+        /// <summary>Sierpinski tetrahedron fold — 3 vertex reflections +
+        /// scale-2 from (1,1,1). Produces the tetra gasket.</summary>
+        Sierpinski,
+    }
 
     public enum UserBulbDEModeKind
     {

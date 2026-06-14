@@ -13,8 +13,8 @@
     <UseWindowsForms>false</UseWindowsForms>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Platforms>x64</Platforms>
-    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>AnyCPU;x64</Platforms>
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <RootNamespace>FracturingFog.Audio.Win</RootNamespace>
     <AssemblyName>FracturingFog.Audio.Win</AssemblyName>
   </PropertyGroup>

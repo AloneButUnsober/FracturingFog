@@ -26,7 +26,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Platforms>x64;arm64</Platforms>
+    <Platforms>AnyCPU;x64;arm64</Platforms>
     <RootNamespace>FracturingFog.Rendering.Skia</RootNamespace>
     <AssemblyName>FracturingFog.Rendering.Skia</AssemblyName>
   </PropertyGroup>

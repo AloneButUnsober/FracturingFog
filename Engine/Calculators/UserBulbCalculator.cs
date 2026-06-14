@@ -526,6 +526,15 @@ namespace FracturingFogDyn
             string wrappedBody = body.Contains("return") ? body : $"return {body};";
             sb.AppendLine($"    static Vec3 Step_{i}(Vec3 z, Vec3 c, int n, double[] __p, ChainCtx ctx) {{");
             sb.Append(ParamLocals(paramNames));
+            // Expose every prior step's output as a Vec3 local so the user
+            // source can reference it as a bare identifier (matches the
+            // chain editor docs and the Sandbox chain compiler's behavior).
+            for (int j = 0; j < i; j++)
+            {
+                string priorName = string.IsNullOrWhiteSpace(steps[j].OutputName) ? $"step{j}" : steps[j].OutputName;
+                if (!IdentRe.IsMatch(priorName)) continue;
+                sb.AppendLine($"        Vec3 {priorName} = ctx.Get(\"{priorName}\");");
+            }
             sb.AppendLine($"        {wrappedBody}");
             sb.AppendLine("    }");
         }

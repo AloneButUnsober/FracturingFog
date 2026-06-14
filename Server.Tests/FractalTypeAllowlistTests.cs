@@ -31,6 +31,22 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.StrangeAttractor)]
     [InlineData(FractalType.Mandelbulb)]
     [InlineData(FractalType.TearDrop)]
+    [InlineData(FractalType.Magnet1)]
+    [InlineData(FractalType.Magnet2)]
+    [InlineData(FractalType.Glynn)]
+    [InlineData(FractalType.Logistic)]
+    [InlineData(FractalType.Halley)]
+    [InlineData(FractalType.Secant)]
+    [InlineData(FractalType.Spider)]
+    [InlineData(FractalType.Mandelbox)]
+    [InlineData(FractalType.Kifs)]
+    [InlineData(FractalType.QuaternionJulia)]
+    [InlineData(FractalType.QuaternionMandelbrot)]
+    [InlineData(FractalType.Plasma)]
+    [InlineData(FractalType.Apollonian)]
+    [InlineData(FractalType.Kleinian)]
+    [InlineData(FractalType.BicomplexMandelbrot)]
+    [InlineData(FractalType.Dla)]
     public void AllowedTypes_AreAllowed(FractalType t)
     {
         Assert.True(FractalTypeAllowlist.IsAllowed(t));

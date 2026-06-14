@@ -89,6 +89,23 @@ namespace FracturingFog.Hosting
             new("User Bulb 3D",  HelpTextBundle.MathUserBulbText),
             new("Sandbox",       HelpTextBundle.MathSandboxText),
             new("Mandelbrot Z² (Generated)", HelpTextBundle.MathGeneratedZ2Text),
+            new("Magnet 1",      HelpTextBundle.MathMagnetOneText),
+            new("Magnet 2",      HelpTextBundle.MathMagnetTwoText),
+            new("Glynn",         HelpTextBundle.MathGlynnText),
+            new("Logistic",      HelpTextBundle.MathLogisticText),
+            new("Halley",        HelpTextBundle.MathHalleyText),
+            new("Secant",        HelpTextBundle.MathSecantText),
+            new("Spider",        HelpTextBundle.MathSpiderText),
+            new("Mandelbox",     HelpTextBundle.MathMandelboxText),
+            new("KIFS",          HelpTextBundle.MathKifsText),
+            new("Quaternion Julia", HelpTextBundle.MathQuatJuliaText),
+            new("Quaternion Mandelbrot", HelpTextBundle.MathQuatMandelbrotText),
+            new("Plasma",        HelpTextBundle.MathPlasmaText),
+            new("Flame",         HelpTextBundle.MathFlameText),
+            new("Apollonian",    HelpTextBundle.MathApollonianText),
+            new("Kleinian",      HelpTextBundle.MathKleinianText),
+            new("Bicomplex Mandelbrot", HelpTextBundle.MathBicomplexText),
+            new("DLA",           HelpTextBundle.MathDlaText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]

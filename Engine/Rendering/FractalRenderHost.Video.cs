@@ -1385,6 +1385,8 @@ namespace FracturingFog.Rendering
                 case EscapeTimeCalculator e: e.FractalType = ViewState.FractalType; e.FractalParameters = ViewState.FractalParameters; break;
                 case IFSCalculator ifs: ifs.FractalParameters = ViewState.FractalParameters; break;
                 case LSystemCalculator ls: ls.FractalParameters = ViewState.FractalParameters; break;
+                case PlasmaCalculator pl: pl.FractalParameters = ViewState.FractalParameters; break;
+                case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
                 case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;

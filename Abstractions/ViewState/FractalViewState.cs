@@ -148,6 +148,23 @@ namespace FracturingFog.ViewState
                 FractalType.GeneratedMandelbrotZ5 => ( 0.0, 0.0, 1.0),
                 FractalType.GeneratedTricorn      => ( 0.0, 0.0, 1.0),
                 FractalType.GeneratedBurningShip  => (-0.5,-0.5, 1.0),
+                FractalType.Magnet1               => ( 1.5,  0.0, 0.6),
+                FractalType.Magnet2               => ( 1.5,  0.0, 0.5),
+                FractalType.Glynn                 => (-0.2,  0.0, 0.7),
+                FractalType.Logistic              => ( 3.5,  0.5, 2.0),
+                FractalType.Halley                => ( 0.0,  0.0, 1.0),
+                FractalType.Secant                => ( 0.0,  0.0, 1.0),
+                FractalType.Spider                => ( 0.0,  0.0, 1.2),
+                FractalType.Mandelbox             => ( 0.0,  0.0, 1.0),
+                FractalType.Kifs                  => ( 0.0,  0.0, 1.0),
+                FractalType.QuaternionJulia       => ( 0.0,  0.0, 1.0),
+                FractalType.QuaternionMandelbrot  => ( 0.0,  0.0, 1.0),
+                FractalType.Plasma                => ( 0.0,  0.0, 1.0),
+                FractalType.Flame                 => ( 0.0,  0.0, 1.0),
+                FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
+                FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
+                FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
+                FractalType.Dla                   => ( 0.0,  0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;
@@ -167,6 +184,12 @@ namespace FracturingFog.ViewState
         /// <summary>True for fractal types that render in 3D camera space
         /// (camera dollies on zoom, right-drag rotates).</summary>
         public bool Is3D => FractalType == FractalType.Mandelbulb
+                         || FractalType == FractalType.Mandelbox
+                         || FractalType == FractalType.Kifs
+                         || FractalType == FractalType.QuaternionJulia
+                         || FractalType == FractalType.QuaternionMandelbrot
+                         || FractalType == FractalType.Kleinian
+                         || FractalType == FractalType.BicomplexMandelbrot
                          || FractalType == FractalType.UserBulb;
     }
 }

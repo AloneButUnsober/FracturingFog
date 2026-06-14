@@ -49,7 +49,7 @@ The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.Ap
 |---|---|
 | Real-time interactivity | Pan, zoom, color-cycle with smooth feedback |
 | Extreme zoom depth | Quad-double precision out to ~5 × 10⁵⁸ |
-| 20+ fractal families | Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Buddhabrot, IFS, L-System, Strange Attractor, Mandelbulb (3D), User Equation, Sandbox, User Bulb (3D), Tear Drop, + CalcGen Generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship) |
+| 20+ fractal families | Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Buddhabrot, IFS, L-System, Strange Attractor, Mandelbulb (3D), Mandelbox (3D), KIFS (3D), User Equation, Sandbox, User Bulb (3D), Tear Drop, Magnet 1/2, Glynn, Logistic, Halley, Secant, Spider, + CalcGen Generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship) |
 | 200+ color themes | Built-in palettes plus JSON-imported user themes plus algorithmic ColorGen DSL |
 | Full theme editor | Live-preview parameter tweaking with save/export + From-Image kmeans extractor |
 | Capture suite | PNG, multi-tile poster, MP4 video (built-in + ffmpeg lossless), PNG sequence |
@@ -566,6 +566,7 @@ Three authoring engines for one-off custom fractals.
 - 3D analogue of User Equation. Roslyn-compiled `Vec3 Step(Vec3 z, Vec3 c, int n, double[] p)` (or `Quat Step` for 4D mode).
 - Mandelbulb-style raymarching with analytic + numerical DE.
 - Animated `t` parameter; named scalar params; chain editor for multi-step recurrences.
+- Hybrid composition: drop in Mandelbox-fold / KIFS-Menger / KIFS-Sierpinski / Mandelbulb-power primitives from the **+ Primitive** menu, or load a worked-example chain from **Hybrid ▾** (Mandelbox+Mandelbulb, Menger+Mandelbulb).
 - OBJ mesh export.
 - Saved to `%APPDATA%\FracturingFog\userbulbs.json`.
 - See [Docs/UserBulb-Guide.md](Docs/UserBulb-Guide.md).
