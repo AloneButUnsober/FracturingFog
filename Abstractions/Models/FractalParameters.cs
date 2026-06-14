@@ -102,6 +102,32 @@ namespace FracturingFog.Models
         /// roughness) deterministically produces the same field.</summary>
         public int PlasmaSeed { get; set; } = 12345;
 
+        /// <summary>Optional explicit Flame-fractal map list. When null the
+        /// renderer falls back to <see cref="FlamePresetName"/> from
+        /// <c>FlamePresets.All</c>.</summary>
+        public List<FlameMap>? FlameMaps { get; set; }
+
+        /// <summary>Built-in Flame preset name. Default Sierpinski-Variation
+        /// is the simplest visually-distinct flame (Sierpinski IFS with
+        /// sinusoidal variation per leg).</summary>
+        public string FlamePresetName { get; set; } = "Sierpinski Variation";
+
+        /// <summary>Chaos-game sample count per render. Flames need an order
+        /// of magnitude more samples than plain IFS because variations
+        /// spread density and gamma tone-map needs a fat histogram.</summary>
+        public int FlameIterations { get; set; } = 8_000_000;
+
+        /// <summary>Gamma applied to the log-density before palette lookup.
+        /// Apophysis default 2.2. Lower = punchier highlights, higher = more
+        /// dynamic range in dim regions.</summary>
+        public double FlameGamma { get; set; } = 2.2;
+
+        /// <summary>Vibrancy ∈ [0, 1] (Apophysis term). Blends the gamma-
+        /// corrected colour back toward the linear colour: 1 = full
+        /// gamma-on-colour (saturated highlights), 0 = pure linear
+        /// (preserves filament tint). Default 0.8.</summary>
+        public double FlameVibrancy { get; set; } = 0.8;
+
         public string AttractorPresetName { get; set; } = "Clifford";
         public int AttractorIterations { get; set; } = 2_000_000;
         public double AttractorA { get; set; } = -1.4;
@@ -362,6 +388,11 @@ namespace FracturingFog.Models
                 LSystemDepth = LSystemDepth,
                 PlasmaRoughness = PlasmaRoughness,
                 PlasmaSeed = PlasmaSeed,
+                FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
+                FlamePresetName = FlamePresetName,
+                FlameIterations = FlameIterations,
+                FlameGamma = FlameGamma,
+                FlameVibrancy = FlameVibrancy,
                 AttractorPresetName = AttractorPresetName,
                 AttractorIterations = AttractorIterations,
                 AttractorA = AttractorA, AttractorB = AttractorB,
@@ -493,6 +524,43 @@ namespace FracturingFog.Models
     /// Affine map for IFS chaos game. x' = a·x + b·y + e, y' = c·x + d·y + f. Picked with weight.
     /// </summary>
     public readonly record struct AffineMap(double A, double B, double C, double D, double E, double F, double Weight);
+
+    /// <summary>Apophysis-style variation. Each map runs its affine pre-
+    /// transform, then a single non-linear "variation" warps the output.
+    /// Slice 1 ships <see cref="Linear"/> (identity); slices 2–3 add the
+    /// other stock variations and their tone-map / palette glue.</summary>
+    public enum FlameVariation
+    {
+        /// <summary>v0 — identity. f(x,y) = (x, y).</summary>
+        Linear = 0,
+        /// <summary>v1 — sinusoidal. f = (sin x, sin y).</summary>
+        Sinusoidal = 1,
+        /// <summary>v2 — spherical. f = (x, y) / (x² + y²).</summary>
+        Spherical = 2,
+        /// <summary>v3 — swirl. r² = x²+y²; f = (x sin r² − y cos r², x cos r² + y sin r²).</summary>
+        Swirl = 3,
+        /// <summary>v5 — polar. θ = atan2(x,y); r = √(x²+y²); f = (θ/π, r − 1).</summary>
+        Polar = 5,
+        /// <summary>v6 — handkerchief unused; this slot is heart. f = r·(sin(θ·r), −cos(θ·r)).</summary>
+        Heart = 6,
+        /// <summary>v8 — disc. f = (θ/π · sin(π r), θ/π · cos(π r)).</summary>
+        Disc = 8,
+        /// <summary>v13 — julia. r = √(x²+y²); θ = atan2(x,y); φ = θ/2 + nπ;
+        /// f = √r · (cos φ, sin φ).</summary>
+        Julia = 13,
+    }
+
+    /// <summary>
+    /// Flame fractal map. Affine pre-transform identical to <see cref="AffineMap"/>,
+    /// extended with a non-linear variation and a per-map colour index
+    /// (Apophysis convention: [0, 1] sample point on the active palette).
+    /// </summary>
+    public readonly record struct FlameMap(
+        double A, double B, double C, double D, double E, double F,
+        double Weight,
+        FlameVariation Variation,
+        double VariationAmount,
+        double ColorIndex);
 
     /// <summary>KIFS fold table choice. Each value selects a different
     /// reflective-fold + scale combination inside KifsCalculator's DE.</summary>

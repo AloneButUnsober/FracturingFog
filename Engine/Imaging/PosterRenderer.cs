@@ -255,6 +255,7 @@ namespace FracturingFog.Imaging
                 FractalType.Kifs             => new KifsCalculator(w, h),
                 FractalType.QuaternionJulia  => new QuatJuliaCalculator(w, h),
                 FractalType.Plasma           => new PlasmaCalculator(w, h),
+                FractalType.Flame            => new FlameRenderer(w, h),
                 FractalType.Sandbox          => new SandboxCalculator(w, h),
                 FractalType.UserBulb         => new UserBulbCalculator(w, h),
                 _                            => null
@@ -285,6 +286,7 @@ namespace FracturingFog.Imaging
                 case KifsCalculator kf:        kf.FractalParameters = req.FractalParameters; break;
                 case QuatJuliaCalculator qj:   qj.FractalParameters = req.FractalParameters; break;
                 case PlasmaCalculator pl:      pl.FractalParameters = req.FractalParameters; break;
+                case FlameRenderer fr:         fr.FractalParameters = req.FractalParameters; break;
                 case SandboxCalculator sb:     sb.FractalParameters = req.FractalParameters; break;
                 case UserBulbCalculator ub:    ub.FractalParameters = req.FractalParameters; break;
             }

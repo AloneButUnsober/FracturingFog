@@ -152,10 +152,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsKifs => FractalType == FractalType.Kifs;
     public bool IsQuatJulia => FractalType == FractalType.QuaternionJulia;
     public bool IsPlasma => FractalType == FractalType.Plasma;
+    public bool IsFlame => FractalType == FractalType.Flame;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia || IsPlasma);
+          || IsQuatJulia || IsPlasma || IsFlame);
 
     // ── Julia ──
     private double _juliaR;

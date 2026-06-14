@@ -129,6 +129,16 @@ namespace FracturingFog
         /// amplitude / very rough), <c>PlasmaSeed</c>. Pan/zoom is a
         /// no-op — the generated field IS the image.</summary>
         Plasma,
+        /// <summary>Flame fractal (Apophysis-style). IFS chaos game with
+        /// per-map non-linear "variation" (linear, sinusoidal, spherical,
+        /// swirl, polar, heart, disc, julia), gamma-corrected log-density
+        /// tone-map, and per-map colour index blended through the active
+        /// gradient palette. Rendered by <c>FlameRenderer</c>. Tunables on
+        /// <c>FractalParameters</c>: <c>FlamePresetName</c>,
+        /// <c>FlameIterations</c>, <c>FlameGamma</c>, <c>FlameVibrancy</c>,
+        /// plus an optional explicit <c>FlameMaps</c> list. Pan/zoom work
+        /// via the standard IFS-style attractor-fit convention.</summary>
+        Flame,
     }
 
     public enum RenderProfile { Preview, Final }
