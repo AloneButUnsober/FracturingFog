@@ -113,7 +113,12 @@ public sealed class FlameRenderer : IFractalCalculator
         Parallel.For(0, threadCount, new ParallelOptions { CancellationToken = ct }, t =>
         {
             if (ct.IsCancellationRequested) return;
-            var rng = new Random(unchecked(Environment.TickCount * 73856093 + t * 19349663));
+            // Deterministic seed per thread. Two renders of the same
+            // (preset, iter) reproduce the exact same chaos-game realization
+            // so when the user nudges Gamma / Vibrancy the only visible
+            // change is the tone-map response — RNG variance no longer
+            // masks the slider effect with per-pixel noise.
+            var rng = new Random(unchecked(t * 19349663 + 0x5A3C9F));
             var lh = localHits[t];
             var lc = localColor[t];
 
@@ -166,62 +171,17 @@ public sealed class FlameRenderer : IFractalCalculator
 
         // ── Tone-map ──
         // Apophysis-style gamma + vibrancy over a log-density histogram.
-        //   alpha   = log(hit + 1) / log(refMax + 1)              ∈ [0, 1]
+        //   alpha   = log(hit + 1) / log(maxHit + 1)              ∈ [0, 1]
         //   alphaG  = alpha ^ (1 / gamma)                          gamma-boost
         //   bright  = vibrancy · alphaG + (1 − vibrancy) · alpha   blend
         //   colour  = palette.Map(avgColorIndex)                   sample
         //   out     = colour · bright                              modulate
-        // Vibrancy = 1 produces saturated gamma highlights; 0 keeps the
-        // filament tint linear in density.
-        //
-        // Auto-exposure: refMax is the 99.5th-percentile log-density
-        // (computed via a 1024-bucket histogram), not the true peak. A
-        // single very bright pixel doesn't dim the rest of the image; the
-        // bulk of the attractor sits in the gamma-active range instead of
-        // pinned at α = 1.
-        uint trueMaxHit = 0;
-        int nonZero = 0;
-        for (int i = 0; i < _hits.Length; i++)
-        {
-            uint h = _hits[i];
-            if (h > 0) nonZero++;
-            if (h > trueMaxHit) trueMaxHit = h;
-        }
-
-        double invLogMax;
-        if (trueMaxHit < 2 || nonZero == 0)
-        {
-            invLogMax = 1.0;
-        }
-        else
-        {
-            double invLogTrueMax = 1.0 / Math.Log(trueMaxHit + 1);
-            const int BUCKETS = 1024;
-            var buckets = new int[BUCKETS];
-            for (int i = 0; i < _hits.Length; i++)
-            {
-                uint h = _hits[i];
-                if (h == 0) continue;
-                double t = Math.Log(h + 1) * invLogTrueMax;
-                int b = (int)(t * (BUCKETS - 1));
-                if (b < 0) b = 0;
-                else if (b > BUCKETS - 1) b = BUCKETS - 1;
-                buckets[b]++;
-            }
-            int target = (int)(nonZero * 0.995);
-            int cumHits = 0;
-            int refBucket = BUCKETS - 1;
-            for (int b = 0; b < BUCKETS; b++)
-            {
-                cumHits += buckets[b];
-                if (cumHits >= target) { refBucket = b; break; }
-            }
-            // Effective reference fraction in log-density space [0, 1].
-            // Clamp to avoid divide-by-zero when the attractor lit a
-            // single sliver of density (refBucket = 0).
-            double refFrac = Math.Max(1.0 / BUCKETS, (refBucket + 1.0) / BUCKETS);
-            invLogMax = invLogTrueMax / refFrac;
-        }
+        // True-max normalization (no auto-exposure clip). Keeps the bulk
+        // of pixels in the gamma-active range α < 1 — auto-exposure
+        // pushed too many α values near 1 where γ has no visible effect.
+        uint maxHit = 0;
+        for (int i = 0; i < _hits.Length; i++) if (_hits[i] > maxHit) maxHit = _hits[i];
+        double invLogMax = maxHit > 1 ? 1.0 / Math.Log(maxHit + 1) : 1.0;
 
         double gamma = Math.Max(0.1, FractalParameters.FlameGamma);
         double invGamma = 1.0 / gamma;
@@ -236,7 +196,7 @@ public sealed class FlameRenderer : IFractalCalculator
                 ColorBuffer[i] = ColorMap.InSetColor;
                 continue;
             }
-            double alpha = Math.Min(1.0, Math.Log(h + 1) * invLogMax);
+            double alpha = Math.Log(h + 1) * invLogMax;
             double alphaG = Math.Pow(alpha, invGamma);
             double bright = vib * alphaG + (1.0 - vib) * alpha;
 
