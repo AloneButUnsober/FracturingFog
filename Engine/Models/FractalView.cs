@@ -138,7 +138,8 @@ namespace FracturingFog.Models
             {FractalType.QuaternionMandelbrot, "Quaternion Mandelbrot" },
             {FractalType.Plasma, "Plasma" },
             {FractalType.Flame, "Flame" },
-            {FractalType.Apollonian, "Apollonian" }
+            {FractalType.Apollonian, "Apollonian" },
+            {FractalType.Kleinian, "Kleinian" }
         };
     }
 

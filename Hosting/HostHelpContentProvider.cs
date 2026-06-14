@@ -103,6 +103,7 @@ namespace FracturingFog.Hosting
             new("Plasma",        HelpTextBundle.MathPlasmaText),
             new("Flame",         HelpTextBundle.MathFlameText),
             new("Apollonian",    HelpTextBundle.MathApollonianText),
+            new("Kleinian",      HelpTextBundle.MathKleinianText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]

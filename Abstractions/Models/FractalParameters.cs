@@ -314,6 +314,27 @@ namespace FracturingFog.Models
         /// Default true.</summary>
         public bool ApollonianColorByDepth { get; set; } = true;
 
+        // Kleinian limit set (3D, sphere-inversion Schottky group).
+        /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
+        /// sharper limit-set boundary, slower per ray sample. Default 16
+        /// covers the visible boundary; deep cusps need 24+.</summary>
+        public int KleinianIterations { get; set; } = 16;
+        /// <summary>Tetrahedral sphere arrangement scale. Centres sit at
+        /// (±s, ±s, ±s) with even parity and radius √2·s. At s = 1 the four
+        /// spheres are mutually tangent at the edge midpoints and the
+        /// fundamental domain shrinks to a single point at the origin;
+        /// smaller scales separate the spheres and open the domain.</summary>
+        public double KleinianSphereScale { get; set; } = 1.0;
+        /// <summary>Sphere-trace step cap. Default 160.</summary>
+        public int KleinianMaxSteps { get; set; } = 160;
+        /// <summary>Hit threshold for the sphere-trace DE. Default 0.0012.</summary>
+        public double KleinianEpsilon { get; set; } = 0.0012;
+        public double KleinianCameraDistance { get; set; } = 4.0;
+        public double KleinianCameraTheta { get; set; } = Math.PI * 0.25;
+        public double KleinianCameraPhi { get; set; } = Math.PI * 0.35;
+        public double KleinianLightTheta { get; set; } = Math.PI * 0.25;
+        public double KleinianLightPhi { get; set; } = Math.PI * 0.45;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -508,6 +529,15 @@ namespace FracturingFog.Models
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
+                KleinianIterations = KleinianIterations,
+                KleinianSphereScale = KleinianSphereScale,
+                KleinianMaxSteps = KleinianMaxSteps,
+                KleinianEpsilon = KleinianEpsilon,
+                KleinianCameraDistance = KleinianCameraDistance,
+                KleinianCameraTheta = KleinianCameraTheta,
+                KleinianCameraPhi = KleinianCameraPhi,
+                KleinianLightTheta = KleinianLightTheta,
+                KleinianLightPhi = KleinianLightPhi,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

@@ -162,6 +162,7 @@ namespace FracturingFog.ViewState
                 FractalType.Plasma                => ( 0.0,  0.0, 1.0),
                 FractalType.Flame                 => ( 0.0,  0.0, 1.0),
                 FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
+                FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;
@@ -185,6 +186,7 @@ namespace FracturingFog.ViewState
                          || FractalType == FractalType.Kifs
                          || FractalType == FractalType.QuaternionJulia
                          || FractalType == FractalType.QuaternionMandelbrot
+                         || FractalType == FractalType.Kleinian
                          || FractalType == FractalType.UserBulb;
     }
 }

@@ -160,6 +160,16 @@ namespace FracturingFog
         /// <c>ApollonianColorByDepth</c>. Pan/zoom supported — deeper detail
         /// auto-reveals as the device pixel pitch shrinks.</summary>
         Apollonian,
+        /// <summary>Kleinian limit set — 3D fractal produced by iterated
+        /// inversion in a Schottky-style group of reflection spheres. First
+        /// cut ships a tetrahedral 4-sphere preset (radius √2 at the four
+        /// even-parity ±1 corners). DE = signed nearest-sphere distance /
+        /// accumulated inversion-scale product, raymarched by sphere tracing
+        /// with finite-difference normals and Phong shading. Tunables on
+        /// <c>FractalParameters</c>: <c>KleinianIterations</c>,
+        /// <c>KleinianSphereScale</c> (loosens / tightens the tetrahedral
+        /// packing), plus shared camera / light fields.</summary>
+        Kleinian,
     }
 
     public enum RenderProfile { Preview, Final }

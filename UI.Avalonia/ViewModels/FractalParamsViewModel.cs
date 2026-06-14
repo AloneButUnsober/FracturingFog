@@ -114,6 +114,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _apolloDepth = _p.ApollonianDepth;
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
+        _kleinIter = _p.KleinianIterations;
+        _kleinScale = _p.KleinianSphereScale;
+        _kleinCameraTheta = _p.KleinianCameraTheta;
+        _kleinCameraPhi = _p.KleinianCameraPhi;
+        _kleinCameraDistance = _p.KleinianCameraDistance;
         _flamePresetName = _p.FlamePresetName;
         _flameIterations = _p.FlameIterations;
         _flameGamma = _p.FlameGamma;
@@ -170,10 +175,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsPlasma => FractalType == FractalType.Plasma;
     public bool IsFlame => FractalType == FractalType.Flame;
     public bool IsApollonian => FractalType == FractalType.Apollonian;
+    public bool IsKleinian => FractalType == FractalType.Kleinian;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian);
+          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian);
 
     // ── Julia ──
     private double _juliaR;
@@ -694,6 +700,18 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double ApollonianMinPixelRadius { get => _apolloMinPx; set { Set(ref _apolloMinPx, Clamp(value, 0.25, 16.0)); _p.ApollonianMinPixelRadius = _apolloMinPx; Fire(); } }
     private bool _apolloColorByDepth;
     public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
+
+    // ── Kleinian ──
+    private int _kleinIter;
+    public int KleinianIterations { get => _kleinIter; set { Set(ref _kleinIter, (int)Clamp(value, 2, 64)); _p.KleinianIterations = _kleinIter; Fire(); } }
+    private double _kleinScale;
+    public double KleinianSphereScale { get => _kleinScale; set { Set(ref _kleinScale, Clamp(value, 0.25, 4.0)); _p.KleinianSphereScale = _kleinScale; Fire(); } }
+    private double _kleinCameraTheta;
+    public double KleinianCameraTheta { get => _kleinCameraTheta; set { Set(ref _kleinCameraTheta, Clamp(value, -10, 10)); _p.KleinianCameraTheta = _kleinCameraTheta; Fire(); } }
+    private double _kleinCameraPhi;
+    public double KleinianCameraPhi { get => _kleinCameraPhi; set { Set(ref _kleinCameraPhi, Clamp(value, 0.01, 3.13)); _p.KleinianCameraPhi = _kleinCameraPhi; Fire(); } }
+    private double _kleinCameraDistance;
+    public double KleinianCameraDistance { get => _kleinCameraDistance; set { Set(ref _kleinCameraDistance, Clamp(value, 0.1, 500)); _p.KleinianCameraDistance = _kleinCameraDistance; Fire(); } }
 
     // ── Flame ──
     private string _flamePresetName = "Sierpinski Variation";
