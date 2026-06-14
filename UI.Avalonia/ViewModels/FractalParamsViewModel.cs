@@ -102,6 +102,8 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _qjCameraTheta = _p.QJuliaCameraTheta;
         _qjCameraPhi = _p.QJuliaCameraPhi;
         _qjCameraDistance = _p.QJuliaCameraDistance;
+        _plasmaRoughness = _p.PlasmaRoughness;
+        _plasmaSeed = _p.PlasmaSeed;
 
         CloseCommand = ReactiveCommand.Create(() =>
         {
@@ -149,10 +151,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsMandelbox => FractalType == FractalType.Mandelbox;
     public bool IsKifs => FractalType == FractalType.Kifs;
     public bool IsQuatJulia => FractalType == FractalType.QuaternionJulia;
+    public bool IsPlasma => FractalType == FractalType.Plasma;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia);
+          || IsQuatJulia || IsPlasma);
 
     // ── Julia ──
     private double _juliaR;
@@ -647,6 +650,12 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double QJuliaCameraPhi { get => _qjCameraPhi; set { Set(ref _qjCameraPhi, Clamp(value, 0.01, 3.13)); _p.QJuliaCameraPhi = _qjCameraPhi; Fire(); } }
     private double _qjCameraDistance;
     public double QJuliaCameraDistance { get => _qjCameraDistance; set { Set(ref _qjCameraDistance, Clamp(value, 0.1, 500)); _p.QJuliaCameraDistance = _qjCameraDistance; Fire(); } }
+
+    // ── Plasma ──
+    private double _plasmaRoughness;
+    public double PlasmaRoughness { get => _plasmaRoughness; set { Set(ref _plasmaRoughness, Clamp(value, 0.0, 1.0)); _p.PlasmaRoughness = _plasmaRoughness; Fire(); } }
+    private int _plasmaSeed;
+    public int PlasmaSeed { get => _plasmaSeed; set { Set(ref _plasmaSeed, value); _p.PlasmaSeed = _plasmaSeed; Fire(); } }
 
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 

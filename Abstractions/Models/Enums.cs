@@ -119,6 +119,16 @@ namespace FracturingFog
         /// <c>QJuliaSliceW</c>, plus shared iter / bailout / camera /
         /// light fields.</summary>
         QuaternionJulia,
+        /// <summary>Plasma (diamond-square midpoint displacement).
+        /// Procedural 2D noise field with fractional-Brownian statistics —
+        /// not strictly a fractal but visually fractal-like. Rendered by
+        /// <c>PlasmaCalculator</c> in a single pass: generate the (2ⁿ+1)²
+        /// height grid, normalise, sample through the active
+        /// <c>IColorMap</c>. Tunables on <c>FractalParameters</c>:
+        /// <c>PlasmaRoughness</c> (0 = smooth gradient, 1 = full
+        /// amplitude / very rough), <c>PlasmaSeed</c>. Pan/zoom is a
+        /// no-op — the generated field IS the image.</summary>
+        Plasma,
     }
 
     public enum RenderProfile { Preview, Final }

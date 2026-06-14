@@ -434,6 +434,22 @@
                                Value="{Binding QJuliaCameraDistance, Mode=TwoWay}" Margin="0,2" />
             </Grid>
 
+            <!-- Plasma -->
+            <Grid IsVisible="{Binding IsPlasma}"
+                  ColumnDefinitions="160,*"
+                  RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Roughness:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="0.0" Maximum="1.0" Increment="0.05" FormatString="F2"
+                               Value="{Binding PlasmaRoughness, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Per-subdivision displacement decay. 0 = smooth gradient, 1 = full amplitude (jagged)." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                               Value="{Binding PlasmaSeed, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="PRNG seed — same seed + roughness + size = identical field." />
+            </Grid>
+
             <!-- Empty state -->
             <TextBlock IsVisible="{Binding HasNoParams}"
                        Text="{Binding EmptyStateText}"

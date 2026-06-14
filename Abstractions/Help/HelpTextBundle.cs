@@ -4606,6 +4606,64 @@ it just re-runs the DE with a different starting q.W and the
 existing camera, lighting, theme and post-FX all transfer.
 ";
 
+        public const string MathPlasmaText =
+@"=== Plasma (Diamond-Square) ===
+
+Not strictly a fractal — Fournier, Fussell & Carpenter's 1982
+diamond-square algorithm builds a 2D height field whose
+power spectrum is approximately 1/f^β, the same self-similar
+statistics produced by fractional Brownian motion.  Visually
+it's the classic ""cloud"" / terrain noise that ships in
+every fractal generator going back to Apophysis.
+
+=== Construction ===
+
+Choose the smallest power-of-two grid (size 2ⁿ + 1) covering
+the longer image edge.  Seed the four corners with random
+values in [0, 1].  Then for each subdivision level:
+
+  1. Square step.  For every cell centre, average the four
+     surrounding corner heights and add a random jitter in
+     (−amp, +amp).
+  2. Diamond step.  For every edge midpoint, average the
+     (up to four) cardinal neighbours and add the same kind
+     of jitter.
+  3. Halve the step size; multiply amp by 2^(−roughness).
+
+The displacement schedule controls the fractal dimension of
+the resulting surface.  Continuous-everywhere, nowhere-
+differentiable surfaces correspond to roughness ≈ 0.5; lower
+roughness produces visibly smooth gradients, higher
+roughness produces jagged mountain terrain.
+
+After the field is built it's normalised to [0, 1] and
+sampled bilinearly into the output buffer, mapped through
+the active gradient palette.
+
+=== Parameters ===
+
+  PlasmaRoughness : double  0..1.  0 = smooth gradient,
+                            1 = full amplitude (no decay).
+                            Default 0.55 — Apophysis-style cloud.
+  PlasmaSeed      : int     PRNG seed.  Same seed + roughness
+                            + image size = identical field.
+
+=== Implementation notes ===
+
+The field is generated once per render; pan and zoom are
+disabled because the procedural domain has no natural
+notion of coordinates outside the seed grid.  Re-rendering
+with the same seed at a different output size reuses the
+same conceptual surface but resamples the (2ⁿ + 1) grid
+that fits the new dimensions, so the pattern morphs
+slightly with viewport size — not a bug, an artefact of
+the grid quantisation.
+
+Themes that work on density / smooth-iter palettes carry
+over directly: the height value is fed to IColorMap.Map
+in the same [0, 256) range escape-time fractals use.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 

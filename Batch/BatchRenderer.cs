@@ -40,6 +40,8 @@ namespace FracturingFog.Batch
             if (!string.IsNullOrWhiteSpace(opts.LSystemPresetName))
                                                   fp.LSystemPresetName  = opts.LSystemPresetName!;
             if (opts.LSystemDepth.HasValue)       fp.LSystemDepth       = opts.LSystemDepth.Value;
+            if (opts.PlasmaRoughness.HasValue)    fp.PlasmaRoughness    = opts.PlasmaRoughness.Value;
+            if (opts.PlasmaSeed.HasValue)         fp.PlasmaSeed         = opts.PlasmaSeed.Value;
 
             var req = new PosterRequest
             {
