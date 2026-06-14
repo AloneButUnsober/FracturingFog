@@ -335,6 +335,26 @@ namespace FracturingFog.Models
         public double KleinianLightTheta { get; set; } = Math.PI * 0.25;
         public double KleinianLightPhi { get; set; } = Math.PI * 0.45;
 
+        // Bicomplex Mandelbrot (tessarine algebra, commutative; i² = j² = −1,
+        // k² = +1, ij = ji = k). Raymarched 3D slice; pixel (x, y, z) routes
+        // to (c.1, c.i, c.j) with c.k pinned to BicomplexSliceW.
+        /// <summary>k-component slice constant for the bicomplex Mandelbrot.
+        /// Pixel (x, y, z) becomes c = (x, y, z, sliceW). 0 collapses the slice
+        /// to a 3D extrusion of the standard 2D Mandelbrot; non-zero values
+        /// expose the zero-divisor seam slabs unique to the tessarine algebra.</summary>
+        public double BicomplexSliceW { get; set; } = 0.0;
+        /// <summary>DE inner iteration count. Default 11.</summary>
+        public int BicomplexIterations { get; set; } = 11;
+        /// <summary>|t|² escape threshold. 16 = canonical Hart bailout.</summary>
+        public double BicomplexBailout { get; set; } = 16.0;
+        public double BicomplexCameraDistance { get; set; } = 4.0;
+        public double BicomplexCameraTheta { get; set; } = Math.PI * 0.25;
+        public double BicomplexCameraPhi { get; set; } = Math.PI * 0.35;
+        public double BicomplexLightTheta { get; set; } = Math.PI * 0.25;
+        public double BicomplexLightPhi { get; set; } = Math.PI * 0.45;
+        public int BicomplexMaxSteps { get; set; } = 160;
+        public double BicomplexEpsilon { get; set; } = 0.0012;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -538,6 +558,16 @@ namespace FracturingFog.Models
                 KleinianCameraPhi = KleinianCameraPhi,
                 KleinianLightTheta = KleinianLightTheta,
                 KleinianLightPhi = KleinianLightPhi,
+                BicomplexSliceW = BicomplexSliceW,
+                BicomplexIterations = BicomplexIterations,
+                BicomplexBailout = BicomplexBailout,
+                BicomplexCameraDistance = BicomplexCameraDistance,
+                BicomplexCameraTheta = BicomplexCameraTheta,
+                BicomplexCameraPhi = BicomplexCameraPhi,
+                BicomplexLightTheta = BicomplexLightTheta,
+                BicomplexLightPhi = BicomplexLightPhi,
+                BicomplexMaxSteps = BicomplexMaxSteps,
+                BicomplexEpsilon = BicomplexEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

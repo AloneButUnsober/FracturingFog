@@ -119,6 +119,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _kleinCameraTheta = _p.KleinianCameraTheta;
         _kleinCameraPhi = _p.KleinianCameraPhi;
         _kleinCameraDistance = _p.KleinianCameraDistance;
+        _bcSliceW = _p.BicomplexSliceW;
+        _bcIterations = _p.BicomplexIterations;
+        _bcCameraTheta = _p.BicomplexCameraTheta;
+        _bcCameraPhi = _p.BicomplexCameraPhi;
+        _bcCameraDistance = _p.BicomplexCameraDistance;
         _flamePresetName = _p.FlamePresetName;
         _flameIterations = _p.FlameIterations;
         _flameGamma = _p.FlameGamma;
@@ -176,10 +181,12 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsFlame => FractalType == FractalType.Flame;
     public bool IsApollonian => FractalType == FractalType.Apollonian;
     public bool IsKleinian => FractalType == FractalType.Kleinian;
+    public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian);
+          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian
+          || IsBicomplexMandelbrot);
 
     // ── Julia ──
     private double _juliaR;
@@ -700,6 +707,18 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double ApollonianMinPixelRadius { get => _apolloMinPx; set { Set(ref _apolloMinPx, Clamp(value, 0.25, 16.0)); _p.ApollonianMinPixelRadius = _apolloMinPx; Fire(); } }
     private bool _apolloColorByDepth;
     public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
+
+    // ── Bicomplex Mandelbrot ──
+    private double _bcSliceW;
+    public double BicomplexSliceW { get => _bcSliceW; set { Set(ref _bcSliceW, Clamp(value, -2, 2)); _p.BicomplexSliceW = _bcSliceW; Fire(); } }
+    private int _bcIterations;
+    public int BicomplexIterations { get => _bcIterations; set { Set(ref _bcIterations, (int)Clamp(value, 2, 32)); _p.BicomplexIterations = _bcIterations; Fire(); } }
+    private double _bcCameraTheta;
+    public double BicomplexCameraTheta { get => _bcCameraTheta; set { Set(ref _bcCameraTheta, Clamp(value, -10, 10)); _p.BicomplexCameraTheta = _bcCameraTheta; Fire(); } }
+    private double _bcCameraPhi;
+    public double BicomplexCameraPhi { get => _bcCameraPhi; set { Set(ref _bcCameraPhi, Clamp(value, 0.01, 3.13)); _p.BicomplexCameraPhi = _bcCameraPhi; Fire(); } }
+    private double _bcCameraDistance;
+    public double BicomplexCameraDistance { get => _bcCameraDistance; set { Set(ref _bcCameraDistance, Clamp(value, 0.1, 500)); _p.BicomplexCameraDistance = _bcCameraDistance; Fire(); } }
 
     // ── Kleinian ──
     private int _kleinIter;

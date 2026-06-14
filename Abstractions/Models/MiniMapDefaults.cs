@@ -29,6 +29,7 @@ public static class MiniMapDefaults
         FractalType.QuaternionJulia => false,
         FractalType.QuaternionMandelbrot => false,
         FractalType.Kleinian   => false,
+        FractalType.BicomplexMandelbrot => false,
         FractalType.UserBulb   => false,
         _                      => true
     };
@@ -73,6 +74,7 @@ public static class MiniMapDefaults
         FractalType.Flame            => new( 0.0,  0.0, 1.0),
         FractalType.Apollonian       => new( 0.0,  0.0, 2.0),
         FractalType.Kleinian         => new( 0.0,  0.0, 1.0),
+        FractalType.BicomplexMandelbrot => new( 0.0,  0.0, 1.0),
         _                            => new( 0.0,  0.0, 1.0)
     };
 
