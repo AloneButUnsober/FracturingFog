@@ -98,6 +98,10 @@ namespace FracturingFog.Batch
         public int? LSystemDepth { get; set; }
         public double? PlasmaRoughness { get; set; }
         public int? PlasmaSeed { get; set; }
+        public string? FlamePresetName { get; set; }
+        public int? FlameIterations { get; set; }
+        public double? FlameGamma { get; set; }
+        public double? FlameVibrancy { get; set; }
 
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
@@ -332,6 +336,27 @@ namespace FracturingFog.Batch
                     case "--plasma-seed":
                         if (!NextInt(args, ref i, a, out int psv, out error)) return false;
                         opts.PlasmaSeed = psv;
+                        break;
+
+                    case "--flame-preset":
+                    case "--flame":
+                        if (!Next(args, ref i, a, out string fpv, out error)) return false;
+                        opts.FlamePresetName = fpv;
+                        break;
+
+                    case "--flame-iter":
+                        if (!NextInt(args, ref i, a, out int fiv, out error)) return false;
+                        opts.FlameIterations = fiv;
+                        break;
+
+                    case "--flame-gamma":
+                        if (!NextDouble(args, ref i, a, out double fgv, out error)) return false;
+                        opts.FlameGamma = fgv;
+                        break;
+
+                    case "--flame-vibrancy":
+                        if (!NextDouble(args, ref i, a, out double fvv, out error)) return false;
+                        opts.FlameVibrancy = fvv;
                         break;
 
                     case "--remote":

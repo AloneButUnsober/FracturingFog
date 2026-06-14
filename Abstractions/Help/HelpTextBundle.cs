@@ -4664,6 +4664,97 @@ over directly: the height value is fed to IColorMap.Map
 in the same [0, 256) range escape-time fractals use.
 ";
 
+        public const string MathFlameText =
+@"=== Flame Fractals (Apophysis-style) ===
+
+Draves & Reckase, ""The Fractal Flame Algorithm"" (2003).  A flame
+is an iterated function system (IFS) where each map is the
+composition of an affine pre-transform and a single non-linear
+""variation"".  The result is tone-mapped through a log-density
+histogram with gamma correction and per-map colour blending — the
+visual signature of every Apophysis / Chaotica / Electric Sheep
+flame ever rendered.
+
+=== Construction ===
+
+For each chaos-game step:
+  1. Pick map i with probability w_i / Σ w_j.
+  2. Apply the affine pre-transform
+        p' = A · p + t
+     (six coefficients per map: A is 2×2, t is 2-vector).
+  3. Apply the non-linear variation v_i
+        q = V_{v_i}(p', amount_i).
+  4. Update the running per-point colour
+        c ← (c + colorIndex_i) · 0.5
+     (geometric blend of every map traversed so far).
+  5. Splat the (q, c) sample into the per-pixel hit + colour
+     histograms.
+
+After 8 M (default) samples the histograms drive the tone-map:
+  α     = log(hit + 1) / log(maxHit + 1)            density
+  α_γ   = α ^ (1 / gamma)                            gamma-boost
+  bright = vibrancy · α_γ + (1 − vibrancy) · α       blend
+  rgb   = palette(avgColor) · bright                 modulate
+
+=== Variations (Slice 2) ===
+
+Eight stock variations are wired:
+
+  Linear      identity
+  Sinusoidal  (sin x, sin y)
+  Spherical   (x, y) / (x² + y²)
+  Swirl       rotate by r² about the origin
+  Polar       (θ/π, r − 1)
+  Heart       r · (sin θr, −cos θr)
+  Disc        (θ/π) · (sin πr, cos πr)
+  Julia       √r · (cos φ, sin φ), φ = θ/2 + nπ random
+
+Apophysis ships ~49 variations; the eight here are the ones
+that appear in essentially every gallery flame.  Adding more is
+mechanical — extend FlameVariation + ApplyVariation in
+FlameRenderer.cs.
+
+=== Parameters ===
+
+  FlamePresetName : string  Built-in map table name.
+  FlameMaps       : list    Optional explicit map list (overrides
+                            the preset when non-null).
+  FlameIterations : int     Chaos-game sample count.  Default 8M;
+                            density-quality scales with √N.
+  FlameGamma      : double  Tone-map gamma exponent.  Default 2.2
+                            (Apophysis default).
+  FlameVibrancy   : double  Highlight saturation blend, 0..1.
+                            0 = linear density (preserves filament
+                            tint), 1 = full gamma-on-colour.
+
+=== Built-in presets ===
+
+  Sierpinski Linear     — Sierpinski IFS, Linear variation only.
+                          Identical shape to the IFS preset but
+                          routed through gamma + per-map colour.
+  Sierpinski Variation  — Sinusoidal-warped Sierpinski.
+  Spherical Pair        — 2-map spherical inversion.
+  Swirl Gasket          — 3-leg gasket with r²-swirl rotation.
+  Heart Sierpinski      — Concave Heart-warped Sierpinski.
+  Polar Julia           — Polar + Julia + Disc three-map blend.
+
+=== Implementation notes ===
+
+Spherical clamps to the origin inside a 1e-20 safety bubble to
+avoid NaN at the inversion pole.  Julia's two-branch random
+rotation uses a thread-local Random so the main chaos-game RNG
+stays deterministic across slices.  The attractor-bbox pass
+discards samples whose coordinates have already gone NaN /
+infinity, so a sampler that lands inside a singular pole during
+its 30 k-sample fit doesn't squash the rest of the set into a
+single pixel.
+
+Themes that work on density / smooth-iter palettes feed directly
+through this renderer — average colour index sits in [0, 1] and
+is fed to IColorMap.Map in the same [0, 256) range escape-time
+fractals use.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 

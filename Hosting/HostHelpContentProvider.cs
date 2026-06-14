@@ -100,6 +100,7 @@ namespace FracturingFog.Hosting
             new("KIFS",          HelpTextBundle.MathKifsText),
             new("Quaternion Julia", HelpTextBundle.MathQuatJuliaText),
             new("Plasma",        HelpTextBundle.MathPlasmaText),
+            new("Flame",         HelpTextBundle.MathFlameText),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]

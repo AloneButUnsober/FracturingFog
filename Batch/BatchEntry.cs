@@ -106,7 +106,7 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              AntiNebulabrot|IFS|LSystem|StrangeAttractor|");
             Console.WriteLine("                              UserEquation|Mandelbulb|Mandelbox|Kifs|Sandbox|UserBulb|");
             Console.WriteLine("                              TearDrop|Magnet1|Magnet2|Glynn|Logistic|Halley|");
-            Console.WriteLine("                              Secant|Spider|QuaternionJulia|Plasma|");
+            Console.WriteLine("                              Secant|Spider|QuaternionJulia|Plasma|Flame|");
             Console.WriteLine("                              GeneratedMandelbrotZ2..Z5|");
             Console.WriteLine("                              GeneratedTricorn|GeneratedBurningShip");
             Console.WriteLine("  --theme NAME, -t NAME       Color theme name (default: HSV)");
@@ -122,6 +122,12 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --plasma-roughness F        Plasma diamond-square roughness (0..1). 0 = smooth,");
             Console.WriteLine("                              1 = jagged. Default 0.55. Requires --fractal Plasma.");
             Console.WriteLine("  --plasma-seed N             Plasma PRNG seed. Default 12345.");
+            Console.WriteLine("  --flame-preset NAME         Flame preset (Sierpinski Linear|Sierpinski Variation|");
+            Console.WriteLine("                              Spherical Pair|Swirl Gasket|Heart Sierpinski|Polar Julia).");
+            Console.WriteLine("                              Quote names with spaces. Requires --fractal Flame.");
+            Console.WriteLine("  --flame-iter N              Flame chaos-game sample count. Default 8000000.");
+            Console.WriteLine("  --flame-gamma F             Flame tone-map gamma. Default 2.2.");
+            Console.WriteLine("  --flame-vibrancy F          Flame highlight saturation 0..1. Default 0.8.");
             Console.WriteLine("  --out PATH, -o PATH         Output file (image) or folder (video) — required");
             Console.WriteLine("  --name NAME, -n NAME        Base filename (default derived from region/coords)");
             Console.WriteLine("  --verbose, -v               Print extra diagnostics");
