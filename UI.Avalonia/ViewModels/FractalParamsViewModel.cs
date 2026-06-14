@@ -104,6 +104,11 @@ public sealed class FractalParamsViewModel : ViewModelBase
         _qjCameraTheta = _p.QJuliaCameraTheta;
         _qjCameraPhi = _p.QJuliaCameraPhi;
         _qjCameraDistance = _p.QJuliaCameraDistance;
+        _qmSliceW = _p.QMandelSliceW;
+        _qmIterations = _p.QMandelIterations;
+        _qmCameraTheta = _p.QMandelCameraTheta;
+        _qmCameraPhi = _p.QMandelCameraPhi;
+        _qmCameraDistance = _p.QMandelCameraDistance;
         _plasmaRoughness = _p.PlasmaRoughness;
         _plasmaSeed = _p.PlasmaSeed;
         _flamePresetName = _p.FlamePresetName;
@@ -158,12 +163,13 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsMandelbox => FractalType == FractalType.Mandelbox;
     public bool IsKifs => FractalType == FractalType.Kifs;
     public bool IsQuatJulia => FractalType == FractalType.QuaternionJulia;
+    public bool IsQuatMandelbrot => FractalType == FractalType.QuaternionMandelbrot;
     public bool IsPlasma => FractalType == FractalType.Plasma;
     public bool IsFlame => FractalType == FractalType.Flame;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia || IsPlasma || IsFlame);
+          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame);
 
     // ── Julia ──
     private double _juliaR;
@@ -658,6 +664,18 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public double QJuliaCameraPhi { get => _qjCameraPhi; set { Set(ref _qjCameraPhi, Clamp(value, 0.01, 3.13)); _p.QJuliaCameraPhi = _qjCameraPhi; Fire(); } }
     private double _qjCameraDistance;
     public double QJuliaCameraDistance { get => _qjCameraDistance; set { Set(ref _qjCameraDistance, Clamp(value, 0.1, 500)); _p.QJuliaCameraDistance = _qjCameraDistance; Fire(); } }
+
+    // ── Quaternion Mandelbrot ──
+    private double _qmSliceW;
+    public double QMandelSliceW { get => _qmSliceW; set { Set(ref _qmSliceW, Clamp(value, -2, 2)); _p.QMandelSliceW = _qmSliceW; Fire(); } }
+    private int _qmIterations;
+    public int QMandelIterations { get => _qmIterations; set { Set(ref _qmIterations, (int)Clamp(value, 2, 32)); _p.QMandelIterations = _qmIterations; Fire(); } }
+    private double _qmCameraTheta;
+    public double QMandelCameraTheta { get => _qmCameraTheta; set { Set(ref _qmCameraTheta, Clamp(value, -10, 10)); _p.QMandelCameraTheta = _qmCameraTheta; Fire(); } }
+    private double _qmCameraPhi;
+    public double QMandelCameraPhi { get => _qmCameraPhi; set { Set(ref _qmCameraPhi, Clamp(value, 0.01, 3.13)); _p.QMandelCameraPhi = _qmCameraPhi; Fire(); } }
+    private double _qmCameraDistance;
+    public double QMandelCameraDistance { get => _qmCameraDistance; set { Set(ref _qmCameraDistance, Clamp(value, 0.1, 500)); _p.QMandelCameraDistance = _qmCameraDistance; Fire(); } }
 
     // ── Plasma ──
     private double _plasmaRoughness;

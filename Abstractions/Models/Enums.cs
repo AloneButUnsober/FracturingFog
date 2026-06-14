@@ -119,6 +119,15 @@ namespace FracturingFog
         /// <c>QJuliaSliceW</c>, plus shared iter / bailout / camera /
         /// light fields.</summary>
         QuaternionJulia,
+        /// <summary>Quaternion Mandelbrot (Norton 1982). Same Hamilton-product
+        /// squaring map as <c>QuaternionJulia</c> (q = q² + c), but c varies
+        /// per pixel — the 3D raymarch walks (x, y, z) through the 4D c-space
+        /// with the 4th component pinned to <c>QMandelSliceW</c>. Orbit q
+        /// starts at the origin (membership test). DE uses the Hubbard–Douady
+        /// estimator with derivative dq/dc updated as
+        /// <c>dq := 2·q·dq + 1</c>. Tunables: <c>QMandelSliceW</c>, plus
+        /// shared iter / bailout / camera / light fields.</summary>
+        QuaternionMandelbrot,
         /// <summary>Plasma (diamond-square midpoint displacement).
         /// Procedural 2D noise field with fractional-Brownian statistics —
         /// not strictly a fractal but visually fractal-like. Rendered by

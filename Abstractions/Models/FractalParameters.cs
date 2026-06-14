@@ -269,6 +269,33 @@ namespace FracturingFog.Models
         public int QJuliaMaxSteps { get; set; } = 160;
         public double QJuliaEpsilon { get; set; } = 0.0012;
 
+        // Quaternion Mandelbrot (Norton 1982 / Holroyd). Same q := q² + c
+        // squaring map as QuatJulia but c varies per pixel — c = (x, y, z,
+        // QMandelSliceW) with the 3D raymarcher walking (x, y, z) through the
+        // 4D c-space. q starts at the origin (membership test). DE uses the
+        // Hubbard–Douady estimator with derivative dq/dc updated as
+        // dq := 2·q·dq + 1 each iter.
+        /// <summary>W component of the 4D slice plane through ℍ in c-space.
+        /// Pixel (x, y, z) becomes c = (x, y, z, QMandelSliceW). Sliding this
+        /// reveals different 3D cross-sections of the same 4D set.</summary>
+        public double QMandelSliceW { get; set; } = 0.0;
+        /// <summary>Reserved — alternate slice plane Z constant when a future
+        /// slice-axis selector lets pixel.z route to c.W instead. Currently
+        /// unused (raymarched z always feeds c.Z).</summary>
+        public double QMandelSliceZ { get; set; } = 0.0;
+        /// <summary>DE inner iteration count. Default 11 — quaternion
+        /// Mandelbrot detail saturates around iter 10–14.</summary>
+        public int QMandelIterations { get; set; } = 11;
+        /// <summary>|q|² escape threshold. 16 = canonical Hart bailout.</summary>
+        public double QMandelBailout { get; set; } = 16.0;
+        public double QMandelCameraDistance { get; set; } = 4.0;
+        public double QMandelCameraTheta { get; set; } = Math.PI * 0.25;
+        public double QMandelCameraPhi { get; set; } = Math.PI * 0.35;
+        public double QMandelLightTheta { get; set; } = Math.PI * 0.25;
+        public double QMandelLightPhi { get; set; } = Math.PI * 0.45;
+        public int QMandelMaxSteps { get; set; } = 160;
+        public double QMandelEpsilon { get; set; } = 0.0012;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -449,6 +476,17 @@ namespace FracturingFog.Models
                 QJuliaLightPhi = QJuliaLightPhi,
                 QJuliaMaxSteps = QJuliaMaxSteps,
                 QJuliaEpsilon = QJuliaEpsilon,
+                QMandelSliceW = QMandelSliceW,
+                QMandelSliceZ = QMandelSliceZ,
+                QMandelIterations = QMandelIterations,
+                QMandelBailout = QMandelBailout,
+                QMandelCameraDistance = QMandelCameraDistance,
+                QMandelCameraTheta = QMandelCameraTheta,
+                QMandelCameraPhi = QMandelCameraPhi,
+                QMandelLightTheta = QMandelLightTheta,
+                QMandelLightPhi = QMandelLightPhi,
+                QMandelMaxSteps = QMandelMaxSteps,
+                QMandelEpsilon = QMandelEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

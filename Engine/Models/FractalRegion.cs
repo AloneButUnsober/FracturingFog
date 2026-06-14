@@ -550,6 +550,30 @@ namespace FracturingFog.Models
                 FractalType = FractalType.QuaternionJulia,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Quat Mandelbrot — Slice W = 0",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Quaternion Mandelbrot at the W=0 slice — q=0 orbit, c varies per pixel. The familiar Mandelbrot silhouette extruded into the Z axis.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Quat Mandelbrot — Slice W = 0.5",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Off-axis 4D slice of the quaternion Mandelbrot. Set QMandelSliceW = 0.5 before recall — exposes thin filaments not present in the W=0 plane.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.QuaternionMandelbrot,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

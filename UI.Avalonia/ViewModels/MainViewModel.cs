@@ -219,6 +219,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Secant,                "Secant"),
         (FractalType.Spider,                "Spider"),
         (FractalType.QuaternionJulia,       "Quaternion Julia (3D)"),
+        (FractalType.QuaternionMandelbrot,  "Quaternion Mandelbrot (3D)"),
         (FractalType.Plasma,                "Plasma (Diamond-Square)"),
         (FractalType.Flame,                 "Flame (Apophysis)"),
     };

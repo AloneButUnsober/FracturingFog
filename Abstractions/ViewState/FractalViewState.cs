@@ -158,6 +158,7 @@ namespace FracturingFog.ViewState
                 FractalType.Mandelbox             => ( 0.0,  0.0, 1.0),
                 FractalType.Kifs                  => ( 0.0,  0.0, 1.0),
                 FractalType.QuaternionJulia       => ( 0.0,  0.0, 1.0),
+                FractalType.QuaternionMandelbrot  => ( 0.0,  0.0, 1.0),
                 FractalType.Plasma                => ( 0.0,  0.0, 1.0),
                 FractalType.Flame                 => ( 0.0,  0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
@@ -182,6 +183,7 @@ namespace FracturingFog.ViewState
                          || FractalType == FractalType.Mandelbox
                          || FractalType == FractalType.Kifs
                          || FractalType == FractalType.QuaternionJulia
+                         || FractalType == FractalType.QuaternionMandelbrot
                          || FractalType == FractalType.UserBulb;
     }
 }
