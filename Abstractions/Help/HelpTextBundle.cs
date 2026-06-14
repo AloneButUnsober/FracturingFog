@@ -4383,6 +4383,79 @@ is the chord-step pattern showing through the basin filaments.
   return Complex.Pow(z, 3) - Complex.One;
 ";
 
+        public const string MathMandelboxText =
+@"=== The Mandelbox ===
+
+Tom Lowe (2010).  A 3D escape-time fractal built from two
+piecewise-linear folds plus a uniform scale.  Per iteration:
+
+        z ← scale · sphereFold(boxFold(z)) + c
+
+with c = ray-sample position (Mandelbrot convention).
+
+=== The two folds ===
+
+  Box fold        — reflection across the planes x = ±1, y = ±1,
+                    z = ±1.  Component-wise:
+                      if  z_i >  1   z_i ← 2  − z_i
+                      if  z_i < −1   z_i ← −2 − z_i
+
+  Sphere fold     — radial scaling driven by two radii
+                    R = fixedRadius (≥ minRadius) and m = minRadius:
+
+                      if  |z| <  m    z ← (R/m)² · z      (constant zoom)
+                      if  m ≤ |z| < R z ← (R/|z|)² · z    (inversion band)
+                      else            z is unchanged
+
+Both folds are conformal away from the fold planes / spheres,
+so the linear DE bound stays valid.
+
+=== Distance estimate ===
+
+Track a scalar derivative magnitude dr that mirrors the
+running |dz| (folds multiply both z and dr by the same factor):
+
+  dr ← |scale| · dr + 1            after the linear z ← scale·z + c
+  dr ← f · dr                      inside each sphere-fold branch
+
+  DE(p) ≈ |z| / |dr|
+
+Surface normal is estimated by central differences of DE.  Lit
+with one directional source; ambient = 0.15.
+
+=== Classic scale values ===
+
+  scale =  2.0   The canonical Mandelbox.  Vault-and-corridor
+                 structure with the recognisable box footprint.
+  scale = −1.5   Inversive ""Juliabox-like"" variant.  Smoother,
+                 with central spherical lobes.
+  scale =  3.0   Open-pore high-detail variant — fold cycles
+                 don't close, exposing inner spiral structure.
+
+=== Parameters ===
+
+  MandelboxScale          : double  Per-iter scale.  Default 2.
+  MandelboxFixedRadius    : double  Sphere-fold outer radius.  Default 1.
+  MandelboxMinRadius      : double  Sphere-fold inner radius.  Default 0.5.
+  MandelboxIterations     : int     DE inner iter count.  Default 12.
+  MandelboxBailout        : double  |z|² escape threshold.  Default 1024.
+  MandelboxMaxSteps       : int     Raymarch step cap.  Default 128.
+  MandelboxEpsilon        : double  DE hit threshold.  Default 0.0015.
+  MandelboxCamera*        : double  Dedicated camera + light angles.
+
+=== Implementation notes ===
+
+DE iterations and ray-march step cap are higher than the
+Mandelbulb's because Mandelbox folds are cheaper per iter
+(no transcendental — only branches + multiplies) so the
+budget shifts toward more iters.  Bailout is large (10²·)
+because folds bound z slowly compared to z^p escape.
+
+Scale values near critical points (|scale| ≈ 1) can collapse
+the DE — iter clamp and bailout exit at |z|² > 10⁶ catch this
+before the surface goes degenerate.
+";
+
         public const string MathSpiderText =
 @"=== Spider Fractal ===
 

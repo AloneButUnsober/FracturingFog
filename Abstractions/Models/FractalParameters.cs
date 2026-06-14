@@ -149,6 +149,34 @@ namespace FracturingFog.Models
         /// a few extra composites per render (cheap relative to sampling).</summary>
         public bool BuddhaProgressive { get; set; } = false;
 
+        // Mandelbox (Tom Lowe, 2010). Box-fold + sphere-fold + scale DE.
+        /// <summary>Mandelbox scale parameter. Per iter:
+        /// z = scale · sphereFold(boxFold(z)) + c. Default 2.0;
+        /// −1.5 (Juliabox-like inversion), 2.0 (canonical), 3.0
+        /// (open-pore variants) are classic values.</summary>
+        public double MandelboxScale { get; set; } = 2.0;
+        /// <summary>Fixed radius for the sphere-fold band. Points with
+        /// |z| in [minRadius, fixedRadius] scale by fixedR²/|z|².
+        /// Default 1.0.</summary>
+        public double MandelboxFixedRadius { get; set; } = 1.0;
+        /// <summary>Inner radius for the sphere-fold. Points with
+        /// |z| &lt; minRadius scale uniformly by fixedR²/minR² (a
+        /// constant per-iteration zoom). Default 0.5.</summary>
+        public double MandelboxMinRadius { get; set; } = 0.5;
+        /// <summary>DE inner iteration count. Higher = sharper folds,
+        /// more time per step. Default 12.</summary>
+        public int MandelboxIterations { get; set; } = 12;
+        /// <summary>Bailout for the DE inner loop. |z|² above this exits
+        /// early so deep escape doesn't waste cycles. Default 1024.</summary>
+        public double MandelboxBailout { get; set; } = 1024.0;
+        public double MandelboxCameraDistance { get; set; } = 12.0;
+        public double MandelboxCameraTheta { get; set; } = Math.PI * 0.25;
+        public double MandelboxCameraPhi { get; set; } = Math.PI * 0.35;
+        public double MandelboxLightTheta { get; set; } = Math.PI * 0.25;
+        public double MandelboxLightPhi { get; set; } = Math.PI * 0.45;
+        public int MandelboxMaxSteps { get; set; } = 128;
+        public double MandelboxEpsilon { get; set; } = 0.0015;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -282,6 +310,18 @@ namespace FracturingFog.Models
                 BuddhaQualityMode = BuddhaQualityMode,
                 BuddhaMetropolis = BuddhaMetropolis,
                 BuddhaProgressive = BuddhaProgressive,
+                MandelboxScale = MandelboxScale,
+                MandelboxFixedRadius = MandelboxFixedRadius,
+                MandelboxMinRadius = MandelboxMinRadius,
+                MandelboxIterations = MandelboxIterations,
+                MandelboxBailout = MandelboxBailout,
+                MandelboxCameraDistance = MandelboxCameraDistance,
+                MandelboxCameraTheta = MandelboxCameraTheta,
+                MandelboxCameraPhi = MandelboxCameraPhi,
+                MandelboxLightTheta = MandelboxLightTheta,
+                MandelboxLightPhi = MandelboxLightPhi,
+                MandelboxMaxSteps = MandelboxMaxSteps,
+                MandelboxEpsilon = MandelboxEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

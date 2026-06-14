@@ -91,6 +91,15 @@ namespace FracturingFog
         /// Decay tunable via <c>SpiderCDecay</c>; 0.5 is classic
         /// Spider, 1.0 degenerates to Mandelbrot.</summary>
         Spider,
+        /// <summary>Mandelbox (Tom Lowe, 2010). 3D box-fold +
+        /// sphere-fold + scale iteration rendered via distance-
+        /// estimation raymarching. Tunable via
+        /// <c>MandelboxScale</c> (default 2.0; ≈−1.5, 2.0, 3.0 are
+        /// classics), <c>MandelboxFixedRadius</c>,
+        /// <c>MandelboxMinRadius</c>, plus dedicated camera /
+        /// light fields. Distance estimate tracks a scalar dz
+        /// magnitude through folds.</summary>
+        Mandelbox,
     }
 
     public enum RenderProfile { Preview, Final }
