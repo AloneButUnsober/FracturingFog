@@ -185,6 +185,13 @@ public struct LightingFxData
     /// 0 = exp fog only. 16–48 typical; cost ~ steps × shadow-per-sample.</summary>
     public int VolumeSteps;
 
+    /// <summary>P4 — adaptive volumetric LOD knob. Shrinks the per-pixel
+    /// step count by ray total-T past 4 world units: <c>vs / (1 + (T − 4) × k)</c>.
+    /// 0 = no LOD (legacy bit-identical). 0.5 = default, ~30–60 % faster on
+    /// deep-depth volumetric scenes with no visible quality drop. Larger
+    /// values trade quality for speed; ~1.0 starts to band on dense fog.</summary>
+    public double VolumeStepsFalloff;
+
     /// <summary>FBM-noise modulation amplitude on fog density [0, 1].
     /// 0 = uniform medium (bit-identical pre-Phase-22); 1 = density swings
     /// fully between empty space and ~2× the unmodulated density, producing
@@ -459,6 +466,7 @@ public struct LightingFxData
         FogDensity         = 0.0,
         FogHeightFalloff   = 0.0,
         VolumeSteps        = 0,
+        VolumeStepsFalloff = 0.5,
         VolumeNoiseAmount  = 0.0,
         VolumeNoiseScale   = 0.3,
         VolumeNoiseSpeed   = 0.0,

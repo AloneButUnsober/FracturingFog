@@ -16,6 +16,7 @@
 // at the default (+inf, 0, 0, 0) so SSAO automatically skips them.
 
 using System;
+using System.Numerics;
 using System.Threading.Tasks;
 
 namespace FracturingFog.Rendering.Lighting;
@@ -57,8 +58,10 @@ public static class ScreenSpacePost
         // Allocate scratch depth buffer. Scale smooth into [0, ~1] world units
         // so SsaoRadius is interpreted at the same magnitude as the 3D path
         // (where depth is ray-T in world units).
-        var depthBuf = new float[n];
-        var normalBuf = new float[3 * n]; // unused by current ApplySsao loop
+        using var depthLease = PostPassBufferPool.RentFloat(n);
+        using var normalLease = PostPassBufferPool.RentFloatCleared(3 * n, 3 * n);
+        var depthBuf = depthLease.Buffer;
+        var normalBuf = normalLease.Buffer; // unused by current ApplySsao loop
         double invMaxIt = 1.0 / maxIt;
         for (int i = 0; i < n; i++)
         {
@@ -117,7 +120,10 @@ public static class ScreenSpacePost
         }
 
         // Raw AO factor per pixel — bilateral-blurred next pass.
-        var aoBuffer = new float[width * height];
+        int aoN = width * height;
+        using var aoLease = PostPassBufferPool.RentFloat(aoN);
+        using var aoBlurLease = PostPassBufferPool.RentFloat(aoN);
+        var aoBuffer = aoLease.Buffer;
 
         // Vogel-disk sample offsets (unit-disk Halton-spiral). Pre-compute up
         // to MAX so we don't allocate per pixel. golden_angle = 137.508 deg.
@@ -181,7 +187,7 @@ public static class ScreenSpacePost
         });
 
         // 3×3 bilateral blur (depth-aware) to remove disk-sampling noise.
-        var aoBlur = new float[width * height];
+        var aoBlur = aoBlurLease.Buffer;
         Parallel.For(0, height, y =>
         {
             for (int x = 0; x < width; x++)
@@ -230,6 +236,31 @@ public static class ScreenSpacePost
         });
     }
 
+    /// <summary>P6 — open a bundled GPU post-pass frame. Wrap the sequence
+    /// of <see cref="ApplySsao"/> + <see cref="ApplyToneMapBloom"/> +
+    /// <see cref="ApplyEdgeInk"/> between this call and
+    /// <see cref="EndGpuFrame"/> to share the device color buffer across
+    /// all three GPU passes. No-op when GPU is disabled or unavailable.</summary>
+    public static void BeginGpuFrame(uint[] colorBuffer, int width, int height, in LightingFxData fx)
+    {
+        if (!fx.UseGpuPost) return;
+        GpuPostKernels.BeginFrame(colorBuffer, width, height);
+    }
+
+    /// <summary>P6 — close the bundled GPU post-pass frame. Single
+    /// Synchronize + CopyToCPU flushes accumulated kernel output back to
+    /// the host color buffer.</summary>
+    public static void EndGpuFrame(in LightingFxData fx)
+    {
+        if (!fx.UseGpuPost) return;
+        GpuPostKernels.EndFrame();
+    }
+
+    // P0 — track last G-buffer size so we can shed pool buckets on resize.
+    // Same-size renders skip the clear (hot path); resize triggers clear so
+    // the pool doesn't retain stale-resolution buffers indefinitely.
+    private static int _lastClearLen = -1;
+
     /// <summary>
     /// Initialise depth + normal buffers for a fresh render. Sky / ray-miss
     /// pixels must read as <see cref="DepthMiss"/>; calculators overwrite hit
@@ -237,6 +268,12 @@ public static class ScreenSpacePost
     /// </summary>
     public static void ClearGBuffer(float[]? depthBuffer, float[]? normalBuffer)
     {
+        int len = depthBuffer?.Length ?? 0;
+        if (len != _lastClearLen)
+        {
+            PostPassBufferPool.Clear();
+            _lastClearLen = len;
+        }
         if (depthBuffer is not null)
             Array.Fill(depthBuffer, DepthMiss);
         if (normalBuffer is not null)
@@ -295,10 +332,31 @@ public static class ScreenSpacePost
             return;
         }
 
+        // Phase 12b — GPU dispatcher. Fused threshold → 2-mip pyramid →
+        // composite + tonemap + gamma. Falls back to CPU below on any failure.
+        // Bit-identity isn't preserved across the cut (float precision differs)
+        // but visual output matches.
+        if (fx.UseGpuPost)
+        {
+            double threshByteScaleGpu = fx.BloomThreshold * 255.0;
+            if (GpuPostKernels.TryApplyToneMapBloom(
+                    colorBuffer, hdrBuffer, width, height,
+                    wantBloom, wantTonemap, (int)fx.ToneMap,
+                    fx.Exposure, threshByteScaleGpu, fx.BloomStrength))
+            {
+                // GPU path handled tonemap + bloom. Still run lens + HUD on CPU
+                // (cheap byte-buffer passes; not worth a GPU port).
+                if (wantLens) ApplyLensPost(colorBuffer, width, height, fx);
+                if (wantHud)  ApplyDebugHud(colorBuffer, width, height, fx);
+                return;
+            }
+        }
+
         // ── Bloom build ────────────────────────────────────────────────────
         // 3-mip pyramid. Bright-pass at full res; blur + downsample successively;
         // bilinear upsample-add back to a single full-res emissive buffer.
-        float[] emissive = new float[3 * n];
+        using var emissiveLease = PostPassBufferPool.RentFloatCleared(3 * n, 3 * n);
+        float[] emissive = emissiveLease.Buffer;
         double threshByteScale = fx.BloomThreshold * 255.0; // operator works on byte-scale luma
 
         // Step 1 — threshold pass to emissive (full res). Sky pixels skipped.
@@ -323,7 +381,13 @@ public static class ScreenSpacePost
         });
 
         // Step 2 — 3 mip levels via box-downsample then 5-tap separable Gaussian.
-        float[] blurred = wantBloom ? BuildBloomPyramid(emissive, width, height) : emissive;
+        PostPassBufferPool.FloatLease pyramidLease = default;
+        float[] blurred = emissive;
+        if (wantBloom)
+        {
+            pyramidLease = BuildBloomPyramid(emissive, width, height);
+            blurred = pyramidLease.Buffer;
+        }
 
         // ── Composite + tone map + gamma ──────────────────────────────────
         double expo = fx.Exposure;
@@ -401,6 +465,8 @@ public static class ScreenSpacePost
             }
         });
 
+        pyramidLease.Dispose();
+
         // Phase 15 — lens distortion + chromatic aberration as final stage.
         // Runs after tonemap so the warp + colour fringing operates on display-
         // ready bytes (CA shifts post-gamma, which is the look most lens sims
@@ -449,7 +515,9 @@ public static class ScreenSpacePost
         if (colorBuffer.Length < n) return;
 
         // Snapshot — sample source from this, write to colorBuffer.
-        uint[] src = (uint[])colorBuffer.Clone();
+        using var srcLease = PostPassBufferPool.RentUint(n);
+        uint[] src = srcLease.Buffer;
+        Array.Copy(colorBuffer, src, n);
 
         double halfW = width * 0.5;
         double halfH = height * 0.5;
@@ -795,7 +863,7 @@ public static class ScreenSpacePost
     /// Returned buffer is full-res (3 floats / pixel) and may be added to the
     /// HDR composite scaled by BloomStrength.
     /// </summary>
-    private static float[] BuildBloomPyramid(float[] src, int w, int h)
+    private static PostPassBufferPool.FloatLease BuildBloomPyramid(float[] src, int w, int h)
     {
         // Levels 1 (½) and 2 (¼). Skip a third level — diminishing returns at
         // typical UI resolutions and the pass cost stays bounded.
@@ -804,13 +872,16 @@ public static class ScreenSpacePost
         int w2 = Math.Max(1, w / 4);
         int h2 = Math.Max(1, h / 4);
 
-        float[] mip1 = DownsampleAndBlur(src, w, h, w1, h1);
-        float[] mip2 = DownsampleAndBlur(mip1, w1, h1, w2, h2);
+        using var mip1Lease = DownsampleAndBlur(src, w, h, w1, h1);
+        using var mip2Lease = DownsampleAndBlur(mip1Lease.Buffer, w1, h1, w2, h2);
+        var mip1 = mip1Lease.Buffer;
+        var mip2 = mip2Lease.Buffer;
 
         // Upsample-add: bilinear sample mips, accumulate into a full-res
         // emissive buffer. Levels weighted by 1, 0.5, 0.25 so finer mips
         // dominate near-light pixels and coarser mips spread the halo.
-        float[] outBuf = new float[3 * w * h];
+        var outLease = PostPassBufferPool.RentFloat(3 * w * h);
+        float[] outBuf = outLease.Buffer;
         Parallel.For(0, h, y =>
         {
             for (int x = 0; x < w; x++)
@@ -824,13 +895,14 @@ public static class ScreenSpacePost
                 AddBilinear(outBuf, i3, mip2, w2, h2, x * 0.25, y * 0.25, 0.5);
             }
         });
-        return outBuf;
+        return outLease;
     }
 
-    private static float[] DownsampleAndBlur(float[] src, int srcW, int srcH, int dstW, int dstH)
+    private static PostPassBufferPool.FloatLease DownsampleAndBlur(float[] src, int srcW, int srcH, int dstW, int dstH)
     {
         // Box downsample
-        float[] downA = new float[3 * dstW * dstH];
+        using var downALease = PostPassBufferPool.RentFloat(3 * dstW * dstH);
+        float[] downA = downALease.Buffer;
         Parallel.For(0, dstH, y =>
         {
             for (int x = 0; x < dstW; x++)
@@ -851,46 +923,132 @@ public static class ScreenSpacePost
         });
         // 5-tap separable Gaussian (sigma ≈ 1). Horizontal then vertical.
         // Kernel [0.06, 0.244, 0.392, 0.244, 0.06].
-        float[] tmp = new float[3 * dstW * dstH];
+        using var tmpLease = PostPassBufferPool.RentFloat(3 * dstW * dstH);
+        float[] tmp = tmpLease.Buffer;
         float[] kernel = { 0.06f, 0.244f, 0.392f, 0.244f, 0.06f };
+
+        // P5 — SIMD horizontal blur. Output index `i = x*3+c` reads source at
+        // `(y*dstW + x+t)*3 + c = rowBase + i + t*3`. So 8 contiguous output
+        // floats fetch 8 contiguous source floats with a uniform t*3 shift —
+        // perfect Vector<float> pattern. Edge pixels (x in [0,1] and
+        // [dstW-2, dstW-1]) need clamp logic, so scalar tail covers them.
+        bool simd = Vector.IsHardwareAccelerated && Vector<float>.Count >= 4;
+        int width3 = dstW * 3;
         Parallel.For(0, dstH, y =>
         {
-            for (int x = 0; x < dstW; x++)
+            int rowBase = y * dstW * 3;
+            // Edge: first 2 pixels (6 floats) — scalar with clamp.
+            BlurScanEdge(downA, tmp, kernel, rowBase, dstW, isHorizontal: true,
+                         iStart: 0, iEnd: Math.Min(6, width3));
+            // Interior: pixels [2, dstW-2). Inner indices i in [6, (dstW-2)*3).
+            int innerStart = Math.Min(6, width3);
+            int innerEnd   = Math.Max(innerStart, (dstW - 2) * 3);
+            if (simd && innerEnd > innerStart)
             {
-                int o = (y * dstW + x) * 3;
-                float r = 0, g = 0, b = 0;
+                int vN = Vector<float>.Count;
+                int simdEnd = innerStart + ((innerEnd - innerStart) / vN) * vN;
+                for (int i = innerStart; i < simdEnd; i += vN)
+                {
+                    var acc = Vector<float>.Zero;
+                    for (int t = -2; t <= 2; t++)
+                    {
+                        var v = new Vector<float>(downA, rowBase + i + t * 3);
+                        acc += v * kernel[t + 2];
+                    }
+                    acc.CopyTo(tmp, rowBase + i);
+                }
+                BlurScanEdge(downA, tmp, kernel, rowBase, dstW, isHorizontal: true,
+                             iStart: simdEnd, iEnd: innerEnd);
+            }
+            else
+            {
+                BlurScanEdge(downA, tmp, kernel, rowBase, dstW, isHorizontal: true,
+                             iStart: innerStart, iEnd: innerEnd);
+            }
+            // Edge: last 2 pixels.
+            BlurScanEdge(downA, tmp, kernel, rowBase, dstW, isHorizontal: true,
+                         iStart: Math.Max(innerEnd, innerStart), iEnd: width3);
+        });
+
+        var outLease = PostPassBufferPool.RentFloat(3 * dstW * dstH);
+        float[] outBuf = outLease.Buffer;
+        // P5 — SIMD vertical blur. Same idea: 8 contiguous output floats at
+        // (y*dstW)*3 + i fetch 8 contiguous source floats per tap at
+        // (clamp(y+t)*dstW)*3 + i. y boundary clamp varies per row, so the
+        // first 2 and last 2 rows go scalar; interior rows all-SIMD.
+        Parallel.For(0, dstH, y =>
+        {
+            int rowOut = y * dstW * 3;
+            bool yEdge = y < 2 || y >= dstH - 2;
+            int yClamp(int yy) => Math.Clamp(yy, 0, dstH - 1);
+            if (yEdge || !simd)
+            {
+                for (int i = 0; i < width3; i++)
+                {
+                    float r = 0;
+                    for (int t = -2; t <= 2; t++)
+                        r += tmp[yClamp(y + t) * dstW * 3 + i] * kernel[t + 2];
+                    outBuf[rowOut + i] = r;
+                }
+                return;
+            }
+            int vN = Vector<float>.Count;
+            int simdEnd = (width3 / vN) * vN;
+            int row0 = (y - 2) * dstW * 3;
+            int row1 = (y - 1) * dstW * 3;
+            int row2 =  y      * dstW * 3;
+            int row3 = (y + 1) * dstW * 3;
+            int row4 = (y + 2) * dstW * 3;
+            for (int i = 0; i < simdEnd; i += vN)
+            {
+                var v0 = new Vector<float>(tmp, row0 + i);
+                var v1 = new Vector<float>(tmp, row1 + i);
+                var v2 = new Vector<float>(tmp, row2 + i);
+                var v3 = new Vector<float>(tmp, row3 + i);
+                var v4 = new Vector<float>(tmp, row4 + i);
+                var acc = v0 * kernel[0] + v1 * kernel[1] + v2 * kernel[2]
+                        + v3 * kernel[3] + v4 * kernel[4];
+                acc.CopyTo(outBuf, rowOut + i);
+            }
+            for (int i = simdEnd; i < width3; i++)
+            {
+                float r = 0;
+                for (int t = -2; t <= 2; t++)
+                    r += tmp[yClamp(y + t) * dstW * 3 + i] * kernel[t + 2];
+                outBuf[rowOut + i] = r;
+            }
+        });
+        return outLease;
+    }
+
+    /// <summary>P5 — scalar fallback for edge / tail spans inside the SIMD
+    /// blur loops. Mirrors the original 5-tap convolution with clamping on
+    /// the relevant axis. <paramref name="iStart"/> / <paramref name="iEnd"/>
+    /// are linear float indices within the destination row.</summary>
+    private static void BlurScanEdge(
+        float[] src, float[] dst, float[] kernel,
+        int rowBase, int dstW, bool isHorizontal,
+        int iStart, int iEnd)
+    {
+        if (iEnd <= iStart) return;
+        int width3 = dstW * 3;
+        for (int i = iStart; i < iEnd; i++)
+        {
+            // i = x*3 + c. Decompose so the X-shift handles channel-correctly.
+            int c = i % 3;
+            int x = i / 3;
+            float r = 0;
+            if (isHorizontal)
+            {
                 for (int t = -2; t <= 2; t++)
                 {
                     int sx = Math.Clamp(x + t, 0, dstW - 1);
-                    int si = (y * dstW + sx) * 3;
-                    float kv = kernel[t + 2];
-                    r += downA[si]     * kv;
-                    g += downA[si + 1] * kv;
-                    b += downA[si + 2] * kv;
+                    r += src[rowBase + sx * 3 + c] * kernel[t + 2];
                 }
-                tmp[o] = r; tmp[o + 1] = g; tmp[o + 2] = b;
             }
-        });
-        float[] outBuf = new float[3 * dstW * dstH];
-        Parallel.For(0, dstH, y =>
-        {
-            for (int x = 0; x < dstW; x++)
-            {
-                int o = (y * dstW + x) * 3;
-                float r = 0, g = 0, b = 0;
-                for (int t = -2; t <= 2; t++)
-                {
-                    int sy = Math.Clamp(y + t, 0, dstH - 1);
-                    int si = (sy * dstW + x) * 3;
-                    float kv = kernel[t + 2];
-                    r += tmp[si]     * kv;
-                    g += tmp[si + 1] * kv;
-                    b += tmp[si + 2] * kv;
-                }
-                outBuf[o] = r; outBuf[o + 1] = g; outBuf[o + 2] = b;
-            }
-        });
-        return outBuf;
+            // Vertical edge handled inline in caller (needs y/dstH context).
+            dst[rowBase + i] = r;
+        }
     }
 
     private static void AddBilinear(float[] dst, int dstI3, float[] src, int sw, int sh, double sx, double sy, double weight)
@@ -913,6 +1071,198 @@ public static class ScreenSpacePost
         dst[dstI3]     += (float)(src[i00]     * w00 + src[i10]     * w10 + src[i01]     * w01 + src[i11]     * w11);
         dst[dstI3 + 1] += (float)(src[i00 + 1] * w00 + src[i10 + 1] * w10 + src[i01 + 1] * w01 + src[i11 + 1] * w11);
         dst[dstI3 + 2] += (float)(src[i00 + 2] * w00 + src[i10 + 2] * w10 + src[i01 + 2] * w01 + src[i11 + 2] * w11);
+    }
+
+    /// <summary>
+    /// Phase 21b — HDR hex-bokeh depth-of-field (McIntosh-Riecke-DiPaola 2012).
+    /// Runs on the linear-light HDR buffer BEFORE tonemap, so bright highlights
+    /// bloom into proper bokeh discs instead of clipping to white first.
+    ///
+    /// Three skewed 1D box blurs at 0°, 120°, 240°. Each pass blurs the HDR
+    /// colour along its direction with a length = per-pixel CoC. The three
+    /// intermediate results are min-blended per-channel to form a hexagonal
+    /// kernel envelope — the intersection of three offset rectangles is a hex.
+    ///
+    /// CoC model (thin-lens proxy)
+    ///   <c>coc_px = aperture · |depth - focus| / depth · shortEdge</c>
+    ///
+    /// Sky pixels (HDR R = NaN) pass through unchanged — bokeh on sky bleeds
+    /// in via foreground samples gathered onto neighbouring surface pixels.
+    /// Bleed control matches the byte-buffer Phase 21 DoF: foreground neighbours
+    /// only contribute when their CoC reaches the centre, preventing sharp
+    /// foreground from smearing onto blurred background.
+    ///
+    /// Sub-pixel CoC (<c>&lt; 0.75</c>) is treated as in-focus — leave HDR
+    /// untouched at that pixel.
+    ///
+    /// No-op when <c>DofAperture &lt;= 0</c> or <c>DofSamples &lt;= 0</c> or
+    /// the HDR buffer is null/short — call sites pass null to opt out.
+    /// </summary>
+    /// <param name="hdrBuffer">Linear-light HDR colour, 3 floats / pixel.
+    /// Modified in place: bokeh-blurred HDR values written back.</param>
+    /// <param name="depthBuffer">Per-pixel ray-total-T. <see cref="DepthMiss"/> = sky.</param>
+    /// <param name="width">Image width.</param>
+    /// <param name="height">Image height.</param>
+    /// <param name="fx">Active LightingFxData. DofAperture / DofFocusDistance /
+    /// DofSamples drive the bokeh.</param>
+    public static void ApplyHdrDof(
+        float[] hdrBuffer,
+        float[] depthBuffer,
+        int width, int height,
+        in LightingFxData fx)
+    {
+        if (fx.DofAperture <= 0 || fx.DofSamples <= 0) return;
+        int n = width * height;
+        if (hdrBuffer.Length < 3 * n) return;
+        if (depthBuffer.Length < n) return;
+
+        double focus = fx.DofFocusDistance;
+        double aperture = fx.DofAperture;
+        double shortEdge = Math.Min(width, height);
+        double cocScale = aperture * shortEdge;
+        // Cap samples per pass. DofSamples drives both the hex aperture
+        // (existing 21a knob — 7/19/37/61 ring boundaries) and the per-direction
+        // tap count here; we cap separately to keep the 3-pass cost bounded.
+        int taps = Math.Clamp(fx.DofSamples, 4, 32);
+
+        // Per-pixel CoC cache.
+        using var cocLease = PostPassBufferPool.RentFloat(n);
+        var cocBuf = cocLease.Buffer;
+        Parallel.For(0, height, y =>
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int idx = y * width + x;
+                float d = depthBuffer[idx];
+                if (float.IsPositiveInfinity(d) || d <= 0) { cocBuf[idx] = 0; continue; }
+                double coc = Math.Abs(d - focus) / d * cocScale;
+                cocBuf[idx] = (float)coc;
+            }
+        });
+
+        // Three skewed-box pass directions. 0°, 120°, 240°.
+        const double a0 = 0.0;
+        const double a1 = 2.0 * Math.PI / 3.0;
+        const double a2 = 4.0 * Math.PI / 3.0;
+        using var pass0Lease = SkewedBoxBlur(hdrBuffer, depthBuffer, cocBuf, width, height, taps,
+                                              Math.Cos(a0), Math.Sin(a0));
+        using var pass1Lease = SkewedBoxBlur(hdrBuffer, depthBuffer, cocBuf, width, height, taps,
+                                              Math.Cos(a1), Math.Sin(a1));
+        using var pass2Lease = SkewedBoxBlur(hdrBuffer, depthBuffer, cocBuf, width, height, taps,
+                                              Math.Cos(a2), Math.Sin(a2));
+        var pass0 = pass0Lease.Buffer;
+        var pass1 = pass1Lease.Buffer;
+        var pass2 = pass2Lease.Buffer;
+
+        // Min-blend per channel — the intersection of three skewed rectangles
+        // is a hexagon, which is the desired bokeh shape.
+        Parallel.For(0, height, y =>
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int idx = y * width + x;
+                int i3 = idx * 3;
+                float src = hdrBuffer[i3];
+                if (float.IsNaN(src)) continue;  // sky stays NaN
+                if (cocBuf[idx] < 0.75f) continue;
+                hdrBuffer[i3]     = MinThree(pass0[i3],     pass1[i3],     pass2[i3]);
+                hdrBuffer[i3 + 1] = MinThree(pass0[i3 + 1], pass1[i3 + 1], pass2[i3 + 1]);
+                hdrBuffer[i3 + 2] = MinThree(pass0[i3 + 2], pass1[i3 + 2], pass2[i3 + 2]);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 1D box blur along a direction (dx, dy) with width = per-pixel CoC.
+    /// Bleed control identical to <see cref="ApplyDof"/>. Returns a fresh
+    /// float[3*n] buffer (allocated each call — caller pools or accepts the
+    /// allocation; Phase 21b ships with 3 calls per DoF render).
+    /// </summary>
+    private static PostPassBufferPool.FloatLease SkewedBoxBlur(
+        float[] hdr,
+        float[] depth,
+        float[] coc,
+        int width, int height, int taps,
+        double dx, double dy)
+    {
+        int n = width * height;
+        var outLease = PostPassBufferPool.RentFloat(3 * n);
+        var outBuf = outLease.Buffer;
+        // Pre-copy untouched pixels so consumers see HDR everywhere. Min-blend
+        // step in caller compares against pre-existing buffer values, so a
+        // zeroed sky pixel would wrongly bias min toward black.
+        Array.Copy(hdr, outBuf, 3 * n);
+
+        Parallel.For(0, height, y =>
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int idx = y * width + x;
+                int i3 = idx * 3;
+                float src0 = hdr[i3];
+                if (float.IsNaN(src0)) continue;
+                float coc0 = coc[idx];
+                if (coc0 < 0.75f) continue;
+
+                float d0 = depth[idx];
+                // Sample taps along (dx, dy) — half on each side of centre,
+                // step = CoC / (taps/2) so the full extent matches the disc
+                // diameter the rest of the pipeline expects.
+                double half = coc0 * 0.5;
+                double step = half / Math.Max(1, taps / 2);
+
+                double sumR = 0, sumG = 0, sumB = 0, sumW = 0;
+                for (int t = -taps / 2; t <= taps / 2; t++)
+                {
+                    int sx = (int)Math.Round(x + dx * step * t);
+                    int sy = (int)Math.Round(y + dy * step * t);
+                    if ((uint)sx >= (uint)width || (uint)sy >= (uint)height) continue;
+                    int sidx = sy * width + sx;
+                    int s3 = sidx * 3;
+                    float sR = hdr[s3];
+                    if (float.IsNaN(sR)) continue;  // skip sky taps
+                    float sG = hdr[s3 + 1];
+                    float sB = hdr[s3 + 2];
+
+                    float dN = depth[sidx];
+                    float cocN = coc[sidx];
+                    double dist = Math.Abs(step * t);  // tap distance in px
+
+                    // Bleed control.
+                    double w;
+                    if (dN < d0 - 1e-4f)
+                    {
+                        // Neighbour in front of centre — contributes only if
+                        // its CoC reaches the centre. Prevents sharp FG smear.
+                        w = cocN > dist ? 1.0 : 0.0;
+                    }
+                    else
+                    {
+                        // Neighbour at or behind centre — full contribution.
+                        w = 1.0;
+                    }
+                    if (w <= 0) continue;
+
+                    sumR += sR * w;
+                    sumG += sG * w;
+                    sumB += sB * w;
+                    sumW += w;
+                }
+                if (sumW > 0)
+                {
+                    outBuf[i3]     = (float)(sumR / sumW);
+                    outBuf[i3 + 1] = (float)(sumG / sumW);
+                    outBuf[i3 + 2] = (float)(sumB / sumW);
+                }
+            }
+        });
+        return outLease;
+    }
+
+    private static float MinThree(float a, float b, float c)
+    {
+        float ab = a < b ? a : b;
+        return ab < c ? ab : c;
     }
 
     /// <summary>
@@ -1006,7 +1356,8 @@ public static class ScreenSpacePost
 
         // Per-pixel CoC pass. Cached so the gather loop doesn't re-derive it
         // for every neighbour read.
-        var cocBuf = new float[n];
+        using var cocLease = PostPassBufferPool.RentFloat(n);
+        var cocBuf = cocLease.Buffer;
         Parallel.For(0, height, y =>
         {
             for (int x = 0; x < width; x++)
@@ -1021,7 +1372,9 @@ public static class ScreenSpacePost
 
         // Snapshot source for gather. In-place modulation would corrupt
         // neighbour reads.
-        uint[] src = (uint[])colorBuffer.Clone();
+        using var srcLease = PostPassBufferPool.RentUint(n);
+        uint[] src = srcLease.Buffer;
+        Array.Copy(colorBuffer, src, n);
 
         Parallel.For(0, height, y =>
         {
@@ -1144,6 +1497,18 @@ public static class ScreenSpacePost
         double inkG = (inkColor >>  8) & 0xFF;
         double inkB =  inkColor        & 0xFF;
         bool useFreiChen = fx.EdgeKernel == EdgeKernelMode.FreiChen;
+
+        // Phase 12c — GPU edge-ink dispatcher. Single per-pixel kernel; same
+        // semantics as the CPU loop below. Falls back on any failure.
+        if (fx.UseGpuPost)
+        {
+            if (GpuPostKernels.TryApplyEdgeInk(
+                    colorBuffer, depthBuffer, normalBuffer,
+                    width, height,
+                    strength, threshold, inkColor,
+                    useFreiChen ? 1 : 0))
+                return;
+        }
 
         // Frei-Chen edge subspace — 4 orthonormal basis vectors covering
         // the 3×3 patch. Magnitude = √(Σ projection²). Normalised so that

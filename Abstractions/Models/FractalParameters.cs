@@ -467,6 +467,14 @@ namespace FracturingFog.Models
         public double UserBulbClipPlaneNZ { get; set; } = 0.0;
         public double UserBulbClipPlaneD { get; set; } = 0.0;
         public int UserBulbSuperSample { get; set; } = 1; // 1, 2, 4
+
+        /// <summary>P2 — per-raymarcher low-res interactive preview scale factor.
+        /// 0.5 = render at half-res, upscale nearest. 1.0 = legacy full-res (no
+        /// preview path). Range clamped at [0.25, 1.0] by callers. Each
+        /// raymarcher checks its own <c>LowResPreview</c> flag before honouring
+        /// this knob — flag off = bit-identical legacy regardless of value.</summary>
+        public double LowResPreviewScale { get; set; } = 0.5;
+
         /// <summary>Optional chain of named-output steps. When non-empty, replaces
         /// UserBulbSource. Final z = last step's return value.</summary>
         public List<UserBulbChainStep> UserBulbChain { get; set; } = new();
@@ -667,6 +675,7 @@ namespace FracturingFog.Models
                 UserBulbClipPlaneNZ = UserBulbClipPlaneNZ,
                 UserBulbClipPlaneD = UserBulbClipPlaneD,
                 UserBulbSuperSample = UserBulbSuperSample,
+                LowResPreviewScale = LowResPreviewScale,
                 UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone()),
                 Lighting = Lighting // struct value-copy; EnvironmentName is string (immutable)
             };

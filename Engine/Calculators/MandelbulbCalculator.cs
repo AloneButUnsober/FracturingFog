@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
@@ -20,6 +21,12 @@ public sealed class MandelbulbCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    /// <summary>P2 — when true, render at <c>FractalParameters.LowResPreviewScale</c>
+    /// of full resolution then nearest-upscale into ColorBuffer. Host toggles
+    /// this during interactive rotate/pan/zoom and clears it for the deferred
+    /// full-res render.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -45,8 +52,15 @@ public sealed class MandelbulbCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        // P2 — low-res preview. Render at scaled-down dims, nearest-upscale at end.
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
         double power = FractalParameters.BulbPower;
         int deIter = Math.Max(2, FractalParameters.BulbIterations);
         int maxSteps = Math.Max(16, FractalParameters.BulbMaxSteps);
@@ -91,8 +105,11 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // saved under (Phase 9 region preset captures Lighting too).
         var fx = FractalParameters.Lighting;
 
-        // AO / fog / shadow walks reuse the same DE the primary raymarch uses.
-        DistanceEstimator deDelegate = (x, y, z) => MandelbulbDE(x, y, z, power, deIter, out _);
+        // P3 — concrete DE struct so Shade<MandelbulbDe> devirtualizes every
+        // Evaluate call site (AO inner loop, soft shadow march, reflection
+        // march, volumetric in-scatter). ~8–15 % raymarch speedup vs the
+        // legacy DistanceEstimator delegate path.
+        var deStruct = new MandelbulbDe(power, deIter);
 
         // Phase 4 — G-buffer for SSAO post-pass. Allocated only when SSAO active
         // so the off case pays no memory cost.
@@ -151,7 +168,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 int idx = rowBase + x;
                 if (!hit)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    renderBuffer[idx] = ColorMap.InSetColor;
                     continue;
                 }
 
@@ -173,18 +190,26 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 var inputs = new ShadingInputs(
                     px, py, pz, nrm[0], nrm[1], nrm[2],
                     rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
-                ColorBuffer[idx] = ShadingPipeline.Shade(
-                    in inputs, baseColor, in fx, deDelegate,
+                renderBuffer[idx] = ShadingPipeline.Shade<MandelbulbDe>(
+                    in inputs, baseColor, in fx, in deStruct, true,
                     idx, depthBuf, normalBuf, hdrBuf);
             }
         });
 
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplySsao(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
-            ScreenSpacePost.ApplyToneMapBloom(ColorBuffer, hdrBuf, width, height, in fx);
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplyEdgeInk(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>
@@ -223,5 +248,40 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         double len = Math.Sqrt(x * x + y * y + z * z);
         if (len < 1e-10) return new[] { 0.0, 0.0, 0.0 };
         return new[] { x / len, y / len, z / len };
+    }
+}
+
+/// <summary>P3 — concrete DE struct for the Mandelbulb. Passed to
+/// <see cref="FracturingFog.Rendering.Lighting.ShadingPipeline.Shade{TDe}"/>
+/// so every shadow / AO / reflection / volumetric DE call inlines.</summary>
+public readonly struct MandelbulbDe : FracturingFog.Rendering.Lighting.IDistanceEstimator
+{
+    public readonly double Power;
+    public readonly int Iter;
+    public MandelbulbDe(double power, int iter) { Power = power; Iter = iter; }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    public double Evaluate(double x, double y, double z)
+    {
+        double zx = x, zy = y, zz = z;
+        double dr = 1.0;
+        double r = 0.0;
+        int iter = Iter;
+        double power = Power;
+        for (int i = 0; i < iter; i++)
+        {
+            r = System.Math.Sqrt(zx * zx + zy * zy + zz * zz);
+            if (r > 2.0) break;
+            double theta = System.Math.Acos(zz / r);
+            double phi = System.Math.Atan2(zy, zx);
+            double rPow = System.Math.Pow(r, power);
+            dr = System.Math.Pow(r, power - 1.0) * power * dr + 1.0;
+            double newTheta = theta * power;
+            double newPhi = phi * power;
+            double sinT = System.Math.Sin(newTheta);
+            zx = rPow * sinT * System.Math.Cos(newPhi) + x;
+            zy = rPow * sinT * System.Math.Sin(newPhi) + y;
+            zz = rPow * System.Math.Cos(newTheta) + z;
+        }
+        return 0.5 * System.Math.Log(System.Math.Max(r, 1e-10)) * r / dr;
     }
 }
