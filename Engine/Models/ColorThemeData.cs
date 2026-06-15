@@ -204,5 +204,23 @@ namespace FracturingFog.Models
 
         /// <summary>Adaptive contrast (histogram eq) strength in [0, 100]; null = no default.</summary>
         public int? Adaptive { get; set; }
+
+        // ── Lighting + post-FX preset (Phase 9, optional) ────────────────────
+        //
+        // Themes that ship a tuned light rig + AO/shadow/fog/bloom/tonemap
+        // setup attach a non-null LightingPreset. The host applies the
+        // preset to FractalParameters.Lighting on theme selection (unless
+        // the user has locked their current lighting). Null = "theme has no
+        // opinion, preserve user lighting" — keeps every existing theme JSON
+        // bit-for-bit compatible.
+
+        /// <summary>
+        /// Optional bundled "Lighting &amp; FX" preset. Null = theme leaves
+        /// the active lighting block alone (legacy behaviour); non-null =
+        /// host snaps <see cref="FractalParameters.Lighting"/> to the values
+        /// here when the theme is selected. Mirrors the same opt-in pattern
+        /// as <see cref="Brightness"/>/<see cref="Contrast"/>/<see cref="Adaptive"/>.
+        /// </summary>
+        public LightingFxPresetData? LightingPreset { get; set; }
     }
 }

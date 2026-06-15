@@ -173,6 +173,23 @@ namespace FracturingFog.Rendering
             new BlockingCollection<FrameJob>(boundedCapacity: 1);
         private Thread? _calcThread;
 
+        // Phase 18b — host animation clock.
+        // Wakes at ~30 FPS to advance LightingFxData.SceneTime and Trigger
+        // when any of (LightOrbitSpeed, CausticsAnimSpeed, VolumeNoiseSpeed)
+        // is non-zero. All three at defaults (== 0) → tick skips Trigger so
+        // renders stay bit-identical.
+        private System.Threading.Timer? _animTimer;
+        private long _animStartTicks;
+        // Re-entry guard: a frame can outrun the tick period at high res, so
+        // skip enqueueing another Trigger while one is still in flight.
+        private int _animTickBusy;
+        // Phase 18b fix — frame-in-flight gate. Set when the tick fires
+        // Trigger(), cleared when AnimationFrameUploaded marks completion.
+        // Without this gate, a slow 3D scene whose Calculate() exceeds 33 ms
+        // gets cancelled by every subsequent tick — calc never finishes,
+        // status bar stays "Calculating…" forever.
+        private int _animFrameInFlight;
+
         private readonly struct FrameJob
         {
             public readonly CancellationToken Token;
@@ -293,6 +310,20 @@ namespace FracturingFog.Rendering
                 Name = "FractalCalc",
             };
             _calcThread.Start();
+
+            // Phase 18b — start the 30 FPS animation tick. Period and dueTime
+            // both 33 ms. The tick is a no-op until the user dials up one of
+            // the animation speeds, so the wake cost is a handful of CPU µs
+            // per frame on an idle scene.
+            _animTimer = new System.Threading.Timer(
+                AnimationTick, state: null, dueTime: 33, period: 33);
+
+            // Phase 18b fix — clear the frame-in-flight gate when each
+            // upload completes (success or cancellation, both fire this
+            // event). Frees the next animation tick to enqueue another
+            // frame instead of being silently skipped.
+            AnimationFrameUploaded += (_, _) =>
+                System.Threading.Interlocked.Exchange(ref _animFrameInFlight, 0);
         }
 
         public FractalViewState ViewState { get; }
@@ -676,6 +707,12 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
 
+            // Phase 18b fix — mark a frame as in flight so the animation tick
+            // doesn't cancel this Trigger 33 ms later. AnimationFrameUploaded
+            // clears the flag once the upload completes (cancelled frames
+            // count too — see RunFrameJobUpload).
+            System.Threading.Interlocked.Exchange(ref _animFrameInFlight, 1);
+
             // Finding A fix: fire status BEFORE any blocking work so the user
             // sees "Calculating…" immediately on click. Previously this fired
             // after Cancel + stale-upload + ApplyView + alt-switch, so under
@@ -838,6 +875,30 @@ namespace FracturingFog.Rendering
             }
             catch (OperationCanceledException) { }
             long calcEnd = Stopwatch.GetTimestamp();
+
+            // Phase 8b — 2D SSAO on the canonical Mandelbrot path. Synthesises
+            // depth from the smooth iteration count. Default SsaoSamples=0 keeps
+            // pre-Phase-8b output bit-identical. 3D raymarchers run their own
+            // SSAO inside Calculate() and aren't touched here.
+            if (!useAlt && !token.IsCancellationRequested)
+            {
+                var fxParams = ViewState?.FractalParameters;
+                if (fxParams != null && fxParams.Lighting.SsaoSamples > 0)
+                {
+                    try
+                    {
+                        var fxLocal = fxParams.Lighting;
+                        FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(
+                            calc.ColorBuffer,
+                            calc.SmoothBuffer,
+                            calc.IterationBuffer,
+                            calc.MaxIterations,
+                            calc.Width, calc.Height,
+                            in fxLocal);
+                    }
+                    catch { /* SSAO best-effort — never fail the frame. */ }
+                }
+            }
             if (ShowPerfHud)
             {
                 _perfStats.RecordCalc((calcEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
@@ -1763,10 +1824,85 @@ namespace FracturingFog.Rendering
                 wm);
         }
 
+        // Phase 18b — animation tick callback. Polls the active Lighting
+        // struct for any non-zero animation speed; if none, returns without
+        // touching ViewState (idle scene stays bit-identical to a stopped
+        // clock). Otherwise advances SceneTime to "seconds since the first
+        // tick that found a non-zero speed" and kicks a Trigger.
+        //
+        // SceneTime injection happens *on the timer thread* via a copy-out
+        // / mutate / copy-in dance because Lighting is exposed as an
+        // auto-property of a value type — a direct field write would be
+        // discarded by the compiler. The mutation is a single struct
+        // assignment; one tick can race a calculator's own snapshot read
+        // and produce 1/30 s of phase mismatch, but the value is a smooth
+        // double so the artifact is below perception threshold.
+        private void AnimationTick(object? state)
+        {
+            if (_disposed) return;
+            if (System.Threading.Interlocked.Exchange(ref _animTickBusy, 1) != 0) return;
+            try
+            {
+                var p = ViewState.FractalParameters;
+                if (p == null) return;
+                var l = p.Lighting;
+                bool anySpeed =
+                    Math.Abs(l.LightOrbitSpeed)   > 1e-9 ||
+                    Math.Abs(l.CausticsAnimSpeed) > 1e-9 ||
+                    Math.Abs(l.VolumeNoiseSpeed)  > 1e-9;
+                if (!anySpeed)
+                {
+                    // Reset clock so the next time speed becomes non-zero we
+                    // re-anchor at "now" rather than carrying an ancient base.
+                    _animStartTicks = 0;
+                    return;
+                }
+
+                // Phase 18b fix — anchor the scene clock the moment speed becomes
+                // non-zero, regardless of whether this tick will proceed to
+                // Trigger. Without this, _animStartTicks was set only when the
+                // gate cleared, so the first animated render snapshotted
+                // SceneTime=0 → identical pixels to the user's initial frame →
+                // looked like "no animation". By the time the gate clears the
+                // clock has already advanced through the in-flight render.
+                long now = Stopwatch.GetTimestamp();
+                if (_animStartTicks == 0) _animStartTicks = now;
+
+                // Phase 18b fix — gate on the previous frame having completed.
+                // Trigger() sets _animFrameInFlight; AnimationFrameUploaded
+                // clears it. Skip if a frame (user-initiated OR animation-tick
+                // initiated) is still running. Without this gate, a slow 3D
+                // scene whose Calculate exceeds the 33 ms tick period gets
+                // cancelled by every subsequent tick — the user sees the
+                // status bar stuck on "Calculating…".
+                if (System.Threading.Volatile.Read(ref _animFrameInFlight) != 0)
+                    return;
+
+                double sceneTime = (now - _animStartTicks) / (double)Stopwatch.Frequency;
+                l.SceneTime = sceneTime;
+                p.Lighting = l;
+
+                Trigger();
+            }
+            catch
+            {
+                // Animation tick must never tear down the host. Swallow and
+                // wait for the next period.
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _animTickBusy, 0);
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
+            // Phase 18b — stop the animation timer first so no more Triggers
+            // fire while the rest of the pipeline is being torn down.
+            try { _animTimer?.Dispose(); } catch { }
+            _animTimer = null;
             // Tear down any running video / slideshow first so its background
             // loop stops touching the calculator + renderer before disposal.
             lock (_videoLock) _videoCts?.Cancel();

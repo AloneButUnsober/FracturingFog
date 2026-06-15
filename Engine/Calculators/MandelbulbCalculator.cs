@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
@@ -83,11 +84,35 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         double panU = CenterX;
         double panV = -CenterY;
 
-        // Light direction (world-space) from spherical angles.
-        double[] light = Normalize3(
-            Math.Sin(FractalParameters.BulbLightPhi) * Math.Cos(FractalParameters.BulbLightTheta),
-            Math.Cos(FractalParameters.BulbLightPhi),
-            Math.Sin(FractalParameters.BulbLightPhi) * Math.Sin(FractalParameters.BulbLightTheta));
+        // Phase 1c — Lighting struct is authoritative for Light1/2/3.
+        // Legacy BulbLightTheta/Phi defaults match LightingFxData.CreateDefault()
+        // so freshly-opened scenes look identical; saved regions that customised
+        // the legacy fields will reflect the Lighting struct values they were
+        // saved under (Phase 9 region preset captures Lighting too).
+        var fx = FractalParameters.Lighting;
+
+        // AO / fog / shadow walks reuse the same DE the primary raymarch uses.
+        DistanceEstimator deDelegate = (x, y, z) => MandelbulbDE(x, y, z, power, deIter, out _);
+
+        // Phase 4 — G-buffer for SSAO post-pass. Allocated only when SSAO active
+        // so the off case pays no memory cost.
+        float[]? depthBuf = null;
+        float[]? normalBuf = null;
+        if (fx.SsaoSamples > 0)
+        {
+            depthBuf = new float[width * height];
+            normalBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearGBuffer(depthBuf, normalBuf);
+        }
+
+        // Phase 7 — HDR float buffer for tonemap/bloom. NaN sentinel marks sky.
+        float[]? hdrBuf = null;
+        bool wantPost = fx.ToneMap != ToneMapOperator.None || fx.BloomStrength > 0;
+        if (wantPost)
+        {
+            hdrBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearHdrBuffer(hdrBuf);
+        }
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -137,23 +162,29 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 double n2 = MandelbulbDE(px, py, pz + h, power, deIter, out _) - MandelbulbDE(px, py, pz - h, power, deIter, out _);
                 var nrm = Normalize3(n0, n1, n2);
 
-                double diffuse = Math.Max(0.0, nrm[0] * light[0] + nrm[1] * light[1] + nrm[2] * light[2]);
-                double ambient = 0.15;
-                double shade = ambient + diffuse * (1.0 - ambient);
-
                 // Color driver: raymarch step count + depth. Spans well across
                 // surface even when DE iter-escape is constant, so non-3D
                 // gradient themes show variation. 3D themes still get nrm.
                 float smooth = (float)hitStep * (256f / Math.Max(1, maxSteps))
                              + (float)(tTotal * 4.0);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
-                // Apply shading multiplicatively.
-                byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);
-                byte G = (byte)Math.Clamp(((baseColor >> 8) & 0xFF) * shade, 0, 255);
-                byte B = (byte)Math.Clamp((baseColor & 0xFF) * shade, 0, 255);
-                ColorBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+
+                // Phase 2 — shading via shared pipeline.
+                var inputs = new ShadingInputs(
+                    px, py, pz, nrm[0], nrm[1], nrm[2],
+                    rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
+                ColorBuffer[idx] = ShadingPipeline.Shade(
+                    in inputs, baseColor, in fx, deDelegate,
+                    idx, depthBuf, normalBuf, hdrBuf);
             }
         });
+
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplySsao(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null)
+            ScreenSpacePost.ApplyToneMapBloom(ColorBuffer, hdrBuf, width, height, in fx);
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplyEdgeInk(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
     }
 
     /// <summary>

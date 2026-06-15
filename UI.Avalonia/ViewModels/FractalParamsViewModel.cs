@@ -16,7 +16,7 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 /// set of section-visibility flags so a single .axaml can render the right
 /// sub-set of controls without a code-behind switch.
 /// </summary>
-public sealed class FractalParamsViewModel : ViewModelBase
+public sealed partial class FractalParamsViewModel : ViewModelBase
 {
     private readonly FractalParameters _p;
     private readonly Func<string, (double a, double b, double c, double d)>? _attractorDefaults;
@@ -185,6 +185,18 @@ public sealed class FractalParamsViewModel : ViewModelBase
     public bool IsKleinian => FractalType == FractalType.Kleinian;
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
     public bool IsDla => FractalType == FractalType.Dla;
+
+    /// <summary>
+    /// Visibility flag for the shared LightingFx section. True for every
+    /// 3D raymarched fractal — those are the ones whose pixels flow through
+    /// <c>ShadingPipeline</c>. 2D fractals get their lighting via theme
+    /// objects (Phase 8) so this section stays hidden for them.
+    /// </summary>
+    public bool IsAny3DRaymarcher =>
+        IsMandelbulb || IsMandelbox || IsKifs
+        || IsQuatJulia || IsQuatMandelbrot
+        || IsBicomplexMandelbrot || IsKleinian
+        || FractalType == FractalType.UserBulb;
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs

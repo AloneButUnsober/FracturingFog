@@ -338,6 +338,66 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public bool TryGetThemeLightingPreset(
+            string themeName, out FracturingFog.Rendering.Lighting.LightingFxData lighting)
+        {
+            lighting = default;
+            if (string.IsNullOrEmpty(themeName)) return false;
+            // User library is the authoritative source for bundled presets —
+            // built-in C# themes don't carry LightingPreset. Case-insensitive
+            // match mirrors ColorPalette.GetPaletteByName's lookup contract.
+            var data = UserColorThemeLibrary.Instance.Themes.FirstOrDefault(
+                t => string.Equals(t.Name, themeName, StringComparison.OrdinalIgnoreCase));
+            if (data?.LightingPreset == null) return false;
+            lighting = data.LightingPreset.ToFx();
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool SaveLightingPresetToTheme(
+            string themeName, in FracturingFog.Rendering.Lighting.LightingFxData lighting)
+        {
+            if (string.IsNullOrEmpty(themeName)) return false;
+            var data = UserColorThemeLibrary.Instance.Themes.FirstOrDefault(
+                t => string.Equals(t.Name, themeName, StringComparison.OrdinalIgnoreCase));
+            // Built-in / algorithmic themes are not in the user library and
+            // can't carry a preset — the caller surfaces a friendly hint.
+            if (data == null) return false;
+            data.LightingPreset = LightingFxPresetData.FromFx(lighting);
+            UserColorThemeLibrary.Instance.Save();
+            ColorPalette.RebuildUserPalettes();
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool ClearLightingPresetOnTheme(string themeName)
+        {
+            if (string.IsNullOrEmpty(themeName)) return false;
+            var data = UserColorThemeLibrary.Instance.Themes.FirstOrDefault(
+                t => string.Equals(t.Name, themeName, StringComparison.OrdinalIgnoreCase));
+            if (data == null || data.LightingPreset == null) return false;
+            data.LightingPreset = null;
+            UserColorThemeLibrary.Instance.Save();
+            ColorPalette.RebuildUserPalettes();
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool TryGetRegionLightingOverride(
+            string regionName, out FracturingFog.Rendering.Lighting.LightingFxData lighting)
+        {
+            lighting = default;
+            if (string.IsNullOrEmpty(regionName)) return false;
+            var region = FractalRegionLibrary.Instance.All.FirstOrDefault(
+                r => string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                ?? FractalRegionLibrary.Instance.AllSlideshowRegions.FirstOrDefault(
+                    r => string.Equals(r.Name, regionName, StringComparison.Ordinal));
+            if (region?.LightingOverride == null) return false;
+            lighting = region.LightingOverride.ToFx();
+            return true;
+        }
+
+        /// <inheritdoc/>
         public bool ApplyThemeSilent(string themeName)
         {
             if (string.IsNullOrEmpty(themeName) || _renderHost == null) return false;

@@ -141,6 +141,18 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (string.IsNullOrEmpty(name)) return;
             _themeService.ApplyTheme(name);
             // ApplyTheme already calls RepaintWithPostFx; nothing else needed.
+
+            // Phase 24 — bundled Lighting & FX preset. When the active theme
+            // carries a non-null LightingPreset and the user hasn't locked
+            // their lighting, snap FractalParameters.Lighting to the bundle
+            // and kick a recompute (lighting affects shading, not just the
+            // post-FX pass that ApplyTheme already retriggered).
+            if (!Main.LightingLocked
+                && _themeService.TryGetThemeLightingPreset(name, out var preset))
+            {
+                Main.ViewState.FractalParameters.Lighting = preset;
+                Main.RenderHost.Trigger();
+            }
         };
         FloatingMenu.ResetClick        += (_, _) => Main.ResetViewCommand.Execute().Subscribe();
         FloatingMenu.HelpClick         += (_, _) => ShowHelp();
@@ -150,6 +162,37 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.BrightnessSlide   += (_, v) => Main.Brightness = v;
         FloatingMenu.ContrastSlide     += (_, v) => Main.Contrast = v;
         FloatingMenu.AdaptiveSlide     += (_, v) => Main.Adaptive = v;
+        // Phase 24 — mirror the lighting-lock checkbox into MainViewModel so
+        // the theme-change handler below can consult it. Phase 24b extends
+        // the same pattern to Brightness / Contrast / Adaptive — previously
+        // the FloatingMenu state never reached Main and the checkboxes were
+        // dead UI.
+        FloatingMenu.LightingLockedChanged += (_, v) => Main.LightingLocked = v;
+        FloatingMenu.BrightnessLockedChanged += (_, v) => Main.BrightnessLocked = v;
+        FloatingMenu.ContrastLockedChanged += (_, v) => Main.ContrastLocked = v;
+        FloatingMenu.AdaptiveLockedChanged += (_, v) => Main.AdaptiveLocked = v;
+
+        // Phase 9b/24b — "Save Lighting → Theme" snapshots the active
+        // FractalParameters.Lighting block as the selected user theme's
+        // bundled LightingPreset. Built-in / algorithmic themes are not in
+        // the user library and the service returns false on those —
+        // surface a friendly status hint in that case so the user knows
+        // the click registered. The selected theme name is whichever entry
+        // is currently in the FloatingMenu combo (mirrored by ColorThemeChanged).
+        FloatingMenu.SaveLightingToThemeClick += (_, themeName) =>
+        {
+            if (string.IsNullOrWhiteSpace(themeName)
+                || themeName.StartsWith("—", StringComparison.Ordinal))
+            {
+                Main.SetStatus("Pick a user theme first.");
+                return;
+            }
+            var lighting = Main.ViewState.FractalParameters.Lighting;
+            bool ok = _themeService.SaveLightingPresetToTheme(themeName, in lighting);
+            Main.SetStatus(ok
+                ? $"Lighting saved to theme: {themeName}"
+                : $"Cannot save lighting to '{themeName}' — built-in or unknown theme.");
+        };
 
         // ── Newly-wired controls (#53) ───────────────────────────────────
         // Close menu — flip the visibility flag the MainWindow binds to.
@@ -1348,6 +1391,18 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // value future saves (poster / region) will actually use.
             Main.SetQualitySilent(Main.ViewState.Quality);
             FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+            // Phase 10b — per-region LightingOverride. Same precedence as the
+            // theme preset (Phase 24): honour LightingLocked, then apply.
+            // The override "wins" the race against the theme preset because
+            // it runs after the region jump — themes follow region jumps in
+            // most user flows, and a region's lighting tuning is more
+            // specific than a theme's. Bit-identical when LightingOverride
+            // is null on the region (the common case).
+            if (!Main.LightingLocked
+                && _themeService.TryGetRegionLightingOverride(name, out var lightOverride))
+            {
+                Main.ViewState.FractalParameters.Lighting = lightOverride;
+            }
             Main.RenderHost.Trigger();
         }
     }

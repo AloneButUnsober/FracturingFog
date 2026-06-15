@@ -1,0 +1,488 @@
+// FractalParamsViewModel.Lighting.cs
+//
+// Bindings for the shared LightingFxData parameter block. Every 3D raymarcher
+// (Mandelbulb, Mandelbox, KIFS, Quat*, Bicomplex, Kleinian, UserBulb) reads
+// the same struct so this single partial wires every scene's lights, AO,
+// shadow, fog, material, sky, post knobs into FractalParamsView.
+//
+// FractalParameters.Lighting is a struct (value type). Setters copy the
+// struct, mutate, write back — done via MutateLighting(...) so each property
+// stays a one-liner.
+
+using System;
+using FracturingFog.Models;
+using FracturingFog.Rendering.Lighting;
+using ReactiveUI;
+
+namespace FracturingFog.UI.Avalonia.ViewModels;
+
+public sealed partial class FractalParamsViewModel
+{
+    // ── struct mutation helper ────────────────────────────────────────
+
+    private void MutateLighting(Action<LightingFxParamRef> action)
+    {
+        var fx = _p.Lighting;
+        action(new LightingFxParamRef(ref fx));
+        _p.Lighting = fx;
+    }
+
+    /// <summary>Ref-wrapper so a setter can pass a delegate that mutates the
+    /// struct in place without each property duplicating the copy/write-back
+    /// boilerplate. Lifetime is bounded to the MutateLighting call so the
+    /// ref-field is safe to hold.</summary>
+    private readonly ref struct LightingFxParamRef
+    {
+        public readonly ref LightingFxData Fx;
+        public LightingFxParamRef(ref LightingFxData fx) { Fx = ref fx; }
+    }
+
+    // ── Lights ────────────────────────────────────────────────────────
+
+    public double Light1Theta
+    {
+        get => _p.Lighting.Light1.Theta;
+        set { MutateLighting(r => r.Fx.Light1.Theta = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light1Phi
+    {
+        get => _p.Lighting.Light1.Phi;
+        set { MutateLighting(r => r.Fx.Light1.Phi = Clamp(value, 0.01, 3.13)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light1Intensity
+    {
+        get => _p.Lighting.Light1.Intensity;
+        set { MutateLighting(r => r.Fx.Light1.Intensity = Clamp(value, 0, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public uint Light1Color
+    {
+        get => _p.Lighting.Light1.Color;
+        set { MutateLighting(r => r.Fx.Light1.Color = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public double Light2Theta
+    {
+        get => _p.Lighting.Light2.Theta;
+        set { MutateLighting(r => r.Fx.Light2.Theta = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light2Phi
+    {
+        get => _p.Lighting.Light2.Phi;
+        set { MutateLighting(r => r.Fx.Light2.Phi = Clamp(value, 0.01, 3.13)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light2Intensity
+    {
+        get => _p.Lighting.Light2.Intensity;
+        set { MutateLighting(r => r.Fx.Light2.Intensity = Clamp(value, 0, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public uint Light2Color
+    {
+        get => _p.Lighting.Light2.Color;
+        set { MutateLighting(r => r.Fx.Light2.Color = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public double Light3Theta
+    {
+        get => _p.Lighting.Light3.Theta;
+        set { MutateLighting(r => r.Fx.Light3.Theta = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3Phi
+    {
+        get => _p.Lighting.Light3.Phi;
+        set { MutateLighting(r => r.Fx.Light3.Phi = Clamp(value, 0.01, 3.13)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3Intensity
+    {
+        get => _p.Lighting.Light3.Intensity;
+        set { MutateLighting(r => r.Fx.Light3.Intensity = Clamp(value, 0, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public uint Light3Color
+    {
+        get => _p.Lighting.Light3.Color;
+        set { MutateLighting(r => r.Fx.Light3.Color = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Ambient / AO ──────────────────────────────────────────────────
+
+    public double AmbientStrength
+    {
+        get => _p.Lighting.AmbientStrength;
+        set { MutateLighting(r => r.Fx.AmbientStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int AoSamples
+    {
+        get => _p.Lighting.AoSamples;
+        set { MutateLighting(r => r.Fx.AoSamples = (int)Clamp(value, 0, 16)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double AoStrength
+    {
+        get => _p.Lighting.AoStrength;
+        set { MutateLighting(r => r.Fx.AoStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int SsaoSamples
+    {
+        get => _p.Lighting.SsaoSamples;
+        set { MutateLighting(r => r.Fx.SsaoSamples = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double SsaoRadius
+    {
+        get => _p.Lighting.SsaoRadius;
+        set { MutateLighting(r => r.Fx.SsaoRadius = Clamp(value, 0.001, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double SsaoStrength
+    {
+        get => _p.Lighting.SsaoStrength;
+        set { MutateLighting(r => r.Fx.SsaoStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Shadow ────────────────────────────────────────────────────────
+
+    public int ShadowSteps
+    {
+        get => _p.Lighting.ShadowSteps;
+        set { MutateLighting(r => r.Fx.ShadowSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double ShadowSoftK
+    {
+        get => _p.Lighting.ShadowSoftK;
+        set { MutateLighting(r => r.Fx.ShadowSoftK = Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Fog / Volumetric ─────────────────────────────────────────────
+
+    public double FogDensity
+    {
+        get => _p.Lighting.FogDensity;
+        set { MutateLighting(r => r.Fx.FogDensity = Clamp(value, 0, 2)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double FogHeightFalloff
+    {
+        get => _p.Lighting.FogHeightFalloff;
+        set { MutateLighting(r => r.Fx.FogHeightFalloff = Clamp(value, 0, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int VolumeSteps
+    {
+        get => _p.Lighting.VolumeSteps;
+        set { MutateLighting(r => r.Fx.VolumeSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double VolumeNoiseAmount
+    {
+        get => _p.Lighting.VolumeNoiseAmount;
+        set { MutateLighting(r => r.Fx.VolumeNoiseAmount = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Material ─────────────────────────────────────────────────────
+
+    public double Roughness
+    {
+        get => _p.Lighting.Roughness;
+        set { MutateLighting(r => r.Fx.Roughness = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Metallic
+    {
+        get => _p.Lighting.Metallic;
+        set { MutateLighting(r => r.Fx.Metallic = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double SpecularStrength
+    {
+        get => _p.Lighting.SpecularStrength;
+        set { MutateLighting(r => r.Fx.SpecularStrength = Clamp(value, 0, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double SubSurfaceStrength
+    {
+        get => _p.Lighting.SubSurfaceStrength;
+        set { MutateLighting(r => r.Fx.SubSurfaceStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Sky / IBL ────────────────────────────────────────────────────
+
+    public SkyMode SkyMode
+    {
+        get => _p.Lighting.SkyMode;
+        set { MutateLighting(r => r.Fx.SkyMode = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array SkyModes => Enum.GetValues(typeof(SkyMode));
+
+    public uint BgTopColor
+    {
+        get => _p.Lighting.BgTopColor;
+        set { MutateLighting(r => r.Fx.BgTopColor = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public uint BgBottomColor
+    {
+        get => _p.Lighting.BgBottomColor;
+        set { MutateLighting(r => r.Fx.BgBottomColor = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public string? EnvironmentName
+    {
+        get => _p.Lighting.EnvironmentName;
+        set { MutateLighting(r => r.Fx.EnvironmentName = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double IblStrength
+    {
+        get => _p.Lighting.IblStrength;
+        set { MutateLighting(r => r.Fx.IblStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Post ─────────────────────────────────────────────────────────
+
+    public ToneMapOperator ToneMap
+    {
+        get => _p.Lighting.ToneMap;
+        set { MutateLighting(r => r.Fx.ToneMap = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array ToneMapOperators => Enum.GetValues(typeof(ToneMapOperator));
+
+    public double Exposure
+    {
+        get => _p.Lighting.Exposure;
+        set { MutateLighting(r => r.Fx.Exposure = Clamp(value, 0.0625, 16)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double BloomThreshold
+    {
+        get => _p.Lighting.BloomThreshold;
+        set { MutateLighting(r => r.Fx.BloomThreshold = Clamp(value, 0, 20)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double BloomStrength
+    {
+        get => _p.Lighting.BloomStrength;
+        set { MutateLighting(r => r.Fx.BloomStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double ChromaticAberration
+    {
+        get => _p.Lighting.ChromaticAberration;
+        set { MutateLighting(r => r.Fx.ChromaticAberration = Clamp(value, 0, 16)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double LensDistortion
+    {
+        get => _p.Lighting.LensDistortion;
+        set { MutateLighting(r => r.Fx.LensDistortion = Clamp(value, -0.5, 0.5)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Vignette
+    {
+        get => _p.Lighting.Vignette;
+        set { MutateLighting(r => r.Fx.Vignette = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double LensTangentialX
+    {
+        get => _p.Lighting.LensTangentialX;
+        set { MutateLighting(r => r.Fx.LensTangentialX = Clamp(value, -0.1, 0.1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double LensTangentialY
+    {
+        get => _p.Lighting.LensTangentialY;
+        set { MutateLighting(r => r.Fx.LensTangentialY = Clamp(value, -0.1, 0.1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double AnamorphicSqueeze
+    {
+        get => _p.Lighting.AnamorphicSqueeze;
+        set { MutateLighting(r => r.Fx.AnamorphicSqueeze = Clamp(value, 0.25, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Reflection / Stereo / DoF / Animation / Edge (Phase 13+) ─────
+
+    public double ReflectionStrength
+    {
+        get => _p.Lighting.ReflectionStrength;
+        set { MutateLighting(r => r.Fx.ReflectionStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int ReflectionSteps
+    {
+        get => _p.Lighting.ReflectionSteps;
+        set { MutateLighting(r => r.Fx.ReflectionSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double EdgeStrength
+    {
+        get => _p.Lighting.EdgeStrength;
+        set { MutateLighting(r => r.Fx.EdgeStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public uint EdgeColor
+    {
+        get => _p.Lighting.EdgeColor;
+        set { MutateLighting(r => r.Fx.EdgeColor = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>Hex BGRA accessor for <see cref="EdgeColor"/>. See
+    /// <see cref="TriplanarTintHex"/> for the rationale.</summary>
+    public string EdgeColorHex
+    {
+        get => _p.Lighting.EdgeColor.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            var s = (value ?? string.Empty).Trim();
+            if (s.StartsWith("#")) s = s.Substring(1);
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+            if (!uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out uint u)) return;
+            if (_p.Lighting.EdgeColor == u) return;
+            MutateLighting(r => r.Fx.EdgeColor = u);
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(EdgeColor));
+            Fire();
+        }
+    }
+    public double EdgeThreshold
+    {
+        get => _p.Lighting.EdgeThreshold;
+        set { MutateLighting(r => r.Fx.EdgeThreshold = Clamp(value, 0, 2.83)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public EdgeKernelMode EdgeKernel
+    {
+        get => _p.Lighting.EdgeKernel;
+        set { MutateLighting(r => r.Fx.EdgeKernel = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array EdgeKernels => Enum.GetValues(typeof(EdgeKernelMode));
+    public double StereoEyeSeparation
+    {
+        get => _p.Lighting.StereoEyeSeparation;
+        set { MutateLighting(r => r.Fx.StereoEyeSeparation = Clamp(value, 0, 0.25)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double StereoFovDegrees
+    {
+        get => _p.Lighting.StereoFovDegrees;
+        set { MutateLighting(r => r.Fx.StereoFovDegrees = Clamp(value, 20, 120)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double DofAperture
+    {
+        get => _p.Lighting.DofAperture;
+        set { MutateLighting(r => r.Fx.DofAperture = Clamp(value, 0, 0.5)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double DofFocusDistance
+    {
+        get => _p.Lighting.DofFocusDistance;
+        set { MutateLighting(r => r.Fx.DofFocusDistance = Clamp(value, 0.1, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int DofSamples
+    {
+        get => _p.Lighting.DofSamples;
+        set { MutateLighting(r => r.Fx.DofSamples = (int)Clamp(value, 1, 32)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double LightOrbitSpeed
+    {
+        get => _p.Lighting.LightOrbitSpeed;
+        set { MutateLighting(r => r.Fx.LightOrbitSpeed = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double CausticsAnimSpeed
+    {
+        get => _p.Lighting.CausticsAnimSpeed;
+        set { MutateLighting(r => r.Fx.CausticsAnimSpeed = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Cloud noise (Phase 22b) ───────────────────────────────────────
+    public double VolumeNoiseScale
+    {
+        get => _p.Lighting.VolumeNoiseScale;
+        set { MutateLighting(r => r.Fx.VolumeNoiseScale = Clamp(value, 0.01, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double VolumeNoiseSpeed
+    {
+        get => _p.Lighting.VolumeNoiseSpeed;
+        set { MutateLighting(r => r.Fx.VolumeNoiseSpeed = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int VolumeNoiseOctaves
+    {
+        get => _p.Lighting.VolumeNoiseOctaves;
+        set { MutateLighting(r => r.Fx.VolumeNoiseOctaves = (int)Clamp(value, 1, 6)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double VolumeSelfShadow
+    {
+        get => _p.Lighting.VolumeSelfShadow;
+        set { MutateLighting(r => r.Fx.VolumeSelfShadow = Clamp(value, 0, 4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int VolumeSelfShadowSteps
+    {
+        get => _p.Lighting.VolumeSelfShadowSteps;
+        set { MutateLighting(r => r.Fx.VolumeSelfShadowSteps = (int)Clamp(value, 0, 16)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Triplanar material (Phase 14b) ────────────────────────────────
+    public TriplanarTextureKind TriplanarKind
+    {
+        get => _p.Lighting.TriplanarKind;
+        set { MutateLighting(r => r.Fx.TriplanarKind = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array TriplanarKinds => Enum.GetValues(typeof(TriplanarTextureKind));
+    public double TriplanarScale
+    {
+        get => _p.Lighting.TriplanarScale;
+        set { MutateLighting(r => r.Fx.TriplanarScale = Clamp(value, 0.01, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double TriplanarStrength
+    {
+        get => _p.Lighting.TriplanarStrength;
+        set { MutateLighting(r => r.Fx.TriplanarStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public uint TriplanarTint
+    {
+        get => _p.Lighting.TriplanarTint;
+        set { MutateLighting(r => r.Fx.TriplanarTint = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>Hex BGRA accessor for <see cref="TriplanarTint"/>. Bound to
+    /// the FractalParamsView TextBox because the Avalonia NumericUpDown
+    /// chokes on the X8 format string and uint maxima, producing blank
+    /// fields + crashes on arrow / direct entry. Phase 14b hotfix.</summary>
+    public string TriplanarTintHex
+    {
+        get => _p.Lighting.TriplanarTint.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            var s = (value ?? string.Empty).Trim();
+            if (s.StartsWith("#")) s = s.Substring(1);
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+            if (!uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out uint u)) return;
+            if (_p.Lighting.TriplanarTint == u) return;
+            MutateLighting(r => r.Fx.TriplanarTint = u);
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(TriplanarTint));
+            Fire();
+        }
+    }
+
+    // ── Debug HUD bits (Phase 19b) ────────────────────────────────────
+    // DebugHudFlags is a bit mask: 0x1 light-direction compass,
+    // 0x2 parameter bars, 0x4 scene-time clock. Expose three independent
+    // booleans rather than one int knob so the UI can toggle each overlay
+    // without the user having to do bit math.
+    public bool DebugHudCompass
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x1) != 0;
+        set
+        {
+            MutateLighting(r =>
+            {
+                if (value) r.Fx.DebugHudFlags |= 0x1;
+                else       r.Fx.DebugHudFlags &= ~0x1;
+            });
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+    public bool DebugHudBars
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x2) != 0;
+        set
+        {
+            MutateLighting(r =>
+            {
+                if (value) r.Fx.DebugHudFlags |= 0x2;
+                else       r.Fx.DebugHudFlags &= ~0x2;
+            });
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+    public bool DebugHudClock
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x4) != 0;
+        set
+        {
+            MutateLighting(r =>
+            {
+                if (value) r.Fx.DebugHudFlags |= 0x4;
+                else       r.Fx.DebugHudFlags &= ~0x4;
+            });
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+}

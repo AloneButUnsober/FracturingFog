@@ -180,6 +180,34 @@ namespace FracturingFog.Models
         /// <summary>UserBulb light phi (radians).</summary>
         public double UserBulbLightPhi { get; set; }
 
+        // ── Lighting & FX override (Phase 10, optional) ──────────────────────
+        //
+        // Region snapshot of the user's tuned "Lighting & FX" state. Null =
+        // region has no opinion; recall preserves whatever lighting the user
+        // currently has dialled in. Non-null = recall snaps
+        // FractalParameters.Lighting to the saved values so the dramatic
+        // shadow angle / volumetric fog / bloom that defined the saved view
+        // come back exactly as captured.
+        //
+        // Uses the same DTO as ColorThemeData.LightingPreset so theme presets
+        // and region overrides can round-trip through one serializer.
+
+        /// <summary>
+        /// Optional snapshot of the active <see cref="FractalParameters.Lighting"/>
+        /// at the time the region was saved. Null = recall leaves user lighting
+        /// alone (legacy behaviour; pre-Phase-10 regions still load cleanly).
+        /// </summary>
+        public LightingFxPresetData? LightingOverride { get; set; }
+
+        /// <summary>
+        /// Apply this region's lighting override (if any) to the given params.
+        /// No-op when the override is null. Pair with a host-side
+        /// "Lock lighting on recall" toggle to let the user opt out of the
+        /// override per recall.
+        /// </summary>
+        public void ApplyLightingTo(FractalParameters parameters)
+            => LightingOverride?.ApplyTo(parameters);
+
         /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
         /// assumed to be user-defined unless explicitly marked as built-in.

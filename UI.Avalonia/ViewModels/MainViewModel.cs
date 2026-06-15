@@ -500,6 +500,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private bool _adaptiveLocked;
     public bool AdaptiveLocked { get => _adaptiveLocked; set => this.RaiseAndSetIfChanged(ref _adaptiveLocked, value); }
 
+    private bool _lightingLocked;
+    /// <summary>When true, theme selection does NOT overwrite
+    /// <c>FractalParameters.Lighting</c> from the theme's bundled
+    /// <see cref="LightingFxPresetData"/>. Default false = honour theme presets.
+    /// Phase 24.</summary>
+    public bool LightingLocked { get => _lightingLocked; set => this.RaiseAndSetIfChanged(ref _lightingLocked, value); }
+
     // ── Overlay toggles ───────────────────────────────────────────────────
 
     private bool _showGrid;

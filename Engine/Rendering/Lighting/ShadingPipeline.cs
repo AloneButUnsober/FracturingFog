@@ -1,0 +1,1142 @@
+// ShadingPipeline.cs
+//
+// Shared shading kernel for 3D raymarchers. Bottom-up port of the
+// UserBulbCalculator path so every raymarcher (Mandelbulb, Mandelbox, KIFS,
+// QJulia, QMandel, Bicomplex, Kleinian, UserBulb) can plug in via a single
+// DistanceEstimator delegate + a ShadingInputs hit record.
+//
+// Phase 1 scope:
+//   - Static helpers: AccumulateLight, SkyColor, LightDir, Saturate,
+//     PackBgra. Bit-identical to the originals in UserBulbCalculator so
+//     a switch-over compiles and renders the same pixels.
+//   - Shade(...) signature stub returning a packed BGRA pixel; first
+//     implementation mirrors UserBulb's Lambert + 3-light + AO + exp-fog
+//     path and is wired in Phase 1b once a pixel-diff harness exists.
+//   - Phase 2+ effects (soft shadow, SSAO, volumetric, IBL, bloom,
+//     tonemap, reflection, SSS, edge contour) extend the same struct;
+//     the contract for calculators stays Shade(...).
+
+using System;
+using System.Runtime.CompilerServices;
+
+namespace FracturingFog.Rendering.Lighting;
+
+/// <summary>
+/// Distance-estimator delegate. Returned scalar is a lower bound on the
+/// distance from (x, y, z) to the fractal surface. Used during the primary
+/// raymarch by the caller; also called during shadow / AO / reflection
+/// walks inside the pipeline.
+/// </summary>
+public delegate double DistanceEstimator(double x, double y, double z);
+
+/// <summary>
+/// Hit record produced by a calculator's primary raymarch loop and passed
+/// to <see cref="ShadingPipeline.Shade"/>. Eight doubles for the point and
+/// normal; integer step / hitDist diagnostics for color drivers.
+/// </summary>
+public readonly struct ShadingInputs
+{
+    public readonly double Px, Py, Pz;        // surface hit point (world)
+    public readonly double Nx, Ny, Nz;        // unit surface normal
+    public readonly double Rdx, Rdy, Rdz;     // ray direction (world)
+    public readonly double TotalT;            // distance traveled along ray
+    public readonly double HitDist;           // last DE value at hit
+    public readonly int    HitStep;           // step index at hit
+    public readonly double Epsilon;           // DE epsilon used by caller
+
+    public ShadingInputs(
+        double px, double py, double pz,
+        double nx, double ny, double nz,
+        double rdx, double rdy, double rdz,
+        double totalT, double hitDist, int hitStep, double epsilon)
+    {
+        Px = px; Py = py; Pz = pz;
+        Nx = nx; Ny = ny; Nz = nz;
+        Rdx = rdx; Rdy = rdy; Rdz = rdz;
+        TotalT = totalT; HitDist = hitDist; HitStep = hitStep; Epsilon = epsilon;
+    }
+}
+
+/// <summary>
+/// Surface material at the hit point. The calculator picks an albedo from
+/// its color map + color driver; the pipeline composites lighting on top.
+/// roughness / metallic / spec / sss are sampled from <see cref="LightingFxData"/>
+/// for now; Phase 14 (triplanar) feeds them per-pixel via texture lookup.
+/// </summary>
+public readonly struct ShadingMaterial
+{
+    public readonly double AlbedoR, AlbedoG, AlbedoB; // [0, 1] linear
+    public readonly double Roughness;                  // [0, 1]
+    public readonly double Metallic;                   // [0, 1]
+    public readonly double SpecularStrength;
+    public readonly double SubSurfaceStrength;
+
+    public ShadingMaterial(
+        double r, double g, double b,
+        double roughness, double metallic,
+        double specularStrength, double subSurfaceStrength)
+    {
+        AlbedoR = r; AlbedoG = g; AlbedoB = b;
+        Roughness = roughness; Metallic = metallic;
+        SpecularStrength = specularStrength;
+        SubSurfaceStrength = subSurfaceStrength;
+    }
+
+    /// <summary>Build a material from a packed BGRA color (calculator's
+    /// post-color-map output) + the active LightingFxData PBR knobs. Inverse-
+    /// sRGB simplification: bytes are read as linear; matches legacy behaviour.</summary>
+    public static ShadingMaterial FromPackedBgra(uint bgra, in LightingFxData fx)
+    {
+        double r = ((bgra >> 16) & 0xFF) / 255.0;
+        double g = ((bgra >> 8) & 0xFF) / 255.0;
+        double b = (bgra & 0xFF) / 255.0;
+        return new ShadingMaterial(r, g, b,
+            fx.Roughness, fx.Metallic, fx.SpecularStrength, fx.SubSurfaceStrength);
+    }
+}
+
+/// <summary>
+/// Stateless shading kernel. All effects flow through <see cref="Shade"/>.
+/// Helpers are public so 2D fractals (Phase 8) and Phase 6 IBL convolution
+/// can reuse the same primitives.
+/// </summary>
+public static class ShadingPipeline
+{
+    /// <summary>
+    /// Composite the surface hit into a final BGRA pixel. Phase 1 scaffold:
+    /// delegates to the legacy three-light + cone-AO + exp-fog path so a
+    /// caller can switch over without behaviour change. Phase 2+ extends
+    /// this body — calculators that already call Shade() inherit the new
+    /// effects automatically.
+    /// </summary>
+    /// <param name="i">Primary-ray hit record.</param>
+    /// <param name="m">Surface material derived from the calculator's
+    /// color map and the active LightingFxData PBR knobs.</param>
+    /// <param name="fx">Shared lighting + post parameters.</param>
+    /// <param name="de">DE delegate. Required when fx requests AO &gt; 0,
+    /// ShadowSteps &gt; 0, VolumeSteps &gt; 0, or ReflectionStrength &gt; 0.
+    /// May be null when only flat lighting + fog are active.</param>
+    public static uint Shade(
+        in ShadingInputs i,
+        in ShadingMaterial m,
+        in LightingFxData fx,
+        DistanceEstimator? de)
+    {
+        // Lights. Phase 18 — orbit theta by SceneTime · LightOrbitSpeed.
+        // Lights 2/3 take 0.7× / 1.3× so they desync. Speed==0 → bit-identical.
+        double orbitT = fx.SceneTime * fx.LightOrbitSpeed;
+        var l1 = LightDir(fx.Light1.Theta + orbitT,        fx.Light1.Phi);
+        var l2 = LightDir(fx.Light2.Theta + orbitT * 0.7,  fx.Light2.Phi);
+        var l3 = LightDir(fx.Light3.Theta + orbitT * 1.3,  fx.Light3.Phi);
+
+        // Phase 3 — per-light soft shadow. IQ DE-march toward light; min
+        // (k·h/t) over walk is visibility. Shadow gates direct lighting only;
+        // ambient is left alone. Origin pushed eps·4 along the normal so the
+        // very first DE sample doesn't trigger on the surface itself.
+        // ShadowLightMask: bit n enables shadow tracing for Light n+1.
+        // ShadowSteps = 0 disables entirely (legacy behaviour).
+        double sh1 = 1.0, sh2 = 1.0, sh3 = 1.0;
+        if (fx.ShadowSteps > 0 && de is not null)
+        {
+            double bias = i.Epsilon * 4.0;
+            double ox = i.Px + i.Nx * bias;
+            double oy = i.Py + i.Ny * bias;
+            double oz = i.Pz + i.Nz * bias;
+            double tMin = i.Epsilon;
+            double tMax = 12.0;  // covers all default scene radii
+            int steps = fx.ShadowSteps;
+            double k = fx.ShadowSoftK;
+            if ((fx.ShadowLightMask & 0x1) != 0 && fx.Light1.Intensity > 0)
+                sh1 = SoftShadow(de, ox, oy, oz, l1.X, l1.Y, l1.Z, tMin, tMax, k, steps);
+            if ((fx.ShadowLightMask & 0x2) != 0 && fx.Light2.Intensity > 0)
+                sh2 = SoftShadow(de, ox, oy, oz, l2.X, l2.Y, l2.Z, tMin, tMax, k, steps);
+            if ((fx.ShadowLightMask & 0x4) != 0 && fx.Light3.Intensity > 0)
+                sh3 = SoftShadow(de, ox, oy, oz, l3.X, l3.Y, l3.Z, tMin, tMax, k, steps);
+        }
+
+        double sR = 0, sG = 0, sB = 0;
+        AccumulateLight(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+
+        // DE-cone AO. Bit-identical to UserBulb when AoSamples > 0.
+        double ao = 1.0;
+        if (fx.AoSamples > 0 && de is not null)
+        {
+            double occl = 0, w = 0;
+            for (int k = 1; k <= fx.AoSamples; k++)
+            {
+                double d = i.Epsilon * Math.Pow(2, k);
+                double sampleD = de(i.Px + i.Nx * d, i.Py + i.Ny * d, i.Pz + i.Nz * d);
+                occl += Math.Max(0, d - sampleD) / d;
+                w += 1.0;
+            }
+            ao = Math.Clamp(1.0 - fx.AoStrength * (occl / Math.Max(w, 1)), 0, 1);
+        }
+
+        double amb = fx.AmbientStrength;
+        sR = amb + (sR / 255.0) * (1.0 - amb);
+        sG = amb + (sG / 255.0) * (1.0 - amb);
+        sB = amb + (sB / 255.0) * (1.0 - amb);
+        sR *= ao; sG *= ao; sB *= ao;
+
+        double br = m.AlbedoR * 255.0 * sR;
+        double bg = m.AlbedoG * 255.0 * sG;
+        double bb = m.AlbedoB * 255.0 * sB;
+
+        // Exponential fog. Volume in-scatter / soft shadow land in Phase 3/5.
+        // Phase 5 — volumetric in-scatter (single-scattering Beer–Lambert).
+        // Activated when VolumeSteps>0, FogDensity>0, DE provided AND key light
+        // (Light1) emits. Per-step shadow-toward-light gates god-rays. Cost is
+        // ~VolumeSteps × ShadowSteps DE evals per pixel — defaults keep it off.
+        // FogHeightFalloff scales density by exp(-falloff·y) so fog can hug
+        // the ground. Phase 22 — FBM cloud-noise modulation via
+        // VolumetricDensityMul, gated by VolumeNoiseAmount.
+        //
+        // When VolumeSteps==0 and FogDensity>0, fall back to legacy exponential
+        // fog (pre-Phase-5 behaviour). When neither, no fog math runs.
+        if (fx.VolumeSteps > 0 && fx.FogDensity > 0 && de is not null
+            && fx.Light1.Intensity > 0)
+        {
+            // Reconstruct camera origin from surface point + view ray.
+            double camX = i.Px - i.Rdx * i.TotalT;
+            double camY = i.Py - i.Rdy * i.TotalT;
+            double camZ = i.Pz - i.Rdz * i.TotalT;
+            int vs = fx.VolumeSteps;
+            double stepSize = i.TotalT / vs;
+            double Lr = (fx.Light1.Color >> 16) & 0xFF;
+            double Lg = (fx.Light1.Color >> 8) & 0xFF;
+            double Lb = fx.Light1.Color & 0xFF;
+            double Li = fx.Light1.Intensity;
+            bool shadowOn = fx.ShadowSteps > 0 && (fx.ShadowLightMask & 0x1) != 0;
+            double T = 1.0, inR = 0, inG = 0, inB = 0;
+            for (int s = 0; s < vs; s++)
+            {
+                double t = (s + 0.5) * stepSize;
+                double sx = camX + i.Rdx * t;
+                double sy = camY + i.Rdy * t;
+                double sz = camZ + i.Rdz * t;
+                double density = fx.FogDensity;
+                if (fx.FogHeightFalloff > 0)
+                    density *= Math.Exp(-fx.FogHeightFalloff * sy);
+                // Phase 22 — fbm cloud-noise modulation. Mul=1 when off, so
+                // pre-Phase-22 renders stay bit-identical.
+                density *= VolumetricDensityMul(sx, sy, sz, fx);
+                double sh = 1.0;
+                if (shadowOn)
+                    sh = SoftShadow(de, sx, sy, sz, l1.X, l1.Y, l1.Z,
+                                    i.Epsilon, 12.0, fx.ShadowSoftK, fx.ShadowSteps);
+                // Phase 22b — cloud self-shadow. Returns 1 when off so
+                // pre-Phase-22b renders stay bit-identical.
+                sh *= CloudSelfShadow(sx, sy, sz, l1.X, l1.Y, l1.Z, fx);
+                double scatter = density * sh * Li * stepSize;
+                inR += T * scatter * Lr;
+                inG += T * scatter * Lg;
+                inB += T * scatter * Lb;
+                T *= Math.Exp(-density * stepSize);
+            }
+            br = br * T + inR;
+            bg = bg * T + inG;
+            bb = bb * T + inB;
+        }
+        else if (fx.FogDensity > 0)
+        {
+            double fogF = 1.0 - Math.Exp(-i.TotalT * fx.FogDensity);
+            uint sky = SkyColor(i.Rdy, fx.BgBottomColor, fx.BgTopColor);
+            br = br * (1 - fogF) + ((sky >> 16) & 0xFF) * fogF;
+            bg = bg * (1 - fogF) + ((sky >> 8) & 0xFF) * fogF;
+            bb = bb * (1 - fogF) + (sky & 0xFF) * fogF;
+        }
+
+        byte R = (byte)Math.Clamp(br, 0, 255);
+        byte G = (byte)Math.Clamp(bg, 0, 255);
+        byte B = (byte)Math.Clamp(bb, 0, 255);
+        return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+    }
+
+    /// <summary>
+    /// Bit-identical port of the legacy UserBulb shade block. Operates on
+    /// the packed BGRA albedo directly so byte→float→byte round-trip
+    /// quantization does not introduce ±1 differences vs the original
+    /// renderer. Used by every 3D raymarcher during Phase 1b/2 swap-overs
+    /// so output is provably the same before any Phase 3+ effect lands.
+    /// </summary>
+    /// <param name="i">Primary-ray hit record.</param>
+    /// <param name="albedoBgra">Packed BGRA color from the color map.</param>
+    /// <param name="fx">Shared lighting + post parameters.</param>
+    /// <param name="de">DE delegate (required when AoSamples > 0).</param>
+    /// <param name="pixelIndex">Linear pixel index for the G-buffer write.
+    /// −1 = skip G-buffer write.</param>
+    /// <param name="depthBuf">Optional depth G-buffer (Phase 4 SSAO input).</param>
+    /// <param name="normalBuf">Optional normal G-buffer, 3 floats / pixel.</param>
+    /// <param name="hdrBuf">Optional HDR linear color buffer (3 floats / pixel,
+    /// byte-scale 0..∞). Phase 7 tonemap + bloom input. Pre-clamp values
+    /// preserved so highlights aren't lost before tonemap.</param>
+    public static uint Shade(
+        in ShadingInputs i,
+        uint albedoBgra,
+        in LightingFxData fx,
+        DistanceEstimator? de,
+        int pixelIndex = -1,
+        float[]? depthBuf = null,
+        float[]? normalBuf = null,
+        float[]? hdrBuf = null)
+    {
+        // Lights. Phase 18 — orbit theta by SceneTime · LightOrbitSpeed.
+        // Lights 2/3 take 0.7× / 1.3× so they desync. Speed==0 → bit-identical.
+        double orbitT = fx.SceneTime * fx.LightOrbitSpeed;
+        var l1 = LightDir(fx.Light1.Theta + orbitT,        fx.Light1.Phi);
+        var l2 = LightDir(fx.Light2.Theta + orbitT * 0.7,  fx.Light2.Phi);
+        var l3 = LightDir(fx.Light3.Theta + orbitT * 1.3,  fx.Light3.Phi);
+
+        // Phase 3 — per-light soft shadow. IQ DE-march toward light; min
+        // (k·h/t) over walk is visibility. Shadow gates direct lighting only;
+        // ambient is left alone. Origin pushed eps·4 along the normal so the
+        // very first DE sample doesn't trigger on the surface itself.
+        // ShadowLightMask: bit n enables shadow tracing for Light n+1.
+        // ShadowSteps = 0 disables entirely (legacy behaviour).
+        double sh1 = 1.0, sh2 = 1.0, sh3 = 1.0;
+        if (fx.ShadowSteps > 0 && de is not null)
+        {
+            double bias = i.Epsilon * 4.0;
+            double ox = i.Px + i.Nx * bias;
+            double oy = i.Py + i.Ny * bias;
+            double oz = i.Pz + i.Nz * bias;
+            double tMin = i.Epsilon;
+            double tMax = 12.0;  // covers all default scene radii
+            int steps = fx.ShadowSteps;
+            double k = fx.ShadowSoftK;
+            if ((fx.ShadowLightMask & 0x1) != 0 && fx.Light1.Intensity > 0)
+                sh1 = SoftShadow(de, ox, oy, oz, l1.X, l1.Y, l1.Z, tMin, tMax, k, steps);
+            if ((fx.ShadowLightMask & 0x2) != 0 && fx.Light2.Intensity > 0)
+                sh2 = SoftShadow(de, ox, oy, oz, l2.X, l2.Y, l2.Z, tMin, tMax, k, steps);
+            if ((fx.ShadowLightMask & 0x4) != 0 && fx.Light3.Intensity > 0)
+                sh3 = SoftShadow(de, ox, oy, oz, l3.X, l3.Y, l3.Z, tMin, tMax, k, steps);
+        }
+
+        double sR = 0, sG = 0, sB = 0;
+        AccumulateLight(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+
+        // Phase 14 — Triplanar procedural texture. Modulates the albedo before
+        // any lighting math runs so PBR + SSS + spec all see the textured
+        // surface. None / Strength==0 → bit-identical legacy.
+        uint texAlbedo = albedoBgra;
+        if (fx.TriplanarKind != TriplanarTextureKind.None && fx.TriplanarStrength > 0)
+        {
+            texAlbedo = ApplyTriplanar(albedoBgra, fx, i.Px, i.Py, i.Pz, i.Nx, i.Ny, i.Nz);
+        }
+
+        // Phase 6 — PBR-lite specular (Cook-Torrance GGX + Schlick F + Smith G).
+        // Gated by SpecularStrength > 0; bit-identical legacy when off.
+        // Metallic = 1 → spec tinted by albedo (F0 = albedo), diffuse zeroed.
+        // Metallic = 0 → spec uses dielectric F0 = 0.04 (white-ish), diffuse full.
+        double specR = 0, specG = 0, specB = 0;
+        if (fx.SpecularStrength > 0)
+        {
+            double vx = -i.Rdx, vy = -i.Rdy, vz = -i.Rdz;
+            double NdotV = Math.Max(0.0, i.Nx * vx + i.Ny * vy + i.Nz * vz);
+            double rough = Math.Max(0.05, fx.Roughness);
+            double a = rough * rough;
+            double a2 = a * a;
+            double kg = (rough + 1.0) * (rough + 1.0) / 8.0;
+            double Ar = ((texAlbedo >> 16) & 0xFF) / 255.0;
+            double Ag = ((texAlbedo >>  8) & 0xFF) / 255.0;
+            double Ab = ( texAlbedo        & 0xFF) / 255.0;
+            double F0r = 0.04 + (Ar - 0.04) * fx.Metallic;
+            double F0g = 0.04 + (Ag - 0.04) * fx.Metallic;
+            double F0b = 0.04 + (Ab - 0.04) * fx.Metallic;
+            AccumulateSpec(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z,
+                i.Nx, i.Ny, i.Nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b,
+                fx.SpecularStrength, ref specR, ref specG, ref specB);
+            AccumulateSpec(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z,
+                i.Nx, i.Ny, i.Nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b,
+                fx.SpecularStrength, ref specR, ref specG, ref specB);
+            AccumulateSpec(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z,
+                i.Nx, i.Ny, i.Nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b,
+                fx.SpecularStrength, ref specR, ref specG, ref specB);
+        }
+
+        // Phase 13 — Sub-Surface Scattering (cheap Burley approximation).
+        // Back-lit lobe: pow(saturate(-V · normalize(L + N·distortion)), p).
+        // Translucent surfaces (wax, marble, organic) get a soft halo on the
+        // side facing away from the light. Gated by SubSurfaceStrength > 0.
+        // Bit-identical legacy when off.
+        //
+        // distortion = 0.3 (Frostbite recommendation), power = 4 — tight enough
+        // that the lobe reads as backlight scatter rather than ambient wash.
+        double sssR = 0, sssG = 0, sssB = 0;
+        if (fx.SubSurfaceStrength > 0)
+        {
+            double vx = -i.Rdx, vy = -i.Rdy, vz = -i.Rdz;
+            AccumulateSss(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z,
+                i.Nx, i.Ny, i.Nz, vx, vy, vz, fx.SubSurfaceStrength,
+                ref sssR, ref sssG, ref sssB);
+            AccumulateSss(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z,
+                i.Nx, i.Ny, i.Nz, vx, vy, vz, fx.SubSurfaceStrength,
+                ref sssR, ref sssG, ref sssB);
+            AccumulateSss(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z,
+                i.Nx, i.Ny, i.Nz, vx, vy, vz, fx.SubSurfaceStrength,
+                ref sssR, ref sssG, ref sssB);
+        }
+
+        double ao = 1.0;
+        if (fx.AoSamples > 0 && de is not null)
+        {
+            double occl = 0, w = 0;
+            for (int k = 1; k <= fx.AoSamples; k++)
+            {
+                double d = i.Epsilon * Math.Pow(2, k);
+                double sampleD = de(i.Px + i.Nx * d, i.Py + i.Ny * d, i.Pz + i.Nz * d);
+                occl += Math.Max(0, d - sampleD) / d;
+                w += 1.0;
+            }
+            ao = Math.Clamp(1.0 - fx.AoStrength * (occl / Math.Max(w, 1)), 0, 1);
+        }
+
+        // Phase 6 — IBL-modulated per-channel ambient. IblStrength==0 keeps the
+        // legacy scalar AmbientStrength (bit-identical). When >0, blend env-map
+        // sample at the surface normal into the ambient term per channel.
+        double ambR = fx.AmbientStrength;
+        double ambG = fx.AmbientStrength;
+        double ambB = fx.AmbientStrength;
+        if (fx.IblStrength > 0)
+        {
+            // Phase 6b — HDRI-aware ambient. Falls back to the gradient
+            // sample when SkyMode != Hdri or the environment name doesn't
+            // resolve, so legacy gradient scenes stay bit-identical.
+            var env = SampleEnvAmbientHdri(i.Nx, i.Ny, i.Nz, in fx);
+            double w = fx.IblStrength;
+            ambR = ambR * (1.0 - w) + env.R * w;
+            ambG = ambG * (1.0 - w) + env.G * w;
+            ambB = ambB * (1.0 - w) + env.B * w;
+        }
+        // Phase 6 — metal suppresses diffuse on the spec-active path. With
+        // SpecularStrength==0 we keep the legacy formula (suppress=1).
+        double diffSuppress = fx.SpecularStrength > 0 ? (1.0 - fx.Metallic) : 1.0;
+        sR = ambR + (sR / 255.0) * (1.0 - ambR) * diffSuppress;
+        sG = ambG + (sG / 255.0) * (1.0 - ambG) * diffSuppress;
+        sB = ambB + (sB / 255.0) * (1.0 - ambB) * diffSuppress;
+        sR *= ao; sG *= ao; sB *= ao;
+
+        double br = ((texAlbedo >> 16) & 0xFF) * sR + specR + sssR;
+        double bg = ((texAlbedo >> 8) & 0xFF) * sG + specG + sssG;
+        double bb = (texAlbedo & 0xFF) * sB + specB + sssB;
+
+        // Phase 16 — 1-bounce reflection probe. March reflect(V, N) along DE;
+        // on hit, cheap env-tinted ambient with distance falloff; on miss,
+        // sample sky along the bounce direction. Mixed by Fresnel × strength
+        // so dielectrics reflect only at grazing angles while metals reflect
+        // broadly. ReflectionStrength==0 → bit-identical legacy.
+        //
+        // Cost: ~ReflectionSteps DE evals per pixel when active. No recursive
+        // shading on the bounce hit — we use a one-light Lambert + ambient
+        // proxy instead. Visually adequate for fractal scenes that are mostly
+        // convex; reflection-of-reflection would require Phase 16b.
+        if (fx.ReflectionStrength > 0 && de is not null)
+        {
+            int reflSteps = fx.ReflectionSteps > 0 ? fx.ReflectionSteps : 24;
+            double vx = -i.Rdx, vy = -i.Rdy, vz = -i.Rdz;
+            double NdotV = Math.Max(0.0, i.Nx * vx + i.Ny * vy + i.Nz * vz);
+
+            // Mirror reflection of the view ray about the surface normal.
+            double rdN = i.Rdx * i.Nx + i.Rdy * i.Ny + i.Rdz * i.Nz;
+            double rrx = i.Rdx - 2.0 * rdN * i.Nx;
+            double rry = i.Rdy - 2.0 * rdN * i.Ny;
+            double rrz = i.Rdz - 2.0 * rdN * i.Nz;
+
+            double bias = i.Epsilon * 4.0;
+            double ox = i.Px + i.Nx * bias;
+            double oy = i.Py + i.Ny * bias;
+            double oz = i.Pz + i.Nz * bias;
+
+            double tR = i.Epsilon;
+            const double tMaxR = 12.0;
+            bool hitR = false;
+            double hitTR = 0.0;
+            for (int s = 0; s < reflSteps; s++)
+            {
+                double pxR = ox + rrx * tR;
+                double pyR = oy + rry * tR;
+                double pzR = oz + rrz * tR;
+                double hR = de(pxR, pyR, pzR);
+                if (hR < i.Epsilon * 2.0) { hitR = true; hitTR = tR; break; }
+                tR += hR;
+                if (tR > tMaxR) break;
+            }
+
+            double reflR, reflG, reflB;
+            if (hitR)
+            {
+                // Env-tinted proxy shade for the bounce hit. Avoids recursive
+                // Shade() while still picking up scene tint (sky → fractal
+                // surface color reads as a warm/cool wash depending on bg).
+                var envR = SampleEnvAmbientHdri(rrx, rry, rrz, in fx);
+                double atten = Math.Exp(-hitTR * 0.15);
+                reflR = envR.R * 255.0 * atten;
+                reflG = envR.G * 255.0 * atten;
+                reflB = envR.B * 255.0 * atten;
+            }
+            else
+            {
+                uint skyR = SkyColorHdri(rrx, rry, rrz, in fx);
+                reflR = (skyR >> 16) & 0xFF;
+                reflG = (skyR >>  8) & 0xFF;
+                reflB =  skyR        & 0xFF;
+            }
+
+            // Schlick Fresnel mix. F0 ramps from 0.04 (dielectric) toward 1.0
+            // (metal) — metallic surfaces reflect broadly, dielectric only at
+            // grazing angles.
+            double f0 = 0.04 + 0.96 * fx.Metallic;
+            double omv = 1.0 - NdotV;
+            double Fc = omv * omv * omv * omv * omv;
+            double F = f0 + (1.0 - f0) * Fc;
+            double w = fx.ReflectionStrength * F;
+
+            br += reflR * w;
+            bg += reflG * w;
+            bb += reflB * w;
+        }
+
+        // Phase 17 — fake caustics. Sample procedural pattern in world (x, z)
+        // at the surface point, weighted by upward-facing surface (NdotUp) and
+        // distance from the focusing plane (exp falloff). Multiplied by the key
+        // light's color × intensity so caustics inherit scene tint and shadow.
+        // CausticsStrength==0 → bit-identical legacy.
+        if (fx.CausticsStrength > 0 && fx.Light1.Intensity > 0)
+        {
+            double NdotUp = i.Ny;
+            if (NdotUp > 0)
+            {
+                double dy = i.Py - fx.CausticsFloorY;
+                double heightFall = Math.Exp(-Math.Abs(dy) * 2.0);
+                double causticPhase = fx.SceneTime * fx.CausticsAnimSpeed;
+                double caustic = EvaluateCaustics(i.Px, i.Pz, fx.CausticsScale, causticPhase);
+                double w = fx.CausticsStrength * caustic * heightFall * NdotUp * fx.Light1.Intensity * sh1;
+                if (w > 0)
+                {
+                    double Lr = (fx.CausticsColor >> 16) & 0xFF;
+                    double Lg = (fx.CausticsColor >>  8) & 0xFF;
+                    double Lb =  fx.CausticsColor        & 0xFF;
+                    br += Lr * w;
+                    bg += Lg * w;
+                    bb += Lb * w;
+                }
+            }
+        }
+
+        // Phase 5 — volumetric in-scatter (single-scattering Beer–Lambert).
+        // Activated when VolumeSteps>0, FogDensity>0, DE provided AND key light
+        // (Light1) emits. Per-step shadow-toward-light gates god-rays. Cost is
+        // ~VolumeSteps × ShadowSteps DE evals per pixel — defaults keep it off.
+        // FogHeightFalloff scales density by exp(-falloff·y) so fog can hug
+        // the ground. Phase 22 — FBM cloud-noise modulation via
+        // VolumetricDensityMul, gated by VolumeNoiseAmount.
+        //
+        // When VolumeSteps==0 and FogDensity>0, fall back to legacy exponential
+        // fog (pre-Phase-5 behaviour). When neither, no fog math runs.
+        if (fx.VolumeSteps > 0 && fx.FogDensity > 0 && de is not null
+            && fx.Light1.Intensity > 0)
+        {
+            // Reconstruct camera origin from surface point + view ray.
+            double camX = i.Px - i.Rdx * i.TotalT;
+            double camY = i.Py - i.Rdy * i.TotalT;
+            double camZ = i.Pz - i.Rdz * i.TotalT;
+            int vs = fx.VolumeSteps;
+            double stepSize = i.TotalT / vs;
+            double Lr = (fx.Light1.Color >> 16) & 0xFF;
+            double Lg = (fx.Light1.Color >> 8) & 0xFF;
+            double Lb = fx.Light1.Color & 0xFF;
+            double Li = fx.Light1.Intensity;
+            bool shadowOn = fx.ShadowSteps > 0 && (fx.ShadowLightMask & 0x1) != 0;
+            double T = 1.0, inR = 0, inG = 0, inB = 0;
+            for (int s = 0; s < vs; s++)
+            {
+                double t = (s + 0.5) * stepSize;
+                double sx = camX + i.Rdx * t;
+                double sy = camY + i.Rdy * t;
+                double sz = camZ + i.Rdz * t;
+                double density = fx.FogDensity;
+                if (fx.FogHeightFalloff > 0)
+                    density *= Math.Exp(-fx.FogHeightFalloff * sy);
+                // Phase 22 — fbm cloud-noise modulation. Mul=1 when off, so
+                // pre-Phase-22 renders stay bit-identical.
+                density *= VolumetricDensityMul(sx, sy, sz, fx);
+                double sh = 1.0;
+                if (shadowOn)
+                    sh = SoftShadow(de, sx, sy, sz, l1.X, l1.Y, l1.Z,
+                                    i.Epsilon, 12.0, fx.ShadowSoftK, fx.ShadowSteps);
+                // Phase 22b — cloud self-shadow. Returns 1 when off so
+                // pre-Phase-22b renders stay bit-identical.
+                sh *= CloudSelfShadow(sx, sy, sz, l1.X, l1.Y, l1.Z, fx);
+                double scatter = density * sh * Li * stepSize;
+                inR += T * scatter * Lr;
+                inG += T * scatter * Lg;
+                inB += T * scatter * Lb;
+                T *= Math.Exp(-density * stepSize);
+            }
+            br = br * T + inR;
+            bg = bg * T + inG;
+            bb = bb * T + inB;
+        }
+        else if (fx.FogDensity > 0)
+        {
+            double fogF = 1.0 - Math.Exp(-i.TotalT * fx.FogDensity);
+            uint sky = SkyColor(i.Rdy, fx.BgBottomColor, fx.BgTopColor);
+            br = br * (1 - fogF) + ((sky >> 16) & 0xFF) * fogF;
+            bg = bg * (1 - fogF) + ((sky >> 8) & 0xFF) * fogF;
+            bb = bb * (1 - fogF) + (sky & 0xFF) * fogF;
+        }
+
+        byte R = (byte)Math.Clamp(br, 0, 255);
+        byte G = (byte)Math.Clamp(bg, 0, 255);
+        byte B = (byte)Math.Clamp(bb, 0, 255);
+
+        if (pixelIndex >= 0)
+        {
+            if (depthBuf is not null && pixelIndex < depthBuf.Length)
+                depthBuf[pixelIndex] = (float)i.TotalT;
+            if (normalBuf is not null && pixelIndex * 3 + 2 < normalBuf.Length)
+            {
+                int n3 = pixelIndex * 3;
+                normalBuf[n3]     = (float)i.Nx;
+                normalBuf[n3 + 1] = (float)i.Ny;
+                normalBuf[n3 + 2] = (float)i.Nz;
+            }
+            // Phase 7 — HDR write preserves pre-clamp values so tonemap can
+            // recover highlights that the byte-clamped path loses. Same
+            // float-per-channel layout as the normal buffer (3 floats / pixel).
+            if (hdrBuf is not null && pixelIndex * 3 + 2 < hdrBuf.Length)
+            {
+                int h3 = pixelIndex * 3;
+                hdrBuf[h3]     = (float)br;
+                hdrBuf[h3 + 1] = (float)bg;
+                hdrBuf[h3 + 2] = (float)bb;
+            }
+        }
+
+        return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+    }
+
+    /// <summary>Resolve a (theta, phi) spherical direction to a unit world-
+    /// space vector. theta = azimuth around +Y; phi = elevation from +Y.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static (double X, double Y, double Z) LightDir(double theta, double phi)
+    {
+        double sinPhi = Math.Sin(phi);
+        return Normalize3(sinPhi * Math.Cos(theta), Math.Cos(phi), sinPhi * Math.Sin(theta));
+    }
+
+    /// <summary>Accumulate one directional light's diffuse contribution into
+    /// the (sR, sG, sB) accumulator in 0–255 space. Bit-identical to
+    /// UserBulbCalculator.AccumulateLight; passed as ref-doubles instead of
+    /// returning so the hot loop avoids struct copies.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void AccumulateLight(
+        double intensity, uint color,
+        double lx, double ly, double lz,
+        double nx, double ny, double nz,
+        ref double sR, ref double sG, ref double sB)
+    {
+        if (intensity <= 0) return;
+        double diffuse = Math.Max(0.0, nx * lx + ny * ly + nz * lz) * intensity;
+        sR += ((color >> 16) & 0xFF) * diffuse;
+        sG += ((color >> 8) & 0xFF) * diffuse;
+        sB += (color & 0xFF) * diffuse;
+    }
+
+    /// <summary>
+    /// Cook-Torrance GGX specular contribution for one directional light.
+    /// Schlick F (per-channel via F0r/F0g/F0b) + Smith joint G (Schlick-GGX) +
+    /// GGX D. Result accumulated in 0–255 byte space; bright highlights can
+    /// exceed 255 and rely on the caller's Math.Clamp (Phase 7 tonemap will
+    /// preserve HDR range properly). Intensity already includes shadow factor.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void AccumulateSpec(
+        double intensity, uint color,
+        double lx, double ly, double lz,
+        double nx, double ny, double nz,
+        double vx, double vy, double vz,
+        double NdotV, double a2, double k,
+        double F0r, double F0g, double F0b,
+        double specStrength,
+        ref double specR, ref double specG, ref double specB)
+    {
+        if (intensity <= 0) return;
+        double NdotL = nx * lx + ny * ly + nz * lz;
+        if (NdotL <= 0) return;
+
+        // Half vector
+        double hx = lx + vx, hy = ly + vy, hz = lz + vz;
+        double hLen2 = hx * hx + hy * hy + hz * hz;
+        if (hLen2 < 1e-12) return;
+        double invH = 1.0 / Math.Sqrt(hLen2);
+        hx *= invH; hy *= invH; hz *= invH;
+        double NdotH = Math.Max(0.0, nx * hx + ny * hy + nz * hz);
+        double VdotH = Math.Max(0.0, vx * hx + vy * hy + vz * hz);
+
+        // GGX D
+        double denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+        double D = a2 / (Math.PI * denom * denom);
+
+        // Smith joint G (Schlick-GGX form)
+        double G1V = NdotV / (NdotV * (1.0 - k) + k);
+        double G1L = NdotL / (NdotL * (1.0 - k) + k);
+        double G = G1V * G1L;
+
+        // Schlick F per channel
+        double omv = 1.0 - VdotH;
+        double Fc = omv * omv * omv * omv * omv;
+        double Fr = F0r + (1.0 - F0r) * Fc;
+        double Fg = F0g + (1.0 - F0g) * Fc;
+        double Fb = F0b + (1.0 - F0b) * Fc;
+
+        // Spec base = D·G / (4·NdotV) — NdotL canceled by Smith G inclusion.
+        double specBase = (D * G / Math.Max(4.0 * NdotV, 1e-4)) * specStrength * intensity;
+        double Lr = (color >> 16) & 0xFF;
+        double Lg = (color >>  8) & 0xFF;
+        double Lb =  color        & 0xFF;
+        specR += specBase * Fr * Lr;
+        specG += specBase * Fg * Lg;
+        specB += specBase * Fb * Lb;
+    }
+
+    /// <summary>
+    /// Triplanar procedural texture sampler. Project surface position onto
+    /// each major plane (YZ / XZ / XY), sample a 2D math fn per plane,
+    /// blend by squared normal weights. Modulate the input albedo by the
+    /// resulting greyscale × tint × strength. Phase 14.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint ApplyTriplanar(
+        uint albedoBgra, in LightingFxData fx,
+        double px, double py, double pz,
+        double nx, double ny, double nz)
+    {
+        double s = fx.TriplanarScale;
+        // Squared normal weights for triplanar blend. abs(n)² emphasises the
+        // axis facing most directly toward each plane projection so seams
+        // between projections fade smoothly.
+        double wx = nx * nx, wy = ny * ny, wz = nz * nz;
+        double sum = wx + wy + wz;
+        if (sum < 1e-8) return albedoBgra;
+        double inv = 1.0 / sum;
+        wx *= inv; wy *= inv; wz *= inv;
+
+        var kind = fx.TriplanarKind;
+        // Each plane projection samples a 2D version of the procedural fn.
+        double txY = SampleProc2D(kind, py * s, pz * s);
+        double txX = SampleProc2D(kind, px * s, pz * s);
+        double txZ = SampleProc2D(kind, px * s, py * s);
+        double v = wx * txY + wy * txX + wz * txZ;
+        v = Math.Clamp(v, 0, 1);
+
+        // Tint × strength blend with albedo.
+        double Tr = ((fx.TriplanarTint >> 16) & 0xFF) / 255.0;
+        double Tg = ((fx.TriplanarTint >>  8) & 0xFF) / 255.0;
+        double Tb = ( fx.TriplanarTint        & 0xFF) / 255.0;
+        double Ar = (albedoBgra >> 16) & 0xFF;
+        double Ag = (albedoBgra >>  8) & 0xFF;
+        double Ab =  albedoBgra        & 0xFF;
+        double mix = fx.TriplanarStrength;
+        // Texture-modulated colour = albedo × (tint × v). Blend back to plain
+        // albedo by (1 − strength) so the user can dial mix to taste.
+        double tr = Ar * Tr * v;
+        double tg = Ag * Tg * v;
+        double tb = Ab * Tb * v;
+        double R = Ar * (1 - mix) + tr * mix;
+        double G = Ag * (1 - mix) + tg * mix;
+        double B = Ab * (1 - mix) + tb * mix;
+        byte Rb = (byte)Math.Clamp(R, 0, 255);
+        byte Gb = (byte)Math.Clamp(G, 0, 255);
+        byte Bb = (byte)Math.Clamp(B, 0, 255);
+        return 0xFF000000u | ((uint)Rb << 16) | ((uint)Gb << 8) | Bb;
+    }
+
+    /// <summary>
+    /// Procedural caustics pattern in (x, z) world plane. Returns intensity
+    /// multiplier in [0, ~4] — most pixels read near 0 with sparse bright
+    /// focused spots, matching the underwater-caustic look. Phase 17.
+    ///
+    /// Two crossed sin-cascades produce moving wave-fronts; the product is
+    /// raised to a high power so only the brightest crests survive. Cheap
+    /// (~10 flops + 4 transcendentals); no noise table needed.
+    ///
+    /// Phase 18 — <paramref name="time"/> adds a phase offset to each sin
+    /// argument (each on a different harmonic of the base time) so the bright
+    /// crests drift like rippling water. time==0 is bit-identical legacy.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double EvaluateCaustics(double x, double z, double scale, double time = 0.0)
+    {
+        double s = scale;
+        double a = Math.Sin(x * s + time) * Math.Sin(z * s * 1.3 + Math.Sin(x * s * 0.7) + time * 1.1);
+        double b = Math.Sin(x * s * 1.7 + z * s * 0.5 + time * 0.9) * Math.Sin(z * s + time);
+        double v = (a + b) * 0.5;
+        v = 0.5 + 0.5 * v;
+        // Power 6 — sharp bright crests, dark everywhere else.
+        double v2 = v * v;       // 2
+        double v4 = v2 * v2;     // 4
+        double v6 = v4 * v2;     // 6
+        // Scale up: caustics in real life are several × ambient on the spot.
+        return v6 * 4.0;
+    }
+
+    /// <summary>Procedural 2D sampler dispatch. Returns greyscale [0, 1].</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double SampleProc2D(TriplanarTextureKind kind, double u, double v)
+    {
+        switch (kind)
+        {
+            case TriplanarTextureKind.Wood:
+            {
+                // Concentric rings via radius from origin + slight angular
+                // wobble so the rings don't read as perfect circles.
+                double r = Math.Sqrt(u * u + v * v);
+                double wobble = 0.1 * Math.Sin(u * 0.3) * Math.Cos(v * 0.3);
+                return 0.5 + 0.5 * Math.Sin((r + wobble) * 6.0);
+            }
+            case TriplanarTextureKind.Marble:
+            {
+                // Turbulent veins: sinusoidal cascade. Two nested sines make
+                // wandering vein-like contours without a full noise function.
+                double turb = Math.Sin(v * 2.0 + Math.Sin(u * 4.0) * 1.5);
+                return 0.5 + 0.5 * Math.Sin(u * 3.0 + turb * 2.0);
+            }
+            case TriplanarTextureKind.Rock:
+            {
+                // Cheap hash-based noise — integer multiply-XOR + sine spread.
+                // No frequency cascade; enough surface variation for an
+                // organic rocky appearance at typical scales.
+                double a = Math.Sin(u * 12.9898 + v * 78.233) * 43758.5453;
+                double n = a - Math.Floor(a);
+                return Math.Clamp(0.3 + 0.7 * n, 0, 1);
+            }
+            case TriplanarTextureKind.Checker:
+            {
+                int cu = (int)Math.Floor(u) & 1;
+                int cv = (int)Math.Floor(v) & 1;
+                return (cu ^ cv) == 0 ? 0.2 : 1.0;
+            }
+            default:
+                return 1.0;
+        }
+    }
+
+    /// <summary>
+    /// Cheap Burley-style SSS backlight lobe. Half-vector distortion biases L
+    /// through the surface toward V; the resulting cosine power produces a
+    /// soft halo on the back-lit side. No DE thickness probe — for our
+    /// fractal scenes the visual difference vs a constant-thickness fake is
+    /// negligible and the cost stays flat. Phase 13.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void AccumulateSss(
+        double intensity, uint color,
+        double lx, double ly, double lz,
+        double nx, double ny, double nz,
+        double vx, double vy, double vz,
+        double strength,
+        ref double sssR, ref double sssG, ref double sssB)
+    {
+        if (intensity <= 0) return;
+        // Distorted half-vector: bias the light through the surface normal.
+        const double distortion = 0.3;
+        double hx = lx + nx * distortion;
+        double hy = ly + ny * distortion;
+        double hz = lz + nz * distortion;
+        double hLen2 = hx * hx + hy * hy + hz * hz;
+        if (hLen2 < 1e-12) return;
+        double invH = 1.0 / Math.Sqrt(hLen2);
+        hx *= invH; hy *= invH; hz *= invH;
+        // Back-lit lobe: -V · h. Saturate, power-curve, scale.
+        double dot = -(vx * hx + vy * hy + vz * hz);
+        if (dot <= 0) return;
+        double lobe = dot * dot;  // p = 2 (soft); raise to p=4 with extra mul if a tighter halo is wanted
+        lobe *= lobe;             // now p = 4 — tight backlight halo
+        double s = lobe * strength * intensity;
+        double Lr = (color >> 16) & 0xFF;
+        double Lg = (color >>  8) & 0xFF;
+        double Lb =  color        & 0xFF;
+        sssR += s * Lr;
+        sssG += s * Lg;
+        sssB += s * Lb;
+    }
+
+    /// <summary>
+    /// Environment-map ambient lookup, sampled at the surface normal. Phase 6
+    /// MVP: re-uses the sky-gradient (BgBottomColor → BgTopColor) so existing
+    /// scenes get IBL-flavoured ambient with no extra assets. Solid mode skips
+    /// the gradient. Hdri mode falls through to gradient — the HDRI-aware path
+    /// lives in <see cref="SampleEnvAmbientHdri"/>; callers that have access to
+    /// the full <see cref="LightingFxData"/> use that overload instead.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static (double R, double G, double B) SampleEnvAmbient(
+        SkyMode mode, double ny, uint bgBot, uint bgTop)
+    {
+        if (mode == SkyMode.Solid)
+        {
+            return (
+                ((bgTop >> 16) & 0xFF) / 255.0,
+                ((bgTop >>  8) & 0xFF) / 255.0,
+                ( bgTop        & 0xFF) / 255.0);
+        }
+        double t = Math.Clamp(0.5 * (ny + 1.0), 0, 1);
+        double R = ((1 - t) * ((bgBot >> 16) & 0xFF) + t * ((bgTop >> 16) & 0xFF)) / 255.0;
+        double G = ((1 - t) * ((bgBot >>  8) & 0xFF) + t * ((bgTop >>  8) & 0xFF)) / 255.0;
+        double B = ((1 - t) * ( bgBot        & 0xFF) + t * ( bgTop        & 0xFF)) / 255.0;
+        return (R, G, B);
+    }
+
+    /// <summary>
+    /// Phase 6b — HDRI-aware ambient lookup. Falls through to the gradient
+    /// path when SkyMode != Hdri or no HDRI is registered under
+    /// <see cref="LightingFxData.EnvironmentName"/>. When an HDRI is resolved,
+    /// samples the equirectangular at the surface normal direction (treating
+    /// the normal's (x, y, z) as the world direction the ambient hemisphere
+    /// is centred on) and returns linear RGB in roughly [0, big-number]; the
+    /// caller scales by IblStrength + clamps to display range.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static (double R, double G, double B) SampleEnvAmbientHdri(
+        double nx, double ny, double nz, in LightingFxData fx)
+    {
+        if (fx.SkyMode == SkyMode.Hdri && TryResolveHdri(fx.EnvironmentName, out var hdri))
+        {
+            return hdri!.Sample(nx, ny, nz);
+        }
+        return SampleEnvAmbient(fx.SkyMode, ny, fx.BgBottomColor, fx.BgTopColor);
+    }
+
+    /// <summary>HDRI resolver. Looks up the registry by name first; if that
+    /// misses and the name appears to be a filesystem path ending in .hdr,
+    /// tries to load it from disk (and caches the result so future frames
+    /// hit the in-memory copy). Phase 6b.</summary>
+    private static bool TryResolveHdri(string? name, out HdriImage? hdri)
+    {
+        if (HdriRegistry.TryGet(name, out hdri) && hdri is not null) return true;
+        if (!string.IsNullOrWhiteSpace(name)
+            && (name.EndsWith(".hdr", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".pic", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (HdriRegistry.TryLoadFromFile(name, out hdri) && hdri is not null) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Phase 6b — HDRI-aware sky lookup along a view ray. Mirrors
+    /// <see cref="SampleEnvAmbientHdri"/> but returns a packed BGRA so
+    /// existing sky-fill code paths can drop it in. Falls back to the
+    /// gradient sky when no HDRI is registered.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint SkyColorHdri(double rdx, double rdy, double rdz, in LightingFxData fx)
+    {
+        if (fx.SkyMode == SkyMode.Hdri && TryResolveHdri(fx.EnvironmentName, out var hdri))
+        {
+            var (r, g, b) = hdri!.Sample(rdx, rdy, rdz);
+            byte R = (byte)Math.Clamp(r * 255.0, 0, 255);
+            byte G = (byte)Math.Clamp(g * 255.0, 0, 255);
+            byte B = (byte)Math.Clamp(b * 255.0, 0, 255);
+            return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+        }
+        return SkyColor(rdy, fx.BgBottomColor, fx.BgTopColor);
+    }
+
+    /// <summary>Vertical gradient sky lookup. rdy is the world-Y component of
+    /// the view ray; t = 0 picks bottom, t = 1 picks top. Cheap; matches
+    /// SkyMode.Gradient. HDRI lookup lands in Phase 6.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint SkyColor(double rdy, uint bgBot, uint bgTop)
+    {
+        double t = Math.Clamp(0.5 * (rdy + 1.0), 0, 1);
+        byte rb = (byte)((1 - t) * ((bgBot >> 16) & 0xFF) + t * ((bgTop >> 16) & 0xFF));
+        byte gb = (byte)((1 - t) * ((bgBot >> 8) & 0xFF) + t * ((bgTop >> 8) & 0xFF));
+        byte bb = (byte)((1 - t) * (bgBot & 0xFF) + t * (bgTop & 0xFF));
+        return 0xFF000000u | ((uint)rb << 16) | ((uint)gb << 8) | bb;
+    }
+
+    /// <summary>
+    /// Phase 22 — 3-octave value-noise fbm. Cheap procedural cloud density.
+    /// Returns roughly [0, 0.875] (sum of 3 amplitudes: 0.5 + 0.25 + 0.125).
+    /// Doubled at call site so the practical multiplier <see cref="VolumetricDensityMul"/>
+    /// can swing between 0 and ~1.75 around the original density.
+    ///
+    /// Hash → smoothed trilinear → octave cascade. No noise tables; everything
+    /// derives from integer hash so the function is referentially transparent.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double FbmCloud3D(double x, double y, double z)
+        => FbmCloud3D(x, y, z, 3);
+
+    /// <summary>Phase 22b — octave-parameterised FBM. <paramref name="octaves"/>
+    /// is clamped to [1, 6]. octaves=3 reproduces the original Phase 22
+    /// result bit-for-bit.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double FbmCloud3D(double x, double y, double z, int octaves)
+    {
+        if (octaves < 1) octaves = 1;
+        else if (octaves > 6) octaves = 6;
+        double v = 0.0;
+        double amp = 0.5;
+        double freq = 1.0;
+        for (int i = 0; i < octaves; i++)
+        {
+            v += amp * ValueNoise3D(x * freq, y * freq, z * freq);
+            freq *= 2.0;
+            amp *= 0.5;
+        }
+        return v;
+    }
+
+    /// <summary>
+    /// Density multiplier for the Phase 5 volumetric in-scatter loop. Returns
+    /// 1.0 when noise is off (bit-identical pre-Phase-22). When on, samples
+    /// FBM at (worldPos · scale + time · speed · drift-axis) and remaps to
+    /// <c>lerp(1, 2·noise, amount)</c> so amount=1 swings density between
+    /// ~empty and ~2× the unmodulated density.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double VolumetricDensityMul(
+        double sx, double sy, double sz, in LightingFxData fx)
+    {
+        if (fx.VolumeNoiseAmount <= 0) return 1.0;
+        double t = fx.SceneTime * fx.VolumeNoiseSpeed;
+        double scale = fx.VolumeNoiseScale;
+        // Drift on a fixed axis (1, 0.3, 0.7) so clouds slide diagonally
+        // rather than along a perfect world-axis line — more natural look.
+        int oct = fx.VolumeNoiseOctaves <= 0 ? 3 : fx.VolumeNoiseOctaves;
+        double n = FbmCloud3D(
+            sx * scale + t,
+            sy * scale + t * 0.3,
+            sz * scale + t * 0.7,
+            oct);
+        // amount=0 → 1.0; amount=1 → 2·n (range [0, ~1.75], mean ~0.875).
+        double mul = 1.0 + fx.VolumeNoiseAmount * (2.0 * n - 1.0);
+        return Math.Max(0.0, mul);
+    }
+
+    /// <summary>
+    /// Phase 22b — cloud self-shadow transmittance toward a directional light.
+    /// Marches a fixed number of FBM samples from (sx, sy, sz) along the light
+    /// direction (lx, ly, lz), accumulates extinction, and returns
+    /// exp(-strength · accum). Returns 1.0 (no attenuation) when self-shadow
+    /// is off so pre-Phase-22b renders stay bit-identical.
+    ///
+    /// March length is fixed at 2.0 world units so deeper cloud bodies cast
+    /// longer shadows. Cost: <c>VolumeSelfShadowSteps</c> extra
+    /// <see cref="FbmCloud3D"/> evals per volume step.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double CloudSelfShadow(
+        double sx, double sy, double sz,
+        double lx, double ly, double lz,
+        in LightingFxData fx)
+    {
+        if (fx.VolumeSelfShadow <= 0 || fx.VolumeSelfShadowSteps <= 0
+            || fx.VolumeNoiseAmount <= 0) return 1.0;
+        int steps = Math.Min(fx.VolumeSelfShadowSteps, 16);
+        const double marchLen = 2.0;
+        double stepSz = marchLen / steps;
+        double t = fx.SceneTime * fx.VolumeNoiseSpeed;
+        double scale = fx.VolumeNoiseScale;
+        int oct = fx.VolumeNoiseOctaves <= 0 ? 3 : fx.VolumeNoiseOctaves;
+        double accum = 0;
+        for (int k = 1; k <= steps; k++)
+        {
+            double px = sx + lx * stepSz * k;
+            double py = sy + ly * stepSz * k;
+            double pz = sz + lz * stepSz * k;
+            double n = FbmCloud3D(
+                px * scale + t,
+                py * scale + t * 0.3,
+                pz * scale + t * 0.7,
+                oct);
+            // Same density remap as the in-scatter walk so attenuation matches
+            // visible cloud density.
+            double d = Math.Max(0.0, 1.0 + fx.VolumeNoiseAmount * (2.0 * n - 1.0));
+            accum += d * stepSz;
+        }
+        return Math.Exp(-fx.VolumeSelfShadow * accum);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double ValueNoise3D(double x, double y, double z)
+    {
+        int ix = (int)Math.Floor(x);
+        int iy = (int)Math.Floor(y);
+        int iz = (int)Math.Floor(z);
+        double fx = x - ix, fy = y - iy, fz = z - iz;
+        // Smoothstep for C1-continuous interpolation.
+        double ux = fx * fx * (3.0 - 2.0 * fx);
+        double uy = fy * fy * (3.0 - 2.0 * fy);
+        double uz = fz * fz * (3.0 - 2.0 * fz);
+        double c000 = Hash3D(ix,     iy,     iz    );
+        double c100 = Hash3D(ix + 1, iy,     iz    );
+        double c010 = Hash3D(ix,     iy + 1, iz    );
+        double c110 = Hash3D(ix + 1, iy + 1, iz    );
+        double c001 = Hash3D(ix,     iy,     iz + 1);
+        double c101 = Hash3D(ix + 1, iy,     iz + 1);
+        double c011 = Hash3D(ix,     iy + 1, iz + 1);
+        double c111 = Hash3D(ix + 1, iy + 1, iz + 1);
+        double x00 = c000 + (c100 - c000) * ux;
+        double x10 = c010 + (c110 - c010) * ux;
+        double x01 = c001 + (c101 - c001) * ux;
+        double x11 = c011 + (c111 - c011) * ux;
+        double y0 = x00 + (x10 - x00) * uy;
+        double y1 = x01 + (x11 - x01) * uy;
+        return y0 + (y1 - y0) * uz;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double Hash3D(int ix, int iy, int iz)
+    {
+        // Integer hash cascade — three large primes for axis spread + a
+        // multiply-XOR scramble. Yields a well-decorrelated [0, 1] scalar
+        // with no period at the scene scales fractals use.
+        unchecked
+        {
+            uint h = (uint)(ix * 374761393 + iy * 668265263 + iz * 2147483647);
+            h = (h ^ (h >> 13)) * 1274126177u;
+            h ^= h >> 16;
+            return (h & 0xFFFFFFu) / 16777215.0;
+        }
+    }
+
+    /// <summary>Inigo Quilez soft shadow. March from origin toward ld; min
+    /// (k * h / t) over the walk is the visibility coefficient.
+    /// Phase 3 enables this from Shade(); helper is exposed now so Phase 2
+    /// raymarchers can call it directly during their lift.</summary>
+    public static double SoftShadow(
+        DistanceEstimator de,
+        double ox, double oy, double oz,
+        double ldx, double ldy, double ldz,
+        double tMin, double tMax, double k, int maxSteps)
+    {
+        double res = 1.0, t = tMin;
+        for (int s = 0; s < maxSteps; s++)
+        {
+            double px = ox + ldx * t;
+            double py = oy + ldy * t;
+            double pz = oz + ldz * t;
+            double h = de(px, py, pz);
+            if (h < 1e-4) return 0.0;
+            if (k > 0) res = Math.Min(res, k * h / t);
+            t += h;
+            if (t >= tMax) break;
+        }
+        return Math.Clamp(res, 0, 1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static (double X, double Y, double Z) Normalize3(double x, double y, double z)
+    {
+        double len = Math.Sqrt(x * x + y * y + z * z);
+        if (len < 1e-10) return (0.0, 0.0, 0.0);
+        double inv = 1.0 / len;
+        return (x * inv, y * inv, z * inv);
+    }
+}
