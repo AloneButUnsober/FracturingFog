@@ -402,6 +402,15 @@ public struct LightingFxData
     /// Phase 12.</summary>
     public bool UseGpuPost;
 
+    /// <summary>P7 — route the primary raymarch + DE through an ILGPU kernel
+    /// when a per-fractal GPU calculator is available (Engine/Calculators/Gpu/).
+    /// Falls back to the CPU Calculate path on any failure (GPU init failure,
+    /// OOM, kernel throw, unsupported fractal). Default off — opt-in until
+    /// per-fractal GPU calculators land and reach visual parity with CPU.
+    /// Distinct from <see cref="UseGpuPost"/>: that gates post-passes; this
+    /// gates the primary raymarch.</summary>
+    public bool UseGpuRender;
+
     // ── Animation (Phase 18) ──────────────────────────────────────────
 
     /// <summary>Global scene time in seconds. Drives Light orbit + pulse.
@@ -528,5 +537,6 @@ public struct LightingFxData
         DebugHudFlags      = 0,
 
         UseGpuPost         = false,
+        UseGpuRender       = false,
     };
 }

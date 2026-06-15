@@ -11,6 +11,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -38,6 +39,9 @@ public sealed class MandelboxCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    // P7a — lazily-constructed GPU calculator (see MandelbulbCalculator for contract).
+    private MandelboxGpuCalculator? _gpu;
 
     public MandelboxCalculator(int width, int height) => Resize(width, height);
 
@@ -122,6 +126,39 @@ public sealed class MandelboxCalculator : IFractalCalculator
         // P3 — concrete DE struct for inlined Evaluate in Shade<TDe>.
         var deStruct = new De(scale, fixedR2, minR2, bailout2, deIter);
 
+        // Scene escape budget — see the CPU comment further below. Hoisted
+        // here so both GPU (P7a) and CPU paths share one definition.
+        double sceneRadius = camDist + setRadius * 2.0 + 4.0;
+
+        // P7a — opt-in GPU raymarch path (cheap-palette shading). See
+        // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes)
+        {
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camX, CamY = camY, CamZ = camZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+            };
+            var bp = new MandelboxGpuParams
+            {
+                Scale = scale, FixedR2 = fixedR2, MinR2 = minR2,
+                Bailout2 = bailout2, DEIter = deIter,
+                SceneRadius = sceneRadius,
+            };
+            _gpu ??= new MandelboxGpuCalculator();
+            if (_gpu.Render(renderBuffer, rp, bp)) return;
+        }
+
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
         float[]? normalBuf = null;
@@ -145,7 +182,7 @@ public sealed class MandelboxCalculator : IFractalCalculator
         // Zoom (camera far away) marches give up before reaching the surface
         // — previous fixed 16 produced "all black" at Zoom<0.5 because the
         // ray exited the budget while still ~100 units from origin.
-        double sceneRadius = camDist + setRadius * 2.0 + 4.0;
+        // (Definition hoisted above the GPU dispatch; left here as marker.)
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
