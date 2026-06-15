@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
@@ -24,6 +25,9 @@ public sealed class KifsCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -49,8 +53,14 @@ public sealed class KifsCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         var fold = FractalParameters.KifsFold;
         // Default scale depends on fold table — Menger needs 3, Sierpinski 2.
@@ -166,7 +176,7 @@ public sealed class KifsCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { ColorBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit) { renderBuffer[idx] = ColorMap.InSetColor; continue; }
 
                 double h = eps * 2;
                 double n0, n1, n2;
@@ -198,18 +208,26 @@ public sealed class KifsCalculator : IFractalCalculator
                 var inputs = new ShadingInputs(
                     px, py, pz, nrm[0], nrm[1], nrm[2],
                     rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
-                ColorBuffer[idx] = ShadingPipeline.Shade(
+                renderBuffer[idx] = ShadingPipeline.Shade(
                     in inputs, baseColor, in fx, deDelegate,
                     idx, depthBuf, normalBuf, hdrBuf);
             }
         });
 
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplySsao(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
-            ScreenSpacePost.ApplyToneMapBloom(ColorBuffer, hdrBuf, width, height, in fx);
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplyEdgeInk(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>

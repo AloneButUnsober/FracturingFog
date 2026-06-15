@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
@@ -25,6 +26,9 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -50,8 +54,14 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         double cx = FractalParameters.QJuliaCX;
         double cy = FractalParameters.QJuliaCY;
@@ -106,7 +116,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
-        DistanceEstimator deDelegate = (x, y, z) => QuatJuliaDE(x, y, z, sliceW, cx, cy, cz, cw, bailout2, deIter);
+        var deStruct = new De(sliceW, cx, cy, cz, cw, bailout2, deIter);
 
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
@@ -158,7 +168,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { ColorBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit) { renderBuffer[idx] = ColorMap.InSetColor; continue; }
 
                 double h = eps * 2;
                 double n0 = QuatJuliaDE(px + h, py, pz, sliceW, cx, cy, cz, cw, bailout2, deIter)
@@ -177,18 +187,26 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
                 var inputs = new ShadingInputs(
                     px, py, pz, nrm[0], nrm[1], nrm[2],
                     rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
-                ColorBuffer[idx] = ShadingPipeline.Shade(
-                    in inputs, baseColor, in fx, deDelegate,
+                renderBuffer[idx] = ShadingPipeline.Shade<De>(
+                    in inputs, baseColor, in fx, in deStruct, true,
                     idx, depthBuf, normalBuf, hdrBuf);
             }
         });
 
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplySsao(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
-            ScreenSpacePost.ApplyToneMapBloom(ColorBuffer, hdrBuf, width, height, in fx);
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplyEdgeInk(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>
@@ -200,6 +218,18 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
     /// Quaternion components are stored as (W, X, Y, Z) where Hamilton
     /// product is the standard (a + bi + cj + dk)·(e + fi + gj + hk) form.
     /// </summary>
+    /// <summary>P3 — concrete DE struct.</summary>
+    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    {
+        private readonly double _sliceW, _cx, _cy, _cz, _cw, _bailout2;
+        private readonly int _iter;
+        public De(double sliceW, double cx, double cy, double cz, double cw, double bailout2, int iter)
+        { _sliceW = sliceW; _cx = cx; _cy = cy; _cz = cz; _cw = cw; _bailout2 = bailout2; _iter = iter; }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public double Evaluate(double x, double y, double z)
+            => QuatJuliaDE(x, y, z, _sliceW, _cx, _cy, _cz, _cw, _bailout2, _iter);
+    }
+
     private static double QuatJuliaDE(
         double sx, double sy, double sz, double sw,
         double cw_x, double cw_y, double cw_z, double cw_w,

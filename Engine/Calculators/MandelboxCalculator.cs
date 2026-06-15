@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
@@ -22,6 +23,9 @@ public sealed class MandelboxCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -47,8 +51,15 @@ public sealed class MandelboxCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        // P2 — low-res preview.
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         double scale = FractalParameters.MandelboxScale;
         double fixedR = Math.Max(1e-3, FractalParameters.MandelboxFixedRadius);
@@ -108,7 +119,8 @@ public sealed class MandelboxCalculator : IFractalCalculator
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
-        DistanceEstimator deDelegate = (x, y, z) => MandelboxDE(x, y, z, scale, fixedR2, minR2, bailout2, deIter);
+        // P3 — concrete DE struct for inlined Evaluate in Shade<TDe>.
+        var deStruct = new De(scale, fixedR2, minR2, bailout2, deIter);
 
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
@@ -164,7 +176,7 @@ public sealed class MandelboxCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { ColorBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit) { renderBuffer[idx] = ColorMap.InSetColor; continue; }
 
                 double h = eps * 2;
                 double n0 = MandelboxDE(px + h, py, pz, scale, fixedR2, minR2, bailout2, deIter)
@@ -186,18 +198,26 @@ public sealed class MandelboxCalculator : IFractalCalculator
                 var inputs = new ShadingInputs(
                     px, py, pz, nrm[0], nrm[1], nrm[2],
                     rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
-                ColorBuffer[idx] = ShadingPipeline.Shade(
-                    in inputs, baseColor, in fx, deDelegate,
+                renderBuffer[idx] = ShadingPipeline.Shade<De>(
+                    in inputs, baseColor, in fx, in deStruct, true,
                     idx, depthBuf, normalBuf, hdrBuf);
             }
         });
 
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplySsao(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
-            ScreenSpacePost.ApplyToneMapBloom(ColorBuffer, hdrBuf, width, height, in fx);
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplyEdgeInk(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>
@@ -208,6 +228,18 @@ public sealed class MandelboxCalculator : IFractalCalculator
     ///   z = scale·z + c, dz tracked as scalar magnitude
     /// DE = |z| / |dz|. dz at +1 per iter accounts for the +c term.
     /// </summary>
+    /// <summary>P3 — concrete DE struct. Inlines through Shade&lt;De&gt;.</summary>
+    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    {
+        private readonly double _scale, _fixedR2, _minR2, _bailout2;
+        private readonly int _iter;
+        public De(double scale, double fixedR2, double minR2, double bailout2, int iter)
+        { _scale = scale; _fixedR2 = fixedR2; _minR2 = minR2; _bailout2 = bailout2; _iter = iter; }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public double Evaluate(double x, double y, double z)
+            => MandelboxDE(x, y, z, _scale, _fixedR2, _minR2, _bailout2, _iter);
+    }
+
     private static double MandelboxDE(double cx, double cy, double cz,
         double scale, double fixedR2, double minR2, double bailout2, int iter)
     {

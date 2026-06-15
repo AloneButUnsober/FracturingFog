@@ -29,6 +29,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using FracturingFog.Interefaces;
+using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
 using FracturingFog.Models;
 
@@ -39,6 +40,9 @@ public sealed class KleinianCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -64,8 +68,14 @@ public sealed class KleinianCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         int deIter   = Math.Max(2, FractalParameters.KleinianIterations);
         int maxSteps = Math.Max(16, FractalParameters.KleinianMaxSteps);
@@ -122,7 +132,7 @@ public sealed class KleinianCalculator : IFractalCalculator
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
-        DistanceEstimator deDelegate = (x, y, z) => KleinianDE(x, y, z, cx, cy, cz, r, deIter);
+        var deStruct = new De(cx, cy, cz, r, deIter);
 
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
@@ -173,7 +183,7 @@ public sealed class KleinianCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { ColorBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit) { renderBuffer[idx] = ColorMap.InSetColor; continue; }
 
                 double h = eps * 2;
                 double n0 = KleinianDE(px + h, py, pz, cx, cy, cz, r, deIter)
@@ -192,18 +202,26 @@ public sealed class KleinianCalculator : IFractalCalculator
                 var inputs = new ShadingInputs(
                     px, py, pz, nrm[0], nrm[1], nrm[2],
                     rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
-                ColorBuffer[idx] = ShadingPipeline.Shade(
-                    in inputs, baseColor, in fx, deDelegate,
+                renderBuffer[idx] = ShadingPipeline.Shade<De>(
+                    in inputs, baseColor, in fx, in deStruct, true,
                     idx, depthBuf, normalBuf, hdrBuf);
             }
         });
 
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplySsao(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
-            ScreenSpacePost.ApplyToneMapBloom(ColorBuffer, hdrBuf, width, height, in fx);
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null)
-            ScreenSpacePost.ApplyEdgeInk(ColorBuffer, depthBuf, normalBuf, width, height, in fx);
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>
@@ -213,6 +231,20 @@ public sealed class KleinianCalculator : IFractalCalculator
     /// derivative magnitude. DE = signed nearest-sphere distance / accumulated
     /// scale.
     /// </summary>
+    /// <summary>P3 — concrete DE struct. Holds references to the sphere
+    /// centre arrays + tangent radius; iter loop runs inside KleinianDE.</summary>
+    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    {
+        private readonly double[] _cx, _cy, _cz;
+        private readonly double _r;
+        private readonly int _iter;
+        public De(double[] cx, double[] cy, double[] cz, double r, int iter)
+        { _cx = cx; _cy = cy; _cz = cz; _r = r; _iter = iter; }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public double Evaluate(double x, double y, double z)
+            => KleinianDE(x, y, z, _cx, _cy, _cz, _r, _iter);
+    }
+
     private static double KleinianDE(
         double px, double py, double pz,
         double[] cx, double[] cy, double[] cz, double r,
