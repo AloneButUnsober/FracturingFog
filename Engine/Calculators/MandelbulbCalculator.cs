@@ -9,6 +9,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -39,6 +40,11 @@ public sealed class MandelbulbCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    // P7a — lazily constructed GPU calculator. Borrows GpuAcceleratorHost's
+    // shared accelerator; Dispose is a no-op for the host so leaving this
+    // null-or-set is safe across resize / parameter changes.
+    private MandelbulbGpuCalculator? _gpu;
 
     public MandelbulbCalculator(int width, int height) => Resize(width, height);
 
@@ -110,6 +116,42 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // march, volumetric in-scatter). ~8–15 % raymarch speedup vs the
         // legacy DistanceEstimator delegate path.
         var deStruct = new MandelbulbDe(power, deIter);
+
+        // P7a — opt-in GPU raymarch path. Cheap-palette shading only (no full
+        // ShadingPipeline lift until P7c), so SSAO / tonemap / bloom / shadow
+        // / AO / edge / DoF / volumetric all silently drop on the GPU branch.
+        // Caller toggles via fx.UseGpuRender when they want raw speed and
+        // accept the visual trade. Skipped for lowRes since the CPU low-res
+        // preview is already fast and runs the full FX stack.
+        if (fx.UseGpuRender && !lowRes)
+        {
+            double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
+            double lightY = Math.Cos(fx.Light1.Phi);
+            double lightZ = Math.Sin(fx.Light1.Phi) * Math.Sin(fx.Light1.Theta);
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camX, CamY = camY, CamZ = camZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = lightX, LightY = lightY, LightZ = lightZ,
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,  // No sphere clip — CPU path bails on tTotal>12 instead
+                InSetColor = ColorMap.InSetColor,
+            };
+            var bp = new MandelbulbGpuParams
+            {
+                Power = power, DEIter = deIter, Bailout = 2.0,
+                SceneRadius = 12.0,
+            };
+            _gpu ??= new MandelbulbGpuCalculator();
+            if (_gpu.Render(renderBuffer, rp, bp)) return;
+            // Fall through to CPU on init or kernel failure.
+        }
 
         // Phase 4 — G-buffer for SSAO post-pass. Allocated only when SSAO active
         // so the off case pays no memory cost.

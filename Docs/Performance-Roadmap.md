@@ -6,7 +6,9 @@ landed (GPU tonemap+bloom+edge, HDR DoF in 7 calculators).
 
 ## Status (2026-06-15)
 
-P0–P6 shipped. P7 (DE-GPU port) remains the open 10-day refactor.
+P0–P6 + P7 infrastructure + P7a (Mandelbulb / Mandelbox / Menger GPU
+calculators) shipped. Remaining: P7b (QJulia / QMandel / Bicomplex /
+Kleinian / KIFS-Sierpinski GPU) and P7c (full `ShadingPipeline` GPU lift).
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -17,7 +19,10 @@ P0–P6 shipped. P7 (DE-GPU port) remains the open 10-day refactor.
 | P4 — Adaptive volumetric LOD            | ✅ shipped | `VolumeStepsFalloff` knob (default 0.5) |
 | P5 — Bloom blur SIMD                    | ✅ shipped | Vector&lt;float&gt; horizontal + vertical interior pass; scalar edge tails |
 | P6 — Bundle GPU dispatch single sync    | ✅ shipped | `ScreenSpacePost.BeginGpuFrame` / `EndGpuFrame` + shared device color buffer across SSAO/tonemap/edge |
-| P7 — DE-GPU port                         | ⏸ deferred | Multi-day refactor; unlocks 12b-volumetric, 16b, 20b |
+| P7 infrastructure                        | ✅ shipped | `GpuRaymarchParams`, `GpuAcceleratorHost` (singleton ILGPU context+accelerator), `GpuKernelUtils` (BuildPrimaryRay / SphereClip / LambertShade / CheapPalette), `LightingFxData.UseGpuRender` flag (default off) |
+| P7a — Mandelbulb / Mandelbox / Menger GPU | ✅ shipped | `MandelbulbGpuCalculator` + `MandelboxGpuCalculator` + `MengerGpuCalculator` (KIFS Menger fold; Sierpinski still CPU). Cheap-palette shading on the GPU branch — SSAO/tonemap/bloom/shadow/AO/edge/DoF/volumetric drop silently when `UseGpuRender` is on; P7c lifts those |
+| P7b — QJulia / QMandel / Bicomplex / Kleinian / KIFS-Sierpinski GPU | ⏸ open | Remaining 3D raymarchers + the second KIFS fold. Same cheap-shading path until P7c |
+| P7c — `ShadingPipeline` GPU lift          | ⏸ open | Full shadow / AO / reflection / volumetric on device. Unlocks 12b-volumetric, 16b, 20b |
 
 Current state — frame budget at 1920×1080 on a representative scene
 (Mandelbulb, key+fill light, SSAO 16 samples, soft shadow 24 steps, AO

@@ -13,6 +13,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -40,6 +41,10 @@ public sealed class KifsCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    // P7a — lazily-constructed GPU calculator (Menger fold only).
+    // Sierpinski fold stays on CPU until P7b adds a sibling kernel.
+    private MengerGpuCalculator? _gpuMenger;
 
     public KifsCalculator(int width, int height) => Resize(width, height);
 
@@ -126,6 +131,35 @@ public sealed class KifsCalculator : IFractalCalculator
         DistanceEstimator deDelegate = (x, y, z) => sierp
             ? SierpDE(x, y, z, scale, ox, oy, oz, deIter)
             : MengerDE(x, y, z, scale, ox, oy, oz, deIter);
+
+        // P7a — opt-in GPU raymarch path for the Menger fold (Sierpinski stays
+        // on CPU). Cheap-palette shading only — see MandelbulbCalculator for
+        // the FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes && !sierp)
+        {
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camX, CamY = camY, CamZ = camZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+            };
+            var mp = new MengerGpuParams
+            {
+                Scale = scale, OffsetX = ox, OffsetY = oy, OffsetZ = oz,
+                DEIter = deIter, SceneRadius = sceneRadius,
+            };
+            _gpuMenger ??= new MengerGpuCalculator();
+            if (_gpuMenger.Render(renderBuffer, rp, mp)) return;
+        }
 
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
