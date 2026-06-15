@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
+using FracturingFog.Rendering.Lighting;
+
 namespace FracturingFog.Models
 {
     /// <summary>
@@ -69,6 +71,15 @@ namespace FracturingFog.Models
         /// editing. Compile / Generate buttons route by this value.
         /// </summary>
         public int UserEquationActiveTab { get; set; } = 0;
+
+        /// <summary>
+        /// When true, the UserEquation calculator skips its parallel-perturbation
+        /// Jacobian trajectory (2× delegate calls per iteration) and emits zero
+        /// surface normals at escape. 3D Phong themes degrade to flat lighting,
+        /// but throughput roughly doubles for expensive equations. Default false
+        /// preserves the full-fidelity Hubbard-Douady gradient path.
+        /// </summary>
+        public bool UserEquationSkipJacobian { get; set; } = false;
 
         /// <summary>
         /// Source for the Sandbox fractal — a restricted expression DSL parsed by
@@ -460,6 +471,14 @@ namespace FracturingFog.Models
         /// UserBulbSource. Final z = last step's return value.</summary>
         public List<UserBulbChainStep> UserBulbChain { get; set; } = new();
 
+        /// <summary>
+        /// Shared lighting + post-FX parameters consumed by every 3D raymarcher.
+        /// Replaces per-fractal duplicates (Bulb*Light*, UserBulb*Light*, etc.)
+        /// going forward. Defaults reproduce the pre-Phase-1 single-light look
+        /// so renders are pixel-identical until a calculator opts in.
+        /// </summary>
+        public LightingFxData Lighting { get; set; } = LightingFxData.CreateDefault();
+
         public FractalParameters Clone()
         {
             return new FractalParameters
@@ -477,6 +496,7 @@ namespace FracturingFog.Models
                 UserEquationRotationDegrees = UserEquationRotationDegrees,
                 UserEquationDslSource = UserEquationDslSource,
                 UserEquationActiveTab = UserEquationActiveTab,
+                UserEquationSkipJacobian = UserEquationSkipJacobian,
                 SandboxSource = SandboxSource,
                 SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,
@@ -647,7 +667,8 @@ namespace FracturingFog.Models
                 UserBulbClipPlaneNZ = UserBulbClipPlaneNZ,
                 UserBulbClipPlaneD = UserBulbClipPlaneD,
                 UserBulbSuperSample = UserBulbSuperSample,
-                UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone())
+                UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone()),
+                Lighting = Lighting // struct value-copy; EnvironmentName is string (immutable)
             };
         }
     }

@@ -42,6 +42,7 @@ using Microsoft.CodeAnalysis.Emit;
 using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
@@ -732,6 +733,54 @@ namespace FracturingFogDyn
             Math.Cos(FractalParameters.UserBulbLightPhi),
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Sin(FractalParameters.UserBulbLightTheta));
 
+        // Phase 1c — Lighting struct is authoritative. Legacy
+        // FractalParameters.UserBulb{Light*,Ambient,Ao*,Fog*,Bg*} fields are
+        // no longer copied here — the FractalParamsView Lighting & FX block
+        // drives Light1/2/3, ambient, AO, fog, and sky colours. Bulb-specific
+        // AO/fog/bg knobs that aren't yet bound through the Lighting struct
+        // (legacy bulb dialog) are kept below as opt-in overrides only when
+        // the Lighting struct value is at its untouched default.
+        var fx = FractalParameters.Lighting;
+        // Treat fx.AoSamples == 0 as "user hasn't dialled this in via the
+        // Lighting block" and respect the legacy bulb AO knob; otherwise
+        // the Lighting value wins. Same logic for fog.
+        if (fx.AoSamples == 0) fx.AoSamples = aoSamples;
+        if (fx.AoStrength == 0) fx.AoStrength = aoStrength;
+        if (fx.FogDensity == 0) fx.FogDensity = fogDensity;
+        // Sky colours: keep legacy bg fallback so first-time bulb scenes
+        // render against the same dark sky they always have.
+        if (fx.BgTopColor == 0) fx.BgTopColor = bgTop;
+        if (fx.BgBottomColor == 0) fx.BgBottomColor = bgBot;
+
+        // DE delegate captured once for ShadingPipeline AO / shadow / volume
+        // walks. Mode dispatch matches the primary raymarch above so AO walks
+        // sample the same surface (quat / analytic-power / numeric Jacobian).
+        DistanceEstimator deDelegate = (x, y, z) => quatMode
+            ? UserBulbQuatDE(fnQ!, sliceW, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+            : useAnalytic
+                ? UserBulbAnalyticDE.PowerDE(fn!, x, y, z, deIter, bailout, analyticPower, pArr)
+                : UserBulbDE(fn!, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+
+        // Phase 4 — G-buffer for SSAO post-pass. Skipped during low-res preview
+        // because the SSAO pass is much heavier than the preview budget allows.
+        // Allocated at render-buffer dimensions so SSAO runs before downsample.
+        float[]? depthBuf = null;
+        float[]? normalBuf = null;
+        if (!lowRes && fx.SsaoSamples > 0)
+        {
+            depthBuf = new float[width * height];
+            normalBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearGBuffer(depthBuf, normalBuf);
+        }
+        // Phase 7 — HDR buffer for tonemap/bloom. Same low-res gate as SSAO.
+        float[]? hdrBuf = null;
+        bool wantPost = !lowRes && (fx.ToneMap != ToneMapOperator.None || fx.BloomStrength > 0);
+        if (wantPost)
+        {
+            hdrBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearHdrBuffer(hdrBuf);
+        }
+
         // GPU path: only when backend=GPU AND source detected as analytic power map.
         // Two routes:
         //   (a) Sandbox-DSL compiler → UserBulbSandboxGpuCompiler runtime-emits a
@@ -975,35 +1024,6 @@ namespace FracturingFogDyn
                 double n2 = (dzp - hitDist) * invH;
                 var nrm = Normalize3(n0, n1, n2);
 
-                // 3-light shading + optional AO/shadows.
-                double ambient = 0.15;
-                double sR = 0, sG = 0, sB = 0;
-                AccumulateLight(L1I, L1C, light.X, light.Y, light.Z, nrm, ref sR, ref sG, ref sB);
-                AccumulateLight(L2I, L2C, light2X, light2Y, light2Z, nrm, ref sR, ref sG, ref sB);
-                AccumulateLight(L3I, L3C, light3X, light3Y, light3Z, nrm, ref sR, ref sG, ref sB);
-                double ao = 1.0;
-                if (aoSamples > 0)
-                {
-                    double occl = 0, normW = 0;
-                    for (int k = 1; k <= aoSamples; k++)
-                    {
-                        double d = eps * Math.Pow(2, k);
-                        double sampleD = quatMode
-                            ? UserBulbQuatDE(fnQ!, sliceW, px + nrm.X * d, py + nrm.Y * d, pz + nrm.Z * d, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
-                            : useAnalytic
-                                ? UserBulbAnalyticDE.PowerDE(fn!, px + nrm.X * d, py + nrm.Y * d, pz + nrm.Z * d, deIter, bailout, analyticPower, pArr)
-                                : UserBulbDE(fn!, px + nrm.X * d, py + nrm.Y * d, pz + nrm.Z * d, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
-                        occl += Math.Max(0, d - sampleD) / d;
-                        normW += 1.0;
-                    }
-                    ao = Math.Clamp(1.0 - aoStrength * (occl / Math.Max(normW, 1)), 0, 1);
-                }
-                double shade = ambient + ao * (1.0 - ambient);
-                sR = ambient + (sR / 255.0) * (1.0 - ambient);
-                sG = ambient + (sG / 255.0) * (1.0 - ambient);
-                sB = ambient + (sB / 255.0) * (1.0 - ambient);
-                sR *= ao; sG *= ao; sB *= ao;
-
                 // Color driver: feeds ColorMap.Map. Default StepDepth = step + depth.
                 float smooth;
                 float nA = (float)nrm.X, nB = (float)nrm.Y;
@@ -1042,23 +1062,34 @@ namespace FracturingFogDyn
                     }
                 }
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, nA, nB);
-                double br = ((baseColor >> 16) & 0xFF) * sR;
-                double bg = ((baseColor >> 8) & 0xFF) * sG;
-                double bb = (baseColor & 0xFF) * sB;
-                if (fogDensity > 0)
-                {
-                    double fogF = 1.0 - Math.Exp(-tTotal * fogDensity);
-                    uint sky = SkyColor(rdy, bgBot, bgTop);
-                    br = br * (1 - fogF) + ((sky >> 16) & 0xFF) * fogF;
-                    bg = bg * (1 - fogF) + ((sky >> 8) & 0xFF) * fogF;
-                    bb = bb * (1 - fogF) + (sky & 0xFF) * fogF;
-                }
-                byte R = (byte)Math.Clamp(br, 0, 255);
-                byte G = (byte)Math.Clamp(bg, 0, 255);
-                byte B = (byte)Math.Clamp(bb, 0, 255);
-                renderBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+
+                // Phase 1b — shading delegated to shared pipeline. Lambert +
+                // 3-light + DE-cone AO + exp fog computed inside
+                // ShadingPipeline.Shade. Bit-identical to the inline path it
+                // replaced (uses the packed-albedo overload to avoid
+                // byte→float→byte roundtrip quantization).
+                var inputs = new ShadingInputs(
+                    px, py, pz, nrm.X, nrm.Y, nrm.Z,
+                    rdx, rdy, rdz, tTotal, hitDist, hitStep, eps);
+                renderBuffer[idx] = ShadingPipeline.Shade(
+                    in inputs, baseColor, in fx, deDelegate,
+                    idx, depthBuf, normalBuf, hdrBuf);
             }
         });
+
+        // Phase 4 — SSAO post-pass on the render-resolution buffer (before
+        // downsample/upscale composites it into ColorBuffer).
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+
+        // Phase 7 — Tonemap + bloom. Operates on renderBuffer (pre-downsample).
+        if (hdrBuf is not null)
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
+
+        // Phase 23 — Sobel-on-normal edge ink. Operates on tonemapped bytes
+        // pre-downsample so ink lines stay sharp through the upscale pass.
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
 
         if (lowRes)
         {

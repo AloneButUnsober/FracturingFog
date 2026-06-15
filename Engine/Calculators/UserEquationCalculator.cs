@@ -27,6 +27,29 @@ public sealed class UserEquationCalculator : IFractalCalculator
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
 
+    // ── Phase 11 — surface normals via numerical Jacobian ──────────────────
+    //
+    // Mandelbrot's typed kernel computes ∂z/∂c analytically (dz' = 2z·dz + 1
+    // for z² + c). User-supplied equations have no closed-form derivative
+    // available, so we run a parallel-perturbation trajectory per pixel:
+    // base (z, c) + perturbed (zP, c + h). At escape, dz/dc ≈ (zP − z) / h.
+    // Cost: 2× delegate calls per iteration vs the analytic path.
+    //
+    // Analytic functions are conformal so a single Re-axis perturbation is
+    // enough — Cauchy-Riemann gives dz/dIm(c) = i · dz/dRe(c). Hubbard-Douady
+    // escape-potential gradient then yields (nx, ny) routed to the
+    // five-parameter ColorMap.Map overload. 2D themes ignore them; 3D Phong
+    // themes light the user equation's escape surface for free.
+
+    /// <summary>X component of the escape-potential gradient at escape, in
+    /// [-1, 1]. 0 for in-set pixels. Consumed by 3D Phong themes via the
+    /// five-parameter ColorMap.Map overload.</summary>
+    public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>Y component of the escape-potential gradient. See
+    /// <see cref="NormalXBuffer"/>.</summary>
+    public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
+
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
     public double Zoom { get; set; } = 1.0;
@@ -74,7 +97,10 @@ public sealed class UserEquationCalculator : IFractalCalculator
     {
         Width = width;
         Height = height;
-        ColorBuffer = new uint[width * height];
+        int n = width * height;
+        ColorBuffer = new uint[n];
+        NormalXBuffer = new float[n];
+        NormalYBuffer = new float[n];
     }
 
     /// <summary>
@@ -186,6 +212,7 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
         double rot = FractalParameters.UserEquationRotationDegrees * Math.PI / 180.0;
         double cosA = Math.Cos(rot);
         double sinA = Math.Sin(rot);
+        bool skipJacobian = FractalParameters.UserEquationSkipJacobian;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -222,25 +249,70 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
                     cy = centerY + dx * sinA + dyCos;
                 }
                 var c = new Complex(cx, cy);
+                const double h = 1e-6;
+                var cP = new Complex(cx + h, cy);
                 var z = Complex.Zero;
+                var zP = Complex.Zero;
                 int iter;
-                for (iter = 0; iter < maxIt; iter++)
+                if (skipJacobian)
                 {
-                    double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
-                    if (r2 >= bailout2) break;
-                    try { z = fn(z, c, iter); }
-                    catch { iter = maxIt; break; }
+                    // Skip parallel-perturbation trajectory — halves delegate
+                    // call cost. 3D Phong themes degrade to flat lighting
+                    // because surface normals come out zero, but 2D themes
+                    // are unaffected.
+                    for (iter = 0; iter < maxIt; iter++)
+                    {
+                        double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
+                        if (r2 >= bailout2) break;
+                        try { z = fn(z, c, iter); }
+                        catch { iter = maxIt; break; }
+                    }
+                }
+                else
+                {
+                    for (iter = 0; iter < maxIt; iter++)
+                    {
+                        double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
+                        if (r2 >= bailout2) break;
+                        try { z = fn(z, c, iter); zP = fn(zP, cP, iter); }
+                        catch { iter = maxIt; break; }
+                    }
                 }
                 int idx = rowBase + x;
                 if (iter >= maxIt)
                 {
                     ColorBuffer[idx] = ColorMap.InSetColor;
+                    NormalXBuffer[idx] = 0f;
+                    NormalYBuffer[idx] = 0f;
                 }
                 else
                 {
                     double mag = Math.Sqrt(z.Real * z.Real + z.Imaginary * z.Imaginary);
                     float smooth = (float)(iter + 1.0 - Math.Log2(Math.Max(1e-10, Math.Log2(Math.Max(mag, 1.0 + 1e-10)))));
-                    ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt);
+
+                    float nx, ny;
+                    if (skipJacobian)
+                    {
+                        nx = 0f;
+                        ny = 0f;
+                    }
+                    else
+                    {
+                        // Hubbard-Douady normal: u = Re(conj(z) · dz/dc),
+                        // v = -Im(conj(z) · dz/dc). dz/dc ≈ (zP − z) / h
+                        // (Cauchy-Riemann gives the Im column for free on analytic fn).
+                        double dzdcR = (zP.Real - z.Real) / h;
+                        double dzdcI = (zP.Imaginary - z.Imaginary) / h;
+                        double u = z.Real * dzdcR + z.Imaginary * dzdcI;          // Re(z̄ · dzdc)
+                        double v = -(z.Real * dzdcI - z.Imaginary * dzdcR);       // -Im(z̄ · dzdc)
+                        double m = Math.Sqrt(u * u + v * v);
+                        if (m > 1e-12) { nx = (float)(u / m); ny = (float)(v / m); }
+                        else { nx = 0f; ny = 0f; }
+                    }
+                    NormalXBuffer[idx] = nx;
+                    NormalYBuffer[idx] = ny;
+
+                    ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
                 }
             }
         });

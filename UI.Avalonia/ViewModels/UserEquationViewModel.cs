@@ -285,6 +285,19 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Skip Jacobian (Phase 11b) ──
+    public bool SkipJacobian
+    {
+        get => _params.UserEquationSkipJacobian;
+        set
+        {
+            if (_params.UserEquationSkipJacobian == value) return;
+            _params.UserEquationSkipJacobian = value;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
     // ── Error / status ──
     private string _statusText = string.Empty;
     public string StatusText { get => _statusText; private set => this.RaiseAndSetIfChanged(ref _statusText, value); }

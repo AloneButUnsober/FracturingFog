@@ -13,6 +13,7 @@
 
 using System.Collections.Generic;
 
+using FracturingFog.Rendering.Lighting;
 using FracturingFog.ViewState;
 
 namespace FracturingFog.Models
@@ -125,6 +126,43 @@ namespace FracturingFog.Models
         /// passed in via the host service's constructor at bootstrap time.
         /// </summary>
         bool ApplyTheme(string themeName);
+
+        /// <summary>
+        /// Look up the bundled Lighting &amp; FX preset attached to the named
+        /// theme. Returns <c>true</c> + the materialised <see cref="LightingFxData"/>
+        /// when the theme exists, lives in the user library (built-in C# themes
+        /// don't carry presets), and has a non-null <c>LightingPreset</c>.
+        /// Returns <c>false</c> on any miss — the caller should leave its
+        /// active lighting block untouched. Phase 24.
+        /// </summary>
+        bool TryGetThemeLightingPreset(string themeName, out LightingFxData lighting);
+
+        /// <summary>
+        /// Persist <paramref name="lighting"/> as the bundled Lighting &amp; FX
+        /// preset on the named user theme. Returns <c>true</c> when the theme
+        /// is in the user library (built-in C# themes are not editable — the
+        /// caller should surface a friendly "save as a user theme first"
+        /// message in that case). Phase 9b/24b — preset author UI hook.
+        /// </summary>
+        bool SaveLightingPresetToTheme(string themeName, in LightingFxData lighting);
+
+        /// <summary>
+        /// Clear the bundled Lighting &amp; FX preset on the named user
+        /// theme. Returns <c>true</c> when a preset was present + removed.
+        /// Phase 9b/24b — companion to <see cref="SaveLightingPresetToTheme"/>.
+        /// </summary>
+        bool ClearLightingPresetOnTheme(string themeName);
+
+        /// <summary>
+        /// Look up the per-region Lighting &amp; FX override attached to the
+        /// named region. Returns <c>true</c> + the materialised
+        /// <see cref="LightingFxData"/> when the region exists and has a
+        /// non-null <c>LightingOverride</c>. Returns <c>false</c> on any
+        /// miss — the caller should leave its active lighting block alone.
+        /// Phase 10b — pairs with <see cref="ApplyRegion"/>: the caller decides
+        /// when (and whether) to honour the override based on its lock state.
+        /// </summary>
+        bool TryGetRegionLightingOverride(string regionName, out LightingFxData lighting);
 
         /// <summary>
         /// Persist the current view state as a new user region under the given

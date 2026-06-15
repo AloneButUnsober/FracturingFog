@@ -94,6 +94,12 @@
             <Button Grid.Column="2" Content="+90°" Command="{Binding RotPlus90Command}"  Margin="6,0,0,0" Padding="8,4" />
             <Button Grid.Column="3" Content="-90°" Command="{Binding RotMinus90Command}" Margin="4,0,0,0" Padding="8,4" />
             <Button Grid.Column="4" Content="Reset" Command="{Binding RotResetCommand}"  Margin="4,0,0,0" Padding="8,4" />
+            <CheckBox Grid.Column="5"
+                      Content="Skip Jacobian (≈2× faster, flat 3D)"
+                      IsChecked="{Binding SkipJacobian, Mode=TwoWay}"
+                      ToolTip.Tip="Drop the parallel-perturbation trajectory used to compute Hubbard–Douady surface normals. Doubles throughput on slow equations at the cost of flat 3D Phong shading."
+                      Margin="12,0,0,0"
+                      VerticalAlignment="Center" />
         </Grid>
 
         <!-- Row 3: tab control (fills) -->

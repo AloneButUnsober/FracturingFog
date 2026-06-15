@@ -21,6 +21,13 @@ public sealed class SandboxCalculator : IFractalCalculator
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
 
+    // Phase 11 — surface normals via numerical Jacobian. Same pattern as
+    // UserEquationCalculator (parallel-perturbation trajectory + Hubbard-
+    // Douady at escape). Empty/zero for in-set pixels; 3D Phong themes
+    // pick them up via the five-parameter ColorMap.Map overload.
+    public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
+    public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
+
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
     public double Zoom { get; set; } = 1.0;
@@ -48,7 +55,10 @@ public sealed class SandboxCalculator : IFractalCalculator
     {
         Width = width;
         Height = height;
-        ColorBuffer = new uint[width * height];
+        int n = width * height;
+        ColorBuffer = new uint[n];
+        NormalXBuffer = new float[n];
+        NormalYBuffer = new float[n];
     }
 
     public void Compile(string source)
@@ -112,25 +122,47 @@ public sealed class SandboxCalculator : IFractalCalculator
                 {
                     double cx = centerX + (x - width * 0.5) * scale;
                     var c = new Complex(cx, cy);
+                    const double h = 1e-6;
+                    var cP = new Complex(cx + h, cy);
                     var z = Complex.Zero;
+                    var zP = Complex.Zero;
                     int iter;
                     for (iter = 0; iter < maxIt; iter++)
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
                         if (r2 >= bailout2) break;
-                        try { z = expr.EvalStep(z, c, iter, env); }
+                        try
+                        {
+                            z = expr.EvalStep(z, c, iter, env);
+                            zP = expr.EvalStep(zP, cP, iter, env);
+                        }
                         catch { iter = maxIt; break; }
                     }
                     int idx = rowBase + x;
                     if (iter >= maxIt)
                     {
                         ColorBuffer[idx] = ColorMap.InSetColor;
+                        NormalXBuffer[idx] = 0f;
+                        NormalYBuffer[idx] = 0f;
                     }
                     else
                     {
                         double mag = Math.Sqrt(z.Real * z.Real + z.Imaginary * z.Imaginary);
                         float smooth = (float)(iter + 1.0 - Math.Log2(Math.Max(1e-10, Math.Log2(Math.Max(mag, 1.0 + 1e-10)))));
-                        ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt);
+
+                        // Hubbard-Douady normal from numerical dz/dc.
+                        double dzdcR = (zP.Real - z.Real) / h;
+                        double dzdcI = (zP.Imaginary - z.Imaginary) / h;
+                        double u = z.Real * dzdcR + z.Imaginary * dzdcI;
+                        double v = -(z.Real * dzdcI - z.Imaginary * dzdcR);
+                        double m = Math.Sqrt(u * u + v * v);
+                        float nx, ny;
+                        if (m > 1e-12) { nx = (float)(u / m); ny = (float)(v / m); }
+                        else { nx = 0f; ny = 0f; }
+                        NormalXBuffer[idx] = nx;
+                        NormalYBuffer[idx] = ny;
+
+                        ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
                     }
                 }
                 return env;

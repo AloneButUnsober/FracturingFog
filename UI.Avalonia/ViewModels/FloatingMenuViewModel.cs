@@ -57,6 +57,11 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         DeleteThemeCommand      = MakeCmd(() => DeleteThemeClick?.Invoke(this, EventArgs.Empty));
         ReloadThemesCommand     = MakeCmd(() => ReloadThemesClick?.Invoke(this, EventArgs.Empty));
         EditThemeCommand        = MakeCmd(() => EditThemeClick?.Invoke(this, EventArgs.Empty));
+        // Phase 9b/24b — "Save Lighting → Theme". Ships the currently
+        // selected theme name to the host, which snapshots
+        // FractalParameters.Lighting into the user theme's LightingPreset.
+        SaveLightingToThemeCommand = MakeCmd(
+            () => SaveLightingToThemeClick?.Invoke(this, SelectedTheme ?? string.Empty));
         SlideshowSettingsCommand= MakeCmd(() => SlideshowSettingsClick?.Invoke(this, EventArgs.Empty));
         ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
@@ -507,13 +512,65 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public string AdaptiveLabel => $"Adaptive: {Adaptive}";
 
     private bool _brightnessLocked;
-    public bool BrightnessLocked { get => _brightnessLocked; set => this.RaiseAndSetIfChanged(ref _brightnessLocked, value); }
+    /// <summary>Lock brightness against theme-bundle overrides. Mirrors into
+    /// MainViewModel.BrightnessLocked via <see cref="BrightnessLockedChanged"/>.
+    /// Phase 24b.</summary>
+    public bool BrightnessLocked
+    {
+        get => _brightnessLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _brightnessLocked, value))
+                BrightnessLockedChanged?.Invoke(this, value);
+        }
+    }
+    /// <summary>Raised when the user flips the BrightnessLocked checkbox. ShellViewModel
+    /// mirrors the value into <see cref="MainViewModel.BrightnessLocked"/>. Phase 24b.</summary>
+    public event System.EventHandler<bool>? BrightnessLockedChanged;
 
     private bool _contrastLocked;
-    public bool ContrastLocked { get => _contrastLocked; set => this.RaiseAndSetIfChanged(ref _contrastLocked, value); }
+    /// <summary>Lock contrast against theme-bundle overrides. Phase 24b.</summary>
+    public bool ContrastLocked
+    {
+        get => _contrastLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _contrastLocked, value))
+                ContrastLockedChanged?.Invoke(this, value);
+        }
+    }
+    public event System.EventHandler<bool>? ContrastLockedChanged;
 
     private bool _adaptiveLocked;
-    public bool AdaptiveLocked { get => _adaptiveLocked; set => this.RaiseAndSetIfChanged(ref _adaptiveLocked, value); }
+    /// <summary>Lock adaptive against theme-bundle overrides. Phase 24b.</summary>
+    public bool AdaptiveLocked
+    {
+        get => _adaptiveLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _adaptiveLocked, value))
+                AdaptiveLockedChanged?.Invoke(this, value);
+        }
+    }
+    public event System.EventHandler<bool>? AdaptiveLockedChanged;
+
+    private bool _lightingLocked;
+    /// <summary>Lock the active Lighting &amp; FX block against theme-bundle
+    /// overrides. When true, theme selection won't overwrite the user's
+    /// dialled-in lights/AO/fog/tonemap. Phase 24.</summary>
+    public bool LightingLocked
+    {
+        get => _lightingLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _lightingLocked, value))
+                LightingLockedChanged?.Invoke(this, value);
+        }
+    }
+    /// <summary>Raised when the user flips the LightingLocked checkbox so
+    /// ShellViewModel can mirror the flag into MainViewModel.LightingLocked.
+    /// Phase 24.</summary>
+    public event System.EventHandler<bool>? LightingLockedChanged;
 
     private bool _adaptiveEnabled = true;
     public bool AdaptiveEnabled { get => _adaptiveEnabled; set => this.RaiseAndSetIfChanged(ref _adaptiveEnabled, value); }
@@ -751,6 +808,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DeleteThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> ReloadThemesCommand { get; }
     public ReactiveCommand<Unit, Unit> EditThemeCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveLightingToThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ServerCommand { get; }
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
@@ -782,6 +840,13 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? DeleteThemeClick;
     public event EventHandler? ReloadThemesClick;
     public event EventHandler? EditThemeClick;
+    /// <summary>
+    /// Phase 9b/24b — user clicked "Save Lighting → Theme" in Color Themes
+    /// section. Payload = currently selected theme name (may be empty). Host
+    /// snapshots <c>FractalParameters.Lighting</c> into the user theme's
+    /// <c>LightingPreset</c> and shows a status banner with the outcome.
+    /// </summary>
+    public event EventHandler<string>? SaveLightingToThemeClick;
     public event EventHandler? SlideshowSettingsClick;
     public event EventHandler? ServerClick;
     public event EventHandler? ClientClick;
