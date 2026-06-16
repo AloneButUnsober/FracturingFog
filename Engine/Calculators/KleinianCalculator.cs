@@ -28,6 +28,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
@@ -40,6 +41,9 @@ public sealed class KleinianCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // P7b — lazily-constructed GPU calculator. See MandelbulbCalculator for contract.
+    private KleinianGpuCalculator? _gpu;
 
     /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
     public bool LowResPreview { get; set; } = false;
@@ -134,6 +138,44 @@ public sealed class KleinianCalculator : IFractalCalculator
         var fx = FractalParameters.Lighting;
         var deStruct = new De(cx, cy, cz, r, deIter);
 
+        // Hoisted for shared use by GPU dispatch + CPU path.
+        double sceneRadius = camDist + setRadius * 2.0 + 4.0;
+
+        // P7b — opt-in GPU raymarch path (cheap-palette shading). Fixed
+        // 4-sphere preset matches the CPU centres array. See
+        // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes)
+        {
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camPX, CamY = camPY, CamZ = camPZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+            };
+            var kp = new KleinianGpuParams
+            {
+                C0X = cx[0], C0Y = cy[0], C0Z = cz[0],
+                C1X = cx[1], C1Y = cy[1], C1Z = cz[1],
+                C2X = cx[2], C2Y = cy[2], C2Z = cz[2],
+                C3X = cx[3], C3Y = cy[3], C3Z = cz[3],
+                Radius = r,
+                DEIter = deIter,
+                SceneRadius = sceneRadius,
+            };
+            var sp = GpuShadingParams.Build(in fx);
+            _gpu ??= new KleinianGpuCalculator();
+            if (_gpu.Render(renderBuffer, rp, sp, kp)) return;
+        }
+
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
         float[]? normalBuf = null;
@@ -151,8 +193,6 @@ public sealed class KleinianCalculator : IFractalCalculator
             hdrBuf = new float[3 * width * height];
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
-
-        double sceneRadius = camDist + setRadius * 2.0 + 4.0;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {

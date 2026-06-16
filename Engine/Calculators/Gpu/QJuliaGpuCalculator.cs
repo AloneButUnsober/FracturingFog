@@ -1,24 +1,13 @@
-// MandelbulbGpuCalculator.cs
+// QJuliaGpuCalculator.cs
 //
-// P7a — ILGPU-backed GPU raymarcher for the Mandelbulb (triplex power-N).
-// Borrows the shared accelerator from GpuAcceleratorHost, the camera/ray
-// struct from GpuRaymarchParams, and the ray construction / sphere clip /
-// shading helpers from GpuKernelUtils.
+// P7b — ILGPU-backed GPU raymarcher for the Quaternion Julia set (Hart /
+// Sandin / Kauffman 1989). Iteration q := q² + c with q, c ∈ ℍ; pixel
+// (x, y, z) ↦ q = (x, y, z, sliceW). Hubbard–Douady DE with orbital
+// derivative dq tracked through the Hamilton product. Same shading and
+// lifecycle contract as MandelbulbGpuCalculator — see that file for details.
 //
-// P7c.1 — shading now lifts the CPU pipeline's 3-light Lambert + soft
-// shadow (per light, gated by ShadowLightMask) + DE-cone AO + scalar exp
-// fog with sky-gradient tint. Albedo is still the cheap step-hash palette
-// (per-pixel color-map / driver GPU port = separate phase). PBR specular,
-// SSS, triplanar, IBL, caustics, reflection, volumetric in-scatter all
-// silently drop on the GPU branch and ship in later P7c sub-phases.
-//
-// Lifecycle: one MandelbulbGpuCalculator per CPU MandelbulbCalculator.
-// Kernel is loaded lazily on first Render. Disposal is a no-op for the
-// accelerator (owned by GpuAcceleratorHost); only the kernel delegate is
-// released so a fresh load can re-JIT after a fold-switch / driver event.
-//
-// Falls back to CPU via the calling code on TryInit==false or any kernel
-// throw at Render time.
+// Component packing matches the CPU calculator: (X, Y, Z, W) with X playing
+// the "real" slot for q·dq. Single 4·Pow-free DE — only Log + Sqrt.
 
 using System;
 
@@ -27,29 +16,21 @@ using ILGPU.Runtime;
 
 namespace FracturingFog.Calculators.Gpu;
 
-/// <summary>Per-fractal kernel parameters for the Mandelbulb. Pass-by-value
-/// alongside the shared <see cref="GpuRaymarchParams"/>. Triplex power-N
-/// formula — Power=2 is the fast square branch on CPU; on GPU we use the
-/// general Pow(r, Power) path for both since the Power==2 branch saves only
-/// a single Pow call and complicates the JIT'd kernel.</summary>
-public struct MandelbulbGpuParams
+/// <summary>Per-fractal kernel parameters for the Quaternion Julia set.
+/// CX/CY/CZ/CW = quaternion constant c, SliceW = fixed 4th component of the
+/// raymarched 3D slice.</summary>
+public struct QJuliaGpuParams
 {
-    /// <summary>Triplex exponent (8.0 is the canonical Mandelbulb).</summary>
-    public double Power;
-    /// <summary>DE iteration cap. Same value used for the on-hit normal
-    /// gradient samples so the surface and the lit shade are consistent.</summary>
+    public double CX, CY, CZ, CW;
+    public double SliceW;
+    public double Bailout2;
     public int DEIter;
-    /// <summary>Bailout magnitude on |z| inside the DE iter. Match CPU 2.0.</summary>
-    public double Bailout;
-    /// <summary>Scene-escape ray length — once tTotal exceeds this the
-    /// march bails to InSetColor. Mirrors the CPU calculator's tTotal>12
-    /// guard (caller passes the scaled-for-camera-distance value).</summary>
     public double SceneRadius;
 }
 
-public sealed class MandelbulbGpuCalculator : IDisposable
+public sealed class QJuliaGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelbulbGpuParams>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QJuliaGpuParams>? _kernel;
     private bool _initFailed;
     public string LastError { get; private set; } = string.Empty;
 
@@ -66,21 +47,18 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MandelbulbGpuParams>(BulbKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, QJuliaGpuParams>(QJuliaKernel);
             return true;
         }
         catch (Exception ex)
         {
-            LastError = $"Mandelbulb GPU kernel load failed: {ex.Message}";
+            LastError = $"QJulia GPU kernel load failed: {ex.Message}";
             _initFailed = true;
             return false;
         }
     }
 
-    /// <summary>Render one frame into <paramref name="outBuffer"/>. Returns
-    /// false on init or kernel failure — caller falls back to CPU. The
-    /// output buffer length must equal <c>r.Width * r.Height</c>.</summary>
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, QJuliaGpuParams p)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -95,14 +73,13 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         }
         catch (Exception ex)
         {
-            LastError = $"Mandelbulb GPU render failed: {ex.Message}";
+            LastError = $"QJulia GPU render failed: {ex.Message}";
             return false;
         }
     }
 
-    // ── Kernel ──────────────────────────────────────────────────────────────
-    private static void BulbKernel(
-        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MandelbulbGpuParams p)
+    private static void QJuliaKernel(
+        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, QJuliaGpuParams p)
     {
         int x = idx % r.Width;
         int y = idx / r.Width;
@@ -121,7 +98,8 @@ public sealed class MandelbulbGpuCalculator : IDisposable
 
         for (int step = 0; step < r.MaxSteps; step++)
         {
-            double d = MandelbulbDE(px, py, pz, p.Power, p.DEIter, p.Bailout);
+            double d = QJuliaDE(px, py, pz, p.SliceW,
+                p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter);
             if (d < r.Eps) { hit = true; hitStep = step; break; }
             if (tT > p.SceneRadius) break;
             px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -130,20 +108,16 @@ public sealed class MandelbulbGpuCalculator : IDisposable
 
         if (!hit) { output[idx] = r.InSetColor; return; }
 
-        // Central-difference normals matching the CPU path.
         double h = r.Eps * 2;
-        double n0 = MandelbulbDE(px + h, py, pz, p.Power, p.DEIter, p.Bailout)
-                  - MandelbulbDE(px - h, py, pz, p.Power, p.DEIter, p.Bailout);
-        double n1 = MandelbulbDE(px, py + h, pz, p.Power, p.DEIter, p.Bailout)
-                  - MandelbulbDE(px, py - h, pz, p.Power, p.DEIter, p.Bailout);
-        double n2 = MandelbulbDE(px, py, pz + h, p.Power, p.DEIter, p.Bailout)
-                  - MandelbulbDE(px, py, pz - h, p.Power, p.DEIter, p.Bailout);
+        double n0 = QJuliaDE(px + h, py, pz, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter)
+                  - QJuliaDE(px - h, py, pz, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter);
+        double n1 = QJuliaDE(px, py + h, pz, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter)
+                  - QJuliaDE(px, py - h, pz, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter);
+        double n2 = QJuliaDE(px, py, pz + h, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter)
+                  - QJuliaDE(px, py, pz - h, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter);
         double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
         double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
 
-        // Per-light soft shadow. Bias the origin off the surface by eps·4 so
-        // the first DE sample doesn't trigger on the hit itself. Mirrors
-        // ShadingPipeline.Shade's shadow block.
         double bias = r.Eps * 4.0;
         double ox = px + nx * bias;
         double oy = py + ny * bias;
@@ -152,17 +126,13 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         if (sp.ShadowSteps > 0)
         {
             if ((sp.ShadowLightMask & 0x1) != 0 && sp.L1I > 0)
-                sh1 = SoftShadow(ox, oy, oz, sp.L1X, sp.L1Y, sp.L1Z,
-                    r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
+                sh1 = SoftShadow(ox, oy, oz, sp.L1X, sp.L1Y, sp.L1Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
             if ((sp.ShadowLightMask & 0x2) != 0 && sp.L2I > 0)
-                sh2 = SoftShadow(ox, oy, oz, sp.L2X, sp.L2Y, sp.L2Z,
-                    r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
+                sh2 = SoftShadow(ox, oy, oz, sp.L2X, sp.L2Y, sp.L2Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
             if ((sp.ShadowLightMask & 0x4) != 0 && sp.L3I > 0)
-                sh3 = SoftShadow(ox, oy, oz, sp.L3X, sp.L3Y, sp.L3Z,
-                    r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
+                sh3 = SoftShadow(ox, oy, oz, sp.L3X, sp.L3Y, sp.L3Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
         }
 
-        // DE-cone AO. Mirrors ShadingPipeline.Shade's AO block.
         double ao = 1.0;
         if (sp.AoSamples > 0)
         {
@@ -170,7 +140,8 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             for (int k = 1; k <= sp.AoSamples; k++)
             {
                 double d = r.Eps * (double)(1L << k);
-                double sd = MandelbulbDE(px + nx * d, py + ny * d, pz + nz * d, p.Power, p.DEIter, p.Bailout);
+                double sd = QJuliaDE(px + nx * d, py + ny * d, pz + nz * d, p.SliceW,
+                    p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter);
                 occl += Math.Max(0.0, d - sd) / d;
                 w += 1.0;
             }
@@ -181,10 +152,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         var (br, bg, bb) = GpuKernelUtils.ComposeSurfacePbr(
             in sp, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
 
-        // P7c.3 — one-bounce reflection. Reflect view ray about the surface
-        // normal, sphere-trace this fractal's DE to either a second hit (sky
-        // tint attenuated by depth) or the sky. Mix by Schlick Fresnel ramped
-        // toward Metallic. ReflectStrength==0 → skip (bit-identical legacy).
+        // P7c.3 — one-bounce reflection (QJulia DE).
         if (sp.ReflectStrength > 0)
         {
             var (rrx, rry, rrz) = GpuKernelUtils.Reflect3D(rdx, rdy, rdz, nx, ny, nz);
@@ -201,7 +169,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
                 double prx = rOx + rrx * tR;
                 double pry = rOy + rry * tR;
                 double prz = rOz + rrz * tR;
-                double hR = MandelbulbDE(prx, pry, prz, p.Power, p.DEIter, p.Bailout);
+                double hR = QJuliaDE(prx, pry, prz, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter);
                 if (hR < r.Eps * 2.0) { hitR = true; hitTR = tR; break; }
                 tR += hR;
                 if (tR > rMax) break;
@@ -213,10 +181,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             bb += rcB * w;
         }
 
-        // P7c.2 — single-scattering Beer–Lambert volumetric in-scatter. Active
-        // when VolumeSteps>0, FogDensity>0, key light emits. Per-step SoftShadow
-        // (calls this fractal's DE) gates god-rays. CloudSelfShadow + FBM
-        // density modulator inherit the same field set as the CPU pipe.
+        // P7c.2 — single-scattering volumetric in-scatter (QJulia DE).
         if (sp.VolumeSteps > 0 && sp.FogDensity > 0 && sp.L1I > 0)
         {
             double camX = px - rdx * tT;
@@ -262,15 +227,11 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         output[idx] = GpuKernelUtils.PackBgra(br, bg, bb);
     }
 
-    /// <summary>Per-fractal soft-shadow march. Mirrors
-    /// <c>ShadingPipeline.SoftShadow&lt;TDe&gt;</c> with the Mandelbulb DE
-    /// inlined — ILGPU kernels can't take struct-generic DE arguments at the
-    /// LoadAutoGroupedStreamKernel level, so each fractal carries its own.</summary>
     private static double SoftShadow(
         double ox, double oy, double oz,
         double ldx, double ldy, double ldz,
         double tMin, double tMax, double k, int maxSteps,
-        MandelbulbGpuParams p)
+        QJuliaGpuParams p)
     {
         double res = 1.0, t = tMin;
         for (int s = 0; s < maxSteps; s++)
@@ -278,7 +239,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             double px = ox + ldx * t;
             double py = oy + ldy * t;
             double pz = oz + ldz * t;
-            double h = MandelbulbDE(px, py, pz, p.Power, p.DEIter, p.Bailout);
+            double h = QJuliaDE(px, py, pz, p.SliceW, p.CX, p.CY, p.CZ, p.CW, p.Bailout2, p.DEIter);
             if (h < 1e-4) return 0.0;
             if (k > 0) res = Math.Min(res, k * h / t);
             t += h;
@@ -287,36 +248,48 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         return Math.Clamp(res, 0.0, 1.0);
     }
 
-    /// <summary>Triplex Mandelbulb distance estimator. Mirrors the CPU
-    /// MandelbulbCalculator.MandelbulbDE but no escape-iter out param (ILGPU
-    /// inlining drops out-params). Spherical-coords power-N formula.</summary>
-    private static double MandelbulbDE(double cx, double cy, double cz, double power, int iter, double bailout)
+    /// <summary>Hubbard–Douady DE for quaternion squaring map. Components
+    /// packed (X, Y, Z, W) — X plays the "real" slot. Mirrors the CPU
+    /// QuatJuliaCalculator.QuatJuliaDE.</summary>
+    private static double QJuliaDE(
+        double sx, double sy, double sz, double sw,
+        double cx, double cy, double cz, double cw,
+        double bailout2, int iter)
     {
-        double zx = cx, zy = cy, zz = cz;
-        double dr = 1.0;
-        double r = 0.0;
+        double qx = sx, qy = sy, qz = sz, qw = sw;
+        double dx = 1.0, dy = 0.0, dz = 0.0, dw = 0.0;
+
         for (int i = 0; i < iter; i++)
         {
-            r = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-            if (r > bailout) break;
+            // dq := 2·q·dq. Hamilton product (X, Y, Z, W).
+            double ndx = qx * dx - qy * dy - qz * dz - qw * dw;
+            double ndy = qx * dy + qy * dx + qz * dw - qw * dz;
+            double ndz = qx * dz - qy * dw + qz * dx + qw * dy;
+            double ndw = qx * dw + qy * dz - qz * dy + qw * dx;
+            dx = 2.0 * ndx; dy = 2.0 * ndy; dz = 2.0 * ndz; dw = 2.0 * ndw;
 
-            double theta = Math.Acos(zz / Math.Max(r, 1e-12));
-            double phi = Math.Atan2(zy, zx);
-            double rPow = Math.Pow(r, power);
-            dr = Math.Pow(r, power - 1.0) * power * dr + 1.0;
+            // q := q² + c.
+            double nqx = qx * qx - qy * qy - qz * qz - qw * qw;
+            double nqy = 2.0 * qx * qy;
+            double nqz = 2.0 * qx * qz;
+            double nqw = 2.0 * qx * qw;
+            qx = nqx + cx;
+            qy = nqy + cy;
+            qz = nqz + cz;
+            qw = nqw + cw;
 
-            double newTheta = theta * power;
-            double newPhi = phi * power;
-            double sinT = Math.Sin(newTheta);
-            zx = rPow * sinT * Math.Cos(newPhi) + cx;
-            zy = rPow * sinT * Math.Sin(newPhi) + cy;
-            zz = rPow * Math.Cos(newTheta) + cz;
+            double r2 = qx * qx + qy * qy + qz * qz + qw * qw;
+            if (r2 > bailout2) break;
         }
-        return 0.5 * Math.Log(Math.Max(r, 1e-10)) * r / Math.Max(dr, 1e-10);
+
+        double q2 = qx * qx + qy * qy + qz * qz + qw * qw;
+        double d2 = dx * dx + dy * dy + dz * dz + dw * dw;
+        if (d2 < 1e-30) return 0.0;
+        if (q2 < 1.0) return 0.0;
+        double qMag = Math.Sqrt(q2);
+        double dMag = Math.Sqrt(d2);
+        return 0.5 * qMag * Math.Log(qMag) / dMag;
     }
 
-    public void Dispose()
-    {
-        _kernel = null;
-    }
+    public void Dispose() => _kernel = null;
 }

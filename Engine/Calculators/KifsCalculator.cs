@@ -42,9 +42,9 @@ public sealed class KifsCalculator : IFractalCalculator
 
     public FractalParameters FractalParameters { get; set; } = new();
 
-    // P7a — lazily-constructed GPU calculator (Menger fold only).
-    // Sierpinski fold stays on CPU until P7b adds a sibling kernel.
+    // P7a — Menger-fold GPU calculator. P7b — Sierpinski sibling. Both lazy.
     private MengerGpuCalculator? _gpuMenger;
+    private SierpinskiGpuCalculator? _gpuSierp;
 
     public KifsCalculator(int width, int height) => Resize(width, height);
 
@@ -132,10 +132,11 @@ public sealed class KifsCalculator : IFractalCalculator
             ? SierpDE(x, y, z, scale, ox, oy, oz, deIter)
             : MengerDE(x, y, z, scale, ox, oy, oz, deIter);
 
-        // P7a — opt-in GPU raymarch path for the Menger fold (Sierpinski stays
-        // on CPU). Cheap-palette shading only — see MandelbulbCalculator for
-        // the FX-drop trade-off + P7c lift plan.
-        if (fx.UseGpuRender && !lowRes && !sierp)
+        // P7a/P7b — opt-in GPU raymarch path. Menger + Sierpinski each get
+        // their own kernel (branchy fold-switch in one kernel bloats the JIT).
+        // Cheap-palette shading only — see MandelbulbCalculator for the
+        // FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes)
         {
             var rp = new GpuRaymarchParams
             {
@@ -152,13 +153,27 @@ public sealed class KifsCalculator : IFractalCalculator
                 CullRadiusSq = 0.0,
                 InSetColor = ColorMap.InSetColor,
             };
-            var mp = new MengerGpuParams
+            var sp = GpuShadingParams.Build(in fx);
+            if (sierp)
             {
-                Scale = scale, OffsetX = ox, OffsetY = oy, OffsetZ = oz,
-                DEIter = deIter, SceneRadius = sceneRadius,
-            };
-            _gpuMenger ??= new MengerGpuCalculator();
-            if (_gpuMenger.Render(renderBuffer, rp, mp)) return;
+                var sip = new SierpinskiGpuParams
+                {
+                    Scale = scale, OffsetX = ox, OffsetY = oy, OffsetZ = oz,
+                    DEIter = deIter, SceneRadius = sceneRadius,
+                };
+                _gpuSierp ??= new SierpinskiGpuCalculator();
+                if (_gpuSierp.Render(renderBuffer, rp, sp, sip)) return;
+            }
+            else
+            {
+                var mp = new MengerGpuParams
+                {
+                    Scale = scale, OffsetX = ox, OffsetY = oy, OffsetZ = oz,
+                    DEIter = deIter, SceneRadius = sceneRadius,
+                };
+                _gpuMenger ??= new MengerGpuCalculator();
+                if (_gpuMenger.Render(renderBuffer, rp, sp, mp)) return;
+            }
         }
 
         // Phase 4 — G-buffer for SSAO post-pass.

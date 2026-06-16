@@ -155,8 +155,9 @@ public sealed class MandelboxCalculator : IFractalCalculator
                 Bailout2 = bailout2, DEIter = deIter,
                 SceneRadius = sceneRadius,
             };
+            var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new MandelboxGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, bp)) return;
+            if (_gpu.Render(renderBuffer, rp, sp, bp)) return;
         }
 
         // Phase 4 — G-buffer for SSAO post-pass.
