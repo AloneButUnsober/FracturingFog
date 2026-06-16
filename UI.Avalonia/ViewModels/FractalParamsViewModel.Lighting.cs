@@ -10,6 +10,7 @@
 // stays a one-liner.
 
 using System;
+using System.Reactive;
 using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
 using ReactiveUI;
@@ -35,6 +36,27 @@ public sealed partial class FractalParamsViewModel
     {
         public readonly ref LightingFxData Fx;
         public LightingFxParamRef(ref LightingFxData fx) { Fx = ref fx; }
+    }
+
+    // ── HDRI Browse… helper ──────────────────────────────────────────
+
+    /// <summary>Apply a freshly-picked HDRI path with auto-arm: switches
+    /// <see cref="SkyMode"/> to <see cref="SkyMode.Hdri"/> if not already
+    /// there, bumps <see cref="IblStrength"/> off zero if it's still at the
+    /// default. Coalesces the three property changes into a single
+    /// <c>ParamChanged</c> fire so the host re-renders once, not three
+    /// times. Called from <c>FractalParamsView</c>'s Browse… handler.</summary>
+    public void ApplyHdriPick(string path)
+    {
+        _suppress = true;
+        try
+        {
+            EnvironmentName = path;
+            if (SkyMode != SkyMode.Hdri) SkyMode = SkyMode.Hdri;
+            if (IblStrength <= 0.0) IblStrength = 1.0;
+        }
+        finally { _suppress = false; }
+        Fire();
     }
 
     // ── Lights ────────────────────────────────────────────────────────
@@ -224,6 +246,16 @@ public sealed partial class FractalParamsViewModel
         set { MutateLighting(r => r.Fx.IblStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>When true, ray-miss pixels render the sky backdrop (HDRI or
+    /// gradient). When false (default), miss pixels fall back to the colormap's
+    /// InSetColor so the fractal silhouette stays clean while IBL still
+    /// contributes to surface lighting. Opt in for full environment composite.</summary>
+    public bool ShowSkyBackdrop
+    {
+        get => _p.Lighting.ShowSkyBackdrop;
+        set { MutateLighting(r => r.Fx.ShowSkyBackdrop = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Post ─────────────────────────────────────────────────────────
 
     public ToneMapOperator ToneMap
@@ -331,6 +363,26 @@ public sealed partial class FractalParamsViewModel
         set { MutateLighting(r => r.Fx.EdgeKernel = value); this.RaisePropertyChanged(); Fire(); }
     }
     public Array EdgeKernels => Enum.GetValues(typeof(EdgeKernelMode));
+    /// <summary>Phase 16b — N-bounce reflection chain depth. 1 = legacy single
+    /// bounce; up to 6 for chrome / hall-of-mirrors effects. Higher counts
+    /// scale linearly with per-pixel cost in the reflection path.</summary>
+    public int MaxBounces
+    {
+        get => _p.Lighting.MaxBounces;
+        set { MutateLighting(r => r.Fx.MaxBounces = (int)Clamp(value, 1, 6)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>Phase 20b — stereo render mode. Off / Fake (depth-parallax warp)
+    /// / True (two-pass per-eye render). Engine-side knobs only at present;
+    /// host orchestration follow-up wires the mode change into the render
+    /// loop.</summary>
+    public StereoMode StereoMode
+    {
+        get => _p.Lighting.StereoMode;
+        set { MutateLighting(r => r.Fx.StereoMode = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array StereoModes => Enum.GetValues(typeof(StereoMode));
+
     public double StereoEyeSeparation
     {
         get => _p.Lighting.StereoEyeSeparation;
@@ -359,12 +411,26 @@ public sealed partial class FractalParamsViewModel
     public double LightOrbitSpeed
     {
         get => _p.Lighting.LightOrbitSpeed;
-        set { MutateLighting(r => r.Fx.LightOrbitSpeed = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+        set
+        {
+            MutateLighting(r => r.Fx.LightOrbitSpeed = Clamp(value, -10, 10));
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(IsLightOrbitRunning));
+            this.RaisePropertyChanged(nameof(LightOrbitToggleLabel));
+            Fire();
+        }
     }
     public double CausticsAnimSpeed
     {
         get => _p.Lighting.CausticsAnimSpeed;
-        set { MutateLighting(r => r.Fx.CausticsAnimSpeed = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+        set
+        {
+            MutateLighting(r => r.Fx.CausticsAnimSpeed = Clamp(value, -10, 10));
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(IsCausticsRunning));
+            this.RaisePropertyChanged(nameof(CausticsToggleLabel));
+            Fire();
+        }
     }
 
     // ── Cloud noise (Phase 22b) ───────────────────────────────────────
@@ -376,7 +442,14 @@ public sealed partial class FractalParamsViewModel
     public double VolumeNoiseSpeed
     {
         get => _p.Lighting.VolumeNoiseSpeed;
-        set { MutateLighting(r => r.Fx.VolumeNoiseSpeed = Clamp(value, -10, 10)); this.RaisePropertyChanged(); Fire(); }
+        set
+        {
+            MutateLighting(r => r.Fx.VolumeNoiseSpeed = Clamp(value, -10, 10));
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(IsVolumeNoiseRunning));
+            this.RaisePropertyChanged(nameof(VolumeNoiseToggleLabel));
+            Fire();
+        }
     }
     public int VolumeNoiseOctaves
     {
@@ -485,4 +558,73 @@ public sealed partial class FractalParamsViewModel
             Fire();
         }
     }
+
+    // ── Speed-driven effect Start/Stop toggles ──────────────────────────
+    //
+    // Each speed-driven effect (light orbit, caustics phase, cloud-noise
+    // drift) pairs a NumericUpDown with a Start/Stop button. Stop stashes
+    // the live speed and zeroes it; Start restores the stash (or a sane
+    // default if stash is also 0). Manual edits still work — the setters
+    // for the speed properties raise IsXxxRunning + XxxToggleLabel so the
+    // button text tracks the live value.
+    //
+    // Stashes default to a visible-but-calm rate so a fresh Start always
+    // produces motion even if the user never typed a number first.
+
+    private double _lightOrbitSpeedStash    = 0.5;
+    private double _causticsAnimSpeedStash  = 0.5;
+    private double _volumeNoiseSpeedStash   = 0.5;
+
+    public bool IsLightOrbitRunning   => LightOrbitSpeed   != 0.0;
+    public bool IsCausticsRunning     => CausticsAnimSpeed != 0.0;
+    public bool IsVolumeNoiseRunning  => VolumeNoiseSpeed  != 0.0;
+
+    public string LightOrbitToggleLabel  => IsLightOrbitRunning  ? "Stop" : "Start";
+    public string CausticsToggleLabel    => IsCausticsRunning    ? "Stop" : "Start";
+    public string VolumeNoiseToggleLabel => IsVolumeNoiseRunning ? "Stop" : "Start";
+
+    private ReactiveCommand<Unit, Unit>? _toggleLightOrbitCmd;
+    public ReactiveCommand<Unit, Unit> ToggleLightOrbitCommand =>
+        _toggleLightOrbitCmd ??= ReactiveCommand.Create(() =>
+        {
+            if (IsLightOrbitRunning)
+            {
+                _lightOrbitSpeedStash = LightOrbitSpeed;
+                LightOrbitSpeed = 0.0;
+            }
+            else
+            {
+                LightOrbitSpeed = _lightOrbitSpeedStash != 0.0 ? _lightOrbitSpeedStash : 0.5;
+            }
+        });
+
+    private ReactiveCommand<Unit, Unit>? _toggleCausticsCmd;
+    public ReactiveCommand<Unit, Unit> ToggleCausticsCommand =>
+        _toggleCausticsCmd ??= ReactiveCommand.Create(() =>
+        {
+            if (IsCausticsRunning)
+            {
+                _causticsAnimSpeedStash = CausticsAnimSpeed;
+                CausticsAnimSpeed = 0.0;
+            }
+            else
+            {
+                CausticsAnimSpeed = _causticsAnimSpeedStash != 0.0 ? _causticsAnimSpeedStash : 0.5;
+            }
+        });
+
+    private ReactiveCommand<Unit, Unit>? _toggleVolumeNoiseCmd;
+    public ReactiveCommand<Unit, Unit> ToggleVolumeNoiseCommand =>
+        _toggleVolumeNoiseCmd ??= ReactiveCommand.Create(() =>
+        {
+            if (IsVolumeNoiseRunning)
+            {
+                _volumeNoiseSpeedStash = VolumeNoiseSpeed;
+                VolumeNoiseSpeed = 0.0;
+            }
+            else
+            {
+                VolumeNoiseSpeed = _volumeNoiseSpeedStash != 0.0 ? _volumeNoiseSpeedStash : 0.5;
+            }
+        });
 }
