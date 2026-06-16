@@ -71,6 +71,39 @@ internal static class GpuKernelUtils
         return (true, tEn, tEx);
     }
 
+    /// <summary>Ray-miss color picker. Reads <see cref="GpuShadingParams.ShowSkyBackdrop"/>:
+    /// 1 → gradient sky from BgTop/BgBot, 0 → flat
+    /// <see cref="GpuRaymarchParams.InSetColor"/>. Used by every per-fractal
+    /// kernel for sphere-clip and march-out miss pixels.</summary>
+    public static uint MissColor(double rdy, in GpuRaymarchParams r, in GpuShadingParams sp)
+    {
+        if (sp.ShowSkyBackdrop == 0) return r.InSetColor;
+        return SkyColorGradient(rdy, in sp);
+    }
+
+    /// <summary>Vertical gradient sky lookup on the GPU. Mirrors the CPU
+    /// <c>ShadingPipeline.SkyColor</c> formula bit-for-bit (linear lerp on
+    /// <c>0.5*(rdy+1)</c>). Drives the ray-miss / sphere-clip-miss
+    /// backdrop. HDRI sampling stays CPU-only — the kernel falls back to
+    /// the gradient sky on those paths until a future phase ships a GPU
+    /// equirect sampler with HDRI buffer upload.</summary>
+    public static uint SkyColorGradient(double rdy, in GpuShadingParams sp)
+    {
+        double t = rdy + 1.0;
+        t = t * 0.5;
+        if (t < 0) t = 0; else if (t > 1) t = 1;
+        double one_t = 1.0 - t;
+        double R = one_t * sp.SkyBotR + t * sp.SkyTopR;
+        double G = one_t * sp.SkyBotG + t * sp.SkyTopG;
+        double B = one_t * sp.SkyBotB + t * sp.SkyTopB;
+        // Clamp + cast — kernel must not allocate; bytes-as-double → uint
+        // is the same pack the rest of the GPU shade pipeline uses.
+        if (R < 0) R = 0; else if (R > 255) R = 255;
+        if (G < 0) G = 0; else if (G > 255) G = 255;
+        if (B < 0) B = 0; else if (B > 255) B = 255;
+        return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+    }
+
     /// <summary>Hash a hit into a deterministic ARGB color using the
     /// cheap-palette pattern from <c>UserBulbGpuCalculator</c>: shade by
     /// step-depth + total ray length, hue from a phase-shifted sine

@@ -38,19 +38,92 @@ using System.Text;
 
 namespace FracturingFog.Rendering.Lighting;
 
-/// <summary>Decoded Radiance .hdr image — linear scene-referred RGB.</summary>
+/// <summary>Decoded Radiance .hdr image — linear scene-referred RGB. Phase 16b
+/// adds a box-downsample mip chain prefiltered at construction time so
+/// roughness-convolved sampling picks the appropriate mip level (mip 0 = sharp,
+/// mip N-1 ≈ 1×1 = uniform ambient). Storage cost ≈ 4/3 × the original buffer.</summary>
 public sealed class HdriImage
 {
     public int Width { get; }
     public int Height { get; }
-    /// <summary>Packed RGB floats — index = (y · width + x) · 3.</summary>
+    /// <summary>Packed RGB floats — index = (y · width + x) · 3. Mip level 0.</summary>
     public float[] Data { get; }
+
+    /// <summary>Phase 16b — total mip level count including mip 0. Capped at 12
+    /// so very large HDRIs don't waste cycles on irrelevant single-pixel mips.</summary>
+    public int MipLevels { get; }
+
+    /// <summary>Phase 16b — width/height per mip level. Indexed by mip level
+    /// (0 = full resolution).</summary>
+    public int[] MipWidths { get; }
+    public int[] MipHeights { get; }
+
+    /// <summary>Phase 16b — RGB float storage per mip level. Index 0 == <see
+    /// cref="Data"/> so callers that pre-date the mip chain still resolve to the
+    /// sharp image.</summary>
+    public float[][] MipData { get; }
 
     public HdriImage(int w, int h, float[] data)
     {
         Width = w;
         Height = h;
         Data = data;
+
+        // Phase 16b — build the box-downsample mip chain. Stop when the
+        // smaller axis hits 1 (or after 12 levels — a 4096-tall HDRI tops
+        // out at 13 mips; cap one short for headroom).
+        int levels = 1;
+        int mw = w, mh = h;
+        while (Math.Min(mw, mh) > 1 && levels < 12)
+        {
+            levels++;
+            mw = Math.Max(1, mw / 2);
+            mh = Math.Max(1, mh / 2);
+        }
+        MipLevels = levels;
+        MipWidths = new int[levels];
+        MipHeights = new int[levels];
+        MipData = new float[levels][];
+        MipWidths[0] = w;
+        MipHeights[0] = h;
+        MipData[0] = data;
+        for (int lvl = 1; lvl < levels; lvl++)
+        {
+            int pw = MipWidths[lvl - 1];
+            int ph = MipHeights[lvl - 1];
+            int nw = Math.Max(1, pw / 2);
+            int nh = Math.Max(1, ph / 2);
+            MipWidths[lvl] = nw;
+            MipHeights[lvl] = nh;
+            MipData[lvl] = BoxDownsample(MipData[lvl - 1], pw, ph, nw, nh);
+        }
+    }
+
+    private static float[] BoxDownsample(float[] src, int sw, int sh, int dw, int dh)
+    {
+        var dst = new float[dw * dh * 3];
+        // Sample 2×2 footprint per destination pixel (with edge clamp on the
+        // tail rows / cols when the parent dim is odd). Cheap; not a perfect
+        // Gaussian but matches GL_LINEAR_MIPMAP_LINEAR's expectation.
+        for (int y = 0; y < dh; y++)
+        {
+            int sy0 = Math.Min(sh - 1, y * 2);
+            int sy1 = Math.Min(sh - 1, sy0 + 1);
+            for (int x = 0; x < dw; x++)
+            {
+                int sx0 = Math.Min(sw - 1, x * 2);
+                int sx1 = Math.Min(sw - 1, sx0 + 1);
+                int i00 = (sy0 * sw + sx0) * 3;
+                int i10 = (sy0 * sw + sx1) * 3;
+                int i01 = (sy1 * sw + sx0) * 3;
+                int i11 = (sy1 * sw + sx1) * 3;
+                int d = (y * dw + x) * 3;
+                dst[d]     = 0.25f * (src[i00]     + src[i10]     + src[i01]     + src[i11]);
+                dst[d + 1] = 0.25f * (src[i00 + 1] + src[i10 + 1] + src[i01 + 1] + src[i11 + 1]);
+                dst[d + 2] = 0.25f * (src[i00 + 2] + src[i10 + 2] + src[i01 + 2] + src[i11 + 2]);
+            }
+        }
+        return dst;
     }
 
     /// <summary>Equirectangular sample. Returns linear RGB. Direction is
@@ -65,30 +138,58 @@ public sealed class HdriImage
         return SampleUv(u, v);
     }
 
+    /// <summary>Phase 16b — roughness-convolved equirectangular sample. Picks
+    /// a mip by <c>roughness² · (MipLevels − 1)</c> and bilinearly samples the
+    /// nearest mip below the fractional level. Roughness 0 = mip 0 (sharp);
+    /// roughness 1 = mip N-1 (≈ uniform ambient).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public (double R, double G, double B) Sample(double dirX, double dirY, double dirZ, double roughness)
+    {
+        double u = 0.5 + Math.Atan2(dirZ, dirX) * (1.0 / (2.0 * Math.PI));
+        double v = Math.Acos(Math.Clamp(dirY, -1.0, 1.0)) * (1.0 / Math.PI);
+        if (roughness <= 0 || MipLevels <= 1) return SampleUv(u, v);
+        if (roughness > 1) roughness = 1;
+        // Square the roughness so the perceptual midpoint lines up with a
+        // mid-mip — matches the GGX prefiltered-IBL convention used by
+        // Karis 2014 and the UE4 / Filament environment maps.
+        double level = roughness * roughness * (MipLevels - 1);
+        int lvl = (int)Math.Floor(level);
+        if (lvl >= MipLevels - 1) lvl = MipLevels - 1;
+        return SampleUvMip(u, v, lvl);
+    }
+
     /// <summary>Bilinear UV sample. u wraps; v clamps (no antipodal wrap).</summary>
     public (double R, double G, double B) SampleUv(double u, double v)
+        => SampleUvMip(u, v, 0);
+
+    /// <summary>Phase 16b — bilinear UV sample at a specific mip level.</summary>
+    public (double R, double G, double B) SampleUvMip(double u, double v, int mip)
     {
-        // Wrap u so the seam at u=0 / u=1 stitches cleanly.
+        if (mip < 0) mip = 0;
+        else if (mip >= MipLevels) mip = MipLevels - 1;
+        int mw = MipWidths[mip];
+        int mh = MipHeights[mip];
+        float[] buf = MipData[mip];
         u -= Math.Floor(u);
         if (v < 0) v = 0; else if (v > 1) v = 1;
-        double fx = u * (Width - 1);
-        double fy = v * (Height - 1);
+        double fx = u * (mw - 1);
+        double fy = v * (mh - 1);
         int x0 = (int)Math.Floor(fx);
         int y0 = (int)Math.Floor(fy);
-        int x1 = x0 + 1; if (x1 >= Width) x1 = 0;            // wrap
-        int y1 = Math.Min(y0 + 1, Height - 1);
+        int x1 = x0 + 1; if (x1 >= mw) x1 = 0;
+        int y1 = Math.Min(y0 + 1, mh - 1);
         double tx = fx - x0;
         double ty = fy - y0;
-        int i00 = (y0 * Width + x0) * 3;
-        int i10 = (y0 * Width + x1) * 3;
-        int i01 = (y1 * Width + x0) * 3;
-        int i11 = (y1 * Width + x1) * 3;
-        double R = (1 - tx) * (1 - ty) * Data[i00]   + tx * (1 - ty) * Data[i10]
-                 + (1 - tx) *      ty  * Data[i01]   + tx *      ty  * Data[i11];
-        double G = (1 - tx) * (1 - ty) * Data[i00+1] + tx * (1 - ty) * Data[i10+1]
-                 + (1 - tx) *      ty  * Data[i01+1] + tx *      ty  * Data[i11+1];
-        double B = (1 - tx) * (1 - ty) * Data[i00+2] + tx * (1 - ty) * Data[i10+2]
-                 + (1 - tx) *      ty  * Data[i01+2] + tx *      ty  * Data[i11+2];
+        int i00 = (y0 * mw + x0) * 3;
+        int i10 = (y0 * mw + x1) * 3;
+        int i01 = (y1 * mw + x0) * 3;
+        int i11 = (y1 * mw + x1) * 3;
+        double R = (1 - tx) * (1 - ty) * buf[i00]   + tx * (1 - ty) * buf[i10]
+                 + (1 - tx) *      ty  * buf[i01]   + tx *      ty  * buf[i11];
+        double G = (1 - tx) * (1 - ty) * buf[i00+1] + tx * (1 - ty) * buf[i10+1]
+                 + (1 - tx) *      ty  * buf[i01+1] + tx *      ty  * buf[i11+1];
+        double B = (1 - tx) * (1 - ty) * buf[i00+2] + tx * (1 - ty) * buf[i10+2]
+                 + (1 - tx) *      ty  * buf[i01+2] + tx *      ty  * buf[i11+2];
         return (R, G, B);
     }
 }
@@ -97,6 +198,15 @@ public static class HdriRegistry
 {
     private static readonly ConcurrentDictionary<string, HdriImage> _byName
         = new(StringComparer.OrdinalIgnoreCase);
+
+    // Self-register with the abstractions-layer probe so the UI shell's
+    // file-picker can pre-warm and surface load failures without taking a
+    // project reference on the Engine. The first reference to any member of
+    // HdriRegistry triggers the static constructor.
+    static HdriRegistry()
+    {
+        HdriProbe.TryLoad = path => TryLoadFromFile(path, out _);
+    }
 
     public static bool TryGet(string? name, out HdriImage? image)
     {
@@ -113,20 +223,45 @@ public static class HdriRegistry
         _byName[name] = image;
     }
 
-    /// <summary>Load a Radiance .hdr from disk, cache it, and return the
-    /// decoded image. Returns false on parse error.</summary>
+    /// <summary>Load an HDRI from disk, cache it, and return the decoded image.
+    /// Dispatches by file extension: <c>.hdr</c> / <c>.pic</c> → Radiance RGBE,
+    /// <c>.exr</c> → OpenEXR scanline. Returns false on parse error or
+    /// unsupported format / compression.
+    ///
+    /// Hot-path note (Phase 16b hotfix): the cross-cache check by full path
+    /// MUST stay first. The engine's <c>TryResolveHdri</c> is called per
+    /// shaded pixel; when <c>EnvironmentName</c> holds an absolute path the
+    /// bare-name cache key misses on every pixel, so without the path-keyed
+    /// short-circuit the file is re-opened + re-decoded millions of times
+    /// per frame and the render hangs. Cache under BOTH the bare name (for
+    /// preset compatibility) and the full path (for picker-set paths).
+    /// </summary>
     public static bool TryLoadFromFile(string path, out HdriImage? image)
     {
         image = null;
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        // Path-keyed cache check — short-circuits the per-pixel reparse.
+        if (_byName.TryGetValue(path, out var cached) && cached is not null)
+        {
+            image = cached;
+            return true;
+        }
+        if (!File.Exists(path)) return false;
         try
         {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
             using var fs = File.OpenRead(path);
-            image = ParseRadiance(fs);
+            image = ext switch
+            {
+                ".hdr" or ".pic" => ParseRadiance(fs),
+                ".exr"           => OpenExrReader.Parse(fs),
+                _                => null,
+            };
             if (image != null)
             {
                 string name = Path.GetFileNameWithoutExtension(path);
                 _byName[name] = image;
+                _byName[path] = image;
                 return true;
             }
         }

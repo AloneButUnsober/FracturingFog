@@ -108,6 +108,15 @@ public sealed class KifsCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
+        // Phase 20b — true per-eye camera offset along the right basis.
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camX += right[0] * eyeOffset;
+            camY += right[1] * eyeOffset;
+            camZ += right[2] * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         double fovBase = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
         double zoomLensFactor = rawCamDist >= camDistFloor
@@ -225,7 +234,14 @@ public sealed class KifsCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { renderBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit)
+                {
+                    // Ray-miss → sky backdrop when toggle on; InSetColor off (see MandelbulbCalculator).
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
+                    continue;
+                }
 
                 double h = eps * 2;
                 double n0, n1, n2;

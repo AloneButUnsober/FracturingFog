@@ -95,6 +95,17 @@ public sealed class MandelbulbCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
+        // Phase 20b — true per-eye stereo. RenderTrueStereo sets the transient
+        // EyeOffset to ±IPD/2 before each Calculate; shift camera origin along
+        // the right basis. Default 0 = mono (legacy bit-identical).
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camX += right[0] * eyeOffset;
+            camY += right[1] * eyeOffset;
+            camZ += right[2] * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         double fovScale = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
 
@@ -211,7 +222,15 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 int idx = rowBase + x;
                 if (!hit)
                 {
-                    renderBuffer[idx] = ColorMap.InSetColor;
+                    // Ray-miss → sky backdrop when toggle on; flat
+                    // InSetColor when off (lets the user keep IBL surface
+                    // lighting without the photographic backdrop competing
+                    // with the fractal for focus). SkyColorHdri routes
+                    // through HDRI sample when SkyMode=Hdri + HDRI loaded,
+                    // gradient otherwise.
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
                     continue;
                 }
 

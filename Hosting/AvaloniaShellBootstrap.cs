@@ -131,6 +131,16 @@ namespace FracturingFog.Hosting
             // list at that moment, not at boot.
             HostHelpContentProvider.IlgpuDeviceProbe = ProbeIlgpuDevices;
             HostHelpContentProvider.AudioBackendProbe = ProbeAudioBackend;
+
+            // Phase 16b / EXR — wire the UI-layer HDRI probe to the Engine's
+            // HdriRegistry. Lets the Avalonia file picker eagerly pre-warm a
+            // pick and surface load failures (unsupported EXR compression,
+            // missing file, etc.) without UI taking a project reference on
+            // the Engine. The TryLoadFromFile out-param is discarded — we
+            // only need the success bool for status reporting; the registry
+            // caches the image internally.
+            FracturingFog.Rendering.Lighting.HdriProbe.TryLoad =
+                path => FracturingFog.Rendering.Lighting.HdriRegistry.TryLoadFromFile(path, out _);
         }
 
         private static string? ProbeIlgpuDevices()

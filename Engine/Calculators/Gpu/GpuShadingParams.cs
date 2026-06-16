@@ -148,6 +148,11 @@ public struct GpuShadingParams
     /// <summary>Schlick F0 metalness ramp. 0 = dielectric (F0=0.04), 1 = metal
     /// (F0=1.0). Mirrors LightingFxData.Metallic.</summary>
     public double Metallic;
+    /// <summary>Phase 16b — max reflection bounces [1, 6]. 1 = legacy single
+    /// bounce (bit-identical to P7c.3). Each extra bounce sphere-traces the
+    /// reflected ray against the local fractal DE; contribution attenuates by
+    /// (ReflectStrength · F) per bounce. Mirrors LightingFxData.MaxBounces.</summary>
+    public int ReflectBounces;
 
     // ── P7c.4 PBR / SSS / Triplanar / Caustics / IBL ──────────────────────
     /// <summary>GGX roughness [0, 1]. 0 = mirror, 1 = lambertian. Clamped to
@@ -178,6 +183,12 @@ public struct GpuShadingParams
     /// (legacy). When &gt;0, blend sky-gradient at the surface normal into the
     /// per-channel ambient. Mirrors LightingFxData.IblStrength.</summary>
     public double IblStrength;
+    /// <summary>1 = ray-miss pixels render the sky gradient backdrop. 0 =
+    /// fall back to <see cref="GpuRaymarchParams.InSetColor"/>. Mirrors
+    /// LightingFxData.ShowSkyBackdrop (bool→int because ILGPU kernels
+    /// can't take System.Boolean fields on every backend). 1 by default
+    /// to match the post-Phase 16b CPU behaviour.</summary>
+    public int ShowSkyBackdrop;
     /// <summary>Procedural caustics strength on upward-facing surfaces. 0 =
     /// off (legacy). Mirrors LightingFxData.CausticsStrength.</summary>
     public double CausticsStrength;
@@ -263,6 +274,7 @@ public struct GpuShadingParams
             ReflectSteps    = fx.ReflectionSteps,
             ReflectMaxDist  = 12.0,
             Metallic        = fx.Metallic,
+            ReflectBounces  = fx.MaxBounces > 0 ? fx.MaxBounces : 1,
 
             // P7c.4 — PBR / SSS / Triplanar / Caustics / IBL. All default-zero
             // so a stock LightingFxData renders bit-identical to P7c.3.
@@ -278,6 +290,7 @@ public struct GpuShadingParams
             TriplanarTintB     =  fx.TriplanarTint        & 0xFF,
 
             IblStrength        = fx.IblStrength,
+            ShowSkyBackdrop    = fx.ShowSkyBackdrop ? 1 : 0,
 
             CausticsStrength   = fx.CausticsStrength,
             CausticsFloorY     = fx.CausticsFloorY,

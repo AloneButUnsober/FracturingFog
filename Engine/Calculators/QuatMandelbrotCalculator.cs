@@ -105,6 +105,15 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
+        // Phase 20b — true per-eye camera offset along the right basis.
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camPX += right[0] * eyeOffset;
+            camPY += right[1] * eyeOffset;
+            camPZ += right[2] * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         double fovBase = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
         double zoomLensFactor = rawCamDist >= camDistFloor
@@ -205,7 +214,14 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { renderBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit)
+                {
+                    // Ray-miss → sky backdrop when toggle on; InSetColor off (see MandelbulbCalculator).
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
+                    continue;
+                }
 
                 double h = eps * 2;
                 double n0 = QuatMandelDE(px + h, py, pz, sliceZ, sliceW, bailout2, deIter)
