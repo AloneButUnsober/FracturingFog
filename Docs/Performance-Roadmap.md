@@ -4,11 +4,24 @@ Companion to `Lighting-FX-Roadmap.md` and `Fractal-Expansion-Roadmap.md`.
 Tracks interactive-render performance work after the second deferred-wave
 landed (GPU tonemap+bloom+edge, HDR DoF in 7 calculators).
 
-## Status (2026-06-15)
+## Status (2026-06-16)
 
-P0–P6 + P7 infrastructure + P7a (Mandelbulb / Mandelbox / Menger GPU
-calculators) shipped. Remaining: P7b (QJulia / QMandel / Bicomplex /
-Kleinian / KIFS-Sierpinski GPU) and P7c (full `ShadingPipeline` GPU lift).
+P0–P6 + P7 infrastructure + P7a + P7b + P7c.1 + P7c.2 + P7c.3 + P7c.4 shipped
+— every 3D raymarcher (Mandelbulb, Mandelbox, QJulia, QMandel, Bicomplex,
+Kleinian) and both KIFS folds (Menger + Sierpinski) now have an opt-in ILGPU
+GPU path with real 3-light Lambert + per-light soft shadow + DE-cone AO +
+ambient + sky-tint fog AND single-scattering volumetric in-scatter
+(Beer–Lambert with per-step shadow toward Light1, FBM cloud-density
+modulation, cloud self-shadow, height falloff, adaptive step-count LOD) AND
+one-bounce Fresnel-weighted reflection probe AND full PBR/SSS/Triplanar/
+Caustics/IBL (Cook-Torrance GGX D·G·F per-light spec with per-channel F0
+ramped by Metallic, Burley back-light SSS lobe per-light, procedural
+triplanar texture modulating albedo pre-lighting, sky-gradient at the surface
+normal blended into ambient via IblStrength, procedural caustics on
+upward-facing surfaces with height falloff and Light1 shadow gating). Albedo
+still rides the cheap step-hash palette (color-map GPU port remains a
+separate future phase). The full P7 lift is complete — all P7c sub-phases
+shipped.
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -21,8 +34,11 @@ Kleinian / KIFS-Sierpinski GPU) and P7c (full `ShadingPipeline` GPU lift).
 | P6 — Bundle GPU dispatch single sync    | ✅ shipped | `ScreenSpacePost.BeginGpuFrame` / `EndGpuFrame` + shared device color buffer across SSAO/tonemap/edge |
 | P7 infrastructure                        | ✅ shipped | `GpuRaymarchParams`, `GpuAcceleratorHost` (singleton ILGPU context+accelerator), `GpuKernelUtils` (BuildPrimaryRay / SphereClip / LambertShade / CheapPalette), `LightingFxData.UseGpuRender` flag (default off) |
 | P7a — Mandelbulb / Mandelbox / Menger GPU | ✅ shipped | `MandelbulbGpuCalculator` + `MandelboxGpuCalculator` + `MengerGpuCalculator` (KIFS Menger fold; Sierpinski still CPU). Cheap-palette shading on the GPU branch — SSAO/tonemap/bloom/shadow/AO/edge/DoF/volumetric drop silently when `UseGpuRender` is on; P7c lifts those |
-| P7b — QJulia / QMandel / Bicomplex / Kleinian / KIFS-Sierpinski GPU | ⏸ open | Remaining 3D raymarchers + the second KIFS fold. Same cheap-shading path until P7c |
-| P7c — `ShadingPipeline` GPU lift          | ⏸ open | Full shadow / AO / reflection / volumetric on device. Unlocks 12b-volumetric, 16b, 20b |
+| P7b — QJulia / QMandel / Bicomplex / Kleinian / KIFS-Sierpinski GPU | ✅ shipped | `QJuliaGpuCalculator` + `QMandelGpuCalculator` + `BicomplexGpuCalculator` + `KleinianGpuCalculator` (fixed 4-sphere tetrahedral preset, centres packed scalar-by-scalar) + `SierpinskiGpuCalculator` (sibling to Menger; KifsCalculator dispatches by fold). Same cheap-palette shading as P7a — P7c lifts the full pipeline |
+| P7c.1 — GPU shading: 3-light + shadow + AO + fog | ✅ shipped | `GpuShadingParams` + `GpuKernelUtils.ComposePixel/CheapAlbedo/SkyGradient`. All 7 P7-pattern kernels (Mandelbulb / Mandelbox / Menger / Sierpinski / QJulia / QMandel / Bicomplex / Kleinian) carry per-fractal inline `SoftShadow` + DE-cone AO loops calling the local DE — ILGPU can't take a generic DE struct at `LoadAutoGroupedStreamKernel` level. Cheap-palette albedo. Scalar exp-fog (volumetric ships in P7c.2) |
+| P7c.2 — GPU volumetric in-scatter         | ✅ shipped | `GpuShadingParams` extended with VolumeSteps + FogHeightFalloff + VolumeNoise* + VolumeSelfShadow* + VolumeStepsFalloff + SceneTime. `GpuKernelUtils` gains kernel-side Hash3D / ValueNoise3D / FbmCloud3D / VolumetricDensityMul / CloudSelfShadow / ExpNegSmall + ComposeSurfaceNoFog / ApplyScalarFog / PackBgra. All 8 P7-pattern kernels run the per-pixel volume march inline (per-step SoftShadow toward Light1 calls each fractal's own DE) and pick volumetric vs scalar exp-fog by `VolumeSteps > 0`. Unlocks 12b-volumetric on GPU |
+| P7c.3 — GPU reflection (secondary ray)    | ✅ shipped | `GpuShadingParams` extended with ReflectStrength + ReflectSteps + ReflectMaxDist + Metallic (mirrors `LightingFxData.ReflectionStrength/ReflectionSteps/Metallic`). `GpuKernelUtils` gains kernel-side Reflect3D + FresnelMix (Schlick F0=0.04+0.96·metallic) + ReflectShade (sky-tint env proxy with exp(-tR·0.15) hit attenuation — HDRI IBL is GPU-blocked until P7c.4). All 8 P7-pattern kernels run a per-pixel reflect-march inline against the local fractal DE (ILGPU can't take a generic DE through `LoadAutoGroupedStreamKernel`, same reason as P7c.1 SoftShadow + P7c.2 volumetric). Reflection block sits between surface compose and the volumetric/scalar-fog branch so god-rays cover the reflection. ReflectStrength==0 → bit-identical legacy. Unlocks 16b |
+| P7c.4 — GPU PBR/SSS/IBL/triplanar/caustics | ✅ shipped | `GpuShadingParams` extended with Roughness + SpecularStrength + SubSurfaceStrength + TriplanarKind + TriplanarScale + TriplanarStrength + TriplanarTint + IblStrength + CausticsStrength + CausticsFloorY + CausticsScale + CausticsColor + CausticsAnimSpeed (mirrors the matching `LightingFxData` fields). `GpuKernelUtils` gains kernel-side `GgxSpecLight` (Cook-Torrance D·G·F per directional light, per-channel F0=0.04+(albedo-0.04)·Metallic), `BurleySssLight` (distortion=0.3 / power=4 back-light lobe), `TriplanarSample2D` (Wood / Marble / Rock / Checker procedurals indexed by int kind), `ApplyTriplanar` (squared-normal-weighted projection blend), `EvaluateCaustics` (mirrors the CPU two-sin-cascade ⁶ pattern), and `ComposeSurfacePbr` — the new full-pipeline composer that walks triplanar → 3-light diffuse + GGX spec + Burley SSS → AO → IBL ambient blend → metal-suppress-diffuse → albedo multiply → caustics. All 8 P7-pattern kernels swapped their `ComposeSurfaceNoFog` call for `ComposeSurfacePbr`. All P7c.4 knobs default-zero — bit-identical legacy when off. Cheap-palette albedo still feeds the PBR layer; per-pixel color-map GPU port stays a separate future phase. HDRI env sampling stays GPU-blocked — sky-gradient at the surface normal is the same MVP fallback the CPU pipe uses |
 
 Current state — frame budget at 1920×1080 on a representative scene
 (Mandelbulb, key+fill light, SSAO 16 samples, soft shadow 24 steps, AO

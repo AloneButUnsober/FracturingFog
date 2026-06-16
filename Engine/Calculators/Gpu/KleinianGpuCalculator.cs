@@ -1,16 +1,16 @@
-// MengerGpuCalculator.cs
+// KleinianGpuCalculator.cs
 //
-// P7a — ILGPU-backed GPU raymarcher for the Menger-sponge KIFS (Knighty's
-// formulation). Mirrors KifsCalculator's MengerDE — octant fold, sort-3,
-// scale·z − (scale−1)·offset, corner-mirror on z.
+// P7b — ILGPU-backed GPU raymarcher for the Kleinian limit set (fixed
+// tetrahedral 4-sphere preset, per the CPU KleinianCalculator). Sphere
+// centres are packed as 12 scalar fields rather than an array — ILGPU
+// kernels don't take managed arrays as struct fields, and the preset is
+// hard-coded at 4 spheres anyway.
 //
-// Sierpinski fold is *not* covered in this kernel — KifsCalculator routes
-// only KifsFold == Menger to GPU. Sierpinski stays on CPU until P7b adds a
-// SierpinskiGpuCalculator (or this kernel branches on a fold-kind field;
-// branchy GPU code is generally avoided so two kernels is cleaner).
-//
-// Scale-power normalisation (Math.Pow(scale, -iter) on the DE return) uses
-// the same Pow call as the CPU path — ILGPU lifts it to its math intrinsic.
+// Distance estimator: for each iter, find the sphere whose interior most
+// contains p (largest negative signed distance); if none, escape. Otherwise
+// invert through that sphere and accumulate the scalar inversion scale.
+// DE = (nearest signed sphere distance) / accumulated scale. Mirrors
+// KleinianCalculator.KleinianDE.
 
 using System;
 
@@ -19,18 +19,24 @@ using ILGPU.Runtime;
 
 namespace FracturingFog.Calculators.Gpu;
 
-/// <summary>Per-fractal kernel parameters for the Menger-fold KIFS.</summary>
-public struct MengerGpuParams
+/// <summary>Per-fractal kernel parameters for the Kleinian limit set.
+/// Fixed 4-sphere preset — centres packed scalar-by-scalar so the struct
+/// stays blittable for ILGPU. <see cref="Radius"/> is the common tangent
+/// radius; sqrt-2 scaled at the CPU side.</summary>
+public struct KleinianGpuParams
 {
-    public double Scale;
-    public double OffsetX, OffsetY, OffsetZ;
+    public double C0X, C0Y, C0Z;
+    public double C1X, C1Y, C1Z;
+    public double C2X, C2Y, C2Z;
+    public double C3X, C3Y, C3Z;
+    public double Radius;
     public int DEIter;
     public double SceneRadius;
 }
 
-public sealed class MengerGpuCalculator : IDisposable
+public sealed class KleinianGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MengerGpuParams>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, KleinianGpuParams>? _kernel;
     private bool _initFailed;
     public string LastError { get; private set; } = string.Empty;
 
@@ -47,18 +53,18 @@ public sealed class MengerGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MengerGpuParams>(MengerKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, KleinianGpuParams>(KleinianKernel);
             return true;
         }
         catch (Exception ex)
         {
-            LastError = $"Menger GPU kernel load failed: {ex.Message}";
+            LastError = $"Kleinian GPU kernel load failed: {ex.Message}";
             _initFailed = true;
             return false;
         }
     }
 
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MengerGpuParams p)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, KleinianGpuParams p)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -73,13 +79,13 @@ public sealed class MengerGpuCalculator : IDisposable
         }
         catch (Exception ex)
         {
-            LastError = $"Menger GPU render failed: {ex.Message}";
+            LastError = $"Kleinian GPU render failed: {ex.Message}";
             return false;
         }
     }
 
-    private static void MengerKernel(
-        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MengerGpuParams p)
+    private static void KleinianKernel(
+        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, KleinianGpuParams p)
     {
         int x = idx % r.Width;
         int y = idx / r.Width;
@@ -98,7 +104,7 @@ public sealed class MengerGpuCalculator : IDisposable
 
         for (int step = 0; step < r.MaxSteps; step++)
         {
-            double d = MengerDE(px, py, pz, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter);
+            double d = KleinianDE(px, py, pz, in p);
             if (d < r.Eps) { hit = true; hitStep = step; break; }
             if (tT > p.SceneRadius) break;
             px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -108,28 +114,25 @@ public sealed class MengerGpuCalculator : IDisposable
         if (!hit) { output[idx] = r.InSetColor; return; }
 
         double h = r.Eps * 2;
-        double n0 = MengerDE(px + h, py, pz, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter)
-                  - MengerDE(px - h, py, pz, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter);
-        double n1 = MengerDE(px, py + h, pz, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter)
-                  - MengerDE(px, py - h, pz, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter);
-        double n2 = MengerDE(px, py, pz + h, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter)
-                  - MengerDE(px, py, pz - h, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter);
+        double n0 = KleinianDE(px + h, py, pz, in p) - KleinianDE(px - h, py, pz, in p);
+        double n1 = KleinianDE(px, py + h, pz, in p) - KleinianDE(px, py - h, pz, in p);
+        double n2 = KleinianDE(px, py, pz + h, in p) - KleinianDE(px, py, pz - h, in p);
         double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
         double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
 
         double bias = r.Eps * 4.0;
-        double ox2 = px + nx * bias;
-        double oy2 = py + ny * bias;
-        double oz2 = pz + nz * bias;
+        double ox = px + nx * bias;
+        double oy = py + ny * bias;
+        double oz = pz + nz * bias;
         double sh1 = 1.0, sh2 = 1.0, sh3 = 1.0;
         if (sp.ShadowSteps > 0)
         {
             if ((sp.ShadowLightMask & 0x1) != 0 && sp.L1I > 0)
-                sh1 = SoftShadow(ox2, oy2, oz2, sp.L1X, sp.L1Y, sp.L1Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
+                sh1 = SoftShadow(ox, oy, oz, sp.L1X, sp.L1Y, sp.L1Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, in p);
             if ((sp.ShadowLightMask & 0x2) != 0 && sp.L2I > 0)
-                sh2 = SoftShadow(ox2, oy2, oz2, sp.L2X, sp.L2Y, sp.L2Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
+                sh2 = SoftShadow(ox, oy, oz, sp.L2X, sp.L2Y, sp.L2Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, in p);
             if ((sp.ShadowLightMask & 0x4) != 0 && sp.L3I > 0)
-                sh3 = SoftShadow(ox2, oy2, oz2, sp.L3X, sp.L3Y, sp.L3Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
+                sh3 = SoftShadow(ox, oy, oz, sp.L3X, sp.L3Y, sp.L3Z, r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, in p);
         }
 
         double ao = 1.0;
@@ -139,7 +142,7 @@ public sealed class MengerGpuCalculator : IDisposable
             for (int k = 1; k <= sp.AoSamples; k++)
             {
                 double d = r.Eps * (double)(1L << k);
-                double sd = MengerDE(px + nx * d, py + ny * d, pz + nz * d, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter);
+                double sd = KleinianDE(px + nx * d, py + ny * d, pz + nz * d, in p);
                 occl += Math.Max(0.0, d - sd) / d;
                 w += 1.0;
             }
@@ -150,7 +153,7 @@ public sealed class MengerGpuCalculator : IDisposable
         var (br, bg, bb) = GpuKernelUtils.ComposeSurfacePbr(
             in sp, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
 
-        // P7c.3 — one-bounce reflection (Menger DE).
+        // P7c.3 — one-bounce reflection (Kleinian DE — DE takes 'in p').
         if (sp.ReflectStrength > 0)
         {
             var (rrx, rry, rrz) = GpuKernelUtils.Reflect3D(rdx, rdy, rdz, nx, ny, nz);
@@ -167,7 +170,7 @@ public sealed class MengerGpuCalculator : IDisposable
                 double prx = rOx + rrx * tR;
                 double pry = rOy + rry * tR;
                 double prz = rOz + rrz * tR;
-                double hR = MengerDE(prx, pry, prz, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter);
+                double hR = KleinianDE(prx, pry, prz, in p);
                 if (hR < r.Eps * 2.0) { hitR = true; hitTR = tR; break; }
                 tR += hR;
                 if (tR > rMax) break;
@@ -179,7 +182,7 @@ public sealed class MengerGpuCalculator : IDisposable
             bb += rcB * w;
         }
 
-        // P7c.2 — single-scattering volumetric in-scatter (Menger DE).
+        // P7c.2 — single-scattering volumetric in-scatter (Kleinian DE).
         if (sp.VolumeSteps > 0 && sp.FogDensity > 0 && sp.L1I > 0)
         {
             double camX = px - rdx * tT;
@@ -204,7 +207,7 @@ public sealed class MengerGpuCalculator : IDisposable
                 double sh = 1.0;
                 if (shadowOn)
                     sh = SoftShadow(sx, sy, sz, sp.L1X, sp.L1Y, sp.L1Z,
-                        r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
+                        r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, in p);
                 sh *= GpuKernelUtils.CloudSelfShadow(sx, sy, sz, sp.L1X, sp.L1Y, sp.L1Z, in sp);
                 double scatter = density * sh * sp.L1I * stepSize;
                 inR += T * scatter * sp.L1R;
@@ -229,7 +232,7 @@ public sealed class MengerGpuCalculator : IDisposable
         double ox, double oy, double oz,
         double ldx, double ldy, double ldz,
         double tMin, double tMax, double k, int maxSteps,
-        MengerGpuParams p)
+        in KleinianGpuParams p)
     {
         double res = 1.0, t = tMin;
         for (int s = 0; s < maxSteps; s++)
@@ -237,7 +240,7 @@ public sealed class MengerGpuCalculator : IDisposable
             double px = ox + ldx * t;
             double py = oy + ldy * t;
             double pz = oz + ldz * t;
-            double h = MengerDE(px, py, pz, p.Scale, p.OffsetX, p.OffsetY, p.OffsetZ, p.DEIter);
+            double h = KleinianDE(px, py, pz, in p);
             if (h < 1e-4) return 0.0;
             if (k > 0) res = Math.Min(res, k * h / t);
             t += h;
@@ -246,30 +249,75 @@ public sealed class MengerGpuCalculator : IDisposable
         return Math.Clamp(res, 0.0, 1.0);
     }
 
-    private static double MengerDE(double cx, double cy, double cz,
-        double scale, double ox, double oy, double oz, int iter)
+    /// <summary>Sphere-inversion DE for the tetrahedral Kleinian group.
+    /// Hand-unrolled 4-sphere selection to keep the inner loop branchless
+    /// of array indexing — ILGPU happily inlines the chain. Mirrors
+    /// KleinianCalculator.KleinianDE.</summary>
+    private static double KleinianDE(double px, double py, double pz, in KleinianGpuParams p)
     {
-        double zx = cx, zy = cy, zz = cz;
-        double k = scale - 1.0;
-        double offX = k * ox;
-        double offY = k * oy;
-        double offZ = k * oz;
-        double mirrorThresh = -0.5 * offZ;
-        for (int i = 0; i < iter; i++)
-        {
-            zx = Math.Abs(zx); zy = Math.Abs(zy); zz = Math.Abs(zz);
-            double t;
-            if (zx - zy < 0) { t = zx; zx = zy; zy = t; }
-            if (zx - zz < 0) { t = zx; zx = zz; zz = t; }
-            if (zy - zz < 0) { t = zy; zy = zz; zz = t; }
+        double r = p.Radius;
+        double r2 = r * r;
+        double scale = 1.0;
 
-            zx = scale * zx - offX;
-            zy = scale * zy - offY;
-            zz = scale * zz;
-            if (zz < mirrorThresh) zz += offZ;
+        for (int i = 0; i < p.DEIter; i++)
+        {
+            int bestK = -1;
+            double bestDeep = 0.0;
+
+            double dx, dy, dz, d;
+
+            dx = px - p.C0X; dy = py - p.C0Y; dz = pz - p.C0Z;
+            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+            if (d < bestDeep) { bestDeep = d; bestK = 0; }
+
+            dx = px - p.C1X; dy = py - p.C1Y; dz = pz - p.C1Z;
+            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+            if (d < bestDeep) { bestDeep = d; bestK = 1; }
+
+            dx = px - p.C2X; dy = py - p.C2Y; dz = pz - p.C2Z;
+            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+            if (d < bestDeep) { bestDeep = d; bestK = 2; }
+
+            dx = px - p.C3X; dy = py - p.C3Y; dz = pz - p.C3Z;
+            d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+            if (d < bestDeep) { bestDeep = d; bestK = 3; }
+
+            if (bestK < 0) break;
+
+            double cx = bestK == 0 ? p.C0X : bestK == 1 ? p.C1X : bestK == 2 ? p.C2X : p.C3X;
+            double cy = bestK == 0 ? p.C0Y : bestK == 1 ? p.C1Y : bestK == 2 ? p.C2Y : p.C3Y;
+            double cz = bestK == 0 ? p.C0Z : bestK == 1 ? p.C1Z : bestK == 2 ? p.C2Z : p.C3Z;
+
+            double ex = px - cx;
+            double ey = py - cy;
+            double ez = pz - cz;
+            double e2 = ex * ex + ey * ey + ez * ez;
+            if (e2 < 1e-30) break;
+            double f = r2 / e2;
+            scale *= f;
+            px = cx + ex * f;
+            py = cy + ey * f;
+            pz = cz + ez * f;
         }
-        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
-        return (rFinal - 2.0) * Math.Pow(scale, -iter);
+
+        double nearest = double.PositiveInfinity;
+
+        double ax, ay, az, a;
+        ax = px - p.C0X; ay = py - p.C0Y; az = pz - p.C0Z;
+        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
+        if (a < nearest) nearest = a;
+        ax = px - p.C1X; ay = py - p.C1Y; az = pz - p.C1Z;
+        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
+        if (a < nearest) nearest = a;
+        ax = px - p.C2X; ay = py - p.C2Y; az = pz - p.C2Z;
+        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
+        if (a < nearest) nearest = a;
+        ax = px - p.C3X; ay = py - p.C3Y; az = pz - p.C3Z;
+        a = Math.Abs(Math.Sqrt(ax * ax + ay * ay + az * az) - r);
+        if (a < nearest) nearest = a;
+
+        if (scale < 1e-30) return 0.0;
+        return nearest / scale;
     }
 
     public void Dispose() => _kernel = null;

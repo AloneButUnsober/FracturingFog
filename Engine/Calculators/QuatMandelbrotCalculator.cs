@@ -21,6 +21,7 @@ using System.Threading;
 using FracturingFog.Rendering.Lighting;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -32,6 +33,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // P7b — lazily-constructed GPU calculator. See MandelbulbCalculator for contract.
+    private QMandelGpuCalculator? _gpu;
 
     /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
     public bool LowResPreview { get; set; } = false;
@@ -120,6 +124,39 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         var fx = FractalParameters.Lighting;
         var deStruct = new De(sliceZ, sliceW, bailout2, deIter);
 
+        // Hoisted for shared use by GPU dispatch + CPU path.
+        double sceneRadius = camDist + setRadius * 2.0 + 4.0;
+
+        // P7b — opt-in GPU raymarch path (cheap-palette shading). See
+        // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes)
+        {
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camPX, CamY = camPY, CamZ = camPZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+            };
+            var qp = new QMandelGpuParams
+            {
+                SliceZ = sliceZ, SliceW = sliceW,
+                Bailout2 = bailout2, DEIter = deIter,
+                SceneRadius = sceneRadius,
+            };
+            var sp = GpuShadingParams.Build(in fx);
+            _gpu ??= new QMandelGpuCalculator();
+            if (_gpu.Render(renderBuffer, rp, sp, qp)) return;
+        }
+
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
         float[]? normalBuf = null;
@@ -137,8 +174,6 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
             hdrBuf = new float[3 * width * height];
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
-
-        double sceneRadius = camDist + setRadius * 2.0 + 4.0;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {

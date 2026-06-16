@@ -148,8 +148,9 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 Power = power, DEIter = deIter, Bailout = 2.0,
                 SceneRadius = 12.0,
             };
+            var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new MandelbulbGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, bp)) return;
+            if (_gpu.Render(renderBuffer, rp, sp, bp)) return;
             // Fall through to CPU on init or kernel failure.
         }
 
