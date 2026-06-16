@@ -110,7 +110,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
 
         var (rdx, rdy, rdz) = GpuKernelUtils.BuildPrimaryRay(x, y, in r);
         var (sphereHit, tEn, _) = GpuKernelUtils.SphereClip(rdx, rdy, rdz, in r);
-        if (!sphereHit) { output[idx] = r.InSetColor; return; }
+        if (!sphereHit) { output[idx] = GpuKernelUtils.MissColor(rdy, in r, in sp); return; }
 
         double px = r.CamX + rdx * tEn;
         double py = r.CamY + rdy * tEn;
@@ -128,7 +128,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             tT += d;
         }
 
-        if (!hit) { output[idx] = r.InSetColor; return; }
+        if (!hit) { output[idx] = GpuKernelUtils.MissColor(rdy, in r, in sp); return; }
 
         // Central-difference normals matching the CPU path.
         double h = r.Eps * 2;
@@ -181,36 +181,82 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         var (br, bg, bb) = GpuKernelUtils.ComposeSurfacePbr(
             in sp, nx, ny, nz, rdx, rdy, rdz, px, py, pz, sh1, sh2, sh3, ao, aR, aG, aB);
 
-        // P7c.3 — one-bounce reflection. Reflect view ray about the surface
-        // normal, sphere-trace this fractal's DE to either a second hit (sky
-        // tint attenuated by depth) or the sky. Mix by Schlick Fresnel ramped
+        // P7c.3 — reflection probe. Reflect view ray about the surface
+        // normal, sphere-trace this fractal's DE to either a hit (sky tint
+        // attenuated by depth) or the sky. Mix by Schlick Fresnel ramped
         // toward Metallic. ReflectStrength==0 → skip (bit-identical legacy).
+        //
+        // Phase 16b — N-bounce loop driven by ReflectBounces (default 1 =
+        // legacy single bounce). Each bounce: sphere-trace, on miss
+        // accumulate sky-tint × chain weight + stop; on hit accumulate
+        // env-proxy × chain weight, recompute normal via central differences
+        // (six DE evals), reflect bounce dir, chain weight *= F for next.
         if (sp.ReflectStrength > 0)
         {
-            var (rrx, rry, rrz) = GpuKernelUtils.Reflect3D(rdx, rdy, rdz, nx, ny, nz);
-            double rOx = px + nx * bias;
-            double rOy = py + ny * bias;
-            double rOz = pz + nz * bias;
             int rSteps = sp.ReflectSteps > 0 ? sp.ReflectSteps : 24;
             double rMax = sp.ReflectMaxDist > 0 ? sp.ReflectMaxDist : 12.0;
-            double tR = r.Eps;
-            bool hitR = false;
-            double hitTR = 0.0;
-            for (int s = 0; s < rSteps; s++)
+            int bounces = sp.ReflectBounces > 0 ? sp.ReflectBounces : 1;
+            if (bounces > 6) bounces = 6;
+
+            // Current bounce state. Start at the primary hit.
+            double brx0, bry0, brz0;
+            (brx0, bry0, brz0) = GpuKernelUtils.Reflect3D(rdx, rdy, rdz, nx, ny, nz);
+            double bOx = px + nx * bias;
+            double bOy = py + ny * bias;
+            double bOz = pz + nz * bias;
+            double bnx = nx, bny = ny, bnz = nz;
+            double bDirX = brx0, bDirY = bry0, bDirZ = brz0;
+            double brdx = rdx, brdy = rdy, brdz = rdz;
+            double chainW = sp.ReflectStrength;
+            double accR = 0, accG = 0, accB = 0;
+            for (int b = 0; b < bounces; b++)
             {
-                double prx = rOx + rrx * tR;
-                double pry = rOy + rry * tR;
-                double prz = rOz + rrz * tR;
-                double hR = MandelbulbDE(prx, pry, prz, p.Power, p.DEIter, p.Bailout);
-                if (hR < r.Eps * 2.0) { hitR = true; hitTR = tR; break; }
-                tR += hR;
-                if (tR > rMax) break;
+                double w = GpuKernelUtils.FresnelMix(bnx, bny, bnz, brdx, brdy, brdz, sp.Metallic, chainW);
+                if (w < 1e-4) break;
+
+                double tR = r.Eps;
+                bool hitR = false;
+                double hitTR = 0.0;
+                double hpx = 0, hpy = 0, hpz = 0;
+                for (int s = 0; s < rSteps; s++)
+                {
+                    hpx = bOx + bDirX * tR;
+                    hpy = bOy + bDirY * tR;
+                    hpz = bOz + bDirZ * tR;
+                    double hR = MandelbulbDE(hpx, hpy, hpz, p.Power, p.DEIter, p.Bailout);
+                    if (hR < r.Eps * 2.0) { hitR = true; hitTR = tR; break; }
+                    tR += hR;
+                    if (tR > rMax) break;
+                }
+                var (rcR, rcG, rcB) = GpuKernelUtils.ReflectShade(hitR, hitTR, bDirY, in sp);
+                accR += rcR * w;
+                accG += rcG * w;
+                accB += rcB * w;
+                if (!hitR) break;
+                if (b + 1 >= bounces) break;
+
+                // Recompute normal at bounce hit, reflect for next bounce.
+                double h2 = r.Eps * 2.0;
+                double n0b = MandelbulbDE(hpx + h2, hpy, hpz, p.Power, p.DEIter, p.Bailout)
+                           - MandelbulbDE(hpx - h2, hpy, hpz, p.Power, p.DEIter, p.Bailout);
+                double n1b = MandelbulbDE(hpx, hpy + h2, hpz, p.Power, p.DEIter, p.Bailout)
+                           - MandelbulbDE(hpx, hpy - h2, hpz, p.Power, p.DEIter, p.Bailout);
+                double n2b = MandelbulbDE(hpx, hpy, hpz + h2, p.Power, p.DEIter, p.Bailout)
+                           - MandelbulbDE(hpx, hpy, hpz - h2, p.Power, p.DEIter, p.Bailout);
+                double nlen = 1.0 / Math.Sqrt(n0b * n0b + n1b * n1b + n2b * n2b + 1e-20);
+                double nbx2 = n0b * nlen, nby2 = n1b * nlen, nbz2 = n2b * nlen;
+                brdx = bDirX; brdy = bDirY; brdz = bDirZ;
+                var (rrx2, rry2, rrz2) = GpuKernelUtils.Reflect3D(bDirX, bDirY, bDirZ, nbx2, nby2, nbz2);
+                bOx = hpx + nbx2 * bias;
+                bOy = hpy + nby2 * bias;
+                bOz = hpz + nbz2 * bias;
+                bnx = nbx2; bny = nby2; bnz = nbz2;
+                bDirX = rrx2; bDirY = rry2; bDirZ = rrz2;
+                chainW = w;
             }
-            var (rcR, rcG, rcB) = GpuKernelUtils.ReflectShade(hitR, hitTR, rry, in sp);
-            double w = GpuKernelUtils.FresnelMix(nx, ny, nz, rdx, rdy, rdz, sp.Metallic, sp.ReflectStrength);
-            br += rcR * w;
-            bg += rcG * w;
-            bb += rcB * w;
+            br += accR;
+            bg += accG;
+            bb += accB;
         }
 
         // P7c.2 — single-scattering Beer–Lambert volumetric in-scatter. Active

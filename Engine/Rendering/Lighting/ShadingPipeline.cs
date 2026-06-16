@@ -486,80 +486,138 @@ public static class ShadingPipeline
         double bg = ((texAlbedo >> 8) & 0xFF) * sG + specG + sssG;
         double bb = (texAlbedo & 0xFF) * sB + specB + sssB;
 
-        // Phase 16 — 1-bounce reflection probe. March reflect(V, N) along DE;
+        // Phase 16 — reflection probe. March reflect(V, N) along DE;
         // on hit, cheap env-tinted ambient with distance falloff; on miss,
         // sample sky along the bounce direction. Mixed by Fresnel × strength
         // so dielectrics reflect only at grazing angles while metals reflect
         // broadly. ReflectionStrength==0 → bit-identical legacy.
         //
-        // Cost: ~ReflectionSteps DE evals per pixel when active. No recursive
-        // shading on the bounce hit — we use a one-light Lambert + ambient
-        // proxy instead. Visually adequate for fractal scenes that are mostly
-        // convex; reflection-of-reflection would require Phase 16b.
+        // Phase 16b — N-bounce loop driven by MaxBounces (default 1 = legacy
+        // single bounce). Each iteration: sphere-trace from current origin/dir
+        // against DE, on hit recompute normal via central differences and
+        // reflect again; on miss sample the IBL (roughness-convolved when an
+        // HDRI is loaded) and stop. Per-bounce contribution scales by
+        // (ReflectionStrength · F)^bounce so deeper bounces fade off.
+        //
+        // Cost: ~MaxBounces × ReflectionSteps DE evals per reflective pixel
+        // (plus 6 extra DE evals per hit for the normal). MaxBounces &gt; 2 is
+        // interactive-preview-only.
         if (fx.ReflectionStrength > 0 && hasDe)
         {
             int reflSteps = fx.ReflectionSteps > 0 ? fx.ReflectionSteps : 24;
-            double vx = -i.Rdx, vy = -i.Rdy, vz = -i.Rdz;
-            double NdotV = Math.Max(0.0, i.Nx * vx + i.Ny * vy + i.Nz * vz);
-
-            // Mirror reflection of the view ray about the surface normal.
-            double rdN = i.Rdx * i.Nx + i.Rdy * i.Ny + i.Rdz * i.Nz;
-            double rrx = i.Rdx - 2.0 * rdN * i.Nx;
-            double rry = i.Rdy - 2.0 * rdN * i.Ny;
-            double rrz = i.Rdz - 2.0 * rdN * i.Nz;
-
+            int maxBounces = fx.MaxBounces > 0 ? fx.MaxBounces : 1;
+            if (maxBounces > 6) maxBounces = 6;
+            double tMaxR = 12.0;
             double bias = i.Epsilon * 4.0;
-            double ox = i.Px + i.Nx * bias;
-            double oy = i.Py + i.Ny * bias;
-            double oz = i.Pz + i.Nz * bias;
 
-            double tR = i.Epsilon;
-            const double tMaxR = 12.0;
-            bool hitR = false;
-            double hitTR = 0.0;
-            for (int s = 0; s < reflSteps; s++)
-            {
-                double pxR = ox + rrx * tR;
-                double pyR = oy + rry * tR;
-                double pzR = oz + rrz * tR;
-                double hR = de.Evaluate(pxR, pyR, pzR);
-                if (hR < i.Epsilon * 2.0) { hitR = true; hitTR = tR; break; }
-                tR += hR;
-                if (tR > tMaxR) break;
-            }
+            // Current bounce state: origin + direction + the surface normal at
+            // the originating hit. Start the chain at the primary hit.
+            double bOx = i.Px + i.Nx * bias;
+            double bOy = i.Py + i.Ny * bias;
+            double bOz = i.Pz + i.Nz * bias;
+            // Initial bounce direction = mirror of the view ray about the
+            // primary hit normal. Subsequent bounces re-reflect against the
+            // newly-hit surface normal.
+            double rdN0 = i.Rdx * i.Nx + i.Rdy * i.Ny + i.Rdz * i.Nz;
+            double brx = i.Rdx - 2.0 * rdN0 * i.Nx;
+            double bry = i.Rdy - 2.0 * rdN0 * i.Ny;
+            double brz = i.Rdz - 2.0 * rdN0 * i.Nz;
+            // NdotV at the originating surface — drives Fresnel for THIS bounce.
+            double NdotV = Math.Max(0.0, i.Nx * -i.Rdx + i.Ny * -i.Rdy + i.Nz * -i.Rdz);
 
-            double reflR, reflG, reflB;
-            if (hitR)
+            // Accumulated reflection contribution (0..255 channel space).
+            double accR = 0, accG = 0, accB = 0;
+            // Running mix weight; multiplied by per-bounce Fresnel each step
+            // so the chain fades geometrically.
+            double chainW = fx.ReflectionStrength;
+
+            for (int b = 0; b < maxBounces; b++)
             {
-                // Env-tinted proxy shade for the bounce hit. Avoids recursive
-                // Shade() while still picking up scene tint (sky → fractal
-                // surface color reads as a warm/cool wash depending on bg).
-                var envR = SampleEnvAmbientHdri(rrx, rry, rrz, in fx);
+                // Schlick Fresnel at the originating surface. F0 ramps from
+                // 0.04 (dielectric) toward 1.0 (metal). Higher metallic →
+                // broader reflection across the whole hemisphere.
+                double f0 = 0.04 + 0.96 * fx.Metallic;
+                double omv = 1.0 - NdotV;
+                double Fc = omv * omv * omv * omv * omv;
+                double F = f0 + (1.0 - f0) * Fc;
+                double w = chainW * F;
+                if (w < 1e-4) break; // chain faded — further bounces invisible.
+
+                // Sphere-trace the current bounce ray.
+                double tR = i.Epsilon;
+                bool hitR = false;
+                double hitTR = 0.0;
+                double hpx = 0, hpy = 0, hpz = 0;
+                for (int s = 0; s < reflSteps; s++)
+                {
+                    hpx = bOx + brx * tR;
+                    hpy = bOy + bry * tR;
+                    hpz = bOz + brz * tR;
+                    double hR = de.Evaluate(hpx, hpy, hpz);
+                    if (hR < i.Epsilon * 2.0) { hitR = true; hitTR = tR; break; }
+                    tR += hR;
+                    if (tR > tMaxR) break;
+                }
+
+                if (!hitR)
+                {
+                    // Miss → sky-tint along the bounce dir. Mirrors the
+                    // legacy single-bounce SkyColorHdri path (clamped bytes).
+                    // Roughness picks the IBL mip when an HDRI is loaded —
+                    // gradient sky has no convolution but the overload is
+                    // cheap. Bit-identical to Phase 16 at roughness == 1.0
+                    // and MaxBounces == 1.
+                    uint skyR = SkyColorHdri(brx, bry, brz, fx.Roughness, in fx);
+                    double mR = (skyR >> 16) & 0xFF;
+                    double mG = (skyR >>  8) & 0xFF;
+                    double mB =  skyR        & 0xFF;
+                    accR += mR * w;
+                    accG += mG * w;
+                    accB += mB * w;
+                    break;
+                }
+
+                // Hit — accumulate env-tinted proxy color for this bounce.
+                // Mirrors the legacy SampleEnvAmbientHdri path with the new
+                // roughness-aware overload.
+                var envH = SampleEnvAmbientHdri(brx, bry, brz, fx.Roughness, in fx);
                 double atten = Math.Exp(-hitTR * 0.15);
-                reflR = envR.R * 255.0 * atten;
-                reflG = envR.G * 255.0 * atten;
-                reflB = envR.B * 255.0 * atten;
-            }
-            else
-            {
-                uint skyR = SkyColorHdri(rrx, rry, rrz, in fx);
-                reflR = (skyR >> 16) & 0xFF;
-                reflG = (skyR >>  8) & 0xFF;
-                reflB =  skyR        & 0xFF;
+                accR += envH.R * 255.0 * atten * w;
+                accG += envH.G * 255.0 * atten * w;
+                accB += envH.B * 255.0 * atten * w;
+
+                // If this was the last allowed bounce, stop — no need to
+                // recompute the next normal.
+                if (b + 1 >= maxBounces) break;
+
+                // Recompute surface normal at the bounce hit via central
+                // differences; reflect the current bounce dir about it for the
+                // next iteration. Six extra DE evals per hit — gated above.
+                double h = i.Epsilon * 2.0;
+                double nbx = de.Evaluate(hpx + h, hpy, hpz) - de.Evaluate(hpx - h, hpy, hpz);
+                double nby = de.Evaluate(hpx, hpy + h, hpz) - de.Evaluate(hpx, hpy - h, hpz);
+                double nbz = de.Evaluate(hpx, hpy, hpz + h) - de.Evaluate(hpx, hpy, hpz - h);
+                var n2 = Normalize3(nbx, nby, nbz);
+                // Re-reflect bounce dir about the new normal. NdotV for the
+                // next bounce's Fresnel = max(0, n·-bounceDir).
+                double rdN = brx * n2.X + bry * n2.Y + brz * n2.Z;
+                double bnx = brx - 2.0 * rdN * n2.X;
+                double bny = bry - 2.0 * rdN * n2.Y;
+                double bnz = brz - 2.0 * rdN * n2.Z;
+                NdotV = Math.Max(0.0, n2.X * -brx + n2.Y * -bry + n2.Z * -brz);
+                bOx = hpx + n2.X * bias;
+                bOy = hpy + n2.Y * bias;
+                bOz = hpz + n2.Z * bias;
+                brx = bnx; bry = bny; brz = bnz;
+                // Fade the chain by THIS bounce's mix; deeper bounces are
+                // weighted by the running product (matches a physical mirror
+                // chain — each reflection loses energy to the surface).
+                chainW = w;
             }
 
-            // Schlick Fresnel mix. F0 ramps from 0.04 (dielectric) toward 1.0
-            // (metal) — metallic surfaces reflect broadly, dielectric only at
-            // grazing angles.
-            double f0 = 0.04 + 0.96 * fx.Metallic;
-            double omv = 1.0 - NdotV;
-            double Fc = omv * omv * omv * omv * omv;
-            double F = f0 + (1.0 - f0) * Fc;
-            double w = fx.ReflectionStrength * F;
-
-            br += reflR * w;
-            bg += reflG * w;
-            bb += reflB * w;
+            br += accR;
+            bg += accG;
+            bb += accB;
         }
 
         // Phase 17 — fake caustics. Sample procedural pattern in world (x, z)
@@ -995,6 +1053,23 @@ public static class ShadingPipeline
         return SampleEnvAmbient(fx.SkyMode, ny, fx.BgBottomColor, fx.BgTopColor);
     }
 
+    /// <summary>Phase 16b — HDRI ambient lookup with roughness convolution.
+    /// Selects an <see cref="HdriImage"/> mip level by
+    /// <c>roughness² · (MipLevels − 1)</c> so smooth surfaces sample mip 0
+    /// (sharp) and rough surfaces sample a heavily downsampled mip (soft).
+    /// Falls back to the gradient path when no HDRI is resolved — gradient
+    /// has no convolution, so roughness is ignored on that branch.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static (double R, double G, double B) SampleEnvAmbientHdri(
+        double nx, double ny, double nz, double roughness, in LightingFxData fx)
+    {
+        if (fx.SkyMode == SkyMode.Hdri && TryResolveHdri(fx.EnvironmentName, out var hdri))
+        {
+            return hdri!.Sample(nx, ny, nz, roughness);
+        }
+        return SampleEnvAmbient(fx.SkyMode, ny, fx.BgBottomColor, fx.BgTopColor);
+    }
+
     /// <summary>HDRI resolver. Looks up the registry by name first; if that
     /// misses and the name appears to be a filesystem path ending in .hdr,
     /// tries to load it from disk (and caches the result so future frames
@@ -1004,7 +1079,8 @@ public static class ShadingPipeline
         if (HdriRegistry.TryGet(name, out hdri) && hdri is not null) return true;
         if (!string.IsNullOrWhiteSpace(name)
             && (name.EndsWith(".hdr", StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith(".pic", StringComparison.OrdinalIgnoreCase)))
+                || name.EndsWith(".pic", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".exr", StringComparison.OrdinalIgnoreCase)))
         {
             if (HdriRegistry.TryLoadFromFile(name, out hdri) && hdri is not null) return true;
         }
@@ -1021,6 +1097,23 @@ public static class ShadingPipeline
         if (fx.SkyMode == SkyMode.Hdri && TryResolveHdri(fx.EnvironmentName, out var hdri))
         {
             var (r, g, b) = hdri!.Sample(rdx, rdy, rdz);
+            byte R = (byte)Math.Clamp(r * 255.0, 0, 255);
+            byte G = (byte)Math.Clamp(g * 255.0, 0, 255);
+            byte B = (byte)Math.Clamp(b * 255.0, 0, 255);
+            return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+        }
+        return SkyColor(rdy, fx.BgBottomColor, fx.BgTopColor);
+    }
+
+    /// <summary>Phase 16b — HDRI sky lookup with roughness convolution.
+    /// Used by the reflection-miss path so rougher bounces see a softer
+    /// environment. Falls back to gradient when no HDRI is loaded.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint SkyColorHdri(double rdx, double rdy, double rdz, double roughness, in LightingFxData fx)
+    {
+        if (fx.SkyMode == SkyMode.Hdri && TryResolveHdri(fx.EnvironmentName, out var hdri))
+        {
+            var (r, g, b) = hdri!.Sample(rdx, rdy, rdz, roughness);
             byte R = (byte)Math.Clamp(r * 255.0, 0, 255);
             byte G = (byte)Math.Clamp(g * 255.0, 0, 255);
             byte B = (byte)Math.Clamp(b * 255.0, 0, 255);

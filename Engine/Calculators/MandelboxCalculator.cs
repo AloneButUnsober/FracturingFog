@@ -104,6 +104,15 @@ public sealed class MandelboxCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
+        // Phase 20b — true per-eye camera offset along the right basis.
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camX += right[0] * eyeOffset;
+            camY += right[1] * eyeOffset;
+            camZ += right[2] * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         // FOV narrows once camera is at its floor — so additional Zoom past
         // the floor acts as a lens zoom rather than a no-op.
@@ -214,7 +223,14 @@ public sealed class MandelboxCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { renderBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit)
+                {
+                    // Ray-miss → sky backdrop when toggle on; InSetColor off (see MandelbulbCalculator).
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
+                    continue;
+                }
 
                 double h = eps * 2;
                 double n0 = MandelboxDE(px + h, py, pz, scale, fixedR2, minR2, bailout2, deIter)

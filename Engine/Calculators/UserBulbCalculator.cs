@@ -724,6 +724,15 @@ namespace FracturingFogDyn
             Y: right.Z * fwd.X - right.X * fwd.Z,
             Z: right.X * fwd.Y - right.Y * fwd.X);
 
+        // Phase 20b — true per-eye camera offset along the right basis.
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camX += right.X * eyeOffset;
+            camY += right.Y * eyeOffset;
+            camZ += right.Z * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         double fovRad = FractalParameters.UserBulbFovDegrees * Math.PI / 180.0;
         double fovScale = Math.Tan(0.5 * Math.Clamp(fovRad, 0.05, Math.PI - 0.05));
@@ -997,7 +1006,13 @@ namespace FracturingFogDyn
 
                 if (!hit)
                 {
-                    renderBuffer[idx] = SkyColor(rdy, bgBot, bgTop);
+                    // Ray-miss → sky backdrop when toggle on, ColorMap
+                    // InSetColor when off. SkyColorHdri routes through HDRI
+                    // sample when SkyMode=Hdri + HDRI loaded, gradient
+                    // BgBottomColor → BgTopColor otherwise.
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
                     continue;
                 }
 
@@ -1081,6 +1096,11 @@ namespace FracturingFogDyn
         // downsample/upscale composites it into ColorBuffer).
         if (depthBuf is not null && normalBuf is not null)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+
+        // Phase 21b — HDR DoF (hex-bokeh 3-pass) runs before tonemap so bright
+        // highlights bloom into proper bokeh discs instead of clipping first.
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
 
         // Phase 7 — Tonemap + bloom. Operates on renderBuffer (pre-downsample).
         if (hdrBuf is not null)

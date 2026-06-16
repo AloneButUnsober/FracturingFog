@@ -12,6 +12,17 @@ Phases 1–24 + the `b` follow-up bindings landed across two batched commits:
   --grep="Lighting"`).
 - Deferred-wave bundle: **`5b5a741`** (Phases 6b/8b/11b/15b/21c/22b/23b/24b +
   animation-tick fix + Phase 1c legacy-light removal in 8 calculators).
+- **GPU + DoF deferred-wave second pass: Phases 12b (tonemap + bloom GPU
+  port), 12c (edge-ink GPU port), 21b (HDR hex-bokeh DoF wired into 7
+  calculators).** Volumetric in-scatter GPU port (originally part of 12b)
+  marked structurally infeasible at the time — see below.
+- **Volumetric GPU port shipped via Performance-Roadmap P7c.2** — per-fractal
+  GPU calculators now run the volume march inline against each fractal's
+  own DE (the calculator-level GPU port called out as the prerequisite in
+  the original 12b note). 12b is now fully shipped end-to-end.
+- **Lighting-FX deferred-wave third pass: 16b (recursive reflection
+  bounces + roughness-convolved IBL) and 20b (true per-eye stereo via
+  camera-offset plumbing in 8 calculators).** See entries below.
 
 Status as of this doc write: working tree clean on
 `feature/cross-platform-full`.
@@ -24,6 +35,17 @@ These were explicitly left out of the deferred-wave bundle because each is a
 multi-day refactor that touches the GPU dispatcher, the raymarcher hot loop,
 or both. They're listed in roughly the order they were originally suggested
 to be tackled.
+
+Update: **12b (tonemap+bloom), 12c, and 21b shipped** in the GPU+DoF
+deferred-wave second pass. Their entries below are kept for historical
+context; current shipped behaviour matches the algorithm sketched here.
+**12b-volumetric shipped** in the Performance-Roadmap P7c.2 wave —
+per-fractal GPU calculators inline the volume march against each fractal's
+own DE (the calculator-level GPU port that blocked the original
+rendering-layer port). **16b and 20b shipped** in the Lighting-FX
+deferred-wave third pass — recursive reflection bounces + roughness-
+convolved IBL and true per-eye stereo via camera-offset plumbing in all
+8 raymarchers.
 
 ### 12b — GPU port: tonemap + bloom + volumetric kernels
 
@@ -61,6 +83,29 @@ ILGPU kernels will run `float`. Document the expected magnitude of
 divergence and add a tolerance band to any visual-regression tests
 that compare CPU vs GPU output.
 
+**Status — Shipped (partial).** Tonemap + bloom kernels live in
+`GpuPostKernels.cs` (`ThresholdKernel`, `DownsampleKernel`,
+`BlurHorizontalKernel`, `BlurVerticalKernel`, `UpsampleAddKernel`,
+`CompositeKernel`). `ScreenSpacePost.ApplyToneMapBloom` dispatches via
+`GpuPostKernels.TryApplyToneMapBloom` when `UseGpuPost` is true and either
+bloom or tonemap is active; falls back to the CPU pyramid on any failure.
+
+**Volumetric GPU port — Shipped via Performance-Roadmap P7c.2.** The
+calculator-level GPU port (Performance-Roadmap P7a/P7b/P7c) ships eight
+per-fractal GPU kernels (Mandelbulb, Mandelbox, KIFS Menger / Sierpinski,
+QJulia, QMandel, Bicomplex, Kleinian). P7c.2 added kernel-side
+`Hash3D` / `ValueNoise3D` / `FbmCloud3D` / `VolumetricDensityMul` /
+`CloudSelfShadow` / `ExpNegSmall` to `GpuKernelUtils`, plus the
+volumetric fields on `GpuShadingParams` (`VolumeSteps`,
+`VolumeStepsFalloff`, `FogHeightFalloff`, `VolumeNoiseAmount/Scale/
+Speed/Octaves`, `VolumeSelfShadow/Steps`, `SceneTime`). Each kernel runs
+the per-pixel volume march inline; per-step `SoftShadow` toward Light1
+calls the local fractal's DE directly (ILGPU still can't take a
+struct-generic DE through `LoadAutoGroupedStreamKernel`, hence the
+per-fractal inlining). `VolumeSteps>0` selects volumetric; otherwise
+the cheap scalar `exp(-T·density)` path runs. UserBulb stays on the
+existing UserBulbGpuCalculator path.
+
 ---
 
 ### 12c — GPU port: edge-ink (Sobel + Frei-Chen)
@@ -89,11 +134,44 @@ will already be GPU-resident.
 non-trivial register pressure — verify on a low-end GPU before
 shipping default-on.
 
+**Status — Shipped.** `GpuPostKernels.EdgeKernel` covers both Sobel and
+Frei-Chen (selected via `kernelMode` arg, 0 = Sobel / 1 = Frei-Chen).
+`ScreenSpacePost.ApplyEdgeInk` dispatches via
+`GpuPostKernels.TryApplyEdgeInk` when `UseGpuPost` is true; falls back to
+the CPU loop on failure. Skip-on-sky-neighbour preserved.
+
 ---
 
 ### 16b — Recursive reflection bounces + roughness-convolved IBL
 
-**Current state.** `ShadingPipeline.Shade` does one reflection bounce
+**Status — Shipped.** `LightingFxData.MaxBounces` (default 1 = legacy
+single bounce). `ShadingPipeline.Shade<TDe>` wraps the existing reflect-
+march block in a per-bounce loop: each bounce hit becomes the next
+bounce origin, the bounce direction is reflected about the new normal,
+and the contribution is weighted by `(reflectStrength · F)^bounce` so
+deeper bounces fade off. On miss, the per-bounce ray samples the IBL /
+sky at its own direction (roughness-convolved when an HDRI is loaded —
+see below). All 8 P7-pattern GPU kernels carry a matching
+`GpuShadingParams.ReflectBounces` loop calling each fractal's local DE.
+HDRI mip chain: `HdriImage` now allocates `MipLevels = floor(log2(min(W,
+H)))` box-downsampled mips at load time; `Sample(dir, roughness)` picks
+the mip by `roughness² · (MipLevels − 1)` and bilinearly samples that
+level (mip 0 is sharp; mip N−1 is one pixel). `SampleEnvAmbientHdri`
+and `SkyColorHdri` route through the new overload so ambient IBL and
+sky-tint reflection misses both pick up roughness convolution. GPU
+HDRI sampling remains GPU-blocked (managed-array lookup); the GPU
+reflect bounce continues to use the sky-gradient proxy.
+
+GGX importance sampling per bounce (the original scope item #3) was
+**not** shipped — the existing mirror reflection + Fresnel mix matches
+what the CPU and GPU paths already do, and per-pixel stochastic GGX
+sampling would need a deterministic RNG plus visual-regression tests
+to lock in. Roughness-convolved IBL captures the same intent (rougher
+surfaces see a softer environment lobe) without adding noise.
+
+**Original scope sketch** (for reference; the shipped subset is above):
+
+`ShadingPipeline.Shade` does one reflection bounce
 (`ReflectionStrength` knob). HDRI sampling on miss is point-sampled,
 not roughness-convolved. The reflection vector is mirror-only — no
 GGX importance sampling, no per-roughness lobe.
@@ -128,7 +206,25 @@ preview-only.
 
 ### 20b — True per-eye stereo (camera offset plumbed into raymarchers)
 
-**Current state.** Phase 20 / 21c ships a side-by-side stereo
+**Status — Shipped.** `LightingFxData.StereoMode` enum (`Off` / `Fake` /
+`True`). `Off` skips stereo entirely. `Fake` runs the existing Phase 20
+depth-parallax warp (`StereoRender.ApplyStereoSideBySide`). `True` runs
+two real camera-offset renders. `LightingFxData.StereoEyeOffset` is a
+transient runtime field (`double`, default 0) — each 3D calculator,
+right after computing its `right` basis vector, applies
+`camX += right.X · EyeOffset` (likewise Y/Z). Eight CPU calculators +
+eight GPU `GpuRaymarchParams` builders carry the shift. `StereoRender.
+RenderTrueStereo(calc, fp, ipd, ct)` orchestrates the two-pass render:
+sets `EyeOffset = −IPD/2`, calls `Calculate`, snapshots `ColorBuffer`
+into the left half; sets `EyeOffset = +IPD/2`, repeats into the right
+half; resets `EyeOffset = 0` and returns the 2W × H output. Caller swaps
+display buffer. Default `Off` preserves legacy mono; `Fake` preserves
+the cheap warp; `True` doubles the render cost but eliminates the close-
+object parallax-flatness that the warp can't fix.
+
+**Original scope sketch** (for reference; the shipped subset is above):
+
+Phase 20 / 21c ships a side-by-side stereo
 post-pass (`ScreenSpacePost.cs`, `StereoRender.cs`) that takes the
 mono-rendered framebuffer and warps it to look like a stereo pair.
 Cheap but **not** true stereo — there's no parallax on close
@@ -198,16 +294,50 @@ must be HDR (linear-light) for the bokeh highlights to bloom right.
 Pair this with 12b — the GPU path can do all three in parallel and
 makes the hex blur viable at interactive framerates.
 
+**Status — Shipped (CPU).** `ScreenSpacePost.ApplyHdrDof` runs on the
+linear-light HDR buffer before tonemap. Three skewed 1D box blurs at
+0°/120°/240° via `SkewedBoxBlur` helper; per-pixel min-blend produces the
+hex bokeh envelope. Bleed control mirrors the byte-buffer Phase 21 pass.
+Wired into all 7 calculators (`Mandelbulb`, `Mandelbox`, `KIFS`,
+`QuatJulia`, `QuatMandelbrot`, `Bicomplex`, `Kleinian`, `UserBulb`)
+between SSAO and `ApplyToneMapBloom`. GPU port deferred — three skewed
+blurs map cleanly to ILGPU but the threading the CPU path already does
+with `Parallel.For` is acceptable at typical resolutions.
+
 ---
 
 ## Recommended order
 
-1. **12b first** (biggest perf win; unblocks 12c and 21b).
-2. **12c** (mechanical follow-up to 12b; small kernels).
-3. **21b** (uses the GPU HDR buffer from 12b).
+1. **12b first** (biggest perf win; unblocks 12c and 21b). **— Shipped
+   (tonemap+bloom). Volumetric portion deferred indefinitely.**
+2. **12c** (mechanical follow-up to 12b; small kernels). **— Shipped.**
+3. **21b** (uses the GPU HDR buffer from 12b). **— Shipped (CPU); GPU
+   port still open but lower priority.**
 4. **16b** (largest architectural lift; reentrant raymarcher).
 5. **20b** (depends on nothing else; can be done in parallel with
    16b if a second contributor picks it up).
+
+### Remaining work after third deferred-wave
+
+- **12b-volumetric** — Shipped via Performance-Roadmap P7c.2 (see 12b
+  Status note above).
+- **16b** — Shipped via this third deferred-wave. `LightingFxData.MaxBounces`
+  drives the reflection-march loop in `ShadingPipeline.Shade<TDe>` (each
+  bounce hits → next bounce origin / dir, accumulates Fresnel-weighted env
+  color, miss → IBL sample at bounce dir). Eight GPU kernels (P7-pattern)
+  gained the matching `ReflectBounces` loop. `HdriImage` now prefilters
+  into a box-downsample mip chain at load time; `Sample(dir, roughness)`
+  picks the mip by `roughness² · (MipLevels−1)`, so the existing
+  `IblStrength` ambient path and the reflection-miss env tint both get
+  roughness-convolved IBL with no extra knobs.
+- **20b** — Shipped via this third deferred-wave. `LightingFxData.StereoMode`
+  enum (`Off` / `Fake` / `True`) + transient `StereoEyeOffset` field. Every
+  3D CPU + GPU calculator shifts its camera origin by `right · EyeOffset`
+  after the basis is computed. `StereoRender.RenderTrueStereo` orchestrates
+  the two-eye render (sets EyeOffset = ±IPD/2, snapshots `ColorBuffer`
+  per pass, composites the doubled-width output). Default `Off` preserves
+  legacy mono; `Fake` preserves the Phase-20 depth-warp; `True` is the new
+  path.
 
 ---
 
