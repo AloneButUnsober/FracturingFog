@@ -87,6 +87,7 @@ public sealed class LightingFxPresetData
     public uint    BgBottomColor   { get; set; } = 0xFF101020u;
     public string? EnvironmentName { get; set; }
     public double  IblStrength     { get; set; } = 0.0;
+    public bool    ShowSkyBackdrop { get; set; } = false;
 
     // ── Post ──────────────────────────────────────────────────────────
 
@@ -154,6 +155,7 @@ public sealed class LightingFxPresetData
 
         SkyMode = fx.SkyMode, BgTopColor = fx.BgTopColor, BgBottomColor = fx.BgBottomColor,
         EnvironmentName = fx.EnvironmentName, IblStrength = fx.IblStrength,
+        ShowSkyBackdrop = fx.ShowSkyBackdrop,
 
         ToneMap = fx.ToneMap, Exposure = fx.Exposure,
         BloomThreshold = fx.BloomThreshold, BloomStrength = fx.BloomStrength,
@@ -199,6 +201,7 @@ public sealed class LightingFxPresetData
 
         SkyMode = SkyMode, BgTopColor = BgTopColor, BgBottomColor = BgBottomColor,
         EnvironmentName = EnvironmentName, IblStrength = IblStrength,
+        ShowSkyBackdrop = ShowSkyBackdrop,
 
         ToneMap = ToneMap, Exposure = Exposure,
         BloomThreshold = BloomThreshold, BloomStrength = BloomStrength,

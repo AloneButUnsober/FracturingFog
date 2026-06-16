@@ -82,6 +82,23 @@ public enum TriplanarTextureKind
     Checker,
 }
 
+/// <summary>Phase 20b — stereo render mode. <see cref="Off"/> = mono (legacy
+/// default). <see cref="Fake"/> = single mono render + depth-parallax warp via
+/// <see cref="ScreenSpacePost"/> / <see cref="StereoRender"/> (Phase 20 / 21c
+/// behaviour — cheap but no parallax on close objects). <see cref="True"/> =
+/// two real per-eye renders with the camera origin shifted by ±IPD/2 along the
+/// right basis vector (Phase 20b — doubles render cost; eliminates the
+/// close-object flatness the warp can't fix).</summary>
+public enum StereoMode
+{
+    /// <summary>No stereo. Mono render straight to the framebuffer.</summary>
+    Off,
+    /// <summary>Phase 20 depth-parallax warp. Single render, cheap.</summary>
+    Fake,
+    /// <summary>Phase 20b two-eye render with camera offset. 2× cost.</summary>
+    True,
+}
+
 /// <summary>Edge-ink kernel selector (Phase 23b).</summary>
 public enum EdgeKernelMode
 {
@@ -284,6 +301,15 @@ public struct LightingFxData
     /// flat AmbientStrength only. Phase 6.</summary>
     public double IblStrength;
 
+    /// <summary>When <c>true</c>, ray-miss pixels render the sky backdrop
+    /// (HDRI sample or gradient) — visible behind the fractal. When
+    /// <c>false</c> (default), ray-miss pixels fall back to the colormap's
+    /// <c>InSetColor</c> so the background stays flat while IBL continues
+    /// to contribute to surface lighting. Default off so HDRI-as-light works
+    /// on the fractal without the photographic backdrop competing with the
+    /// fractal for visual focus; opt in for full environment composite.</summary>
+    public bool ShowSkyBackdrop;
+
     // ── Post (Phase 7) ────────────────────────────────────────────────
 
     public ToneMapOperator ToneMap;
@@ -325,6 +351,13 @@ public struct LightingFxData
     public double ReflectionStrength;
     /// <summary>Max steps for reflection ray. 0 = use ShadowSteps default.</summary>
     public int ReflectionSteps;
+    /// <summary>Phase 16b — max reflection bounces [1, 6]. 1 = legacy single
+    /// bounce. Each extra bounce traces the reflected ray against the surface
+    /// again; the contribution is attenuated by Fresnel × ReflectionStrength
+    /// per bounce so it fades geometrically. Cost scales linearly with this
+    /// value × ReflectionSteps DE evals per pixel; UI tooltip flags values &gt;2
+    /// as preview-only. Default 1 stays bit-identical with pre-16b renders.</summary>
+    public int MaxBounces;
 
     // ── Caustics (Phase 17) ───────────────────────────────────────────
 
@@ -376,9 +409,27 @@ public struct LightingFxData
     /// <summary>Interpupillary distance for side-by-side stereo render.
     /// 0 = mono (legacy). Output width doubles when non-zero. Phase 20 ships
     /// fake-stereo: monocular render + depth-parallax warp produces the right
-    /// eye. Phase 20b (deferred) will add true per-eye render via camera
-    /// offset for higher quality at the cost of doubled render time.</summary>
+    /// eye. Phase 20b adds true per-eye render via camera offset for higher
+    /// quality at the cost of doubled render time — driven by
+    /// <see cref="StereoMode"/>.</summary>
     public double StereoEyeSeparation;
+
+    /// <summary>Phase 20b — stereo render mode. Default <see cref="StereoMode.Off"/>
+    /// = mono. When the user toggles stereo on, host code routes through
+    /// <see cref="StereoMode.Fake"/> (Phase 20 depth-parallax warp; cheap) or
+    /// <see cref="StereoMode.True"/> (two-eye render with camera offset, doubled
+    /// cost). The legacy behaviour (StereoEyeSeparation &gt; 0 → fake stereo)
+    /// is treated as <see cref="StereoMode.Fake"/> by the host bridge so old
+    /// saved scenes still pick up the warp.</summary>
+    public StereoMode StereoMode;
+
+    /// <summary>Phase 20b — transient per-eye camera-offset along the right
+    /// basis (world units). Set by <see cref="StereoRender.RenderTrueStereo"/>
+    /// to <c>-IPD/2</c> on the left-eye pass and <c>+IPD/2</c> on the right-eye
+    /// pass; reset to 0 afterwards. Each 3D calculator's <c>Calculate</c> adds
+    /// <c>right · EyeOffset</c> to its camera origin right after computing the
+    /// basis. Default 0 → no shift (mono).</summary>
+    public double StereoEyeOffset;
 
     /// <summary>Horizontal field of view in degrees, used to derive a focal-
     /// length-in-pixels proxy for the depth-parallax warp:
@@ -498,6 +549,7 @@ public struct LightingFxData
         BgBottomColor      = 0xFF101020u,
         EnvironmentName    = null,
         IblStrength        = 0.0,
+        ShowSkyBackdrop    = false,
 
         ToneMap            = ToneMapOperator.None,
         Exposure           = 1.0,
@@ -512,6 +564,7 @@ public struct LightingFxData
 
         ReflectionStrength = 0.0,
         ReflectionSteps    = 0,
+        MaxBounces         = 1,
 
         CausticsStrength   = 0.0,
         CausticsFloorY     = 0.0,
@@ -525,6 +578,8 @@ public struct LightingFxData
 
         StereoEyeSeparation = 0.0,
         StereoFovDegrees    = 60.0,
+        StereoMode          = StereoMode.Off,
+        StereoEyeOffset     = 0.0,
 
         DofAperture        = 0.0,
         DofFocusDistance   = 3.0,
