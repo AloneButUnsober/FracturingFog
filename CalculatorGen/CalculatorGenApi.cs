@@ -248,13 +248,18 @@ public static class CalculatorGenApi
         // `Sr1 = SrNew1; …` still need the new-value locals declared
         // for the file to compile. Emit zero stubs in the disabled
         // case so the JIT discards them along with everything else.
+        // Wave 2.1 — SA order bumped 8 → 16. Must match the const SaOrders
+        // declared in the template (Calculator.template.cs) and the manual
+        // unroll sites that read Sr/Si/SrNew across the SA build + per-pixel
+        // evaluation loops.
+        const int SaOrderTarget = 16;
         string saRecurrenceBody;
         if (saFast)
-            saRecurrenceBody = SaRecurrenceEmitter.Emit(saDegreeFast, indent: "                ");
+            saRecurrenceBody = SaRecurrenceEmitter.Emit(saDegreeFast, indent: "                ", order: SaOrderTarget);
         else if (saGeneric)
-            saRecurrenceBody = SaRecurrenceEmitter.EmitGeneric(saPolyZ!, saDegreeGeneric, indent: "                ");
+            saRecurrenceBody = SaRecurrenceEmitter.EmitGeneric(saPolyZ!, saDegreeGeneric, indent: "                ", order: SaOrderTarget);
         else
-            saRecurrenceBody = SaRecurrenceEmitter.EmitDisabledStub(indent: "                ");
+            saRecurrenceBody = SaRecurrenceEmitter.EmitDisabledStub(indent: "                ", order: SaOrderTarget);
 
         string template = LoadTemplate("Calculator.template.cs");
         string rendered = template

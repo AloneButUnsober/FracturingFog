@@ -728,6 +728,7 @@ public sealed partial class MainWindow : Window
         _shell.IsSlideshowVcrVisible = false;
 
         AvaloniaShell.LeftDragWindowHook = ToyDragWindow;
+        AttachToySpongeDrag();
         _toyModeActive = true;
     }
 
@@ -736,6 +737,7 @@ public sealed partial class MainWindow : Window
         if (!_toyModeActive || _shell == null) return;
 
         AvaloniaShell.LeftDragWindowHook = null;
+        DetachToySpongeDrag();
 
         WindowState        = _preToyState;
         WindowDecorations  = _preToyDecorations;
@@ -752,6 +754,36 @@ public sealed partial class MainWindow : Window
         _toyModeActive = false;
     }
 
+    // Phase X.3 / Slice 3.3 — cross-platform toy-mode drag via Avalonia
+    // PointerPressed → BeginMoveDrag(e). Only fires when the pointer event
+    // actually reaches the InputSponge — on Win with the DX swap-chain
+    // HWND covering the surface the event is swallowed by the native
+    // HWND, so the Win32 fallback path (NativeMouseForwarder →
+    // ToyDragWindow Win32 trick) remains the active drag on that host.
+    // On Linux/macOS (Silk OpenGL composited through Avalonia) and on
+    // Windows under `--renderer skia` the event reaches here and
+    // BeginMoveDrag drives the move natively.
+    private void AttachToySpongeDrag()
+    {
+        _sponge ??= this.FindControl<Border>("InputSponge");
+        if (_sponge == null) return;
+        _sponge.PointerPressed += OnToySpongePointerPressed;
+    }
+
+    private void DetachToySpongeDrag()
+    {
+        if (_sponge == null) return;
+        _sponge.PointerPressed -= OnToySpongePointerPressed;
+    }
+
+    private void OnToySpongePointerPressed(object? sender, global::Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (!_toyModeActive) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        try { BeginMoveDrag(e); }
+        catch { /* compositor refused (Wayland seat-focus); fall through */ }
+    }
+
     // Win32 window-move kick. Called from NativeMouseForwarder (Win-only by
     // construction) when a left-click lands on the swap-chain HWND while Toy
     // Mode is active. ReleaseCapture undoes whatever the OS auto-set on
@@ -761,12 +793,9 @@ public sealed partial class MainWindow : Window
     //
     // Phase X.3 / Slice 3.1: `OperatingSystem.IsWindows()` guard so the CA1416
     // analyzer can prove the Win32 calls are unreachable on non-Win hosts.
-    // The hook itself is set from EnterToyMode and only consumed by the Win-only
-    // NativeMouseForwarder, but the guard makes the contract explicit for
-    // cross-platform UI.Avalonia readers. Avalonia 11's BeginMoveDrag requires
-    // a PointerPressedEventArgs which the native HWND callback can't synthesise,
-    // so the Win32 trick stays here for Windows; cross-platform toy-mode drag
-    // is parked behind a future Avalonia API.
+    // The Avalonia BeginMoveDrag path above (AttachToySpongeDrag) handles
+    // every other RID; this stays as the Win+DX fallback because the
+    // swap-chain HWND eats pointer events before Avalonia sees them.
     private bool ToyDragWindow()
     {
         if (!OperatingSystem.IsWindows()) return false;

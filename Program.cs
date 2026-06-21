@@ -31,6 +31,19 @@ static class Program
         if (args.Length > 0 && args[0] == "--ubspike")
             return FracturingFog.Calculators.UserBulbSandboxGpuSpike.Run();
 
+        // Phase X.5 / Slice 5.1 — per-RID ILGPU device-kind smoke. Asserts
+        // CPU fallback is reachable; emits ilgpu-probe.out next to the exe.
+        // Also wired in FracturingFog.App/Program.cs so the same flag works
+        // on Linux + macOS legs of the release workflow.
+        if (args.Length > 0 && args[0] == "--ilgpu-probe")
+        {
+            bool okIlg = FracturingFog.Calculators.AcceleratorProbe.RunSmoke(out string ilgReport);
+            string ilgPath = System.IO.Path.Combine(AppContext.BaseDirectory, "ilgpu-probe.out");
+            try { System.IO.File.WriteAllText(ilgPath, ilgReport); } catch { }
+            Console.Write(ilgReport);
+            return okIlg ? 0 : 1;
+        }
+
         // CalculatorGen-emitted self-tests: validates that the scalar and
         // AVX2 paths of a generated calculator agree on a fixed sample grid.
         // Pass the calculator name (sans "Calculator" suffix) as arg[1].

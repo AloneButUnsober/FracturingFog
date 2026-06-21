@@ -51,8 +51,8 @@
                     Padding="14,4" />
         </Grid>
 
-        <!-- Row 1: promote toggle + Compile & Load + Generate via CalcGen + Equation Guide + CalcGen Help -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+        <!-- Row 1: promote toggle + Compile & Load + Compile + Save + Generate via CalcGen + Equation Guide + CalcGen Help -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
             <CheckBox Grid.Column="0"
                       Content="Promote to fractal list"
                       IsChecked="{Binding Promote, Mode=TwoWay}"
@@ -64,17 +64,23 @@
                     Margin="0,0,6,0"
                     Padding="14,4" />
             <Button Grid.Column="2"
+                    Content="Compile + Save"
+                    Command="{Binding HotLoadAndPersistCommand}"
+                    ToolTip.Tip="Same as Compile &amp; Load, but also writes the generated source under %LOCALAPPDATA%/FracturingFog/UserCalculators/. The calculator is re-loaded automatically on next launch."
+                    Margin="0,0,6,0"
+                    Padding="14,4" />
+            <Button Grid.Column="3"
                     Content="Generate via CalcGen"
                     Command="{Binding GenerateViaCalcGenCommand}"
                     ToolTip.Tip="Run the active tab's equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
                     Padding="14,4" />
-            <Button Grid.Column="3"
+            <Button Grid.Column="4"
                     Content="Equation Guide"
                     Command="{Binding OpenEquationGuideCommand}"
                     ToolTip.Tip="Open the Fractal Equation Design Guide — how equations work, what to change for which result, extensive worked examples across every CalcGen-supported family."
                     Margin="6,0,0,0"
                     Padding="10,4" />
-            <Button Grid.Column="4"
+            <Button Grid.Column="5"
                     Content="CalcGen Help"
                     Command="{Binding OpenCalcGenHelpCommand}"
                     ToolTip.Tip="Open the CalcGen User Guide — grammar, operators, examples, gating rules."

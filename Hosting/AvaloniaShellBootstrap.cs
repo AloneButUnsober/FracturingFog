@@ -244,6 +244,26 @@ namespace FracturingFog.Hosting
             int w = Math.Max(1, surface.PixelWidth);
             int h = Math.Max(1, surface.PixelHeight);
 
+            // Wave 2.3 — warm-load any user-persisted calculators
+            // (%LOCALAPPDATA%/FracturingFog/UserCalculators/*.cs) before the
+            // first UserEquation editor open so Compile & Load is a cache
+            // hit on the equations the user previously saved.
+            try
+            {
+                var persisted = FracturingFog.CalculatorGen.CalculatorGenHotLoad.LoadAllPersisted();
+                foreach (var entry in persisted)
+                {
+                    if (entry.CalculatorType != null)
+                        Console.WriteLine($"[Persist] warm-loaded {entry.ClassName} ← {entry.SourcePath}");
+                    else
+                        Console.Error.WriteLine($"[Persist] skip {entry.ClassName}: {entry.Error}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Persist] scan failed: {ex.Message}");
+            }
+
             // ── Engines ──────────────────────────────────────────────────
             var viewState = new FractalViewState();
             var initialMap = ColorPalette.GetPaletteByName("HSV");
@@ -1500,6 +1520,28 @@ namespace FracturingFog.Hosting
                 catch (Exception ex)
                 {
                     return $"Hot-load failed: {ex.GetType().Name}: {ex.Message}";
+                }
+            };
+
+            // Wave 2.3 — Persist + Hot-Load.
+            vm.HotLoadAndPersistRequested += (eq, baseName) =>
+            {
+                try
+                {
+                    var result = FracturingFog.CalculatorGen.CalculatorGenHotLoad
+                        .PersistAndLoad(eq, baseName);
+                    if (!result.Ok) return (result.Error, result.SourcePath);
+                    int w = s_renderHost!.Mandelbrot.Width;
+                    int h = s_renderHost.Mandelbrot.Height;
+                    var calc = (FracturingFog.Interefaces.IFractalCalculator?)
+                        Activator.CreateInstance(result.CalculatorType!, w, h);
+                    if (calc == null) return ("Activator returned null.", result.SourcePath);
+                    s_renderHost.SetDynamicAltCalculator(calc);
+                    return (null, result.SourcePath);
+                }
+                catch (Exception ex)
+                {
+                    return ($"Persist + Hot-load failed: {ex.GetType().Name}: {ex.Message}", (string?)null);
                 }
             };
 

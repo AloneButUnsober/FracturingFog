@@ -231,6 +231,12 @@ namespace FracturingFog.Rendering
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
 
+            // Wave 0.6: route per-stage post-FX timings into _perfStats. Idempotent
+            // — multiple FractalRenderHost instances would overwrite the publisher
+            // but the host is owned by a single shell, so a second host means the
+            // first one has already been disposed.
+            FracturingFog.Rendering.Lighting.StagePerf.Publisher = _perfStats.RecordStage;
+
             _calculator = new MandelbrotCalculator(w, h);
             _escapeCalculator = new EscapeTimeCalculator(w, h);
             _ifsCalculator = new IFSCalculator(w, h);
@@ -872,6 +878,16 @@ namespace FracturingFog.Rendering
             {
                 if (useAlt) altCalc!.Calculate(token);
                 else calc.Calculate(token);
+
+                // Wave 2.6 — sub-pixel MSAA via Calculate() re-runs at jittered
+                // centre coords. Only on the canonical (non-alt) Mandelbrot
+                // calc; alt calcs are the user-equation hot-load path which
+                // already pays delegate-call overhead per pixel and shouldn't
+                // pay AA on top. Pixel-size heuristic matches the calculator's
+                // own (3.5 / max(W,H) / Zoom).
+                int aaSamples = !useAlt ? (calc.Quality?.AaSamples ?? 1) : 1;
+                if (aaSamples > 1 && !token.IsCancellationRequested)
+                    RunMsaaAccumulateMandelbrot(calc, aaSamples, token);
             }
             catch (OperationCanceledException) { }
             long calcEnd = Stopwatch.GetTimestamp();
@@ -921,6 +937,89 @@ namespace FracturingFog.Rendering
             // on UploadProcessedBuffer (post-FX + GPU upload).
             ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
                 new UploadCtx(this, job, ms), preferLocal: false);
+        }
+
+        // Wave 2.6 — MSAA helper. Runs N total samples on a √N×√N jitter grid
+        // around the original centre coords; first sample (already in
+        // calc.ColorBuffer when this is called) is reused as the (0,0)-jitter
+        // entry. Each subsequent Calculate() shifts CenterX/CenterY by a
+        // sub-pixel offset, then we accumulate channel sums and write the
+        // averaged colour back. Restores Center on exit.
+        //
+        // Format: ColorBuffer is uint with packed BGRA (matches IColorMap.Map's
+        // output everywhere; the renderer's UpdateTexture also expects BGRA).
+        // The byte extraction below is endian-safe because we touch the same
+        // uint on both sides — we never reinterpret the byte order.
+        private static void RunMsaaAccumulateMandelbrot(
+            MandelbrotCalculator calc, int aaSamples, CancellationToken token)
+        {
+            int side = (int)Math.Round(Math.Sqrt(aaSamples));
+            if (side * side != aaSamples) return; // only square grids
+            int pixels = calc.Width * calc.Height;
+            uint[] color = calc.ColorBuffer;
+            if (color.Length < pixels) return;
+
+            var sumR = new int[pixels];
+            var sumG = new int[pixels];
+            var sumB = new int[pixels];
+            var sumA = new int[pixels];
+
+            // Accumulate the already-computed sample 0 (centre).
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = color[i];
+                sumB[i] +=  (int)(c        & 0xFF);
+                sumG[i] +=  (int)((c >> 8)  & 0xFF);
+                sumR[i] +=  (int)((c >> 16) & 0xFF);
+                sumA[i] +=  (int)((c >> 24) & 0xFF);
+            }
+
+            // Pixel scale matches generated calculators: 3.5/max(W,H)/Zoom.
+            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+            double origCx = calc.CenterX;
+            double origCy = calc.CenterY;
+
+            int count = 1; // sample 0 already counted
+            for (int sy = 0; sy < side; sy++)
+            {
+                double jy = (sy + 0.5) / side - 0.5; // ∈ [-0.5, 0.5)
+                for (int sx = 0; sx < side; sx++)
+                {
+                    if (sx == side / 2 && sy == side / 2) continue; // centre already done
+                    if (token.IsCancellationRequested) goto WriteBack;
+
+                    double jx = (sx + 0.5) / side - 0.5;
+                    calc.CenterX = origCx + jx * scale;
+                    calc.CenterY = origCy + jy * scale;
+                    try { calc.Calculate(token); }
+                    catch (OperationCanceledException) { goto WriteBack; }
+
+                    var buf = calc.ColorBuffer;
+                    for (int i = 0; i < pixels; i++)
+                    {
+                        uint c = buf[i];
+                        sumB[i] += (int)(c        & 0xFF);
+                        sumG[i] += (int)((c >> 8)  & 0xFF);
+                        sumR[i] += (int)((c >> 16) & 0xFF);
+                        sumA[i] += (int)((c >> 24) & 0xFF);
+                    }
+                    count++;
+                }
+            }
+        WriteBack:
+            calc.CenterX = origCx;
+            calc.CenterY = origCy;
+            if (count <= 0) return;
+            int half = count / 2;
+            var outBuf = calc.ColorBuffer;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint b = (uint)((sumB[i] + half) / count) & 0xFF;
+                uint g = (uint)((sumG[i] + half) / count) & 0xFF;
+                uint r = (uint)((sumR[i] + half) / count) & 0xFF;
+                uint a = (uint)((sumA[i] + half) / count) & 0xFF;
+                outBuf[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
         }
 
         private void RunFrameJobUpload(FrameJob job, long ms)

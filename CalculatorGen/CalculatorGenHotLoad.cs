@@ -128,6 +128,117 @@ public static class CalculatorGenHotLoad
         _lastContext = null;
     }
 
+    // ── Phase D-6 / item 26 — permanent persist + auto-reload (Wave 2.3) ────
+    //
+    // "Save hot-loaded calc to permanent .cs" — generates the calculator
+    // source, writes it under %LOCALAPPDATA%/FracturingFog/UserCalculators/,
+    // and (optionally) hot-loads the result. On next launch the host scans
+    // the dir and re-loads every .cs it finds — no rebuild required.
+    //
+    // Layout:
+    //   <PersistDir>/<ClassName>.cs        — generated calculator source
+    //   <PersistDir>/<ClassName>.meta.txt  — the source equation string for
+    //                                        round-trip into the editor
+    public static string PersistDir { get; set; } = DefaultPersistDir();
+
+    public static string DefaultPersistDir()
+    {
+        string root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(root, "FracturingFog", "UserCalculators");
+    }
+
+    public readonly record struct PersistResult(
+        Type? CalculatorType,
+        string? SourcePath,
+        string? Equation,
+        string? ClassName,
+        string? Error)
+    {
+        public bool Ok => CalculatorType != null && SourcePath != null;
+    }
+
+    /// <summary>
+    /// Generate source for <paramref name="equation"/>, write it to
+    /// <see cref="PersistDir"/>, then Roslyn-compile + load. Caller gets the
+    /// compiled type and the on-disk path so the editor can show "saved to …"
+    /// in the status bar. Idempotent on the source path — re-saving the same
+    /// name overwrites the previous .cs.
+    /// </summary>
+    public static PersistResult PersistAndLoad(string equation, string name)
+    {
+        var gen = CalculatorGenApi.Generate(equation, name, includeSelfTest: false);
+        if (!gen.Ok)
+            return new PersistResult(null, null, equation, null, gen.Error);
+
+        string dir = PersistDir;
+        string srcPath;
+        string metaPath;
+        try
+        {
+            Directory.CreateDirectory(dir);
+            srcPath = Path.Combine(dir, gen.ClassName + ".cs");
+            metaPath = Path.Combine(dir, gen.ClassName + ".meta.txt");
+            File.WriteAllText(srcPath, gen.Source, new UTF8Encoding(false));
+            File.WriteAllText(metaPath, equation, new UTF8Encoding(false));
+        }
+        catch (Exception ex)
+        {
+            return new PersistResult(null, null, equation, gen.ClassName,
+                $"Persist write failed: {ex.Message}");
+        }
+
+        var load = TryCompileAndLoad(equation, name);
+        if (!load.Ok)
+            return new PersistResult(null, srcPath, equation, gen.ClassName, load.Error);
+        return new PersistResult(load.CalculatorType, srcPath, equation, gen.ClassName, null);
+    }
+
+    public readonly record struct PersistedEntry(
+        string SourcePath,
+        string ClassName,
+        string Equation,
+        Type? CalculatorType,
+        string? Error);
+
+    /// <summary>
+    /// Enumerate every .cs file under <see cref="PersistDir"/>, attempt to
+    /// hot-load each, and return one entry per file (with the error string
+    /// populated for entries that failed to compile). Called once at host
+    /// startup so persisted calculators are available without a rebuild.
+    /// </summary>
+    public static List<PersistedEntry> LoadAllPersisted()
+    {
+        var result = new List<PersistedEntry>();
+        string dir = PersistDir;
+        if (!Directory.Exists(dir)) return result;
+
+        foreach (string srcPath in Directory.EnumerateFiles(dir, "*.cs"))
+        {
+            string className = Path.GetFileNameWithoutExtension(srcPath);
+            string equation = string.Empty;
+            string metaPath = Path.Combine(dir, className + ".meta.txt");
+            if (File.Exists(metaPath))
+            {
+                try { equation = File.ReadAllText(metaPath).Trim(); } catch { }
+            }
+
+            if (string.IsNullOrEmpty(equation))
+            {
+                result.Add(new PersistedEntry(srcPath, className, "", null,
+                    "No matching .meta.txt — cannot reconstruct source equation."));
+                continue;
+            }
+
+            string baseName = className.EndsWith("Calculator", StringComparison.Ordinal)
+                ? className.Substring(0, className.Length - "Calculator".Length)
+                : className;
+            var load = TryCompileAndLoad(equation, baseName);
+            result.Add(new PersistedEntry(srcPath, className, equation,
+                load.CalculatorType, load.Error));
+        }
+        return result;
+    }
+
     private static List<MetadataReference> GatherReferences()
     {
         // Force-load runtime dependencies the generated calculator imports
