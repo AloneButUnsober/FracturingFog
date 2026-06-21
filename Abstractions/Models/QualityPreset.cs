@@ -125,6 +125,21 @@ namespace FracturingFog.Models
         public bool NeedsHighPrecision(double zoom)
             => AllowHighPrecision && zoom > HPZoomThreshold;
 
+        // ── Anti-aliasing (Wave 2.6 / D-5.19) ────────────────────────────────
+        //
+        // Sub-pixel super-sampling — N² samples averaged into one pixel.
+        // 1  = off (default; bit-identical to pre-AA output).
+        // 4  = 2×2 jitter grid (High preset).
+        // 16 = 4×4 jitter grid (Ultra / Extreme presets).
+        //
+        // FractalRenderHost reads this value off the active calc's
+        // Quality preset and runs N-1 extra Calculate() passes with
+        // sub-pixel-shifted centre coords; the per-pixel uint colours
+        // are decomposed to RGBA, averaged, and repacked. Cost is
+        // roughly linear in AaSamples on the CPU paths; GPU paths
+        // currently ignore this and render single-sample.
+        public int AaSamples { get; init; } = 1;
+
         /// <summary>Short label for the status bar: "SP" (single precision) or "DD" (double-double).</summary>
         public string GetPrecisionLabel(double zoom)
             => NeedsHighPrecision(zoom) ? "DD" : "SP";
@@ -177,7 +192,7 @@ namespace FracturingFog.Models
         {
             Tier = QualityTier.High,
             Name = "High",
-            Description = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. Slower at depth.",
+            Description = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. 2×2 anti-aliasing. Slower at depth.",
             ZoomMin = 1e-6,
             ZoomMax = 1e22,
             WheelZoomFactor = 1.12,     // 12% per detent — finer control at depth
@@ -186,6 +201,7 @@ namespace FracturingFog.Models
             IterPerDecade = 256,       // +256 iters per decade
             AllowHighPrecision = true,
             HPZoomThreshold = 1e12,      // engage DD when double starts to degrade
+            AaSamples = 4,             // Wave 2.6 — 2×2 MSAA
         };
 
         /// <summary>
@@ -196,7 +212,7 @@ namespace FracturingFog.Models
         {
             Tier = QualityTier.Ultra,
             Name = "Ultra",
-            Description = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. Slow at extreme depth.",
+            Description = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. 4×4 anti-aliasing. Slow at extreme depth.",
             ZoomMin = 1e-6,
             ZoomMax = 5e27,
             WheelZoomFactor = 1.08,     // 8% per detent — very fine control
@@ -205,6 +221,7 @@ namespace FracturingFog.Models
             IterPerDecade = 512,       // +512 iters per decade
             AllowHighPrecision = true,
             HPZoomThreshold = 1e12,
+            AaSamples = 16,            // Wave 2.6 — 4×4 MSAA
         };
 
         /// <summary>
@@ -216,7 +233,7 @@ namespace FracturingFog.Models
         {
             Tier = QualityTier.Extreme,
             Name = "Extreme",
-            Description = "Quad-double precision — zoom to 5×10⁵⁸, up to 131072 iterations. Slow.",
+            Description = "Quad-double precision — zoom to 5×10⁵⁸, up to 131072 iterations. 4×4 anti-aliasing. Slow.",
             ZoomMin = 1e-6,
             ZoomMax = 5e58,
             WheelZoomFactor = 1.06,     // very fine
@@ -225,6 +242,7 @@ namespace FracturingFog.Models
             IterPerDecade = 1024,
             AllowHighPrecision = true,
             HPZoomThreshold = 1e12,
+            AaSamples = 16,            // Wave 2.6 — 4×4 MSAA
         };
         // ── Lookup helpers ────────────────────────────────────────────────────
 

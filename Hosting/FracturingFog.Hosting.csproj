@@ -41,12 +41,18 @@
           FracturingFog.Win in a follow-up slice.
         * HostPaletteExtractionService.cs — depends on PaletteBuilder.Lib
           (net10.0-windows TFM today; flipped to net10.0 in Phase X.1).
-        * FfmpegSetupDialog.cs / AvaloniaDialogs.cs — pull FracturingFog.Audio
-          types; move with Slice 0.2 (audio carve).
+
+      Moved into this cross-platform Hosting (Wave 1.C1, 2026-06-20):
+        * FfmpegSetupDialog.cs — Avalonia modal; no Audio / UI.Avalonia.Views
+          / PaletteBuilder dep, so it carves cleanly into this assembly.
+
+      AvaloniaDialogs.cs stays in WinExe for now — it references
+      FracturingFog.Views.* (WinForms picker for "From Image…"),
+      PaletteBuilder.* (palette wrapper), and AvaloniaShellBootstrap statics
+      that don't live in this assembly. Wider carve is a follow-up.
     -->
     <Compile Remove="AvaloniaShellBootstrap.cs" />
     <Compile Remove="HostPaletteExtractionService.cs" />
-    <Compile Remove="FfmpegSetupDialog.cs" />
     <Compile Remove="AvaloniaDialogs.cs" />
   </ItemGroup>
 

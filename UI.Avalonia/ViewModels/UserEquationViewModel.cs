@@ -79,6 +79,11 @@ public sealed class UserEquationViewModel : ViewModelBase
         RotResetCommand = ReactiveCommand.Create(() => SetRotation(0.0));
         GenerateViaCalcGenCommand = ReactiveCommand.Create(OnGenerateViaCalcGen);
         HotLoadViaCalcGenCommand = ReactiveCommand.Create(OnHotLoadViaCalcGen);
+        // Wave 2.3 — Persist + Hot-Load: writes generated source under
+        // %LOCALAPPDATA%/FracturingFog/UserCalculators/, then hot-loads it.
+        // Host scans the dir at startup so persisted calculators survive
+        // a restart with no rebuild.
+        HotLoadAndPersistCommand = ReactiveCommand.Create(OnHotLoadAndPersist);
         ApplyFixCommand = ReactiveCommand.Create(OnApplyFix,
             this.WhenAnyValue(x => x.SuggestedFix).Select(f => !string.IsNullOrEmpty(f)));
         // Docs were re-rooted under User/ + Technical/ — see Docs/Documentation-Plan.md.
@@ -312,6 +317,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> RotResetCommand { get; }
     public ReactiveCommand<Unit, Unit> GenerateViaCalcGenCommand { get; }
     public ReactiveCommand<Unit, Unit> HotLoadViaCalcGenCommand { get; }
+    public ReactiveCommand<Unit, Unit> HotLoadAndPersistCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyFixCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenUserEquationHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenDslHelpCommand { get; }
@@ -341,6 +347,12 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// the result onto the render pipeline. Args: (equation, className).
     /// Return value: null on success, error message on failure.</summary>
     public event Func<string, string, string?>? HotLoadRequested;
+
+    /// <summary>Host persists + compiles + loads the equation. Args: (equation, className).
+    /// Return value: (error, savedPath). error == null → success; savedPath
+    /// is the on-disk source path even on compile failure so the editor can
+    /// surface where the .cs landed.</summary>
+    public event Func<string, string, (string? error, string? savedPath)>? HotLoadAndPersistRequested;
 
     /// <summary>Force an immediate compile (cancel pending debounce).
     /// Only meaningful on the User Equation tab — DSL tab does not feed
@@ -651,6 +663,31 @@ public sealed class UserEquationViewModel : ViewModelBase
         else
         {
             ShowError(err);
+        }
+    }
+
+    private void OnHotLoadAndPersist()
+    {
+        if (!TryGetCalcGenSource(out string equation, out string baseName)) return;
+
+        var handler = HotLoadAndPersistRequested;
+        if (handler == null)
+        {
+            ShowError("Persist + Hot-load not wired by host.");
+            return;
+        }
+
+        var (err, savedPath) = handler.Invoke(equation, baseName);
+        if (err == null)
+        {
+            StatusText = savedPath == null
+                ? $"✓ Hot-loaded {baseName}Calculator (no path)"
+                : $"✓ Hot-loaded + saved → {savedPath}";
+            StatusIsError = false;
+        }
+        else
+        {
+            ShowError(savedPath == null ? err : $"{err}\n(source saved to {savedPath})");
         }
     }
 

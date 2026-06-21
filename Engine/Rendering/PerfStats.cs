@@ -20,12 +20,14 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Rendering
 {
     internal sealed class PerfStats
     {
         private const int CAP = 60;
+        private const int STAGE_COUNT = 6;
 
         private readonly double[] _calc    = new double[CAP];
         private readonly double[] _upload  = new double[CAP];
@@ -37,10 +39,24 @@ namespace FracturingFog.Rendering
         private readonly double[] _gpuDispatch = new double[CAP];
         private readonly double[] _gpuReadback = new double[CAP];
 
+        // Wave 0.6 — per-stage post-FX microbar. One ring per PostStage value
+        // (ssao / bloom / dof / edge / lens / volume). Fed by StagePerf via
+        // a delegate the host wires up on construction.
+        private readonly double[][] _stageRings;
+        private readonly int[] _stageIdx = new int[STAGE_COUNT];
+        private readonly int[] _stageCnt = new int[STAGE_COUNT];
+
         private int _idxCalc, _idxUp, _idxPres, _idxFrame;
         private int _cntCalc, _cntUp, _cntPres, _cntFrame;
         private int _idxGpuD, _idxGpuR;
         private int _cntGpuD, _cntGpuR;
+
+        public PerfStats()
+        {
+            _stageRings = new double[STAGE_COUNT][];
+            for (int i = 0; i < STAGE_COUNT; i++)
+                _stageRings[i] = new double[CAP];
+        }
 
         private readonly object _lock = new();
 
@@ -109,6 +125,18 @@ namespace FracturingFog.Rendering
             }
         }
 
+        public void RecordStage(PostStage stage, double ms)
+        {
+            int i = (int)stage;
+            if ((uint)i >= STAGE_COUNT) return;
+            lock (_lock)
+            {
+                _stageRings[i][_stageIdx[i]] = ms;
+                _stageIdx[i] = (_stageIdx[i] + 1) % CAP;
+                if (_stageCnt[i] < CAP) _stageCnt[i]++;
+            }
+        }
+
         public PerfSnapshot Snapshot()
         {
             lock (_lock)
@@ -119,6 +147,13 @@ namespace FracturingFog.Rendering
                 double aFr   = Avg(_frame, _cntFrame);
                 double aGpuD = Avg(_gpuDispatch, _cntGpuD);
                 double aGpuR = Avg(_gpuReadback, _cntGpuR);
+                var stages = new double[STAGE_COUNT];
+                var stageCounts = new int[STAGE_COUNT];
+                for (int i = 0; i < STAGE_COUNT; i++)
+                {
+                    stages[i] = Avg(_stageRings[i], _stageCnt[i]);
+                    stageCounts[i] = _stageCnt[i];
+                }
                 double fMin  = Min(_frame, _cntFrame);
                 double fMax  = Max(_frame, _cntFrame);
                 long now = Stopwatch.GetTimestamp();
@@ -135,7 +170,8 @@ namespace FracturingFog.Rendering
                     fMin, fMax, fps,
                     g0Rate, g1Rate, g2Rate,
                     _cntFrame,
-                    aGpuD, aGpuR, _cntGpuD);
+                    aGpuD, aGpuR, _cntGpuD,
+                    stages, stageCounts);
             }
         }
 
@@ -146,6 +182,12 @@ namespace FracturingFog.Rendering
                 Array.Clear(_calc); Array.Clear(_upload);
                 Array.Clear(_present); Array.Clear(_frame);
                 Array.Clear(_gpuDispatch); Array.Clear(_gpuReadback);
+                for (int i = 0; i < STAGE_COUNT; i++)
+                {
+                    Array.Clear(_stageRings[i]);
+                    _stageIdx[i] = 0;
+                    _stageCnt[i] = 0;
+                }
                 _idxCalc = _idxUp = _idxPres = _idxFrame = 0;
                 _cntCalc = _cntUp = _cntPres = _cntFrame = 0;
                 _idxGpuD = _idxGpuR = 0;
@@ -200,12 +242,18 @@ namespace FracturingFog.Rendering
         public readonly double GpuDispatchMs;
         public readonly double GpuReadbackMs;
         public readonly int GpuSampleCount;
+        // Wave 0.6 — per-stage post-FX timings, indexed by (int)PostStage.
+        // Both arrays have length 6. StageCounts[i] == 0 means the HUD hides
+        // that row (stage didn't fire this frame batch).
+        public readonly double[] StageMs;
+        public readonly int[] StageCounts;
 
         public PerfSnapshot(double calcMs, double uploadMs, double presentMs, double frameMs,
             double frameMin, double frameMax, double fps,
             double g0, double g1, double g2,
             int sampleCount,
-            double gpuDispatchMs, double gpuReadbackMs, int gpuSampleCount)
+            double gpuDispatchMs, double gpuReadbackMs, int gpuSampleCount,
+            double[] stageMs, int[] stageCounts)
         {
             CalcMs = calcMs; UploadMs = uploadMs; PresentMs = presentMs; FrameMs = frameMs;
             FrameMin = frameMin; FrameMax = frameMax; Fps = fps;
@@ -214,6 +262,8 @@ namespace FracturingFog.Rendering
             GpuDispatchMs = gpuDispatchMs;
             GpuReadbackMs = gpuReadbackMs;
             GpuSampleCount = gpuSampleCount;
+            StageMs = stageMs;
+            StageCounts = stageCounts;
         }
     }
 

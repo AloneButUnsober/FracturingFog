@@ -100,6 +100,7 @@ public static class ScreenSpacePost
         if (fx.SsaoSamples <= 0) return;
         if (colorBuffer.Length < width * height) return;
         if (depthBuffer.Length < width * height) return;
+        using var __stage = StagePerf.Begin(PostStage.Ssao);
 
         int samples = Math.Min(fx.SsaoSamples, 64);
         double radiusPixels = fx.SsaoRadius * Math.Min(width, height);
@@ -331,6 +332,7 @@ public static class ScreenSpacePost
             if (wantHud)  ApplyDebugHud(colorBuffer, width, height, fx);
             return;
         }
+        using var __stage = StagePerf.Begin(PostStage.Bloom);
 
         // Phase 12b — GPU dispatcher. Fused threshold → 2-mip pyramid →
         // composite + tonemap + gamma. Falls back to CPU below on any failure.
@@ -513,6 +515,7 @@ public static class ScreenSpacePost
         if (!wantLens) return;
         int n = width * height;
         if (colorBuffer.Length < n) return;
+        using var __stage = StagePerf.Begin(PostStage.Lens);
 
         // Snapshot — sample source from this, write to colorBuffer.
         using var srcLease = PostPassBufferPool.RentUint(n);
@@ -1115,6 +1118,7 @@ public static class ScreenSpacePost
         int n = width * height;
         if (hdrBuffer.Length < 3 * n) return;
         if (depthBuffer.Length < n) return;
+        using var __stage = StagePerf.Begin(PostStage.Dof);
 
         double focus = fx.DofFocusDistance;
         double aperture = fx.DofAperture;
@@ -1488,6 +1492,7 @@ public static class ScreenSpacePost
         if (colorBuffer.Length < n) return;
         if (depthBuffer.Length < n) return;
         if (normalBuffer.Length < 3 * n) return;
+        using var __stage = StagePerf.Begin(PostStage.Edge);
 
         double strength = Math.Clamp(fx.EdgeStrength, 0.0, 1.0);
         double threshold = Math.Max(0.0, fx.EdgeThreshold);

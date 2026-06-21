@@ -14,7 +14,7 @@
 //                  =  ((z + z)*z + z*z)*D + 1
 //
 // Generator: CalculatorGen v0.3 (polynomial + symbolic diff + ILGPU)
-// Generated: 2026-06-08 20:15:54 UTC
+// Generated: 2026-06-20 11:10:43 UTC
 //
 // DO NOT HAND-EDIT. Re-run CalculatorGen with the same --name flag to
 // regenerate. If you need behaviour the generator cannot produce
@@ -233,8 +233,14 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
     /// Higher = wider validity range = further per-pixel skip into the
     /// orbit. Locked at codegen time because the emitter unrolls the
     /// recurrence; to change, regenerate the calculator and update
-    /// <c>SaRecurrenceEmitter.Emit(..., order)</c> to match.</summary>
-    private const int SaOrders = 8;
+    /// <c>SaRecurrenceEmitter.Emit(..., order)</c> to match.
+    ///
+    /// Wave 2.1 — bumped 8 → 16. Per CalcGen roadmap D-2.8, each extra
+    /// order extends the valid skip range exponentially; legacy ~64,
+    /// 16 captures most of the practical win. Cost: per-iter SA-build
+    /// scales O(d · N²) ≈ 4× over the order-8 baseline, still
+    /// negligible against the per-pixel work that follows.</summary>
+    private const int SaOrders = 16;
 
     /// <summary>False when the equation contains operators the Taylor
     /// expansion can't handle (Div / Conj / Folded). When false the
@@ -1102,27 +1108,45 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
             double maxEpsPowNm1 = Math.Pow(maxEps, SaOrders - 1);
             double tol = SaTolerance;
             int n;
-            // Unrolled coefficient state. Indices 1..SaOrders. Hard-
-            // coded at SaOrders=8 — if you change the const above,
-            // expand this declaration to match the new N.
-            double Sr1 = 0.0, Si1 = 0.0;
-            double Sr2 = 0.0, Si2 = 0.0;
-            double Sr3 = 0.0, Si3 = 0.0;
-            double Sr4 = 0.0, Si4 = 0.0;
-            double Sr5 = 0.0, Si5 = 0.0;
-            double Sr6 = 0.0, Si6 = 0.0;
-            double Sr7 = 0.0, Si7 = 0.0;
-            double Sr8 = 0.0, Si8 = 0.0;
+            // Unrolled coefficient state. Indices 1..SaOrders. Hand-
+            // expanded at SaOrders=16 (Wave 2.1, was 8). Pure stack
+            // locals so JIT keeps them in XMM registers; converting to
+            // an array would heap-allocate per frame and force memory
+            // round-trips inside the hot loop.
+            double Sr1 = 0.0,  Si1 = 0.0;
+            double Sr2 = 0.0,  Si2 = 0.0;
+            double Sr3 = 0.0,  Si3 = 0.0;
+            double Sr4 = 0.0,  Si4 = 0.0;
+            double Sr5 = 0.0,  Si5 = 0.0;
+            double Sr6 = 0.0,  Si6 = 0.0;
+            double Sr7 = 0.0,  Si7 = 0.0;
+            double Sr8 = 0.0,  Si8 = 0.0;
+            double Sr9 = 0.0,  Si9 = 0.0;
+            double Sr10 = 0.0, Si10 = 0.0;
+            double Sr11 = 0.0, Si11 = 0.0;
+            double Sr12 = 0.0, Si12 = 0.0;
+            double Sr13 = 0.0, Si13 = 0.0;
+            double Sr14 = 0.0, Si14 = 0.0;
+            double Sr15 = 0.0, Si15 = 0.0;
+            double Sr16 = 0.0, Si16 = 0.0;
             for (n = 0; n < refOrbitLen; n++)
             {
-                saSr[1][n] = Sr1; saSi[1][n] = Si1;
-                saSr[2][n] = Sr2; saSi[2][n] = Si2;
-                saSr[3][n] = Sr3; saSi[3][n] = Si3;
-                saSr[4][n] = Sr4; saSi[4][n] = Si4;
-                saSr[5][n] = Sr5; saSi[5][n] = Si5;
-                saSr[6][n] = Sr6; saSi[6][n] = Si6;
-                saSr[7][n] = Sr7; saSi[7][n] = Si7;
-                saSr[8][n] = Sr8; saSi[8][n] = Si8;
+                saSr[1][n]  = Sr1;  saSi[1][n]  = Si1;
+                saSr[2][n]  = Sr2;  saSi[2][n]  = Si2;
+                saSr[3][n]  = Sr3;  saSi[3][n]  = Si3;
+                saSr[4][n]  = Sr4;  saSi[4][n]  = Si4;
+                saSr[5][n]  = Sr5;  saSi[5][n]  = Si5;
+                saSr[6][n]  = Sr6;  saSi[6][n]  = Si6;
+                saSr[7][n]  = Sr7;  saSi[7][n]  = Si7;
+                saSr[8][n]  = Sr8;  saSi[8][n]  = Si8;
+                saSr[9][n]  = Sr9;  saSi[9][n]  = Si9;
+                saSr[10][n] = Sr10; saSi[10][n] = Si10;
+                saSr[11][n] = Sr11; saSi[11][n] = Si11;
+                saSr[12][n] = Sr12; saSi[12][n] = Si12;
+                saSr[13][n] = Sr13; saSi[13][n] = Si13;
+                saSr[14][n] = Sr14; saSi[14][n] = Si14;
+                saSr[15][n] = Sr15; saSi[15][n] = Si15;
+                saSr[16][n] = Sr16; saSi[16][n] = Si16;
 
                 // Stop advancing n when SA is no longer safe. Multiple
                 // criteria — first to fire wins.
@@ -1158,28 +1182,46 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                 //
                 // (4) Tail-vs-head — original criterion, retained as a
                 // belt-and-suspenders bound on the final truncation.
-                double m1 = Math.Sqrt(Sr1 * Sr1 + Si1 * Si1);
-                double m2 = Math.Sqrt(Sr2 * Sr2 + Si2 * Si2);
-                double m3 = Math.Sqrt(Sr3 * Sr3 + Si3 * Si3);
-                double m4 = Math.Sqrt(Sr4 * Sr4 + Si4 * Si4);
-                double m5 = Math.Sqrt(Sr5 * Sr5 + Si5 * Si5);
-                double m6 = Math.Sqrt(Sr6 * Sr6 + Si6 * Si6);
-                double m7 = Math.Sqrt(Sr7 * Sr7 + Si7 * Si7);
-                double m8 = Math.Sqrt(Sr8 * Sr8 + Si8 * Si8);
+                double m1  = Math.Sqrt(Sr1  * Sr1  + Si1  * Si1);
+                double m2  = Math.Sqrt(Sr2  * Sr2  + Si2  * Si2);
+                double m3  = Math.Sqrt(Sr3  * Sr3  + Si3  * Si3);
+                double m4  = Math.Sqrt(Sr4  * Sr4  + Si4  * Si4);
+                double m5  = Math.Sqrt(Sr5  * Sr5  + Si5  * Si5);
+                double m6  = Math.Sqrt(Sr6  * Sr6  + Si6  * Si6);
+                double m7  = Math.Sqrt(Sr7  * Sr7  + Si7  * Si7);
+                double m8  = Math.Sqrt(Sr8  * Sr8  + Si8  * Si8);
+                double m9  = Math.Sqrt(Sr9  * Sr9  + Si9  * Si9);
+                double m10 = Math.Sqrt(Sr10 * Sr10 + Si10 * Si10);
+                double m11 = Math.Sqrt(Sr11 * Sr11 + Si11 * Si11);
+                double m12 = Math.Sqrt(Sr12 * Sr12 + Si12 * Si12);
+                double m13 = Math.Sqrt(Sr13 * Sr13 + Si13 * Si13);
+                double m14 = Math.Sqrt(Sr14 * Sr14 + Si14 * Si14);
+                double m15 = Math.Sqrt(Sr15 * Sr15 + Si15 * Si15);
+                double m16 = Math.Sqrt(Sr16 * Sr16 + Si16 * Si16);
                 if (n > 0)
                 {
-                    if (!double.IsFinite(m8) || !double.IsFinite(m1)
-                        || m8 > 1.0e150 || m1 > 1.0e150) break;
+                    // Overflow guard is on the TOP order (mN); its
+                    // magnitude grows fastest so it saturates first.
+                    if (!double.IsFinite(m16) || !double.IsFinite(m1)
+                        || m16 > 1.0e150 || m1 > 1.0e150) break;
                     if (m1 * maxEps > 1.0e-3) break;
                     double tolEps = tol;
-                    if (m2 * maxEps > tolEps * m1) break;
-                    if (m3 * maxEps > tolEps * m2) break;
-                    if (m4 * maxEps > tolEps * m3) break;
-                    if (m5 * maxEps > tolEps * m4) break;
-                    if (m6 * maxEps > tolEps * m5) break;
-                    if (m7 * maxEps > tolEps * m6) break;
-                    if (m8 * maxEps > tolEps * m7) break;
-                    if (m8 * maxEpsPowNm1 > tol * m1) break;
+                    if (m2  * maxEps > tolEps * m1)  break;
+                    if (m3  * maxEps > tolEps * m2)  break;
+                    if (m4  * maxEps > tolEps * m3)  break;
+                    if (m5  * maxEps > tolEps * m4)  break;
+                    if (m6  * maxEps > tolEps * m5)  break;
+                    if (m7  * maxEps > tolEps * m6)  break;
+                    if (m8  * maxEps > tolEps * m7)  break;
+                    if (m9  * maxEps > tolEps * m8)  break;
+                    if (m10 * maxEps > tolEps * m9)  break;
+                    if (m11 * maxEps > tolEps * m10) break;
+                    if (m12 * maxEps > tolEps * m11) break;
+                    if (m13 * maxEps > tolEps * m12) break;
+                    if (m14 * maxEps > tolEps * m13) break;
+                    if (m15 * maxEps > tolEps * m14) break;
+                    if (m16 * maxEps > tolEps * m15) break;
+                    if (m16 * maxEpsPowNm1 > tol * m1) break;
                 }
 
                 double Zr2 = refZr[n], Zi2 = refZi[n];
@@ -1200,6 +1242,22 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                 double dPow2_7_Im = (Sr1*Si6 + Si1*Sr6) + (Sr2*Si5 + Si2*Sr5) + (Sr3*Si4 + Si3*Sr4) + (Sr4*Si3 + Si4*Sr3) + (Sr5*Si2 + Si5*Sr2) + (Sr6*Si1 + Si6*Sr1);
                 double dPow2_8_Re = (Sr1*Sr7 - Si1*Si7) + (Sr2*Sr6 - Si2*Si6) + (Sr3*Sr5 - Si3*Si5) + (Sr4*Sr4 - Si4*Si4) + (Sr5*Sr3 - Si5*Si3) + (Sr6*Sr2 - Si6*Si2) + (Sr7*Sr1 - Si7*Si1);
                 double dPow2_8_Im = (Sr1*Si7 + Si1*Sr7) + (Sr2*Si6 + Si2*Sr6) + (Sr3*Si5 + Si3*Sr5) + (Sr4*Si4 + Si4*Sr4) + (Sr5*Si3 + Si5*Sr3) + (Sr6*Si2 + Si6*Sr2) + (Sr7*Si1 + Si7*Sr1);
+                double dPow2_9_Re = (Sr1*Sr8 - Si1*Si8) + (Sr2*Sr7 - Si2*Si7) + (Sr3*Sr6 - Si3*Si6) + (Sr4*Sr5 - Si4*Si5) + (Sr5*Sr4 - Si5*Si4) + (Sr6*Sr3 - Si6*Si3) + (Sr7*Sr2 - Si7*Si2) + (Sr8*Sr1 - Si8*Si1);
+                double dPow2_9_Im = (Sr1*Si8 + Si1*Sr8) + (Sr2*Si7 + Si2*Sr7) + (Sr3*Si6 + Si3*Sr6) + (Sr4*Si5 + Si4*Sr5) + (Sr5*Si4 + Si5*Sr4) + (Sr6*Si3 + Si6*Sr3) + (Sr7*Si2 + Si7*Sr2) + (Sr8*Si1 + Si8*Sr1);
+                double dPow2_10_Re = (Sr1*Sr9 - Si1*Si9) + (Sr2*Sr8 - Si2*Si8) + (Sr3*Sr7 - Si3*Si7) + (Sr4*Sr6 - Si4*Si6) + (Sr5*Sr5 - Si5*Si5) + (Sr6*Sr4 - Si6*Si4) + (Sr7*Sr3 - Si7*Si3) + (Sr8*Sr2 - Si8*Si2) + (Sr9*Sr1 - Si9*Si1);
+                double dPow2_10_Im = (Sr1*Si9 + Si1*Sr9) + (Sr2*Si8 + Si2*Sr8) + (Sr3*Si7 + Si3*Sr7) + (Sr4*Si6 + Si4*Sr6) + (Sr5*Si5 + Si5*Sr5) + (Sr6*Si4 + Si6*Sr4) + (Sr7*Si3 + Si7*Sr3) + (Sr8*Si2 + Si8*Sr2) + (Sr9*Si1 + Si9*Sr1);
+                double dPow2_11_Re = (Sr1*Sr10 - Si1*Si10) + (Sr2*Sr9 - Si2*Si9) + (Sr3*Sr8 - Si3*Si8) + (Sr4*Sr7 - Si4*Si7) + (Sr5*Sr6 - Si5*Si6) + (Sr6*Sr5 - Si6*Si5) + (Sr7*Sr4 - Si7*Si4) + (Sr8*Sr3 - Si8*Si3) + (Sr9*Sr2 - Si9*Si2) + (Sr10*Sr1 - Si10*Si1);
+                double dPow2_11_Im = (Sr1*Si10 + Si1*Sr10) + (Sr2*Si9 + Si2*Sr9) + (Sr3*Si8 + Si3*Sr8) + (Sr4*Si7 + Si4*Sr7) + (Sr5*Si6 + Si5*Sr6) + (Sr6*Si5 + Si6*Sr5) + (Sr7*Si4 + Si7*Sr4) + (Sr8*Si3 + Si8*Sr3) + (Sr9*Si2 + Si9*Sr2) + (Sr10*Si1 + Si10*Sr1);
+                double dPow2_12_Re = (Sr1*Sr11 - Si1*Si11) + (Sr2*Sr10 - Si2*Si10) + (Sr3*Sr9 - Si3*Si9) + (Sr4*Sr8 - Si4*Si8) + (Sr5*Sr7 - Si5*Si7) + (Sr6*Sr6 - Si6*Si6) + (Sr7*Sr5 - Si7*Si5) + (Sr8*Sr4 - Si8*Si4) + (Sr9*Sr3 - Si9*Si3) + (Sr10*Sr2 - Si10*Si2) + (Sr11*Sr1 - Si11*Si1);
+                double dPow2_12_Im = (Sr1*Si11 + Si1*Sr11) + (Sr2*Si10 + Si2*Sr10) + (Sr3*Si9 + Si3*Sr9) + (Sr4*Si8 + Si4*Sr8) + (Sr5*Si7 + Si5*Sr7) + (Sr6*Si6 + Si6*Sr6) + (Sr7*Si5 + Si7*Sr5) + (Sr8*Si4 + Si8*Sr4) + (Sr9*Si3 + Si9*Sr3) + (Sr10*Si2 + Si10*Sr2) + (Sr11*Si1 + Si11*Sr1);
+                double dPow2_13_Re = (Sr1*Sr12 - Si1*Si12) + (Sr2*Sr11 - Si2*Si11) + (Sr3*Sr10 - Si3*Si10) + (Sr4*Sr9 - Si4*Si9) + (Sr5*Sr8 - Si5*Si8) + (Sr6*Sr7 - Si6*Si7) + (Sr7*Sr6 - Si7*Si6) + (Sr8*Sr5 - Si8*Si5) + (Sr9*Sr4 - Si9*Si4) + (Sr10*Sr3 - Si10*Si3) + (Sr11*Sr2 - Si11*Si2) + (Sr12*Sr1 - Si12*Si1);
+                double dPow2_13_Im = (Sr1*Si12 + Si1*Sr12) + (Sr2*Si11 + Si2*Sr11) + (Sr3*Si10 + Si3*Sr10) + (Sr4*Si9 + Si4*Sr9) + (Sr5*Si8 + Si5*Sr8) + (Sr6*Si7 + Si6*Sr7) + (Sr7*Si6 + Si7*Sr6) + (Sr8*Si5 + Si8*Sr5) + (Sr9*Si4 + Si9*Sr4) + (Sr10*Si3 + Si10*Sr3) + (Sr11*Si2 + Si11*Sr2) + (Sr12*Si1 + Si12*Sr1);
+                double dPow2_14_Re = (Sr1*Sr13 - Si1*Si13) + (Sr2*Sr12 - Si2*Si12) + (Sr3*Sr11 - Si3*Si11) + (Sr4*Sr10 - Si4*Si10) + (Sr5*Sr9 - Si5*Si9) + (Sr6*Sr8 - Si6*Si8) + (Sr7*Sr7 - Si7*Si7) + (Sr8*Sr6 - Si8*Si6) + (Sr9*Sr5 - Si9*Si5) + (Sr10*Sr4 - Si10*Si4) + (Sr11*Sr3 - Si11*Si3) + (Sr12*Sr2 - Si12*Si2) + (Sr13*Sr1 - Si13*Si1);
+                double dPow2_14_Im = (Sr1*Si13 + Si1*Sr13) + (Sr2*Si12 + Si2*Sr12) + (Sr3*Si11 + Si3*Sr11) + (Sr4*Si10 + Si4*Sr10) + (Sr5*Si9 + Si5*Sr9) + (Sr6*Si8 + Si6*Sr8) + (Sr7*Si7 + Si7*Sr7) + (Sr8*Si6 + Si8*Sr6) + (Sr9*Si5 + Si9*Sr5) + (Sr10*Si4 + Si10*Sr4) + (Sr11*Si3 + Si11*Sr3) + (Sr12*Si2 + Si12*Sr2) + (Sr13*Si1 + Si13*Sr1);
+                double dPow2_15_Re = (Sr1*Sr14 - Si1*Si14) + (Sr2*Sr13 - Si2*Si13) + (Sr3*Sr12 - Si3*Si12) + (Sr4*Sr11 - Si4*Si11) + (Sr5*Sr10 - Si5*Si10) + (Sr6*Sr9 - Si6*Si9) + (Sr7*Sr8 - Si7*Si8) + (Sr8*Sr7 - Si8*Si7) + (Sr9*Sr6 - Si9*Si6) + (Sr10*Sr5 - Si10*Si5) + (Sr11*Sr4 - Si11*Si4) + (Sr12*Sr3 - Si12*Si3) + (Sr13*Sr2 - Si13*Si2) + (Sr14*Sr1 - Si14*Si1);
+                double dPow2_15_Im = (Sr1*Si14 + Si1*Sr14) + (Sr2*Si13 + Si2*Sr13) + (Sr3*Si12 + Si3*Sr12) + (Sr4*Si11 + Si4*Sr11) + (Sr5*Si10 + Si5*Sr10) + (Sr6*Si9 + Si6*Sr9) + (Sr7*Si8 + Si7*Sr8) + (Sr8*Si7 + Si8*Sr7) + (Sr9*Si6 + Si9*Sr6) + (Sr10*Si5 + Si10*Sr5) + (Sr11*Si4 + Si11*Sr4) + (Sr12*Si3 + Si12*Sr3) + (Sr13*Si2 + Si13*Sr2) + (Sr14*Si1 + Si14*Sr1);
+                double dPow2_16_Re = (Sr1*Sr15 - Si1*Si15) + (Sr2*Sr14 - Si2*Si14) + (Sr3*Sr13 - Si3*Si13) + (Sr4*Sr12 - Si4*Si12) + (Sr5*Sr11 - Si5*Si11) + (Sr6*Sr10 - Si6*Si10) + (Sr7*Sr9 - Si7*Si9) + (Sr8*Sr8 - Si8*Si8) + (Sr9*Sr7 - Si9*Si7) + (Sr10*Sr6 - Si10*Si6) + (Sr11*Sr5 - Si11*Si5) + (Sr12*Sr4 - Si12*Si4) + (Sr13*Sr3 - Si13*Si3) + (Sr14*Sr2 - Si14*Si2) + (Sr15*Sr1 - Si15*Si1);
+                double dPow2_16_Im = (Sr1*Si15 + Si1*Sr15) + (Sr2*Si14 + Si2*Sr14) + (Sr3*Si13 + Si3*Sr13) + (Sr4*Si12 + Si4*Sr12) + (Sr5*Si11 + Si5*Sr11) + (Sr6*Si10 + Si6*Sr10) + (Sr7*Si9 + Si7*Sr9) + (Sr8*Si8 + Si8*Sr8) + (Sr9*Si7 + Si9*Sr7) + (Sr10*Si6 + Si10*Sr6) + (Sr11*Si5 + Si11*Sr5) + (Sr12*Si4 + Si12*Sr4) + (Sr13*Si3 + Si13*Sr3) + (Sr14*Si2 + Si14*Sr2) + (Sr15*Si1 + Si15*Sr1);
                 double dPow3_3_Re = (dPow2_2_Re*Sr1 - dPow2_2_Im*Si1);
                 double dPow3_3_Im = (dPow2_2_Re*Si1 + dPow2_2_Im*Sr1);
                 double dPow3_4_Re = (dPow2_2_Re*Sr2 - dPow2_2_Im*Si2) + (dPow2_3_Re*Sr1 - dPow2_3_Im*Si1);
@@ -1212,6 +1270,22 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                 double dPow3_7_Im = (dPow2_2_Re*Si5 + dPow2_2_Im*Sr5) + (dPow2_3_Re*Si4 + dPow2_3_Im*Sr4) + (dPow2_4_Re*Si3 + dPow2_4_Im*Sr3) + (dPow2_5_Re*Si2 + dPow2_5_Im*Sr2) + (dPow2_6_Re*Si1 + dPow2_6_Im*Sr1);
                 double dPow3_8_Re = (dPow2_2_Re*Sr6 - dPow2_2_Im*Si6) + (dPow2_3_Re*Sr5 - dPow2_3_Im*Si5) + (dPow2_4_Re*Sr4 - dPow2_4_Im*Si4) + (dPow2_5_Re*Sr3 - dPow2_5_Im*Si3) + (dPow2_6_Re*Sr2 - dPow2_6_Im*Si2) + (dPow2_7_Re*Sr1 - dPow2_7_Im*Si1);
                 double dPow3_8_Im = (dPow2_2_Re*Si6 + dPow2_2_Im*Sr6) + (dPow2_3_Re*Si5 + dPow2_3_Im*Sr5) + (dPow2_4_Re*Si4 + dPow2_4_Im*Sr4) + (dPow2_5_Re*Si3 + dPow2_5_Im*Sr3) + (dPow2_6_Re*Si2 + dPow2_6_Im*Sr2) + (dPow2_7_Re*Si1 + dPow2_7_Im*Sr1);
+                double dPow3_9_Re = (dPow2_2_Re*Sr7 - dPow2_2_Im*Si7) + (dPow2_3_Re*Sr6 - dPow2_3_Im*Si6) + (dPow2_4_Re*Sr5 - dPow2_4_Im*Si5) + (dPow2_5_Re*Sr4 - dPow2_5_Im*Si4) + (dPow2_6_Re*Sr3 - dPow2_6_Im*Si3) + (dPow2_7_Re*Sr2 - dPow2_7_Im*Si2) + (dPow2_8_Re*Sr1 - dPow2_8_Im*Si1);
+                double dPow3_9_Im = (dPow2_2_Re*Si7 + dPow2_2_Im*Sr7) + (dPow2_3_Re*Si6 + dPow2_3_Im*Sr6) + (dPow2_4_Re*Si5 + dPow2_4_Im*Sr5) + (dPow2_5_Re*Si4 + dPow2_5_Im*Sr4) + (dPow2_6_Re*Si3 + dPow2_6_Im*Sr3) + (dPow2_7_Re*Si2 + dPow2_7_Im*Sr2) + (dPow2_8_Re*Si1 + dPow2_8_Im*Sr1);
+                double dPow3_10_Re = (dPow2_2_Re*Sr8 - dPow2_2_Im*Si8) + (dPow2_3_Re*Sr7 - dPow2_3_Im*Si7) + (dPow2_4_Re*Sr6 - dPow2_4_Im*Si6) + (dPow2_5_Re*Sr5 - dPow2_5_Im*Si5) + (dPow2_6_Re*Sr4 - dPow2_6_Im*Si4) + (dPow2_7_Re*Sr3 - dPow2_7_Im*Si3) + (dPow2_8_Re*Sr2 - dPow2_8_Im*Si2) + (dPow2_9_Re*Sr1 - dPow2_9_Im*Si1);
+                double dPow3_10_Im = (dPow2_2_Re*Si8 + dPow2_2_Im*Sr8) + (dPow2_3_Re*Si7 + dPow2_3_Im*Sr7) + (dPow2_4_Re*Si6 + dPow2_4_Im*Sr6) + (dPow2_5_Re*Si5 + dPow2_5_Im*Sr5) + (dPow2_6_Re*Si4 + dPow2_6_Im*Sr4) + (dPow2_7_Re*Si3 + dPow2_7_Im*Sr3) + (dPow2_8_Re*Si2 + dPow2_8_Im*Sr2) + (dPow2_9_Re*Si1 + dPow2_9_Im*Sr1);
+                double dPow3_11_Re = (dPow2_2_Re*Sr9 - dPow2_2_Im*Si9) + (dPow2_3_Re*Sr8 - dPow2_3_Im*Si8) + (dPow2_4_Re*Sr7 - dPow2_4_Im*Si7) + (dPow2_5_Re*Sr6 - dPow2_5_Im*Si6) + (dPow2_6_Re*Sr5 - dPow2_6_Im*Si5) + (dPow2_7_Re*Sr4 - dPow2_7_Im*Si4) + (dPow2_8_Re*Sr3 - dPow2_8_Im*Si3) + (dPow2_9_Re*Sr2 - dPow2_9_Im*Si2) + (dPow2_10_Re*Sr1 - dPow2_10_Im*Si1);
+                double dPow3_11_Im = (dPow2_2_Re*Si9 + dPow2_2_Im*Sr9) + (dPow2_3_Re*Si8 + dPow2_3_Im*Sr8) + (dPow2_4_Re*Si7 + dPow2_4_Im*Sr7) + (dPow2_5_Re*Si6 + dPow2_5_Im*Sr6) + (dPow2_6_Re*Si5 + dPow2_6_Im*Sr5) + (dPow2_7_Re*Si4 + dPow2_7_Im*Sr4) + (dPow2_8_Re*Si3 + dPow2_8_Im*Sr3) + (dPow2_9_Re*Si2 + dPow2_9_Im*Sr2) + (dPow2_10_Re*Si1 + dPow2_10_Im*Sr1);
+                double dPow3_12_Re = (dPow2_2_Re*Sr10 - dPow2_2_Im*Si10) + (dPow2_3_Re*Sr9 - dPow2_3_Im*Si9) + (dPow2_4_Re*Sr8 - dPow2_4_Im*Si8) + (dPow2_5_Re*Sr7 - dPow2_5_Im*Si7) + (dPow2_6_Re*Sr6 - dPow2_6_Im*Si6) + (dPow2_7_Re*Sr5 - dPow2_7_Im*Si5) + (dPow2_8_Re*Sr4 - dPow2_8_Im*Si4) + (dPow2_9_Re*Sr3 - dPow2_9_Im*Si3) + (dPow2_10_Re*Sr2 - dPow2_10_Im*Si2) + (dPow2_11_Re*Sr1 - dPow2_11_Im*Si1);
+                double dPow3_12_Im = (dPow2_2_Re*Si10 + dPow2_2_Im*Sr10) + (dPow2_3_Re*Si9 + dPow2_3_Im*Sr9) + (dPow2_4_Re*Si8 + dPow2_4_Im*Sr8) + (dPow2_5_Re*Si7 + dPow2_5_Im*Sr7) + (dPow2_6_Re*Si6 + dPow2_6_Im*Sr6) + (dPow2_7_Re*Si5 + dPow2_7_Im*Sr5) + (dPow2_8_Re*Si4 + dPow2_8_Im*Sr4) + (dPow2_9_Re*Si3 + dPow2_9_Im*Sr3) + (dPow2_10_Re*Si2 + dPow2_10_Im*Sr2) + (dPow2_11_Re*Si1 + dPow2_11_Im*Sr1);
+                double dPow3_13_Re = (dPow2_2_Re*Sr11 - dPow2_2_Im*Si11) + (dPow2_3_Re*Sr10 - dPow2_3_Im*Si10) + (dPow2_4_Re*Sr9 - dPow2_4_Im*Si9) + (dPow2_5_Re*Sr8 - dPow2_5_Im*Si8) + (dPow2_6_Re*Sr7 - dPow2_6_Im*Si7) + (dPow2_7_Re*Sr6 - dPow2_7_Im*Si6) + (dPow2_8_Re*Sr5 - dPow2_8_Im*Si5) + (dPow2_9_Re*Sr4 - dPow2_9_Im*Si4) + (dPow2_10_Re*Sr3 - dPow2_10_Im*Si3) + (dPow2_11_Re*Sr2 - dPow2_11_Im*Si2) + (dPow2_12_Re*Sr1 - dPow2_12_Im*Si1);
+                double dPow3_13_Im = (dPow2_2_Re*Si11 + dPow2_2_Im*Sr11) + (dPow2_3_Re*Si10 + dPow2_3_Im*Sr10) + (dPow2_4_Re*Si9 + dPow2_4_Im*Sr9) + (dPow2_5_Re*Si8 + dPow2_5_Im*Sr8) + (dPow2_6_Re*Si7 + dPow2_6_Im*Sr7) + (dPow2_7_Re*Si6 + dPow2_7_Im*Sr6) + (dPow2_8_Re*Si5 + dPow2_8_Im*Sr5) + (dPow2_9_Re*Si4 + dPow2_9_Im*Sr4) + (dPow2_10_Re*Si3 + dPow2_10_Im*Sr3) + (dPow2_11_Re*Si2 + dPow2_11_Im*Sr2) + (dPow2_12_Re*Si1 + dPow2_12_Im*Sr1);
+                double dPow3_14_Re = (dPow2_2_Re*Sr12 - dPow2_2_Im*Si12) + (dPow2_3_Re*Sr11 - dPow2_3_Im*Si11) + (dPow2_4_Re*Sr10 - dPow2_4_Im*Si10) + (dPow2_5_Re*Sr9 - dPow2_5_Im*Si9) + (dPow2_6_Re*Sr8 - dPow2_6_Im*Si8) + (dPow2_7_Re*Sr7 - dPow2_7_Im*Si7) + (dPow2_8_Re*Sr6 - dPow2_8_Im*Si6) + (dPow2_9_Re*Sr5 - dPow2_9_Im*Si5) + (dPow2_10_Re*Sr4 - dPow2_10_Im*Si4) + (dPow2_11_Re*Sr3 - dPow2_11_Im*Si3) + (dPow2_12_Re*Sr2 - dPow2_12_Im*Si2) + (dPow2_13_Re*Sr1 - dPow2_13_Im*Si1);
+                double dPow3_14_Im = (dPow2_2_Re*Si12 + dPow2_2_Im*Sr12) + (dPow2_3_Re*Si11 + dPow2_3_Im*Sr11) + (dPow2_4_Re*Si10 + dPow2_4_Im*Sr10) + (dPow2_5_Re*Si9 + dPow2_5_Im*Sr9) + (dPow2_6_Re*Si8 + dPow2_6_Im*Sr8) + (dPow2_7_Re*Si7 + dPow2_7_Im*Sr7) + (dPow2_8_Re*Si6 + dPow2_8_Im*Sr6) + (dPow2_9_Re*Si5 + dPow2_9_Im*Sr5) + (dPow2_10_Re*Si4 + dPow2_10_Im*Sr4) + (dPow2_11_Re*Si3 + dPow2_11_Im*Sr3) + (dPow2_12_Re*Si2 + dPow2_12_Im*Sr2) + (dPow2_13_Re*Si1 + dPow2_13_Im*Sr1);
+                double dPow3_15_Re = (dPow2_2_Re*Sr13 - dPow2_2_Im*Si13) + (dPow2_3_Re*Sr12 - dPow2_3_Im*Si12) + (dPow2_4_Re*Sr11 - dPow2_4_Im*Si11) + (dPow2_5_Re*Sr10 - dPow2_5_Im*Si10) + (dPow2_6_Re*Sr9 - dPow2_6_Im*Si9) + (dPow2_7_Re*Sr8 - dPow2_7_Im*Si8) + (dPow2_8_Re*Sr7 - dPow2_8_Im*Si7) + (dPow2_9_Re*Sr6 - dPow2_9_Im*Si6) + (dPow2_10_Re*Sr5 - dPow2_10_Im*Si5) + (dPow2_11_Re*Sr4 - dPow2_11_Im*Si4) + (dPow2_12_Re*Sr3 - dPow2_12_Im*Si3) + (dPow2_13_Re*Sr2 - dPow2_13_Im*Si2) + (dPow2_14_Re*Sr1 - dPow2_14_Im*Si1);
+                double dPow3_15_Im = (dPow2_2_Re*Si13 + dPow2_2_Im*Sr13) + (dPow2_3_Re*Si12 + dPow2_3_Im*Sr12) + (dPow2_4_Re*Si11 + dPow2_4_Im*Sr11) + (dPow2_5_Re*Si10 + dPow2_5_Im*Sr10) + (dPow2_6_Re*Si9 + dPow2_6_Im*Sr9) + (dPow2_7_Re*Si8 + dPow2_7_Im*Sr8) + (dPow2_8_Re*Si7 + dPow2_8_Im*Sr7) + (dPow2_9_Re*Si6 + dPow2_9_Im*Sr6) + (dPow2_10_Re*Si5 + dPow2_10_Im*Sr5) + (dPow2_11_Re*Si4 + dPow2_11_Im*Sr4) + (dPow2_12_Re*Si3 + dPow2_12_Im*Sr3) + (dPow2_13_Re*Si2 + dPow2_13_Im*Sr2) + (dPow2_14_Re*Si1 + dPow2_14_Im*Sr1);
+                double dPow3_16_Re = (dPow2_2_Re*Sr14 - dPow2_2_Im*Si14) + (dPow2_3_Re*Sr13 - dPow2_3_Im*Si13) + (dPow2_4_Re*Sr12 - dPow2_4_Im*Si12) + (dPow2_5_Re*Sr11 - dPow2_5_Im*Si11) + (dPow2_6_Re*Sr10 - dPow2_6_Im*Si10) + (dPow2_7_Re*Sr9 - dPow2_7_Im*Si9) + (dPow2_8_Re*Sr8 - dPow2_8_Im*Si8) + (dPow2_9_Re*Sr7 - dPow2_9_Im*Si7) + (dPow2_10_Re*Sr6 - dPow2_10_Im*Si6) + (dPow2_11_Re*Sr5 - dPow2_11_Im*Si5) + (dPow2_12_Re*Sr4 - dPow2_12_Im*Si4) + (dPow2_13_Re*Sr3 - dPow2_13_Im*Si3) + (dPow2_14_Re*Sr2 - dPow2_14_Im*Si2) + (dPow2_15_Re*Sr1 - dPow2_15_Im*Si1);
+                double dPow3_16_Im = (dPow2_2_Re*Si14 + dPow2_2_Im*Sr14) + (dPow2_3_Re*Si13 + dPow2_3_Im*Sr13) + (dPow2_4_Re*Si12 + dPow2_4_Im*Sr12) + (dPow2_5_Re*Si11 + dPow2_5_Im*Sr11) + (dPow2_6_Re*Si10 + dPow2_6_Im*Sr10) + (dPow2_7_Re*Si9 + dPow2_7_Im*Sr9) + (dPow2_8_Re*Si8 + dPow2_8_Im*Sr8) + (dPow2_9_Re*Si7 + dPow2_9_Im*Sr7) + (dPow2_10_Re*Si6 + dPow2_10_Im*Sr6) + (dPow2_11_Re*Si5 + dPow2_11_Im*Sr5) + (dPow2_12_Re*Si4 + dPow2_12_Im*Sr4) + (dPow2_13_Re*Si3 + dPow2_13_Im*Sr3) + (dPow2_14_Re*Si2 + dPow2_14_Im*Sr2) + (dPow2_15_Re*Si1 + dPow2_15_Im*Sr1);
                 double SrNew1 = 3.0 * (Zp2Re * Sr1 - Zp2Im * Si1) + 1.0;
                 double SiNew1 = 3.0 * (Zp2Re * Si1 + Zp2Im * Sr1);
                 double SrNew2 = 3.0 * (Zp2Re * Sr2 - Zp2Im * Si2) + 3.0 * (Zp1Re * dPow2_2_Re - Zp1Im * dPow2_2_Im);
@@ -1228,23 +1302,55 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                 double SiNew7 = 3.0 * (Zp2Re * Si7 + Zp2Im * Sr7) + 3.0 * (Zp1Re * dPow2_7_Im + Zp1Im * dPow2_7_Re) + dPow3_7_Im;
                 double SrNew8 = 3.0 * (Zp2Re * Sr8 - Zp2Im * Si8) + 3.0 * (Zp1Re * dPow2_8_Re - Zp1Im * dPow2_8_Im) + dPow3_8_Re;
                 double SiNew8 = 3.0 * (Zp2Re * Si8 + Zp2Im * Sr8) + 3.0 * (Zp1Re * dPow2_8_Im + Zp1Im * dPow2_8_Re) + dPow3_8_Im;
-                Sr1 = SrNew1; Si1 = SiNew1;
-                Sr2 = SrNew2; Si2 = SiNew2;
-                Sr3 = SrNew3; Si3 = SiNew3;
-                Sr4 = SrNew4; Si4 = SiNew4;
-                Sr5 = SrNew5; Si5 = SiNew5;
-                Sr6 = SrNew6; Si6 = SiNew6;
-                Sr7 = SrNew7; Si7 = SiNew7;
-                Sr8 = SrNew8; Si8 = SiNew8;
+                double SrNew9 = 3.0 * (Zp2Re * Sr9 - Zp2Im * Si9) + 3.0 * (Zp1Re * dPow2_9_Re - Zp1Im * dPow2_9_Im) + dPow3_9_Re;
+                double SiNew9 = 3.0 * (Zp2Re * Si9 + Zp2Im * Sr9) + 3.0 * (Zp1Re * dPow2_9_Im + Zp1Im * dPow2_9_Re) + dPow3_9_Im;
+                double SrNew10 = 3.0 * (Zp2Re * Sr10 - Zp2Im * Si10) + 3.0 * (Zp1Re * dPow2_10_Re - Zp1Im * dPow2_10_Im) + dPow3_10_Re;
+                double SiNew10 = 3.0 * (Zp2Re * Si10 + Zp2Im * Sr10) + 3.0 * (Zp1Re * dPow2_10_Im + Zp1Im * dPow2_10_Re) + dPow3_10_Im;
+                double SrNew11 = 3.0 * (Zp2Re * Sr11 - Zp2Im * Si11) + 3.0 * (Zp1Re * dPow2_11_Re - Zp1Im * dPow2_11_Im) + dPow3_11_Re;
+                double SiNew11 = 3.0 * (Zp2Re * Si11 + Zp2Im * Sr11) + 3.0 * (Zp1Re * dPow2_11_Im + Zp1Im * dPow2_11_Re) + dPow3_11_Im;
+                double SrNew12 = 3.0 * (Zp2Re * Sr12 - Zp2Im * Si12) + 3.0 * (Zp1Re * dPow2_12_Re - Zp1Im * dPow2_12_Im) + dPow3_12_Re;
+                double SiNew12 = 3.0 * (Zp2Re * Si12 + Zp2Im * Sr12) + 3.0 * (Zp1Re * dPow2_12_Im + Zp1Im * dPow2_12_Re) + dPow3_12_Im;
+                double SrNew13 = 3.0 * (Zp2Re * Sr13 - Zp2Im * Si13) + 3.0 * (Zp1Re * dPow2_13_Re - Zp1Im * dPow2_13_Im) + dPow3_13_Re;
+                double SiNew13 = 3.0 * (Zp2Re * Si13 + Zp2Im * Sr13) + 3.0 * (Zp1Re * dPow2_13_Im + Zp1Im * dPow2_13_Re) + dPow3_13_Im;
+                double SrNew14 = 3.0 * (Zp2Re * Sr14 - Zp2Im * Si14) + 3.0 * (Zp1Re * dPow2_14_Re - Zp1Im * dPow2_14_Im) + dPow3_14_Re;
+                double SiNew14 = 3.0 * (Zp2Re * Si14 + Zp2Im * Sr14) + 3.0 * (Zp1Re * dPow2_14_Im + Zp1Im * dPow2_14_Re) + dPow3_14_Im;
+                double SrNew15 = 3.0 * (Zp2Re * Sr15 - Zp2Im * Si15) + 3.0 * (Zp1Re * dPow2_15_Re - Zp1Im * dPow2_15_Im) + dPow3_15_Re;
+                double SiNew15 = 3.0 * (Zp2Re * Si15 + Zp2Im * Sr15) + 3.0 * (Zp1Re * dPow2_15_Im + Zp1Im * dPow2_15_Re) + dPow3_15_Im;
+                double SrNew16 = 3.0 * (Zp2Re * Sr16 - Zp2Im * Si16) + 3.0 * (Zp1Re * dPow2_16_Re - Zp1Im * dPow2_16_Im) + dPow3_16_Re;
+                double SiNew16 = 3.0 * (Zp2Re * Si16 + Zp2Im * Sr16) + 3.0 * (Zp1Re * dPow2_16_Im + Zp1Im * dPow2_16_Re) + dPow3_16_Im;
+                Sr1  = SrNew1;  Si1  = SiNew1;
+                Sr2  = SrNew2;  Si2  = SiNew2;
+                Sr3  = SrNew3;  Si3  = SiNew3;
+                Sr4  = SrNew4;  Si4  = SiNew4;
+                Sr5  = SrNew5;  Si5  = SiNew5;
+                Sr6  = SrNew6;  Si6  = SiNew6;
+                Sr7  = SrNew7;  Si7  = SiNew7;
+                Sr8  = SrNew8;  Si8  = SiNew8;
+                Sr9  = SrNew9;  Si9  = SiNew9;
+                Sr10 = SrNew10; Si10 = SiNew10;
+                Sr11 = SrNew11; Si11 = SiNew11;
+                Sr12 = SrNew12; Si12 = SiNew12;
+                Sr13 = SrNew13; Si13 = SiNew13;
+                Sr14 = SrNew14; Si14 = SiNew14;
+                Sr15 = SrNew15; Si15 = SiNew15;
+                Sr16 = SrNew16; Si16 = SiNew16;
             }
-            saSr[1][n] = Sr1; saSi[1][n] = Si1;
-            saSr[2][n] = Sr2; saSi[2][n] = Si2;
-            saSr[3][n] = Sr3; saSi[3][n] = Si3;
-            saSr[4][n] = Sr4; saSi[4][n] = Si4;
-            saSr[5][n] = Sr5; saSi[5][n] = Si5;
-            saSr[6][n] = Sr6; saSi[6][n] = Si6;
-            saSr[7][n] = Sr7; saSi[7][n] = Si7;
-            saSr[8][n] = Sr8; saSi[8][n] = Si8;
+            saSr[1][n]  = Sr1;  saSi[1][n]  = Si1;
+            saSr[2][n]  = Sr2;  saSi[2][n]  = Si2;
+            saSr[3][n]  = Sr3;  saSi[3][n]  = Si3;
+            saSr[4][n]  = Sr4;  saSi[4][n]  = Si4;
+            saSr[5][n]  = Sr5;  saSi[5][n]  = Si5;
+            saSr[6][n]  = Sr6;  saSi[6][n]  = Si6;
+            saSr[7][n]  = Sr7;  saSi[7][n]  = Si7;
+            saSr[8][n]  = Sr8;  saSi[8][n]  = Si8;
+            saSr[9][n]  = Sr9;  saSi[9][n]  = Si9;
+            saSr[10][n] = Sr10; saSi[10][n] = Si10;
+            saSr[11][n] = Sr11; saSi[11][n] = Si11;
+            saSr[12][n] = Sr12; saSi[12][n] = Si12;
+            saSr[13][n] = Sr13; saSi[13][n] = Si13;
+            saSr[14][n] = Sr14; saSi[14][n] = Si14;
+            saSr[15][n] = Sr15; saSi[15][n] = Si15;
+            saSr[16][n] = Sr16; saSi[16][n] = Si16;
             // Don't skip the last couple of iters — gives the per-pixel
             // δ recurrence a small ramp-in before the BLA / glitch logic
             // sees per-pixel offsets, keeping rounding clean.
@@ -1484,6 +1590,16 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
 
                         // Derivative
                         {
+                            // c at pixel = (ref centre Cr/Ci scalars in outer
+                            // scope) broadcast across the SIMD lanes. Equations
+                            // whose derivative references c (e.g. CondArg over
+                            // a c-containing sub-expression) read Cr_v/Ci_v
+                            // through the AVX-512 deriv emitter's CRef binding.
+                            // Per-lane ε offset isn't added — the perturbation
+                            // δ is in deriv space already; mathematically this
+                            // approximates c ≈ C for the deriv chain.
+                            Vector512<double> Cr_v = Vector512.Create(Cr);
+                            Vector512<double> Ci_v = Vector512.Create(Ci);
                     Vector512<double> dvre1 = Avx512F.Add(zr_v, zr_v);
                     Vector512<double> dvim2 = Avx512F.Add(zi_v, zi_v);
                     Vector512<double> dvre3 = Avx512F.FusedMultiplyAddNegated(dvim2, zi_v, Avx512F.Multiply(dvre1, zr_v));
@@ -1771,6 +1887,11 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
 
                         // Derivative
                         {
+                            // c at pixel = (ref centre Cr/Ci scalars in outer
+                            // scope) broadcast across the AVX-2 lanes. See
+                            // the AVX-512 deriv block above for the rationale.
+                            Vector256<double> Cr_v = Vector256.Create(Cr);
+                            Vector256<double> Ci_v = Vector256.Create(Ci);
                     Vector256<double> dv2re1 = Avx.Add(zr_v, zr_v);
                     Vector256<double> dv2im2 = Avx.Add(zi_v, zi_v);
                     Vector256<double> dv2re3 = Fma.MultiplyAddNegated(dv2im2, zi_v, Avx.Multiply(dv2re1, zr_v));
@@ -1935,33 +2056,57 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                     // we skip. saStart==0 means no SA (loop runs from 0).
                     if (saStart > 0)
                     {
-                        double Sr1 = saSr![1][saStart], Si1 = saSi![1][saStart];
-                        double Sr2 = saSr![2][saStart], Si2 = saSi![2][saStart];
-                        double Sr3 = saSr![3][saStart], Si3 = saSi![3][saStart];
-                        double Sr4 = saSr![4][saStart], Si4 = saSi![4][saStart];
-                        double Sr5 = saSr![5][saStart], Si5 = saSi![5][saStart];
-                        double Sr6 = saSr![6][saStart], Si6 = saSi![6][saStart];
-                        double Sr7 = saSr![7][saStart], Si7 = saSi![7][saStart];
-                        double Sr8 = saSr![8][saStart], Si8 = saSi![8][saStart];
+                        double Sr1  = saSr![1][saStart],  Si1  = saSi![1][saStart];
+                        double Sr2  = saSr![2][saStart],  Si2  = saSi![2][saStart];
+                        double Sr3  = saSr![3][saStart],  Si3  = saSi![3][saStart];
+                        double Sr4  = saSr![4][saStart],  Si4  = saSi![4][saStart];
+                        double Sr5  = saSr![5][saStart],  Si5  = saSi![5][saStart];
+                        double Sr6  = saSr![6][saStart],  Si6  = saSi![6][saStart];
+                        double Sr7  = saSr![7][saStart],  Si7  = saSi![7][saStart];
+                        double Sr8  = saSr![8][saStart],  Si8  = saSi![8][saStart];
+                        double Sr9  = saSr![9][saStart],  Si9  = saSi![9][saStart];
+                        double Sr10 = saSr![10][saStart], Si10 = saSi![10][saStart];
+                        double Sr11 = saSr![11][saStart], Si11 = saSi![11][saStart];
+                        double Sr12 = saSr![12][saStart], Si12 = saSi![12][saStart];
+                        double Sr13 = saSr![13][saStart], Si13 = saSi![13][saStart];
+                        double Sr14 = saSr![14][saStart], Si14 = saSi![14][saStart];
+                        double Sr15 = saSr![15][saStart], Si15 = saSi![15][saStart];
+                        double Sr16 = saSr![16][saStart], Si16 = saSi![16][saStart];
                         // ε^k in real/imag form, k=1..SaOrders (chained
                         // off the previous power to avoid recomputation).
-                        double e1r = er,                 e1i = ei;
-                        double e2r = e1r*e1r - e1i*e1i,  e2i = 2.0*e1r*e1i;
-                        double e3r = e2r*e1r - e2i*e1i,  e3i = e2r*e1i + e2i*e1r;
-                        double e4r = e3r*e1r - e3i*e1i,  e4i = e3r*e1i + e3i*e1r;
-                        double e5r = e4r*e1r - e4i*e1i,  e5i = e4r*e1i + e4i*e1r;
-                        double e6r = e5r*e1r - e5i*e1i,  e6i = e5r*e1i + e5i*e1r;
-                        double e7r = e6r*e1r - e6i*e1i,  e7i = e6r*e1i + e6i*e1r;
-                        double e8r = e7r*e1r - e7i*e1i,  e8i = e7r*e1i + e7i*e1r;
+                        double e1r  = er,                   e1i  = ei;
+                        double e2r  = e1r*e1r - e1i*e1i,    e2i  = 2.0*e1r*e1i;
+                        double e3r  = e2r*e1r - e2i*e1i,    e3i  = e2r*e1i + e2i*e1r;
+                        double e4r  = e3r*e1r - e3i*e1i,    e4i  = e3r*e1i + e3i*e1r;
+                        double e5r  = e4r*e1r - e4i*e1i,    e5i  = e4r*e1i + e4i*e1r;
+                        double e6r  = e5r*e1r - e5i*e1i,    e6i  = e5r*e1i + e5i*e1r;
+                        double e7r  = e6r*e1r - e6i*e1i,    e7i  = e6r*e1i + e6i*e1r;
+                        double e8r  = e7r*e1r - e7i*e1i,    e8i  = e7r*e1i + e7i*e1r;
+                        double e9r  = e8r*e1r - e8i*e1i,    e9i  = e8r*e1i + e8i*e1r;
+                        double e10r = e9r*e1r - e9i*e1i,    e10i = e9r*e1i + e9i*e1r;
+                        double e11r = e10r*e1r - e10i*e1i,  e11i = e10r*e1i + e10i*e1r;
+                        double e12r = e11r*e1r - e11i*e1i,  e12i = e11r*e1i + e11i*e1r;
+                        double e13r = e12r*e1r - e12i*e1i,  e13i = e12r*e1i + e12i*e1r;
+                        double e14r = e13r*e1r - e13i*e1i,  e14i = e13r*e1i + e13i*e1r;
+                        double e15r = e14r*e1r - e14i*e1i,  e15i = e14r*e1i + e14i*e1r;
+                        double e16r = e15r*e1r - e15i*e1i,  e16i = e15r*e1i + e15i*e1r;
                         // δ = Σ S_k · ε^k (complex).
-                        dr = (Sr1*e1r - Si1*e1i) + (Sr2*e2r - Si2*e2i)
-                           + (Sr3*e3r - Si3*e3i) + (Sr4*e4r - Si4*e4i)
-                           + (Sr5*e5r - Si5*e5i) + (Sr6*e6r - Si6*e6i)
-                           + (Sr7*e7r - Si7*e7i) + (Sr8*e8r - Si8*e8i);
-                        di = (Sr1*e1i + Si1*e1r) + (Sr2*e2i + Si2*e2r)
-                           + (Sr3*e3i + Si3*e3r) + (Sr4*e4i + Si4*e4r)
-                           + (Sr5*e5i + Si5*e5r) + (Sr6*e6i + Si6*e6r)
-                           + (Sr7*e7i + Si7*e7r) + (Sr8*e8i + Si8*e8r);
+                        dr = (Sr1*e1r   - Si1*e1i)   + (Sr2*e2r   - Si2*e2i)
+                           + (Sr3*e3r   - Si3*e3i)   + (Sr4*e4r   - Si4*e4i)
+                           + (Sr5*e5r   - Si5*e5i)   + (Sr6*e6r   - Si6*e6i)
+                           + (Sr7*e7r   - Si7*e7i)   + (Sr8*e8r   - Si8*e8i)
+                           + (Sr9*e9r   - Si9*e9i)   + (Sr10*e10r - Si10*e10i)
+                           + (Sr11*e11r - Si11*e11i) + (Sr12*e12r - Si12*e12i)
+                           + (Sr13*e13r - Si13*e13i) + (Sr14*e14r - Si14*e14i)
+                           + (Sr15*e15r - Si15*e15i) + (Sr16*e16r - Si16*e16i);
+                        di = (Sr1*e1i   + Si1*e1r)   + (Sr2*e2i   + Si2*e2r)
+                           + (Sr3*e3i   + Si3*e3r)   + (Sr4*e4i   + Si4*e4r)
+                           + (Sr5*e5i   + Si5*e5r)   + (Sr6*e6i   + Si6*e6r)
+                           + (Sr7*e7i   + Si7*e7r)   + (Sr8*e8i   + Si8*e8r)
+                           + (Sr9*e9i   + Si9*e9r)   + (Sr10*e10i + Si10*e10r)
+                           + (Sr11*e11i + Si11*e11r) + (Sr12*e12i + Si12*e12r)
+                           + (Sr13*e13i + Si13*e13r) + (Sr14*e14i + Si14*e14r)
+                           + (Sr15*e15i + Si15*e15r) + (Sr16*e16i + Si16*e16r);
                         // dz/dc seed at saStart. Since z = Z_ref + δ and
                         // d(Z_ref)/dc = 0 for the pixel's c, dz/dc = dδ/dc.
                         // With ε = c_pixel − c_center (so dε/dc = 1):
@@ -1971,15 +2116,23 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                         // normals across the SA-skipped band are wrong
                         // (typically: DE collapses to zero, ridges flatten).
                         drv = Sr1
-                            + 2.0 * (Sr2*e1r - Si2*e1i) + 3.0 * (Sr3*e2r - Si3*e2i)
-                            + 4.0 * (Sr4*e3r - Si4*e3i) + 5.0 * (Sr5*e4r - Si5*e4i)
-                            + 6.0 * (Sr6*e5r - Si6*e5i) + 7.0 * (Sr7*e6r - Si7*e6i)
-                            + 8.0 * (Sr8*e7r - Si8*e7i);
+                            +  2.0 * (Sr2*e1r   - Si2*e1i)   +  3.0 * (Sr3*e2r   - Si3*e2i)
+                            +  4.0 * (Sr4*e3r   - Si4*e3i)   +  5.0 * (Sr5*e4r   - Si5*e4i)
+                            +  6.0 * (Sr6*e5r   - Si6*e5i)   +  7.0 * (Sr7*e6r   - Si7*e6i)
+                            +  8.0 * (Sr8*e7r   - Si8*e7i)   +  9.0 * (Sr9*e8r   - Si9*e8i)
+                            + 10.0 * (Sr10*e9r  - Si10*e9i)  + 11.0 * (Sr11*e10r - Si11*e10i)
+                            + 12.0 * (Sr12*e11r - Si12*e11i) + 13.0 * (Sr13*e12r - Si13*e12i)
+                            + 14.0 * (Sr14*e13r - Si14*e13i) + 15.0 * (Sr15*e14r - Si15*e14i)
+                            + 16.0 * (Sr16*e15r - Si16*e15i);
                         div = Si1
-                            + 2.0 * (Sr2*e1i + Si2*e1r) + 3.0 * (Sr3*e2i + Si3*e2r)
-                            + 4.0 * (Sr4*e3i + Si4*e3r) + 5.0 * (Sr5*e4i + Si5*e4r)
-                            + 6.0 * (Sr6*e5i + Si6*e5r) + 7.0 * (Sr7*e6i + Si7*e6r)
-                            + 8.0 * (Sr8*e7i + Si8*e7r);
+                            +  2.0 * (Sr2*e1i   + Si2*e1r)   +  3.0 * (Sr3*e2i   + Si3*e2r)
+                            +  4.0 * (Sr4*e3i   + Si4*e3r)   +  5.0 * (Sr5*e4i   + Si5*e4r)
+                            +  6.0 * (Sr6*e5i   + Si6*e5r)   +  7.0 * (Sr7*e6i   + Si7*e6r)
+                            +  8.0 * (Sr8*e7i   + Si8*e7r)   +  9.0 * (Sr9*e8i   + Si9*e8r)
+                            + 10.0 * (Sr10*e9i  + Si10*e9r)  + 11.0 * (Sr11*e10i + Si11*e10r)
+                            + 12.0 * (Sr12*e11i + Si12*e11r) + 13.0 * (Sr13*e12i + Si13*e12r)
+                            + 14.0 * (Sr14*e13i + Si14*e13r) + 15.0 * (Sr15*e14i + Si15*e14r)
+                            + 16.0 * (Sr16*e15i + Si16*e15r);
                         it = saStart;
                     }
                     double glitchTolLocal = PerturbGlitchTolerance;
@@ -2558,6 +2711,14 @@ public sealed class MandelbrotZ3Calculator : IFractalCalculator, IDisposable
                 goto rebDone;
             }
             {
+                // Per-pixel c = ref-orbit centre. TryIterateRebasePixel
+                // doesn't carry the rebase centre into scope; declare 0
+                // so the emitted Cr/Ci references compile. Equations
+                // whose derivative actually depends on c approximate the
+                // derivative chain through c≈0 inside the rebase path —
+                // for polynomial-derivative-of-c-independent equations
+                // this is exact (the references aren't emitted at all).
+                double Cr = 0.0, Ci = 0.0;
                     double drv_new = (((((zr + zr) * zr - (zi + zi) * zi) + (zr * zr - zi * zi)) * drv - (((zr + zr) * zi + (zi + zi) * zr) + (zr * zi + zi * zr)) * div) + 1.0);
                     double div_new = ((((zr + zr) * zr - (zi + zi) * zi) + (zr * zr - zi * zi)) * div + (((zr + zr) * zi + (zi + zi) * zr) + (zr * zi + zi * zr)) * drv);
                 drv = drv_new; div = div_new;

@@ -117,6 +117,8 @@
     <Compile Remove="Hosting\HostHelpContentProvider.cs" />
     <Compile Remove="Hosting\ColorThemeDefAdapter.cs" />
     <Compile Remove="Hosting\PngSlideshowFrameRecorder.cs" />
+    <!-- Wave 1.C1 — FfmpegSetupDialog moved into FracturingFog.Hosting.dll. -->
+    <Compile Remove="Hosting\FfmpegSetupDialog.cs" />
     <!--
       Phase X.0 / Slice 0.2 — Audio files now owned by FracturingFog.Audio
       (temporary net10.0-windows TFM until Phase X.B introduces the backend
