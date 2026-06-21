@@ -99,7 +99,7 @@ audio-reactive dialog without crash.
 | 2.7 | D-5.21 — TAA temporal accumulation | ✅ Shipped 2026-06-21 |
 | 2.8 | D-6.23 — Equation cookbook + gallery | ✅ Shipped 2026-06-21 |
 | 2.9 | D-6.25 — Animation: morph equations | ✅ Shipped 2026-06-21 |
-| 2.10 | D-4.18 — DD-precision BLA tables | 3 d |
+| 2.10 | D-4.18 — DD-precision BLA tables | ✅ Shipped 2026-06-21 |
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | 5+ d |
 | 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 5+ d |
 | 2.13 | D-7.29 — Roslyn source generator | 1 wk |
@@ -321,6 +321,34 @@ Convergence after Wave 1:
     extending to alt calcs needs each one's `Center{X,Y}` plumbed the same
     way — deferred follow-on.
   * Build clean (0 errors, 4 pre-existing AVLN5001 Watermark warnings).
+- 2026-06-21 — Wave 2.10 (D-4.18) shipped — DD-precision BLA tables.
+  * `Engine/Math/Bla.cs` — `Bla` struct now stores A, B as double-double
+    pairs (`AReHi/AReLo, AImHi/AImLo, BReHi/BReLo, BImHi/BImLo`). Public
+    `ARe / AIm / BRe / BIm` properties return `Hi + Lo` collapsed, so all
+    11 apply sites (SIMD broadcasts + scalar reads) work unchanged — one
+    add per skip, negligible vs the merge-precision win.
+  * New `BlaTable(refZr, refZrLo, refZi, refZiLo, refLen, dcMaxAbs)`
+    constructor seeds level-0 from the DD reference orbit: `A = 2·Z`
+    with `A.Lo = 2·refZLo` (multiply by 2 is exact in FP, so Lo
+    carries through unchanged), `B = 1` exactly. Merge math
+    (`MergeDd`) runs in DD throughout using `TwoSum`/`TwoProduct`
+    primitives mirroring `Abstractions/Math/DoubleDouble.cs` — complex
+    DD × DD for `A_m = A2·A1` and `B_m = A2·B1 + B2`. Validity radius
+    uses collapsed magnitudes (radius precision not load-bearing).
+  * Legacy single-precision ctor still emits `Lo=0` for all limbs; the
+    generic `BlaTable(Bla[] level0, …)` overload picks the
+    single-precision merge path (`MergeDouble`) so generated calcs are
+    bit-identical to pre-2.10. New `DdPrecision` flag exposes which
+    merge ran for the diagnostic log (`BLA-DD:` vs `BLA:`).
+  * `MandelbrotCalculator.EnsureBlaTable` always picks the DD ctor when
+    in the HP path — `_refZrLo / _refZiLo` are populated unconditionally
+    (DD low limb for Zoom ≤ 1e25, QD X1 limb for Zoom > 1e25) so DD-BLA
+    fires across the entire perturbation regime, not just near the
+    QD threshold.
+  * Smoke: `--saprobe` deep-zoom histogram at z=1.08e12…1e16 — distinct
+    colour counts stable, legacy calc tracks generated `MandelbrotZ2`
+    within ~5%, no iteration banding or solid-blob collapse.
+  * Build clean (0 errors).
 - 2026-06-21 — Wave 2.9 (D-6.25) shipped — Animation: morph equations.
   * `UI.Avalonia/ViewModels/EquationMorph.cs` — synth helper. Wraps two DSL
     sources A and B into `(1-t)*(A) + t*(B)` with `t` baked as a numeric

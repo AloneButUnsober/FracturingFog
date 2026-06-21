@@ -1518,7 +1518,8 @@ public sealed class MandelbrotCalculator
 
         if (_blaTable != null)
             Debug.WriteLine(
-                $"BLA: {_blaSkipsTotal:N0} skips, {_blaIterSkippedTotal:N0} iter saved " +
+                $"BLA{(_blaTable.DdPrecision ? "-DD" : "")}: {_blaSkipsTotal:N0} skips, " +
+                $"{_blaIterSkippedTotal:N0} iter saved " +
                 $"(avg {(_blaSkipsTotal == 0 ? 0 : _blaIterSkippedTotal / (double)_blaSkipsTotal):F1}/skip), " +
                 $"refLen={_refOrbitLen}, levels={_blaTable.Levels}, dcMax={dcMaxAbs:E2}");
 
@@ -1566,7 +1567,13 @@ public sealed class MandelbrotCalculator
         if (!refChanged && _blaTable != null && dcDrift < 0.05) return;
 
         if (_refOrbitLen < 4) { _blaTable = null; return; }
-        _blaTable = new BlaTable(_refZr, _refZi, _refOrbitLen, dcMaxAbs);
+        // Wave 2.10 — DD-precision BLA tables. HP path always populates
+        // _refZrLo/_refZiLo (DD low limb when Zoom ≤ 1e25, QD X1 limb when
+        // Zoom > 1e25). Feed them into the DD merge so chains of 2^k step
+        // merges retain DD precision in A_n (near 1.0 + tiny at deep zoom
+        // — single-precision storage loses ULPs after k≈14 merge levels,
+        // visible as iteration banding past ~1e15).
+        _blaTable = new BlaTable(_refZr, _refZrLo, _refZi, _refZiLo, _refOrbitLen, dcMaxAbs);
         _blaDcMaxAbs = dcMaxAbs;
         _blaForRefMaxIter = _refCachedMaxIter;
         _blaForRefOrbitLen = _refOrbitLen;
