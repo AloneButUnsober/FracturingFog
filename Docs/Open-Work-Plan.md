@@ -96,8 +96,8 @@ audio-reactive dialog without crash.
 | 2.4 | D-6.24 — Live equation preview (AST + dz/dc + SA flag as user types) | ✅ Shipped 2026-06-21 |
 | 2.5 | D-5.20 — Progressive rendering ¼→½→full | 2 d |
 | 2.6 | D-5.19 — Anti-aliasing 2×2/4×4 (Quality gate) | 1 d |
-| 2.7 | D-5.21 — TAA temporal accumulation | 3-4 d |
-| 2.8 | D-6.23 — Equation cookbook + gallery | 2 d |
+| 2.7 | D-5.21 — TAA temporal accumulation | ✅ Shipped 2026-06-21 |
+| 2.8 | D-6.23 — Equation cookbook + gallery | ✅ Shipped 2026-06-21 |
 | 2.9 | D-6.25 — Animation: morph equations | 2 d |
 | 2.10 | D-4.18 — DD-precision BLA tables | 3 d |
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | 5+ d |
@@ -298,6 +298,52 @@ Convergence after Wave 1:
     still says "DO NOT HAND-EDIT — copy + rename for divergent math".
     Future Roslyn-source-gen path (Wave 2.13) will regenerate it
     correctly once the emitter handles prev-z as a function of c.
+- 2026-06-21 — Wave 2.7 (D-5.21) shipped — TAA temporal accumulation.
+  * `QualityPreset.TaaMaxSamples` field — 1 = off (Draft/Standard), 8 (High),
+    16 (Ultra), 32 (Extreme). Caps total accumulated samples per still-camera
+    spell so the loop terminates.
+  * `FractalRenderHost` carries per-pixel R/G/B/A `long[]` accumulator + view
+    fingerprint (Cx/Cy/Zoom/Iter/Width/Height/FractalType). First frame of a
+    given view seeds the accumulator from the freshly-computed (and
+    optionally MSAA-averaged) `ColorBuffer`. After each upload, if the
+    fingerprint still matches and count < TaaMaxSamples, the host enqueues a
+    new `FrameJob` with `TaaSampleIndex > 0`. The calc thread branches: jitter
+    `Center{X,Y}` by Halton(2,3) sub-pixel, `Calculate()`, restore Center,
+    blend the new colors into the sums, average → `ColorBuffer`, hand off to
+    the standard upload path. Brightness/contrast + grid/watermark composite
+    still apply to the averaged buffer.
+  * `Resize` drops the accumulator (sized for old buffers). View changes
+    self-invalidate via the fingerprint check; any user `Trigger()` drains
+    the bounded(1) calc queue, so a queued TAA continuation gets replaced by
+    the fresh frame before it runs.
+  * Bypassed when `useAlt` is set (Burning Ship / Tricorn / user-equation hot
+    load all run alt calcs). Only the canonical Mandelbrot path gets TAA;
+    extending to alt calcs needs each one's `Center{X,Y}` plumbed the same
+    way — deferred follow-on.
+  * Build clean (0 errors, 4 pre-existing AVLN5001 Watermark warnings).
+- 2026-06-21 — Wave 2.8 (D-6.23) shipped — Equation cookbook + gallery.
+  * `UI.Avalonia/ViewModels/EquationCookbook.cs` — 14 curated `CookbookEntry`
+    rows: Mandelbrot z²/z³/z⁴/z⁵, Tricorn, Burning Ship, Phoenix, Sin / Cos /
+    Exp Mandelbrot, Lambda (Logistic), Newton z³−1, Magnet 1, mixed
+    quadratic. Each carries a hand-tuned (centre, zoom) framing.
+  * `CookbookViewModel` + `CookbookView.axaml` — modeless picker dialog. Left
+    column lists entries by name; right column shows DSL source + centre/zoom
+    + description. Enter / "Use this equation" accepts; Escape / Cancel
+    closes. Selection-driven properties (`SelectedName` / `SelectedDescription`
+    / `SelectedSourceDisplay` / `SelectedCentreDisplay`) keep XAML bindings
+    off the nullable struct, which Avalonia x:DataType doesn't traverse.
+  * `UserEquationViewModel` — `OpenCookbookCommand` + `CookbookRequested`
+    event opens the picker; `ApplyCookbookEntry(entry)` writes the source
+    into `DslSource`, snaps to the DSL tab, and fires
+    `CookbookCentreRequested(cx, cy, zoom)` so the host re-centres the view.
+    Editor preview panel picks up the new source via the existing
+    DSL-validate path (no new wiring).
+  * `AvaloniaShellBootstrap.OpenUserEquationEditor` — wires both events; the
+    cookbook window is shown modeless as a child of the equation editor, and
+    `CookbookCentreRequested` writes `ViewState.{CenterX,CenterY,Zoom}` then
+    calls `Trigger()`.
+  * `UserEquationView.axaml` — new "Cookbook…" button in the action row.
+  * Build clean (0 errors).
 - 2026-06-21 — Wave 2.4 (D-6.24) shipped — Live equation preview.
   * New `CalculatorGenApi.Preview(equation) → PreviewResult` returns the
     parsed AST in printed form (`AstPrinter.Print`), symbolic `dz/dc` and
