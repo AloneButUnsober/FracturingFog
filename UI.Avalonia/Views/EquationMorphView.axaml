@@ -1,0 +1,154 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.EquationMorphView"
+        x:DataType="vm:EquationMorphViewModel"
+        Title="Equation Morph"
+        Width="760"
+        Height="600"
+        MinWidth="560"
+        MinHeight="460"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#1C1C1C"
+        Foreground="#DCDCDC">
+
+    <Grid Margin="12" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+
+        <TextBlock Grid.Row="0"
+                   Text="Renders an N-frame PNG sequence of (1-t)·A + t·B as t sweeps 0 → 1. SA is implicitly off (equation changes per frame)."
+                   Foreground="#B4B4B4"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8" />
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,*">
+            <TextBlock Grid.Row="0" Grid.Column="0"
+                       Text="Equation A"
+                       FontWeight="Bold"
+                       Foreground="#FFFFFF"
+                       Margin="0,0,6,4" />
+            <TextBlock Grid.Row="0" Grid.Column="1"
+                       Text="Equation B"
+                       FontWeight="Bold"
+                       Foreground="#FFFFFF"
+                       Margin="6,0,0,4" />
+
+            <ComboBox Grid.Row="1" Grid.Column="0"
+                      ItemsSource="{Binding Cookbook}"
+                      SelectedItem="{Binding EntryA, Mode=TwoWay}"
+                      Background="#161616"
+                      Foreground="#DCDCDC"
+                      Margin="0,0,6,6">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="vm:CookbookEntry">
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <ComboBox Grid.Row="1" Grid.Column="1"
+                      ItemsSource="{Binding Cookbook}"
+                      SelectedItem="{Binding EntryB, Mode=TwoWay}"
+                      Background="#161616"
+                      Foreground="#DCDCDC"
+                      Margin="6,0,0,6">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="vm:CookbookEntry">
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <TextBox Grid.Row="2" Grid.Column="0"
+                     Text="{Binding DslSourceA, Mode=TwoWay}"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     FontFamily="Consolas, monospace"
+                     FontSize="13"
+                     Background="#101010"
+                     Foreground="#FFD080"
+                     Margin="0,0,6,0" />
+
+            <TextBox Grid.Row="2" Grid.Column="1"
+                     Text="{Binding DslSourceB, Mode=TwoWay}"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     FontFamily="Consolas, monospace"
+                     FontSize="13"
+                     Background="#101010"
+                     Foreground="#FFD080"
+                     Margin="6,0,0,0" />
+        </Grid>
+
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,80,Auto,*,Auto" Margin="0,10,0,0">
+            <TextBlock Grid.Column="0"
+                       Text="Frames:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,6,0" />
+            <NumericUpDown Grid.Column="1"
+                           Value="{Binding FrameCount, Mode=TwoWay}"
+                           Minimum="2"
+                           Maximum="600"
+                           Increment="1"
+                           FormatString="0"
+                           Background="#161616"
+                           Foreground="#DCDCDC" />
+            <TextBlock Grid.Column="2"
+                       Text="Output dir:"
+                       VerticalAlignment="Center"
+                       Margin="14,0,6,0" />
+            <TextBox Grid.Column="3"
+                     Text="{Binding OutputDir, Mode=TwoWay}"
+                     Background="#161616"
+                     Foreground="#DCDCDC"
+                     VerticalContentAlignment="Center" />
+            <Button Grid.Column="4"
+                    Content="Browse…"
+                    Command="{Binding BrowseOutputCommand}"
+                    Padding="10,4"
+                    Margin="6,0,0,0" />
+        </Grid>
+
+        <ProgressBar Grid.Row="3"
+                     Value="{Binding ProgressFrame}"
+                     Maximum="{Binding FrameCount}"
+                     Height="6"
+                     Margin="0,10,0,0" />
+
+        <TextBlock Grid.Row="4"
+                   Text="{Binding StatusText}"
+                   Margin="0,8,0,0"
+                   TextWrapping="Wrap">
+            <TextBlock.Styles>
+                <Style Selector="TextBlock">
+                    <Setter Property="Foreground" Value="#80E080" />
+                </Style>
+            </TextBlock.Styles>
+        </TextBlock>
+
+        <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,10,0,0">
+            <TextBlock Grid.Column="0"
+                       Text="Saves morph_0000.png … morph_NNNN.png. Use ffmpeg / OBS to assemble into MP4 / GIF."
+                       Foreground="#808080"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="Start"
+                    Command="{Binding StartCommand}"
+                    IsEnabled="{Binding NotRunning}"
+                    FontWeight="Bold"
+                    Padding="14,4"
+                    Margin="0,0,6,0" />
+            <Button Grid.Column="2"
+                    Content="Stop"
+                    Command="{Binding StopCommand}"
+                    IsEnabled="{Binding Running}"
+                    Padding="14,4"
+                    Margin="0,0,6,0" />
+            <Button Grid.Column="3"
+                    Content="Close"
+                    Command="{Binding CloseCommand}"
+                    Padding="14,4" />
+        </Grid>
+
+    </Grid>
+</Window>

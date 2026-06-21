@@ -98,7 +98,7 @@ audio-reactive dialog without crash.
 | 2.6 | D-5.19 — Anti-aliasing 2×2/4×4 (Quality gate) | 1 d |
 | 2.7 | D-5.21 — TAA temporal accumulation | ✅ Shipped 2026-06-21 |
 | 2.8 | D-6.23 — Equation cookbook + gallery | ✅ Shipped 2026-06-21 |
-| 2.9 | D-6.25 — Animation: morph equations | 2 d |
+| 2.9 | D-6.25 — Animation: morph equations | ✅ Shipped 2026-06-21 |
 | 2.10 | D-4.18 — DD-precision BLA tables | 3 d |
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | 5+ d |
 | 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 5+ d |
@@ -321,6 +321,36 @@ Convergence after Wave 1:
     extending to alt calcs needs each one's `Center{X,Y}` plumbed the same
     way — deferred follow-on.
   * Build clean (0 errors, 4 pre-existing AVLN5001 Watermark warnings).
+- 2026-06-21 — Wave 2.9 (D-6.25) shipped — Animation: morph equations.
+  * `UI.Avalonia/ViewModels/EquationMorph.cs` — synth helper. Wraps two DSL
+    sources A and B into `(1-t)*(A) + t*(B)` with `t` baked as a numeric
+    literal. Endpoint shortcut (`t=0` → A verbatim, `t=1` → B verbatim) skips
+    the wrap-around so the parser never sees `0.0 * (foo)` noise. Validate
+    helper parses A, B, and the mid-morph string (defensive — catches the rare
+    case where both sides parse but the wrap trips a limit).
+  * `UI.Avalonia/ViewModels/EquationMorphViewModel.cs` + `Views/EquationMorphView.axaml` —
+    modeless dialog. Two cookbook combos populate A + B (also free-edit
+    TextBox), `FrameCount` (default 60, clamp 2..600), `OutputDir` (defaults
+    to `%PICTURES%/FracturingFog/Morph`). Start/Stop + progress bar +
+    cancellation. VM drives the loop; per-frame work delegated to host via
+    `RenderAndSaveRequested(synth, outPath, ct) → Task<string?>` event.
+  * `Hosting/AvaloniaShellBootstrap` — wires `MorphRequested` to open
+    `EquationMorphView` modeless under the UE editor. `RenderAndSaveRequested`
+    handler hot-compiles the synth DSL via `CalculatorGenHotLoad.TryCompileAndLoad`,
+    installs the result via `SetDynamicAltCalculator` (which triggers a
+    render internally), subscribes a one-shot `AnimationFrameUploaded`
+    handler to await upload (30 s timeout per frame), then calls
+    `SaveLastFrameToPng(outPath)`. Output sequence is `morph_0000.png` …
+    `morph_NNNN.png`; user assembles into MP4/GIF with ffmpeg/OBS.
+  * `UserEquationViewModel` — `OpenMorphCommand` + `MorphRequested` event.
+  * `UserEquationView.axaml` — new "Morph…" button in the action row, between
+    "Cookbook…" and "Compile & Load".
+  * SA is implicitly off across the sweep — the cross term `(1-t)*(A) + t*(B)`
+    almost always trips at least one of CalcGen's SA gates (conj/sin/fold/div
+    etc.) once either A or B contains a non-polynomial op, and the polynomial
+    structure changes per frame anyway. Spec calls this out as required;
+    enforcement falls out of existing gating.
+  * Build clean (0 errors).
 - 2026-06-21 — Wave 2.8 (D-6.23) shipped — Equation cookbook + gallery.
   * `UI.Avalonia/ViewModels/EquationCookbook.cs` — 14 curated `CookbookEntry`
     rows: Mandelbrot z²/z³/z⁴/z⁵, Tricorn, Burning Ship, Phoenix, Sin / Cos /

@@ -99,6 +99,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             HelpRequested?.Invoke("Technical/FractalEquation-DesignGuide.md", null,
                                   "Fractal Equation Design Guide"));
         OpenCookbookCommand = ReactiveCommand.Create(OnOpenCookbook);
+        OpenMorphCommand = ReactiveCommand.Create(OnOpenMorph);
 
         _params.UserEquationSource = _source;
         _params.UserEquationDslSource = _dslSource;
@@ -407,6 +408,8 @@ public sealed class UserEquationViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> OpenEquationGuideCommand { get; }
     /// <summary>Wave 2.8 — open the equation cookbook dialog.</summary>
     public ReactiveCommand<Unit, Unit> OpenCookbookCommand { get; private set; } = null!;
+    /// <summary>Wave 2.9 — open the equation morph dialog.</summary>
+    public ReactiveCommand<Unit, Unit> OpenMorphCommand { get; private set; } = null!;
 
     /// <summary>Host opens an in-app help viewer. Args: (docId, anchor, title).
     /// docId is a filename inside the embedded Docs/ resource folder.
@@ -442,6 +445,11 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// The dialog calls back into <see cref="ApplyCookbookEntry"/> on accept;
     /// cancel is a no-op.</summary>
     public event Action? CookbookRequested;
+
+    /// <summary>Wave 2.9 — host opens the equation-morph dialog (modeless).
+    /// Dialog owns its own render loop via its own RenderAndSaveRequested
+    /// delegate; this VM just kicks the window open.</summary>
+    public event Action? MorphRequested;
 
     /// <summary>Wave 2.8 — host applies (centre X, centre Y, zoom) from the
     /// accepted cookbook entry to the active view. Editor source is mutated
@@ -719,6 +727,14 @@ public sealed class UserEquationViewModel : ViewModelBase
     private void OnOpenCookbook()
     {
         CookbookRequested?.Invoke();
+    }
+
+    // ── Morph (Wave 2.9 / D-6.25) ────────────────────────────────────────
+    // Opens the morph dialog modeless. Dialog handles its own loop —
+    // VM just routes the open request.
+    private void OnOpenMorph()
+    {
+        MorphRequested?.Invoke();
     }
 
     // ── CalcGen pipeline ─────────────────────────────────────────────────

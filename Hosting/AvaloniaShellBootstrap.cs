@@ -1544,6 +1544,100 @@ namespace FracturingFog.Hosting
                 s_renderHost.Trigger();
             };
 
+            // Wave 2.9 — Equation morph. Opens the morph dialog modeless. The
+            // dialog's per-frame loop calls RenderAndSaveRequested which:
+            //   (a) hot-compiles the synth DSL via CalcGenHotLoad
+            //   (b) installs it as the dynamic alt calculator
+            //   (c) Trigger()s a render and awaits AnimationFrameUploaded
+            //   (d) saves the resulting BGRA buffer to PNG.
+            // Per-frame Roslyn compile is slow but acceptable for offline use.
+            vm.MorphRequested += () =>
+            {
+                var morphVm = new EquationMorphViewModel();
+                morphVm.RenderAndSaveRequested += async (synth, outPath, ct) =>
+                {
+                    if (s_renderHost == null) return "Render host not initialised.";
+                    try
+                    {
+                        var compiled = FracturingFog.CalculatorGen.CalculatorGenHotLoad
+                            .TryCompileAndLoad(synth, "Morph");
+                        if (!compiled.Ok) return compiled.Error ?? "Compile failed.";
+                        int w = s_renderHost.Mandelbrot.Width;
+                        int h = s_renderHost.Mandelbrot.Height;
+                        var calc = (FracturingFog.Interefaces.IFractalCalculator?)
+                            Activator.CreateInstance(compiled.CalculatorType!, w, h);
+                        if (calc == null) return "Activator returned null.";
+
+                        var tcs = new TaskCompletionSource();
+                        EventHandler? handler = null;
+                        handler = (_, _) =>
+                        {
+                            s_renderHost!.AnimationFrameUploaded -= handler;
+                            tcs.TrySetResult();
+                        };
+                        s_renderHost.AnimationFrameUploaded += handler;
+                        s_renderHost.SetDynamicAltCalculator(calc);
+                        // SetDynamicAltCalculator already fires Trigger; no extra call needed.
+
+                        var timeout = Task.Delay(30_000, ct);
+                        // Stay on UI sync ctx — VM resumes after await and
+                        // mutates reactive props which Avalonia bindings
+                        // require to be touched on the dispatcher.
+                        var done = await Task.WhenAny(tcs.Task, timeout);
+                        if (done == timeout)
+                        {
+                            s_renderHost.AnimationFrameUploaded -= handler;
+                            return "Frame timed out (30 s).";
+                        }
+                        if (ct.IsCancellationRequested) return null;
+
+                        s_renderHost.SaveLastFrameToPng(outPath);
+                        return null;
+                    }
+                    catch (Exception ex)
+                    {
+                        return $"{ex.GetType().Name}: {ex.Message}";
+                    }
+                };
+                morphVm.BrowseFolderRequested += current =>
+                {
+                    string? picked = null;
+                    var task = AvaloniaDialogs.PickFolderAsync("Choose morph output directory");
+                    // PickFolderAsync runs the picker on the UI thread; this lambda
+                    // runs from a Reactive command on the UI thread too. .Wait is
+                    // safe here because AvaloniaDialogs marshals onto the dispatcher
+                    // continuation pool, not the calling sync ctx.
+                    try { picked = task.GetAwaiter().GetResult(); }
+                    catch { picked = null; }
+                    return picked;
+                };
+
+                // Defer ALC unloads while morph is active — per-frame compile
+                // would otherwise unload the previous context while the host
+                // still references the calc instance via _dynamicAltCalculator,
+                // racing with AnimationTick / queued render jobs and crashing
+                // the process. Flush on close once we've cleared the alt slot.
+                FracturingFog.CalculatorGen.CalculatorGenHotLoad.KeepContexts = true;
+
+                var morphWin = new EquationMorphView { DataContext = morphVm };
+                morphWin.Closed += (_, _) =>
+                {
+                    try { s_renderHost?.SetDynamicAltCalculator(null); }
+                    catch { }
+                    FracturingFog.CalculatorGen.CalculatorGenHotLoad.KeepContexts = false;
+                    // Defer flush a beat so any in-flight render finishes
+                    // reading the just-cleared alt slot before we unload
+                    // its assembly.
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        try { FracturingFog.CalculatorGen.CalculatorGenHotLoad.FlushKeptContexts(); }
+                        catch { }
+                    }, DispatcherPriority.Background);
+                };
+                if (s_userEqWin != null) morphWin.Show(s_userEqWin);
+                else ShowEditor(morphWin);
+            };
+
             // Wave 2.3 — Persist + Hot-Load.
             vm.HotLoadAndPersistRequested += (eq, baseName) =>
             {

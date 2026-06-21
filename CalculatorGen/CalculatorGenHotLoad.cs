@@ -41,6 +41,19 @@ public readonly record struct HotLoadResult(
 public static class CalculatorGenHotLoad
 {
     private static AssemblyLoadContext? _lastContext;
+    // Wave 2.9 — morph runner needs to compile a fresh calculator per frame
+    // for an extended sweep (~60 calls). Default behaviour unloads the
+    // previous context on every TryCompileAndLoad which races with the
+    // render host: between the unload call and the caller's
+    // SetDynamicAltCalculator(new) install, the host still references the
+    // calc instance from the about-to-die context. A background
+    // AnimationTick on the render thread that fires during that window
+    // dereferences metadata mid-unload and crashes the process. While
+    // KeepContexts is true, all compiled contexts are retained until it
+    // flips back to false; FlushKeptContexts then unloads them in one
+    // batch when the caller can guarantee no live references remain.
+    public static bool KeepContexts { get; set; }
+    private static readonly List<AssemblyLoadContext> _keptContexts = new();
     // Cache: (equation|name) → previously-loaded Type. Re-typing the
     // same equation in the UserEquation editor and clicking "Compile &
     // Load" repeatedly should be free — skip Roslyn entirely when the
@@ -95,7 +108,13 @@ public static class CalculatorGenHotLoad
         // Unload the previous context to free the prior assembly's
         // memory. The cache holds Type references for fast re-load —
         // entries pointing at unloaded contexts get invalidated here.
-        if (_lastContext != null)
+        // Skipped while KeepContexts is true (Wave 2.9 morph) — the
+        // caller will flush via FlushKeptContexts when safe.
+        if (KeepContexts)
+        {
+            if (_lastContext != null) _keptContexts.Add(_lastContext);
+        }
+        else if (_lastContext != null)
         {
             var stale = _lastContext;
             // Drop cache entries from the dying context so a future
@@ -126,6 +145,34 @@ public static class CalculatorGenHotLoad
     {
         _lastContext?.Unload();
         _lastContext = null;
+    }
+
+    /// <summary>Unload all contexts retained while <see cref="KeepContexts"/>
+    /// was true. Caller must have dropped every live reference to types from
+    /// those contexts before calling — for the morph runner that means the
+    /// render host's dynamic alt slot has been cleared. Best-effort: an
+    /// individual unload that throws is logged and skipped so the rest of
+    /// the queue still flushes.</summary>
+    public static void FlushKeptContexts()
+    {
+        foreach (var stale in _keptContexts)
+        {
+            try
+            {
+                var staleKeys = new System.Collections.Generic.List<string>();
+                foreach (var kv in _cache)
+                    if (kv.Value.Assembly.GetName().Name?.StartsWith(stale.Name ?? "") ?? false)
+                        staleKeys.Add(kv.Key);
+                foreach (var k in staleKeys) _cache.Remove(k);
+                stale.Unload();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"FlushKeptContexts: unload failed: {ex.Message}");
+            }
+        }
+        _keptContexts.Clear();
     }
 
     // ── Phase D-6 / item 26 — permanent persist + auto-reload (Wave 2.3) ────
