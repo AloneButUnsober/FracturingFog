@@ -98,6 +98,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         OpenEquationGuideCommand = ReactiveCommand.Create(() =>
             HelpRequested?.Invoke("Technical/FractalEquation-DesignGuide.md", null,
                                   "Fractal Equation Design Guide"));
+        OpenCookbookCommand = ReactiveCommand.Create(OnOpenCookbook);
 
         _params.UserEquationSource = _source;
         _params.UserEquationDslSource = _dslSource;
@@ -404,6 +405,8 @@ public sealed class UserEquationViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> OpenDslHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCalcGenHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenEquationGuideCommand { get; }
+    /// <summary>Wave 2.8 — open the equation cookbook dialog.</summary>
+    public ReactiveCommand<Unit, Unit> OpenCookbookCommand { get; private set; } = null!;
 
     /// <summary>Host opens an in-app help viewer. Args: (docId, anchor, title).
     /// docId is a filename inside the embedded Docs/ resource folder.
@@ -434,6 +437,29 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// is the on-disk source path even on compile failure so the editor can
     /// surface where the .cs landed.</summary>
     public event Func<string, string, (string? error, string? savedPath)>? HotLoadAndPersistRequested;
+
+    /// <summary>Wave 2.8 — host opens the cookbook picker dialog (modeless).
+    /// The dialog calls back into <see cref="ApplyCookbookEntry"/> on accept;
+    /// cancel is a no-op.</summary>
+    public event Action? CookbookRequested;
+
+    /// <summary>Wave 2.8 — host applies (centre X, centre Y, zoom) from the
+    /// accepted cookbook entry to the active view. Editor source is mutated
+    /// directly via DslSource so the existing tab-switch + validate path
+    /// handles the visual update.</summary>
+    public event Action<double, double, double>? CookbookCentreRequested;
+
+    /// <summary>Wave 2.8 — host calls this on accept (from the cookbook
+    /// dialog). Replaces DSL editor source, snaps to the DSL tab, and asks
+    /// the host to re-centre.</summary>
+    public void ApplyCookbookEntry(CookbookEntry entry)
+    {
+        DslSource = entry.DslSource;
+        ActiveTabIndex = 1;
+        CookbookCentreRequested?.Invoke(entry.CenterX, entry.CenterY, entry.Zoom);
+        StatusText = $"Loaded \"{entry.Name}\" from cookbook.";
+        StatusIsError = false;
+    }
 
     /// <summary>Force an immediate compile (cancel pending debounce).
     /// Only meaningful on the User Equation tab — DSL tab does not feed
@@ -685,6 +711,14 @@ public sealed class UserEquationViewModel : ViewModelBase
 
         _params.UserEquationName = entry.Name;
         RefreshSavedList(entry.Name);
+    }
+
+    // ── Cookbook (Wave 2.8 / D-6.23) ─────────────────────────────────────
+    // Opens the picker dialog modeless. The dialog calls
+    // <see cref="ApplyCookbookEntry"/> on accept; cancel is a no-op.
+    private void OnOpenCookbook()
+    {
+        CookbookRequested?.Invoke();
     }
 
     // ── CalcGen pipeline ─────────────────────────────────────────────────

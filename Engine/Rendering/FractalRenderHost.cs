@@ -190,6 +190,29 @@ namespace FracturingFog.Rendering
         // status bar stays "Calculating…" forever.
         private int _animFrameInFlight;
 
+        // Wave 2.7 — TAA accumulator state.
+        //
+        // _taaSumR/G/B/A hold per-pixel channel sums across all samples
+        // (sample 0 = original ColorBuffer + any MSAA jitter, sample N>0 =
+        // additional Halton-jittered Calculate runs). _taaSampleCount is the
+        // number of samples folded in; the per-frame display value is
+        // sum/count rounded to byte. _taaFp* captures the view fingerprint
+        // (centre / zoom / iter cap / fractal type) we accumulated against —
+        // any change invalidates the accumulator. Touched only from the
+        // calc thread + the upload threadpool callback (which never overlap
+        // on a single FrameJob, so no lock is needed beyond visibility).
+        private long[]? _taaSumR;
+        private long[]? _taaSumG;
+        private long[]? _taaSumB;
+        private long[]? _taaSumA;
+        private int _taaSumPixels;
+        private int _taaSampleCount;
+        private double _taaFpCx, _taaFpCy, _taaFpZoom;
+        private int _taaFpIter;
+        private int _taaFpW, _taaFpH;
+        private FractalType _taaFpType;
+        private bool _taaValid;
+
         private readonly struct FrameJob
         {
             public readonly CancellationToken Token;
@@ -201,14 +224,21 @@ namespace FracturingFog.Rendering
             public readonly int StaleH;
             public readonly int CalcW;
             public readonly int CalcH;
+            // Wave 2.7 — TAA continuation marker. 0 = normal first frame
+            // (stale upload + Calculate + optional MSAA). >0 = jittered TAA
+            // sample N (skip stale-upload + MSAA; blend into the TAA
+            // accumulator and present the running average).
+            public readonly int TaaSampleIndex;
 
             public FrameJob(CancellationToken token, MandelbrotCalculator calc,
                 IFractalCalculator? altCalc, Stopwatch sw,
-                uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH)
+                uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH,
+                int taaSampleIndex = 0)
             {
                 Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
                 StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
                 CalcW = calcW; CalcH = calcH;
+                TaaSampleIndex = taaSampleIndex;
             }
         }
 
@@ -856,6 +886,43 @@ namespace FracturingFog.Rendering
             var altCalc = job.AltCalc;
             bool useAlt = altCalc != null;
 
+            // Wave 2.7 — TAA continuation frame. Skips stale-upload, MSAA,
+            // SSAO recompute, CDF rebuild. Runs one jittered Calculate, blends
+            // the result into the running TAA sum, writes the averaged colour
+            // back into calc.ColorBuffer, and hands off to the standard upload
+            // path so brightness/contrast + grid/watermark composite still
+            // applies. The accumulator was already seeded by the initial
+            // (TaaSampleIndex == 0) frame.
+            if (job.TaaSampleIndex > 0 && !useAlt)
+            {
+                long taaCalcStart = Stopwatch.GetTimestamp();
+                bool ok = false;
+                try
+                {
+                    ok = RunOneTaaSample(calc, job.TaaSampleIndex, token);
+                }
+                catch (OperationCanceledException) { ok = false; }
+                long taaCalcEnd = Stopwatch.GetTimestamp();
+
+                if (ShowPerfHud)
+                    _perfStats.RecordCalc((taaCalcEnd - taaCalcStart) * 1000.0 / Stopwatch.Frequency);
+
+                if (!ok || token.IsCancellationRequested)
+                {
+                    // Cancelled or fingerprint changed mid-step — drop this
+                    // frame quietly (the next user-initiated Trigger will
+                    // present a fresh image). Still fire AnimationFrameUploaded
+                    // so any in-flight gate doesn't get stuck.
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+
+                long taaMs = job.Sw.ElapsedMilliseconds;
+                ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
+                    new UploadCtx(this, job, taaMs), preferLocal: false);
+                return;
+            }
+
             // Stale-frame re-upload so the screen shows a correct (if
             // old) image while the next frame computes. Serialised
             // against the calc-completion upload via _d3dGate, so the
@@ -888,6 +955,15 @@ namespace FracturingFog.Rendering
                 int aaSamples = !useAlt ? (calc.Quality?.AaSamples ?? 1) : 1;
                 if (aaSamples > 1 && !token.IsCancellationRequested)
                     RunMsaaAccumulateMandelbrot(calc, aaSamples, token);
+
+                // Wave 2.7 — seed the TAA accumulator from this frame's
+                // finished (possibly MSAA-averaged) ColorBuffer. Captures the
+                // view fingerprint so the upload tail can decide whether to
+                // queue continuation samples.
+                if (!useAlt && !token.IsCancellationRequested)
+                    SeedTaaAccumulator(calc);
+                else if (useAlt)
+                    InvalidateTaa();
             }
             catch (OperationCanceledException) { }
             long calcEnd = Stopwatch.GetTimestamp();
@@ -1022,6 +1098,168 @@ namespace FracturingFog.Rendering
             }
         }
 
+        // Wave 2.7 — TAA helpers.
+        //
+        // Seed: reset the sum arrays to the current ColorBuffer contents
+        // (which may already be MSAA-averaged) and stamp the fingerprint.
+        // Blend: jitter Calculate, add into sums, write average back into
+        // ColorBuffer. Invalidate: drop the accumulator (called on Resize,
+        // useAlt, or fingerprint mismatch).
+        private void SeedTaaAccumulator(MandelbrotCalculator calc)
+        {
+            int taaMax = calc.Quality?.TaaMaxSamples ?? 1;
+            if (taaMax <= 1) { InvalidateTaa(); return; }
+
+            int pixels = calc.Width * calc.Height;
+            var color = calc.ColorBuffer;
+            if (color.Length < pixels) { InvalidateTaa(); return; }
+
+            if (_taaSumR == null || _taaSumPixels != pixels)
+            {
+                _taaSumR = new long[pixels];
+                _taaSumG = new long[pixels];
+                _taaSumB = new long[pixels];
+                _taaSumA = new long[pixels];
+                _taaSumPixels = pixels;
+            }
+
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = color[i];
+                _taaSumB![i] =  (long)(c        & 0xFF);
+                _taaSumG![i] =  (long)((c >> 8)  & 0xFF);
+                _taaSumR![i] =  (long)((c >> 16) & 0xFF);
+                _taaSumA![i] =  (long)((c >> 24) & 0xFF);
+            }
+            _taaSampleCount = 1;
+            _taaFpCx = calc.CenterX;
+            _taaFpCy = calc.CenterY;
+            _taaFpZoom = calc.Zoom;
+            _taaFpIter = calc.MaxIterations;
+            _taaFpW = calc.Width;
+            _taaFpH = calc.Height;
+            _taaFpType = ViewState.FractalType;
+            _taaValid = true;
+        }
+
+        private void InvalidateTaa()
+        {
+            _taaValid = false;
+            _taaSampleCount = 0;
+            // Keep sum arrays around for reuse — they'll be re-zeroed on the
+            // next SeedTaaAccumulator.
+        }
+
+        private bool TaaFingerprintMatches(MandelbrotCalculator calc)
+        {
+            return _taaValid
+                && _taaFpCx == calc.CenterX
+                && _taaFpCy == calc.CenterY
+                && _taaFpZoom == calc.Zoom
+                && _taaFpIter == calc.MaxIterations
+                && _taaFpW == calc.Width
+                && _taaFpH == calc.Height
+                && _taaFpType == ViewState.FractalType;
+        }
+
+        // Halton(idx, base) radical-inverse — quasi-random in [0, 1).
+        // Used for sub-pixel jitter that distributes far better than a
+        // grid would across an arbitrary sample count.
+        private static double Halton(int index, int b)
+        {
+            double f = 1.0, r = 0.0;
+            int i = index;
+            while (i > 0)
+            {
+                f /= b;
+                r += f * (i % b);
+                i /= b;
+            }
+            return r;
+        }
+
+        private bool RunOneTaaSample(MandelbrotCalculator calc, int sampleIndex, CancellationToken token)
+        {
+            if (!TaaFingerprintMatches(calc)) return false;
+            int pixels = calc.Width * calc.Height;
+            if (_taaSumR == null || _taaSumPixels != pixels) return false;
+
+            double jx = Halton(sampleIndex + 2, 2) - 0.5;
+            double jy = Halton(sampleIndex + 2, 3) - 0.5;
+            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+
+            double origCx = calc.CenterX;
+            double origCy = calc.CenterY;
+            calc.CenterX = origCx + jx * scale;
+            calc.CenterY = origCy + jy * scale;
+            try { calc.Calculate(token); }
+            catch (OperationCanceledException)
+            {
+                calc.CenterX = origCx; calc.CenterY = origCy;
+                return false;
+            }
+            calc.CenterX = origCx;
+            calc.CenterY = origCy;
+            if (token.IsCancellationRequested) return false;
+
+            var buf = calc.ColorBuffer;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = buf[i];
+                _taaSumB![i] += (long)(c        & 0xFF);
+                _taaSumG![i] += (long)((c >> 8)  & 0xFF);
+                _taaSumR![i] += (long)((c >> 16) & 0xFF);
+                _taaSumA![i] += (long)((c >> 24) & 0xFF);
+            }
+            _taaSampleCount++;
+
+            int count = _taaSampleCount;
+            long half = count / 2;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint b = (uint)((_taaSumB![i] + half) / count) & 0xFF;
+                uint g = (uint)((_taaSumG![i] + half) / count) & 0xFF;
+                uint r = (uint)((_taaSumR![i] + half) / count) & 0xFF;
+                uint a = (uint)((_taaSumA![i] + half) / count) & 0xFF;
+                buf[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
+            return true;
+        }
+
+        // Wave 2.7 — called at the tail of the upload step. If TAA is enabled,
+        // view is still stable, and we haven't hit the cap, enqueue the next
+        // jittered sample so the image keeps refining while the camera idles.
+        // Any user Trigger cancels the token (which the calc thread checks) and
+        // mutates the calc state (which invalidates the fingerprint), so we
+        // don't need explicit cooperation to stop.
+        private void TryScheduleNextTaaSample(in FrameJob job)
+        {
+            if (job.AltCalc != null) return;
+            if (job.Token.IsCancellationRequested) return;
+            var calc = job.Calc;
+            int taaMax = calc.Quality?.TaaMaxSamples ?? 1;
+            if (taaMax <= 1) return;
+            if (!TaaFingerprintMatches(calc)) return;
+            if (_taaSampleCount >= taaMax) return;
+
+            var nextJob = new FrameJob(
+                job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
+                staleBuf: null, staleW: 0, staleH: 0,
+                calcW: calc.Width, calcH: calc.Height,
+                taaSampleIndex: _taaSampleCount);
+            try { _calcQueue.Add(nextJob); }
+            catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
+            catch (ArgumentException)
+            {
+                // Bounded(1) full — drain stale entry then re-enqueue. A user
+                // Trigger between the drain and add would just supersede us
+                // with a fresh frame, which is desired.
+                while (_calcQueue.TryTake(out _)) { }
+                try { _calcQueue.Add(nextJob); }
+                catch { /* shutdown race */ }
+            }
+        }
+
         private void RunFrameJobUpload(FrameJob job, long ms)
         {
             var token = job.Token;
@@ -1106,6 +1344,13 @@ namespace FracturingFog.Rendering
                 if (ShowPerfHud) _perfStats.RecordFrame(ms);
 
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+
+                // Wave 2.7 — once the user-visible frame is up, queue the next
+                // TAA continuation if the view is still settled. Bounded(1)
+                // queue means a fresh Trigger from input simply replaces our
+                // continuation before it runs. Skipped for alt calcs (TAA
+                // currently restricted to the canonical Mandelbrot path).
+                if (!useAlt) TryScheduleNextTaaSample(in job);
             }
         }
 
@@ -1121,6 +1366,10 @@ namespace FracturingFog.Rendering
             _currentTargetHeight = h;
             // Buffer dimensions changing → old CDF is sized for old buffers.
             InvalidateAdaptiveCdf();
+            // Wave 2.7 — sum arrays sized for old buffers too.
+            InvalidateTaa();
+            _taaSumR = null; _taaSumG = null; _taaSumB = null; _taaSumA = null;
+            _taaSumPixels = 0;
 
             lock (_d3dGate)
             {

@@ -140,6 +140,23 @@ namespace FracturingFog.Models
         // currently ignore this and render single-sample.
         public int AaSamples { get; init; } = 1;
 
+        // ── Temporal accumulation (Wave 2.7 / D-5.21) ────────────────────────
+        //
+        // When the camera is still, the render host re-runs Calculate() with
+        // sub-pixel Halton jitter and blends each new sample into a running
+        // average. Successive frames smooth out the noise that AaSamples alone
+        // can't kill (palette dithering, deep-zoom precision rounding,
+        // single-sample edge aliasing). Each TAA sample presents as soon as
+        // it's blended, so the user sees the image refine over ~1-2 seconds
+        // of stillness; any new Trigger cancels the loop and resets the
+        // accumulator.
+        //
+        // 1   = off (default; bit-identical to pre-TAA output).
+        // >1  = cap on total samples accumulated (including MSAA seed).
+        //       Capped to keep CPU paths from looping forever; once reached,
+        //       the host stops queueing continuation frames.
+        public int TaaMaxSamples { get; init; } = 1;
+
         /// <summary>Short label for the status bar: "SP" (single precision) or "DD" (double-double).</summary>
         public string GetPrecisionLabel(double zoom)
             => NeedsHighPrecision(zoom) ? "DD" : "SP";
@@ -192,7 +209,7 @@ namespace FracturingFog.Models
         {
             Tier = QualityTier.High,
             Name = "High",
-            Description = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. 2×2 anti-aliasing. Slower at depth.",
+            Description = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. 2×2 anti-aliasing + 8-sample TAA. Slower at depth.",
             ZoomMin = 1e-6,
             ZoomMax = 1e22,
             WheelZoomFactor = 1.12,     // 12% per detent — finer control at depth
@@ -202,6 +219,7 @@ namespace FracturingFog.Models
             AllowHighPrecision = true,
             HPZoomThreshold = 1e12,      // engage DD when double starts to degrade
             AaSamples = 4,             // Wave 2.6 — 2×2 MSAA
+            TaaMaxSamples = 8,         // Wave 2.7 — extend out to 8 jittered frames
         };
 
         /// <summary>
@@ -212,7 +230,7 @@ namespace FracturingFog.Models
         {
             Tier = QualityTier.Ultra,
             Name = "Ultra",
-            Description = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. 4×4 anti-aliasing. Slow at extreme depth.",
+            Description = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. 4×4 anti-aliasing + 16-sample TAA. Slow at extreme depth.",
             ZoomMin = 1e-6,
             ZoomMax = 5e27,
             WheelZoomFactor = 1.08,     // 8% per detent — very fine control
@@ -222,6 +240,7 @@ namespace FracturingFog.Models
             AllowHighPrecision = true,
             HPZoomThreshold = 1e12,
             AaSamples = 16,            // Wave 2.6 — 4×4 MSAA
+            TaaMaxSamples = 16,        // Wave 2.7
         };
 
         /// <summary>
@@ -233,7 +252,7 @@ namespace FracturingFog.Models
         {
             Tier = QualityTier.Extreme,
             Name = "Extreme",
-            Description = "Quad-double precision — zoom to 5×10⁵⁸, up to 131072 iterations. 4×4 anti-aliasing. Slow.",
+            Description = "Quad-double precision — zoom to 5×10⁵⁸, up to 131072 iterations. 4×4 anti-aliasing + 32-sample TAA. Slow.",
             ZoomMin = 1e-6,
             ZoomMax = 5e58,
             WheelZoomFactor = 1.06,     // very fine
@@ -243,6 +262,7 @@ namespace FracturingFog.Models
             AllowHighPrecision = true,
             HPZoomThreshold = 1e12,
             AaSamples = 16,            // Wave 2.6 — 4×4 MSAA
+            TaaMaxSamples = 32,        // Wave 2.7
         };
         // ── Lookup helpers ────────────────────────────────────────────────────
 

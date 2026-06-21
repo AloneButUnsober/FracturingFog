@@ -1523,6 +1523,27 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // Wave 2.8 — Cookbook picker. Opens the picker as a modeless child
+            // of the editor (matches the rest of the editor surface — modeless
+            // so the equation editor stays interactive). The VM applies the
+            // entry from its Accepted callback; cancel is a no-op.
+            vm.CookbookRequested += () =>
+            {
+                var cookbookVm = new CookbookViewModel();
+                cookbookVm.Accepted += entry => vm.ApplyCookbookEntry(entry);
+                var cookbookWin = new CookbookView { DataContext = cookbookVm };
+                if (s_userEqWin != null) cookbookWin.Show(s_userEqWin);
+                else ShowEditor(cookbookWin);
+            };
+            vm.CookbookCentreRequested += (cx, cy, zoom) =>
+            {
+                if (s_renderHost == null) return;
+                s_renderHost.ViewState.CenterX = cx;
+                s_renderHost.ViewState.CenterY = cy;
+                s_renderHost.ViewState.Zoom = zoom;
+                s_renderHost.Trigger();
+            };
+
             // Wave 2.3 — Persist + Hot-Load.
             vm.HotLoadAndPersistRequested += (eq, baseName) =>
             {
