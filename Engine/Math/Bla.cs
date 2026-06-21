@@ -1,4 +1,4 @@
-﻿// Math/Bla.cs
+// Math/Bla.cs
 //
 // Bilinear Approximation (BLA) — Zhuoran's perturbation acceleration
 // (https://fractalforums.org/fractal-mathematics-and-new-theories/28/another-solution-to-perturbation-glitches/4360).
@@ -21,8 +21,19 @@
 // Validity radius r is conservative: while |δ|² ≤ r² the quadratic term is
 // guaranteed below the precision floor.  Outside r, fall back to a single
 // perturbation step.
+//
+// DD-precision tables (Wave 2.10) — each BLA entry stores A and B as
+// double-double (Hi + Lo).  At deep zoom the merged A_n is near 1.0 + tiny
+// and double precision in the table itself loses ULPs after thousands of
+// accumulation steps (16-level merge ≈ 2¹⁶ refs).  Merge math runs in DD
+// using TwoSum/TwoProduct; apply-time broadcast reads ARe / AIm / BRe / BIm
+// properties which collapse Hi+Lo back to a single double — one add per
+// skip, negligible vs the merge-precision win.  Legacy single-precision
+// constructors set Lo=0 → behaviour identical for callers (generated
+// calcs) that never supplied Lo bits.
 
 using System;
+using System.Runtime.CompilerServices;
 
 namespace FracturingFog.FFMath
 {
@@ -30,18 +41,48 @@ namespace FracturingFog.FFMath
     /// Bilinear approximation of l consecutive perturbation iterations:
     ///   δ_{n+l} = A·δ_n + B·dc
     /// valid while |δ_n|² ≤ R².
+    ///
+    /// Storage is double-double: A and B each carry Hi + Lo limbs so merge
+    /// chains retain DD precision.  Apply-time accessors (<see cref="ARe"/>
+    /// etc.) return <c>Hi + Lo</c> — callers see plain doubles.
     /// </summary>
     public readonly struct Bla
     {
-        public readonly double ARe, AIm;
-        public readonly double BRe, BIm;
+        public readonly double AReHi, AReLo;
+        public readonly double AImHi, AImLo;
+        public readonly double BReHi, BReLo;
+        public readonly double BImHi, BImLo;
         public readonly double R2;
         public readonly int L;
 
+        /// <summary>Apply-time A.Re collapsed from DD storage.</summary>
+        public double ARe { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => AReHi + AReLo; }
+        public double AIm { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => AImHi + AImLo; }
+        public double BRe { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => BReHi + BReLo; }
+        public double BIm { [MethodImpl(MethodImplOptions.AggressiveInlining)] get => BImHi + BImLo; }
+
+        /// <summary>Legacy single-precision constructor — Lo limbs zero.</summary>
         public Bla(double aRe, double aIm, double bRe, double bIm, double r2, int l)
         {
-            ARe = aRe; AIm = aIm;
-            BRe = bRe; BIm = bIm;
+            AReHi = aRe; AReLo = 0.0;
+            AImHi = aIm; AImLo = 0.0;
+            BReHi = bRe; BReLo = 0.0;
+            BImHi = bIm; BImLo = 0.0;
+            R2 = r2; L = l;
+        }
+
+        /// <summary>DD-precision constructor (Wave 2.10).</summary>
+        public Bla(
+            double aReHi, double aReLo,
+            double aImHi, double aImLo,
+            double bReHi, double bReLo,
+            double bImHi, double bImLo,
+            double r2, int l)
+        {
+            AReHi = aReHi; AReLo = aReLo;
+            AImHi = aImHi; AImLo = aImLo;
+            BReHi = bReHi; BReLo = bReLo;
+            BImHi = bImHi; BImLo = bImLo;
             R2 = r2; L = l;
         }
     }
@@ -57,6 +98,8 @@ namespace FracturingFog.FFMath
         public readonly int[] LevelStart;
         public readonly int[] LevelLen;
         public readonly Bla[] Data;
+        /// <summary>True when level-0 + merges built using DD-precision ref orbit (Wave 2.10).</summary>
+        public readonly bool DdPrecision;
 
         // Linearisation tolerance: |δ|·|2Z+δ| dominated by 2Zδ requires |δ| ≤ ε·|Z|.
         // 1e-6 keeps the dropped δ² term ≥ 12 orders of magnitude below 2Zδ —
@@ -75,7 +118,23 @@ namespace FracturingFog.FFMath
         /// <param name="refLen">Number of valid reference iterations (orbit may have terminated by escape).</param>
         /// <param name="dcMaxAbs">Maximum |dc| over all pixels — needed for merge validity.</param>
         public BlaTable(double[] refZr, double[] refZi, int refLen, double dcMaxAbs)
-            : this(BuildMandelbrotLevel0(refZr, refZi, refLen), refLen, dcMaxAbs)
+            : this(BuildMandelbrotLevel0(refZr, refZi, refLen), refLen, dcMaxAbs, ddPrecision: false)
+        {
+        }
+
+        /// <summary>
+        /// DD-precision Mandelbrot BLA hierarchy (Wave 2.10).  Level-0 seeds
+        /// <c>A = 2·Z</c> from the DD reference orbit (Hi + Lo) — multiply by 2
+        /// is exact in floating point, so <c>A_Lo = 2·refZLo</c>.  <c>B = 1</c>
+        /// exactly.  Merge math runs in DD throughout.  Validity radius uses
+        /// the collapsed <c>Hi + Lo</c> magnitude.
+        /// </summary>
+        public BlaTable(
+            double[] refZr, double[] refZrLo,
+            double[] refZi, double[] refZiLo,
+            int refLen, double dcMaxAbs)
+            : this(BuildMandelbrotLevel0Dd(refZr, refZrLo, refZi, refZiLo, refLen),
+                   refLen, dcMaxAbs, ddPrecision: true)
         {
         }
 
@@ -92,6 +151,30 @@ namespace FracturingFog.FFMath
             return level0;
         }
 
+        private static Bla[] BuildMandelbrotLevel0Dd(
+            double[] refZr, double[] refZrLo,
+            double[] refZi, double[] refZiLo, int refLen)
+        {
+            var level0 = new Bla[refLen];
+            for (int n = 0; n < refLen; n++)
+            {
+                double zrHi = refZr[n], zrLo = refZrLo[n];
+                double ziHi = refZi[n], ziLo = refZiLo[n];
+                // |Z| from collapsed DD — Hi alone is fine for the radius
+                // (Lo contributes ~1e-16 relative, far below Epsilon=1e-6).
+                double zMag = System.Math.Sqrt(zrHi * zrHi + ziHi * ziHi);
+                double r = Epsilon * zMag;
+                // A = 2·Z exactly in FP (multiply by 2 = exponent bump).
+                level0[n] = new Bla(
+                    2.0 * zrHi, 2.0 * zrLo,
+                    2.0 * ziHi, 2.0 * ziLo,
+                    1.0, 0.0,
+                    0.0, 0.0,
+                    r * r, 1);
+            }
+            return level0;
+        }
+
         /// <summary>
         /// Build a BLA hierarchy from pre-computed level-0 BLAs.
         /// Used by CalculatorGen-generated calculators that build per-equation
@@ -102,8 +185,14 @@ namespace FracturingFog.FFMath
         /// <param name="refLen">Number of valid reference iterations.</param>
         /// <param name="dcMaxAbs">Maximum |dc| over all pixels.</param>
         public BlaTable(Bla[] level0, int refLen, double dcMaxAbs)
+            : this(level0, refLen, dcMaxAbs, ddPrecision: false)
+        {
+        }
+
+        private BlaTable(Bla[] level0, int refLen, double dcMaxAbs, bool ddPrecision)
         {
             RefLen = refLen;
+            DdPrecision = ddPrecision;
             int maxLevel = 0;
             while ((1 << (maxLevel + 1)) <= refLen) maxLevel++;
             Levels = System.Math.Max(1, maxLevel + 1);
@@ -126,9 +215,13 @@ namespace FracturingFog.FFMath
             // Higher levels — merge two consecutive prior-level BLAs.
             //   A_m = A2 · A1
             //   B_m = A2 · B1 + B2
-            //   r_m = min(r1, max(0, r2 − |B2|·|dc_max|) / |A1|)
+            //   r_m = min(r1, max(0, r2 − |B1|·|dc_max|) / |A1|)
             // The r2 condition asks: "after applying BLA1, will δ stay within BLA2's
             // radius even with the dc contribution?" — answers conservatively.
+            //
+            // When ddPrecision=true the complex multiplies / adds run in
+            // double-double via Two{Sum,Product}; otherwise they run in
+            // single-precision (Lo limbs stay 0, identical to pre-2.10 path).
             for (int k = 1; k < Levels; k++)
             {
                 int l = 1 << k;
@@ -140,29 +233,152 @@ namespace FracturingFog.FFMath
                     var b1 = Data[prevStart + 2 * n];
                     var b2 = Data[prevStart + 2 * n + 1];
 
-                    // Complex multiply A2·A1
-                    double aRe = b2.ARe * b1.ARe - b2.AIm * b1.AIm;
-                    double aIm = b2.ARe * b1.AIm + b2.AIm * b1.ARe;
+                    Bla merged;
+                    if (ddPrecision)
+                        merged = MergeDd(b1, b2, dcMaxAbs, l);
+                    else
+                        merged = MergeDouble(b1, b2, dcMaxAbs, l);
 
-                    // A2·B1 + B2
-                    double bRe = b2.ARe * b1.BRe - b2.AIm * b1.BIm + b2.BRe;
-                    double bIm = b2.ARe * b1.BIm + b2.AIm * b1.BRe + b2.BIm;
-
-                    double r1 = System.Math.Sqrt(b1.R2);
-                    double r2 = System.Math.Sqrt(b2.R2);
-                    double a1Mag = System.Math.Sqrt(b1.ARe * b1.ARe + b1.AIm * b1.AIm);
-                    // After BLA1 applies: δ' = A1·δ + B1·dc.  Validity for BLA2
-                    // requires |δ'| ≤ r2.  Triangle bound: |A1|·|δ| + |B1|·|dc| ≤ r2,
-                    // hence |δ| ≤ (r2 − |B1|·|dc|) / |A1|.  Use |B1| (not |B2|).
-                    double b1Mag = System.Math.Sqrt(b1.BRe * b1.BRe + b1.BIm * b1.BIm);
-                    double rMerged = System.Math.Min(r1,
-                        System.Math.Max(0.0, r2 - b1Mag * dcMaxAbs)
-                        / System.Math.Max(a1Mag, 1e-300));
-
-                    Data[curStart + n] = new Bla(aRe, aIm, bRe, bIm,
-                        rMerged * rMerged, l);
+                    Data[curStart + n] = merged;
                 }
             }
+        }
+
+        // ── Single-precision merge (legacy path, Lo limbs assumed 0) ────────
+        private static Bla MergeDouble(in Bla b1, in Bla b2, double dcMaxAbs, int l)
+        {
+            double b1ARe = b1.AReHi, b1AIm = b1.AImHi;
+            double b1BRe = b1.BReHi, b1BIm = b1.BImHi;
+            double b2ARe = b2.AReHi, b2AIm = b2.AImHi;
+            double b2BRe = b2.BReHi, b2BIm = b2.BImHi;
+
+            // A2·A1
+            double aRe = b2ARe * b1ARe - b2AIm * b1AIm;
+            double aIm = b2ARe * b1AIm + b2AIm * b1ARe;
+
+            // A2·B1 + B2
+            double bRe = b2ARe * b1BRe - b2AIm * b1BIm + b2BRe;
+            double bIm = b2ARe * b1BIm + b2AIm * b1BRe + b2BIm;
+
+            double r1 = System.Math.Sqrt(b1.R2);
+            double r2 = System.Math.Sqrt(b2.R2);
+            double a1Mag = System.Math.Sqrt(b1ARe * b1ARe + b1AIm * b1AIm);
+            double b1Mag = System.Math.Sqrt(b1BRe * b1BRe + b1BIm * b1BIm);
+            double rMerged = System.Math.Min(r1,
+                System.Math.Max(0.0, r2 - b1Mag * dcMaxAbs)
+                / System.Math.Max(a1Mag, 1e-300));
+
+            return new Bla(aRe, aIm, bRe, bIm, rMerged * rMerged, l);
+        }
+
+        // ── DD-precision merge primitives ──────────────────────────────────
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (double s, double e) TwoSum(double a, double b)
+        {
+            double s = a + b;
+            double v = s - a;
+            double e = (a - (s - v)) + (b - v);
+            return (s, e);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (double s, double e) QuickTwoSum(double a, double b)
+        {
+            double s = a + b;
+            double e = b - (s - a);
+            return (s, e);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (double p, double e) TwoProduct(double a, double b)
+        {
+            double p = a * b;
+            double e = System.Math.FusedMultiplyAdd(a, b, -p);
+            return (p, e);
+        }
+
+        // DD + DD (sloppy Knuth-Priest variant — 6 flops, sufficient for the
+        // merge accumulation; see Abstractions/Math/DoubleDouble.cs for the
+        // canonical reference impl).
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (double hi, double lo) DdAdd(double aHi, double aLo, double bHi, double bLo)
+        {
+            var (s1, s2) = TwoSum(aHi, bHi);
+            var (t1, t2) = TwoSum(aLo, bLo);
+            s2 += t1;
+            var (r1, r2) = QuickTwoSum(s1, s2);
+            r2 += t2;
+            var (p1, p2) = QuickTwoSum(r1, r2);
+            return (p1, p2);
+        }
+
+        // DD - DD
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (double hi, double lo) DdSub(double aHi, double aLo, double bHi, double bLo)
+            => DdAdd(aHi, aLo, -bHi, -bLo);
+
+        // DD × DD
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (double hi, double lo) DdMul(double aHi, double aLo, double bHi, double bLo)
+        {
+            var (p1, p2) = TwoProduct(aHi, bHi);
+            p2 += aHi * bLo + aLo * bHi;
+            var (r1, r2) = QuickTwoSum(p1, p2);
+            return (r1, r2);
+        }
+
+        // Complex DD × DD:  (aRe + i·aIm) · (bRe + i·bIm)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static (double reHi, double reLo, double imHi, double imLo) DdComplexMul(
+            double aReHi, double aReLo, double aImHi, double aImLo,
+            double bReHi, double bReLo, double bImHi, double bImLo)
+        {
+            var (rrHi, rrLo) = DdMul(aReHi, aReLo, bReHi, bReLo);   // aRe·bRe
+            var (iiHi, iiLo) = DdMul(aImHi, aImLo, bImHi, bImLo);   // aIm·bIm
+            var (riHi, riLo) = DdMul(aReHi, aReLo, bImHi, bImLo);   // aRe·bIm
+            var (irHi, irLo) = DdMul(aImHi, aImLo, bReHi, bReLo);   // aIm·bRe
+            var (reHi, reLo) = DdSub(rrHi, rrLo, iiHi, iiLo);
+            var (imHi, imLo) = DdAdd(riHi, riLo, irHi, irLo);
+            return (reHi, reLo, imHi, imLo);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double DdToDouble(double hi, double lo) => hi + lo;
+
+        private static Bla MergeDd(in Bla b1, in Bla b2, double dcMaxAbs, int l)
+        {
+            // A_m = A2 · A1
+            var (aReHi, aReLo, aImHi, aImLo) = DdComplexMul(
+                b2.AReHi, b2.AReLo, b2.AImHi, b2.AImLo,
+                b1.AReHi, b1.AReLo, b1.AImHi, b1.AImLo);
+
+            // tmp = A2 · B1
+            var (tReHi, tReLo, tImHi, tImLo) = DdComplexMul(
+                b2.AReHi, b2.AReLo, b2.AImHi, b2.AImLo,
+                b1.BReHi, b1.BReLo, b1.BImHi, b1.BImLo);
+
+            // B_m = tmp + B2
+            var (bReHi, bReLo) = DdAdd(tReHi, tReLo, b2.BReHi, b2.BReLo);
+            var (bImHi, bImLo) = DdAdd(tImHi, tImLo, b2.BImHi, b2.BImLo);
+
+            // Validity radius — magnitudes from collapsed DD (precision of
+            // r itself is not critical, only the merge result is).
+            double r1 = System.Math.Sqrt(b1.R2);
+            double r2 = System.Math.Sqrt(b2.R2);
+            double b1Re = DdToDouble(b1.BReHi, b1.BReLo);
+            double b1Im = DdToDouble(b1.BImHi, b1.BImLo);
+            double a1Re = DdToDouble(b1.AReHi, b1.AReLo);
+            double a1Im = DdToDouble(b1.AImHi, b1.AImLo);
+            double a1Mag = System.Math.Sqrt(a1Re * a1Re + a1Im * a1Im);
+            double b1Mag = System.Math.Sqrt(b1Re * b1Re + b1Im * b1Im);
+            double rMerged = System.Math.Min(r1,
+                System.Math.Max(0.0, r2 - b1Mag * dcMaxAbs)
+                / System.Math.Max(a1Mag, 1e-300));
+
+            return new Bla(aReHi, aReLo, aImHi, aImLo,
+                           bReHi, bReLo, bImHi, bImLo,
+                           rMerged * rMerged, l);
         }
 
         /// <summary>
