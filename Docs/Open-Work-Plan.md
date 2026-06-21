@@ -91,9 +91,9 @@ audio-reactive dialog without crash.
 | # | Item | Lift |
 |---|------|------|
 | 2.1 | D-2.8 — SA orders 8 → 16 | 1 d |
-| 2.2 | D-3.16 — Phoenix proper DE + perturbation (δ_prev + dprev/dc) | 2-3 d |
+| 2.2 | D-3.16 — Phoenix proper DE + perturbation (δ_prev + dprev/dc) | ✅ Shipped 2026-06-21 |
 | 2.3 | D-6.26 — Save hot-loaded calc to permanent `.cs` | ½ d |
-| 2.4 | D-6.24 — Live equation preview (AST + dz/dc + SA flag as user types) | 1-2 d |
+| 2.4 | D-6.24 — Live equation preview (AST + dz/dc + SA flag as user types) | ✅ Shipped 2026-06-21 |
 | 2.5 | D-5.20 — Progressive rendering ¼→½→full | 2 d |
 | 2.6 | D-5.19 — Anti-aliasing 2×2/4×4 (Quality gate) | 1 d |
 | 2.7 | D-5.21 — TAA temporal accumulation | 3-4 d |
@@ -278,3 +278,41 @@ Convergence after Wave 1:
     averages N sub-pixel jittered passes for the canonical
     `MandelbrotCalculator` path. Alt calcs (user-equation / sandbox)
     currently skip AA pending interface broadening.
+- 2026-06-21 — Wave 2.2 (D-3.16) shipped — Phoenix proper DE + scalar
+  perturbation tier.
+  * `PhoenixKernel.StepWithPrevDeriv` carries `(dr, di, dprev_r, dprev_i)`
+    via recurrence `D_{n+1} = 2·z·D + 1 + p·Dp`. Init (0,0,0,0).
+  * `EscapeTimeCalculator.CalculatePhoenix` now passes real derivative
+    to `FillAuxAndColor` — distance estimate + normal shading active
+    for Phoenix where they were zeroed before (visible: edge glow,
+    proper DE-based contrast).
+  * New `CalculatePhoenixPerturb` tier gated at `Zoom >= 1e10`. Builds
+    double-precision reference orbit at frame centre, then per-pixel
+    `δ + δ_prev` recurrence:  `δ_{n+1} = 2·Z·δ + δ² + ε + p · δ_prev`.
+    Reconstructs true `(z, prev_z)` each step so derivative tracking
+    stays exact. Scalar only — no AVX2 / QD / BLA / glitch detection
+    (deferred follow-on); enough headroom to unstick the SP-only
+    iteration-count collapse Phoenix hits at deep zoom.
+  * Generated `MandelbrotPhoenixCalculator.cs` left untouched — unused
+    by dispatch (`FractalType.Phoenix` → `EscapeTimeCalculator`); banner
+    still says "DO NOT HAND-EDIT — copy + rename for divergent math".
+    Future Roslyn-source-gen path (Wave 2.13) will regenerate it
+    correctly once the emitter handles prev-z as a function of c.
+- 2026-06-21 — Wave 2.4 (D-6.24) shipped — Live equation preview.
+  * New `CalculatorGenApi.Preview(equation) → PreviewResult` returns the
+    parsed AST in printed form (`AstPrinter.Print`), symbolic `dz/dc` and
+    `dz/dz` (`AstDifferentiator.{DpDc,DpDz}`), SA gating (both fast and
+    generic detectors), perturbation + DE feature flags, plus per-node
+    presence flags (prev / iter / conj / fold / div / trans / cond). Same
+    analysis pass the generator runs, exposed as a read-only projection
+    with no file I/O so it's safe per keystroke.
+  * `UserEquationViewModel` adds observable preview state and calls
+    `UpdatePreview` from both the UE-tab CalcGen validator and the
+    DSL-tab validator after a successful parse. Last-good values stay
+    pinned on transient parse failures so the panel doesn't flicker.
+    Dialog seeds the preview from the current source on open.
+  * `UserEquationView.axaml` adds an `Expander` between the editor and
+    the status row showing AST / dz/dc / dz/dz / SA / Perturbation / DE
+    / Flags. SelectableTextBlocks, monospace. Window grew to 700×680 to
+    accommodate.
+  * Build clean (0 errors, only pre-existing AVLN5001 Watermark warnings).
