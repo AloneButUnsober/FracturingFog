@@ -65,5 +65,47 @@ namespace FracturingFog.Models.FractalKernels
             prevZr = oldZr; prevZi = oldZi;
             zr = newZr; zi = newZi;
         }
+
+        /// <summary>
+        /// Phoenix step with derivative tracking (D-3.16).
+        /// Recurrence:  z_{n+1} = z² + c + p · z_{n-1}
+        /// d/dc:        D_{n+1} = 2·z·D_n + 1 + p · Dp_n
+        /// Rotates (prevZr, prevZi) ← old z and (dprev_r, dprev_i) ← old D.
+        /// Init at caller: zr=zi=prevZr=prevZi=0, dr=di=dprev_r=dprev_i=0.
+        /// Feeds Milnor/Hubbard DE  dist = |z|·log|z| / |dz/dc|  via FillAuxAndColor.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void StepWithPrevDeriv(
+            ref double zr, ref double zi,
+            ref double prevZr, ref double prevZi,
+            ref double dr, ref double di,
+            ref double dprev_r, ref double dprev_i,
+            double cx, double cy)
+        {
+            // p · prev_z
+            double pPrevR = _pr * prevZr - _pi * prevZi;
+            double pPrevI = _pr * prevZi + _pi * prevZr;
+            // p · prev_D
+            double pPrevDr = _pr * dprev_r - _pi * dprev_i;
+            double pPrevDi = _pr * dprev_i + _pi * dprev_r;
+            // 2·z·D
+            double twoZdR = 2.0 * (zr * dr - zi * di);
+            double twoZdI = 2.0 * (zr * di + zi * dr);
+
+            double oldZr = zr;
+            double oldZi = zi;
+            double oldDr = dr;
+            double oldDi = di;
+
+            double newZr = zr * zr - zi * zi + cx + pPrevR;
+            double newZi = 2.0 * zr * zi + cy + pPrevI;
+            double newDr = twoZdR + 1.0 + pPrevDr;
+            double newDi = twoZdI + pPrevDi;
+
+            prevZr = oldZr; prevZi = oldZi;
+            dprev_r = oldDr; dprev_i = oldDi;
+            zr = newZr; zi = newZi;
+            dr = newDr; di = newDi;
+        }
     }
 }

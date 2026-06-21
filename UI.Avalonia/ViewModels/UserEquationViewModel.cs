@@ -102,6 +102,27 @@ public sealed class UserEquationViewModel : ViewModelBase
         _params.UserEquationSource = _source;
         _params.UserEquationDslSource = _dslSource;
         _params.UserEquationActiveTab = _activeTabIndex;
+
+        // Seed the live-preview panel from current source so the user sees
+        // AST + dz/dc + flags as soon as the dialog opens, without waiting
+        // 1.8 s for the typing debounce. UE tab pipes through the C#→DSL
+        // preprocessor first; failures stay silent (debounce path will
+        // surface the parse error in the status bar).
+        SeedPreviewFromCurrentTab();
+    }
+
+    private void SeedPreviewFromCurrentTab()
+    {
+        try
+        {
+            string raw = _activeTabIndex == 1 ? (_dslSource ?? string.Empty) : (_source ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            string equation = _activeTabIndex == 1
+                ? raw.Trim()
+                : EquationPreprocessor.Preprocess(raw, out PreprocessDiagnostic? _);
+            if (!string.IsNullOrWhiteSpace(equation)) UpdatePreview(equation);
+        }
+        catch { /* preview is best-effort */ }
     }
 
     // ── Validation (Tab 0 only) ──
@@ -303,6 +324,66 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Live preview (Wave 2.4 / D-6.24) ───────────────────────────────
+    //
+    // After every successful parse on either tab we re-run CalcGen's
+    // Preview pass — same AST + feature-flag logic the generator uses —
+    // and project the result into observable properties bound by the
+    // Expander in UserEquationView.axaml. When parsing fails the panel
+    // freezes on the last good result so the user can still see what
+    // the previous valid equation produced; PreviewError surfaces the
+    // current state in red separately if desired.
+    private string _previewAstText = string.Empty;
+    private string _previewDpDzText = string.Empty;
+    private string _previewDpDcText = string.Empty;
+    private string _previewSaText = "off";
+    private string _previewPerturbText = "off";
+    private string _previewDeText = "off";
+    private string _previewFlagsText = string.Empty;
+    private bool _hasPreview;
+
+    public string PreviewAstText { get => _previewAstText; private set => this.RaiseAndSetIfChanged(ref _previewAstText, value); }
+    public string PreviewDpDzText { get => _previewDpDzText; private set => this.RaiseAndSetIfChanged(ref _previewDpDzText, value); }
+    public string PreviewDpDcText { get => _previewDpDcText; private set => this.RaiseAndSetIfChanged(ref _previewDpDcText, value); }
+    public string PreviewSaText { get => _previewSaText; private set => this.RaiseAndSetIfChanged(ref _previewSaText, value); }
+    public string PreviewPerturbText { get => _previewPerturbText; private set => this.RaiseAndSetIfChanged(ref _previewPerturbText, value); }
+    public string PreviewDeText { get => _previewDeText; private set => this.RaiseAndSetIfChanged(ref _previewDeText, value); }
+    public string PreviewFlagsText { get => _previewFlagsText; private set => this.RaiseAndSetIfChanged(ref _previewFlagsText, value); }
+    public bool HasPreview { get => _hasPreview; private set => this.RaiseAndSetIfChanged(ref _hasPreview, value); }
+
+    // Run CalcGen's analysis pass and project flags into the preview pane.
+    // Caller passes the post-preprocess DSL string (UE tab pipes its C#
+    // body through EquationPreprocessor before getting here). Silent on
+    // parse failure — leaves the last valid preview frozen so transient
+    // typing errors don't blank the panel.
+    private void UpdatePreview(string equation)
+    {
+        if (string.IsNullOrWhiteSpace(equation)) return;
+        var p = CalculatorGenApi.Preview(equation);
+        if (!p.Ok) return;
+        PreviewAstText = p.AstText;
+        PreviewDpDzText = p.DpDzText;
+        PreviewDpDcText = p.DpDcText;
+        PreviewSaText = p.SaFastDegree >= 2
+            ? $"on (fast, z^{p.SaFastDegree}+c)"
+            : p.SaGenericDegree >= 2
+                ? $"on (generic, degree {p.SaGenericDegree})"
+                : "off";
+        PreviewPerturbText = p.SupportsPerturbation ? "on" : "off";
+        PreviewDeText = p.SupportsDe ? "on" : "off";
+
+        var flags = new System.Collections.Generic.List<string>();
+        if (p.HasPrev)   flags.Add("prev");
+        if (p.HasIter)   flags.Add("iter");
+        if (p.HasConj)   flags.Add("conj");
+        if (p.HasFolded) flags.Add("fold");
+        if (p.HasDiv)    flags.Add("div");
+        if (p.HasTrans)  flags.Add("trans");
+        if (p.HasCond)   flags.Add("if");
+        PreviewFlagsText = flags.Count == 0 ? "(plain polynomial)" : string.Join(", ", flags);
+        HasPreview = true;
+    }
+
     // ── Error / status ──
     private string _statusText = string.Empty;
     public string StatusText { get => _statusText; private set => this.RaiseAndSetIfChanged(ref _statusText, value); }
@@ -456,6 +537,7 @@ public sealed class UserEquationViewModel : ViewModelBase
                 StatusIsError = false;
             }
             ClearErrorSpan();
+            UpdatePreview(equation);
         }
         catch (Exception ex)
         {
@@ -497,6 +579,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             StatusText = "✓ DSL parses";
             StatusIsError = false;
             ClearErrorSpan();
+            UpdatePreview(raw);
         }
         catch (Exception ex)
         {
