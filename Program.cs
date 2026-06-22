@@ -167,6 +167,131 @@ static class Program
             return 0;
         }
 
+        // --gpurefprobe: Wave 2.12 — compare CPU vs GPU reference orbit.
+        // Runs three implementations at QD-tier coord + zoom:
+        //   * CPU-QD     — full QD reference (truth for the perturbation path).
+        //   * CPU-Hi     — plain-double Mandelbrot iteration on the QD's Hi
+        //                  limb only. Matches what the first-cut GPU kernel
+        //                  computes; used as the bit-exact parity target.
+        //   * GPU-Hi     — first-cut MandelbrotRefOrbitGpu kernel (Hi-only).
+        // Parity Δ vs CPU-QD diverges by chaos amplification at deep iter
+        // counts (expected for Hi-only); parity Δ vs CPU-Hi should be at
+        // FP64 round-off (validates the GPU kernel is functionally
+        // equivalent to the CPU Hi-only path). QD-upgrade of the kernel is
+        // the next Wave 2.12 slice.
+        if (args.Length > 0 && args[0] == "--gpurefprobe")
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("GPU ref-orbit probe — Wave 2.12 (D-6.27)");
+            sb.AppendLine("  CPU-QD = QD-precision truth; CPU-Hi & GPU-Hi = plain-double comparison");
+            (string label, double cxX0, double cxX1, double cyX0, double cyX1, int iter)[] cases =
+            {
+                ("1e15 saprobe", -1.1726999042772253, 8.9529605787776783E-17,
+                                 -0.2968356710071185, -2.3536240906562374E-18, 4096),
+                ("1e30 saprobe", -1.1726999042772253, 8.9529605787776783E-17,
+                                 -0.2968356710071185, -2.3536240906562374E-18, 8192),
+            };
+            using var gpu = new FracturingFog.Calculators.Gpu.MandelbrotRefOrbitGpu();
+            foreach (var c in cases)
+            {
+                var cx = new FracturingFog.FFMath.QD(c.cxX0, c.cxX1, 0, 0);
+                var cy = new FracturingFog.FFMath.QD(c.cyX0, c.cyX1, 0, 0);
+                int maxIter = c.iter;
+                int slots = maxIter + 1;
+                // CPU baseline (mirror of MandelbrotCalculator.ComputeReferenceOrbitQD).
+                double[] cZrX0 = new double[slots], cZrX1 = new double[slots];
+                double[] cZrX2 = new double[slots], cZrX3 = new double[slots];
+                double[] cZiX0 = new double[slots], cZiX1 = new double[slots];
+                double[] cZiX2 = new double[slots], cZiX3 = new double[slots];
+                var swCpu = System.Diagnostics.Stopwatch.StartNew();
+                int cpuN = 0;
+                {
+                    var zr = FracturingFog.FFMath.QD.Zero;
+                    var zi = FracturingFog.FFMath.QD.Zero;
+                    int n;
+                    for (n = 0; n < maxIter; n++)
+                    {
+                        cZrX0[n] = zr.X0; cZrX1[n] = zr.X1; cZrX2[n] = zr.X2; cZrX3[n] = zr.X3;
+                        cZiX0[n] = zi.X0; cZiX1[n] = zi.X1; cZiX2[n] = zi.X2; cZiX3[n] = zi.X3;
+                        if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= 512.0 * 512.0) break;
+                        var newZi = (zr * zi) * 2.0 + cy;
+                        zr = zr.Square() - zi.Square() + cx;
+                        zi = newZi;
+                    }
+                    cZrX0[n] = zr.X0; cZrX1[n] = zr.X1; cZrX2[n] = zr.X2; cZrX3[n] = zr.X3;
+                    cZiX0[n] = zi.X0; cZiX1[n] = zi.X1; cZiX2[n] = zi.X2; cZiX3[n] = zi.X3;
+                    cpuN = n;
+                }
+                swCpu.Stop();
+
+                // CPU Hi-only baseline — matches GPU kernel's current math.
+                double[] hZrX0 = new double[slots], hZiX0 = new double[slots];
+                var swCpuHi = System.Diagnostics.Stopwatch.StartNew();
+                int cpuHiN = 0;
+                {
+                    double zr = 0, zi = 0;
+                    double cxh = cx.X0, cyh = cy.X0;
+                    int n;
+                    for (n = 0; n < maxIter; n++)
+                    {
+                        hZrX0[n] = zr; hZiX0[n] = zi;
+                        if (zr * zr + zi * zi >= 512.0 * 512.0) break;
+                        double nzi = 2.0 * zr * zi + cyh;
+                        double nzr = zr * zr - zi * zi + cxh;
+                        zr = nzr; zi = nzi;
+                    }
+                    hZrX0[n] = zr; hZiX0[n] = zi;
+                    cpuHiN = n;
+                }
+                swCpuHi.Stop();
+
+                // GPU path.
+                double[] gZrX0 = new double[slots], gZrX1 = new double[slots];
+                double[] gZrX2 = new double[slots], gZrX3 = new double[slots];
+                double[] gZiX0 = new double[slots], gZiX1 = new double[slots];
+                double[] gZiX2 = new double[slots], gZiX3 = new double[slots];
+                var swGpu = System.Diagnostics.Stopwatch.StartNew();
+                bool ok = gpu.Compute(cx.X0, cx.X1, cx.X2, cx.X3,
+                                       cy.X0, cy.X1, cy.X2, cy.X3,
+                                       maxIter, 512.0 * 512.0,
+                                       gZrX0, gZrX1, gZrX2, gZrX3,
+                                       gZiX0, gZiX1, gZiX2, gZiX3,
+                                       out int gpuN, out _);
+                swGpu.Stop();
+                if (!ok)
+                {
+                    sb.AppendLine($"  {c.label,-14} CPU n={cpuN} ms={swCpu.Elapsed.TotalMilliseconds:F2}  GPU FAILED: {gpu.LastError}");
+                    continue;
+                }
+                // Two parity comparisons:
+                //   * vs CPU-Hi — should be bit-exact (FP64 round-off only).
+                //     If non-zero, the GPU kernel has drifted from the CPU
+                //     Hi-only math; investigate.
+                //   * vs CPU-QD — chaos-amplified divergence at deep iter,
+                //     expected to be O(magnitude of Z). Reported for context;
+                //     not a failure indicator until the QD kernel lands.
+                int parityN = Math.Min(cpuHiN, gpuN);
+                int[] checkIters = { 0, 100, 1000, Math.Min(5000, parityN), parityN };
+                double maxHiDelta = 0;
+                double maxQdDelta = 0;
+                foreach (int k in checkIters)
+                {
+                    if (k > parityN) continue;
+                    double hi = Math.Max(Math.Abs(hZrX0[k] - gZrX0[k]),
+                                         Math.Abs(hZiX0[k] - gZiX0[k]));
+                    if (hi > maxHiDelta) maxHiDelta = hi;
+                    double qd = Math.Max(Math.Abs(cZrX0[k] - gZrX0[k]),
+                                         Math.Abs(cZiX0[k] - gZiX0[k]));
+                    if (qd > maxQdDelta) maxQdDelta = qd;
+                }
+                sb.AppendLine($"  {c.label,-14} CPU-QD n={cpuN,5} ms={swCpu.Elapsed.TotalMilliseconds,7:F2}  CPU-Hi n={cpuHiN,5} ms={swCpuHi.Elapsed.TotalMilliseconds,7:F2}  GPU-Hi n={gpuN,5} ms={swGpu.Elapsed.TotalMilliseconds,7:F2}  Δ(GPU-Hi vs CPU-Hi)={maxHiDelta:E2}  Δ(GPU-Hi vs CPU-QD)={maxQdDelta:E2}  dev=[{gpu.SelectedDeviceLabel}]");
+            }
+            string gprPath = System.IO.Path.Combine(AppContext.BaseDirectory, "gpurefprobe.out");
+            System.IO.File.WriteAllText(gprPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location
