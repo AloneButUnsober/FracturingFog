@@ -2681,25 +2681,7 @@ namespace FracturingFog.Hosting
         /// options on Linux / macOS.
         /// </summary>
         public static AudioBackendCapabilities AudioCapabilities
-            => s_audioDriver?.Capabilities ?? DetectAudioCapabilities();
-
-        /// <summary>
-        /// Probe capabilities without constructing the driver. Returns the same
-        /// flags <see cref="CreateAudioBackend"/> would produce — used by the
-        /// settings dialog opened before the first slideshow start.
-        /// </summary>
-        private static AudioBackendCapabilities DetectAudioCapabilities()
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                return AudioBackendCapabilities.SystemLoopback
-                     | AudioBackendCapabilities.Microphone
-                     | AudioBackendCapabilities.FilePlayback
-                     | AudioBackendCapabilities.SynthPlayback;
-            }
-            return AudioBackendCapabilities.FilePlayback
-                 | AudioBackendCapabilities.SynthPlayback;
-        }
+            => s_audioDriver?.Capabilities ?? AudioCapabilityProbe.Detect();
 
         private static IAudioCaptureBackend CreateAudioBackend()
         {

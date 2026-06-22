@@ -37,7 +37,7 @@ using FracturingFog.UI.Avalonia.Views;
 
 namespace FracturingFog.Hosting
 {
-    internal static class AvaloniaDialogs
+    public static class AvaloniaDialogs
     {
         public static Window? ActiveMainWindow
         {
@@ -395,7 +395,7 @@ namespace FracturingFog.Hosting
             {
                 var current = AudioSettingsStore.Load();
                 var vm = new AudioSettingsViewModel(current, liveSource: null,
-                    capabilities: AvaloniaShellBootstrap.AudioCapabilities);
+                    capabilities: AudioCapabilityProbe.Detect());
                 var win = new AudioSettingsView { DataContext = vm };
 
                 // Browse… → Avalonia open-file picker; push the chosen path back.
@@ -953,12 +953,12 @@ namespace FracturingFog.Hosting
 
                 var txCX = new TextBox
                 {
-                    Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(currentCX, 0, 0, 0),
+                    Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(currentCX, 0, 0, 0),
                     FontFamily = new FontFamily("Consolas"),
                 };
                 var txCY = new TextBox
                 {
-                    Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(currentCY, 0, 0, 0),
+                    Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(currentCY, 0, 0, 0),
                     FontFamily = new FontFamily("Consolas"),
                 };
                 var txZoom = new TextBox
@@ -1140,9 +1140,9 @@ namespace FracturingFog.Hosting
                     targetCXLo = region.CenterXLo; targetCX2 = region.CenterX2; targetCX3 = region.CenterX3;
                     targetCYLo = region.CenterYLo; targetCY2 = region.CenterY2; targetCY3 = region.CenterY3;
 
-                    txCX.Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(
+                    txCX.Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(
                         region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                    txCY.Text = global::FracturingFog.Views.FormHelpers.FormatCoordSingle(
+                    txCY.Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(
                         region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
 
                     double z = region.Zoom;
@@ -1169,9 +1169,9 @@ namespace FracturingFog.Hosting
                     out double cyHi, out double cyLo, out double cy2, out double cy3,
                     out double zoom, out double seconds)
                 {
-                    bool okCX = global::FracturingFog.Views.FormHelpers.TryParseCoordAny(
+                    bool okCX = global::FracturingFog.Abstractions.Math.QdCoordCodec.TryParseCoordAny(
                         txCX.Text ?? "", out cxHi, out cxLo, out cx2, out cx3);
-                    bool okCY = global::FracturingFog.Views.FormHelpers.TryParseCoordAny(
+                    bool okCY = global::FracturingFog.Abstractions.Math.QdCoordCodec.TryParseCoordAny(
                         txCY.Text ?? "", out cyHi, out cyLo, out cy2, out cy3);
 
                     if (okCX && cxLo == 0 && cx2 == 0 && cx3 == 0)
