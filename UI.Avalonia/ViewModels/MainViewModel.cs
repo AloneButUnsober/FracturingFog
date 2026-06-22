@@ -841,8 +841,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 }
                 break;
             case RenderHint.Fast:
+                // Wave 2.5 — progressive ¼ → ½ → full chain. Each pan / wheel
+                // step cancels the in-flight chain and restarts at ¼ res so
+                // the user sees feedback within ~one calc of the quarter-res
+                // sidecar (~1/16 of full-res cost). The chain self-escalates
+                // to a full-quality final stage when input stops; the
+                // pan-stop debounce below is kept as a backstop for callers
+                // that emit a single Fast without a follow-up Full.
                 _renderHintFastInFlight = true;
-                _renderHost.TriggerFast();
+                _renderHost.Trigger(progressive: true);
                 _panStopDebounce.Change(PanStopDebounceMs, System.Threading.Timeout.Infinite);
                 break;
         }

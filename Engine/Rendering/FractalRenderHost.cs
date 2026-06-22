@@ -43,6 +43,18 @@ namespace FracturingFog.Rendering
         // Per-fractal-type calculators. MandelbrotCalculator is the canonical
         // primary; everything else is "alt" and selected by FractalType.
         private MandelbrotCalculator _calculator;
+
+        // Wave 2.5 — progressive rendering ¼ → ½ → full chain. Dedicated
+        // sidecar MandelbrotCalculator instances permanently sized to the
+        // matching downsample of the active surface. Used only when a
+        // Trigger(progressive: true) fires and only on the canonical
+        // Mandelbrot path (useAlt always falls through to a single full
+        // render). Resize() keeps them in step with the main calc; never
+        // disposed because MandelbrotCalculator owns no native handles.
+        // Memory cost at 1080p: ~5 MB (quarter) + ~20 MB (half) of pinned
+        // LOH on top of the main calc's ~80 MB.
+        private MandelbrotCalculator _previewCalcQuarter;
+        private MandelbrotCalculator _previewCalcHalf;
         private EscapeTimeCalculator _escapeCalculator;
         private IFSCalculator _ifsCalculator;
         private LSystemCalculator _lsystemCalculator;
@@ -229,16 +241,22 @@ namespace FracturingFog.Rendering
             // sample N (skip stale-upload + MSAA; blend into the TAA
             // accumulator and present the running average).
             public readonly int TaaSampleIndex;
+            // Wave 2.5 — progressive downsample factor. 0 / 1 = final
+            // full-resolution stage (existing path). 2 = half. 4 = quarter.
+            // When non-final the calc runs on a sidecar preview calc; the
+            // upload tail schedules the next stage (4 → 2 → 0).
+            public readonly int ProgressiveStage;
 
             public FrameJob(CancellationToken token, MandelbrotCalculator calc,
                 IFractalCalculator? altCalc, Stopwatch sw,
                 uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH,
-                int taaSampleIndex = 0)
+                int taaSampleIndex = 0, int progressiveStage = 0)
             {
                 Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
                 StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
                 CalcW = calcW; CalcH = calcH;
                 TaaSampleIndex = taaSampleIndex;
+                ProgressiveStage = progressiveStage;
             }
         }
 
@@ -268,6 +286,13 @@ namespace FracturingFog.Rendering
             FracturingFog.Rendering.Lighting.StagePerf.Publisher = _perfStats.RecordStage;
 
             _calculator = new MandelbrotCalculator(w, h);
+            // Wave 2.5 — progressive sidecars at ¼ and ½ resolution. Min
+            // 64×64 to keep BLA / SA prelude math well-behaved at very small
+            // window sizes.
+            int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
+            int hw = Math.Max(64, w / 2); int hh = Math.Max(64, h / 2);
+            _previewCalcQuarter = new MandelbrotCalculator(qw, qh);
+            _previewCalcHalf    = new MandelbrotCalculator(hw, hh);
             _escapeCalculator = new EscapeTimeCalculator(w, h);
             _ifsCalculator = new IFSCalculator(w, h);
             _lsystemCalculator = new LSystemCalculator(w, h);
@@ -864,12 +889,22 @@ namespace FracturingFog.Rendering
             int calcW = _calculator.Width;
             int calcH = _calculator.Height;
 
+            // Wave 2.5 — progressive only on the canonical Mandelbrot path
+            // and only when the dynamic alt slot is empty. Alt calcs run a
+            // single full render as before. Tiny windows (W*H < 256 px) skip
+            // progressive too — overhead exceeds the win.
+            int progressiveStage = (progressive && !useAlt && _dynamicAltCalculator == null
+                                     && calcW * calcH >= 256 * 256)
+                ? 4
+                : 0;
+
             // T2.4: enqueue onto the dedicated calc thread (latest-only).
             // Drain any queued-but-unstarted job first so a burst of Triggers
             // (wheel zoom, key-repeat) collapses to the freshest job before
             // the calc thread can pick a stale one up.
             var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
-                staleBuf, staleW, staleH, calcW, calcH);
+                staleBuf, staleW, staleH, calcW, calcH,
+                taaSampleIndex: 0, progressiveStage: progressiveStage);
             while (_calcQueue.TryTake(out _)) { }
             try { _calcQueue.Add(job); }
             catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
@@ -903,6 +938,42 @@ namespace FracturingFog.Rendering
             var calc = job.Calc;
             var altCalc = job.AltCalc;
             bool useAlt = altCalc != null;
+
+            // Wave 2.5 — progressive preview stage. Run Calculate on a
+            // sidecar quarter / half calc, upload its smaller buffer (the D3D
+            // renderer's full-screen triangle stretches via the texture
+            // sampler), then hand off to RunFrameJobUpload tail which will
+            // schedule the next stage. Skips TAA / MSAA / SSAO / CDF rebuild
+            // / FrameCompleted — those apply only to the final full-res
+            // frame.
+            if (job.ProgressiveStage >= 2 && !useAlt)
+            {
+                long pCalcStart = Stopwatch.GetTimestamp();
+                MandelbrotCalculator preview = job.ProgressiveStage >= 4
+                    ? _previewCalcQuarter
+                    : _previewCalcHalf;
+                MirrorMandelbrotState(calc, preview);
+                try { preview.Calculate(token); }
+                catch (OperationCanceledException)
+                {
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+                long pCalcEnd = Stopwatch.GetTimestamp();
+                if (ShowPerfHud)
+                    _perfStats.RecordCalc((pCalcEnd - pCalcStart) * 1000.0 / Stopwatch.Frequency);
+
+                if (token.IsCancellationRequested)
+                {
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+
+                long pMs = job.Sw.ElapsedMilliseconds;
+                ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
+                    new UploadCtx(this, job, pMs), preferLocal: false);
+                return;
+            }
 
             // Wave 2.7 — TAA continuation frame. Skips stale-upload, MSAA,
             // SSAO recompute, CDF rebuild. Runs one jittered Calculate, blends
@@ -1278,12 +1349,79 @@ namespace FracturingFog.Rendering
             }
         }
 
+        // Wave 2.5 — copy view-relevant Mandelbrot state from the main calc
+        // onto a sidecar preview calc. Buffer dims stay at the preview calc's
+        // (smaller) size — the calc thread temporarily inherits the centre /
+        // zoom / iter / quality / colour map / acceleration flags so the
+        // pixel scale and ref orbit reproduce the main view at downsample.
+        private static void MirrorMandelbrotState(MandelbrotCalculator src, MandelbrotCalculator dst)
+        {
+            dst.CenterX   = src.CenterX;   dst.CenterXLo = src.CenterXLo;
+            dst.CenterX2  = src.CenterX2;  dst.CenterX3  = src.CenterX3;
+            dst.CenterX4  = src.CenterX4;  dst.CenterX5  = src.CenterX5;
+            dst.CenterX6  = src.CenterX6;  dst.CenterX7  = src.CenterX7;
+            dst.CenterY   = src.CenterY;   dst.CenterYLo = src.CenterYLo;
+            dst.CenterY2  = src.CenterY2;  dst.CenterY3  = src.CenterY3;
+            dst.CenterY4  = src.CenterY4;  dst.CenterY5  = src.CenterY5;
+            dst.CenterY6  = src.CenterY6;  dst.CenterY7  = src.CenterY7;
+            dst.Zoom = src.Zoom;
+            dst.MaxIterations = src.MaxIterations;
+            dst.Quality = src.Quality;
+            dst.ColorMap = src.ColorMap;
+            dst.DisableAcceleration = src.DisableAcceleration;
+            dst.DisableSeriesApproximation = src.DisableSeriesApproximation;
+            dst.DisableDdBla = src.DisableDdBla;
+        }
+
         private void RunFrameJobUpload(FrameJob job, long ms)
         {
             var token = job.Token;
             var calc = job.Calc;
             var altCalc = job.AltCalc;
             bool useAlt = altCalc != null;
+
+            // Wave 2.5 — progressive preview upload. The sidecar's
+            // ColorBuffer is at preview-calc dims; the renderer's
+            // EnsureTexture recreates the texture at those dims, and the
+            // full-screen quad sampler scales it to the back buffer. No
+            // overlay composite, no TAA, no FrameCompleted, no perf-HUD
+            // frame timing (still records calc ms above). After upload,
+            // enqueue the next stage (4 → 2 → 0 final).
+            if (job.ProgressiveStage >= 2 && !useAlt)
+            {
+                if (token.IsCancellationRequested || _disposed)
+                {
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+                MandelbrotCalculator preview = job.ProgressiveStage >= 4
+                    ? _previewCalcQuarter
+                    : _previewCalcHalf;
+                lock (_uploadGate)
+                {
+                    lock (_d3dGate)
+                    {
+                        _renderer.UpdateTexture(preview.ColorBuffer, preview.Width, preview.Height);
+                        _renderer.Render();
+                    }
+                }
+                AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+
+                int nextStage = job.ProgressiveStage >= 4 ? 2 : 0;
+                var nextJob = new FrameJob(
+                    job.Token, calc, altCalc: null, sw: job.Sw,
+                    staleBuf: null, staleW: 0, staleH: 0,
+                    calcW: job.CalcW, calcH: job.CalcH,
+                    taaSampleIndex: 0, progressiveStage: nextStage);
+                try { _calcQueue.Add(nextJob); }
+                catch (InvalidOperationException) { /* shutdown */ }
+                catch (ArgumentException)
+                {
+                    while (_calcQueue.TryTake(out _)) { }
+                    try { _calcQueue.Add(nextJob); } catch { }
+                }
+                return;
+            }
 
             {
                 if (token.IsCancellationRequested)
@@ -1397,6 +1535,11 @@ namespace FracturingFog.Rendering
                 _renderer.Render();
             }
             _calculator.Resize(w, h);
+            // Wave 2.5 — keep progressive sidecars in sync with main surface.
+            int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
+            int hw = Math.Max(64, w / 2); int hh = Math.Max(64, h / 2);
+            _previewCalcQuarter.Resize(qw, qh);
+            _previewCalcHalf.Resize(hw, hh);
             _escapeCalculator.Resize(w, h);
             _ifsCalculator.Resize(w, h);
             _lsystemCalculator.Resize(w, h);
