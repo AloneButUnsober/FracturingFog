@@ -94,7 +94,7 @@ audio-reactive dialog without crash.
 | 2.2 | D-3.16 — Phoenix proper DE + perturbation (δ_prev + dprev/dc) | ✅ Shipped 2026-06-21 |
 | 2.3 | D-6.26 — Save hot-loaded calc to permanent `.cs` | ½ d |
 | 2.4 | D-6.24 — Live equation preview (AST + dz/dc + SA flag as user types) | ✅ Shipped 2026-06-21 |
-| 2.5 | D-5.20 — Progressive rendering ¼→½→full | 2 d |
+| 2.5 | D-5.20 — Progressive rendering ¼→½→full | ✅ Shipped 2026-06-22 |
 | 2.6 | D-5.19 — Anti-aliasing 2×2/4×4 (Quality gate) | 1 d |
 | 2.7 | D-5.21 — TAA temporal accumulation | ✅ Shipped 2026-06-21 |
 | 2.8 | D-6.23 — Equation cookbook + gallery | ✅ Shipped 2026-06-21 |
@@ -544,6 +544,33 @@ Convergence after Wave 1:
     calls `Trigger()`.
   * `UserEquationView.axaml` — new "Cookbook…" button in the action row.
   * Build clean (0 errors).
+- 2026-06-22 — Wave 2.5 (D-5.20) shipped — Progressive rendering ¼ → ½ → full.
+  * `Engine/Rendering/FractalRenderHost.cs` — two new sidecar
+    `MandelbrotCalculator` instances (`_previewCalcQuarter`,
+    `_previewCalcHalf`) permanently sized to (W/4, H/4) and (W/2, H/2),
+    floor 64×64. Memory cost ~25 MB pinned LOH on top of the main
+    calc's ~80 MB at 1080p. `Resize` updates both in step.
+  * `FrameJob.ProgressiveStage` int (0 = final, 2 = half, 4 = quarter).
+    `Trigger(progressive: true)` enqueues a quarter-stage job; the
+    upload tail schedules the next stage (4 → 2 → 0). Gated on the
+    canonical Mandelbrot path (no `useAlt`, no `_dynamicAltCalculator`)
+    and surface ≥ 256×256 — alt calcs and tiny windows fall back to
+    a single full render.
+  * `MirrorMandelbrotState(src, dst)` copies all 8 centre limbs +
+    zoom + iter + quality + colour map + acceleration flags onto the
+    sidecar so the preview reproduces the main view at downsample.
+  * Preview upload pushes the sidecar's `ColorBuffer` at its smaller
+    dims; `DirectXRenderer.EnsureTexture` recreates the texture at
+    those dims and the full-screen quad sampler stretches to the
+    back buffer. No overlay composite, no TAA seed, no MSAA, no SSAO,
+    no CDF rebuild, no `FrameCompleted` event for non-final stages —
+    those run only on the final full-res stage as before.
+  * `UI.Avalonia/ViewModels/MainViewModel.cs` — `RenderHint.Fast`
+    now calls `Trigger(progressive: true)` instead of `TriggerFast()`.
+    Each pan / wheel event cancels the in-flight chain (shared CTS)
+    and restarts at ¼ res. Pan-stop debounce kept as backstop for
+    single-Fast callers that don't follow up with a Full hint.
+  * Build clean (0 errors). 140/140 server tests pass.
 - 2026-06-21 — Wave 2.4 (D-6.24) shipped — Live equation preview.
   * New `CalculatorGenApi.Preview(equation) → PreviewResult` returns the
     parsed AST in printed form (`AstPrinter.Print`), symbolic `dz/dc` and
