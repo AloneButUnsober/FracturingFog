@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class FirePalette : IColorMap
+    public class FirePalette : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Fire";
 
@@ -33,5 +33,20 @@ namespace FracturingFog.Models
 
             return (255 << 24) | (r << 16) | (g << 8) | b;
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float traw = in_smooth * 0.020;
+    float t = traw - floor(traw);
+    float r = saturate(t * 3.0);
+    float g = saturate((t - 0.33) * 3.0);
+    float b = saturate((t - 0.67) * 3.0);
+    float ripple = 0.85 + 0.15 * sin(in_smooth * 0.11);
+    return float3(r, g, b) * ripple;
+";
+
+        public string PaletteId => "FirePalette/v1";
     }
 }

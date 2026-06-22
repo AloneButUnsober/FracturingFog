@@ -5,13 +5,30 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class Pastelly : IColorMap
+    public class Pastelly : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Pastelly";
 
         public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
 
         public int MaxIterations { get; set; } = 1000;
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        // Mirrors Map() — saturation expression `c * (t / c) % 1.0` algebraically
+        // simplifies to `t % 1.0` (same as hue). NaN when distance == 0 on CPU
+        // and on GPU — cg_pack_bgra saturates the eventual write.
+        public string HlslPaletteBody => @"
+    float t = in_smooth * 0.05;
+    float hue = t - floor(t);
+    float sat = t - floor(t);
+    float baseV = (in_isInSet > 0.5) ? -0.01 : 1.0;
+    float lightness = 1.35 - min(t * 0.04, 1.0);
+    float value = saturate(baseV * (lightness + 0.3 * exp(-in_dist * 0.2)));
+    return cg_hsv_to_rgb(hue, sat, value);
+";
+
+        public string PaletteId => "Pastelly/v1";
 
         //public int Map(float smooth, float distance, int iterations)
         //{

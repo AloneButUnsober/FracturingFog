@@ -103,7 +103,7 @@ audio-reactive dialog without crash.
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | ✅ Shipped 2026-06-21; OD arithmetic fixed + re-enabled 2026-06-22 (op* rewrite + 23 xUnit OD parity tests in `Server.Tests/OctupleDoubleTests.cs`). UI navigation past 1e58 still pending — see status log |
 | 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 🟡 Scaffold shipped 2026-06-22 (Hi-only kernel works on CUDA). QD upgrade + perf-win analysis **deferred** as non-blocking follow-on — toggle off by default, no other wave depends on it |
 | 2.13 | D-7.29 — Roslyn source generator | ✅ Shipped 2026-06-22 |
-| 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | 3–5 d (see Path B notes in 2026-06-22 status log) |
+| 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | 🟡 Deferred 2026-06-22 — 3–5 d, no other wave depends on it; revisit after Wave 3 perf tail |
 | 2.15 | D-4.20 — OD-aware UI navigation — populate `CenterX4..X7` from pan/zoom | ✅ Shipped 2026-06-22 (`FractalInputController.cs` — 6 pan/zoom sites + OD pan-start cache + `StoreOD` helper) |
 
 ---
@@ -112,14 +112,14 @@ audio-reactive dialog without crash.
 
 | # | Item |
 |---|------|
-| 3.1 | T2.1 — SIMD brightness/contrast |
-| 3.2 | T2.2 — Suppress pre-overlay snapshot during video record |
-| 3.3 | T2.3 — `EscapeTimeCalculator` SIMD inner loop (Mandelbrot/Julia/BurningShip/Tricorn/Multibrot) |
-| 3.4 | T3.3 — non-temporal `Avx.Store*` writes |
-| 3.5 | T3.2 — ref-orbit recycling across video frames |
-| 3.6 | T3.1 ext — HLSL palette codegen for hand-written `IColorMap`; GPU `ColorBuffer` for orbit-aware themes |
-| 3.7 | Finding D — Adaptive HE crossfade lerp |
-| 3.8 | Pan/keyboard input fails at zoom ≥ 1e24 — QD-limb update in pan-zoom command pipeline |
+| 3.1 | T2.1 — SIMD brightness/contrast | ✅ Already shipped — `FractalRenderHost.cs:2181` `ProcessRowSimd` Vector256 (8 BGRA pixels/step), chunked Partitioner, pooled LOH dst buffer |
+| 3.2 | T2.2 — Suppress pre-overlay snapshot during video record | ✅ Already shipped — `FractalRenderHost.cs:2085` `if (!_recordingActive)` gate; pooled `_uploadPrePool` LOH |
+| 3.3 | T2.3 — `EscapeTimeCalculator` SIMD inner loop (Mandelbrot/Julia/BurningShip/Tricorn/Multibrot) | ✅ Shipped 2026-06-22 — Mandelbrot/Julia/BurningShip/Tricorn already SIMD; Multibrot d∈{3,4,5} added (direct complex-mul scalar + `StepSimd`); d≥6 keeps polar fallback. `SimdSupported` flag drives dispatch in `EscapeTimeCalculator.Calculate` |
+| 3.4 | T3.3 — non-temporal `Avx.Store*` writes | ✅ Shipped 2026-06-22 — `ProcessRowSimd` gains `StoreAlignedNonTemporal` fast-path when dst is 32-byte aligned; pre-loop alignment check splits two hot loops |
+| 3.5 | T3.2 — ref-orbit recycling across video frames | 🟡 Deferred 2026-06-22 — needs orbit-validity checkpoint infrastructure (re-eval cached orbit vs new dc, reuse when |δ_n| stays within BLA radius); ~1-2 d, revisit after Wave 4 |
+| 3.6 | T3.1 ext — HLSL palette codegen for hand-written `IColorMap`; GPU `ColorBuffer` for orbit-aware themes | ✅ Shipped 2026-06-22 — `HsvPalette` + all 19 sibling hand-written themes now implement `IGpuHlslPalette`. Shared HLSL prelude in `Engine/Models/HlslPaletteHelpers.cs` (cg_mods + cg_hsv_to_rgb mirroring Fractals.HsvToRgb). Auto-picked by `EscapeTimeCalculator.TryDispatchGpu` |
+| 3.7 | Finding D — Adaptive HE crossfade lerp | ✅ Shipped 2026-06-22 — `RecolorActiveToBuffer` now bakes HE into the recolor target via `BuildHistogramCdf` + `ApplyHistogramEqualizationWithCdf` when `ViewState.HistogramEq > 0`; eliminates the post-fade snap |
+| 3.8 | Pan/keyboard input fails at zoom ≥ 1e24 — QD-limb update in pan-zoom command pipeline | ✅ Superseded by Wave 2.15 (2026-06-22) — `FractalInputController.cs` all 6 pan/zoom sites carry OD/QD/DD/SP branches with `StoreOD`/`StoreQD`/`StoreDD` writing all limbs |
 
 ---
 
@@ -646,6 +646,94 @@ Convergence after Wave 1:
     / Flags. SelectableTextBlocks, monospace. Window grew to 700×680 to
     accommodate.
   * Build clean (0 errors, only pre-existing AVLN5001 Watermark warnings).
+- 2026-06-22 — Wave 3 kickoff. 2.14 (QD δ-chain) deferred — 3-5 d, no
+  blocker. 3.1 (SIMD brightness/contrast) + 3.2 (suppress pre-overlay
+  snapshot) found already shipped — `FractalRenderHost.cs` has
+  Vector256 `ProcessRowSimd` (8 BGRA pixels/step, chunked Partitioner,
+  pooled LOH) + `_recordingActive` gate at the snapshot site. Closed
+  both as completed.
+- 2026-06-22 — Wave 3.8 superseded. `FractalInputController.cs` already
+  carries OD/QD/DD/SP branches on all 6 pan/zoom sites
+  (`OnPointerMove`, `OnPointerDoubleClick`, `OnWheel`, `ApplyBoxZoom`,
+  `PanByPixels`) with `StoreOD`/`StoreQD`/`StoreDD` writing every limb —
+  Wave 2.15's work covered the perf-plan finding. `QDZoomThreshold` =
+  1e25; DD branch handles 1e12–1e25 via Hi+Lo. Pan no longer collapses
+  limbs in any tier.
+- 2026-06-22 — Wave 3.6 follow-on shipped — 19 remaining hand-written
+  themes ported to `IGpuHlslPalette`. New shared file
+  `Engine/Models/HlslPaletteHelpers.cs` exposes two static prelude
+  strings: `HsvAndMods` (cg_mods + cg_hsv_to_rgb that mirrors
+  `Fractals.HsvToRgb` exactly — no input clamping; `cg_pack_bgra`
+  saturates at pack time) and `ModsOnly` (for themes that need only
+  the GLSL-style mod helper). Themes ported: `GrayscalePalette`,
+  `RainbowColorMap`, `FirePalette`, `Painted`, `PaintedReversed`,
+  `Pastelly`, `WarpedHsvMap`, `GoldenRatioMap`, `MonoBandMap`,
+  `BernsteinMap`, `RedAndBlack` (Radio Interference), `NebulaDustMap`,
+  `DigitalMatrixMap`, `PsychedelicMap`, `TwilightCyclicMap`,
+  `SolarWindMap`, `SolarWindMapMOD`, `CopperSheenMap`, `VintageSepiaMap`,
+  `DistanceGlowMap`. Each carries unique `PaletteId` so the kernel
+  caches its compiled shader per theme. End-to-end GPU palette path
+  (`EscapeTimeCalculator.TryDispatchGpu` → `GpuKernel.SetPalette` →
+  `gColor` UAV write) now applies to every algorithmic theme in the
+  EscapeTime dispatch table. Build clean, 140/140 tests pass.
+- 2026-06-22 — Wave 3.6 (T3.1 ext) shipped — HLSL palette codegen for
+  hand-written `IColorMap`. `HsvPalette` now implements `IGpuHlslPalette`
+  as the canonical hand-port template. `HlslPaletteBody` mirrors `Map()`
+  but with saturation=1 baked in, so the per-sector colour blend
+  simplifies to (v,t,0)/(q,v,0)/(0,v,t)/(0,q,v)/(t,0,v)/(v,0,q) and the
+  shader needs no helpers — `HlslPrelude` returns empty. `PaletteId`
+  = `"HsvPalette/v1"` so the kernel caches the compiled shader per id.
+  Picked up automatically by `EscapeTimeCalculator.TryDispatchGpu`'s
+  `ColorMap as IGpuHlslPalette` check (and the matching
+  `MandelbrotCalculator` path); when the toggle is on and the kernel
+  attached, the GPU writes `ColorBuffer` end-to-end and the CPU
+  writeback skips. 3.5 deferred per user — needs orbit-validity
+  infrastructure (~1-2 d).
+  Follow-on (mechanical port using HsvPalette as template):
+  GrayscalePalette, RainbowColorMap, FirePalette, Painted,
+  PaintedReversed, Pastelly, WarpedHsvMap, GoldenRatioMap, MonoBandMap,
+  BernsteinMap, RedAndBlack, NebulaDustMap, DigitalMatrixMap,
+  PsychedelicMap, TwilightCyclicMap, SolarWindMap, SolarWindMapMOD,
+  CopperSheenMap, VintageSepiaMap, DistanceGlowMap. Build clean,
+  140/140 tests pass.
+- 2026-06-22 — Wave 3.7 (Finding D) shipped — Adaptive HE crossfade.
+  Root cause: slideshow `_lastUploadedBuffer` snapshot source had HE
+  applied (calc-completion path bakes HE before `UploadProcessedBuffer`)
+  but `RecolorActiveToBuffer` returned the raw post-Calculate /
+  post-`ApplyBandDitherRecolor` buffer with no HE. `FadeAsync`
+  per-pixel lerp ended in the pre-HE target state; the post-fade
+  `RepaintWithPostFx` then snapped HE onto the visible frame — the
+  "HE pops on at end" jump. Fix: after the recolor compute,
+  `BuildHistogramCdf` + `ApplyHistogramEqualizationWithCdf` apply HE
+  to the recolor target when `ViewState.HistogramEq > 0`, matching
+  the upload-path output so both fade endpoints are post-HE and the
+  RepaintWithPostFx is now a no-op visually. Mandelbrot path only
+  (alt calcs already bypass HE in the upload path). Build clean,
+  140/140 tests pass.
+- 2026-06-22 — Wave 3.4 (T3.3) shipped — Non-temporal AVX writes.
+  `FractalRenderHost.ProcessRowSimd` (brightness/contrast Vector256 inner
+  loop) now uses `Vector256<uint>.StoreAlignedNonTemporal(uint*)` when
+  the dst buffer (pinned POH `_uploadDstPool`) is 32-byte aligned at
+  start. Each step writes 32 bytes (vecLen=8 uints) so alignment is
+  preserved across the loop — one pre-loop alignment check splits the
+  hot path into NT vs fallback `StoreUnsafe` loops, no per-iteration
+  branch. Bypasses L2/L3 cache eviction for the post-FX buffer that GPU
+  upload consumes immediately without CPU re-read. Build clean,
+  140/140 tests pass.
+- 2026-06-22 — Wave 3.3 (T2.3) shipped — Multibrot SIMD.
+  Mandelbrot/Julia/BurningShip/Tricorn already SIMD via
+  `ISimdFractalKernel`. Multibrot previously stayed scalar with polar
+  form (`Math.Atan2`/`Pow`/`Cos`/`Sin` per step). Added direct
+  complex-multiplication scalar + SIMD paths for d∈{3,4,5}:
+  * d=3: `z³ = zr(zr² − 3 zi²) + i zi(3 zr² − zi²)`; 3·z² derivative.
+  * d=4: `z² = u + iv`, `z⁴ = (u² − v²) + 2 u v i`; 4·z³ derivative.
+  * d=5: `z⁴ = U + iV`, `z⁵ = (zr·U − zi·V) + i(zr·V + zi·U)`; 5·z⁴.
+  Each Step/StepSimd branches on `_d` — predictable, hoist-friendly.
+  d≥6 keeps polar fallback. `SimdSupported` flag drives dispatch:
+  `EscapeTimeCalculator.Calculate` picks `DispatchByColorMapSimd` for
+  d∈{3,4,5}, scalar `DispatchByColorMap` otherwise. Interface comment
+  in `IFractalKernel.cs` updated to reflect the new coverage.
+  Build clean (0 errors), 140/140 server tests pass.
 - 2026-06-22 — Wave 2.13 (D-7.29) shipped — Roslyn source generator.
   Replaces the legacy `dotnet run -p CalculatorGen` step with a
   compile-time `IIncrementalGenerator`. Deleted ~33 K lines of

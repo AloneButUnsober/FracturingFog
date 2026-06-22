@@ -12,7 +12,7 @@ namespace FracturingFog.Models
     /// Matrix digital rain — phosphor green on black with scan-line banding
     /// and distance-based edge glow.
     /// </summary>
-    public class DigitalMatrixMap : IColorMap
+    public class DigitalMatrixMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Digital Matrix";
 
@@ -47,5 +47,20 @@ namespace FracturingFog.Models
 
             return unchecked((int)0xFF000000 | (g << 8) | b);
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float band1 = 0.5 + 0.5 * sin(in_smooth * 0.25);
+    float band2 = 0.5 + 0.5 * sin(in_smooth * 0.07);
+    float combined = band1 * band2;
+    float glow = exp(-in_dist * 0.12);
+    float v = saturate(combined * (0.3 + 0.7 * glow));
+    float b = v * v * (80.0 / 255.0);
+    return float3(0.0, v, b);
+";
+
+        public string PaletteId => "DigitalMatrixMap/v1";
     }
 }

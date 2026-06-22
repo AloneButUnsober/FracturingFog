@@ -1791,6 +1791,21 @@ namespace FracturingFog.Rendering
             {
                 _calculator.ApplyBandDitherRecolor(0.0);
             }
+
+            // Wave 3.7 — bake Adaptive HE into the recolor target so the
+            // slideshow cross-fade interpolates between two HE-applied
+            // buffers (snapshot source has HE; without this the target was
+            // pre-HE and the fade ended in a pre-HE state that the post-
+            // fade `RepaintWithPostFx` then snapped onto, producing the
+            // visible "HE pops on" jump at fade end). Mirrors the calc-
+            // completion HE step at the top of UploadCompletedFrame.
+            if (ViewState.HistogramEq > 0
+                && _calculator.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
+            {
+                _calculator.ApplyHistogramEqualizationWithCdf(
+                    cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
+            }
+
             var src = _calculator.ColorBuffer;
             int mn = w * h;
             var copy = new uint[mn];
@@ -2195,36 +2210,72 @@ namespace FracturingFog.Rendering
 
             int i = start;
             int simdEnd = end - vecLen;
-            for (; i <= simdEnd; i += vecLen)
+
+            // T3.3 — non-temporal stores when dst[start] is 32-byte aligned.
+            // Each step writes 32 bytes (8 uints) so alignment is preserved
+            // across the loop. The post-FX buffer is consumed by GPU upload
+            // immediately — no CPU re-read — so bypassing the cache saves
+            // L2 eviction pressure on 4K renders. One-time check up front
+            // keeps the branch out of the hot loop.
+            bool useNonTemp;
+            unsafe
             {
-                var packed = Vector256.LoadUnsafe(ref src[i]);
+                useNonTemp = (((nint)System.Runtime.CompilerServices.Unsafe.AsPointer(ref dst[start])) & 31) == 0;
+            }
 
-                // Extract per-channel byte values into Vector256<int>.
-                var bI = (packed & maskFF).AsInt32();
-                var gI = ((packed >> 8)  & maskFF).AsInt32();
-                var rI = ((packed >> 16) & maskFF).AsInt32();
-
-                var b = Vector256.ConvertToSingle(bI);
-                var g = Vector256.ConvertToSingle(gI);
-                var r = Vector256.ConvertToSingle(rI);
-
-                // (v - 127.5) * contrast + 127.5 + brightness255
-                b = (b - halfV) * contrastV + halfV + brightnessV;
-                g = (g - halfV) * contrastV + halfV + brightnessV;
-                r = (r - halfV) * contrastV + halfV + brightnessV;
-
-                // Clamp to [0, 255].
-                b = Vector256.Max(zeroF, Vector256.Min(max255F, b));
-                g = Vector256.Max(zeroF, Vector256.Min(max255F, g));
-                r = Vector256.Max(zeroF, Vector256.Min(max255F, r));
-
-                // Back to uint and pack into 0xFFRRGGBB layout.
-                var bU = Vector256.ConvertToInt32(b).AsUInt32();
-                var gU = Vector256.ConvertToInt32(g).AsUInt32() << 8;
-                var rU = Vector256.ConvertToInt32(r).AsUInt32() << 16;
-                var result = alpha | rU | gU | bU;
-
-                result.StoreUnsafe(ref dst[i]);
+            if (useNonTemp)
+            {
+                unsafe
+                {
+                    fixed (uint* pDst = &dst[0])
+                    {
+                        for (; i <= simdEnd; i += vecLen)
+                        {
+                            var packed = Vector256.LoadUnsafe(ref src[i]);
+                            var bI = (packed & maskFF).AsInt32();
+                            var gI = ((packed >> 8)  & maskFF).AsInt32();
+                            var rI = ((packed >> 16) & maskFF).AsInt32();
+                            var b = Vector256.ConvertToSingle(bI);
+                            var g = Vector256.ConvertToSingle(gI);
+                            var r = Vector256.ConvertToSingle(rI);
+                            b = (b - halfV) * contrastV + halfV + brightnessV;
+                            g = (g - halfV) * contrastV + halfV + brightnessV;
+                            r = (r - halfV) * contrastV + halfV + brightnessV;
+                            b = Vector256.Max(zeroF, Vector256.Min(max255F, b));
+                            g = Vector256.Max(zeroF, Vector256.Min(max255F, g));
+                            r = Vector256.Max(zeroF, Vector256.Min(max255F, r));
+                            var bU = Vector256.ConvertToInt32(b).AsUInt32();
+                            var gU = Vector256.ConvertToInt32(g).AsUInt32() << 8;
+                            var rU = Vector256.ConvertToInt32(r).AsUInt32() << 16;
+                            var result = alpha | rU | gU | bU;
+                            result.StoreAlignedNonTemporal(pDst + i);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (; i <= simdEnd; i += vecLen)
+                {
+                    var packed = Vector256.LoadUnsafe(ref src[i]);
+                    var bI = (packed & maskFF).AsInt32();
+                    var gI = ((packed >> 8)  & maskFF).AsInt32();
+                    var rI = ((packed >> 16) & maskFF).AsInt32();
+                    var b = Vector256.ConvertToSingle(bI);
+                    var g = Vector256.ConvertToSingle(gI);
+                    var r = Vector256.ConvertToSingle(rI);
+                    b = (b - halfV) * contrastV + halfV + brightnessV;
+                    g = (g - halfV) * contrastV + halfV + brightnessV;
+                    r = (r - halfV) * contrastV + halfV + brightnessV;
+                    b = Vector256.Max(zeroF, Vector256.Min(max255F, b));
+                    g = Vector256.Max(zeroF, Vector256.Min(max255F, g));
+                    r = Vector256.Max(zeroF, Vector256.Min(max255F, r));
+                    var bU = Vector256.ConvertToInt32(b).AsUInt32();
+                    var gU = Vector256.ConvertToInt32(g).AsUInt32() << 8;
+                    var rU = Vector256.ConvertToInt32(r).AsUInt32() << 16;
+                    var result = alpha | rU | gU | bU;
+                    result.StoreUnsafe(ref dst[i]);
+                }
             }
             return i;
         }

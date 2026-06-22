@@ -13,7 +13,7 @@ namespace FracturingFog.Models
     /// HSV with non-linear saturation/value warping and distance-based
     /// boundary highlighting.  Produces richer detail than plain HSV.
     /// </summary>
-    public class WarpedHsvMap : IColorMap
+    public class WarpedHsvMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Warped HSV";
 
@@ -44,5 +44,21 @@ namespace FracturingFog.Models
             var c = ColorUtils.Hsv(hue, sat, val);
             return ColorUtils.PackArgb(c.R, c.G, c.B);
         }
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float h0 = in_smooth * 0.021;
+    float hue = h0 - floor(h0);
+    float satRipple = 0.5 + 0.5 * sin(in_smooth * 0.08 + 0.7);
+    float sat = saturate(0.55 + 0.45 * satRipple);
+    float depthDim = 1.0 - 0.4 * pow(in_smooth / max(in_maxIter, 1.0), 0.5);
+    float edgeGlow = 0.5 * exp(-in_dist * 0.15);
+    float val = saturate(depthDim + edgeGlow);
+    return cg_hsv_to_rgb(hue, sat, val);
+";
+
+        public string PaletteId => "WarpedHsvMap/v1";
     }
 }
