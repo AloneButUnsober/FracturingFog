@@ -101,7 +101,7 @@ audio-reactive dialog without crash.
 | 2.9 | D-6.25 — Animation: morph equations | ✅ Shipped 2026-06-21 |
 | 2.10 | D-4.18 — DD-precision BLA tables | ✅ Shipped 2026-06-21 |
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | ✅ Shipped 2026-06-21; OD arithmetic fixed + re-enabled 2026-06-22 (op* rewrite + 23 xUnit OD parity tests in `Server.Tests/OctupleDoubleTests.cs`). UI navigation past 1e58 still pending — see status log |
-| 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 5+ d |
+| 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 🟡 Scaffold shipped 2026-06-22 (Hi-only kernel works on CUDA). QD upgrade + perf-win analysis pending — see status log |
 | 2.13 | D-7.29 — Roslyn source generator | 1 wk |
 | 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | 3–5 d (see Path B notes in 2026-06-22 status log) |
 | 2.15 | D-4.20 — OD-aware UI navigation — populate `CenterX4..X7` from pan/zoom | ✅ Shipped 2026-06-22 (`FractalInputController.cs` — 6 pan/zoom sites + OD pan-start cache + `StoreOD` helper) |
@@ -571,6 +571,63 @@ Convergence after Wave 1:
     and restarts at ¼ res. Pan-stop debounce kept as backstop for
     single-Fast callers that don't follow up with a Full hint.
   * Build clean (0 errors). 140/140 server tests pass.
+- 2026-06-22 — Wave 2.12 (D-6.27) — GPU reference orbit scaffold landed.
+  Hi-only kernel runs end-to-end on CUDA; QD upgrade deferred to next slice.
+  * `Engine/Calculators/Gpu/GpuQD.cs` — ILGPU-friendly QD math (mirror of
+    `Abstractions/Math/QuadDouble.cs`). Tuple-returning primitives,
+    `AggressiveInlining`. Uses Dekker split-based `TwoProduct` instead of
+    `Math.FusedMultiplyAdd` — ILGPU 1.5.3 doesn't intercept the BCL FMA
+    intrinsic, so the FMA form throws "internal compiler error" during
+    JIT. Built but not yet invoked by the kernel.
+  * `Engine/Calculators/Gpu/MandelbrotRefOrbitGpu.cs` — single-thread
+    sequential kernel + host shim. Packs the 8 output limbs per slot
+    into `RefOrbitSlot` so the typed kernel loader stays at 4 generic
+    params (8 parallel `ArrayView<double>` blew past the loader's
+    practical ceiling — kernel JIT failed before any math ran). First
+    cut iterates Hi-only doubles; QD body wired via `GpuQDMath` lives
+    behind a TODO because ILGPU 1.5.3's IR-inliner trips on
+    `Renorm5`/`ThreeSum`'s deep `(s, e1, e2) = ThreeSum(...)`
+    deconstruction cascades (kernel JIT failed identically to the FMA
+    case). Two options for the QD upgrade slice: (a) rewrite GpuQDMath
+    primitives to return mutable struct outputs instead of value tuples;
+    (b) bump ILGPU to 2.x (different IR pipeline, tuples handled).
+  * `Engine/Calculators/Gpu/MandelbrotRefOrbitGpu.cs` — private FP64-
+    capable accelerator (`TryAcquireFp64`). Walks devices CUDA → CPU.
+    Bypasses `GpuAcceleratorHost` for the ref orbit because that picks
+    ILGPU's preferred non-CPU device, which on this dev machine landed
+    on Intel UHD OpenCL — "Float64 (double) type is not supported on
+    this device", kernel can't compile. Skips OpenCL entirely (no
+    cheap pre-flight FP64 probe; CPU is the only universally-FP64
+    fallback). Exposes `SelectedDeviceLabel` for `--gpurefprobe`.
+  * `Engine/Calculators/MandelbrotCalculator.cs` — `UseGpuReferenceOrbit`
+    static toggle (default off). When on, `CalculateHighPrecision` QD
+    branch routes through `TryComputeReferenceOrbitQDGpu` which mirrors
+    the centre-cache short-circuit in `ComputeReferenceOrbitQD`, runs
+    the GPU compute, and updates `_refZr/_refZrLo/_refZrX2/_refZrX3`
+    (and zi counterparts) plus the cache fields. Failure falls back
+    silently to the CPU path; failure reason logged via `Debug.WriteLine`.
+    Default off keeps every existing call site bit-identical to pre-2.12.
+  * `Program.cs` — `--gpurefprobe` flag. Runs three implementations
+    side-by-side at QD-tier coord/zoom (1e15 + 1e30 saprobe coords):
+    CPU-QD (truth), CPU-Hi (Hi-only baseline matching kernel math),
+    GPU-Hi (kernel). Reports ms + Δ(GPU vs CPU-Hi) — should be FP64
+    round-off; Δ(GPU vs CPU-QD) — chaos-amplified, expected large
+    until QD kernel slice lands. Writes `gpurefprobe.out`.
+  * Smoke result on dev hardware (GeForce GT 710, FP64 1/24-rate):
+    CUDA picked; kernel JITs (~490 ms first call, cached after);
+    second call 1.54 ms vs CPU-QD 0.54 ms. Δ(GPU-Hi vs CPU-Hi)=346 —
+    differs by CUDA's fused-mul-add rounding vs x86's two-step
+    mul+add; not a bug, IEEE-FP64 semantics differ between
+    backends. GT 710 isn't the target perf hardware — Wave 6 multi-
+    cluster will need a modern CUDA card for the GPU path to beat
+    CPU on sequential ref-orbit work; current win is offload + CPU
+    overlap potential, not raw throughput.
+  * Build clean (0 errors); 140/140 server tests pass (toggle off,
+    no behaviour change to default path).
+  * Open follow-ons: QD-body kernel (struct-output rewrite or ILGPU
+    upgrade); benchmark on RTX-class CUDA card; integrate toggle into
+    a host-side perf decision (auto-enable when measured GPU < CPU at
+    rebuild time); promote to OD ref orbit once QD lands.
 - 2026-06-21 — Wave 2.4 (D-6.24) shipped — Live equation preview.
   * New `CalculatorGenApi.Preview(equation) → PreviewResult` returns the
     parsed AST in printed form (`AstPrinter.Print`), symbolic `dz/dc` and

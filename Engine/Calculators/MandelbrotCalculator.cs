@@ -167,6 +167,14 @@ public sealed class MandelbrotCalculator
     /// </summary>
     public bool DisableAcceleration { get; set; } = false;
 
+    /// <summary>Wave 2.12 — opt in to GPU QD reference orbit. Default off:
+    /// the per-iteration QD chain is sequential, so the win is GPU FP64
+    /// throughput + CPU offload, not parallelism, and integrated GPUs
+    /// generally lose to CPU here. Toggled by the host (or --gpurefprobe)
+    /// once the GPU is confirmed faster on the active hardware. Failure
+    /// silently falls back to <see cref="ComputeReferenceOrbitQD"/>.</summary>
+    public static bool UseGpuReferenceOrbit { get; set; } = false;
+
     /// <summary>
     /// Disable SA prelude only (BLA still applies). Use this to isolate
     /// SA-induced visual artefacts at problem zoom levels.
@@ -1526,7 +1534,10 @@ public sealed class MandelbrotCalculator
         {
             var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
             var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
-            ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
+            // Wave 2.12 — opt-in GPU QD reference orbit. Falls back to CPU on
+            // any GPU init / kernel / copy failure.
+            if (!(UseGpuReferenceOrbit && TryComputeReferenceOrbitQDGpu(cxQD, cyQD, maxIt)))
+                ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
         }
         else
         {
@@ -2120,6 +2131,64 @@ public sealed class MandelbrotCalculator
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = n < maxIter;
+    }
+
+    // Wave 2.12 — GPU QD reference orbit dispatch. Lazily instantiated so
+    // the kernel JIT cost is paid only when first engaged. Lives on the
+    // calculator (not static) because each instance owns its own ref-orbit
+    // arrays the GPU writes into.
+    private FracturingFog.Calculators.Gpu.MandelbrotRefOrbitGpu? _refOrbitGpu;
+
+    /// <summary>Wave 2.12 — try to run the QD reference orbit on the GPU.
+    /// Returns true on success (orbit arrays + cache updated, identical
+    /// post-state to <see cref="ComputeReferenceOrbitQD"/>); false on any
+    /// GPU failure (caller falls back to CPU). Mirrors the CPU method's
+    /// centre-cache short-circuit so cached orbits skip the GPU launch.</summary>
+    private bool TryComputeReferenceOrbitQDGpu(QD cx, QD cy, int maxIter)
+    {
+        bool centerSame = cx.X0 == _refCxHi && cx.X1 == _refCxLo
+                       && cx.X2 == _refCx2 && cx.X3 == _refCx3
+                       && _refCx4 == 0 && _refCx5 == 0 && _refCx6 == 0 && _refCx7 == 0
+                       && cy.X0 == _refCyHi && cy.X1 == _refCyLo
+                       && cy.X2 == _refCy2 && cy.X3 == _refCy3
+                       && _refCy4 == 0 && _refCy5 == 0 && _refCy6 == 0 && _refCy7 == 0;
+        if (centerSame && (_refCachedEscaped || maxIter <= _refCachedMaxIter))
+            return true;  // cache hit — nothing to do (same as CPU path)
+
+        EnsureRefOrbitCapacity(maxIter);
+        _refOrbitGpu ??= new FracturingFog.Calculators.Gpu.MandelbrotRefOrbitGpu();
+        bool ok = _refOrbitGpu.Compute(
+            cx.X0, cx.X1, cx.X2, cx.X3,
+            cy.X0, cy.X1, cy.X2, cy.X3,
+            maxIter, EscapeRadius2,
+            _refZr, _refZrLo, _refZrX2, _refZrX3,
+            _refZi, _refZiLo, _refZiX2, _refZiX3,
+            out int n, out bool escaped);
+        if (!ok)
+        {
+            Debug.WriteLine($"[Wave2.12] GPU ref-orbit failed, falling back to CPU: {_refOrbitGpu.LastError}");
+            return false;
+        }
+
+        // QD path leaves OD limbs (X4..X7) zero — clear those slots up to n
+        // so any cached OD orbit residue from a prior frame doesn't bleed
+        // into the QD-tier per-pixel HP fallback.
+        for (int k = 0; k <= n; k++)
+        {
+            _refZrX4[k] = 0; _refZrX5[k] = 0; _refZrX6[k] = 0; _refZrX7[k] = 0;
+            _refZiX4[k] = 0; _refZiX5[k] = 0; _refZiX6[k] = 0; _refZiX7[k] = 0;
+        }
+
+        _refOrbitLen = n;
+        _refOrbitGen++;
+
+        _refCxHi = cx.X0; _refCxLo = cx.X1; _refCx2 = cx.X2; _refCx3 = cx.X3;
+        _refCx4 = 0; _refCx5 = 0; _refCx6 = 0; _refCx7 = 0;
+        _refCyHi = cy.X0; _refCyLo = cy.X1; _refCy2 = cy.X2; _refCy3 = cy.X3;
+        _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
+        _refCachedMaxIter = maxIter;
+        _refCachedEscaped = escaped;
+        return true;
     }
 
     // Octuple-double reference orbit — engaged at zoom > 1e50 (Wave 2.11).
