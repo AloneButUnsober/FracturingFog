@@ -348,6 +348,31 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Ctrl+Shift+A / Ctrl+Shift+S — diagnostic toggles for the legacy
+        // MandelbrotCalculator HP path. Bare A/S are reserved for WASD 3D
+        // camera input, so the unblocked diagnostic combo is Ctrl+Shift.
+        // Title gains a [ACCEL OFF] / [SA OFF] suffix while on. Used to
+        // isolate deep-zoom pixelation regressions (BLA vs SA vs QD math).
+        const KeyModifiers ctrlShift = KeyModifiers.Control | KeyModifiers.Shift;
+        if (e.Key == Key.A && e.KeyModifiers == ctrlShift)
+        {
+            _shell.ToggleMandelbrotAcceleration();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.S && e.KeyModifiers == ctrlShift)
+        {
+            _shell.ToggleMandelbrotSeriesApproximation();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.D && e.KeyModifiers == ctrlShift)
+        {
+            _shell.ToggleMandelbrotDdBla();
+            e.Handled = true;
+            return;
+        }
+
         // Command keys (M/T/R/V/Escape) — unmodified only; Ctrl/Alt/Shift
         // combos are reserved (diagnostic toggles, precise-pan).
         if (e.KeyModifiers == KeyModifiers.None)

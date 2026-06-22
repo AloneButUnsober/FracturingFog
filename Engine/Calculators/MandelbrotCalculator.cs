@@ -79,10 +79,39 @@ public sealed class MandelbrotCalculator
     public double CenterY2 { get; set; } = 0.0;
     public double CenterY3 { get; set; } = 0.0;
 
+    // OD limbs 4..7 — populated only at zoom > 1e50 (Wave 2.11). Default 0
+    // → behaves as QD. Set by Avalonia pan/zoom when OD-aware navigation
+    // is engaged; until that lands, deep-zoom state arrives via API.
+    public double CenterX4 { get; set; } = 0.0;
+    public double CenterX5 { get; set; } = 0.0;
+    public double CenterX6 { get; set; } = 0.0;
+    public double CenterX7 { get; set; } = 0.0;
+    public double CenterY4 { get; set; } = 0.0;
+    public double CenterY5 { get; set; } = 0.0;
+    public double CenterY6 { get; set; } = 0.0;
+    public double CenterY7 { get; set; } = 0.0;
+
     public double Zoom { get; set; } = 1.0;
 
     /// <summary>Zoom threshold above which QD ref orbit is used (else DD).</summary>
     private const double QDZoomThreshold = 1e25;
+
+    /// <summary>Zoom threshold above which BLA table builds in DD precision
+    /// (Wave 2.10). Below that the legacy single-precision merge runs ~7×
+    /// faster and the precision loss isn't ULP-visible (banding only appears
+    /// past ~1e15 due to 14+ merge-level ULP accumulation). Tunable via
+    /// `DisableDdBla` toggle for diagnostic A/B.</summary>
+    private const double DdBlaZoomThreshold = 1e15;
+
+    /// <summary>Zoom threshold above which OD ref orbit is used (else QD).
+    /// Wave 2.11 — 8-limb octuple-double centre + reference orbit.
+    /// QD ceiling is ~5×10⁵⁸ (X3 limb noise floor); OD pushes to ~10¹¹⁶.
+    /// Engaged just below QD's wall so a single zoom step doesn't bounce
+    /// off the precision floor.
+    /// Verified by `OctupleDoubleTests.RefOrbit_ModerateZoom_OdMatchesQd`:
+    /// OD matches QD to better than 1e-55 through the first 200 orbit
+    /// iterations on a representative coord.</summary>
+    private const double ODZoomThreshold = 1e50;
 
     public int MaxIterations { get; set; } = 512;
 
@@ -143,6 +172,26 @@ public sealed class MandelbrotCalculator
     /// SA-induced visual artefacts at problem zoom levels.
     /// </summary>
     public bool DisableSeriesApproximation { get; set; } = false;
+
+    /// <summary>
+    /// Force the legacy single-precision BLA table (pre-Wave-2.10) instead
+    /// of the DD-precision merge. Used to isolate suspected Wave 2.10
+    /// regressions at extreme zoom — DD-BLA stores A's Lo limb but the
+    /// per-pixel Apply collapses Hi+Lo to double, so the precision win
+    /// is theoretical until Apply itself runs in DD math.
+    /// Setter invalidates the BLA cache so the next render rebuilds.
+    /// </summary>
+    private bool _disableDdBla;
+    public bool DisableDdBla
+    {
+        get => _disableDdBla;
+        set
+        {
+            if (_disableDdBla == value) return;
+            _disableDdBla = value;
+            _blaTable = null;
+        }
+    }
 
     /// <summary>
     /// Complex-plane units per pixel for the most recent <see cref="Calculate"/>
@@ -242,6 +291,16 @@ public sealed class MandelbrotCalculator
     private double[] _refZiX2 = Array.Empty<double>();
     private double[] _refZrX3 = Array.Empty<double>();
     private double[] _refZiX3 = Array.Empty<double>();
+    // Wave 2.11 — OD limbs 4..7 of the reference orbit. Populated only by
+    // ComputeReferenceOrbitOD (Zoom > 1e50). DD/QD paths leave these zero.
+    private double[] _refZrX4 = Array.Empty<double>();
+    private double[] _refZiX4 = Array.Empty<double>();
+    private double[] _refZrX5 = Array.Empty<double>();
+    private double[] _refZiX5 = Array.Empty<double>();
+    private double[] _refZrX6 = Array.Empty<double>();
+    private double[] _refZiX6 = Array.Empty<double>();
+    private double[] _refZrX7 = Array.Empty<double>();
+    private double[] _refZiX7 = Array.Empty<double>();
     private int _refOrbitLen;
     // Bumped on every reference-orbit rebuild. BLA/SA cache derived
     // coefficients from a specific orbit snapshot; recentre that keeps
@@ -253,6 +312,11 @@ public sealed class MandelbrotCalculator
     // recomputation entirely. Key = (center limbs, maxIter at compute time).
     private double _refCxHi = double.NaN, _refCxLo, _refCx2, _refCx3;
     private double _refCyHi, _refCyLo, _refCy2, _refCy3;
+    // Wave 2.11 — OD center limbs 4..7 of the cached reference orbit.
+    // Both QD and DD paths leave these zero; centerSame in those paths
+    // must also verify these are zero to avoid a stale OD orbit reuse.
+    private double _refCx4, _refCx5, _refCx6, _refCx7;
+    private double _refCy4, _refCy5, _refCy6, _refCy7;
     private int _refCachedMaxIter = -1;
     private bool _refCachedEscaped;  // true when orbit terminated by escape
 
@@ -1448,7 +1512,17 @@ public sealed class MandelbrotCalculator
         //   • Zoom > 1e25  →  promote to QD center (~62 digits), supporting
         //                     zoom to ~5×10⁵⁸. Adds 4 limbs (X2, X3, Y2, Y3)
         //                     populated by MainForm pan/zoom when active.
-        if (Zoom > QDZoomThreshold)
+        //   • Zoom > 1e50  →  promote to OD center (~124 digits) — Wave 2.11.
+        //                     Adds 4 more limbs (X4..X7, Y4..Y7).
+        if (Zoom > ODZoomThreshold)
+        {
+            var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                              CenterX4, CenterX5, CenterX6, CenterX7);
+            var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                              CenterY4, CenterY5, CenterY6, CenterY7);
+            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
+        }
+        else if (Zoom > QDZoomThreshold)
         {
             var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
             var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
@@ -1573,7 +1647,17 @@ public sealed class MandelbrotCalculator
         // merges retain DD precision in A_n (near 1.0 + tiny at deep zoom
         // — single-precision storage loses ULPs after k≈14 merge levels,
         // visible as iteration banding past ~1e15).
-        _blaTable = new BlaTable(_refZr, _refZrLo, _refZi, _refZiLo, _refOrbitLen, dcMaxAbs);
+        //
+        // Gate at Zoom > DdBlaZoomThreshold (default 1e15). Below that, the
+        // 14-merge-level error hasn't accumulated to ULP-visible banding yet,
+        // and the DD merge is ~7× slower than the single-precision merge.
+        // Hitting every Calculate at zoom 1e12..1e15 with the DD merge cost
+        // for invisible benefit was the perf regression user reported when
+        // "DD kicks in" at medium depth.
+        bool useDdBla = !DisableDdBla && Zoom > DdBlaZoomThreshold;
+        _blaTable = useDdBla
+            ? new BlaTable(_refZr, _refZrLo, _refZi, _refZiLo, _refOrbitLen, dcMaxAbs)
+            : new BlaTable(_refZr, _refZi, _refOrbitLen, dcMaxAbs);
         _blaDcMaxAbs = dcMaxAbs;
         _blaForRefMaxIter = _refCachedMaxIter;
         _blaForRefOrbitLen = _refOrbitLen;
@@ -1928,23 +2012,14 @@ public sealed class MandelbrotCalculator
         // previous maxIter cap >= current cap.
         bool centerSame = cx.Hi == _refCxHi && cx.Lo == _refCxLo
                        && _refCx2 == 0 && _refCx3 == 0
+                       && _refCx4 == 0 && _refCx5 == 0 && _refCx6 == 0 && _refCx7 == 0
                        && cy.Hi == _refCyHi && cy.Lo == _refCyLo
-                       && _refCy2 == 0 && _refCy3 == 0;
+                       && _refCy2 == 0 && _refCy3 == 0
+                       && _refCy4 == 0 && _refCy5 == 0 && _refCy6 == 0 && _refCy7 == 0;
         if (centerSame && (_refCachedEscaped || maxIter <= _refCachedMaxIter))
             return;
 
-        if (_refZr.Length <= maxIter)
-        {
-            int sz = maxIter + 1;
-            _refZr = new double[sz];
-            _refZi = new double[sz];
-            _refZrLo = new double[sz];
-            _refZiLo = new double[sz];
-            _refZrX2 = new double[sz];
-            _refZiX2 = new double[sz];
-            _refZrX3 = new double[sz];
-            _refZiX3 = new double[sz];
-        }
+        EnsureRefOrbitCapacity(maxIter);
         DD zr = DD.Zero, zi = DD.Zero;
         int n;
         for (n = 0; n < maxIter; n++)
@@ -1953,6 +2028,8 @@ public sealed class MandelbrotCalculator
             _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
             _refZrX2[n] = 0;    _refZrX3[n] = 0;
             _refZiX2[n] = 0;    _refZiX3[n] = 0;
+            _refZrX4[n] = 0;    _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
+            _refZiX4[n] = 0;    _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
             if (zr.Hi * zr.Hi + zi.Hi * zi.Hi >= EscapeRadius2) break;
             DD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
@@ -1962,13 +2039,42 @@ public sealed class MandelbrotCalculator
         _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
         _refZrX2[n] = 0;    _refZrX3[n] = 0;
         _refZiX2[n] = 0;    _refZiX3[n] = 0;
+        _refZrX4[n] = 0;    _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
+        _refZiX4[n] = 0;    _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
         _refOrbitLen = n;  // == maxIter when centre is interior
         _refOrbitGen++;
 
         _refCxHi = cx.Hi; _refCxLo = cx.Lo; _refCx2 = 0; _refCx3 = 0;
+        _refCx4 = 0; _refCx5 = 0; _refCx6 = 0; _refCx7 = 0;
         _refCyHi = cy.Hi; _refCyLo = cy.Lo; _refCy2 = 0; _refCy3 = 0;
+        _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = n < maxIter;
+    }
+
+    // Wave 2.11 — single allocation point. QD/OD paths share this storage
+    // even when their lower limbs hold zero, so per-pixel fallback can read
+    // a uniform 8-limb refZ unconditionally.
+    private void EnsureRefOrbitCapacity(int maxIter)
+    {
+        if (_refZr.Length > maxIter) return;
+        int sz = maxIter + 1;
+        _refZr = new double[sz];
+        _refZi = new double[sz];
+        _refZrLo = new double[sz];
+        _refZiLo = new double[sz];
+        _refZrX2 = new double[sz];
+        _refZiX2 = new double[sz];
+        _refZrX3 = new double[sz];
+        _refZiX3 = new double[sz];
+        _refZrX4 = new double[sz];
+        _refZiX4 = new double[sz];
+        _refZrX5 = new double[sz];
+        _refZiX5 = new double[sz];
+        _refZrX6 = new double[sz];
+        _refZiX6 = new double[sz];
+        _refZrX7 = new double[sz];
+        _refZiX7 = new double[sz];
     }
 
     // Quad-double reference orbit — engaged at zoom > 1e25. Storage of Z_n
@@ -1980,29 +2086,22 @@ public sealed class MandelbrotCalculator
     {
         bool centerSame = cx.X0 == _refCxHi && cx.X1 == _refCxLo
                        && cx.X2 == _refCx2 && cx.X3 == _refCx3
+                       && _refCx4 == 0 && _refCx5 == 0 && _refCx6 == 0 && _refCx7 == 0
                        && cy.X0 == _refCyHi && cy.X1 == _refCyLo
-                       && cy.X2 == _refCy2 && cy.X3 == _refCy3;
+                       && cy.X2 == _refCy2 && cy.X3 == _refCy3
+                       && _refCy4 == 0 && _refCy5 == 0 && _refCy6 == 0 && _refCy7 == 0;
         if (centerSame && (_refCachedEscaped || maxIter <= _refCachedMaxIter))
             return;
 
-        if (_refZr.Length <= maxIter)
-        {
-            int sz = maxIter + 1;
-            _refZr = new double[sz];
-            _refZi = new double[sz];
-            _refZrLo = new double[sz];
-            _refZiLo = new double[sz];
-            _refZrX2 = new double[sz];
-            _refZiX2 = new double[sz];
-            _refZrX3 = new double[sz];
-            _refZiX3 = new double[sz];
-        }
+        EnsureRefOrbitCapacity(maxIter);
         QD zr = QD.Zero, zi = QD.Zero;
         int n;
         for (n = 0; n < maxIter; n++)
         {
             _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
             _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
+            _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
+            _refZiX4[n] = 0; _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
             if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= EscapeRadius2) break;
             QD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
@@ -2010,13 +2109,158 @@ public sealed class MandelbrotCalculator
         }
         _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
         _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
+        _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
+        _refZiX4[n] = 0; _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
         _refOrbitLen = n;
         _refOrbitGen++;
 
         _refCxHi = cx.X0; _refCxLo = cx.X1; _refCx2 = cx.X2; _refCx3 = cx.X3;
+        _refCx4 = 0; _refCx5 = 0; _refCx6 = 0; _refCx7 = 0;
         _refCyHi = cy.X0; _refCyLo = cy.X1; _refCy2 = cy.X2; _refCy3 = cy.X3;
+        _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = n < maxIter;
+    }
+
+    // Octuple-double reference orbit — engaged at zoom > 1e50 (Wave 2.11).
+    // Storage mirrors the QD path: per slot, all 8 limbs of Z_n are
+    // recorded so the per-pixel HP fallback can reconstruct the full
+    // 124-digit ref-orbit value. The PT inner loop still pulls only the
+    // Hi limb (_refZr[k] / _refZi[k]) since δ stays double.
+    private void ComputeReferenceOrbitOD(OD cx, OD cy, int maxIter)
+    {
+        bool centerSame = cx.X0 == _refCxHi && cx.X1 == _refCxLo
+                       && cx.X2 == _refCx2 && cx.X3 == _refCx3
+                       && cx.X4 == _refCx4 && cx.X5 == _refCx5
+                       && cx.X6 == _refCx6 && cx.X7 == _refCx7
+                       && cy.X0 == _refCyHi && cy.X1 == _refCyLo
+                       && cy.X2 == _refCy2 && cy.X3 == _refCy3
+                       && cy.X4 == _refCy4 && cy.X5 == _refCy5
+                       && cy.X6 == _refCy6 && cy.X7 == _refCy7;
+        if (centerSame && (_refCachedEscaped || maxIter <= _refCachedMaxIter))
+            return;
+
+        EnsureRefOrbitCapacity(maxIter);
+        OD zr = OD.Zero, zi = OD.Zero;
+        int n;
+        for (n = 0; n < maxIter; n++)
+        {
+            _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
+            _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
+            _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
+            _refZrX6[n] = zr.X6; _refZrX7[n] = zr.X7;
+            _refZi[n] = zi.X0;   _refZiLo[n] = zi.X1;
+            _refZiX2[n] = zi.X2; _refZiX3[n] = zi.X3;
+            _refZiX4[n] = zi.X4; _refZiX5[n] = zi.X5;
+            _refZiX6[n] = zi.X6; _refZiX7[n] = zi.X7;
+            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= EscapeRadius2) break;
+            OD newZi = (zr * zi) * 2.0 + cy;
+            zr = zr.Square() - zi.Square() + cx;
+            zi = newZi;
+        }
+        _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
+        _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
+        _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
+        _refZrX6[n] = zr.X6; _refZrX7[n] = zr.X7;
+        _refZi[n] = zi.X0;   _refZiLo[n] = zi.X1;
+        _refZiX2[n] = zi.X2; _refZiX3[n] = zi.X3;
+        _refZiX4[n] = zi.X4; _refZiX5[n] = zi.X5;
+        _refZiX6[n] = zi.X6; _refZiX7[n] = zi.X7;
+        _refOrbitLen = n;
+        _refOrbitGen++;
+
+        _refCxHi = cx.X0; _refCxLo = cx.X1; _refCx2 = cx.X2; _refCx3 = cx.X3;
+        _refCx4 = cx.X4;  _refCx5 = cx.X5;  _refCx6 = cx.X6;  _refCx7 = cx.X7;
+        _refCyHi = cy.X0; _refCyLo = cy.X1; _refCy2 = cy.X2; _refCy3 = cy.X3;
+        _refCy4 = cy.X4;  _refCy5 = cy.X5;  _refCy6 = cy.X6;  _refCy7 = cy.X7;
+        _refCachedMaxIter = maxIter;
+        _refCachedEscaped = n < maxIter;
+    }
+
+    // Full-OD per-pixel fallback (used for PT glitches at zoom > 1e50).
+    // Mirrors ComputePixelQD line-by-line, but uses OD math so pixel offsets
+    // at the ~10⁻⁵² scale (where QD precision starts to fail) remain
+    // distinguishable. Wave 2.11.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ComputePixelOD<TMap>(OD cx, OD cy, int maxIter, int idx, TMap colorMap)
+        where TMap : IColorMap
+    {
+        if (IsInMainCardioidOrBulb(cx.X0, cy.X0))
+        {
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorHP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+
+        OD zr = OD.Zero, zi = OD.Zero;
+        double dr = 1.0, di = 0.0;
+        int iterStart = 0;
+
+        // SA prelude — mirror of ComputePixelQD with OD dc subtraction.
+        var sa = _sa;
+        if (sa != null && sa.SafeMax >= 16 && !DisableAcceleration && !DisableSeriesApproximation)
+        {
+            OD refCx = new OD(_refCxHi, _refCxLo, _refCx2, _refCx3,
+                              _refCx4, _refCx5, _refCx6, _refCx7);
+            OD refCy = new OD(_refCyHi, _refCyLo, _refCy2, _refCy3,
+                              _refCy4, _refCy5, _refCy6, _refCy7);
+            OD dcRod = cx - refCx;
+            OD dcIod = cy - refCy;
+            double dcR = dcRod.X0;
+            double dcI = dcIod.X0;
+            int k = sa.FindSkip(dcR, dcI, SaTolerance, maxIter - 1);
+            if (k >= 16 && k <= _refOrbitLen)
+            {
+                sa.EvalDelta(k, dcR, dcI, out double dR, out double dI);
+                sa.EvalDDelta(k, dcR, dcI, out double ddR, out double ddI);
+                // Seed from full OD reference orbit — at this depth pixel
+                // offsets live in X4..X7 of ref_k, dropping them would
+                // collapse near-centre pixels exactly the same way QD-vs-DD
+                // does at zoom > 1e32.
+                OD refZk = new OD(_refZr[k], _refZrLo[k], _refZrX2[k], _refZrX3[k],
+                                  _refZrX4[k], _refZrX5[k], _refZrX6[k], _refZrX7[k]);
+                OD refIk = new OD(_refZi[k], _refZiLo[k], _refZiX2[k], _refZiX3[k],
+                                  _refZiX4[k], _refZiX5[k], _refZiX6[k], _refZiX7[k]);
+                zr = refZk + new OD(dR);
+                zi = refIk + new OD(dI);
+                dr = ddR;
+                di = ddI;
+                iterStart = k;
+            }
+        }
+
+        double zrSnap0 = 0, zrSnap1 = 0, ziSnap0 = 0, ziSnap1 = 0;
+        int snapInterval = PeriodicitySnapshotStart;
+        int snapCounter = 0;
+
+        int iter;
+        for (iter = iterStart; iter < maxIter; iter++)
+        {
+            double zrH = zr.X0, ziH = zi.X0;
+            if (zrH * zrH + ziH * ziH >= EscapeRadius2) break;
+
+            double newDr = 2.0 * (zrH * dr - ziH * di) + 1.0;
+            double newDi = 2.0 * (zrH * di + ziH * dr);
+            dr = newDr; di = newDi;
+
+            OD newZi = (zr * zi) * 2.0 + cy;
+            OD newZr = zr.Square() - zi.Square() + cx;
+            zr = newZr; zi = newZi;
+
+            if (zr.X0 == zrSnap0 && zr.X1 == zrSnap1
+                && zi.X0 == ziSnap0 && zi.X1 == ziSnap1)
+            { iter = maxIter; break; }
+            if (++snapCounter >= snapInterval)
+            {
+                zrSnap0 = zr.X0; zrSnap1 = zr.X1;
+                ziSnap0 = zi.X0; ziSnap1 = zi.X1;
+                snapCounter = 0;
+                if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+            }
+        }
+
+        IterationBuffer[idx] = iter;
+        FillAuxAndColorHP(idx, iter, maxIter, zr.X0, zi.X0, dr, di, colorMap);
     }
 
     // Returns false when the reference orbit was exhausted before this pixel
@@ -2077,11 +2321,18 @@ public sealed class MandelbrotCalculator
         double halfH = Height * 0.5;
         double halfW = Width * 0.5;
         double dcY = (y - halfH) * scale;
-        bool useQD = Zoom > QDZoomThreshold;
+        bool useOD = Zoom > ODZoomThreshold;
+        bool useQD = Zoom > QDZoomThreshold && !useOD;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
         QD cy_qd = useQD
             ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
             : QD.Zero;
+        OD cy_od = useOD
+            ? OD.FromCenterOffset(
+                new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                       CenterY4, CenterY5, CenterY6, CenterY7),
+                y - halfH, scale)
+            : OD.Zero;
 
         for (int x = 0; x < Width; x++)
         {
@@ -2089,7 +2340,15 @@ public sealed class MandelbrotCalculator
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                if (useQD)
+                if (useOD)
+                {
+                    OD cx_od = OD.FromCenterOffset(
+                        new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                               CenterX4, CenterX5, CenterX6, CenterX7),
+                        x - halfW, scale);
+                    ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
+                }
+                else if (useQD)
                 {
                     QD cx_qd = QD.FromCenterOffset(
                         new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);
@@ -2111,11 +2370,18 @@ public sealed class MandelbrotCalculator
         double halfW = Width * 0.5;
         double halfH = Height * 0.5;
         double dcY = (y - halfH) * scale;
-        bool useQD = Zoom > QDZoomThreshold;
+        bool useOD = Zoom > ODZoomThreshold;
+        bool useQD = Zoom > QDZoomThreshold && !useOD;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
         QD cy_qd = useQD
             ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
             : QD.Zero;
+        OD cy_od = useOD
+            ? OD.FromCenterOffset(
+                new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                       CenterY4, CenterY5, CenterY6, CenterY7),
+                y - halfH, scale)
+            : OD.Zero;
 
         var er2v = Vector256.Create(EscapeRadius2);
         var one = Vector256.Create(1.0);
@@ -2319,7 +2585,15 @@ public sealed class MandelbrotCalculator
                 // (pixel spacing ~2e-32 < DD precision ~6e-32); use QD instead.
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
-                    if (useQD)
+                    if (useOD)
+                    {
+                        OD cx_od = OD.FromCenterOffset(
+                            new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                                   CenterX4, CenterX5, CenterX6, CenterX7),
+                            x + k - halfW, scale);
+                        ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
+                    }
+                    else if (useQD)
                     {
                         QD cx_qd = QD.FromCenterOffset(
                             new QD(CenterX, CenterXLo, CenterX2, CenterX3), x + k - halfW, scale);
@@ -2350,7 +2624,15 @@ public sealed class MandelbrotCalculator
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                if (useQD)
+                if (useOD)
+                {
+                    OD cx_od = OD.FromCenterOffset(
+                        new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                               CenterX4, CenterX5, CenterX6, CenterX7),
+                        x - halfW, scale);
+                    ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
+                }
+                else if (useQD)
                 {
                     QD cx_qd = QD.FromCenterOffset(
                         new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);
@@ -2390,11 +2672,18 @@ public sealed class MandelbrotCalculator
         double halfW = Width * 0.5;
         double halfH = Height * 0.5;
         double dcY = (y - halfH) * scale;
-        bool useQD = Zoom > QDZoomThreshold;
+        bool useOD = Zoom > ODZoomThreshold;
+        bool useQD = Zoom > QDZoomThreshold && !useOD;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
         QD cy_qd = useQD
             ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
             : QD.Zero;
+        OD cy_od = useOD
+            ? OD.FromCenterOffset(
+                new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                       CenterY4, CenterY5, CenterY6, CenterY7),
+                y - halfH, scale)
+            : OD.Zero;
 
         var er2v = Vector512.Create(EscapeRadius2);
         var one = Vector512.Create(1.0);
@@ -2587,7 +2876,15 @@ public sealed class MandelbrotCalculator
                 int idx = rowBase + x + k;
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
-                    if (useQD)
+                    if (useOD)
+                    {
+                        OD cx_od = OD.FromCenterOffset(
+                            new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                                   CenterX4, CenterX5, CenterX6, CenterX7),
+                            x + k - halfW, scale);
+                        ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
+                    }
+                    else if (useQD)
                     {
                         QD cx_qd = QD.FromCenterOffset(
                             new QD(CenterX, CenterXLo, CenterX2, CenterX3), x + k - halfW, scale);
@@ -2617,7 +2914,15 @@ public sealed class MandelbrotCalculator
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                if (useQD)
+                if (useOD)
+                {
+                    OD cx_od = OD.FromCenterOffset(
+                        new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                               CenterX4, CenterX5, CenterX6, CenterX7),
+                        x - halfW, scale);
+                    ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
+                }
+                else if (useQD)
                 {
                     QD cx_qd = QD.FromCenterOffset(
                         new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);

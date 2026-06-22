@@ -204,6 +204,24 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // Grid checkbox in the menu mirrors the toolbar toggle.
         FloatingMenu.GridToggled       += (_, v) => Main.ShowGrid = v;
+        FloatingMenu.BypassAccelerationToggled += (_, v) =>
+        {
+            Main.RenderHost.MandelbrotDisableAcceleration = v;
+            RebuildWindowTitle();
+            Main.RenderHost.Trigger();
+        };
+        FloatingMenu.BypassSeriesApproximationToggled += (_, v) =>
+        {
+            Main.RenderHost.MandelbrotDisableSeriesApproximation = v;
+            RebuildWindowTitle();
+            Main.RenderHost.Trigger();
+        };
+        FloatingMenu.BypassDdBlaToggled += (_, v) =>
+        {
+            Main.RenderHost.MandelbrotDisableDdBla = v;
+            RebuildWindowTitle();
+            Main.RenderHost.Trigger();
+        };
 
         // Status-bar visibility flag the MainWindow status row binds to.
         FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;
@@ -412,8 +430,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // a deep-zoom region without losing precision.
             var s = Main.ViewState;
             FloatingMenu.UpdateCoords(
-                FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3),
-                FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3),
+                FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+                            s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
+                FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+                            s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
                 info.Iterations.ToString(CultureInfo.InvariantCulture),
                 FloatingMenu.ActiveCoordField);
@@ -508,9 +528,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     private static string FormatCoords(FracturingFog.ViewState.FractalViewState s)
     {
+        // Emit full multi-limb centre in the same pipe form the menu textbox
+        // already accepts on paste. Past zoom ~1e15 the Hi limb alone is
+        // below pixel scale, so emitting only Hi would collapse adjacent
+        // pixels to identical coords on round-trip → user-visible block
+        // pixelation when pasting the copied value back. Pipe form keeps
+        // every DD/QD/OD limb intact through clipboard.
         return string.Format(CultureInfo.InvariantCulture,
-            "CX = {0:G12}\nCY = {1:G12}\nZoom = {2:G6}",
-            s.CenterX, s.CenterY, s.Zoom);
+            "CX = {0}\nCY = {1}\nZoom = {2:G6}",
+            FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+                        s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
+            FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+                        s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
+            s.Zoom);
     }
 
     /// <summary>Mirror the view across the real axis: negate all four CY
@@ -864,17 +894,25 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // limbs exactly. At deep zoom that drifts the centre by a visible
         // fraction of a pixel on Go.
         if (FloatingMenu.CX != FloatingMenu.LastPushedCX
-            && TryParseLimbs(FloatingMenu.CX, out double cxHi, out double cxLo, out double cxL2, out double cxL3))
+            && TryParseLimbs(FloatingMenu.CX,
+                out double cxHi, out double cxLo, out double cxL2, out double cxL3,
+                out double cxL4, out double cxL5, out double cxL6, out double cxL7))
         {
             Main.ViewState.CenterX = cxHi;
             Main.ViewState.CenterXLo = cxLo; Main.ViewState.CenterX2 = cxL2; Main.ViewState.CenterX3 = cxL3;
+            Main.ViewState.CenterX4 = cxL4; Main.ViewState.CenterX5 = cxL5;
+            Main.ViewState.CenterX6 = cxL6; Main.ViewState.CenterX7 = cxL7;
             changed = true;
         }
         if (FloatingMenu.CY != FloatingMenu.LastPushedCY
-            && TryParseLimbs(FloatingMenu.CY, out double cyHi, out double cyLo, out double cyL2, out double cyL3))
+            && TryParseLimbs(FloatingMenu.CY,
+                out double cyHi, out double cyLo, out double cyL2, out double cyL3,
+                out double cyL4, out double cyL5, out double cyL6, out double cyL7))
         {
             Main.ViewState.CenterY = cyHi;
             Main.ViewState.CenterYLo = cyLo; Main.ViewState.CenterY2 = cyL2; Main.ViewState.CenterY3 = cyL3;
+            Main.ViewState.CenterY4 = cyL4; Main.ViewState.CenterY5 = cyL5;
+            Main.ViewState.CenterY6 = cyL6; Main.ViewState.CenterY7 = cyL7;
             changed = true;
         }
         if (FloatingMenu.Zoom != FloatingMenu.LastPushedZoom
@@ -911,35 +949,44 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     // limit that bounds the pipe-format paste path. Falls back to the limb
     // string when any limb is outside decimal range (e.g. denormals beyond
     // ±7.9e28) so we never lose information silently.
-    private static string FormatLimbs(double hi, double lo, double l2, double l3)
+    private static string FormatLimbs(double hi, double lo, double l2, double l3,
+                                       double l4 = 0.0, double l5 = 0.0,
+                                       double l6 = 0.0, double l7 = 0.0)
     {
         // Pick the highest non-zero limb so the format never carries trailing
         // zero limbs (avoids surfacing meaningless precision for shallow zooms).
+        // Wave 2.11 — OD limbs 4..7 join the same scan; the format scales
+        // automatically when zoom > 1e50 once the pan-zoom path populates them.
         int n = 1;
-        if (l3 != 0.0) n = 4;
+        if (l7 != 0.0) n = 8;
+        else if (l6 != 0.0) n = 7;
+        else if (l5 != 0.0) n = 6;
+        else if (l4 != 0.0) n = 5;
+        else if (l3 != 0.0) n = 4;
         else if (l2 != 0.0) n = 3;
         else if (lo != 0.0) n = 2;
 
-        // Any-extra-limb path (n >= 2): the Lo (and L2/L3) limbs carry
+        // Any-extra-limb path (n >= 2): the Lo (and L2..L7) limbs carry
         // precision past decimal's ~29-digit cap. DD pair is ~31 digits,
-        // QD chain is ~62 digits; either case loses bottom limb data
-        // through the G29 sum + textbox round-trip and collapses the
-        // centre to ~29 digits permanently on the next Go. Emit pipe-
-        // delimited limbs whenever any low limb is non-zero so every
-        // limb survives the display + parse.
+        // QD chain is ~62 digits, OD chain is ~124 digits; any case loses
+        // bottom limb data through the G29 sum + textbox round-trip and
+        // collapses the centre to ~29 digits permanently on the next Go.
+        // Emit pipe-delimited limbs whenever any low limb is non-zero so
+        // every limb survives the display + parse.
         //
         // Pipe form is uglier than a single decimal string but is the
         // only honest representation of multi-limb precision in a UI
         // textbox. Shallow (n=1) coords keep the readable decimal form.
         if (n >= 2)
         {
-            string hp = hi.ToString("G17", CultureInfo.InvariantCulture);
-            string p1p = lo.ToString("G17", CultureInfo.InvariantCulture);
-            if (n == 2) return $"{hp}|{p1p}";
-            string p2p = l2.ToString("G17", CultureInfo.InvariantCulture);
-            if (n == 3) return $"{hp}|{p1p}|{p2p}";
-            string p3p = l3.ToString("G17", CultureInfo.InvariantCulture);
-            return $"{hp}|{p1p}|{p2p}|{p3p}";
+            var limbs = new double[] { hi, lo, l2, l3, l4, l5, l6, l7 };
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < n; i++)
+            {
+                if (i > 0) sb.Append('|');
+                sb.Append(limbs[i].ToString("G17", CultureInfo.InvariantCulture));
+            }
+            return sb.ToString();
         }
 
         try
@@ -977,18 +1024,28 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     //      capture whatever precision is still in the decimal residual.
     // Missing limbs default to zero. Returns true when at least Hi parsed.
     private static bool TryParseLimbs(string? s, out double hi, out double lo, out double l2, out double l3)
+        => TryParseLimbs(s, out hi, out lo, out l2, out l3, out _, out _, out _, out _);
+
+    private static bool TryParseLimbs(string? s,
+        out double hi, out double lo, out double l2, out double l3,
+        out double l4, out double l5, out double l6, out double l7)
     {
-        hi = lo = l2 = l3 = 0.0;
+        hi = lo = l2 = l3 = l4 = l5 = l6 = l7 = 0.0;
         if (string.IsNullOrWhiteSpace(s)) return false;
         var parts = s.Split('|');
         if (parts.Length > 1)
         {
             // Pipe-delimited (legacy) — each segment is a plain double.
+            // Wave 2.11 — accept up to 8 limbs for OD precision past zoom 1e50.
             if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out hi))
                 return false;
             if (parts.Length > 1) double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lo);
             if (parts.Length > 2) double.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l2);
             if (parts.Length > 3) double.TryParse(parts[3].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l3);
+            if (parts.Length > 4) double.TryParse(parts[4].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l4);
+            if (parts.Length > 5) double.TryParse(parts[5].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l5);
+            if (parts.Length > 6) double.TryParse(parts[6].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l6);
+            if (parts.Length > 7) double.TryParse(parts[7].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l7);
             return true;
         }
 
@@ -1167,8 +1224,38 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         string ver = string.IsNullOrEmpty(_programVersion) ? "" : $" v{_programVersion}";
         string ren = string.IsNullOrEmpty(_rendererDescription) ? "" : $"  —  {_rendererDescription}";
-        WindowTitle = $"{_programName}{ver}{ren}";
+        string diag = BuildDiagnosticSuffix();
+        WindowTitle = $"{_programName}{ver}{ren}{diag}";
     }
+
+    private string BuildDiagnosticSuffix()
+    {
+        var sb = new System.Text.StringBuilder();
+        if (Main.RenderHost.MandelbrotDisableAcceleration) sb.Append("  [ACCEL OFF]");
+        if (Main.RenderHost.MandelbrotDisableSeriesApproximation) sb.Append("  [SA OFF]");
+        if (Main.RenderHost.MandelbrotDisableDdBla) sb.Append("  [DD-BLA OFF]");
+        return sb.ToString();
+    }
+
+    /// <summary>Toggle BLA + SA bypass on the legacy MandelbrotCalculator HP
+    /// path. Used to isolate deep-zoom precision regressions. Title gains a
+    /// <c>[ACCEL OFF]</c> suffix when on. Retriggers the current frame.
+    /// Drives the menu checkbox; menu event handler does the actual flag +
+    /// trigger so both paths stay in lockstep.</summary>
+    public void ToggleMandelbrotAcceleration()
+        => FloatingMenu.BypassAcceleration = !FloatingMenu.BypassAcceleration;
+
+    /// <summary>Toggle SA prelude bypass on the legacy MandelbrotCalculator HP
+    /// path (BLA still applies). Used to isolate SA-induced artefacts vs BLA
+    /// errors. Title gains a <c>[SA OFF]</c> suffix when on.</summary>
+    public void ToggleMandelbrotSeriesApproximation()
+        => FloatingMenu.BypassSeriesApproximation = !FloatingMenu.BypassSeriesApproximation;
+
+    /// <summary>Toggle DD-precision BLA bypass — when on, the legacy single-
+    /// precision BLA table runs (pre-Wave-2.10 behaviour). Title gains a
+    /// <c>[DD-BLA OFF]</c> suffix while on.</summary>
+    public void ToggleMandelbrotDdBla()
+        => FloatingMenu.BypassDdBla = !FloatingMenu.BypassDdBla;
 
     // ── Local server indicator (status bar dot) ──────────────────────────
 

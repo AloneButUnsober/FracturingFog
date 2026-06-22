@@ -167,6 +167,22 @@ namespace FracturingFog.Render
         /// caller should re-read after setting to verify.</summary>
         bool UseGpuCompute { get; set; }
 
+        /// <summary>Diagnostic toggle — bypass BLA + SA on the legacy
+        /// MandelbrotCalculator HP path. Used to isolate deep-zoom precision
+        /// regressions: when on, perturbation runs raw (no BLA skip, no SA
+        /// prelude) so a pixelation block can be attributed to the
+        /// acceleration path vs the QD math.</summary>
+        bool MandelbrotDisableAcceleration { get; set; }
+
+        /// <summary>Diagnostic toggle — bypass SA prelude only (BLA still
+        /// applies) on the legacy MandelbrotCalculator HP path.</summary>
+        bool MandelbrotDisableSeriesApproximation { get; set; }
+
+        /// <summary>Diagnostic toggle — force legacy single-precision BLA
+        /// table (pre-Wave-2.10) instead of the DD-precision merge. Used to
+        /// isolate suspected Wave 2.10 regressions at extreme zoom.</summary>
+        bool MandelbrotDisableDdBla { get; set; }
+
         /// <summary>Region label rendered in the watermark.</summary>
         string? RegionName { get; set; }
 

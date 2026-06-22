@@ -156,6 +156,23 @@
                             <Button Classes="action go" Content="Flip Y" Command="{Binding FlipCommand}"       Margin="0,0,4,0" />
                             <Button Classes="action go" Content="Copy"   Command="{Binding CopyCoordsCommand}" ToolTip.Tip="Copy CX/CY/Zoom/Iter to clipboard" />
                         </UniformGrid>
+                        <StackPanel Orientation="Horizontal" Spacing="14" Margin="80,8,0,0">
+                            <CheckBox Content="Bypass BLA+SA"
+                                      IsChecked="{Binding BypassAcceleration}"
+                                      Foreground="#FFCC00"
+                                      FontWeight="Bold"
+                                      ToolTip.Tip="Diagnostic: bypass BLA + SA on HP path (Ctrl+Shift+A)" />
+                            <CheckBox Content="Bypass SA"
+                                      IsChecked="{Binding BypassSeriesApproximation}"
+                                      Foreground="#FFCC00"
+                                      FontWeight="Bold"
+                                      ToolTip.Tip="Diagnostic: bypass SA prelude only (Ctrl+Shift+S)" />
+                            <CheckBox Content="Bypass DD-BLA"
+                                      IsChecked="{Binding BypassDdBla}"
+                                      Foreground="#FFCC00"
+                                      FontWeight="Bold"
+                                      ToolTip.Tip="Diagnostic: force legacy single-precision BLA (pre-Wave-2.10). Ctrl+Shift+D" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
