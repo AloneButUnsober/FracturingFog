@@ -224,14 +224,18 @@
 
                 <!-- Animation -->
                 <TextBlock Classes="header" Text="Animation (t)" />
-                <Grid ColumnDefinitions="Auto,Auto,110,Auto,170">
+                <Grid ColumnDefinitions="Auto,Auto,110,Auto,110,Auto,170">
                     <Button        Grid.Column="0" Classes="tool" Content="{Binding PlayPauseLabel}"
                                    Command="{Binding TogglePlayCommand}" />
                     <TextBlock     Grid.Column="1" Classes="label" Text="Speed:" Margin="10,0,4,0" />
                     <NumericUpDown Grid.Column="2" Minimum="-10" Maximum="10" Increment="0.1" FormatString="0.00"
                                    Value="{Binding AnimSpeed}" />
-                    <TextBlock     Grid.Column="3" Classes="label" Text="t:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="4" Minimum="-1000000" Maximum="1000000" Increment="0.1" FormatString="0.000"
+                    <TextBlock     Grid.Column="3" Classes="label" Text="Loop s:" Margin="10,0,4,0"
+                                   ToolTip.Tip="Loop length in seconds. 0 = no loop." />
+                    <NumericUpDown Grid.Column="4" Minimum="0" Maximum="600" Increment="0.5" FormatString="0.00"
+                                   Value="{Binding AnimLoopSeconds}" />
+                    <TextBlock     Grid.Column="5" Classes="label" Text="t:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="6" Minimum="-1000000" Maximum="1000000" Increment="0.1" FormatString="0.000"
                                    Value="{Binding AnimTime}" />
                 </Grid>
 
