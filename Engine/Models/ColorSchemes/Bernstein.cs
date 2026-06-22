@@ -19,7 +19,7 @@ namespace FracturingFog.Models
     /// defined gradients without interpolation artefacts.
     /// Based on Íñigo Quílez's cosine palette formula.
     /// </summary>
-    public class BernsteinMap : IColorMap
+    public class BernsteinMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Bernstein";
 
@@ -60,5 +60,20 @@ namespace FracturingFog.Models
 
             return ColorUtils.PackArgbF(r, g, b);
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    const float TWO_PI = 6.2831853071795864769;
+    float t = in_smooth * 0.020;
+    float r = 0.5 + 0.5 * cos(TWO_PI * (1.000 * t + 0.000));
+    float g = 0.5 + 0.5 * cos(TWO_PI * (0.700 * t + 0.150));
+    float b = 0.5 + 0.5 * cos(TWO_PI * (0.400 * t + 0.200));
+    float edge = 1.0 - 0.25 * exp(-in_dist * 0.2);
+    return saturate(float3(r, g, b) * edge);
+";
+
+        public string PaletteId => "BernsteinMap/v1";
     }
 }

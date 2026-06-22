@@ -13,7 +13,7 @@ namespace FracturingFog.Models
     /// Ultra-rapid hue cycling with interference-pattern saturation ripple.
     /// Produces dense, psychedelic colour banding.
     /// </summary>
-    public class PsychedelicMap : IColorMap
+    public class PsychedelicMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Psychedelic";
 
@@ -44,5 +44,20 @@ namespace FracturingFog.Models
             var c = ColorUtils.Hsv(hue, sat, val);
             return ColorUtils.PackArgb(c.R, c.G, c.B);
         }
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float h0 = in_smooth * 0.055;
+    float hue = h0 - floor(h0);
+    float ripple1 = 0.5 + 0.5 * sin(in_smooth * 0.31);
+    float ripple2 = 0.5 + 0.5 * sin(in_smooth * 0.11);
+    float sat = saturate(0.6 + 0.4 * ripple1 * ripple2);
+    float val = saturate(0.65 + 0.35 * sin(in_smooth * 0.05 + 1.2));
+    return cg_hsv_to_rgb(hue, sat, val);
+";
+
+        public string PaletteId => "PsychedelicMap/v1";
     }
 }

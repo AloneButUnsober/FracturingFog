@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class Painted : IColorMap
+    public class Painted : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Painted";
 
@@ -26,5 +26,17 @@ namespace FracturingFog.Models
 
             return Fractals.HsvToRgb(hue, saturation, value);
         }
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    float h0 = cg_mods(in_smooth * 0.05, 1.1);
+    float hue = h0 - floor(h0);
+    float baseV = (in_isInSet > 0.5) ? -0.01 : 1.0;
+    float lightness = 1.35 - min(in_dist * 0.04, 1.0);
+    return cg_hsv_to_rgb(hue, 0.9, baseV * lightness);
+";
+
+        public string PaletteId => "Painted/v1";
     }
 }

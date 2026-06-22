@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class GrayscalePalette : IColorMap
+    public class GrayscalePalette : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Greyscale";
 
@@ -31,5 +31,18 @@ namespace FracturingFog.Models
             byte c = (byte)(v * 255f);
             return unchecked((int)0xFF000000 | (c << 16) | (c << 8) | c);
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float traw = in_smooth * 0.020;
+    float t = traw - floor(traw);
+    float band = 0.5 + 0.5 * sin(in_smooth * 0.12);
+    float v = saturate(t * 0.75 + band * 0.25);
+    return float3(v, v, v);
+";
+
+        public string PaletteId => "GrayscalePalette/v1";
     }
 }

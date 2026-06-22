@@ -166,10 +166,17 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
             case FractalType.Tricorn:
                 DispatchByColorMapSimd(new TricornKernel(), ct);
                 break;
-            // Transcendental / two-step memory — stay scalar.
+            // Multibrot d ∈ {3,4,5}: SIMD via direct complex multiplication.
+            // d ≥ 6: polar fallback (atan2 + pow + cos + sin), scalar.
             case FractalType.Multibrot:
-                DispatchByColorMap(new MultibrotKernel(FractalParameters.MultibrotExponent), ct);
+            {
+                var mk = new MultibrotKernel(FractalParameters.MultibrotExponent);
+                if (mk.SimdSupported)
+                    DispatchByColorMapSimd(mk, ct);
+                else
+                    DispatchByColorMap(mk, ct);
                 break;
+            }
             case FractalType.Phoenix:
                 CalculatePhoenix(new PhoenixKernel(FractalParameters.PhoenixP.Real, FractalParameters.PhoenixP.Imaginary), ct);
                 break;

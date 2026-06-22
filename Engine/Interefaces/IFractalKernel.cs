@@ -6,8 +6,8 @@ namespace FracturingFog.Interefaces
     /// <summary>
     /// Marker + SIMD-step interface for kernels that admit a Vector&lt;double&gt;
     /// inner loop. Implementations are pure polynomial in zr/zi (Mandelbrot,
-    /// Julia, BurningShip, Tricorn). Multibrot / Phoenix use transcendentals
-    /// or memory state that fight vectorisation — they stay scalar.
+    /// Julia, BurningShip, Tricorn, Multibrot d∈{3,4,5}). Multibrot d≥6 (polar
+    /// form) and Phoenix (prev-z memory) fight vectorisation — they stay scalar.
     ///
     /// EscapeTimeCalculator checks the runtime kernel type against this
     /// interface and routes to a SIMD inner loop when supported. JIT
