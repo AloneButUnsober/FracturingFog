@@ -446,6 +446,19 @@ public sealed class UserBulbViewModel : ViewModelBase
     private double _animSpeed = 1.0;
     public double AnimSpeed { get => _animSpeed; set => this.RaiseAndSetIfChanged(ref _animSpeed, Math.Clamp(value, -10.0, 10.0)); }
 
+    private double _animLoopSeconds;
+    /// <summary>
+    /// Loop length in seconds (in raw t-units, before AnimSpeed scaling).
+    /// 0 = no loop (t accumulates without wrap). Positive values cause
+    /// AnimationTick to wrap t into [0, LoopSeconds) — useful for periodic
+    /// animations driven from sin(t)/cos(t) DSL expressions.
+    /// </summary>
+    public double AnimLoopSeconds
+    {
+        get => _animLoopSeconds;
+        set => this.RaiseAndSetIfChanged(ref _animLoopSeconds, Math.Clamp(value, 0.0, 600.0));
+    }
+
     private double _animTime;
     public double AnimTime
     {
@@ -477,8 +490,14 @@ public sealed class UserBulbViewModel : ViewModelBase
     public void AnimationTick(double dtSeconds)
     {
         if (!_isPlaying) return;
+        double next = _params.UserBulbTime + _animSpeed * dtSeconds;
+        if (_animLoopSeconds > 0.0)
+        {
+            double L = _animLoopSeconds;
+            next -= L * Math.Floor(next / L);
+        }
         _suppressRender = true;
-        AnimTime = _params.UserBulbTime + _animSpeed * dtSeconds;
+        AnimTime = next;
         _suppressRender = false;
         if (_renderInFlight) return;
         _renderInFlight = true;

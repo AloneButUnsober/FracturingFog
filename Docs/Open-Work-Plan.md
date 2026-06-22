@@ -74,7 +74,7 @@ Exit: Release build, FPS up, no visual regression on the 8 stock regions.
 |---|------|--------|
 | 1.S1 | Run `CrossPlatform-SmokeTests.md` manual checks on real Ubuntu 24.04 (X11 + Wayland), macOS Sonoma arm64, Raspberry Pi OS arm64 | 1 d per host |
 | 1.S2 | Tag a `v0.7.0-rc1` to fire `release.yml`; triage drafted artifacts; verify install + launch on each host | 1 d |
-| 1.C1 | Avalonia `FfmpegSetupDialog` rewrite — remove WinForms drag from cross-platform `Hosting/` (currently WinForms shell only) | ½ d |
+| 1.C1 | Avalonia `FfmpegSetupDialog` rewrite — remove WinForms drag from cross-platform `Hosting/` (currently WinForms shell only) | ✅ Shipped 2026-06-22 |
 | 1.C2 | Toy-mode drag — synth `PointerPressedEventArgs` from NativeMouseForwarder callback so `BeginMoveDrag` works on every RID, retire `ReleaseCapture`+`WM_NCLBUTTONDOWN` | ½ d |
 | 1.C3 | X.5 per-RID device-kind smoke — assert `AcceleratorProbe.Chosen.Kind` matches expectation in `--batch --self-test` | ½ d |
 | 0.5b | Wave 0.5 follow-up — `dotnet run --project Tools/VisualRegression -- record` to populate `baseline.json` | ½ d (long build + 22 batch renders) |
@@ -133,7 +133,7 @@ audio-reactive dialog without crash.
 | 4.4 | Sandbox 3C — interpreter perf (opcode-flat dispatch or DynamicMethod IL emit) |
 | 4.5 | Sandbox chain mode GPU dispatch |
 | 4.6 | Sandbox Quat-mode Julia + numerical-Jacobian DE on GPU |
-| 4.7 | UserBulb 3.4 — time global `t` + animate bar |
+| 4.7 | UserBulb 3.4 — time global `t` + animate bar | ✅ Shipped 2026-06-22 |
 | 4.8 | UserBulb 3.7 — color drivers |
 | 4.9 | UserBulb 3.9 — FOV / DoF / clip / SS + viewport orbit |
 | 4.10 | UserBulb 3.6 — multi-equation chain w/ named outputs |
@@ -710,6 +710,53 @@ Convergence after Wave 1:
   RepaintWithPostFx is now a no-op visually. Mandelbrot path only
   (alt calcs already bypass HE in the upload path). Build clean,
   140/140 tests pass.
+- 2026-06-22 — Wave 4.7 shipped — UserBulb 3.4 time global + animate bar.
+  Audit revealed engine-side + ViewModel-side already shipped earlier:
+  `FractalParameters.UserBulbTime` (cloned), `UserBulbCalculator` compile
+  sig appends `double t = __p[__p.Length - 1]`, `UserBulbView.axaml`
+  animation row (Play/Pause / Speed / t), `UserBulbViewModel.AnimationTick`
+  + `NotifyRenderDone` gating, and `AvaloniaShellBootstrap` 30 Hz
+  `DispatcherTimer` pumping `vm.AnimationTick(dt)` while gated on
+  `AnimationFrameUploaded`. Outstanding piece per the original 3.4 spec
+  (`Docs/Technical/UserBulb3D-DevelopmentPlan.md:250`): loop-length knob.
+  Added this turn:
+  * `UserBulbViewModel.AnimLoopSeconds` (clamp 0..600). When > 0,
+    `AnimationTick` wraps `t` into `[0, L)` via `next -= L * floor(next/L)`.
+    Default 0 = no loop, preserving the prior monotonic-advance behaviour.
+  * `UserBulbView.axaml` animation row gains "Loop s:" NumericUpDown
+    between Speed and t.
+  * Build clean (0 errors, 4 pre-existing AVLN5001 Watermark warnings).
+    140/140 Server.Tests pass.
+  * Open follow-on: video time-sweep mode (spec 3.4 line 263) — wire
+    `BulbTimeSweepEnabled` / `BulbTimeStart` / `BulbTimeEnd` into
+    `VideoZoomRequest` so the video pipeline can lerp `UserBulbTime`
+    per frame. Not blocking; filed as 4.7.f1.
+- 2026-06-22 — Wave 1.C1 closure shipped — AvaloniaDialogs.cs carved into
+  cross-platform `FracturingFog.Hosting.dll`. Three blockers resolved:
+  * QD coord codec (FormatCoordSingle / TryParseCoordSingle / TryParseCoordAny
+    + DecomposeDouble / ExactSum / RationalToDouble) relocated from
+    `Views/Controls.cs` FormHelpers (WinForms-bound) to new
+    `Abstractions/Math/QdCoordCodec.cs`. FormHelpers retains the legacy
+    `FracturingFog.Views.FormHelpers` API as thin delegating shims for
+    in-tree WinForms callers.
+  * `AvaloniaShellBootstrap.AudioCapabilities` static dependency replaced
+    with `FracturingFog.Audio.AudioCapabilityProbe.Detect()` in the
+    cross-platform Audio assembly. AvaloniaShellBootstrap now delegates to
+    the probe; AvaloniaDialogs calls the probe directly so the carve has
+    no remaining reference to the WinExe-pinned bootstrap.
+  * `PaletteBuilder.Views.MainWindow` available cross-platform since
+    Wave 1.8 (PaletteBuilder.Lib TFM = net10.0). Added
+    `PaletteBuilder.Lib.csproj` ProjectReference to
+    `FracturingFog.Hosting.csproj`.
+  * `FracturingFog.Hosting.csproj` drops `<Compile Remove="AvaloniaDialogs.cs" />`;
+    `FracturingFogCLD.csproj` adds it (WinExe consumes across the
+    ProjectReference). AvaloniaDialogs visibility flipped `internal →
+    public` because AvaloniaShellBootstrap (still WinExe-only) calls into
+    it across the new assembly boundary.
+  * Full solution builds clean (0 errors, 0 warnings). 140/140
+    Server.Tests pass. Wave 1 launch blockers now reduce to manual smoke
+    runs (1.S1/1.S2) + per-RID device-kind assert wired (1.C3) + Wave 0.5b
+    baseline-record.
 - 2026-06-22 — Wave 3.4 (T3.3) shipped — Non-temporal AVX writes.
   `FractalRenderHost.ProcessRowSimd` (brightness/contrast Vector256 inner
   loop) now uses `Vector256<uint>.StoreAlignedNonTemporal(uint*)` when
