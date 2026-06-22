@@ -21,6 +21,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <!--
+      Wave 2.13 (D-7.29) — CalculatorGen Roslyn source generator. Replaces
+      the legacy `dotnet run -p CalculatorGen` step that wrote files
+      into Engine/Calculators/Generated/. ReferenceOutputAssembly=false
+      keeps the analyzer DLL out of Engine's runtime closure (it only runs
+      inside the compiler).
+    -->
+    <ProjectReference Include="..\CalculatorGen.SourceGen\CalculatorGen.SourceGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

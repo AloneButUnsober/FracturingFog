@@ -92,6 +92,10 @@
     <Compile Remove="ColorGen\**" />
     <Compile Remove="CalculatorGen.Lib\**" />
     <Compile Remove="ColorGen.Lib\**" />
+    <!-- Wave 2.13 — Roslyn source-gen project sits next to CalculatorGen
+         and would otherwise be slurped into the WinExe glob, producing
+         the same CS0579 duplicate-AssemblyInfo cascade as the Lib siblings. -->
+    <Compile Remove="CalculatorGen.SourceGen\**" />
     <!--
       Phase X.0 cross-platform scaffolding. These sibling projects sit under
       the WinExe's root folder and the SDK's default Compile glob would slurp
