@@ -123,6 +123,10 @@
     <Compile Remove="Hosting\PngSlideshowFrameRecorder.cs" />
     <!-- Wave 1.C1 — FfmpegSetupDialog moved into FracturingFog.Hosting.dll. -->
     <Compile Remove="Hosting\FfmpegSetupDialog.cs" />
+    <!-- Wave 1.C1 closure (2026-06-22) — AvaloniaDialogs moved into
+         FracturingFog.Hosting.dll after the QD coord codec + Audio capability
+         probe carve-outs. WinExe consumes it across the ProjectReference. -->
+    <Compile Remove="Hosting\AvaloniaDialogs.cs" />
     <!--
       Phase X.0 / Slice 0.2 — Audio files now owned by FracturingFog.Audio
       (temporary net10.0-windows TFM until Phase X.B introduces the backend

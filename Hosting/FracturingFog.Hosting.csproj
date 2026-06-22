@@ -46,20 +46,33 @@
         * FfmpegSetupDialog.cs — Avalonia modal; no Audio / UI.Avalonia.Views
           / PaletteBuilder dep, so it carves cleanly into this assembly.
 
-      AvaloniaDialogs.cs stays in WinExe for now — it references
-      FracturingFog.Views.* (WinForms picker for "From Image…"),
-      PaletteBuilder.* (palette wrapper), and AvaloniaShellBootstrap statics
-      that don't live in this assembly. Wider carve is a follow-up.
+      Moved into this cross-platform Hosting (Wave 1.C1 closure, 2026-06-22):
+        * AvaloniaDialogs.cs — full Avalonia dialog suite. Required carve-outs:
+          - FracturingFog.Views.FormHelpers (WinForms-bound) → QD coord codec
+            relocated to FracturingFog.Abstractions.Math.QdCoordCodec.
+          - AvaloniaShellBootstrap.AudioCapabilities → AudioCapabilityProbe.Detect()
+            in the cross-platform Audio assembly.
+          - PaletteBuilder.Views.MainWindow → PaletteBuilder.Lib (already net10.0
+            since Wave 1.8); referenced from this assembly via ProjectReference.
     -->
     <Compile Remove="AvaloniaShellBootstrap.cs" />
     <Compile Remove="HostPaletteExtractionService.cs" />
-    <Compile Remove="AvaloniaDialogs.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+    <ProjectReference Include="..\Audio\FracturingFog.Audio.csproj" />
     <ProjectReference Include="..\UI.Avalonia\FracturingFog.UI.Avalonia.csproj">
+      <ExcludeAssets>analyzers</ExcludeAssets>
+    </ProjectReference>
+    <!--
+      Wave 1.C1 closure (2026-06-22) — PaletteBuilder.Lib needed by
+      AvaloniaDialogs.ShowImagePalettePickerAsync (the "From Image…" picker).
+      Lib flipped to net10.0 in Wave 1.8 (Slice 1.2) so it's now safe to
+      consume from cross-platform Hosting.
+    -->
+    <ProjectReference Include="..\PaletteBuilder\PaletteBuilder.Lib.csproj">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
   </ItemGroup>
