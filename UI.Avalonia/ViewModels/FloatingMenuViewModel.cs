@@ -785,6 +785,42 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    // Diagnostic — bypass BLA + SA on legacy MandelbrotCalculator HP path.
+    // Used to isolate deep-zoom pixelation regressions. Wire to RenderHost
+    // via shell event handler.
+    private bool _bypassAcceleration;
+    public bool BypassAcceleration
+    {
+        get => _bypassAcceleration;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bypassAcceleration, value);
+            BypassAccelerationToggled?.Invoke(this, value);
+        }
+    }
+
+    private bool _bypassSeriesApproximation;
+    public bool BypassSeriesApproximation
+    {
+        get => _bypassSeriesApproximation;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bypassSeriesApproximation, value);
+            BypassSeriesApproximationToggled?.Invoke(this, value);
+        }
+    }
+
+    private bool _bypassDdBla;
+    public bool BypassDdBla
+    {
+        get => _bypassDdBla;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bypassDdBla, value);
+            BypassDdBlaToggled?.Invoke(this, value);
+        }
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, Unit> ResetCommand { get; }
@@ -869,6 +905,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
 
     public event EventHandler<bool>? StatusBarToggled;
     public event EventHandler<bool>? GridToggled;
+    public event EventHandler<bool>? BypassAccelerationToggled;
+    public event EventHandler<bool>? BypassSeriesApproximationToggled;
+    public event EventHandler<bool>? BypassDdBlaToggled;
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }

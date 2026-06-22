@@ -408,6 +408,24 @@ namespace FracturingFog.Rendering
         /// view-state contract.</summary>
         public MandelbrotCalculator Mandelbrot => _calculator;
 
+        public bool MandelbrotDisableAcceleration
+        {
+            get => _calculator.DisableAcceleration;
+            set => _calculator.DisableAcceleration = value;
+        }
+
+        public bool MandelbrotDisableSeriesApproximation
+        {
+            get => _calculator.DisableSeriesApproximation;
+            set => _calculator.DisableSeriesApproximation = value;
+        }
+
+        public bool MandelbrotDisableDdBla
+        {
+            get => _calculator.DisableDdBla;
+            set => _calculator.DisableDdBla = value;
+        }
+
         // T3.1: GPU compute kernel constructed lazily on the first Use
         // request when a factory is installed. Null on non-D3D11 backends or
         // when the user has never enabled the feature.

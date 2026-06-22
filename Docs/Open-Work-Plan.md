@@ -100,9 +100,11 @@ audio-reactive dialog without crash.
 | 2.8 | D-6.23 — Equation cookbook + gallery | ✅ Shipped 2026-06-21 |
 | 2.9 | D-6.25 — Animation: morph equations | ✅ Shipped 2026-06-21 |
 | 2.10 | D-4.18 — DD-precision BLA tables | ✅ Shipped 2026-06-21 |
-| 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | 5+ d |
+| 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | ✅ Shipped 2026-06-21; OD arithmetic fixed + re-enabled 2026-06-22 (op* rewrite + 23 xUnit OD parity tests in `Server.Tests/OctupleDoubleTests.cs`). UI navigation past 1e58 still pending — see status log |
 | 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 5+ d |
 | 2.13 | D-7.29 — Roslyn source generator | 1 wk |
+| 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | 3–5 d (see Path B notes in 2026-06-22 status log) |
+| 2.15 | D-4.20 — OD-aware UI navigation — populate `CenterX4..X7` from pan/zoom | ✅ Shipped 2026-06-22 (`FractalInputController.cs` — 6 pan/zoom sites + OD pan-start cache + `StoreOD` helper) |
 
 ---
 
@@ -321,6 +323,146 @@ Convergence after Wave 1:
     extending to alt calcs needs each one's `Center{X,Y}` plumbed the same
     way — deferred follow-on.
   * Build clean (0 errors, 4 pre-existing AVLN5001 Watermark warnings).
+- 2026-06-22 — DD-BLA perf gating. User report: "performance at medium
+  depth seems empirically worse once DD kicks in"; right-click outline-
+  to-zoom lagging at ~1e18. Root cause: Wave 2.10 ran the DD-precision
+  BLA merge unconditionally across the entire DD tier (1e12 → 1e25).
+  `MergeDd` is ~7× the flops of `MergeDouble` (4 DdComplexMul + 2 DdAdd
+  vs 10 muls/adds), and BLA rebuilds on every centre / orbit change —
+  every pan event paid the full DD merge cost. Below ~1e15 the merged
+  A_n ULP error hasn't yet accumulated to visible iteration banding.
+  Fix: added `DdBlaZoomThreshold = 1e15` constant in
+  `MandelbrotCalculator.cs`. `EnsureBlaTable` now picks DD merge only
+  when `Zoom > 1e15 && !DisableDdBla`; below that, legacy single-
+  precision merge (restoring pre-2.10 pan-responsive perf at the
+  Standard / shallow-zoom tier). Above 1e15 DD merge fires unchanged.
+  Outline lag at 1e18 is a downstream symptom: `SetSelectionBox` →
+  `RepaintWithPostFx` shares the `_uploadGate` lock with `Calculate` —
+  while a slow deep-zoom Calculate is in flight, every drag-event
+  overlay update blocks behind it. Real fix is a perf budget that
+  keeps Calculate under ~50 ms; tracked as 2.14 (DD δ-chain) +
+  separate per-pixel QD/OD optimization wave.
+- 2026-06-22 — Wave 2.15 shipped — OD-aware UI navigation. User report:
+  click-drag pan at deep QD/OD zoom collapsed CX/CY to 2 limbs in the
+  main menu. Root cause: `FractalInputController.cs` had `RequiresQD`
+  + `RequiresDD` pan/zoom branches but no `RequiresOD` branch — at
+  zoom > 1e50 (OD threshold) the pan fell into the plain-double `else`
+  arm and `ClearLowLimbs()` wiped CenterX/Y_Lo..X3. Even at QD zoom
+  the `StoreQD` helper never touched CenterX/Y_4..7, so stale OD
+  limbs from a Copy/Paste survived a pan-zoom cycle. Fix:
+  * Added `_panStartODCX/CY` cache, initialised in `OnPointerDown`.
+  * Added `OD` branch as first arm of all six pan/zoom sites (pan
+    move, box zoom, double-click pan, wheel zoom, key-pan, all
+    threading through the same RequiresOD → QD → DD → SP precedence).
+  * New `StoreOD(OD cx, OD cy)` helper writes all 8 limbs from an OD.
+  * Extended `ClearLowLimbs` / `StoreDD` / `StoreQD` to also clear
+    X4..X7 (consistent with their tier — DD has no X2/3 either).
+  * Build clean, 140/140 tests pass.
+- 2026-06-22 — Wave 2.14 filed. Path B (DD-precision PT δ chain)
+  required to push usable zoom past 1e58. Path A (OD arithmetic fix)
+  + Path C (OD-aware navigation, shipped today as 2.15) are necessary
+  but not sufficient by themselves — see 2.11 entry below.
+- 2026-06-22 — User test of OD path. Coord:
+  ```
+  CX = -1.9918151296901943|-7.8219844803880472E-17|1.6601399303929208E-34|-5.8601391417687406E-51
+  CY = -5.5240415753972429E-06|-2.8659813126937928E-22|6.6910924132216174E-39|-2.0109018297360669E-55
+  Zoom = 1.0E+51
+  ```
+  Threshold engagement: zoom > 1e50 enters OD path. Expected: no
+  solid-colour render, no NaN, no all-black; visual quality similar
+  to QD at same zoom (Path A only fixes the OD-arithmetic regression,
+  not the underlying QD precision floor — those need 2.14 / 2.15).
+- 2026-06-22 — Wave 2.11 OD arithmetic fix (Path A) — `operator *` rewritten.
+  Root cause: original tier-by-tier accumulator reused `ThreeSum` residual
+  variable names (`r1a/r1b` overwritten by tier-2 `ThreeSum`, `r3a/r3b` by
+  tier-3 `TwoSum`), silently dropping tier-1 + tier-3 residual mass on every
+  multiply. ~1e-32 noise per multiply compounded through the ref orbit and
+  bubbled into X0 at iter ~127, collapsing every pixel to one colour at
+  zoom ≥ 1e40. Fix: replaced with stackalloc 9-slot expansion accumulator
+  (`AddPair` / `AddProduct` push partial products into the expansion via
+  TwoSum cascade, residuals propagate forward without name reuse).
+  * Threshold restored: `ODZoomThreshold = 1e50` in both
+    `MandelbrotCalculator.cs` and `FractalViewState.cs`.
+  * Tests: 23 xUnit OD parity + stress tests in
+    `Server.Tests/OctupleDoubleTests.cs`. Key invariant — at user's
+    pixelating coord (zoom 7.14E48), OD/QD agree to better than 1e-55
+    on X0 through iter 200 (beyond which QD's own precision floor
+    swamps the comparison; deep-iter test verifies OD stays finite to
+    iter 5000).
+  * Saprobe smoke (1e9 → 1e60) runs without crash / NaN. Visual parity
+    past 1e50 requires UI navigation populating CenterX4..X7 — the
+    saprobe coord has zero X2..X7, so OD behaves identically to QD
+    there regardless of fix.
+  * Pre-existing QD-floor pixelation at user's 7.14E48 coord remains
+    open. OD threshold engages only past 1e50, so QD path still runs
+    at that exact zoom; user-reported pixelation there is the QD
+    precision wall on a specific orbit (chaos amplifies QD's 1e-62 ULP
+    over ~600 iters to swamp the 5e-52 pixel scale). Path B (DD-precision
+    PT δ chain) or full OD navigation pipeline needed — separate wave.
+- 2026-06-21 — Wave 2.11 regression. OD engagement at zoom 7e48 (after
+  threshold lowered from 1e50 → 1e40) produced solid-colour render at
+  user's prior-working 1e58 location. Suspect bug in `OD operator+`
+  carry cascade or `Renorm9` redistribution. Restored prior behaviour
+  by setting `ODZoomThreshold = 1e100` in both
+  `MandelbrotCalculator.cs` and `FractalViewState.cs` — OD code stays
+  compiled but inert; QD path runs at any practical zoom (verified
+  user-side to ~1e58). **Resolved 2026-06-22 — see entry above.**
+- 2026-06-21 — Wave 2.11 (D-4.17) shipped (engine MVP) — Octuple-double
+  (OD) reference orbit, 8-limb extended precision, ~124 decimal digits.
+  Pushes the legacy `MandelbrotCalculator` zoom ceiling past 1e50 toward
+  the ~10¹¹⁶ OD limit. `OdEmitter` for generated calcs is a deferred
+  follow-up (large mechanical port of the QD path; not blocking).
+  * `Abstractions/Math/OctupleDouble.cs` — new `OD` readonly struct
+    (X0..X7), mirrors `QD` API. HLB primitives `TwoSum / QuickTwoSum /
+    TwoProduct / ThreeSum` carried over. `Renorm9` — 9-term QuickTwoSum
+    cascade reducing to canonical 8-term form. Add (sloppy two-pass
+    residual sweep), Sub, Mul (diagonal-by-diagonal partial product
+    accumulation across 8 tiers — tier 6 keeps Hi-only on outer terms,
+    tier 7 collapses to scalar mul; sufficient for ~124-digit retention
+    after renormalize), Square (= this·this), Div (long-division by 8×
+    Newton refinement on Hi limb). Implicit `OD ← double`, explicit
+    `(double)OD`, `ToDD()`, `ToQD()`, `FromCenterOffset(center, pixel,
+    scale)` for the per-pixel coord factory.
+  * `Abstractions/ViewState/FractalViewState.cs` — `CenterX4..X7` /
+    `CenterY4..Y7` properties, `ODZoomThreshold = 1e50` const,
+    `RequiresOD` flag. `ResetView` / `SnapToFractalDefault` clear all
+    8 limbs. `RequiresQD` now gated `&& !RequiresOD` so QD doesn't
+    fire when OD is required.
+  * `Engine/Calculators/MandelbrotCalculator.cs` — adds the same 4-limb
+    center props (`CenterX4..X7` / `CenterY4..Y7`), `ODZoomThreshold`
+    const, OD limbs 4..7 of the reference orbit storage (`_refZrX4..X7`
+    / `_refZiX4..X7`), and `_refCx4..X7` / `_refCy4..Y7` for the
+    centerSame cache check. New `EnsureRefOrbitCapacity(maxIter)` —
+    single allocation point for all 8-limb arrays so QD/OD paths share
+    storage. DD and QD `centerSame` updated to also require X4..X7
+    zero (avoids stale OD orbit reuse when zoom drops back through
+    1e50). New `ComputeReferenceOrbitOD(OD cx, OD cy, maxIter)` writes
+    all 8 limbs per slot. New `ComputePixelOD` mirrors `ComputePixelQD`
+    with OD subtraction in the SA prelude + OD inner iteration (per-
+    pixel HP fallback when PT glitches at zoom > 1e50). `Calculate()`
+    branches three-way: OD > 1e50 → QD > 1e25 → DD ≤ 1e25.
+    `ComputeRowPTScalar` / `ComputeRowPT4` / `ComputeRowPT8` all
+    detect `useOD` separately, build `cy_od`, and route glitched/tail
+    pixels through OD instead of QD when active.
+  * `Program.cs` — `--saprobe` ladder extended with 1e30 + 1e60 cases
+    to exercise QD and OD code paths through the legacy calculator.
+    At those zooms the probe coords (DD-only precision) are below
+    pixel scale, so the result collapses to a single colour as
+    expected; the verification is that the code path runs without
+    crash, NaN, or memory issue. Real visual verification past 1e50
+    waits on the pan-zoom OD limb plumbing (out of scope this wave —
+    requires UI cursor → OD-limb propagation, similar to the existing
+    QD limb pan handling).
+  * Build clean (0 errors, 24 pre-existing warnings).
+  * Known limitation: pan/zoom UI does not yet promote a screen
+    cursor to non-zero CenterX4..X7. Until that lands, OD ref orbit
+    runs at DD-precision center → output collapses past zoom 1e16.
+    Filing as follow-up wave (similar shape to the existing QD limb
+    pan handling at `Engine/Calculators/MandelbrotCalculator.cs:1450`).
+  * Known limitation: generated calcs (`Engine/Calculators/Generated/*`)
+    still cap at QD. `OdEmitter` is the next sub-task — large mechanical
+    port mirroring `QdEmitter` + `QdDirectEmitter`. Deferred to keep
+    Wave 2.11 shippable.
 - 2026-06-21 — Wave 2.10 (D-4.18) shipped — DD-precision BLA tables.
   * `Engine/Math/Bla.cs` — `Bla` struct now stores A, B as double-double
     pairs (`AReHi/AReLo, AImHi/AImLo, BReHi/BReLo, BImHi/BImLo`). Public
