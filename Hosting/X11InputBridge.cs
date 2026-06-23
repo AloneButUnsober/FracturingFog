@@ -29,6 +29,8 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 
+using Avalonia.Threading;
+
 using FracturingFog.Input;
 
 namespace FracturingFog.Hosting;
@@ -164,16 +166,47 @@ internal sealed class X11InputBridge : INativeInputBridge
     {
         if (_input == null) return;
 
+        // S-X7.2b (2026-06-23) — marshal every dispatch onto the Avalonia
+        // UI thread. The X event pump runs on a dedicated background thread
+        // (X11 event loops are blocking) but the downstream IFractalInputController
+        // writes to FractalViewState whose PropertyChanged subscribers touch
+        // Avalonia visuals, and ContextMenuRequested directly opens an
+        // Avalonia ContextMenu. Both throw InvalidOperationException
+        // ("The calling thread cannot access this object because a different
+        // thread owns it") when called off the UI thread. Win's NativeMouseForwarder
+        // gets this for free because Win32 messages dispatch on the UI thread
+        // already; on Linux we have to hop manually.
         switch (ev.type)
         {
-            case ButtonPress:    HandleButtonPress(ref ev.xbutton); break;
-            case ButtonRelease:  HandleButtonRelease(ref ev.xbutton); break;
-            case MotionNotify:   HandleMotion(ref ev.xmotion); break;
-            case EnterNotify:    FocusRequested?.Invoke(); break;
+            case ButtonPress:
+            {
+                var snap = ev.xbutton; // copy by value out of the union
+                Dispatcher.UIThread.Post(() => HandleButtonPress(snap),
+                    DispatcherPriority.Input);
+                break;
+            }
+            case ButtonRelease:
+            {
+                var snap = ev.xbutton;
+                Dispatcher.UIThread.Post(() => HandleButtonRelease(snap),
+                    DispatcherPriority.Input);
+                break;
+            }
+            case MotionNotify:
+            {
+                var snap = ev.xmotion;
+                Dispatcher.UIThread.Post(() => HandleMotion(snap),
+                    DispatcherPriority.Input);
+                break;
+            }
+            case EnterNotify:
+                Dispatcher.UIThread.Post(() => FocusRequested?.Invoke(),
+                    DispatcherPriority.Input);
+                break;
         }
     }
 
-    private void HandleButtonPress(ref XButtonEvent e)
+    private void HandleButtonPress(XButtonEvent e)
     {
         // X11 wheel arrives as buttons 4 (up) + 5 (down); some servers also
         // emit 6/7 for horizontal scroll. Translate to a WheelInput tick.
@@ -221,7 +254,7 @@ internal sealed class X11InputBridge : INativeInputBridge
         else _input!.OnPointerDown(pi);
     }
 
-    private void HandleButtonRelease(ref XButtonEvent e)
+    private void HandleButtonRelease(XButtonEvent e)
     {
         if (e.button == 4 || e.button == 5 || e.button == 6 || e.button == 7) return;
         var btn = MapButton(e.button);
@@ -240,7 +273,7 @@ internal sealed class X11InputBridge : INativeInputBridge
         }
     }
 
-    private void HandleMotion(ref XMotionEvent e)
+    private void HandleMotion(XMotionEvent e)
     {
         var pi = new PointerInput(e.x, e.y, GetWindowWidth(), GetWindowHeight(),
             MapMotionButtons(e.state), MapModifiers(e.state));
