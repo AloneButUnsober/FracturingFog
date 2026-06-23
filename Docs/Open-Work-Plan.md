@@ -148,21 +148,21 @@ audio-reactive dialog without crash.
 
 | # | Item |
 |---|------|
-| 5.1 | Theme compatibility matrix audit (A.1–D.2 new families) |
-| 5.2 | Region preset coverage audit |
-| 5.3 | CalcGen reach verification (A.1/A.2/A.5/A.6 5-path) |
-| 5.4 | Math help 2-level grouping (>25 sub-tabs) |
-| 5.5 | `FEATURES.md` "20+ families" → ~38; README badge counter |
-| 5.6 | Allowlist negative tests for 19 new types |
-| 5.7 | Headless visual-regression baseline (golden PNG per type) |
-| 5.8 | `FractalParamsView.axaml` per-type extract |
-| 5.9 | B.2 KIFS new folds (Mandelbox-rot / Octahedron / Dodecahedron) |
-| 5.10 | D.5 L-System 5 more presets |
-| 5.11 | D.4 Flame next 8-16 Apophysis variations |
-| 5.12 | B.4 Kleinian user-editable sphere list + Möbius composition + analytic DE |
-| 5.13 | D.2 DLA cached-blit pan/zoom + multi-seed + sticky-coef |
-| 5.14 | C.3 Bicomplex 2nd-slice-axis + split-complex variant |
-| 5.15 | D.1 Apollonian sub-gasket filled rendering (low pri) |
+| 5.1 | Theme compatibility matrix audit (A.1–D.2 new families) | ✅ Shipped 2026-06-23 — implicit feature-bit gating, no central tag table needs adding |
+| 5.2 | Region preset coverage audit | ✅ Shipped 2026-06-23 — +5 built-in regions (Plasma / Flame / Logistic / TearDrop / Mandelbulb) |
+| 5.3 | CalcGen reach verification (A.1/A.2/A.5/A.6 5-path) | ✅ Shipped 2026-06-23 — Magnet 1/2 / Glynn / Spider stay hand-written (DSL lacks pole-clamp / fractional-pow / c-mutate) |
+| 5.4 | Math help 2-level grouping (>25 sub-tabs) | ✅ Shipped 2026-06-23 — `HelpSubTabGroup` + 7-group layout in `HostHelpContentProvider`; AXAML nested TabControl |
+| 5.5 | `FEATURES.md` "20+ families" → ~38; README badge counter | ✅ Shipped 2026-06-23 |
+| 5.6 | Allowlist negative tests for 19 new types | ✅ Shipped 2026-06-23 — +16 tests in `FractalTypeAllowlistTests.cs`; new enum-classification coverage assertion |
+| 5.7 | Headless visual-regression baseline (golden PNG per type) | ✅ Shipped 2026-06-23 — case set extended 22 → 41; baseline re-record deferred to user run |
+| 5.8 | `FractalParamsView.axaml` per-type extract | 🟡 Deferred — low pri per roadmap |
+| 5.9 | B.2 KIFS new folds (Mandelbox-rot / Octahedron / Dodecahedron) | 🔴 Bugged 2026-06-23 — enum values + DE bodies land but all three render incorrectly (Octa → cube, Dodeca → all-black, MandelboxRot → stepped-ridge cube). Fix deferred. See status log. |
+| 5.10 | D.5 L-System 5 more presets | ✅ Shipped 2026-06-23 — Crystal / Quadratic Koch Island / Twindragon / Bush / Sierpinski Carpet |
+| 5.11 | D.4 Flame next 8-16 Apophysis variations | ✅ Shipped 2026-06-23 — +10: Horseshoe / Spiral / Hyperbolic / Diamond / Ex / Bent / Fisheye / Exponential / Power / Cosine |
+| 5.12 | B.4 Kleinian user-editable sphere list + Möbius composition + analytic DE | 🟡 Deferred — heavy multi-file refactor |
+| 5.13 | D.2 DLA cached-blit pan/zoom + multi-seed + sticky-coef | 🟡 Deferred — needs new render-pipeline state |
+| 5.14 | C.3 Bicomplex 2nd-slice-axis + split-complex variant | ✅ Shipped 2026-06-23 — `BicomplexSliceAxis` enum {K/J/I/R}; split-complex / coquaternion stays deferred |
+| 5.15 | D.1 Apollonian sub-gasket filled rendering (low pri) | 🟡 Deferred — low pri |
 
 ---
 
@@ -230,6 +230,134 @@ Convergence after Wave 1:
 ---
 
 ## Status log
+
+- 2026-06-23 — Wave 5.9 KIFS folds **bugged + deferred**. All three new folds
+  (Octahedron, Dodecahedron, MandelboxRot) render incorrectly. Iteration
+  + rebuild + smoke confirmed code path runs; math itself wrong. Three
+  successive rewrites all failed to produce correct shapes. Deferring
+  rather than burning more time on derivation.
+  * **Octahedron** — current impl is Menger sort-3 abs-fold with a 30°
+    Y-axis pre-rotation. User reports solid cube. Earlier variant
+    (Menger minus z-mirror) also rendered cube — both leave the orbit
+    bounded to roughly the unit cube under abs+sort+scale, no
+    octahedral self-similarity emerges. True octahedron IFS needs a
+    face-fold across the (1,1,1)/√3 face-normal plane that actually
+    fires for typical iterates; my versions either folded too rarely
+    (`y+z > 1` after sort puts max in x → rarely true) or used the
+    wrong scale/offset combination that collapsed orbits to origin.
+  * **Dodecahedron** — current impl is Sierpinski tetra fold with 36°
+    rotation around (1,1,1) diagonal — should render *something* but
+    not the intended dodecahedral / icosahedral shape. Earlier variants
+    using Knighty's three φ-derived mirror planes (n1=(-φ,-1,φ-1),
+    n2=(-1,φ-1,-φ), n3=(φ-1,-φ,-1)) diverged for every traced pixel —
+    `if (d < 0)` reflections never produced a bounded attractor, so DE
+    stayed huge-positive everywhere → no ray hits → all-black render.
+    Adding the canonical abs(z) first-octant prefix made the +++ octant
+    all-positive against any (-,-,+) normal, so mirrors fired the wrong
+    way. The Wave 5.9 "next 36° rotated Sierp" tactic ships but does NOT
+    match the dodecahedral spec.
+  * **MandelboxRot** — current impl is box-fold-at-±1 + sphere-fold +
+    π/48 Y-axis rotation + scale. User reports cube-like shape with
+    stepped ridges along oblong slightly curved sides. The fixed-dr
+    KIFS DE scheme (no per-iter |dz| magnitude tracking) is the root
+    cause — real Mandelbox DE needs the dr update from the sphere-fold
+    factored into the distance return. Without it, the DE produced is
+    geometrically incorrect → only the bounding-cube approximation
+    renders. The proper sphere-fold + dr-magnitude update lives in
+    `MandelboxCalculator`, separate code path.
+  * UI hooks shipped: `KifsFoldKind.Octahedron / Dodecahedron /
+    MandelboxRot` enum values, ComboBox row in `FractalParamsView.axaml`,
+    `DispatchDE` switch in `KifsCalculator.cs`. GPU path correctly gates
+    new folds to CPU fallback. Build clean, 156/156 tests pass — the
+    bug is mathematical, not structural.
+  * **Fix plan (deferred)** — proper fixes require porting battle-tested
+    formulas from Mandelbulber2's `fractal_formulas.cpp` (specifically
+    its "Octahedron", "IcosaFold", and "AmazingBoxMod1" entries), each
+    of which is ~50 lines of carefully-tuned axis swaps + plane mirrors
+    + dr-tracking arithmetic. None of those formulas fit the simple
+    fixed-dr KIFS DE scheme used by the existing Menger / Sierpinski
+    paths — they need a dr accumulator and bailout management closer
+    to the `MandelboxCalculator` shape. Filing as 5.9.f1: replace the
+    three current DE bodies with Mandelbulber-ported versions and
+    extend `KifsCalculator` with a dr-magnitude accumulator threaded
+    through `DispatchDE`. Estimated 1-2 days.
+  * Interim user-facing behaviour: the three new fold options remain
+    pickable in the ComboBox and render *something* (their distinct
+    incorrect shapes), so they don't crash or block. Recommend leaving
+    selection on Menger / Sierpinski until 5.9.f1 lands.
+
+- 2026-06-23 — Wave 5 closeout — 10 of 15 items shipped (5.1–5.7, 5.10, 5.11,
+  5.14). Five items deferred — 5.8 / 5.12 / 5.13 / 5.15 are heavier than
+  polish-wave scope; 5.9 (KIFS folds) ships UI/enum scaffolding but DE
+  bodies bugged — see separate 5.9 entry. Fix tracked as 5.9.f1.
+  * 5.5 / 5.6 / 5.7 — doc + test polish. FEATURES.md / README bumped to
+    "~38 families" with category breakdown; README gained shields.io
+    badges (fractals / themes / platforms / .NET). Allowlist test suite
+    grew from 39 → 55 with full enum-classification coverage assertion.
+    Visual-regression case set 22 → 41 (every new FractalType + every
+    Generated variant + every 3D raymarcher). Baseline.json stays the
+    earlier 22-entry record; user runs `record` when ready to absorb the
+    ~10 min cold-build cost.
+  * 5.1 audit conclusion — theme gating is implicit (per-calculator
+    capability + `EquationProfile` feature-bit recommender), not a
+    central FractalType→tag registry. New families pick up sane defaults
+    via interface gating (e.g. `IInteriorAwareColorMap` only runs inside
+    `MandelbrotCalculator.RunInteriorPass`; alt calcs silently skip).
+    No new tag table needed. Documented + closed.
+  * 5.2 — `Engine/Models/FractalRegion.cs` `_builtIns` extended with 5
+    new entries: Plasma (default seed framing), Flame (default chaos
+    framing), Logistic (r ∈ [2.9, 4.0] bifurcation window), TearDrop
+    (default centre), Mandelbulb power-8 (default camera). Roadmap
+    target was ≥1 built-in per family; the four families above were
+    bare. Other families already had ≥1.
+  * 5.3 — CalcGen DSL inspected. Magnet 1/2 rational expressions are
+    DSL-expressible (`/`, `^2` work) but the pole-clamp on the
+    denominator has no DSL operator → NaN blow-up on pole pixels.
+    Glynn needs fractional `z^1.5` — DSL `^` is integer-only. Spider
+    mutates `c` per iteration — DSL state model assumes constant c.
+    All four stay hand-written scalar / SIMD kernels in
+    `Engine/Models/FractalKernels/`. No `[assembly: GeneratedCalculator]`
+    entries added.
+  * 5.4 — Two-level Mathematics-tab grouping. New `HelpSubTabGroup`
+    record in `Abstractions/Help/IHelpContentProvider.cs`. Default
+    interface impl wraps the flat `MathSubTabs` into a single "All"
+    group so legacy hosts stay compatible. `HostHelpContentProvider`
+    overrides with a 7-group layout: Overview / 2D escape-time /
+    Histogram / Procedural / 3D + 4D / Authoring / Generated.
+    `FloatingHelpView.axaml` now renders an outer TabControl over the
+    groups and an inner TabControl (TabStripPlacement="Left") over each
+    group's sub-tabs. Tab strip no longer wraps; total 35 sub-tabs split
+    across the 7 groups.
+  * 5.9 — UI / enum scaffolding shipped (KifsFoldKind.Octahedron /
+    Dodecahedron / MandelboxRot, ComboBox row, DispatchDE switch, GPU
+    gate to CPU fallback) but DE math bugged across all three variants.
+    Three rewrite attempts failed to produce correct shapes. **Marked
+    🔴 bugged + deferred — see dedicated 5.9 status-log entry above for
+    diagnosis and 5.9.f1 fix plan.**
+  * 5.10 — `LSystemPresets.cs` gained 5 new entries: Crystal (Koch-square
+    variant), Quadratic Koch Island, Twindragon, Bush (Plant variant),
+    Sierpinski Carpet. Built-in library now 16 entries.
+  * 5.11 — Flame gained 10 new Apophysis stock variations: Horseshoe (v4),
+    Spiral (v9), Hyperbolic (v10), Diamond (v11), Ex (v12), Bent (v14),
+    Fisheye (v16), Exponential (v18), Power (v19), Cosine (v20). Enum
+    values use Apophysis-canonical IDs; the `ApplyVariation` switch
+    arm guards origin-singular variations with the same r ≥ 1e-12
+    bailout the existing Spherical / Julia / Disc arms use.
+  * 5.14 — Bicomplex Mandelbrot 4D slice-axis selector. New
+    `BicomplexSliceAxis` enum {K, J, I, R}. The DE now packs
+    (sx, sy, sz, sliceW) into (c1..c4) according to the selected axis,
+    routing the slice constant to the chosen algebra basis vector.
+    Default K preserves legacy behaviour bit-exactly. GPU kernel
+    still hardcodes K-axis assignment — non-K selections fall back to
+    CPU. UI gains a ComboBox row in `FractalParamsView.axaml`. The
+    coquaternion / split-complex variant from the roadmap stays
+    deferred — needs a new calculator with swapped product table.
+  * Bug fix piggyback in `FractalParamsView.axaml`: the Bicomplex
+    "Cam dist" NumericUpDown's `Grid.Row` was "4" against a TextBlock
+    at row "5" → cam-dist value overlapped cam-φ. Fixed to row "5".
+  * Build clean (0 errors, 20 pre-existing warnings — same baseline as
+    Wave 4 closeout). 156/156 Server.Tests pass (140 baseline + 16 new
+    allowlist tests).
 
 - 2026-06-23 — Wave 4.12 shipped — Marching Cubes mesh export
   (OBJ smooth + binary STL).

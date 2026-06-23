@@ -674,6 +674,66 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Apollonian,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Plasma — Default",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 64,
+                Description = "Diamond-square midpoint-displacement noise field at the default seed and roughness. Pan/zoom is a no-op — the generated field IS the image; switch PlasmaSeed for variety.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Plasma,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Flame — Default Chaos",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Apophysis-style chaos-game flame at the default variation table. The renderer auto-fits the attractor; CX/CY/Zoom are advisory only.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Flame,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Logistic — r ∈ [2.9, 4.0]",
+                CenterX     =  3.45,
+                CenterY     =  0.5,
+                Zoom        =  1.8,
+                Iterations  = 512,
+                Description = "Classic bifurcation diagram framing — the period-doubling cascade from r ≈ 2.9 through the Feigenbaum point at r ≈ 3.5699 into the chaotic regime past r = 4.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Logistic,
+                QualityPreset = QualityPreset.High
+            },
+            new()
+            {
+                Name        = "TearDrop — Default",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  = 256,
+                Description = "Tear Drop fractal at default framing. The asymmetric drop shape sits centred on the origin.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.TearDrop,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Mandelbulb — Power 8",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical power-8 Mandelbulb at default camera. Triplex algebra (spherical-coord exponent map) renders the bulb with raymarched DE and Phong shading.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbulb,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

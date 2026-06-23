@@ -122,6 +122,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _dlaParticles = _p.DlaParticles;
         _dlaSeed = _p.DlaSeed;
         _bcSliceW = _p.BicomplexSliceW;
+        _bcSliceAxis = _p.BicomplexSliceAxis;
         _bcIterations = _p.BicomplexIterations;
         _bcCameraTheta = _p.BicomplexCameraTheta;
         _bcCameraPhi = _p.BicomplexCameraPhi;
@@ -732,6 +733,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // ── Bicomplex Mandelbrot ──
     private double _bcSliceW;
     public double BicomplexSliceW { get => _bcSliceW; set { Set(ref _bcSliceW, Clamp(value, -2, 2)); _p.BicomplexSliceW = _bcSliceW; Fire(); } }
+    private BicomplexSliceAxis _bcSliceAxis;
+    public BicomplexSliceAxis BicomplexSliceAxis { get => _bcSliceAxis; set { Set(ref _bcSliceAxis, value); _p.BicomplexSliceAxis = value; Fire(); } }
+    public Array BicomplexSliceAxes => Enum.GetValues(typeof(BicomplexSliceAxis));
     private int _bcIterations;
     public int BicomplexIterations { get => _bcIterations; set { Set(ref _bcIterations, (int)Clamp(value, 2, 32)); _p.BicomplexIterations = _bcIterations; Fire(); } }
     private double _bcCameraTheta;

@@ -46,6 +46,7 @@ public sealed class FloatingHelpViewModel : ViewModelBase
         PosterText   = content.PosterText;
         ArchitectureText = content.ArchitectureText;
         MathSubTabs  = content.MathSubTabs;
+        MathSubTabGroups = content.MathSubTabGroups;
         AboutLinks   = content.AboutLinks;
         _hardwareText = content.GetSystemInfoText();
 
@@ -75,6 +76,7 @@ public sealed class FloatingHelpViewModel : ViewModelBase
     public string PosterText { get; }
     public string ArchitectureText { get; }
     public IReadOnlyList<HelpSubTab> MathSubTabs { get; }
+    public IReadOnlyList<HelpSubTabGroup> MathSubTabGroups { get; }
     public IReadOnlyList<HelpLink> AboutLinks { get; }
 
     private string _hardwareText;

@@ -82,6 +82,7 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
         uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         double sliceW = FractalParameters.BicomplexSliceW;
+        var sliceAxis = FractalParameters.BicomplexSliceAxis;
         int deIter = Math.Max(2, FractalParameters.BicomplexIterations);
         double bailout2 = Math.Max(4.0, FractalParameters.BicomplexBailout);
         int maxSteps = Math.Max(16, FractalParameters.BicomplexMaxSteps);
@@ -136,14 +137,17 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
-        var deStruct = new De(sliceW, bailout2, deIter);
+        var deStruct = new De(sliceW, sliceAxis, bailout2, deIter);
 
         // Hoisted for shared use by GPU dispatch + CPU path.
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
 
         // P7b — opt-in GPU raymarch path (cheap-palette shading). See
         // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
-        if (fx.UseGpuRender && !lowRes)
+        // Wave 5.14 — GPU kernel still hardcodes the legacy K-axis assignment;
+        // non-K slice-axis selections fall back to the CPU path until the
+        // kernel grows an axis parameter.
+        if (fx.UseGpuRender && !lowRes && sliceAxis == BicomplexSliceAxis.K)
         {
             var rp = new GpuRaymarchParams
             {
@@ -210,7 +214,7 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
 
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = BicomplexDE(px, py, pz, sliceW, bailout2, deIter);
+                    double dist = BicomplexDE(px, py, pz, sliceW, sliceAxis, bailout2, deIter);
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
                     px += rdx * dist; py += rdy * dist; pz += rdz * dist;
@@ -228,12 +232,12 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
                 }
 
                 double h = eps * 2;
-                double n0 = BicomplexDE(px + h, py, pz, sliceW, bailout2, deIter)
-                          - BicomplexDE(px - h, py, pz, sliceW, bailout2, deIter);
-                double n1 = BicomplexDE(px, py + h, pz, sliceW, bailout2, deIter)
-                          - BicomplexDE(px, py - h, pz, sliceW, bailout2, deIter);
-                double n2 = BicomplexDE(px, py, pz + h, sliceW, bailout2, deIter)
-                          - BicomplexDE(px, py, pz - h, sliceW, bailout2, deIter);
+                double n0 = BicomplexDE(px + h, py, pz, sliceW, sliceAxis, bailout2, deIter)
+                          - BicomplexDE(px - h, py, pz, sliceW, sliceAxis, bailout2, deIter);
+                double n1 = BicomplexDE(px, py + h, pz, sliceW, sliceAxis, bailout2, deIter)
+                          - BicomplexDE(px, py - h, pz, sliceW, sliceAxis, bailout2, deIter);
+                double n2 = BicomplexDE(px, py, pz + h, sliceW, sliceAxis, bailout2, deIter)
+                          - BicomplexDE(px, py, pz - h, sliceW, sliceAxis, bailout2, deIter);
                 var nrm = Normalize3(n0, n1, n2);
 
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
@@ -278,20 +282,33 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
     public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
     {
         private readonly double _sliceW, _bailout2;
+        private readonly BicomplexSliceAxis _axis;
         private readonly int _iter;
-        public De(double sliceW, double bailout2, int iter)
-        { _sliceW = sliceW; _bailout2 = bailout2; _iter = iter; }
+        public De(double sliceW, BicomplexSliceAxis axis, double bailout2, int iter)
+        { _sliceW = sliceW; _axis = axis; _bailout2 = bailout2; _iter = iter; }
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
-            => BicomplexDE(x, y, z, _sliceW, _bailout2, _iter);
+            => BicomplexDE(x, y, z, _sliceW, _axis, _bailout2, _iter);
     }
 
     private static double BicomplexDE(
         double sx, double sy, double sz, double sliceW,
-        double bailout2, int iter)
+        BicomplexSliceAxis axis, double bailout2, int iter)
     {
-        // Pack pixel as c: (1, i, j, k) = (sx, sy, sz, sliceW).
-        double c1 = sx, c2 = sy, c3 = sz, c4 = sliceW;
+        // Wave 5.14 — pack pixel as c with the slice-constant axis chosen by
+        // the user. Default K keeps the legacy assignment (c = (sx, sy, sz, sliceW)).
+        double c1, c2, c3, c4;
+        switch (axis)
+        {
+            case BicomplexSliceAxis.R:
+                c1 = sliceW; c2 = sx; c3 = sy; c4 = sz; break;
+            case BicomplexSliceAxis.I:
+                c1 = sx; c2 = sliceW; c3 = sy; c4 = sz; break;
+            case BicomplexSliceAxis.J:
+                c1 = sx; c2 = sy; c3 = sliceW; c4 = sz; break;
+            default: // K
+                c1 = sx; c2 = sy; c3 = sz; c4 = sliceW; break;
+        }
 
         // t starts at zero (Mandelbrot membership test).
         double t1 = 0.0, t2 = 0.0, t3 = 0.0, t4 = 0.0;
