@@ -35,6 +35,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace FracturingFog.Rendering.Lighting;
 
@@ -199,6 +200,14 @@ public static class HdriRegistry
     private static readonly ConcurrentDictionary<string, HdriImage> _byName
         = new(StringComparer.OrdinalIgnoreCase);
 
+    // Wave 4.3 — per-path parse gate. Concurrent first-hits on the per-pixel
+    // render path would otherwise all open the file + parse N times before
+    // the cache write completes; the gate funnels every concurrent caller
+    // through a single Lazy parse so the work happens exactly once. Used by
+    // both TryLoadFromFile (sync) and Preload (async).
+    private static readonly ConcurrentDictionary<string, Lazy<HdriImage?>> _parseGate
+        = new(StringComparer.OrdinalIgnoreCase);
+
     // Self-register with the abstractions-layer probe so the UI shell's
     // file-picker can pre-warm and surface load failures without taking a
     // project reference on the Engine. The first reference to any member of
@@ -206,6 +215,11 @@ public static class HdriRegistry
     static HdriRegistry()
     {
         HdriProbe.TryLoad = path => TryLoadFromFile(path, out _);
+        // Wave 4.3 — fire-and-forget background preload. VM EnvironmentName
+        // setter + preset-apply sites call this so the first render frame
+        // finds the HDRI cached instead of racing N pixel-worker threads
+        // through the same file parse.
+        HdriProbe.Preload = path => Task.Run(() => TryLoadFromFile(path, out _));
     }
 
     public static bool TryGet(string? name, out HdriImage? image)
@@ -247,11 +261,32 @@ public static class HdriRegistry
             return true;
         }
         if (!File.Exists(path)) return false;
+        // Wave 4.3 — funnel concurrent first-hits through one Lazy parse.
+        // N pixel-worker threads landing on the same uncached path would
+        // otherwise each open + parse the file; the gate guarantees one
+        // parse, all callers share the result.
+        var gate = _parseGate.GetOrAdd(path, p => new Lazy<HdriImage?>(() => ParseUncached(p)));
+        try
+        {
+            image = gate.Value;
+        }
+        catch
+        {
+            image = null;
+        }
+        // Once the parse settled (success or failure), drop the gate so a
+        // later retry on a fixed file isn't wedged on a stale Lazy.
+        _parseGate.TryRemove(path, out _);
+        return image is not null;
+    }
+
+    private static HdriImage? ParseUncached(string path)
+    {
         try
         {
             string ext = Path.GetExtension(path).ToLowerInvariant();
             using var fs = File.OpenRead(path);
-            image = ext switch
+            HdriImage? image = ext switch
             {
                 ".hdr" or ".pic" => ParseRadiance(fs),
                 ".exr"           => OpenExrReader.Parse(fs),
@@ -262,14 +297,13 @@ public static class HdriRegistry
                 string name = Path.GetFileNameWithoutExtension(path);
                 _byName[name] = image;
                 _byName[path] = image;
-                return true;
             }
+            return image;
         }
         catch
         {
-            // Surface failure as false — caller falls back to gradient sky.
+            return null;
         }
-        return false;
     }
 
     /// <summary>Forget every cached HDRI. Useful when the user reloads

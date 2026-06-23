@@ -151,6 +151,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 && _themeService.TryGetThemeLightingPreset(name, out var preset))
             {
                 Main.ViewState.FractalParameters.Lighting = preset;
+                // Wave 4.3 — preset-apply bypasses the VM EnvironmentName
+                // setter, so kick the HDRI preload here too.
+                if (!string.IsNullOrWhiteSpace(preset.EnvironmentName))
+                    FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(preset.EnvironmentName);
                 Main.RenderHost.Trigger();
             }
         };
@@ -1489,6 +1493,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 && _themeService.TryGetRegionLightingOverride(name, out var lightOverride))
             {
                 Main.ViewState.FractalParameters.Lighting = lightOverride;
+                // Wave 4.3 — preset-apply bypasses the VM EnvironmentName
+                // setter, so kick the HDRI preload here too.
+                if (!string.IsNullOrWhiteSpace(lightOverride.EnvironmentName))
+                    FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(lightOverride.EnvironmentName);
             }
             Main.RenderHost.Trigger();
         }

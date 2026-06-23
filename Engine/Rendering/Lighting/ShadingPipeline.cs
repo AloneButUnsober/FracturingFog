@@ -517,11 +517,22 @@ public static class ShadingPipeline
             double bOz = i.Pz + i.Nz * bias;
             // Initial bounce direction = mirror of the view ray about the
             // primary hit normal. Subsequent bounces re-reflect against the
-            // newly-hit surface normal.
+            // newly-hit surface normal. Wave 4.2 — GGX VNDF sample when the
+            // knob is on; falls back to mirror reflect at alpha → 0.
             double rdN0 = i.Rdx * i.Nx + i.Rdy * i.Ny + i.Rdz * i.Nz;
             double brx = i.Rdx - 2.0 * rdN0 * i.Nx;
             double bry = i.Rdy - 2.0 * rdN0 * i.Ny;
             double brz = i.Rdz - 2.0 * rdN0 * i.Nz;
+            if (fx.UseGgxSampling)
+            {
+                var (u1, u2) = HashPair(i.Px, i.Py, i.Pz, 0);
+                var g = SampleGgxReflect(-i.Rdx, -i.Rdy, -i.Rdz, i.Nx, i.Ny, i.Nz, fx.Roughness, u1, u2);
+                // Reject below-horizon samples — keep mirror reflect.
+                if (g.X * i.Nx + g.Y * i.Ny + g.Z * i.Nz > 0)
+                {
+                    brx = g.X; bry = g.Y; brz = g.Z;
+                }
+            }
             // NdotV at the originating surface — drives Fresnel for THIS bounce.
             double NdotV = Math.Max(0.0, i.Nx * -i.Rdx + i.Ny * -i.Rdy + i.Nz * -i.Rdz);
 
@@ -599,11 +610,22 @@ public static class ShadingPipeline
                 double nbz = de.Evaluate(hpx, hpy, hpz + h) - de.Evaluate(hpx, hpy, hpz - h);
                 var n2 = Normalize3(nbx, nby, nbz);
                 // Re-reflect bounce dir about the new normal. NdotV for the
-                // next bounce's Fresnel = max(0, n·-bounceDir).
+                // next bounce's Fresnel = max(0, n·-bounceDir). Wave 4.2 —
+                // GGX VNDF sample replaces the mirror reflect when the knob
+                // is on. V = -brx/-bry/-brz (toward incoming surface).
                 double rdN = brx * n2.X + bry * n2.Y + brz * n2.Z;
                 double bnx = brx - 2.0 * rdN * n2.X;
                 double bny = bry - 2.0 * rdN * n2.Y;
                 double bnz = brz - 2.0 * rdN * n2.Z;
+                if (fx.UseGgxSampling)
+                {
+                    var (u1, u2) = HashPair(hpx, hpy, hpz, b + 1);
+                    var g = SampleGgxReflect(-brx, -bry, -brz, n2.X, n2.Y, n2.Z, fx.Roughness, u1, u2);
+                    if (g.X * n2.X + g.Y * n2.Y + g.Z * n2.Z > 0)
+                    {
+                        bnx = g.X; bny = g.Y; bnz = g.Z;
+                    }
+                }
                 NdotV = Math.Max(0.0, n2.X * -brx + n2.Y * -bry + n2.Z * -brz);
                 bOx = hpx + n2.X * bias;
                 bOy = hpy + n2.Y * bias;
@@ -1339,5 +1361,127 @@ public static class ShadingPipeline
         if (len < 1e-10) return (0.0, 0.0, 0.0);
         double inv = 1.0 / len;
         return (x * inv, y * inv, z * inv);
+    }
+
+    /// <summary>Wave 4.2 — deterministic Wang-hash seeded by per-bounce world
+    /// origin + bounce index. Returns two uniforms in [0, 1) for GGX VNDF
+    /// sampling. Stable across frames at the same camera, but different
+    /// neighbours hash to different uniforms so the per-bounce lobe spread is
+    /// spatially decorrelated without averaging cost.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static (double U1, double U2) HashPair(double x, double y, double z, int bounce)
+    {
+        // Scale up so sub-pixel positions decorrelate; truncate to int so we
+        // get a stable seed across frames. 1024 ≈ pixel-scale at typical
+        // world-units.
+        uint a = (uint)(int)(x * 1024.0) ^ 0x9E3779B1u;
+        uint b = (uint)(int)(y * 1024.0) ^ 0x85EBCA77u;
+        uint c = (uint)(int)(z * 1024.0) ^ 0xC2B2AE3Du;
+        uint d = (uint)bounce ^ 0x27D4EB2Fu;
+        uint h = a;
+        h = (h ^ b) * 0x85EBCA6Bu;
+        h = (h ^ c) * 0xC2B2AE35u;
+        h = (h ^ d) * 0x27D4EB2Du;
+        h ^= h >> 16;
+        uint h2 = h * 0x85EBCA6Bu; h2 ^= h2 >> 13;
+        // Convert to [0, 1).
+        double u1 = (h  & 0xFFFFFFu) / (double)0x1000000u;
+        double u2 = (h2 & 0xFFFFFFu) / (double)0x1000000u;
+        return (u1, u2);
+    }
+
+    /// <summary>Wave 4.2 — GGX VNDF importance-sampled reflection direction
+    /// (Heitz 2018, "Sampling the GGX Distribution of Visible Normals").
+    /// Returns a reflected direction L = reflect(-V, H) where H is sampled
+    /// from the visible-normal distribution at view dir V (= unit toward
+    /// camera) with isotropic roughness alpha = roughness². At
+    /// <paramref name="alpha"/> ≈ 0 the result collapses to mirror reflect.
+    /// One sample per call — temporal/spatial decorrelation from
+    /// <see cref="HashPair"/> spreads the lobe across the screen.</summary>
+    private static (double X, double Y, double Z) SampleGgxReflect(
+        double vx, double vy, double vz,
+        double nx, double ny, double nz,
+        double roughness,
+        double u1, double u2)
+    {
+        // Build orthonormal TBN. Frisvad 2012 — branchless basis from normal.
+        double sign = ny >= 0 ? 1.0 : -1.0;
+        double a = -1.0 / (sign + ny);
+        double bComp = nx * nz * a;
+        double t1x = 1.0 + sign * nx * nx * a;
+        double t1y = -sign * nx;
+        double t1z = sign * bComp;
+        double t2x = bComp;
+        double t2y = -nz;
+        double t2z = sign + nz * nz * a;
+
+        // V in tangent space.
+        double Vtx = vx * t1x + vy * t1y + vz * t1z;
+        double Vty = vx * t2x + vy * t2y + vz * t2z;
+        double Vtz = vx * nx  + vy * ny  + vz * nz;
+
+        double alpha = roughness * roughness;
+        if (alpha < 1e-4) alpha = 1e-4;
+
+        // Stretch.
+        double Vhx = alpha * Vtx;
+        double Vhy = alpha * Vty;
+        double Vhz = Vtz;
+        double Vhlen = Math.Sqrt(Vhx * Vhx + Vhy * Vhy + Vhz * Vhz);
+        if (Vhlen < 1e-10) Vhlen = 1e-10;
+        Vhx /= Vhlen; Vhy /= Vhlen; Vhz /= Vhlen;
+
+        // Orthonormal basis on (T1, T2, Vh).
+        double lensq = Vhx * Vhx + Vhy * Vhy;
+        double T1x, T1y, T1z;
+        if (lensq > 0)
+        {
+            double inv = 1.0 / Math.Sqrt(lensq);
+            T1x = -Vhy * inv; T1y = Vhx * inv; T1z = 0;
+        }
+        else
+        {
+            T1x = 1; T1y = 0; T1z = 0;
+        }
+        // T2 = cross(Vh, T1).
+        double T2x = Vhy * T1z - Vhz * T1y;
+        double T2y = Vhz * T1x - Vhx * T1z;
+        double T2z = Vhx * T1y - Vhy * T1x;
+
+        // Sample point on disk.
+        double r = Math.Sqrt(u1);
+        double phi = 2.0 * Math.PI * u2;
+        double tA = r * Math.Cos(phi);
+        double tB = r * Math.Sin(phi);
+        double s = 0.5 * (1.0 + Vhz);
+        tB = (1.0 - s) * Math.Sqrt(Math.Max(0, 1.0 - tA * tA)) + s * tB;
+
+        // Hemisphere sample in stretched space.
+        double Nhz = Math.Sqrt(Math.Max(0, 1.0 - tA * tA - tB * tB));
+        double Nhx_s = tA * T1x + tB * T2x + Nhz * Vhx;
+        double Nhy_s = tA * T1y + tB * T2y + Nhz * Vhy;
+        double Nhz_s = tA * T1z + tB * T2z + Nhz * Vhz;
+
+        // Unstretch.
+        double Hx_t = alpha * Nhx_s;
+        double Hy_t = alpha * Nhy_s;
+        double Hz_t = Math.Max(0, Nhz_s);
+        double Hlen = Math.Sqrt(Hx_t * Hx_t + Hy_t * Hy_t + Hz_t * Hz_t);
+        if (Hlen < 1e-10) Hlen = 1e-10;
+        Hx_t /= Hlen; Hy_t /= Hlen; Hz_t /= Hlen;
+
+        // Transform H back to world.
+        double Hx = Hx_t * t1x + Hy_t * t2x + Hz_t * nx;
+        double Hy = Hx_t * t1y + Hy_t * t2y + Hz_t * ny;
+        double Hz = Hx_t * t1z + Hy_t * t2z + Hz_t * nz;
+
+        // L = reflect(-V, H) = 2·(V·H)·H − V. (We have V toward viewer; ray
+        // direction = −V. Standard mirror-around-H gives reflected ray dir.)
+        double VdotH = vx * Hx + vy * Hy + vz * Hz;
+        double Lx = 2.0 * VdotH * Hx - vx;
+        double Ly = 2.0 * VdotH * Hy - vy;
+        double Lz = 2.0 * VdotH * Hz - vz;
+        var nrm = Normalize3(Lx, Ly, Lz);
+        return nrm;
     }
 }

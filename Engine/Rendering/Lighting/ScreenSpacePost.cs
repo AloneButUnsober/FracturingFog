@@ -1120,6 +1120,14 @@ public static class ScreenSpacePost
         if (depthBuffer.Length < n) return;
         using var __stage = StagePerf.Begin(PostStage.Dof);
 
+        // Wave 4.1 — GPU dispatch when UseGpuPost is on. Falls back to the
+        // CPU path below on any failure (init / OOM / kernel throw).
+        if (fx.UseGpuPost
+            && GpuPostKernels.TryApplyHdrDof(
+                hdrBuffer, depthBuffer, width, height,
+                fx.DofAperture, fx.DofFocusDistance, fx.DofSamples))
+            return;
+
         double focus = fx.DofFocusDistance;
         double aperture = fx.DofAperture;
         double shortEdge = Math.Min(width, height);

@@ -35,6 +35,17 @@ public struct GpuRenderParams
     public double Power;          // 2 = square triplex; else generic power-N
     public double QuatSliceW;     // Quat axis-mode slice plane (z.W when projecting 4D→3D)
     public uint InSetColor;
+
+    // Wave 4.6 — Julia + numerical-Jacobian fields (Sandbox quat-mode GPU
+    // dispatch). Default zero keeps legacy single-step + chain analytic-power
+    // paths bit-identical (UseAnalyticDE=1 from the caller routes through
+    // the analytic branch; legacy callers that don't set the field get the
+    // analytic branch via default-zero check on the new shape — see
+    // BuildKernelSource).
+    public int JuliaMode;                       // 0 = escape-time, 1 = Julia (c constant from JuliaC*)
+    public double JuliaCW, JuliaCX, JuliaCY, JuliaCZ;
+    public double JacH;                         // Jacobian forward-diff step (numerical DE only)
+    public int UseAnalyticDE;                   // 1 = power-DE; 0 = 5-trajectory numerical Jacobian
 }
 
 public sealed class UserBulbGpuCalculator : IDisposable
