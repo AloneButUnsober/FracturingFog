@@ -37,7 +37,8 @@ public static class SilkRendererFactory
         GL gl,
         IGpuSurface surface,
         Action makeCurrent,
-        Action swap)
+        Action swap,
+        Action? releaseCurrent = null)
     {
         ArgumentNullException.ThrowIfNull(surface);
         return new SilkGLRenderer(
@@ -45,7 +46,8 @@ public static class SilkRendererFactory
             System.Math.Max(1, surface.PixelWidth),
             System.Math.Max(1, surface.PixelHeight),
             makeCurrent,
-            swap);
+            swap,
+            releaseCurrent);
     }
 
     /// <summary>
