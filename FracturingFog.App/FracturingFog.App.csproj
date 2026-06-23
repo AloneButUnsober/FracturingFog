@@ -14,7 +14,16 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      S-X3 (2026-06-23) — multi-targeted. Cross-plat legs (linux-x64,
+      linux-arm64, osx-arm64, osx-x64) publish from the net10.0 TFM; the
+      Windows leg publishes from net10.0-windows so it can ProjectReference
+      FracturingFog.Win directly and call WindowsBootstrap.Install without
+      reflection. Two output trees on Windows; the cross-plat legs ignore the
+      net10.0-windows TFM entirely (it carries Windows-flavoured BCL surface
+      that doesn't load on Linux).
+    -->
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -28,6 +37,20 @@
     <AssemblyName>FracturingFog.App</AssemblyName>
   </PropertyGroup>
 
+  <!--
+    S-X3 (2026-06-23) — Windows-only ProjectReferences. FracturingFog.Win
+    (net10.0-windows) owns WindowsBootstrap.Install which writes the
+    Windows-only hook surface onto AvaloniaShellBootstrap (HardwareInfoProvider,
+    GpuKernelFactoryHook, NativeVideoWriterFactoryHook, NativeInputBridge).
+    Cross-plat TFM (net10.0) leaves these unwired and the bootstrap takes its
+    no-op fallbacks. The Win leg's ColorSampleBridge + SyncDialogs still live
+    on the legacy WinExe (UseWindowsForms=true closure) — moving them into
+    FracturingFog.Win is a later slice.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <ProjectReference Include="..\FracturingFog.Win\FracturingFog.Win.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
@@ -40,6 +63,11 @@
       AvaloniaShellBootstrap.CreateAudioBackend on Windows hosts.
     -->
     <ProjectReference Include="..\Audio\FracturingFog.Audio.csproj" />
+    <!--
+      S-X2 (2026-06-23) — Rendering.Silk powers the cross-plat OpenGL backend
+      and the silk-smoke entry point. Cross-plat net10.0; safe everywhere.
+    -->
+    <ProjectReference Include="..\Rendering.Silk\FracturingFog.Rendering.Silk.csproj" />
   </ItemGroup>
 
   <!--

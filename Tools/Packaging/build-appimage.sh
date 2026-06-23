@@ -48,9 +48,16 @@ ICON_SRC_PNG="$REPO_ROOT/Resources/Linux/FracturingFog.png"
 ICON_SRC_FALLBACK="$REPO_ROOT/Resources/FracturingFog.ico"
 
 # ── 1. Publish the App self-contained ─────────────────────────────────────
+# S-X3 (2026-06-23) — pass -f explicitly. FracturingFog.App multi-targets
+# net10.0;net10.0-windows so the Win leg can ProjectReference FracturingFog.Win.
+# MSBuild's CrossTargeting Publish target refuses without an explicit TFM
+# (NETSDK1129). Linux RIDs always publish the net10.0 leg; the Windows leg is
+# handled by Tools/Packaging/build-mac-app.sh's sibling Windows script (or
+# direct dotnet publish -f net10.0-windows).
 echo "==> Publishing $APP_CSPROJ for $RID"
 dotnet publish "$APP_CSPROJ" \
     -c Release \
+    -f net10.0 \
     -p:PublishProfile="$RID"
 
 if [ ! -d "$PUBLISH_DIR" ]; then
