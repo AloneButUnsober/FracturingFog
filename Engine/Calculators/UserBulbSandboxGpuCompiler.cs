@@ -179,6 +179,105 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         }
     }
 
+    /// <summary>Wave 4.5 — Sandbox chain compile. Each step's body is emitted
+    /// independently with a slot-map exposing prior-step output names; bodies
+    /// inline into a single Step() with each step output cached in a typed
+    /// local. Mirrors <see cref="UserBulbCalculator.WrapUserSourceChain"/> on
+    /// the CPU side but reuses the existing GPU kernel scaffolding
+    /// (Step → SandboxDE → BulbKernel raymarch).</summary>
+    public bool TryCompileChain(
+        IReadOnlyList<UserBulbChainStep> steps,
+        IReadOnlyList<string> paramNames,
+        bool quatMode)
+    {
+        if (!TryInit()) return false;
+        if (steps == null || steps.Count == 0) { LastError = "Chain has no steps."; return false; }
+        string key = BuildChainKey(steps, paramNames, quatMode);
+        if (_kernel != null && _cachedKey == key) return true;
+
+        // Parse chain (shared scope across steps; output slots tracked).
+        SandboxBulbChain chain;
+        try
+        {
+            var extras = new List<string>(paramNames.Count + 1);
+            extras.AddRange(paramNames);
+            extras.Add("t");
+            chain = SandboxBulbChain.Parse(steps, extras);
+        }
+        catch (Exception ex) { LastError = $"Sandbox chain parse failed: {ex.Message}"; return false; }
+
+        // Per-step emit. Each iteration emits step body referencing prior
+        // outputs via the slot-map; after emit, the step's output slot is
+        // appended to the map so subsequent steps see it.
+        var stepKind = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
+        var priorMap = new Dictionary<int, (string Name, SbxEmitKind Kind)>();
+        var stepLocals = new List<string>(steps.Count); // local var names
+        var stepBodies = new List<string>(steps.Count); // emitted C# bodies
+        for (int i = 0; i < steps.Count; i++)
+        {
+            string raw = string.IsNullOrWhiteSpace(steps[i].OutputName) ? $"step{i}" : steps[i].OutputName!;
+            string localName = SanitizeIdent(raw, i);
+            var emit = UserBulbSandboxEmitter.Emit(
+                chain.StepRoots[i],
+                paramNames,
+                quatMode,
+                gpuTarget: true,
+                priorMap);
+            if (!emit.Ok) { LastError = $"Emitter rejected chain step {i}: {emit.Error}"; return false; }
+            if (!quatMode && emit.Body!.Contains("Quat"))
+            { LastError = $"GPU chain step {i}: vec-mode body unexpectedly references Quat."; return false; }
+            stepBodies.Add(emit.Body!);
+            stepLocals.Add(localName);
+            priorMap[chain.StepOutputSlots[i]] = (localName, stepKind);
+        }
+
+        string kernelSrc = BuildChainKernelSource(stepBodies, stepLocals, paramNames, quatMode);
+        Assembly? asm = TryRoslynCompile(kernelSrc, out var rerr);
+        if (asm == null) { LastError = $"Roslyn compile failed (chain): {rerr}"; return false; }
+
+        var method = asm.GetType("FracturingFogDyn.SandboxBulbGpu")?.GetMethod("Kernel");
+        if (method == null) { LastError = "Internal: emitted kernel method not found (chain)."; return false; }
+
+        var del = (Action<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>)
+            Delegate.CreateDelegate(
+                typeof(Action<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>),
+                method);
+
+        try
+        {
+            _kernel = _accelerator!.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>(del);
+            _cachedKey = key;
+            LastError = string.Empty;
+            return true;
+        }
+        catch (Exception ex) when (IsFloat64Failure(ex) && SwitchToCpuAccelerator())
+        {
+            try
+            {
+                _kernel = _accelerator!.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, ArrayView<double>, GpuRenderParams>(del);
+                _cachedKey = key;
+                LastError = "GPU lacks fp64; fell back to CPU accelerator.";
+                return true;
+            }
+            catch (Exception ex2)
+            {
+                LastError = $"ILGPU JIT failed even on CPU accelerator: {ex2.GetType().Name}: {ex2.Message}";
+                _kernel = null; _cachedKey = string.Empty;
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            var sb = new StringBuilder();
+            sb.Append("ILGPU JIT failed (chain): ").Append(ex.GetType().Name).Append(": ").Append(ex.Message);
+            for (var e = ex.InnerException; e != null; e = e.InnerException)
+                sb.Append(" | inner: ").Append(e.GetType().Name).Append(": ").Append(e.Message);
+            LastError = sb.ToString();
+            _kernel = null; _cachedKey = string.Empty;
+            return false;
+        }
+    }
+
     private static bool IsFloat64Failure(Exception ex)
     {
         for (var e = ex; e != null; e = e.InnerException)
@@ -227,16 +326,61 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         return sb.ToString();
     }
 
+    private static string BuildChainKey(IReadOnlyList<UserBulbChainStep> steps, IReadOnlyList<string> paramNames, bool quatMode)
+    {
+        var sb = new StringBuilder();
+        sb.Append("CHAIN|").Append(quatMode ? 'Q' : 'V').Append('|');
+        for (int i = 0; i < paramNames.Count; i++) sb.Append(paramNames[i]).Append(',');
+        sb.Append('|');
+        for (int i = 0; i < steps.Count; i++)
+            sb.Append(steps[i].OutputName ?? string.Empty).Append(':').Append(steps[i].Source ?? string.Empty).Append("##");
+        return sb.ToString();
+    }
+
+    /// <summary>Map a user-supplied chain step output name to a safe C# local
+    /// identifier. Fallback to step{i} on empty / invalid input.</summary>
+    private static string SanitizeIdent(string raw, int idx)
+    {
+        if (string.IsNullOrEmpty(raw)) return "step" + idx;
+        var sb = new StringBuilder(raw.Length + 1);
+        char c0 = raw[0];
+        if (!(char.IsLetter(c0) || c0 == '_')) sb.Append('_');
+        for (int i = 0; i < raw.Length; i++)
+        {
+            char c = raw[i];
+            sb.Append((char.IsLetterOrDigit(c) || c == '_') ? c : '_');
+        }
+        return sb.ToString();
+    }
+
     /// <summary>Compose the full kernel source. Mirrors the structure of
     /// UserBulbGpuCalculator.BulbKernel: sphere-clip → raymarch SandboxDE →
     /// forward-diff normals → cheap palette shade. SandboxDE replaces the
     /// hard-coded TriplexPowerDE with the user step compiled from the AST.
     /// In <paramref name="quatMode"/> the step takes Quat z/c (z.W projects
-    /// onto p.QuatSliceW) and the analytic DE loop iterates in 4D.
+    /// onto p.QuatSliceW) and the DE loop branches on
+    /// <c>p.UseAnalyticDE</c> (power-map) vs 5-trajectory numerical Jacobian,
+    /// and on <c>p.JuliaMode</c> (Julia substitution of c).
     /// </summary>
     private static string BuildKernelSource(string stepBody, IReadOnlyList<string> paramNames, bool quatMode)
     {
         var sb = new StringBuilder();
+        AppendKernelPrelude(sb);
+
+        // Step function — body comes verbatim from emitter.
+        AppendStepFn(sb, stepBody, paramNames, quatMode);
+
+        // DE function — analytic-only for vec; analytic + Jacobian + Julia for quat.
+        sb.AppendLine(quatMode ? QuatSandboxDESource : VecSandboxDESource);
+
+        // Kernel: same shape as UserBulbGpuCalculator.BulbKernel.
+        sb.AppendLine(KernelBodySource);
+        sb.AppendLine("} }");
+        return sb.ToString();
+    }
+
+    private static void AppendKernelPrelude(StringBuilder sb)
+    {
         sb.AppendLine("using System;");
         sb.AppendLine("using ILGPU;");
         sb.AppendLine("using ILGPU.Runtime;");
@@ -244,55 +388,106 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         sb.AppendLine("using FracturingFog.Calculators;");
         sb.AppendLine("namespace FracturingFogDyn {");
         sb.AppendLine("public static class SandboxBulbGpu {");
+    }
 
-        // Step function — body comes verbatim from emitter.
+    private static void AppendStepFn(StringBuilder sb, string stepBody, IReadOnlyList<string> paramNames, bool quatMode)
+    {
         string stepType = quatMode ? "Quat" : "Vec3";
         sb.Append("    private static ").Append(stepType).Append(" Step(").Append(stepType).Append(" z, ")
           .Append(stepType).AppendLine(" c, int n, ArrayView<double> __p) {");
         for (int i = 0; i < paramNames.Count; i++)
             sb.Append("        double ").Append(paramNames[i]).Append(" = __p[").Append(i).AppendLine("];");
-        // `t` always last in __p.
         sb.Append("        double t = __p[").Append(paramNames.Count).AppendLine("];");
         sb.Append("        return ").Append(stepBody).AppendLine(";");
         sb.AppendLine("    }");
+    }
 
-        // Analytic DE: power map. `power` comes from GpuRenderParams.
-        // dr = power * pow(r, power-1) * dr + 1.
-        if (quatMode)
-        {
-            sb.AppendLine(@"    private static double SandboxDE(double cx, double cy, double cz, int iter, double bailout, double power, double sliceW, ArrayView<double> __p) {
-        var c = new Quat(sliceW, cx, cy, cz);
-        var z = Quat.Zero;
-        double dr = 1.0, r = 0.0;
-        for (int i = 0; i < iter; i++) {
-            r = z.Length;
-            if (r > bailout) break;
-            dr = power * Math.Pow(r, power - 1.0) * dr + 1.0;
-            z = Step(z, c, i, __p);
-        }
-        if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
-        return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
-    }");
-        }
-        else
-        {
-            sb.AppendLine(@"    private static double SandboxDE(double cx, double cy, double cz, int iter, double bailout, double power, double sliceW, ArrayView<double> __p) {
+    // Vec mode: analytic-power DE only (Wave 4.6 leaves vec-Julia / vec-numerical
+    // on the CPU path — out of scope).
+    private const string VecSandboxDESource = @"    private static double SandboxDE(double cx, double cy, double cz, GpuRenderParams p, ArrayView<double> __p) {
         var c = new Vec3(cx, cy, cz);
         var z = new Vec3(0.0, 0.0, 0.0);
         double dr = 1.0, r = 0.0;
-        for (int i = 0; i < iter; i++) {
+        for (int i = 0; i < p.DEIter; i++) {
             r = z.Length;
-            if (r > bailout) break;
-            dr = power * Math.Pow(r, power - 1.0) * dr + 1.0;
+            if (r > p.Bailout) break;
+            dr = p.Power * Math.Pow(r, p.Power - 1.0) * dr + 1.0;
             z = Step(z, c, i, __p);
         }
         if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
         return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
-    }");
+    }";
+
+    // Wave 4.6 — Quat unified DE: branches on JuliaMode (c constant vs per-pixel)
+    // and UseAnalyticDE (power-DE vs 5-trajectory forward-diff Jacobian).
+    // Numerical-Jacobian path mirrors CPU UserBulbQuatDE: four perturbed
+    // trajectories along {W, X, Y, Z} axes; |z_pert - z|/h gives column lengths
+    // of ∂z/∂axis; max column length used as conservative spectral-radius proxy.
+    private const string QuatSandboxDESource = @"    private static double SandboxDE(double cx, double cy, double cz, GpuRenderParams p, ArrayView<double> __p) {
+        bool julia = p.JuliaMode != 0;
+        bool analytic = p.UseAnalyticDE != 0;
+        double h = p.JacH;
+
+        if (analytic) {
+            Quat c0, z0;
+            if (julia) {
+                c0 = new Quat(p.JuliaCW, p.JuliaCX, p.JuliaCY, p.JuliaCZ);
+                z0 = new Quat(p.QuatSliceW, cx, cy, cz);
+            } else {
+                c0 = new Quat(p.QuatSliceW, cx, cy, cz);
+                z0 = Quat.Zero;
+            }
+            var z = z0; var c = c0;
+            double dr = 1.0, r = 0.0;
+            for (int i = 0; i < p.DEIter; i++) {
+                r = z.Length;
+                if (r > p.Bailout) break;
+                dr = p.Power * Math.Pow(r, p.Power - 1.0) * dr + 1.0;
+                z = Step(z, c, i, __p);
+            }
+            if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
+            return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
         }
 
-        // Kernel: same shape as UserBulbGpuCalculator.BulbKernel.
-        sb.AppendLine(@"    public static void Kernel(Index1D idx, ArrayView<uint> output, ArrayView<double> __p, GpuRenderParams p) {
+        // 5-trajectory numerical-Jacobian DE.
+        Quat cB, cW, cX, cY, cZc;
+        Quat zB, zW, zX, zY, zZc;
+        if (julia) {
+            var jc = new Quat(p.JuliaCW, p.JuliaCX, p.JuliaCY, p.JuliaCZ);
+            cB = cW = cX = cY = cZc = jc;
+            zB  = new Quat(p.QuatSliceW,     cx,     cy,     cz);
+            zW  = new Quat(p.QuatSliceW + h, cx,     cy,     cz);
+            zX  = new Quat(p.QuatSliceW,     cx + h, cy,     cz);
+            zY  = new Quat(p.QuatSliceW,     cx,     cy + h, cz);
+            zZc = new Quat(p.QuatSliceW,     cx,     cy,     cz + h);
+        } else {
+            cB  = new Quat(p.QuatSliceW,     cx,     cy,     cz);
+            cW  = new Quat(p.QuatSliceW + h, cx,     cy,     cz);
+            cX  = new Quat(p.QuatSliceW,     cx + h, cy,     cz);
+            cY  = new Quat(p.QuatSliceW,     cx,     cy + h, cz);
+            cZc = new Quat(p.QuatSliceW,     cx,     cy,     cz + h);
+            zB = zW = zX = zY = zZc = Quat.Zero;
+        }
+        double rN = 0.0;
+        for (int i = 0; i < p.DEIter; i++) {
+            rN = zB.Length;
+            if (rN > p.Bailout) break;
+            zB  = Step(zB,  cB,  i, __p);
+            zW  = Step(zW,  cW,  i, __p);
+            zX  = Step(zX,  cX,  i, __p);
+            zY  = Step(zY,  cY,  i, __p);
+            zZc = Step(zZc, cZc, i, __p);
+        }
+        double invH = 1.0 / Math.Max(h, 1e-12);
+        double j0 = (zW  - zB).Length * invH;
+        double j1 = (zX  - zB).Length * invH;
+        double j2 = (zY  - zB).Length * invH;
+        double j3 = (zZc - zB).Length * invH;
+        double drN = Math.Max(Math.Max(j0, j1), Math.Max(j2, j3));
+        return 0.5 * rN / Math.Max(drN, 1e-10);
+    }";
+
+    private const string KernelBodySource = @"    public static void Kernel(Index1D idx, ArrayView<uint> output, ArrayView<double> __p, GpuRenderParams p) {
         int x = idx % p.Width;
         int y = idx / p.Width;
         if (y >= p.Height) return;
@@ -322,7 +517,7 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         int hitStep = 0;
         double hitDist = 0.0;
         for (int step = 0; step < p.MaxSteps; step++) {
-            double d = SandboxDE(px, py, pz, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p);
+            double d = SandboxDE(px, py, pz, p, __p);
             if (d < p.Eps) { hit = true; hitStep = step; hitDist = d; break; }
             if (tT > tEx + 1.0) break;
             px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -331,9 +526,9 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         if (!hit) { output[idx] = p.InSetColor; return; }
         double h = p.Eps * 2;
         double invH = 1.0 / h;
-        double n0 = (SandboxDE(px + h, py, pz, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p) - hitDist) * invH;
-        double n1 = (SandboxDE(px, py + h, pz, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p) - hitDist) * invH;
-        double n2 = (SandboxDE(px, py, pz + h, p.DEIter, p.Bailout, p.Power, p.QuatSliceW, __p) - hitDist) * invH;
+        double n0 = (SandboxDE(px + h, py, pz, p, __p) - hitDist) * invH;
+        double n1 = (SandboxDE(px, py + h, pz, p, __p) - hitDist) * invH;
+        double n2 = (SandboxDE(px, py, pz + h, p, __p) - hitDist) * invH;
         double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
         double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
         double diffuse = Math.Max(0.0, nx * p.LightX + ny * p.LightY + nz * p.LightZ);
@@ -345,7 +540,41 @@ public sealed class UserBulbSandboxGpuCompiler : IDisposable
         uint g2 = (uint)Math.Min(255.0, 255.0 * shade * (0.5 + 0.5 * Math.Sin(tt * 6.283 + 2.094)));
         uint b2 = (uint)Math.Min(255.0, 255.0 * shade * (0.5 + 0.5 * Math.Sin(tt * 6.283 + 4.188)));
         output[idx] = 0xFF000000u | (r2 << 16) | (g2 << 8) | b2;
-    }");
+    }";
+
+    /// <summary>Build kernel source for chain mode. Each step body is inlined
+    /// as a local in <c>Step()</c>, so step N can reference step 0..N-1 by
+    /// the local name the emitter resolved them to. Final return is the last
+    /// step's local. Surrounding DE / kernel scaffolding is identical to the
+    /// single-step <see cref="BuildKernelSource"/>.</summary>
+    private static string BuildChainKernelSource(
+        IReadOnlyList<string> stepBodies,
+        IReadOnlyList<string> stepLocals,
+        IReadOnlyList<string> paramNames,
+        bool quatMode)
+    {
+        var sb = new StringBuilder();
+        AppendKernelPrelude(sb);
+
+        // Chain Step: each step body inlined as a typed local; prior step
+        // outputs reachable by name (emitter resolved via extraSlots).
+        string stepType = quatMode ? "Quat" : "Vec3";
+        sb.Append("    private static ").Append(stepType).Append(" Step(").Append(stepType).Append(" z, ")
+          .Append(stepType).AppendLine(" c, int n, ArrayView<double> __p) {");
+        for (int i = 0; i < paramNames.Count; i++)
+            sb.Append("        double ").Append(paramNames[i]).Append(" = __p[").Append(i).AppendLine("];");
+        sb.Append("        double t = __p[").Append(paramNames.Count).AppendLine("];");
+        for (int i = 0; i < stepBodies.Count; i++)
+        {
+            sb.Append("        ").Append(stepType).Append(' ').Append(stepLocals[i])
+              .Append(" = ").Append(stepBodies[i]).AppendLine(";");
+        }
+        sb.Append("        return ").Append(stepLocals[stepBodies.Count - 1]).AppendLine(";");
+        sb.AppendLine("    }");
+
+        // Wave 4.6 — unified DE + Kernel shared with single-step path.
+        sb.AppendLine(quatMode ? QuatSandboxDESource : VecSandboxDESource);
+        sb.AppendLine(KernelBodySource);
         sb.AppendLine("} }");
         return sb.ToString();
     }

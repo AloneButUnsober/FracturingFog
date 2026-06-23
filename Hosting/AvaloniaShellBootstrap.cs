@@ -1738,7 +1738,7 @@ namespace FracturingFog.Hosting
                 if (s_renderHost == null) return;
                 try
                 {
-                    int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportObjVoxelSurface(
+                    int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                         e.Path,
                         (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z),
                         s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0,

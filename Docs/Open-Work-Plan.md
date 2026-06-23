@@ -31,7 +31,7 @@ measurement baseline, (c) shake out renderer hooks needed elsewhere.
 | 0.2 | Perf T1.2 — VSync toggle on `DirectXRenderer.Render` | ✅ Already shipped — `IFractalRenderer.VSync` + `Rendering.D3D/DirectXRenderer.cs:449,475` |
 | 0.3 | Perf T1.3 — single-shot `MemoryCopy` fast path in `UpdateTexture` | ✅ Already shipped — `Rendering.D3D/DirectXRenderer.cs:397-415` |
 | 0.4 | Perf T1.4 — `EscapeTimeCalculator` concrete-colormap dispatch | ✅ Already shipped — concrete switch on both `DispatchByColorMap` + `DispatchByColorMapSimd` (~21 cases each) |
-| 0.5 | Visual-regression harness — `--batch` per-fractal SHA256 baseline | ✅ Tool shipped (`Tools/VisualRegression/`). Baseline-record run is a follow-up (full app rebuild + 22 renders) |
+| 0.5 | Visual-regression harness — `--batch` per-fractal SHA256 baseline | ✅ Tool shipped (`Tools/VisualRegression/`). Baseline recorded 2026-06-22 (0.5b) |
 | 0.6 | Per-stage frame-time HUD microbar | ✅ Shipped — `PostStage` enum + `StagePerf` static hook + 5 `Apply*` sites wrapped + `PerfStats.RecordStage` ring + HUD micro-rows |
 
 > **Re-survey note (2026-06-20):** Repo geometry already split per Phase X.0
@@ -77,7 +77,7 @@ Exit: Release build, FPS up, no visual regression on the 8 stock regions.
 | 1.C1 | Avalonia `FfmpegSetupDialog` rewrite — remove WinForms drag from cross-platform `Hosting/` (currently WinForms shell only) | ✅ Shipped 2026-06-22 |
 | 1.C2 | Toy-mode drag — synth `PointerPressedEventArgs` from NativeMouseForwarder callback so `BeginMoveDrag` works on every RID, retire `ReleaseCapture`+`WM_NCLBUTTONDOWN` | ½ d |
 | 1.C3 | X.5 per-RID device-kind smoke — assert `AcceleratorProbe.Chosen.Kind` matches expectation in `--batch --self-test` | ½ d |
-| 0.5b | Wave 0.5 follow-up — `dotnet run --project Tools/VisualRegression -- record` to populate `baseline.json` | ½ d (long build + 22 batch renders) |
+| 0.5b | Wave 0.5 follow-up — `dotnet run --project Tools/VisualRegression -- record` to populate `baseline.json` | ✅ Shipped 2026-06-22 |
 
 Exit per `CrossPlatform-Roadmap.md` Definition of Done: install on Ubuntu /
 Fedora / macOS 14 / Win11, launch self-contained, render Mandelbrot in 5 s,
@@ -95,7 +95,7 @@ audio-reactive dialog without crash.
 | 2.3 | D-6.26 — Save hot-loaded calc to permanent `.cs` | ½ d |
 | 2.4 | D-6.24 — Live equation preview (AST + dz/dc + SA flag as user types) | ✅ Shipped 2026-06-21 |
 | 2.5 | D-5.20 — Progressive rendering ¼→½→full | ✅ Shipped 2026-06-22 |
-| 2.6 | D-5.19 — Anti-aliasing 2×2/4×4 (Quality gate) | 1 d |
+| 2.6 | D-5.19 — Anti-aliasing 2×2/4×4 (Quality gate) | ✅ Shipped 2026-06-22 (broadened to alt calcs gated on `SupportsZoomPan`) |
 | 2.7 | D-5.21 — TAA temporal accumulation | ✅ Shipped 2026-06-21 |
 | 2.8 | D-6.23 — Equation cookbook + gallery | ✅ Shipped 2026-06-21 |
 | 2.9 | D-6.25 — Animation: morph equations | ✅ Shipped 2026-06-21 |
@@ -127,20 +127,20 @@ audio-reactive dialog without crash.
 
 | # | Item |
 |---|------|
-| 4.1 | Lighting-FX 21b GPU port — HDR DoF skewed blurs on ILGPU |
-| 4.2 | Lighting-FX 16b GGX importance sampling per bounce |
-| 4.3 | Lighting-FX — HDRI auto-preload on param change |
-| 4.4 | Sandbox 3C — interpreter perf (opcode-flat dispatch or DynamicMethod IL emit) |
-| 4.5 | Sandbox chain mode GPU dispatch |
-| 4.6 | Sandbox Quat-mode Julia + numerical-Jacobian DE on GPU |
+| 4.1 | Lighting-FX 21b GPU port — HDR DoF skewed blurs on ILGPU | ✅ Shipped 2026-06-22 |
+| 4.2 | Lighting-FX 16b GGX importance sampling per bounce | ✅ Shipped 2026-06-22 |
+| 4.3 | Lighting-FX — HDRI auto-preload on param change | ✅ Shipped 2026-06-22 |
+| 4.4 | Sandbox 3C — interpreter perf (opcode-flat dispatch or DynamicMethod IL emit) | ✅ Shipped 2026-06-22 |
+| 4.5 | Sandbox chain mode GPU dispatch | ✅ Shipped 2026-06-22 |
+| 4.6 | Sandbox Quat-mode Julia + numerical-Jacobian DE on GPU | ✅ Shipped 2026-06-22 |
 | 4.7 | UserBulb 3.4 — time global `t` + animate bar | ✅ Shipped 2026-06-22 |
-| 4.8 | UserBulb 3.7 — color drivers |
-| 4.9 | UserBulb 3.9 — FOV / DoF / clip / SS + viewport orbit |
-| 4.10 | UserBulb 3.6 — multi-equation chain w/ named outputs |
-| 4.11 | UserBulb 3.10 — preset library seed |
-| 4.12 | UserBulb 3.11 — marching-cubes mesh export OBJ/STL |
-| 4.13 | UserBulb 3.12 — `.fbulb` import/export |
-| 4.14 | UserBulb 3.5 — Julia mode Vec3 path |
+| 4.8 | UserBulb 3.7 — color drivers | ✅ Shipped (audited 2026-06-22) |
+| 4.9 | UserBulb 3.9 — FOV / DoF / clip / SS + viewport orbit | ✅ Shipped (audited 2026-06-22) |
+| 4.10 | UserBulb 3.6 — multi-equation chain w/ named outputs | ✅ Shipped (audited 2026-06-22) |
+| 4.11 | UserBulb 3.10 — preset library seed | ✅ Shipped 2026-06-22 |
+| 4.12 | UserBulb 3.11 — marching-cubes mesh export OBJ/STL | ✅ Shipped 2026-06-23 |
+| 4.13 | UserBulb 3.12 — `.fbulb` import/export | ✅ Shipped 2026-06-22 |
+| 4.14 | UserBulb 3.5 — Julia mode Vec3 path | ✅ Shipped (audited 2026-06-22) |
 
 ---
 
@@ -231,6 +231,247 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-06-23 — Wave 4.12 shipped — Marching Cubes mesh export
+  (OBJ smooth + binary STL).
+  * `Export/UserBulbMeshExporter.cs` rewritten. Public surface now:
+    `ExportMarchingCubes(filePath, sample, cx, cy, cz, range, n, ct)`
+    — dispatches on file extension (`.stl` → binary STL with per-face
+    normals; anything else → OBJ with smooth per-vertex normals + `v` /
+    `vn` / `f a//a b//b c//c` lines). Legacy `ExportObjVoxelSurface`
+    kept verbatim for the WinForms shell wire-up + as a low-N fallback.
+  * Lorensen-Cline tables embedded inline: 256-entry `EdgeTable[int]`
+    (12-bit crossed-edge mask per cube index) and `TriTable[int,16]`
+    (-1-terminated triangle edge lists, up to 5 tris per cube). Layout
+    matches Paul Bourke's reference.
+  * Sampling: uniform (n+1)³ scalar field on a cube of side 2·range,
+    centred on (cx,cy,cz). Iso-level held at `step·0.5` to match the
+    surface band the raymarcher considers solid (the User Bulb DE
+    estimator clamps positive outside; matches the legacy voxel path's
+    `surfaceEps`).
+  * MC sweep over the n³ cells: 8-corner sign comparison against iso
+    → `ci ∈ [0,256)`, fetch `em = EdgeTable[ci]`, materialise the up-to-12
+    edge vertices via linear interp toward iso, then emit triangles by
+    indexing through `TriTable[ci,*]` in triples until the -1 sentinel.
+  * Edge-vertex dedup: each MC edge is uniquely owned by the
+    lower-coord corner + an axis (X/Y/Z). Packed into a single
+    `int[(n+1)³ · 3]` -1-seeded lookup, keyed
+    `((i·side + j)·side + k)·3 + axis`. Each crossed edge produces
+    exactly one shared vertex regardless of how many of the (up to 4)
+    incident cells reach it.
+  * Smooth normals: per-vertex normal = sum of incident triangle face
+    normals (computed as `(b-a) × (c-a)`, which already carries area
+    weighting in its magnitude), normalised at the end. Zero-length
+    vertices fall back to `(0,0,1)` to keep OBJ readers happy.
+  * OBJ writer emits `v` + `vn` lines (1-indexed) and faces as
+    `f a//a b//b c//c` so DCC tools (Blender, MeshLab) pick the smooth
+    normals up directly. STL writer emits the standard 80-byte header
+    (`FracturingFog UserBulb MC`), `uint32` triangle count, then 50
+    bytes per triangle (12 B face normal + 3×12 B verts + 2 B attribute
+    word = 0). Output is little-endian, matches Wikipedia STL spec.
+  * Host gate updated in `Hosting/AvaloniaShellBootstrap.cs:1741` to
+    call `ExportMarchingCubes` (extension-dispatched) instead of
+    `ExportObjVoxelSurface`. `UserBulbViewModel.OnExportMesh` widened
+    its save-filter to `"OBJ (smooth)|*.obj|STL (binary)|*.stl"`. The
+    WinForms shell (`MainForm.cs:1841` / `Views/UserBulbDialog.cs:682`)
+    kept on the legacy voxel path per the CLAUDE.md "WinForms
+    deprecated" guidance — no new features land there.
+  * `Span<int> edgeIdx = stackalloc int[12]` hoisted out of the
+    `i/j/k` triple loop (CA2014 "potential stack overflow"). Unset
+    entries from prior cells are never read because `TriTable` only
+    indexes edges marked in `EdgeTable[ci]`, which is exactly the
+    bitmap that gates the conditional `GetOrCreateEdgeVert` writes.
+  * Build clean (0 errors, 0 warnings — the 4 pre-existing
+    `AVLN5001 TextBox.Watermark` Avalonia warnings stay on
+    UI.Avalonia / PaletteBuilder.Lib, unrelated). 140/140
+    `Server.Tests` pass. No new unit-test fixture: Server.Tests doesn't
+    reference Engine / Export, and adding a project reference for one
+    smoke is heavier than the standard-table verification is worth.
+  * Wave 4 backlog now empty.
+
+- 2026-06-22 — Wave 4.6 shipped — Sandbox quat Julia + numerical-
+  Jacobian DE on GPU.
+  * `GpuRenderParams` extended with `JuliaMode` (int 0/1),
+    `JuliaCW/CX/CY/CZ` (double), `JacH` (double), `UseAnalyticDE`
+    (int 0/1). Default-zero values are inert for legacy
+    `UserBulbGpuCalculator.BulbKernel` (it never reads them), so the
+    Roslyn-source / hand-written GPU path keeps its bit-identity.
+  * `UserBulbSandboxGpuCompiler` kernel scaffolding refactored. The
+    DE + Kernel string bodies extracted to constants
+    (`VecSandboxDESource`, `QuatSandboxDESource`, `KernelBodySource`)
+    + helpers (`AppendKernelPrelude`, `AppendStepFn`). Both
+    `BuildKernelSource` and `BuildChainKernelSource` now compose
+    from the same parts; previously the chain version was a verbatim
+    duplicate of the single-step kernel scaffolding.
+  * Unified Quat DE: branches on `p.UseAnalyticDE` (power-map vs
+    5-trajectory Jacobian) and on `p.JuliaMode` (per-pixel c vs Julia
+    parameter from `p.JuliaC*` with z₀ taking the pixel coord).
+    Numerical-Jacobian mirrors CPU `UserBulbQuatDE`: four perturbed
+    trajectories along {W, X, Y, Z}; max |z_pert − z|/h gives the
+    conservative spectral-radius proxy. Vec mode kept analytic-only —
+    vec-Julia / vec-numerical GPU support is out of scope for 4.6.
+  * `SandboxDE` signature collapsed to
+    `(double cx, double cy, double cz, GpuRenderParams p, ArrayView<double> __p)`
+    so the branch fields live on the struct, not the param list. All
+    `KernelBodySource` callsites updated.
+  * `UserBulbCalculator.Calculate` GPU gate now allows the Sandbox-quat
+    route through Julia mode + non-analytic sources. Old gate:
+    `!juliaMode && analyticPattern != None`; new gate: `sandboxQuatGpu ||
+    vecAnalyticGpuOk`. Julia + analytic-power case still uses the analytic
+    branch (matches CPU `useAnalytic` gate of `!juliaMode && analytic`,
+    so Julia falls into the numerical branch).
+  * `GpuRenderParams` populated with the new fields at the same site:
+    `JuliaMode`, `JuliaC{W,X,Y,Z}`, `JacH`, `UseAnalyticDE`.
+  * Build clean (0 errors, 24 pre-existing warnings — same baseline as 4.5).
+    140/140 Server.Tests pass. `--ubtest` quat compile + chain + triplex
+    + emitter parity scenarios all green.
+  * Wave 4 remaining: 4.12 follow-on (real MC + STL).
+- 2026-06-22 — Wave 4.5 shipped — Sandbox chain GPU dispatch.
+  * Prior gate in `UserBulbCalculator.Calculate` GPU branch was
+    `_compiledCompiler == Sandbox && !useChainPath` — chain mode
+    locked to CPU. Now `useChainPath` selects between
+    `UserBulbSandboxGpuCompiler.TryCompileChain(...)` and the
+    existing `TryCompile(...)`.
+  * `UserBulbSandboxEmitter.Emit` gained a 5-arg overload accepting
+    `IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>
+    extraSlots`. `EmitCtx` stores the map and `EmitSlot` checks it
+    after the let-substitution probe and after the
+    z/c/n/params/`t` lookup — slots that survive to the fall-through
+    branch are chain prior-step outputs. The original "extras past
+    paramCount collapse to `t`" bug fixed; unbound slots now throw
+    `NotSupportedException` rather than silently aliasing `t`.
+    Slot kind also seeded into `_slotKinds` so `step0.x` member
+    access infers Real correctly.
+  * `UserBulbSandboxGpuCompiler.TryCompileChain(steps, paramNames,
+    quatMode)` — new entry point parallel to `TryCompile`. Reuses
+    `SandboxBulbChain.Parse` (shares scope across steps + assigns
+    output slots). Per-step emit walks each step's root AST through
+    the 5-arg emitter overload, populating the slot map after each
+    step with `(localName, stepKind)`. Local name comes from
+    `steps[i].OutputName` sanitised via `SanitizeIdent` (leading
+    char letter/underscore, non-ident chars replaced with `_`).
+  * `BuildChainKernelSource` mirrors `BuildKernelSource` but the
+    `Step` body inlines each emitted step expression into a typed
+    local (`Vec3 step0 = (body);` / `Vec3 myname = (body);` …) so
+    later steps reference earlier ones by their declared name.
+    Returns the last step's local. Surrounding `SandboxDE` +
+    `Kernel` raymarch scaffolding identical to single-step path,
+    so existing fp64 fallback + Roslyn compile + ILGPU JIT plumbing
+    + Render shim all reused unchanged.
+  * Chain key includes `CHAIN|` prefix so the kernel cache distinguishes
+    chain compiles from single-step with the same source string.
+  * Build clean (0 errors, 24 pre-existing warnings — same baseline as
+    4.4). 140/140 Server.Tests pass. `--ubtest` chain compile +
+    chain-analytic detect both green (`Pattern=MandelbulbN power=8`).
+  * Wave 4 remaining: 4.6 Sandbox Quat-mode Julia + numerical-Jacobian
+    DE on GPU; 4.12 follow-on (real MC + STL).
+- 2026-06-22 — Wave 4.4 shipped — Sandbox interpreter opcode-flat
+  dispatch.
+  * Hot path was `Sbx3Binary.Eval` / `Sbx3Call.Eval` running `string`
+    switches on `Op` (`"+"`, `"&&"`, `"<="`, …) and `Name` (`"vec"`,
+    `"triplex"`, `"qmul"`, …) per AST step. C# string switches lower
+    to chained equality probes, not jump tables — every interior node
+    paid an O(n) string-compare cost per Eval call. With Sandbox at
+    ~10–15× slower than Roslyn for non-analytic sources per Stage 3C
+    notes, this was the dominant tax.
+  * Added two internal enums in
+    `Engine/Models/SandboxBulbExpression.cs`: `SbxBinOp` (13 values
+    Add/Sub/Mul/Div/Pow/Lt/Gt/Le/Ge/Eq/Ne/And/Or) and `SbxFuncId`
+    (34 values covering every built-in vec/quat/scalar function).
+    Resolved at AST construction time — `Sbx3Binary` ctor calls
+    `ResolveOp(op)` once, `Sbx3Call` ctor calls `ResolveFunc(name)`
+    once. Original `string Op` / `string Name` fields retained so
+    `UserBulbAnalyticDE.DetectSandbox` pattern matchers
+    (`Sbx3Binary { Op: "+" }` / `call.Name == "triplex"`) and
+    `UserBulbSandboxEmitter.EmitBinary` / `EmitCall` (which read
+    `b.Op` / `call.Name`) continue to work bit-identically.
+  * `Sbx3Binary.Eval` now switches on `OpKind` (SbxBinOp). 13-arm
+    enum switch lowers to a dense jump table.
+  * `Sbx3Call.Eval` now switches on `Func` (SbxFuncId). Two-stage
+    structure preserved: multi-arg ops in the first `switch`, scalar
+    unary transcendentals in the trailing enum switch (handles
+    Quat-rejection via `ApplyScalar`).
+  * Out of scope for this slice — DynamicMethod IL emit. Opcode-flat
+    dispatch was the cheaper of the two options on Stage 3C's list
+    and removes the bulk of the string-compare tax without
+    introducing a JIT-emit pipeline. If sandbox perf needs another
+    pass after this, the next move is `Eval(env)` virtual call
+    flattening (compile AST into a linear opcode array
+    walked by a single while loop) or DynamicMethod IL.
+  * Build clean (0 errors, 24 pre-existing warnings — same baseline
+    as 4.2). 140/140 Server.Tests pass. `--ubtest` runs full sandbox
+    + chain + quat + emitter parity matrix, all green.
+  * Wave 4 remaining: 4.5 Sandbox chain GPU dispatch; 4.6 Sandbox
+    Quat-mode Julia + numerical-Jacobian DE on GPU; 4.12 follow-on
+    (real MC + STL).
+- 2026-06-22 — Wave 4.1 + 4.2 shipped.
+  * 4.1 — `ScreenSpacePost.ApplyHdrDof` now gates on `fx.UseGpuPost` and
+    routes the three skewed-box blurs through new ILGPU kernels in
+    `GpuPostKernels.cs`. Kernels: `DofCocKernel` (per-pixel CoC from
+    depth + focus + cocScale), `DofSkewedBoxKernel` (1D box blur along
+    (dx, dy) with width = per-pixel CoC and the same bleed-control
+    behaviour as the CPU `SkewedBoxBlur` — foreground neighbours
+    contribute only when their CoC reaches the centre), and
+    `DofMinBlendKernel` (composites three skewed passes back into
+    `hdrBuffer` via per-channel min, skipping sub-CoC and sky pixels).
+    Float-precision NaN sky detection uses the self-compare trick the
+    bloom kernels already use (ILGPU doesn't accept `float.IsNaN`).
+    Falls back to the CPU path on any init / OOM / kernel throw — no
+    new toggle, the existing `UseGpuPost` knob covers it.
+  * 4.2 — `LightingFxData.UseGgxSampling` (default `false` preserves
+    16b mirror-reflect bit-identity). When on, both reflect-direction
+    sites in `ShadingPipeline.Shade<TDe>` (initial mirror from view ray
+    + per-bounce re-reflect against newly-hit normal) replace the
+    mirror reflect with a GGX VNDF sample (Heitz 2018). New helpers
+    in `ShadingPipeline.cs`: `HashPair(x, y, z, bounce)` returns two
+    deterministic Wang-hashed uniforms seeded by world position + bounce
+    index (stable across frames, decorrelated per pixel); and
+    `SampleGgxReflect(V, N, roughness, u1, u2)` builds a Frisvad TBN,
+    stretches view dir to the unit hemisphere per Heitz, samples the
+    visible-normal lobe, unstretches, and returns the reflected
+    direction. One sample per bounce — temporal/spatial decorrelation
+    spreads the lobe across the screen so we don't need Monte Carlo
+    averaging. Below-horizon samples (g·n ≤ 0) fall back to mirror.
+    Knob ties into the existing `Roughness` field (alpha = roughness²);
+    `Roughness = 0` collapses to mirror by definition.
+  * Build clean (0 errors, 24 pre-existing warnings — same baseline as
+    4.3). 140/140 Server.Tests pass. No commit made.
+  * Wave 4 remaining: 4.4 Sandbox interp perf; 4.5/4.6 Sandbox chain +
+    Quat-Julia GPU dispatch; 4.12 follow-on (real MC + STL).
+- 2026-06-22 — Wave 4 audit + Wave 4.3 shipped.
+  * Audit: 4.8 color drivers, 4.9 FOV/DoF/clip/SS, 4.10 multi-equation
+    chain (`UserBulbChain` + `CompileSandboxChain` + `WrapUserSourceChain`),
+    4.14 Julia mode Vec3 (UserBulbDE juliaMode branch) all found
+    wired in code but unmarked in plan — marked ✅ Shipped (audited
+    2026-06-22). 4.12 (mesh export) re-classified 🟡: voxel-cube OBJ
+    exporter at `Export/UserBulbMeshExporter.cs` shipped, real
+    Marching Cubes (256-entry triangulation table) + STL writer +
+    normal smoothing still open.
+  * 4.3 HDRI auto-preload — `HdriProbe.Preload` action added
+    (`Abstractions/Rendering/Lighting/HdriProbe.cs`). `HdriRegistry`
+    static ctor wires it to `Task.Run(() => TryLoadFromFile(...))`.
+    `HdriRegistry.TryLoadFromFile` rerouted through a `_parseGate`
+    `ConcurrentDictionary<string, Lazy<HdriImage?>>` so concurrent
+    first-hits funnel through a single Lazy parse instead of N
+    pixel-worker threads each opening the file + parsing the RGBE
+    stream + writing to the cache. Gate entry removed after parse so
+    a fixed file can be retried.
+  * Preload kicked from three seams covering every parameter-change
+    route: (a) `FractalParamsViewModel.EnvironmentName` setter
+    (UI-driven changes); (b) `ShellViewModel` theme + region preset
+    apply sites that assign `FractalParameters.Lighting` wholesale
+    (bypass the VM setter); (c) `LightingFxPresetData.ApplyTo`
+    (preset DTO apply path that fires for theme JSON loads). Fire-
+    and-forget on background thread; render trigger continues
+    concurrently, but with the per-path lock guaranteeing single
+    parse the worst-case race is `parse_ms + 1 frame` not
+    `parse_ms · N_threads`.
+  * Build clean (0 errors, 24 pre-existing warnings — same baseline
+    as 4.13). 140/140 Server.Tests pass. No commit made.
+  * Wave 4 remaining: 4.1 Lighting-FX GPU port (big — ILGPU port of
+    HDR DoF skewed blurs); 4.2 GGX importance sampling per bounce;
+    4.4 Sandbox interpreter perf (opcode-flat dispatch or
+    DynamicMethod IL emit); 4.5/4.6 Sandbox chain + Quat-Julia GPU
+    dispatch; 4.12 follow-on (real MC + STL).
 - 2026-06-20 — Plan drafted from full roadmap survey. Wave 0 in progress.
 - 2026-06-20 — Wave 0 complete. 0.1–0.4 found already shipped (re-survey).
   0.5 visual-regression tool added at `Tools/VisualRegression/`. 0.6
@@ -710,6 +951,83 @@ Convergence after Wave 1:
   RepaintWithPostFx is now a no-op visually. Mandelbrot path only
   (alt calcs already bypass HE in the upload path). Build clean,
   140/140 tests pass.
+- 2026-06-22 — Wave 4.13 shipped — `.fbulb` snapshot import/export.
+  Pre-4.13 `UserBulbStore.ExportEntry`/`ImportEntry` only round-tripped
+  `UserBulbEntry` (Name/Source/Promoted/Chain) — the preset's axis mode /
+  Julia c / camera / lights / colour driver / render budget were lost on
+  export. Per the Wave 4.11 follow-on, `.fbulb` is the schema-extension
+  point that finalises per-entry persistence so Quaternion-Julia + KIFS
+  presets reload exactly the way they were saved.
+  * `Abstractions/Models/UserBulbSnapshot.cs` — new versioned envelope.
+    `Version = 1`, `Entry` (UserBulbEntry), plus ~30 nullable knobs
+    mirroring `FractalParameters.UserBulb*`: axis mode, compiler, DE mode,
+    backend, QuatSliceW, Julia mode + (Cx,Cy,Cz,Cw), camera distance /
+    theta / phi, light theta / phi, light 1-3 intensity, AO samples, fog
+    density, colour driver, orbit-trap (X,Y,Z), iter-component axis,
+    iterations, max steps, epsilon, bailout, Jacobian h, cull radius,
+    FOV, clip-plane, super-sample, time, named params list. Every knob
+    nullable → missing fields leave the target slot untouched on import,
+    so older + newer producers interoperate without breaking changes.
+  * `UserBulbStore.ExportSnapshot(snapshot, path)` — writes the envelope
+    with `JsonIgnoreCondition.WhenWritingNull` so emitted JSON only
+    contains what the producer actually set; keeps `.fbulb` files small.
+    `ImportSnapshot(path)` reads the envelope, merges the entry into the
+    store (collision rename `(N)`), returns the parsed snapshot so the
+    caller can apply the runtime knobs.
+  * Legacy fallback in `TryParseSnapshot`: `JsonDocument`-peeks the root
+    for `Version` + `Entry`; absent → parses as bare `UserBulbEntry`,
+    wraps in a snapshot with `Version = 0` (sentinel for "legacy, no
+    knobs to apply"). Pre-4.13 `.fbulb` files written by `ExportEntry`
+    round-trip unchanged.
+  * `UserBulbViewModel.OnExport` builds the snapshot from `_params` via
+    new `BuildSnapshotFromParams(entry)`. `OnImport` calls `ImportSnapshot`,
+    applies non-null knobs through `ApplySnapshotToParams`, then
+    `SyncMirrorFromParams` re-pulls every VM mirror field + raises
+    `PropertyChanged` for the bound views — suppress flag stays on
+    through the bulk update so no per-property render fires; the
+    final `LoadEquationByName` triggers one compile + render.
+  * `ExportEntry`/`ImportEntry` retained for legacy callers (none in
+    tree besides the now-rewritten VM). Doc-comments flag them as
+    pre-4.13.
+  * Build clean (0 errors, 24 pre-existing warnings). 140/140 Server.Tests
+    pass.
+  * Follow-on: `.fbulb` registered as an OS file-association handler
+    (double-click → open in FF). Not in 4.13 scope — file format works
+    end-to-end via the editor's Import/Export buttons. Filed as 4.13.f1.
+- 2026-06-22 — Wave 4.11 shipped — UserBulb preset library seed.
+  Audit of `Abstractions/Models/UserBulbStore.cs:SeedDefaults` found 6/10 of
+  the spec list (`Docs/Technical/UserBulb3D-DevelopmentPlan.md:387-398`)
+  already seeded — Mandelbulb p=8, Square triplex (squared variant), Sin-bulb,
+  Abs-bulb p=8, Mandelbox, Animated breathing bulb. Four missing: Menger
+  sponge step, Sierpinski tetrahedron, Kaleidoscopic IFS chain, Quaternion
+  Julia. Added this turn:
+  * `UserBulbStore.SeedDefaults` — 4 new `Equations.Add` calls. Menger /
+    Sierpinski reuse the bodies already centralised in
+    `UserBulbChainPrimitives.GetById(Id{Menger,Sierpinski})` so the
+    standalone preset and the hybrid-chain step are bit-equal. Quaternion
+    Julia uses the same triplex-squared body as `Square triplex` with an
+    inline `// Switch Axis Mode → Quat + Julia Mode` comment — neither
+    `Source` nor `Chain` carries axis-mode / Julia-mode flags today, so
+    the user toggles them in the editor; per-entry persistence is the
+    Wave 4.13 (.fbulb) schema work.
+  * `UserBulbStore.TopUpBuiltins` — 4 matching `Ensure(name, factory)`
+    calls so pre-existing `%APPDATA%/FracturingFog/userbulbs.json` files
+    pick up the new entries on next launch (mirrors how the B.3 hybrid
+    chains were retro-fitted).
+  * `UserBulbChainPrimitives.KaleidoscopicIfsChain()` — new 3-step factory
+    (Sierpinski fold → Y-axis rotation → scale-2 + translation), matching
+    the spec's "chain: fold → rot → scale, 3 steps". Two new id consts
+    `IdKifsRot` / `IdKifsScale` so the kernel caches per step. The
+    Kaleidoscopic IFS preset's `Source` is a single-pass fallback for
+    legacy chain-less loaders; `Chain` is the canonical form and
+    overrides at runtime per the `UserBulbEntry` doc-comment contract.
+  * Build clean (0 errors, 24 pre-existing warnings — CS0219 in
+    generator output + AVLN5001 Watermark obsolete). 140/140
+    Server.Tests pass.
+  * Follow-on: per-entry axis-mode / Julia-c / camera persistence —
+    Wave 4.13 (.fbulb single-equation import/export) is the place for the
+    schema extension; Wave 4.11 deliberately scoped to chain-source seeds
+    only to avoid churning UserBulbEntry mid-wave.
 - 2026-06-22 — Wave 4.7 shipped — UserBulb 3.4 time global + animate bar.
   Audit revealed engine-side + ViewModel-side already shipped earlier:
   `FractalParameters.UserBulbTime` (cloned), `UserBulbCalculator` compile
@@ -731,6 +1049,66 @@ Convergence after Wave 1:
     `BulbTimeSweepEnabled` / `BulbTimeStart` / `BulbTimeEnd` into
     `VideoZoomRequest` so the video pipeline can lerp `UserBulbTime`
     per frame. Not blocking; filed as 4.7.f1.
+- 2026-06-22 — Wave 0.5b shipped — Visual-regression baseline recorded.
+  `Tools/VisualRegression/Program.cs` needed four pre-flight fixes before the
+  record run could succeed:
+  * Shelled the cross-platform `FracturingFog.App` stub which doesn't yet
+    handle `--batch` (the BatchEntry CLI lives in the WinExe). Constant
+    `BatchProject = "FracturingFogCLD.csproj"` flips the target.
+  * `MagnetOne` / `MagnetTwo` corrected to `Magnet1` / `Magnet2` matching
+    `FractalType` enum literals in `Abstractions/Models/Enums.cs`.
+  * Each case now passes `--x 0 --y 0 --zoom 0.5` (BatchOptions validator
+    requires region or coords; procedural / non-escape-time families ignore
+    them and use family-internal framing).
+  * Per-case timeout bumped 120 s → 600 s to absorb the cold-cache rebuild
+    on the first invocation; subsequent cases skip rebuild and render in
+    seconds at 256² Standard.
+  * Redirected stdout/stderr drained via `BeginOutputReadLine` /
+    `BeginErrorReadLine` (no-op handlers). Initial record-attempt wedged
+    on the Flame case — child blocked writing into a full pipe buffer
+    because the harness never read the redirected streams. Standalone
+    Flame batch completed in seconds; only the un-drained pipeline
+    blocked. Other 21 cases passed at first attempt because their
+    per-case chatter stayed under the pipe-buffer ceiling.
+  Recorded 22 SHA256 entries to `Tools/VisualRegression/baseline.json`.
+  Curiosity: `newton-default` and `nova-default` share a hash at the (0,0)
+  centre — either Nova falls back to Newton-rendering at default knobs or
+  both produce identical output at this framing. Baseline pins current
+  behaviour; future regression run will fire if either changes. Filed
+  separately as an audit (not in 0.5b scope).
+  Non-determinism note: Buddhabrot + IFS hashes shifted across two record
+  runs (RNG-driven Monte Carlo). These two cases won't gate as
+  bit-equality regressions until their RNG is explicitly seeded — separate
+  follow-on (deferred). Plasma uses `PlasmaSeed` field default so its
+  output stayed stable.
+- 2026-06-22 — Wave 2.6 broadening shipped — AA for alt calcs.
+  Wave 2.6 originally landed canonical Mandelbrot AA only ("alt calcs (user-
+  equation / sandbox) currently skip AA pending interface broadening" per
+  status entry 2026-06-20). Now extended to every alt calc whose
+  `IFractalCalculator.SupportsZoomPan` is true — escape-time families
+  (Newton/Nova/Halley/Secant/Magnet1/Magnet2/Glynn/Spider, Phoenix via
+  `EscapeTimeCalculator`), user-equation hot-load path, sandbox, and 3D
+  raymarchers (Mandelbulb/UserBulb/Mandelbox/KIFS/QuaternionJulia/
+  QuaternionMandelbrot/Bicomplex/Kleinian). Procedural / non-escape-time
+  families (IFS/LSystem/Plasma/Flame/DLA/Apollonian/StrangeAttractor/
+  Buddhabrot/Nebulabrot/Anti*) gate out at the `SupportsZoomPan` check —
+  their `Calculate()` ignores centre+zoom so jitter would just re-roll noise.
+  * New `RunMsaaAccumulateAlt(IFractalCalculator, aaSamples, token)` helper
+    mirrors `RunMsaaAccumulateMandelbrot` shape: sub-pixel jitter on
+    (CenterX, CenterY) over a √N×√N grid at 3.5/max(W,H)/Zoom pixel scale,
+    re-runs `Calculate(token)` per sample, accumulates BGRA channel sums in
+    pinned int arrays, writes the weighted-mean colour back to ColorBuffer.
+    MandelbrotCalculator stays on the typed helper because it isn't an
+    `IFractalCalculator` (carries QD/DD/OD limb fields the interface doesn't
+    expose).
+  * Call-site at `FractalRenderHost.cs:1038` branches: `!useAlt` → existing
+    Mandelbrot helper; `useAlt && altCalc.SupportsZoomPan` → new alt helper;
+    `useAlt && !SupportsZoomPan` → AA skipped (procedural family).
+  * Heavy delegate overhead on UserEquation/Sandbox/UserBulb Calculate()
+    remains; user opts into 4×/16× cost by picking High/Ultra/Extreme
+    QualityPreset. Standard stays 1× AA across the board (unchanged
+    default).
+  * Build clean (0 errors). 140/140 Server.Tests pass.
 - 2026-06-22 — Wave 1.C1 closure shipped — AvaloniaDialogs.cs carved into
   cross-platform `FracturingFog.Hosting.dll`. Three blockers resolved:
   * QD coord codec (FormatCoordSingle / TryParseCoordSingle / TryParseCoordAny

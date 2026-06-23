@@ -41,6 +41,10 @@ public static class GpuPostKernels
     private static Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, float>? _upsampleAddKernel;
     private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<uint>, int, int, int, int, float, float>? _compositeKernel;
     private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<uint>, int, int, int, float, float, float, float, float>? _edgeKernel;
+    // Wave 4.1 — HDR DoF (3-pass skewed-box hex bokeh).
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>, int, float, float>? _dofCocKernel;
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, float, float>? _dofSkewedKernel;
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int>? _dofMinBlendKernel;
     private static bool _initFailed;
     private static readonly object _initLock = new();
 
@@ -160,6 +164,9 @@ public static class GpuPostKernels
                 _upsampleAddKernel = _acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, int, float>(UpsampleAddKernel);
                 _compositeKernel   = _acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<uint>, int, int, int, int, float, float>(CompositeKernel);
                 _edgeKernel        = _acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<uint>, int, int, int, float, float, float, float, float>(EdgeKernel);
+                _dofCocKernel      = _acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, int, float, float>(DofCocKernel);
+                _dofSkewedKernel   = _acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int, int, int, float, float>(DofSkewedBoxKernel);
+                _dofMinBlendKernel = _acc.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, ArrayView<float>, int>(DofMinBlendKernel);
                 return true;
             }
             catch
@@ -408,6 +415,83 @@ public static class GpuPostKernels
                 ownColor.Buffer.View.SubView(0, n).CopyToCPU(colorBuffer);
                 ownColor.Dispose();
             }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Wave 4.1 — GPU HDR DoF (McIntosh 2012 hex bokeh). Mirrors the CPU
+    /// <c>ScreenSpacePost.ApplyHdrDof</c>:
+    ///   1. Per-pixel CoC pass from depth + focus + aperture.
+    ///   2. Three skewed 1D box blurs at 0°, 120°, 240°. Each blur tap is
+    ///      bleed-controlled: foreground neighbours contribute only if their
+    ///      own CoC reaches the centre, preventing sharp FG smear.
+    ///   3. Min-blend the three intermediates per channel → hex envelope; write
+    ///      back to <paramref name="hdrBuffer"/> where CoC ≥ 0.75 and the
+    ///      source is not sky (NaN).
+    /// Operates on the linear-light HDR buffer in place. Returns false on any
+    /// failure — caller falls back to <c>ScreenSpacePost.ApplyHdrDof</c>.
+    /// </summary>
+    public static bool TryApplyHdrDof(
+        float[] hdrBuffer,
+        float[] depthBuffer,
+        int width, int height,
+        double aperture,
+        double focus,
+        int samples)
+    {
+        if (aperture <= 0 || samples <= 0) return true; // no-op success
+        if (!TryInit() || _acc == null
+            || _dofCocKernel == null || _dofSkewedKernel == null || _dofMinBlendKernel == null) return false;
+
+        int n = width * height;
+        if (hdrBuffer.Length < 3 * n) return false;
+        if (depthBuffer.Length < n) return false;
+
+        int taps = Math.Clamp(samples, 4, 32);
+        double shortEdge = Math.Min(width, height);
+        double cocScale = aperture * shortEdge;
+
+        // Three skewed-box pass directions. 0°, 120°, 240°.
+        const double a0 = 0.0;
+        const double a1 = 2.0 * Math.PI / 3.0;
+        const double a2 = 4.0 * Math.PI / 3.0;
+
+        try
+        {
+            using var dHdr  = GpuBufferPool.RentFloat(_acc, 3 * n);
+            using var dDep  = GpuBufferPool.RentFloat(_acc, n);
+            using var dCoc  = GpuBufferPool.RentFloat(_acc, n);
+            using var dP0   = GpuBufferPool.RentFloat(_acc, 3 * n);
+            using var dP1   = GpuBufferPool.RentFloat(_acc, 3 * n);
+            using var dP2   = GpuBufferPool.RentFloat(_acc, 3 * n);
+
+            dHdr.Buffer.View.SubView(0, 3 * n).CopyFromCPU(hdrBuffer);
+            dDep.Buffer.View.SubView(0, n).CopyFromCPU(depthBuffer);
+
+            _dofCocKernel(n, dDep.View, dCoc.View, n, (float)focus, (float)cocScale);
+
+            // Three skewed-box passes (each kernel pre-copies source-untouched
+            // pixels into dst so the min-blend doesn't bias toward zero on
+            // skip-cases).
+            _dofSkewedKernel(n, dHdr.View, dP0.View, dDep.View, dCoc.View,
+                             width, height, taps,
+                             (float)Math.Cos(a0), (float)Math.Sin(a0));
+            _dofSkewedKernel(n, dHdr.View, dP1.View, dDep.View, dCoc.View,
+                             width, height, taps,
+                             (float)Math.Cos(a1), (float)Math.Sin(a1));
+            _dofSkewedKernel(n, dHdr.View, dP2.View, dDep.View, dCoc.View,
+                             width, height, taps,
+                             (float)Math.Cos(a2), (float)Math.Sin(a2));
+
+            _dofMinBlendKernel(n, dHdr.View, dP0.View, dP1.View, dP2.View, dCoc.View, n);
+
+            _acc.Synchronize();
+            dHdr.Buffer.View.SubView(0, 3 * n).CopyToCPU(hdrBuffer);
             return true;
         }
         catch
@@ -803,6 +887,129 @@ public static class GpuPostKernels
         color[i] = 0xFF000000u | ((uint)oR << 16) | ((uint)oG << 8) | (uint)oB;
     }
 
+    /// <summary>Wave 4.1 — per-pixel CoC for HDR DoF. Mirrors the CPU
+    /// thin-lens proxy: <c>coc = |depth - focus| / depth · cocScale</c>. Sky
+    /// pixels (PositiveInfinity depth) get CoC = 0 so the blur pass skips
+    /// them. n = pixel count.</summary>
+    private static void DofCocKernel(
+        Index1D idx,
+        ArrayView<float> depth,
+        ArrayView<float> coc,
+        int n,
+        float focus,
+        float cocScale)
+    {
+        int i = idx.X;
+        if (i >= n) return;
+        float d = depth[i];
+        if (d > 1e30f || d <= 0f) { coc[i] = 0f; return; }
+        float diff = d - focus; if (diff < 0f) diff = -diff;
+        coc[i] = diff / d * cocScale;
+    }
+
+    /// <summary>Wave 4.1 — 1D box blur along a direction (dx, dy) with width =
+    /// per-pixel CoC. Bleed control: foreground neighbours contribute only if
+    /// their CoC reaches the centre. Pre-copies source on skip-cases so the
+    /// caller's min-blend isn't biased toward zero on sub-CoC / sky pixels.</summary>
+    private static void DofSkewedBoxKernel(
+        Index1D idx,
+        ArrayView<float> hdr,
+        ArrayView<float> outBuf,
+        ArrayView<float> depth,
+        ArrayView<float> coc,
+        int width, int height, int taps,
+        float dx, float dy)
+    {
+        int i = idx.X;
+        if (i >= width * height) return;
+        int i3 = i * 3;
+        float src0 = hdr[i3];
+        float src1 = hdr[i3 + 1];
+        float src2 = hdr[i3 + 2];
+        // Pre-copy untouched pixel. NaN sky propagates through (downstream
+        // min-blend skips NaN centres explicitly).
+        outBuf[i3] = src0; outBuf[i3 + 1] = src1; outBuf[i3 + 2] = src2;
+#pragma warning disable CS1718
+        if (src0 != src0) return; // sky
+#pragma warning restore CS1718
+        float coc0 = coc[i];
+        if (coc0 < 0.75f) return;
+
+        int x = i % width;
+        int y = i / width;
+        float d0 = depth[i];
+        int half = taps / 2;
+        if (half < 1) half = 1;
+        float step = (coc0 * 0.5f) / (float)half;
+
+        float sumR = 0f, sumG = 0f, sumB = 0f, sumW = 0f;
+        for (int t = -half; t <= half; t++)
+        {
+            float ft = (float)t;
+            int sx = (int)(x + dx * step * ft + 0.5f * (ft >= 0f ? 1f : -1f));
+            int sy = (int)(y + dy * step * ft + 0.5f * (ft >= 0f ? 1f : -1f));
+            if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+            int sidx = sy * width + sx;
+            int s3 = sidx * 3;
+            float sR = hdr[s3];
+#pragma warning disable CS1718
+            if (sR != sR) continue;  // sky tap
+#pragma warning restore CS1718
+            float sG = hdr[s3 + 1];
+            float sB = hdr[s3 + 2];
+
+            float dN = depth[sidx];
+            float cocN = coc[sidx];
+            float dist = step * ft; if (dist < 0f) dist = -dist;
+
+            // Bleed control. Neighbour in front of centre → contribute only
+            // if its CoC reaches the centre. Else (at or behind) → full.
+            float w;
+            if (dN < d0 - 1e-4f) w = cocN > dist ? 1f : 0f;
+            else                 w = 1f;
+            if (w <= 0f) continue;
+
+            sumR += sR * w;
+            sumG += sG * w;
+            sumB += sB * w;
+            sumW += w;
+        }
+        if (sumW > 0f)
+        {
+            outBuf[i3]     = sumR / sumW;
+            outBuf[i3 + 1] = sumG / sumW;
+            outBuf[i3 + 2] = sumB / sumW;
+        }
+    }
+
+    /// <summary>Wave 4.1 — composite three skewed-box passes back into hdr via
+    /// per-channel min-blend. Sub-CoC and sky centres pass through unchanged.</summary>
+    private static void DofMinBlendKernel(
+        Index1D idx,
+        ArrayView<float> hdr,
+        ArrayView<float> p0,
+        ArrayView<float> p1,
+        ArrayView<float> p2,
+        ArrayView<float> coc,
+        int n)
+    {
+        int i = idx.X;
+        if (i >= n) return;
+        int i3 = i * 3;
+        float src = hdr[i3];
+#pragma warning disable CS1718
+        if (src != src) return; // sky stays NaN
+#pragma warning restore CS1718
+        if (coc[i] < 0.75f) return;
+
+        float a0 = p0[i3],     a1 = p1[i3],     a2 = p2[i3];
+        float b0 = p0[i3 + 1], b1 = p1[i3 + 1], b2 = p2[i3 + 1];
+        float c0 = p0[i3 + 2], c1 = p1[i3 + 2], c2 = p2[i3 + 2];
+        float mAB = a0 < a1 ? a0 : a1; hdr[i3]     = mAB < a2 ? mAB : a2;
+        float mBB = b0 < b1 ? b0 : b1; hdr[i3 + 1] = mBB < b2 ? mBB : b2;
+        float mCB = c0 < c1 ? c0 : c1; hdr[i3 + 2] = mCB < c2 ? mCB : c2;
+    }
+
     /// <summary>5-tap Gaussian weights matching the CPU kernel.</summary>
     private static float TapWeight(int t)
     {
@@ -836,6 +1043,9 @@ public static class GpuPostKernels
             _upsampleAddKernel = null;
             _compositeKernel = null;
             _edgeKernel = null;
+            _dofCocKernel = null;
+            _dofSkewedKernel = null;
+            _dofMinBlendKernel = null;
             _acc?.Dispose(); _acc = null;
             _ctx?.Dispose(); _ctx = null;
             _initFailed = false;

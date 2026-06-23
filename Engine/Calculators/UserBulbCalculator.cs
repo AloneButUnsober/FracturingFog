@@ -790,19 +790,25 @@ namespace FracturingFogDyn
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
 
-        // GPU path: only when backend=GPU AND source detected as analytic power map.
-        // Two routes:
-        //   (a) Sandbox-DSL compiler → UserBulbSandboxGpuCompiler runtime-emits a
-        //       kernel that mirrors UserBulbGpuCalculator.BulbKernel but with the
-        //       DE function generated from the user's DSL.
-        //   (b) Roslyn-source compiler → UserBulbGpuCalculator's hardcoded
-        //       TriplexPowerDE (fast path for power-N triplex Mandelbulb).
-        // Falls through to CPU on either failure.
+        // GPU path. Three routes:
+        //   (a) Sandbox-DSL quat-mode (Wave 4.6) — kernel runs analytic power-DE
+        //       when an analytic pattern is detected AND !juliaMode; otherwise
+        //       falls into a 5-trajectory numerical-Jacobian DE (and accepts
+        //       Julia mode by holding c constant at the Julia parameter).
+        //   (b) Sandbox-DSL vec-mode — analytic-power only (vec-Julia /
+        //       vec-numerical on GPU is out of scope this wave).
+        //   (c) Legacy Roslyn-source path — UserBulbGpuCalculator's hardcoded
+        //       TriplexPowerDE (vec only, !juliaMode, analytic only).
+        // Falls through to CPU on any failure.
+        bool sandboxQuatGpu = _compiledCompiler == UserBulbCompilerKind.Sandbox && quatMode;
+        bool vecAnalyticGpuOk = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
-            && !juliaMode
-            && _analyticPattern.Kind != AnalyticDEKind.None)
+            && (sandboxQuatGpu || vecAnalyticGpuOk))
         {
+            // Quat-mode allows analytic only when the pattern matched and
+            // we're not in Julia mode — matches the CPU `useAnalytic` gate.
+            bool gpuUseAnalytic = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
             var gp = new GpuRenderParams
             {
                 Width = width, Height = height,
@@ -818,22 +824,32 @@ namespace FracturingFogDyn
                 Power = analyticPower,
                 QuatSliceW = FractalParameters.UserBulbQuatSliceW,
                 InSetColor = ColorMap.InSetColor,
+                // Wave 4.6 — quat-mode Julia + numerical-Jacobian fields.
+                JuliaMode = juliaMode ? 1 : 0,
+                JuliaCW = jcW, JuliaCX = jcX, JuliaCY = jcY, JuliaCZ = jcZ,
+                JacH = jacH,
+                UseAnalyticDE = gpuUseAnalytic ? 1 : 0,
             };
 
-            // (a) Sandbox path: vec + quat. Chain mode still CPU.
+            // (a) Sandbox path: vec + quat. Wave 4.5 — chain mode now compiles
+            // each step body via the emitter, inlines all step bodies into a
+            // single Step() with prior-step outputs visible by name as typed
+            // locals. CPU fallback on any failure.
             bool useChainPath = FractalParameters.UserBulbChain != null
                                  && FractalParameters.UserBulbChain.Count > 0;
-            if (_compiledCompiler == UserBulbCompilerKind.Sandbox && !useChainPath)
+            if (_compiledCompiler == UserBulbCompilerKind.Sandbox)
             {
                 _sandboxGpu ??= new UserBulbSandboxGpuCompiler();
-                if (_sandboxGpu.TryCompile(
-                        FractalParameters.UserBulbSource ?? string.Empty,
-                        _compiledParamNames,
-                        quatMode: quatMode)
-                    && _sandboxGpu.Render(ColorBuffer, pArr, gp))
-                {
-                    return;
-                }
+                bool compiled = useChainPath
+                    ? _sandboxGpu.TryCompileChain(
+                          FractalParameters.UserBulbChain!,
+                          _compiledParamNames,
+                          quatMode: quatMode)
+                    : _sandboxGpu.TryCompile(
+                          FractalParameters.UserBulbSource ?? string.Empty,
+                          _compiledParamNames,
+                          quatMode: quatMode);
+                if (compiled && _sandboxGpu.Render(ColorBuffer, pArr, gp)) return;
                 LastError = _sandboxGpu.LastError;
                 // Fall through to legacy GPU (vec only) + then CPU.
             }

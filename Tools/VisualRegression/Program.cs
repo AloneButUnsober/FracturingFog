@@ -29,6 +29,11 @@ internal static class Program
     private const int DefaultWidth   = 256;
     private const int DefaultHeight  = 256;
 
+    // Shells the WinExe today — only assembly that wires the BatchEntry CLI. The
+    // cross-platform FracturingFog.App stub doesn't yet handle --batch (filed
+    // separately). Flip this once App grows its own batch dispatch.
+    private const string BatchProject = "FracturingFogCLD.csproj";
+
     private static int Main(string[] args)
     {
         if (args.Length == 0)
@@ -147,6 +152,9 @@ internal static class Program
     /// </summary>
     private static List<Case> DefaultCases()
     {
+        // FractalType enum names from Abstractions/Models/Enums.cs. BatchOptions
+        // matches with ignoreCase=true so "BuddhaBrot"/"buddhabrot" both resolve.
+        // Magnet1/Magnet2 — note enum literal uses digit, not English suffix.
         string[] fractals =
         {
             "Mandelbrot",
@@ -157,25 +165,31 @@ internal static class Program
             "Phoenix",
             "Newton",
             "Nova",
-            "MagnetOne",
-            "MagnetTwo",
+            "Magnet1",
+            "Magnet2",
             "Halley",
             "Secant",
             "Glynn",
             "Spider",
-            "Buddhabrot",
+            "BuddhaBrot",
             "IFS",
             "LSystem",
             "StrangeAttractor",
             "Plasma",
             "Apollonian",
-            "DLA",
+            "Dla",
             "Flame",
         };
 
         var cases = new List<Case>();
         foreach (var f in fractals)
         {
+            // BatchOptions validator requires --region OR (--x --y --zoom). The
+            // procedural / non-escape-time families (Plasma/IFS/LSystem/Flame/
+            // DLA/Apollonian/StrangeAttractor) ignore centre+zoom internally —
+            // pass canonical (0,0,0.5) for the 14 escape-time families and let
+            // the others use it as a dummy. Result is a stable fingerprint per
+            // family at default parameters.
             cases.Add(new Case
             {
                 Name = $"{f.ToLowerInvariant()}-default",
@@ -183,6 +197,9 @@ internal static class Program
                 {
                     "--fractal", f,
                     "--theme", "HSV",
+                    "--x", "0",
+                    "--y", "0",
+                    "--zoom", "0.5",
                     "--width", DefaultWidth.ToString(),
                     "--height", DefaultHeight.ToString(),
                     "--quality", "Standard",
@@ -209,7 +226,7 @@ internal static class Program
         psi.ArgumentList.Add("-c");
         psi.ArgumentList.Add("Release");
         psi.ArgumentList.Add("--project");
-        psi.ArgumentList.Add("FracturingFog.App");
+        psi.ArgumentList.Add(BatchProject);
         psi.ArgumentList.Add("--");
         psi.ArgumentList.Add("--batch");
         psi.ArgumentList.Add("--mode");
@@ -219,7 +236,17 @@ internal static class Program
         foreach (var a in caseArgs) psi.ArgumentList.Add(a);
 
         using var p = Process.Start(psi)!;
-        p.WaitForExit(120_000);
+        // Drain stdout/stderr so the child never blocks writing into a full
+        // pipe buffer. Flame's progress chatter alone is big enough to wedge
+        // the child mid-render if we don't read. BeginOutputReadLine without
+        // a handler still drains the pipe — the bytes are discarded.
+        p.OutputDataReceived += static (_, _) => { };
+        p.ErrorDataReceived  += static (_, _) => { };
+        p.BeginOutputReadLine();
+        p.BeginErrorReadLine();
+        // First case warms the build (~60-90 s cold cache); later cases skip
+        // rebuild. Per-case render itself runs in seconds at 256² Standard.
+        p.WaitForExit(600_000);
         return p.HasExited ? p.ExitCode : -1;
     }
 

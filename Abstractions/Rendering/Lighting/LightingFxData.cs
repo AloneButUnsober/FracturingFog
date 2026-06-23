@@ -359,6 +359,16 @@ public struct LightingFxData
     /// as preview-only. Default 1 stays bit-identical with pre-16b renders.</summary>
     public int MaxBounces;
 
+    /// <summary>Wave 4.2 — GGX importance sampling per reflection bounce. When
+    /// true, the reflect direction at each bounce is sampled from a GGX VNDF
+    /// (Heitz 2018) parameterised by <see cref="Roughness"/> instead of mirror-
+    /// reflecting the view ray. Deterministic Wang-hash RNG seeded by the
+    /// per-bounce world-space origin so animations stay stable. Single sample
+    /// per bounce — temporal/spatial decorrelation provides the lobe spread
+    /// without averaging cost. Default false preserves bit-identity with 16b
+    /// (mirror reflect + roughness-convolved IBL on miss).</summary>
+    public bool UseGgxSampling;
+
     // ── Caustics (Phase 17) ───────────────────────────────────────────
 
     /// <summary>Fake caustics contribution [0, 1+]. 0 = off. Bright caustic
@@ -565,6 +575,7 @@ public struct LightingFxData
         ReflectionStrength = 0.0,
         ReflectionSteps    = 0,
         MaxBounces         = 1,
+        UseGgxSampling     = false,
 
         CausticsStrength   = 0.0,
         CausticsFloorY     = 0.0,

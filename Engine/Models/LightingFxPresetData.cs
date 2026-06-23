@@ -229,6 +229,11 @@ public sealed class LightingFxPresetData
     public void ApplyTo(FractalParameters parameters)
     {
         if (parameters is null) return;
-        parameters.Lighting = ToFx();
+        var fx = ToFx();
+        parameters.Lighting = fx;
+        // Wave 4.3 — kick HDRI preload so the next render frame hits a warm
+        // cache instead of N pixel threads racing the file parse.
+        if (!string.IsNullOrWhiteSpace(fx.EnvironmentName))
+            FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(fx.EnvironmentName);
     }
 }

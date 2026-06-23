@@ -30,4 +30,12 @@ public static class HdriProbe
     /// up — callers should treat that as "load result unknown" and skip the
     /// status update rather than display a misleading error.</summary>
     public static Func<string, bool>? TryLoad;
+
+    /// <summary>Fire-and-forget background preload of an HDRI by path. Wired
+    /// to <c>Task.Run(HdriRegistry.TryLoadFromFile)</c> by the engine static
+    /// ctor. UI/VM setters call this on <c>EnvironmentName</c> changes so the
+    /// first render frame finds the HDRI already cached instead of N render
+    /// threads racing to parse the same file. Null when engine not loaded
+    /// (tests / pre-bootstrap) — callers treat as no-op.</summary>
+    public static Action<string>? Preload;
 }

@@ -238,7 +238,16 @@ public sealed partial class FractalParamsViewModel
     public string? EnvironmentName
     {
         get => _p.Lighting.EnvironmentName;
-        set { MutateLighting(r => r.Fx.EnvironmentName = value); this.RaisePropertyChanged(); Fire(); }
+        set
+        {
+            MutateLighting(r => r.Fx.EnvironmentName = value);
+            // Wave 4.3 — kick background preload so the next render frame
+            // hits a warm HdriRegistry cache instead of N pixel threads
+            // racing the same file parse.
+            if (!string.IsNullOrWhiteSpace(value)) HdriProbe.Preload?.Invoke(value);
+            this.RaisePropertyChanged();
+            Fire();
+        }
     }
     public double IblStrength
     {
