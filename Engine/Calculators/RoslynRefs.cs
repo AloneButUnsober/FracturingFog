@@ -27,14 +27,32 @@ namespace FracturingFog.Calculators;
 
 internal static class RoslynRefs
 {
+    private static readonly bool s_diag =
+        string.Equals(Environment.GetEnvironmentVariable("FF_ROSLYN_DEBUG"), "1", StringComparison.Ordinal);
+
     public static MetadataReference[] GatherRefs(params Assembly[] markers)
+        => GatherRefs(markers, includeAllTpa: false);
+
+    /// <summary>
+    /// Returns metadata references for every TPA assembly. Use for hot-load
+    /// surfaces where the user's source can pull anything (UserEquation,
+    /// UserBulb). Restricted GatherRefs(markers) is for kernel-style compiles
+    /// where the closure is narrow + known.
+    /// </summary>
+    public static MetadataReference[] GatherAllTpaRefs()
+        => GatherRefs(Array.Empty<Assembly>(), includeAllTpa: true);
+
+    private static MetadataReference[] GatherRefs(Assembly[] markers, bool includeAllTpa)
     {
         var tpaByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var tpaPaths = new List<string>();
         if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa && tpa.Length > 0)
         {
             char sep = OperatingSystem.IsWindows() ? ';' : ':';
             foreach (var path in tpa.Split(sep, StringSplitOptions.RemoveEmptyEntries))
             {
+                if (string.IsNullOrEmpty(path)) continue;
+                tpaPaths.Add(path);
                 string name = Path.GetFileNameWithoutExtension(path);
                 if (!tpaByName.ContainsKey(name)) tpaByName[name] = path;
             }
@@ -42,13 +60,23 @@ internal static class RoslynRefs
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var refs = new List<MetadataReference>();
+        int failed = 0;
 
         void AddPath(string? p)
         {
             if (string.IsNullOrEmpty(p)) return;
             if (!seen.Add(p)) return;
             try { refs.Add(MetadataReference.CreateFromFile(p)); }
-            catch { /* skip unreadable */ }
+            catch (Exception ex)
+            {
+                failed++;
+                if (s_diag) Console.Error.WriteLine($"[RoslynRefs] skip {p}: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        if (includeAllTpa)
+        {
+            foreach (var path in tpaPaths) AddPath(path);
         }
 
         foreach (var asm in markers)
@@ -64,6 +92,12 @@ internal static class RoslynRefs
         if (tpaByName.TryGetValue("System.Runtime", out string? sysRt)) AddPath(sysRt);
         if (tpaByName.TryGetValue("netstandard", out string? netStd)) AddPath(netStd);
         if (tpaByName.TryGetValue("System.Private.CoreLib", out string? coreLib)) AddPath(coreLib);
+
+        if (s_diag)
+        {
+            Console.Error.WriteLine($"[RoslynRefs] refs={refs.Count} tpa={tpaPaths.Count} failed={failed} markers={markers.Length} allTpa={includeAllTpa}");
+            Console.Error.Flush();
+        }
 
         return refs.ToArray();
     }

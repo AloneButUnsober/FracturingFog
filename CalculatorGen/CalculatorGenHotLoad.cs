@@ -313,30 +313,46 @@ public static class CalculatorGenHotLoad
         // %TEMP%/.net/<app>/<hash>/ then load by file). Use that as the
         // primary source; the AppDomain pass below picks up dynamically-
         // loaded extras (ILGPU, source-generated calculators).
+        int tpaTotal = 0, tpaAdded = 0, tpaFailed = 0;
         if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa && tpa.Length > 0)
         {
             char sep = OperatingSystem.IsWindows() ? ';' : ':';
             foreach (var path in tpa.Split(sep, StringSplitOptions.RemoveEmptyEntries))
             {
+                tpaTotal++;
                 if (string.IsNullOrEmpty(path)) continue;
                 if (!seen.Add(path)) continue;
-                try { refs.Add(MetadataReference.CreateFromFile(path)); }
-                catch { /* skip unreadable */ }
+                try { refs.Add(MetadataReference.CreateFromFile(path)); tpaAdded++; }
+                catch (Exception ex)
+                {
+                    tpaFailed++;
+                    if (s_diag) Console.Error.WriteLine($"[CalcGenHotLoad] TPA ref skip {path}: {ex.GetType().Name}: {ex.Message}");
+                }
             }
         }
 
+        int adAdded = 0, adSkipped = 0;
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
-            if (asm.IsDynamic) continue;
+            if (asm.IsDynamic) { adSkipped++; continue; }
             string loc;
-            try { loc = asm.Location; } catch { continue; }
-            if (string.IsNullOrEmpty(loc)) continue;
-            if (!seen.Add(loc)) continue;
-            try { refs.Add(MetadataReference.CreateFromFile(loc)); }
-            catch { /* best-effort — skip refs we can't materialise */ }
+            try { loc = asm.Location; } catch { adSkipped++; continue; }
+            if (string.IsNullOrEmpty(loc)) { adSkipped++; continue; }
+            if (!seen.Add(loc)) { adSkipped++; continue; }
+            try { refs.Add(MetadataReference.CreateFromFile(loc)); adAdded++; }
+            catch { adSkipped++; }
+        }
+
+        if (s_diag)
+        {
+            Console.Error.WriteLine($"[CalcGenHotLoad] refs total={refs.Count} TPA(total={tpaTotal},added={tpaAdded},failed={tpaFailed}) AppDomain(added={adAdded},skipped={adSkipped})");
+            Console.Error.Flush();
         }
         return refs;
     }
+
+    private static readonly bool s_diag =
+        string.Equals(Environment.GetEnvironmentVariable("FF_ROSLYN_DEBUG"), "1", StringComparison.Ordinal);
 
     private static void TryLoadByName(string simpleName)
     {

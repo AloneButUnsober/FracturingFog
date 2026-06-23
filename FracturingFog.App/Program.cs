@@ -32,6 +32,17 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        // S-X7.10 (2026-06-23) — startup heartbeat. Linux smoke runs reported
+        // empty output even with `./FracturingFog.App > ff.log 2>&1`; this
+        // prints + flushes immediately so the user can confirm Main reached
+        // and stdio is hooked. Cheap, prints once at process start.
+        try
+        {
+            Console.Error.WriteLine($"[FF] Main entered args=[{string.Join(' ', args)}] pid={Environment.ProcessId}");
+            Console.Error.Flush();
+        }
+        catch { /* stdio absent — silently proceed */ }
+
         // Phase X.5 / Slice 5.1 — per-RID ILGPU device-kind smoke. Asserts
         // CPU fallback is reachable on the current host. Used by the release
         // workflow smoke step on the Linux + macOS legs where CUDA/OpenCL
