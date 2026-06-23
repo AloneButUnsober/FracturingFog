@@ -195,14 +195,14 @@ public sealed class UserBulbCalculator : IFractalCalculator
             // the embedded bundle, not disk). MetadataReference.CreateFromFile("")
             // throws ArgumentException "value cannot be an empty string
             // (Parameter 'path')" which surfaces under the equation entry as
-            // the compile error. Resolve every reference via TPA paths instead;
-            // the runtime extracts those to disk on first launch so they are
-            // always readable.
-            var refs = GatherRefs(
-                typeof(object).Assembly,
-                typeof(Math).Assembly,
-                typeof(Complex).Assembly,
-                typeof(Vec3).Assembly);
+            // the compile error.
+            //
+            // S-X7.10 (2026-06-23) — broadened to include every TPA assembly
+            // (mirrors CalculatorGenHotLoad). The narrow marker list left
+            // generated code with unresolved namespace errors because Roslyn
+            // could not see forwarder assemblies it needed to compose the BCL
+            // primitives across single-file boundaries.
+            var refs = RoslynRefs.GatherAllTpaRefs();
             var compilation = CSharpCompilation.Create(
                 "UserBulbDyn_" + Guid.NewGuid().ToString("N"),
                 new[] { tree },
