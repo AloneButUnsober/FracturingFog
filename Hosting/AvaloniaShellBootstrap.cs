@@ -128,6 +128,17 @@ namespace FracturingFog.Hosting
         {
             RendererFactory.NonWin32Backend = TryCreateSilkRenderer;
 
+            // S-X7.2 (2026-06-23) — Linux native input bridge. Avalonia's
+            // NativeControlHost child X11 subwindow swallows pointer events
+            // before the XAML InputSponge can see them (same cause as the
+            // Win+DX swap-chain HWND case). X11InputBridge XSelectInputs on
+            // the foreign XID and forwards to IFractalInputController.
+            // Windows installs its own NativeMouseForwarder via
+            // FracturingFog.Win.WindowsBootstrap; on Linux we wire the X11
+            // bridge here so the bootstrap installs whichever is present.
+            if (OperatingSystem.IsLinux() && BootstrapHooks.NativeInputBridge == null)
+                BootstrapHooks.NativeInputBridge = new X11InputBridge();
+
             // Phase X.5 / Slice 5.2 — register Help → Hardware tab probes.
             // The callables read live state each time the user opens the
             // help window so they reflect the audio backend / ILGPU device

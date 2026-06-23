@@ -113,6 +113,25 @@ public static class ColorGenHotLoad
     {
         var refs = new List<MetadataReference>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // S-X7.3 (2026-06-23) — TPA fallback for single-file publish. See the
+        // matching comment in CalculatorGenHotLoad.GatherReferences for the
+        // full rationale; in short, single-file builds leave Assembly.Location
+        // empty, so the loop below produces no MetadataReferences and Roslyn
+        // fails with CS0518 (Predefined types not defined). TRUSTED_PLATFORM_ASSEMBLIES
+        // carries the extracted on-disk paths every Roslyn compile needs.
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa && tpa.Length > 0)
+        {
+            char sep = OperatingSystem.IsWindows() ? ';' : ':';
+            foreach (var path in tpa.Split(sep, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrEmpty(path)) continue;
+                if (!seen.Add(path)) continue;
+                try { refs.Add(MetadataReference.CreateFromFile(path)); }
+                catch { /* skip unreadable */ }
+            }
+        }
+
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;

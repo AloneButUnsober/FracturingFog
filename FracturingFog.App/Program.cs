@@ -70,6 +70,30 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--ubspike")
             return FracturingFog.Calculators.UserBulbSandboxGpuSpike.Run();
 
+        // S-X7.1 (2026-06-23) — headless JSON-RPC server flag. Without this
+        // dispatch the child process re-entered AvaloniaShell.Run and opened
+        // a second GUI window. Full server (ServerEntry + HostFractalRenderEngine)
+        // still drags System.Drawing.Imaging via PosterRenderer PNG export, so
+        // wire-up is gated to Windows for now; the legacy WinExe carries the
+        // running server until HostFractalRenderEngine ports to SkiaSharp.
+        // Linux/macOS: exit early with a clear error rather than silently
+        // opening a duplicate GUI shell.
+        if (args.Length > 0 && args[0] == "--server")
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                Console.Error.WriteLine(
+                    "FracturingFog: --server is not yet supported on this platform. " +
+                    "Server-side PosterRenderer still depends on System.Drawing.Imaging; " +
+                    "cross-platform port is tracked as S-X7.1 follow-up.");
+                return 2;
+            }
+            Console.Error.WriteLine(
+                "FracturingFog: --server requires the legacy WinExe (FracturingFog.exe). " +
+                "Launch via 'FracturingFog.exe --server' instead of FracturingFog.App.");
+            return 2;
+        }
+
         // Phase X.4 / Slice 4.1 — --renderer override. Default is
         // RendererBackend.Auto (DX on Win, Silk on Linux/macOS, picked by
         // RendererFactory.Create from the surface kind). Explicit values let
