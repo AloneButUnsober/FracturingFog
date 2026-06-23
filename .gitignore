@@ -29,6 +29,10 @@ x86/
 bld/
 [Bb]in/
 [Oo]bj/
+# PaletteBuilder.Lib uses obj.lib/ + bin.lib/ as per-project redirects
+# (see PaletteBuilder/Directory.Build.props) so they need explicit rules.
+obj.lib/
+bin.lib/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
