@@ -10,6 +10,7 @@ slideshow, palette tools, and cross-platform support on Windows, Linux,
 and macOS.
 
 * Full feature tour: [FEATURES.md](FEATURES.md)
+* Documentation landing page: [Docs/_Index.md](Docs/_Index.md)
 * Per-OS install + caveats: [Docs/User/CrossPlatform-UserGuide.md](Docs/User/CrossPlatform-UserGuide.md)
 * Avalonia shell tour: [Docs/User/Avalonia-UserGuide.md](Docs/User/Avalonia-UserGuide.md)
 * Keyboard shortcuts: [Docs/User/Keyboard-Shortcuts.md](Docs/User/Keyboard-Shortcuts.md)

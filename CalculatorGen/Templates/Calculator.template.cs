@@ -191,20 +191,18 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
     /// re-runs perturbation for the cluster against that rebase orbit.
     /// Pixels that glitch again on the rebase orbit fall to per-pixel
     /// HP-direct as before.
-    /// Default false pending AVX-2 perturbation lane parity with legacy.
-    /// At deep zoom on scattered-mini-Julia scenes the rebase orbit
-    /// build cost (one QD orbit per spatial cluster) plus the rebase
-    /// pass overhead can dominate the per-pixel HP-direct cost the path
-    /// is meant to amortise. Three early-exit guards (zoom gate, bbox
-    /// cohesion, sample-probe) and cross-frame cache (E) reduce the
-    /// wasted work but don't fully eliminate it. Enable opt-in for
-    /// cohesive deep-zoom mini-Julia scenes where many adjacent pixels
-    /// glitch together.
-    /// Spatial partitioning (D) splits scattered glitches into
-    /// independent clusters via grid bucketing + connected components,
-    /// so each cluster gets its own rebase orbit instead of one
-    /// centroid orbit that fits none of them.</summary>
-    public bool UseClusterRebase { get; set; } = false;
+    /// Default true since Wave 6: AVX-2 perturbation lane reached parity
+    /// with legacy, spatial partitioning (D) splits scattered glitches
+    /// into independent clusters via grid bucketing + 8-conn flood-fill
+    /// so each mini-Julia gets its own rebase orbit instead of one
+    /// centroid that fits none, and the cross-frame orbit cache (E)
+    /// amortises the QD orbit build across pan/zoom-only frames where
+    /// the same minis stay in view. Three early-exit guards (zoom &gt;
+    /// 1e25, bbox density ≥ 2%, sample-probe ≥ 50% hits) kill bad-fit
+    /// clusters before the per-pixel pass. Set false to revert to the
+    /// pre-Item-7 behaviour where every glitched pixel routes straight
+    /// to HP-direct.</summary>
+    public bool UseClusterRebase { get; set; } = true;
 
     /// <summary>Minimum number of glitched pixels for the cluster-rebase
     /// pass to engage. Below this, the rebase orbit's QD build cost

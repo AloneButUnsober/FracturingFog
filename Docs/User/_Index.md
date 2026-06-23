@@ -6,7 +6,8 @@ zoom in trillions of times, paint them with hundreds of colour themes, record vi
 slideshows with music.
 
 This page is the entry point for end-user documentation. If you are a developer or contributor, head
-instead to the [Technical Index](../Technical/_Index.md).
+instead to the [Technical Index](../Technical/_Index.md). For a top-level router that bridges both
+audiences plus the project-wide roadmaps, see [Docs Index](../_Index.md).
 
 ---
 

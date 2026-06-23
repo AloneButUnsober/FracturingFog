@@ -41,13 +41,16 @@ between bigger features.
 
 ## Phase D-2 — Quality + perf wins (medium)
 
-7. **Per-pixel rebase** — DONE (cluster-rebase MVP; see Known
+7. **Per-pixel rebase** — DONE through Wave 6 closeout (Item 7 MVP +
+   guards A/B/C + multi-cluster D + cross-frame cache E; see Known
    issues entry below for the implementation summary). When pixels
-   glitch the perturbation path, the renderer now collects them and
-   rebuilds ONE shared reference orbit at the cluster centroid
-   instead of falling each pixel to HP-direct. Multi-cluster spatial
-   partitioning is a follow-up that helps when several distinct
-   mini-Julias appear in the same frame far apart.
+   glitch the perturbation path, the renderer collects them and
+   spatial-partitions into independent clusters via grid bucketing +
+   8-connectivity flood-fill; each cluster builds its own rebase
+   reference orbit at its centroid, cached cross-frame so pan/zoom-
+   only updates reuse warm orbits. Three early-exit guards (zoom &gt;
+   1e25, bbox density ≥ 2%, sample-probe ≥ 50% hits) kill bad-fit
+   clusters before per-pixel commit.
 8. **Higher SA orders (3 → 16+)** — current SA tracks A, B, C only.
    Each extra order extends the valid skip range exponentially. Legacy
    uses ~64. Lifting to 16 captures most of the win.
@@ -640,32 +643,36 @@ flips priority.
   (gentest's centres don't trigger HP-direct so the DD4 path
   isn't exercised there).
 
-- [x] **Cluster rebase on perturbation glitch (Item 7)** — IMPLEMENTED.
-  Glitched pixels deferred during the main perturbation pass into a
-  `ConcurrentBag<(int x, int y)>`. After Parallel.For completes, the
-  cluster-rebase pass kicks in: computes the centroid of all glitched
-  pixels in c-offset space, builds a single shared QD reference orbit
-  at that centroid (via `BuildRebaseRefOrbitQd` — same QD body as the
-  primary build, no BLA / no SA / no cache), and runs perturbation
-  for each glitched pixel against the rebase orbit
-  (`TryIterateRebasePixel`). Pixels that glitch again or whose rebase
-  orbit exhausts before escape fall to per-pixel HP-direct as the
-  final backstop (`HpDirectGlitchPixel`). Below
-  `MinClusterSizeForRebase = 32` pixels, the rebase build's QD
-  iteration cost outweighs per-pixel savings — drop straight to
-  HP-direct (the pre-rebase behaviour).
-  Properties: `UseClusterRebase` (default true),
-  `MinClusterSizeForRebase` (default 32). Both scalar tail and
-  AVX-512 SIMD lane defer to the same bag.
-  Trade-offs: MVP uses ONE cluster centroid for ALL glitches —
-  multi-cluster spatial partitioning is a follow-up that helps when
-  several distinct mini-Julias appear in the same frame far apart
-  (current behaviour: stragglers from non-centroid clusters fall
-  to HP-direct, so correctness is preserved; perf win is reduced).
-  Cost: one QD orbit build (~10-50 ms at maxIt=10000) per frame
-  where the cluster threshold is met. Win: 5-20× speedup on
-  mini-Julia clusters vs per-pixel HP-direct (per-glitch cost
-  drops from ~500 µs DD-direct to ~50 µs perturbation iter).
+- [x] **Cluster rebase on perturbation glitch (Item 7)** — IMPLEMENTED
+  through Wave 6 closeout (MVP + guards A/B/C + multi-cluster D +
+  cross-frame cache E). Glitched pixels deferred during the main
+  perturbation pass into a `ConcurrentBag<(int x, int y)>`. After
+  Parallel.For completes, `ProcessClusterRebase` spatial-partitions
+  the bag into clusters via a 16×16-cell occupancy grid + 8-conn
+  BFS flood-fill on occupied cells. Each cluster runs through
+  `ProcessSingleCluster`: zoom gate (skip below 1e25 — DD-direct
+  cheaper than rebase build there), bbox-cohesion guard (skip
+  long-thin tendrils with density &lt; 2%), centroid build of a
+  shared QD reference orbit via `BuildRebaseRefOrbitQd` (no BLA /
+  no SA), cross-frame cache lookup (4-slot LRU via
+  `TryGetCachedRebaseOrbit` / `InsertCachedRebaseOrbit` keyed by
+  centroid within `scale·16` tolerance + maxIt), sample-probe of
+  the first 8 pixels (commit only when ≥ 50% land), then parallel
+  `TryIterateRebasePixel` over the remainder. Pixels that glitch
+  again or whose rebase orbit exhausts fall to per-pixel HP-direct
+  (`HpDirectGlitchPixel`). Below `MinClusterSizeForRebase = 32`
+  pixels per cluster, HP-direct straight away.
+  Properties: `UseClusterRebase` (default true since Wave 6 — AVX-2
+  perturbation lane parity reached, multi-cluster + cache reduce
+  wasted-work to acceptable), `MinClusterSizeForRebase` (default 32).
+  Both scalar tail and AVX-2 + AVX-512 SIMD lanes defer to the
+  same bag.
+  Cost: one QD orbit build (~10-50 ms at maxIt=10000) per cluster
+  per frame (cached cross-frame), zero for cached hits. Win: 5-20×
+  speedup on mini-Julia clusters vs per-pixel HP-direct (per-glitch
+  cost drops from ~500 µs DD-direct to ~50 µs perturbation iter).
+  Scattered mini-Julias each get their own rebase orbit instead of
+  one centroid orbit that fits none of them.
   `--calcgen-test` 90/90 PASS; `--gentest MandelbrotZ2` 0-diff
   (gentest's interior centres produce no glitches so the rebase
   path doesn't engage on its sample grid).

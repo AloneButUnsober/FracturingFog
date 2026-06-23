@@ -168,17 +168,18 @@ audio-reactive dialog without crash.
 
 ## Wave 6 — Multi-cluster glitch rebase
 
-| # | Item |
-|---|------|
-| 6.1 | Multi-cluster spatial partitioning for perturbation rebase |
+| # | Item | Status |
+|---|------|--------|
+| 6.1 | Multi-cluster spatial partitioning for perturbation rebase | ✅ Shipped 2026-06-23 — `CalculatorGen/Templates/Calculator.template.cs` carries MVP (Item 7) + guards A/B/C + multi-cluster D (16×16-cell occupancy grid + 8-conn BFS flood-fill) + cross-frame cache E (4-slot LRU). Multi-cluster + cache landed in commits 2912309 + bcea672; default flipped to `UseClusterRebase = true` this turn (AVX-2 perturbation lane parity reached, commits cea9cc8 + b0abc68). Legacy `Engine/Calculators/MandelbrotCalculator.cs` port filed as 6.1.f1 follow-up. |
+| 6.1.f1 | Port cluster rebase pipeline (Item 7 MVP + A/B/C/D/E) into legacy `Engine/Calculators/MandelbrotCalculator.cs` — canonical Mandelbrot path glitched lanes currently fall straight to per-pixel HP-direct (`ComputePixelOD/QD/HP`). ~2-3 d: needs SP/DD/QD/OD precision-tier branches, 4 perturbation-path glitch-enqueue sites (scalar + PT4 + PT8 + PT8-512), OD-aware rebase orbit build (template only handles DD+QD). | 🟡 Deferred — non-blocking |
 
 ---
 
 ## Wave 7 — Docs
 
-| # | Item |
-|---|------|
-| 7.1 | Top-level `Docs/_Index.md` landing page for both audiences |
+| # | Item | Status |
+|---|------|--------|
+| 7.1 | Top-level `Docs/_Index.md` landing page for both audiences | ✅ Shipped 2026-06-23 — top-level router page routes by audience (User → `User/_Index.md`, Technical → `Technical/_Index.md`) plus project-wide roadmap quick-links. Root `README.md` + both sub-indices wired to point at the new landing page. |
 
 ---
 
@@ -220,8 +221,8 @@ Convergence after Wave 1:
 | 3 | 10 | Perf Tier 2 + 3 tail |
 | 4 | 15 | Lighting/FX + UserBulb |
 | 5 | 10 | Fractal Expansion polish |
-| 6 | 3 | Multi-cluster glitch rebase |
-| 7 | 1 | Docs landing page |
+| 6 | 3 → **0** | Shipped in template (Wave 6 closeout); legacy port = 6.1.f1 deferred |
+| 7 | 1 → **0** | Shipped 2026-06-23 |
 | 8 (when greenlit) | 2 | WinForms retirement |
 | **Total** | **~65 dev-days** | Down from 90 after Wave 0+1 re-audit |
 
@@ -231,6 +232,73 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-06-23 — Wave 7.1 shipped — Top-level `Docs/_Index.md` landing page.
+  Routes by audience (User → `User/_Index.md`, Technical → `Technical/
+  _Index.md`) and surfaces the project-wide roadmap layer (Open-Work-Plan,
+  Performance-Roadmap, Lighting-FX-Roadmap, Fractal-Expansion-Roadmap,
+  CalculatorGen-Roadmap, Documentation-Plan, Resources-Bibliography) as
+  a third bucket — the existing sub-indices only show their own audience's
+  pages, so cross-cutting roadmap docs had no canonical entry. Style matches
+  the two sub-indices (table-of-routes pattern, terse one-line "what it
+  covers" cells). Wires:
+  * `README.md` — new "Documentation landing page" line between feature
+    tour and per-OS install caveats so the top-level entry is one click
+    from the project landing page.
+  * `Docs/User/_Index.md` + `Docs/Technical/_Index.md` — opening paragraph
+    extended to point upward at the new landing page so readers who
+    arrive mid-tree can navigate up to the bridge.
+  * Roadmap effort table bumped 1 → 0 day. Wave 7 closed.
+- 2026-06-23 — Wave 6.1 shipped — Multi-cluster spatial partitioning for
+  perturbation rebase. Audit found the work already in the CalculatorGen
+  Roslyn template (`CalculatorGen/Templates/Calculator.template.cs`):
+  Item 7 MVP (commit f54ffe7), guards A+B+C hardening (8d7cf75),
+  multi-cluster D (2912309), cross-frame orbit cache E (bcea672) — all
+  shipped pre-Wave-6 but never tracked in `Open-Work-Plan.md`. Plus
+  Wave 2.13 source-gen (f5935c3) deleted the in-tree generated calcs;
+  template now emits at build time via Roslyn analyzer, so multi-cluster
+  flows to all 10 generated calcs (MandelbrotZ2..5, Tricorn,
+  MandelbrotTricorn, BurningShip, MandelbrotBurningShip, MandelbrotPhoenix,
+  UserDslEquation).
+  * `ProcessClusterRebase` (template line 2108) — spatial-partitions the
+    `ConcurrentBag<(int x, int y)>` from the main perturbation pass via
+    a 16×16-cell occupancy grid + 8-conn BFS flood-fill on occupied
+    cells. 1920×1080 frame → ~8K cells; cluster count typically 1-20 per
+    deep-zoom frame. Sequential per-cluster dispatch (inner rebase pass
+    is itself Parallel.For — nesting would oversubscribe threadpool).
+  * `ProcessSingleCluster` (template line 2234) — zoom gate (skip below
+    `QdDirectZoomThreshold = 1e25`, DD-direct cheaper there), bbox-
+    cohesion guard (skip long-thin tendrils with density &lt; 2%), centroid
+    build of shared QD reference orbit via `BuildRebaseRefOrbitQd` (no
+    BLA, no SA), 4-slot LRU cache lookup via `TryGetCachedRebaseOrbit`
+    keyed by centroid within `scale·16` tolerance + maxIt, sample-probe
+    of first 8 pixels (commit only when ≥ 50% land), parallel
+    `TryIterateRebasePixel` over remainder. Failures route to
+    `HpDirectGlitchPixel`.
+  * `UseClusterRebase` default flipped `false → true` this turn. Original
+    off-by-default per commit 6d6db7f "Default UseClusterRebase off until
+    AVX-2 perturbation lane lands"; AVX-2 lane shipped commits cea9cc8 +
+    b0abc68 so the guard is stale. XML doc rewritten to reflect Wave 6
+    closeout state (multi-cluster + cache reduce wasted work, three guards
+    kill bad-fit clusters early).
+  * Smoke: full solution build clean (0 errors, 24 baseline warnings —
+    CS0219 in generator output + AVLN5001 obsolete). 156/156 Server.Tests
+    pass. `--gentest MandelbrotZ2` 0-diff scalar↔AVX2↔GPU↔perturbation↔
+    BLA↔QD-ref-orbit at 4096 pixels. `--saprobe` histogram across
+    1e9 → 1e60 zoom tiers: gen-vs-legacy colour counts within ±10 across
+    SP / QD-PT-SA range (saprobe coords stay on main cardioid so don't
+    fire rebase, but no regression in non-glitch path).
+  * Legacy `Engine/Calculators/MandelbrotCalculator.cs` (canonical
+    `FractalType.Mandelbrot` path) has no cluster rebase at all — glitched
+    lanes in PT4 / PT8 / PT8-512 fall straight to per-pixel `ComputePixelOD
+    /QD/HP`. Filed as 6.1.f1 follow-up: needs SP/DD/QD/OD precision-tier
+    branches, 4 glitch-enqueue sites across the 4 perturbation paths, and
+    OD-aware `BuildRebaseRefOrbitOD` extension (template only handles
+    DD+QD). ~2-3 d when prioritised; non-blocking — canonical Mandelbrot's
+    own per-pixel HP-direct fallback stays correct, just slower than
+    cluster rebase would be on cohesive mini-Julia scenes.
+  * `Docs/Technical/CalculatorGen-Roadmap.md` Item 7 + Known-Issues entry
+    updated to reflect the multi-cluster + cache state (was still
+    documented as MVP single-centroid with multi-cluster as follow-up).
 - 2026-06-23 — Wave 5.9 KIFS folds **bugged + deferred**. All three new folds
   (Octahedron, Dodecahedron, MandelboxRot) render incorrectly. Iteration
   + rebuild + smoke confirmed code path runs; math itself wrong. Three

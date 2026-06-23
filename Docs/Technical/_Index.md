@@ -1,7 +1,8 @@
 # Fracturing Fog — Technical Documentation
 
 This is the contributor / developer entry point. For end-user docs, see the
-[User Index](../User/_Index.md).
+[User Index](../User/_Index.md). For a top-level router that bridges both audiences plus
+the project-wide roadmaps, see [Docs Index](../_Index.md).
 
 Fracturing Fog is a Windows-first, cross-platform-foundation Avalonia application that wraps a
 DirectX 11/12 render surface, a SIMD + double-double + quad-double maths pipeline, an ILGPU GPU
