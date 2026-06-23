@@ -56,15 +56,18 @@ namespace FracturingFog.Hosting
     /// <see cref="OnSurfaceReady"/> the first time its native GPU surface
     /// is available; everything else flows from there.
     /// </summary>
+    // S-X1 (2026-06-23) — IBootstrapHooks.NativeInputBridge + IBootstrapHooks.ColorSampleBridge contracts
+    // live in Hosting/BootstrapHookContracts.cs so FracturingFog.Win can
+    // implement them against a Hosting ProjectReference.
+
     public static class AvaloniaShellBootstrap
     {
-        // ── Win32 plumbing for Inspect click → screen pixel conversion ───────
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct POINT { public int X; public int Y; }
+        // Win-only service hooks live on BootstrapHooks (Hosting.dll) so
+        // FracturingFog.Win can write them through a Hosting ProjectReference.
 
-        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-        private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+        // Read-only accessors for the Win-only installer + diagnostics.
+        public static IGpuSurface? CurrentSurface => s_surface;
+        public static ShellViewModel? CurrentShell => s_shell;
 
         private static IFractalRenderer? s_renderer;
         private static FractalRenderHost? s_renderHost;
@@ -274,31 +277,25 @@ namespace FracturingFog.Hosting
             // handles; the host knows the live renderer and can downcast.
             // Non-D3D11 renderers (Silk GL, Skia CPU) return null so
             // UseGpuCompute stays off silently.
-            s_renderHost.GpuKernelFactory = (renderer, gate) =>
-            {
-                if (renderer is FracturingFog.DirectXRenderer dx
-                    && dx.TryGetD3D11(out var dev, out var ctx))
-                {
-                    return new FracturingFog.Rendering.MandelbrotGpuKernel(dev, ctx, gate);
-                }
-                return null;
-            };
+            //
+            // S-X1 carve: WindowsBootstrap.Install populates BootstrapHooks.GpuKernelFactoryHook
+            // with the DirectXRenderer downcast + MandelbrotGpuKernel construct.
+            // On Linux/macOS the hook is null so UseGpuCompute stays off.
+            if (BootstrapHooks.GpuKernelFactoryHook != null)
+                s_renderHost.GpuKernelFactory = BootstrapHooks.GpuKernelFactoryHook;
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
-            //   * Windows: try Media Foundation Mp4Writer first (zero deps,
-            //     built into Windows 8+). Fall through to ffmpeg if MF init
+            //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer
+            //     via BootstrapHooks.NativeVideoWriterFactoryHook. Returns null when MF init
             //     fails (driver edge case, locked-down Server SKU).
-            //   * Linux/macOS: probe ffmpeg via FfmpegEncoder.FindFfmpeg and
-            //     return an FfmpegVideoWriter when present; null otherwise.
-            // VideoWriterFactory's null return propagates to the UI which
-            // surfaces "ffmpeg required" via the existing IsEnabledForUser
-            // gating + FfmpegSetupDialog rescan flow (Slice 2.5).
+            //   * Linux/macOS: hook is null. Falls through to ffmpeg.
+            //   * Either path: ffmpeg fallback when the native writer rejects.
+            // null return propagates to the UI which surfaces "ffmpeg required"
+            // via the existing IsEnabledForUser gating + FfmpegSetupDialog rescan
+            // flow (Slice 2.5).
             s_renderHost.VideoWriterFactory = (path, w, h) =>
             {
-                if (OperatingSystem.IsWindows())
-                {
-                    try { return new FracturingFog.Mp4Writer(path, w, h); }
-                    catch { /* MF init failed, fall through to ffmpeg */ }
-                }
+                var native = BootstrapHooks.NativeVideoWriterFactoryHook?.Invoke(path, w, h);
+                if (native != null) return native;
                 if (FracturingFog.FfmpegEncoder.IsAvailable())
                 {
                     try
@@ -316,47 +313,51 @@ namespace FracturingFog.Hosting
             s_input = new FractalInputController(viewState);
 
             // The swap-chain HWND composites on top of all Avalonia content, so
-            // the XAML InputSponge never receives a pointer event. Subclass the
-            // native window and forward its mouse messages into the controller.
+            // the XAML InputSponge never receives a pointer event. The native
+            // bridge (Windows: subclass via NativeMouseForwarder) forwards its
+            // mouse messages into the controller.
             // (Runs on the UI thread — OnSurfaceReady fires from the native
             // control's CreateNativeControlCore.)
-            NativeMouseForwarder.Attach(surface.Handle, s_input);
-            // Bridge native HWND right-click release to the Avalonia shell so
-            // MainWindow can open its context menu (Avalonia's own
-            // ContextRequested never fires — WM_RBUTTONUP is swallowed by the
-            // subclass above so Windows never raises WM_CONTEXTMENU).
-            NativeMouseForwarder.ContextMenuRequested = wasDrag =>
+            //
+            // S-X1 carve: on Linux/macOS BootstrapHooks.NativeInputBridge is null. Avalonia
+            // PointerPressed events already bubble through MainWindow's
+            // InputSponge because the GL/Skia render path doesn't composite a
+            // separate native HWND on top of the XAML tree.
+            if (BootstrapHooks.NativeInputBridge != null)
             {
-                try { FracturingFog.UI.Avalonia.AvaloniaShell.ContextMenuRequested?.Invoke(wasDrag); }
-                catch { /* swallow — must not crash the native subclass */ }
-            };
-            // Bridge "mouse-down on render surface" to the shell so it can
-            // pull keyboard focus back onto the InputSponge. Otherwise a
-            // toolbar ComboBox keeps logical focus after the click and
-            // swallows R/M/T/V via its type-ahead. Posted onto the UI
-            // dispatcher so the Focus() call doesn't run inside the Win32
-            // message handler.
-            NativeMouseForwarder.FocusRequested = () =>
-            {
-                try
+                var bridge = BootstrapHooks.NativeInputBridge;
+                bridge.Attach(surface.Handle, s_input);
+                // Bridge native right-click release to the Avalonia shell so
+                // MainWindow can open its context menu (Avalonia's own
+                // ContextRequested never fires — WM_RBUTTONUP is swallowed by
+                // the subclass so Windows never raises WM_CONTEXTMENU).
+                bridge.ContextMenuRequested = wasDrag =>
                 {
-                    Dispatcher.UIThread.Post(() =>
+                    try { FracturingFog.UI.Avalonia.AvaloniaShell.ContextMenuRequested?.Invoke(wasDrag); }
+                    catch { /* swallow — must not crash the native subclass */ }
+                };
+                // Bridge "mouse-down on render surface" to the shell so it can
+                // pull keyboard focus back onto the InputSponge.
+                bridge.FocusRequested = () =>
+                {
+                    try
                     {
-                        try { FracturingFog.UI.Avalonia.AvaloniaShell.RenderSurfaceFocusRequested?.Invoke(); }
-                        catch { /* swallow */ }
-                    });
-                }
-                catch { /* swallow — must not crash the native subclass */ }
-            };
-            // Bridge "left-button down on render surface" to the Toy-Mode
-            // window-drag hook. When inactive the lambda returns false and
-            // the click falls through to the normal Inspect / pan path; when
-            // active MainWindow's hook kicks off an OS window move.
-            NativeMouseForwarder.LeftDragWindowHook = () =>
-            {
-                try { return FracturingFog.UI.Avalonia.AvaloniaShell.LeftDragWindowHook?.Invoke() ?? false; }
-                catch { return false; }
-            };
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            try { FracturingFog.UI.Avalonia.AvaloniaShell.RenderSurfaceFocusRequested?.Invoke(); }
+                            catch { /* swallow */ }
+                        });
+                    }
+                    catch { /* swallow */ }
+                };
+                // Bridge "left-button down on render surface" to the Toy-Mode
+                // window-drag hook.
+                bridge.LeftDragWindowHook = () =>
+                {
+                    try { return FracturingFog.UI.Avalonia.AvaloniaShell.LeftDragWindowHook?.Invoke() ?? false; }
+                    catch { return false; }
+                };
+            }
 
             // ── Services ─────────────────────────────────────────────────
             // Theme service holds a reference to the render host so its
@@ -367,12 +368,12 @@ namespace FracturingFog.Hosting
             // / ReloadThemes flows.
             s_themeService = new HostColorThemeService(s_renderHost);
             var themeService = s_themeService;
-            // Phase X.0 / Slice 0.3b — pass the Windows D3D11 hardware probe
-            // so the Hardware tab can enumerate DXGI adapters + report the
-            // D3D11 feature level. Cross-platform App will install a different
-            // probe (or none) depending on the active backend.
-            var helpProvider = new HostHelpContentProvider(
-                new FracturingFog.Rendering.WindowsD3D11HardwareInfoProvider());
+            // Phase X.0 / Slice 0.3b — Hardware tab probe. Windows installs
+            // WindowsD3D11BootstrapHooks.HardwareInfoProvider via the bootstrap hook so the
+            // tab enumerates DXGI adapters + reports the D3D11 feature level.
+            // Linux/macOS leave BootstrapHooks.HardwareInfoProvider null; the help content
+            // provider falls back to platform-neutral text.
+            var helpProvider = new HostHelpContentProvider(BootstrapHooks.HardwareInfoProvider);
 
             // Stamp program name + version onto the render host so the watermark
             // overlay (FractalOverlayCompositor) renders "Fracturing Fog v0.6.1
@@ -760,14 +761,19 @@ namespace FracturingFog.Hosting
 
             shell.SampleColorRequested += (_, args) =>
             {
-                if (FracturingFog.Views.Editors.DesktopEyedropper.IsActive)
+                // S-X1 carve: desktop pixel sampler is Win-only (low-level
+                // mouse hook + GDI+ CopyFromScreen). When the bridge is null
+                // (Linux/macOS) the request completes immediately without
+                // picking — UI shows the prior swatch unchanged.
+                var bridge = BootstrapHooks.ColorSampleBridge;
+                if (bridge == null || bridge.IsActive)
                 {
                     args.Completion.TrySetResult(true);
                     return;
                 }
                 try
                 {
-                    FracturingFog.Views.Editors.DesktopEyedropper.Begin(
+                    bridge.Begin(
                         picked =>
                         {
                             args.PickedR = picked.R;
@@ -790,35 +796,35 @@ namespace FracturingFog.Hosting
             // starting a pan. Hook stays installed for the program lifetime
             // and is a no-op when no editor is open or Inspect is unchecked.
             //
-            // Phase X.3 / Slice 3.1: `OperatingSystem.IsWindows()` guard so the
-            // CA1416 analyzer can prove `ClientToScreen` is unreachable on
-            // non-Win hosts. NativeMouseForwarder only attaches on Windows
-            // (early-out at NativeMouseForwarder.Attach) so the hook itself
-            // never fires off-Windows in practice — the guard makes the
-            // contract explicit for cross-platform Hosting readers.
-            FracturingFog.Hosting.NativeMouseForwarder.InspectClickHook = (clientX, clientY) =>
+            // S-X1 carve: pixel sampling (Win32 ClientToScreen + screen GetPixel)
+            // lives behind BootstrapHooks.NativeInputBridge.TrySampleClient. The shell-state
+            // routing logic stays here.
+            if (BootstrapHooks.NativeInputBridge != null)
             {
-                if (!OperatingSystem.IsWindows()) return false;
-                var editor = s_shell?.ColorThemeEditor;
-                if (editor == null || !editor.AnyInspectActive) return false;
-                if (s_surface == null) return false;
-                var pt = new POINT { X = clientX, Y = clientY };
-                if (!ClientToScreen(s_surface.Handle, ref pt)) return false;
-                var c = FracturingFog.Views.Editors.DesktopEyedropper.SamplePixel(pt.X, pt.Y);
-                bool routeTo3D = editor.Inspect3DActive;
-                bool routeToBand = editor.InspectBandActive;
-                global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                var bridge = BootstrapHooks.NativeInputBridge;
+                bridge.InspectClickHook = (clientX, clientY) =>
                 {
-                    try
+                    var editor = s_shell?.ColorThemeEditor;
+                    if (editor == null || !editor.AnyInspectActive) return false;
+                    if (s_surface == null) return false;
+                    if (!bridge.TrySampleClient(s_surface.Handle, clientX, clientY,
+                                                 out byte r, out byte g, out byte b))
+                        return false;
+                    bool routeTo3D = editor.Inspect3DActive;
+                    bool routeToBand = editor.InspectBandActive;
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        if (routeToBand) editor.HandleInspectBandColor(c.R, c.G, c.B);
-                        else if (routeTo3D) editor.HandleInspect3DColor(c.R, c.G, c.B);
-                        else editor.HandleInspectColor(c.R, c.G, c.B);
-                    }
-                    catch { }
-                });
-                return true;
-            };
+                        try
+                        {
+                            if (routeToBand) editor.HandleInspectBandColor(r, g, b);
+                            else if (routeTo3D) editor.HandleInspect3DColor(r, g, b);
+                            else editor.HandleInspectColor(r, g, b);
+                        }
+                        catch { }
+                    });
+                    return true;
+                };
+            }
 
             // From-image flow: editor wants the host to extract a palette
             // from a chosen image. Opens ImagePaletteView modally on the UI
@@ -1913,108 +1919,28 @@ namespace FracturingFog.Hosting
         // dialogs already available here (this is a WinExe with UseWindowsForms):
         // they run their own modal message loop and return synchronously.
 
+        // S-X1b — sync dialog helpers delegate to BootstrapHooks.SyncDialogs.
+        // Windows installs a WinForms-backed implementation (runs its own
+        // modal message loop synchronously, no Avalonia dispatcher recursion).
+        // Cross-platform: hook stays null and the helpers no-op (return
+        // null/false) so the editors don't deadlock the dispatcher. Async
+        // dialog parity for cross-plat editors lands in a later slice when
+        // the VM events themselves move to async patterns.
+
         private static string? PromptName(string title, string prompt, string defaultValue)
-        {
-            // Sync prompt for the source-editor VMs (Func<string,string?>).
-            // Use a Windows Forms modal — visual styles are enabled at startup
-            // so it renders with the system theme (no VB6 InputBox legacy
-            // look), and its own message loop runs without recursing the
-            // Avalonia dispatcher (the earlier RunJobs-spin approach
-            // crashed on Cancel/X). Centred on the active Avalonia window
-            // so the dialog appears over the editor that requested it.
-            using var dlg = new System.Windows.Forms.Form
-            {
-                Text = string.IsNullOrEmpty(title) ? "Enter Name" : title,
-                FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
-                StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
-                MaximizeBox = false,
-                MinimizeBox = false,
-                ShowInTaskbar = false,
-                ClientSize = new System.Drawing.Size(420, 124),
-                AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi,
-            };
-
-            var lbl = new System.Windows.Forms.Label
-            {
-                Text = prompt ?? "Enter a name:",
-                Location = new System.Drawing.Point(12, 12),
-                Size = new System.Drawing.Size(396, 24),
-                AutoEllipsis = true,
-            };
-            var box = new System.Windows.Forms.TextBox
-            {
-                Text = defaultValue ?? string.Empty,
-                Location = new System.Drawing.Point(12, 40),
-                Size = new System.Drawing.Size(396, 24),
-                Anchor = System.Windows.Forms.AnchorStyles.Left
-                       | System.Windows.Forms.AnchorStyles.Right
-                       | System.Windows.Forms.AnchorStyles.Top,
-            };
-            var ok = new System.Windows.Forms.Button
-            {
-                Text = "OK",
-                DialogResult = System.Windows.Forms.DialogResult.OK,
-                Location = new System.Drawing.Point(252, 80),
-                Size = new System.Drawing.Size(76, 28),
-            };
-            var cancel = new System.Windows.Forms.Button
-            {
-                Text = "Cancel",
-                DialogResult = System.Windows.Forms.DialogResult.Cancel,
-                Location = new System.Drawing.Point(332, 80),
-                Size = new System.Drawing.Size(76, 28),
-            };
-
-            dlg.Controls.Add(lbl);
-            dlg.Controls.Add(box);
-            dlg.Controls.Add(ok);
-            dlg.Controls.Add(cancel);
-            dlg.AcceptButton = ok;
-            dlg.CancelButton = cancel;
-            dlg.Shown += (_, _) => { box.SelectAll(); box.Focus(); };
-
-            var result = dlg.ShowDialog();
-            if (result != System.Windows.Forms.DialogResult.OK) return null;
-            string r = box.Text;
-            return string.IsNullOrWhiteSpace(r) ? null : r;
-        }
+            => BootstrapHooks.SyncDialogs?.PromptName(title, prompt, defaultValue);
 
         private static bool ConfirmYesNo(string message, string title)
-            => System.Windows.Forms.MessageBox.Show(
-                   message, title,
-                   System.Windows.Forms.MessageBoxButtons.YesNo,
-                   System.Windows.Forms.MessageBoxIcon.Question)
-               == System.Windows.Forms.DialogResult.Yes;
+            => BootstrapHooks.SyncDialogs?.ConfirmYesNo(message, title) ?? false;
 
         private static void ShowInfo(string title, string body, bool isError)
-            => System.Windows.Forms.MessageBox.Show(
-                   body, title,
-                   System.Windows.Forms.MessageBoxButtons.OK,
-                   isError ? System.Windows.Forms.MessageBoxIcon.Error
-                           : System.Windows.Forms.MessageBoxIcon.Information);
+            => BootstrapHooks.SyncDialogs?.ShowInfo(title, body, isError);
 
         private static string? PickOpenSync(string title, string filter)
-        {
-            using var d = new System.Windows.Forms.OpenFileDialog
-            {
-                Title = string.IsNullOrEmpty(title) ? "Open" : title,
-                Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-                CheckFileExists = true,
-            };
-            return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-        }
+            => BootstrapHooks.SyncDialogs?.PickOpenSync(title, filter);
 
         private static string? PickSaveSync(string title, string filter, string defaultName)
-        {
-            using var d = new System.Windows.Forms.SaveFileDialog
-            {
-                Title = string.IsNullOrEmpty(title) ? "Save" : title,
-                Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-                FileName = defaultName ?? string.Empty,
-                OverwritePrompt = true,
-            };
-            return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-        }
+            => BootstrapHooks.SyncDialogs?.PickSaveSync(title, filter, defaultName);
 
         // ── FFmpeg startup prompt ────────────────────────────────────────────
         //
@@ -2605,7 +2531,7 @@ namespace FracturingFog.Hosting
         {
             lock (s_gate)
             {
-                try { NativeMouseForwarder.Detach(); } catch { /* ignore */ }
+                try { BootstrapHooks.NativeInputBridge?.Detach(); } catch { /* ignore */ }
                 try { s_userBulbAnimTimer?.Stop(); } catch { /* ignore */ }
                 s_userBulbAnimTimer = null;
                 try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;

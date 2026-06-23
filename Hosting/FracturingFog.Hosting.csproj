@@ -23,41 +23,18 @@
     <AssemblyName>FracturingFog.Hosting</AssemblyName>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!--
-      Phase X.0 / Slice 0.3a — owns the cross-platform-safe Hosting surface.
-      Files that still depend on Win-only types (DirectXRenderer, Mp4Writer,
-      MandelbrotGpuKernel via the bootstrap; comctl32/user32 via the native
-      mouse forwarder), or on the still-net10.0-windows PaletteBuilder.Lib
-      (the palette extraction host adapter) stay behind in the WinExe until
-      later slices.
-
-      Stays in WinExe (FracturingFogCLD.csproj):
-        * AvaloniaShellBootstrap.cs — installs IGpuKernel + IVideoWriter
-          factories that name DirectXRenderer / Mp4Writer /
-          MandelbrotGpuKernel directly. Future slice introduces a
-          WindowsBootstrap layer that augments a cross-platform base.
-        * NativeMouseForwarder.cs — comctl32 HWND subclass; belongs in
-          FracturingFog.Win in a follow-up slice.
-        * HostPaletteExtractionService.cs — depends on PaletteBuilder.Lib
-          (net10.0-windows TFM today; flipped to net10.0 in Phase X.1).
-
-      Moved into this cross-platform Hosting (Wave 1.C1, 2026-06-20):
-        * FfmpegSetupDialog.cs — Avalonia modal; no Audio / UI.Avalonia.Views
-          / PaletteBuilder dep, so it carves cleanly into this assembly.
-
-      Moved into this cross-platform Hosting (Wave 1.C1 closure, 2026-06-22):
-        * AvaloniaDialogs.cs — full Avalonia dialog suite. Required carve-outs:
-          - FracturingFog.Views.FormHelpers (WinForms-bound) → QD coord codec
-            relocated to FracturingFog.Abstractions.Math.QdCoordCodec.
-          - AvaloniaShellBootstrap.AudioCapabilities → AudioCapabilityProbe.Detect()
-            in the cross-platform Audio assembly.
-          - PaletteBuilder.Views.MainWindow → PaletteBuilder.Lib (already net10.0
-            since Wave 1.8); referenced from this assembly via ProjectReference.
-    -->
-    <Compile Remove="AvaloniaShellBootstrap.cs" />
-    <Compile Remove="HostPaletteExtractionService.cs" />
-  </ItemGroup>
+  <!--
+    S-X1b.6 (2026-06-23) — AvaloniaShellBootstrap.cs flipped into Hosting.dll
+    after the carve is complete:
+      * RendererFactory cross-plat dispatch lives in Engine; the Win-only
+        IntPtr Create + Probe stay in Rendering.D3D as WindowsDxRendererFactory.
+      * WinForms PromptName/ConfirmYesNo/ShowInfo/PickOpenSync/PickSaveSync
+        private helpers replaced by IHostSyncDialogs hook indirection.
+      * UserBulbMeshExporter relocated to Engine\Export\.
+      * HostPaletteExtractionService + PaletteFileIO now owned by Hosting.
+    WinExe consumes the bootstrap across the Hosting ProjectReference; the
+    matching Compile Remove in FracturingFogCLD.csproj drops the duplicate.
+  -->
 
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
@@ -75,6 +52,11 @@
     <ProjectReference Include="..\PaletteBuilder\PaletteBuilder.Lib.csproj">
       <ExcludeAssets>analyzers</ExcludeAssets>
     </ProjectReference>
+    <!--
+      S-X1b.6 — the bootstrap imports FracturingFog.Rendering.Silk for the
+      Silk.NET OpenGL backend it wires into RendererFactory.NonWin32Backend.
+    -->
+    <ProjectReference Include="..\Rendering.Silk\FracturingFog.Rendering.Silk.csproj" />
   </ItemGroup>
 
   <!--
