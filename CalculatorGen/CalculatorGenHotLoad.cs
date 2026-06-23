@@ -301,6 +301,30 @@ public static class CalculatorGenHotLoad
 
         var refs = new List<MetadataReference>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // S-X7.3 (2026-06-23) — TPA fallback for single-file publish. In a
+        // single-file self-contained build, Assembly.Location returns ""
+        // because the assembly was loaded from the embedded bundle, not from
+        // disk. GatherReferences then handed Roslyn an empty reference list
+        // and every compile failed with CS0518 (Predefined types not defined)
+        // because System.Private.CoreLib never made the cut. The TRUSTED_PLATFORM_ASSEMBLIES
+        // AppContext data contains the extracted on-disk paths of every BCL
+        // + dependency assembly (single-file runtimes write them under
+        // %TEMP%/.net/<app>/<hash>/ then load by file). Use that as the
+        // primary source; the AppDomain pass below picks up dynamically-
+        // loaded extras (ILGPU, source-generated calculators).
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa && tpa.Length > 0)
+        {
+            char sep = OperatingSystem.IsWindows() ? ';' : ':';
+            foreach (var path in tpa.Split(sep, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrEmpty(path)) continue;
+                if (!seen.Add(path)) continue;
+                try { refs.Add(MetadataReference.CreateFromFile(path)); }
+                catch { /* skip unreadable */ }
+            }
+        }
+
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;

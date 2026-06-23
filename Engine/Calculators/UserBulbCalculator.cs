@@ -190,17 +190,19 @@ public sealed class UserBulbCalculator : IFractalCalculator
                     : WrapUserSource(source, paramNames);
             }
             var tree = CSharpSyntaxTree.ParseText(code);
-            var refs = new[]
-            {
-                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(Math).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(Complex).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(Vec3).Assembly.Location),
-                MetadataReference.CreateFromFile(
-                    System.IO.Path.Combine(
-                        System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
-                        "System.Runtime.dll")),
-            };
+            // S-X7.6 (2026-06-23) — typeof(T).Assembly.Location returns "" in
+            // single-file self-contained publish (the assembly is loaded from
+            // the embedded bundle, not disk). MetadataReference.CreateFromFile("")
+            // throws ArgumentException "value cannot be an empty string
+            // (Parameter 'path')" which surfaces under the equation entry as
+            // the compile error. Resolve every reference via TPA paths instead;
+            // the runtime extracts those to disk on first launch so they are
+            // always readable.
+            var refs = GatherRefs(
+                typeof(object).Assembly,
+                typeof(Math).Assembly,
+                typeof(Complex).Assembly,
+                typeof(Vec3).Assembly);
             var compilation = CSharpCompilation.Create(
                 "UserBulbDyn_" + Guid.NewGuid().ToString("N"),
                 new[] { tree },
@@ -1435,5 +1437,54 @@ namespace FracturingFogDyn
         if (len < 1e-10) return (0.0, 0.0, 0.0);
         double inv = 1.0 / len;
         return (x * inv, y * inv, z * inv);
+    }
+
+    // S-X7.6 (2026-06-23) — single-file-safe MetadataReference gathering.
+    // Looks up each marker assembly's path via TRUSTED_PLATFORM_ASSEMBLIES
+    // because Assembly.Location is empty when loaded from a single-file
+    // bundle; the legacy MetadataReference.CreateFromFile(asm.Location) path
+    // threw ArgumentException ("value cannot be an empty string (Parameter
+    // 'path')") which surfaced under the UserBulb equation entry. The TPA
+    // map also pulls System.Runtime.dll automatically (no separate runtime-
+    // dir probe needed).
+    private static MetadataReference[] GatherRefs(params System.Reflection.Assembly[] markers)
+    {
+        var tpaByName = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa && tpa.Length > 0)
+        {
+            char sep = OperatingSystem.IsWindows() ? ';' : ':';
+            foreach (var path in tpa.Split(sep, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string name = System.IO.Path.GetFileNameWithoutExtension(path);
+                if (!tpaByName.ContainsKey(name)) tpaByName[name] = path;
+            }
+        }
+
+        var seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var refs = new System.Collections.Generic.List<MetadataReference>();
+
+        void AddPath(string? p)
+        {
+            if (string.IsNullOrEmpty(p)) return;
+            if (!seen.Add(p)) return;
+            try { refs.Add(MetadataReference.CreateFromFile(p)); }
+            catch { /* skip unreadable */ }
+        }
+
+        foreach (var asm in markers)
+        {
+            string? loc = null;
+            try { loc = asm.Location; } catch { }
+            if (string.IsNullOrEmpty(loc))
+                tpaByName.TryGetValue(asm.GetName().Name ?? string.Empty, out loc);
+            AddPath(loc);
+        }
+
+        // System.Runtime is needed even if no marker maps to it (the BCL
+        // forward-shims many primitive types through it).
+        if (tpaByName.TryGetValue("System.Runtime", out string? sysRt)) AddPath(sysRt);
+        if (tpaByName.TryGetValue("netstandard", out string? netStd)) AddPath(netStd);
+
+        return refs.ToArray();
     }
 }

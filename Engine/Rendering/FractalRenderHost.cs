@@ -107,9 +107,11 @@ namespace FracturingFog.Rendering
         // CPU compositor for grid + watermark. Reused across frames. Only
         // touched from the calculator continuation, which serialises with
         // every other consumer behind _d3dGate.
-        private readonly FractalOverlayCompositor _overlay = OperatingSystem.IsWindows()
-            ? new FractalOverlayCompositor()
-            : null!;
+        // S-X7.5 (2026-06-23) — overlay compositor is SkiaSharp cross-plat
+        // (FractalOverlayCompositor.cs Phase X.A / Slice A.4 port). Stale
+        // IsWindows guard from the GDI+ era dropped so Grid + Watermark +
+        // Perf HUD render on Linux too.
+        private readonly FractalOverlayCompositor _overlay = new FractalOverlayCompositor();
 
         // Cached previous frame — re-uploaded on the next trigger so the
         // user sees the stale (correct) image while the next one calculates,
@@ -2207,7 +2209,8 @@ namespace FracturingFog.Rendering
             // overlay survives every backend (Windows HWND swap-chain
             // included, where Avalonia.Media overlays are occluded). Only
             // runs when at least one toggle is on.
-            if ((ShowGrid || ShowWatermark || _selectionBox.HasValue) && OperatingSystem.IsWindows())
+            // S-X7.5 (2026-06-23) — IsWindows gate dropped; compositor is Skia.
+            if (ShowGrid || ShowWatermark || _selectionBox.HasValue)
             {
                 try
                 {
@@ -2227,7 +2230,8 @@ namespace FracturingFog.Rendering
             // Perf HUD: composited last so it sits above grid + watermark.
             // Standalone of those toggles — user wants timings even on a
             // bare frame. Sampled phase data from _perfStats.
-            if (ShowPerfHud && OperatingSystem.IsWindows())
+            // S-X7.5 (2026-06-23) — IsWindows gate dropped; HUD is Skia too.
+            if (ShowPerfHud)
             {
                 try
                 {
@@ -2429,13 +2433,17 @@ namespace FracturingFog.Rendering
         /// (region/theme + program-name sub-line) regardless of the on-screen
         /// <see cref="ShowWatermark"/> toggle — parity with the legacy
         /// WinForms screenshot flow in ImageCapture.cs. No-op when no frame
-        /// has been rendered yet. Windows only — depends on System.Drawing.
+        /// has been rendered yet. Cross-platform via SkiaSharp in
+        /// ImageExport.SavePixelsToFile (Phase X.A / Slice A.7).
         /// </summary>
         public void SaveLastFrameToPng(string path)
         {
             if (_disposed) return;
             if (string.IsNullOrEmpty(path)) return;
-            if (!OperatingSystem.IsWindows()) return;
+            // S-X7.4 (2026-06-23) — IsWindows gate dropped. The underlying
+            // ImageExport.SavePixelsToFile is SkiaSharp end-to-end; the old
+            // gate dates from before that migration when this method called
+            // System.Drawing-bound encoder paths.
 
             // Prefer the pre-overlay snapshot so a fresh watermark renders at
             // file resolution instead of double-stamping the buffer's already-
