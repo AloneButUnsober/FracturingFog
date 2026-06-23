@@ -38,6 +38,19 @@
   </PropertyGroup>
 
   <!--
+    S-X6 (2026-06-23) — Windows manifest. Without supportedOS Id (Win10),
+    Avalonia's Win32NativeControlHost.DumbWindow ctor throws "Unable to
+    create child window for native control host. Application manifest with
+    supported OS list might be required." → GpuSurfaceControl never produces
+    a surface → renderer never wired → window draws nothing → black. Same
+    failure mode the legacy WinExe avoided by shipping app.manifest. Cross-
+    plat TFM (net10.0) ignores the manifest.
+  -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!--
     S-X3 (2026-06-23) — Windows-only ProjectReferences. FracturingFog.Win
     (net10.0-windows) owns WindowsBootstrap.Install which writes the
     Windows-only hook surface onto AvaloniaShellBootstrap (HardwareInfoProvider,

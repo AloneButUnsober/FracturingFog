@@ -134,6 +134,16 @@ public sealed class SilkWin32ContextAdapter : INativeContext, IDisposable
         wglMakeCurrent(_hdc, _glrc);
     }
 
+    // S-X6 (2026-06-23) — releases ctx from the calling thread. WGL ctx is
+    // pinned per-thread; without an explicit release, the next thread that
+    // calls MakeCurrent silently fails (ERROR_BUSY) and subsequent GL calls
+    // return GL_INVALID_OPERATION on a null current ctx.
+    public void ReleaseCurrent()
+    {
+        if (_disposed) return;
+        wglMakeCurrent(IntPtr.Zero, IntPtr.Zero);
+    }
+
     public void SwapBuffers()
     {
         if (_disposed) return;

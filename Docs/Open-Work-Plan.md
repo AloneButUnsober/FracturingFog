@@ -62,7 +62,7 @@ Exit: Release build, FPS up, no visual regression on the 8 stock regions.
 | 1.7 | X.B | Audio backend abstraction | ✅ Shipped — `Abstractions/Audio/IAudioCaptureBackend.cs` + `Audio/NoopAudioBackend.cs` + `Audio.Win/WindowsNAudioBackend.cs` + `Audio/AudioCaptureDriver.cs` |
 | 1.8 | X.1 | Palette demotion | ✅ Shipped — `PaletteBuilder.Lib.csproj` TFM = `net10.0`, QuestPDF replaces PDFsharp-gdi, `System.Drawing.Common` dropped |
 | 1.9 | X.2 | Video export — `IVideoWriter` | ✅ Shipped — `Engine/Imaging/IVideoWriter.cs` + `FfmpegVideoWriter.cs`; `MP4Writer.cs` moved to `Rendering.D3D` Win fragment |
-| 1.10 | X.3 | P/Invoke + IsOSPlatform sweep | ✅ Mostly shipped — `BatchEntry.cs` / `ServerEntry.cs` / `MandelbrotBench.cs` / `MainWindow.ToyDragWindow` all gated `OperatingSystem.IsWindows()`. CA1416 clean. **Open:** ToyDragWindow still uses Win32 `ReleaseCapture`+`WM_NCLBUTTONDOWN` because the NativeMouseForwarder HWND callback can't synthesise `PointerPressedEventArgs`; Linux/macOS Toy-mode drag is parked — file as follow-up |
+| 1.10 | X.3 | P/Invoke + IsOSPlatform sweep | ✅ Shipped — `BatchEntry.cs` / `ServerEntry.cs` / `MandelbrotBench.cs` / `MainWindow.ToyDragWindow` all gated `OperatingSystem.IsWindows()`. CA1416 clean. Linux/macOS Toy-mode drag covered by the Avalonia `BeginMoveDrag` path (see 1.C2); Win+DX retains the `WM_NCLBUTTONDOWN` trick as the fallback for the swap-chain HWND case. |
 | 1.11 | X.4 | Bootstrap polish — `--renderer` CLI | ✅ Shipped — `--renderer dx\|silk\|skia\|auto` in `Program.cs:241`; CI has Linux Wayland leg via `weston --backend=headless` |
 | 1.12 | X.5 | Compute fallback smoke on Apple Silicon | ⚠️ Code path shipped (`AcceleratorProbe` CPU fallback). **Open:** per-RID device-kind smoke assert + manual run on real Apple Silicon |
 | 1.13 | X.6 | Packaging | ✅ Shipped — 5 pubxml profiles under `FracturingFog.App/Properties/PublishProfiles/`; `release.yml` workflow zips Win + AppImage Linux + `.app` macOS, sha256-sums, drafts GH release |
@@ -75,7 +75,7 @@ Exit: Release build, FPS up, no visual regression on the 8 stock regions.
 | 1.S1 | Run `CrossPlatform-SmokeTests.md` manual checks on real Ubuntu 24.04 (X11 + Wayland), macOS Sonoma arm64, Raspberry Pi OS arm64 | 1 d per host |
 | 1.S2 | Tag a `v0.7.0-rc1` to fire `release.yml`; triage drafted artifacts; verify install + launch on each host | 1 d |
 | 1.C1 | Avalonia `FfmpegSetupDialog` rewrite — remove WinForms drag from cross-platform `Hosting/` (currently WinForms shell only) | ✅ Shipped 2026-06-22 |
-| 1.C2 | Toy-mode drag — synth `PointerPressedEventArgs` from NativeMouseForwarder callback so `BeginMoveDrag` works on every RID, retire `ReleaseCapture`+`WM_NCLBUTTONDOWN` | ½ d |
+| 1.C2 | Toy-mode drag cross-platform — `BeginMoveDrag(e)` via InputSponge `PointerPressed` handles Linux/macOS + Windows-under-Skia. Win+DX retains the Win32 `WM_NCLBUTTONDOWN` fallback because the swap-chain HWND swallows Avalonia pointer events before the sponge sees them. | ✅ Shipped 2026-06-23 (S-X5) |
 | 1.C3 | X.5 per-RID device-kind smoke — assert `AcceleratorProbe.Chosen.Kind` matches expectation in `--batch --self-test` | ½ d |
 | 0.5b | Wave 0.5 follow-up — `dotnet run --project Tools/VisualRegression -- record` to populate `baseline.json` | ✅ Shipped 2026-06-22 |
 

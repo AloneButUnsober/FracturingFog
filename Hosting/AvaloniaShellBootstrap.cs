@@ -185,7 +185,7 @@ namespace FracturingFog.Hosting
                     {
                         var ctx = SilkGLXContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     case GpuSurfaceKind.Win32Hwnd:
                     {
@@ -194,7 +194,7 @@ namespace FracturingFog.Hosting
                         // Windows runs short-circuit before this hook fires.
                         var ctx = SilkWin32ContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     case GpuSurfaceKind.CoreAnimationMetalLayer:
                     {
@@ -205,7 +205,7 @@ namespace FracturingFog.Hosting
                         // SilkGLRenderer's 3.3 GLSL shaders compile against.
                         var ctx = SilkCglContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     case GpuSurfaceKind.WaylandSurface:
                     {
@@ -215,7 +215,7 @@ namespace FracturingFog.Hosting
                         // to surface its internal display pointer.
                         var ctx = SilkEglContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     default:
                         Console.Error.WriteLine(

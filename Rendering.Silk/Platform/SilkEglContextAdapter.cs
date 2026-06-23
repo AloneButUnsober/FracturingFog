@@ -154,6 +154,13 @@ public sealed class SilkEglContextAdapter : INativeContext, IDisposable
         eglMakeCurrent(_eglDisplay, _eglSurface, _eglSurface, _eglContext);
     }
 
+    // S-X6 (2026-06-23) — release ctx from calling thread; see SilkWin32 sibling.
+    public void ReleaseCurrent()
+    {
+        if (_disposed) return;
+        eglMakeCurrent(_eglDisplay, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+    }
+
     public void SwapBuffers()
     {
         if (_disposed) return;
