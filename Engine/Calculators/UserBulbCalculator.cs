@@ -1439,52 +1439,6 @@ namespace FracturingFogDyn
         return (x * inv, y * inv, z * inv);
     }
 
-    // S-X7.6 (2026-06-23) — single-file-safe MetadataReference gathering.
-    // Looks up each marker assembly's path via TRUSTED_PLATFORM_ASSEMBLIES
-    // because Assembly.Location is empty when loaded from a single-file
-    // bundle; the legacy MetadataReference.CreateFromFile(asm.Location) path
-    // threw ArgumentException ("value cannot be an empty string (Parameter
-    // 'path')") which surfaced under the UserBulb equation entry. The TPA
-    // map also pulls System.Runtime.dll automatically (no separate runtime-
-    // dir probe needed).
     private static MetadataReference[] GatherRefs(params System.Reflection.Assembly[] markers)
-    {
-        var tpaByName = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa && tpa.Length > 0)
-        {
-            char sep = OperatingSystem.IsWindows() ? ';' : ':';
-            foreach (var path in tpa.Split(sep, StringSplitOptions.RemoveEmptyEntries))
-            {
-                string name = System.IO.Path.GetFileNameWithoutExtension(path);
-                if (!tpaByName.ContainsKey(name)) tpaByName[name] = path;
-            }
-        }
-
-        var seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var refs = new System.Collections.Generic.List<MetadataReference>();
-
-        void AddPath(string? p)
-        {
-            if (string.IsNullOrEmpty(p)) return;
-            if (!seen.Add(p)) return;
-            try { refs.Add(MetadataReference.CreateFromFile(p)); }
-            catch { /* skip unreadable */ }
-        }
-
-        foreach (var asm in markers)
-        {
-            string? loc = null;
-            try { loc = asm.Location; } catch { }
-            if (string.IsNullOrEmpty(loc))
-                tpaByName.TryGetValue(asm.GetName().Name ?? string.Empty, out loc);
-            AddPath(loc);
-        }
-
-        // System.Runtime is needed even if no marker maps to it (the BCL
-        // forward-shims many primitive types through it).
-        if (tpaByName.TryGetValue("System.Runtime", out string? sysRt)) AddPath(sysRt);
-        if (tpaByName.TryGetValue("netstandard", out string? netStd)) AddPath(netStd);
-
-        return refs.ToArray();
-    }
+        => RoslynRefs.GatherRefs(markers);
 }

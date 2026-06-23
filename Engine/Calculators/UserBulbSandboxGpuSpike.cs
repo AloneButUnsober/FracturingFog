@@ -419,23 +419,14 @@ namespace FracturingFogDyn.Spike {{
     {
         error = string.Empty;
         var tree = CSharpSyntaxTree.ParseText(source);
-        var refs = new List<MetadataReference>
-        {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(System.Runtime.CompilerServices.RuntimeHelpers).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Math).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Vec3).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Index1D).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ArrayView<>).Assembly.Location),
-            MetadataReference.CreateFromFile(
-                Path.Combine(
-                    System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
-                    "System.Runtime.dll")),
-            MetadataReference.CreateFromFile(
-                Path.Combine(
-                    System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
-                    "netstandard.dll")),
-        };
+        // S-X7.9 (2026-06-23) — single-file-safe ref gathering via RoslynRefs.
+        var refs = RoslynRefs.GatherRefs(
+            typeof(object).Assembly,
+            typeof(System.Runtime.CompilerServices.RuntimeHelpers).Assembly,
+            typeof(Math).Assembly,
+            typeof(Vec3).Assembly,
+            typeof(Index1D).Assembly,
+            typeof(ArrayView<>).Assembly);
         var compilation = CSharpCompilation.Create(
             asmName + "_" + Guid.NewGuid().ToString("N"),
             new[] { tree },
