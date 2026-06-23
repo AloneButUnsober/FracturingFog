@@ -155,8 +155,11 @@ internal static class Program
         // FractalType enum names from Abstractions/Models/Enums.cs. BatchOptions
         // matches with ignoreCase=true so "BuddhaBrot"/"buddhabrot" both resolve.
         // Magnet1/Magnet2 — note enum literal uses digit, not English suffix.
+        // Adding a new entry here requires a fresh `record` pass — any
+        // missing baseline.json entry surfaces as MISS on the next verify.
         string[] fractals =
         {
+            // 2D escape-time families
             "Mandelbrot",
             "Julia",
             "BurningShip",
@@ -165,13 +168,20 @@ internal static class Program
             "Phoenix",
             "Newton",
             "Nova",
+            "TearDrop",
             "Magnet1",
             "Magnet2",
             "Halley",
             "Secant",
             "Glynn",
             "Spider",
+            // Histogram / orbit-replay families
             "BuddhaBrot",
+            "Nebulabrot",
+            "AntiBuddhabrot",
+            "AntiNebulabrot",
+            "Logistic",
+            // Procedural / stochastic
             "IFS",
             "LSystem",
             "StrangeAttractor",
@@ -179,6 +189,21 @@ internal static class Program
             "Apollonian",
             "Dla",
             "Flame",
+            // 3D raymarchers
+            "Mandelbulb",
+            "Mandelbox",
+            "Kifs",
+            "QuaternionJulia",
+            "QuaternionMandelbrot",
+            "BicomplexMandelbrot",
+            "Kleinian",
+            // CalcGen-generated demo family
+            "GeneratedMandelbrotZ2",
+            "GeneratedMandelbrotZ3",
+            "GeneratedMandelbrotZ4",
+            "GeneratedMandelbrotZ5",
+            "GeneratedTricorn",
+            "GeneratedBurningShip",
         };
 
         var cases = new List<Case>();

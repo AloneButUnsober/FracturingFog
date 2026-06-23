@@ -105,6 +105,44 @@ namespace FracturingFog.Models
                 new() { { 'F', "+F++F----F--F++F++F-" } },
                 36.0,
                 4),
+
+            // Wave 5.10 — five more classic L-systems.
+
+            ["Crystal"] = new LSystemDefinition(
+                "F+F+F+F",
+                new() { { 'F', "FF+F++F+F" } },
+                90.0,
+                4),
+
+            ["Quadratic Koch Island"] = new LSystemDefinition(
+                "F+F+F+F",
+                new() { { 'F', "F-F+F+FFF-F-F+F" } },
+                90.0,
+                2),
+
+            ["Twindragon"] = new LSystemDefinition(
+                "FX+FX+",
+                new() {
+                    { 'X', "X+YF" },
+                    { 'Y', "FX-Y" },
+                },
+                90.0,
+                10),
+
+            ["Bush"] = new LSystemDefinition(
+                "F",
+                new() { { 'F', "FF-[-F+F+F]+[+F-F-F]" } },
+                22.5,
+                4,
+                StartAngleDegrees: 90.0),
+
+            ["Sierpinski Carpet"] = new LSystemDefinition(
+                "F+F+F+F",
+                new() {
+                    { 'F', "FF+F+F+F+FF" },
+                },
+                90.0,
+                3),
         };
     }
 }
