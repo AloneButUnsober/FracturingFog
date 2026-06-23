@@ -23,6 +23,10 @@ using System.Reflection;
 
 using Microsoft.CodeAnalysis;
 
+// Fully-qualified System.Reflection.Metadata.AssemblyExtensions.TryGetRawMetadata
+// call avoids the System.Reflection.AssemblyExtensions ambiguity (System.Reflection
+// namespace also has an AssemblyExtensions type).
+
 namespace FracturingFog.Calculators;
 
 internal static class RoslynRefs
@@ -93,9 +97,47 @@ internal static class RoslynRefs
         if (tpaByName.TryGetValue("netstandard", out string? netStd)) AddPath(netStd);
         if (tpaByName.TryGetValue("System.Private.CoreLib", out string? coreLib)) AddPath(coreLib);
 
+        // S-X7.11 (2026-06-23) — single-file bundle fallback. .NET 10 single-
+        // file publish (the default for FracturingFog.App on every RID) keeps
+        // managed DLLs inside the bundle exe rather than extracting them to
+        // disk, so TPA is empty and Assembly.Location returns "" for every
+        // loaded assembly. AssemblyExtensions.TryGetRawMetadata pulls the
+        // metadata blob straight out of the in-memory bundle; we wrap that
+        // in a ModuleMetadata→AssemblyMetadata→MetadataReference chain so
+        // Roslyn can compile without a disk-resident PE.
+        int bundleAdded = 0, bundleFailed = 0;
+        if (includeAllTpa || markers.Length > 0)
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (asm.IsDynamic) continue;
+                string? simpleName = asm.GetName().Name;
+                if (string.IsNullOrEmpty(simpleName)) continue;
+                if (!seen.Add("bundle:" + simpleName)) continue;
+                try
+                {
+                    unsafe
+                    {
+                        if (System.Reflection.Metadata.AssemblyExtensions.TryGetRawMetadata(asm, out byte* blob, out int length)
+                            && blob != null && length > 0)
+                        {
+                            var module = ModuleMetadata.CreateFromMetadata((IntPtr)blob, length);
+                            refs.Add(AssemblyMetadata.Create(module).GetReference());
+                            bundleAdded++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    bundleFailed++;
+                    if (s_diag) Console.Error.WriteLine($"[RoslynRefs] bundle skip {simpleName}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
         if (s_diag)
         {
-            Console.Error.WriteLine($"[RoslynRefs] refs={refs.Count} tpa={tpaPaths.Count} failed={failed} markers={markers.Length} allTpa={includeAllTpa}");
+            Console.Error.WriteLine($"[RoslynRefs] refs={refs.Count} tpa={tpaPaths.Count} failed={failed} markers={markers.Length} bundle(added={bundleAdded},failed={bundleFailed}) allTpa={includeAllTpa}");
             Console.Error.Flush();
         }
 

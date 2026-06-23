@@ -142,6 +142,32 @@ public static class ColorGenHotLoad
             try { refs.Add(MetadataReference.CreateFromFile(loc)); }
             catch { /* best-effort */ }
         }
+
+        // S-X7.11 (2026-06-23) — single-file bundle fallback. See
+        // CalculatorGenHotLoad.GatherReferences for the full rationale;
+        // in short, .NET 10 single-file publish keeps managed DLLs in the
+        // bundle exe so TPA + Assembly.Location are useless. Pull metadata
+        // straight from the in-memory bundle via AssemblyExtensions.TryGetRawMetadata.
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (asm.IsDynamic) continue;
+            string? simpleName = asm.GetName().Name;
+            if (string.IsNullOrEmpty(simpleName)) continue;
+            if (!seen.Add("bundle:" + simpleName)) continue;
+            try
+            {
+                unsafe
+                {
+                    if (System.Reflection.Metadata.AssemblyExtensions.TryGetRawMetadata(asm, out byte* blob, out int length)
+                        && blob != null && length > 0)
+                    {
+                        var module = ModuleMetadata.CreateFromMetadata((IntPtr)blob, length);
+                        refs.Add(AssemblyMetadata.Create(module).GetReference());
+                    }
+                }
+            }
+            catch { /* best-effort */ }
+        }
         return refs;
     }
 }

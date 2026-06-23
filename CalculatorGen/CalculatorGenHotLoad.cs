@@ -343,9 +343,43 @@ public static class CalculatorGenHotLoad
             catch { adSkipped++; }
         }
 
+        // S-X7.11 (2026-06-23) — single-file bundle fallback. TPA is empty
+        // and Assembly.Location is "" for every loaded assembly when the
+        // app is published as single-file (.NET 10 default for the cross-
+        // plat App). AssemblyExtensions.TryGetRawMetadata pulls metadata
+        // straight out of the in-memory bundle so Roslyn can compile
+        // without a disk-resident PE. See RoslynRefs.cs for the matching
+        // path in the Engine-side hot-loaders.
+        int bundleAdded = 0, bundleFailed = 0;
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (asm.IsDynamic) continue;
+            string? simpleName = asm.GetName().Name;
+            if (string.IsNullOrEmpty(simpleName)) continue;
+            if (!seen.Add("bundle:" + simpleName)) continue;
+            try
+            {
+                unsafe
+                {
+                    if (System.Reflection.Metadata.AssemblyExtensions.TryGetRawMetadata(asm, out byte* blob, out int length)
+                        && blob != null && length > 0)
+                    {
+                        var module = ModuleMetadata.CreateFromMetadata((IntPtr)blob, length);
+                        refs.Add(AssemblyMetadata.Create(module).GetReference());
+                        bundleAdded++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                bundleFailed++;
+                if (s_diag) Console.Error.WriteLine($"[CalcGenHotLoad] bundle skip {simpleName}: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
         if (s_diag)
         {
-            Console.Error.WriteLine($"[CalcGenHotLoad] refs total={refs.Count} TPA(total={tpaTotal},added={tpaAdded},failed={tpaFailed}) AppDomain(added={adAdded},skipped={adSkipped})");
+            Console.Error.WriteLine($"[CalcGenHotLoad] refs total={refs.Count} TPA(total={tpaTotal},added={tpaAdded},failed={tpaFailed}) AppDomain(added={adAdded},skipped={adSkipped}) bundle(added={bundleAdded},failed={bundleFailed})");
             Console.Error.Flush();
         }
         return refs;
