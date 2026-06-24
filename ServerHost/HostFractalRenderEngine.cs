@@ -6,12 +6,12 @@
 
 using System;
 using System.Diagnostics;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Hosting;
 using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -372,18 +372,26 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         Directory.CreateDirectory(pngFolder);
         bool keepFrames = req.KeepFrames ?? (losslessPreset == null);
 
-        Mp4Writer? mp4 = null;
+        // S-X7.1b (2026-06-23) — go through BootstrapHooks.NativeVideoWriterFactoryHook
+        // instead of constructing Mp4Writer directly. On Windows the hook is
+        // wired to Media Foundation via FracturingFog.Win.WindowsBootstrap;
+        // on Linux/macOS it stays null and we fall through to the ffmpeg PNG-
+        // sequence encode so the server still produces an .mp4 without a
+        // Windows-only dep. The IVideoWriter abstraction means this file no
+        // longer references Mp4Writer (or Rendering.D3D) at all, so it can
+        // compile into the cross-plat FracturingFog.App.
+        IVideoWriter? mp4 = null;
         if (losslessPreset == null)
         {
-            // Client asked for video mode. A silent fallback to "PNG
-            // sequence only" leaves the documented .mp4 path empty —
-            // client reads it and hits FileNotFound. Surface the real
-            // reason now so the user sees something actionable.
-            try { mp4 = new Mp4Writer(finalVideoPath, outW, outH, req.VideoFps, 1); }
-            catch (Exception ex)
+            mp4 = BootstrapHooks.NativeVideoWriterFactoryHook?.Invoke(finalVideoPath, outW, outH);
+            if (mp4 == null)
             {
-                throw new ServerProtocolException("render-failed",
-                    $"Mp4Writer init failed: {ex.Message}. Use --lossless h264 to force ffmpeg encode instead.");
+                if (!FfmpegEncoder.IsAvailable())
+                    throw new ServerProtocolException("ffmpeg-missing",
+                        "No native Mp4Writer (non-Windows host) and ffmpeg not on PATH; " +
+                        "install ffmpeg or run --lossless h264.");
+                losslessPreset = FfmpegEncoder.Preset.HighQualityH264Mp4;
+                log.Info("native Mp4Writer unavailable → ffmpeg HighQualityH264Mp4");
             }
         }
 
@@ -397,7 +405,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         // so the awaiting caller (FFServer dispatch) does not block its
         // own context. ffmpeg encode is launched as a child process and
         // is awaited natively below — no more GetAwaiter().GetResult().
-        Mp4Writer? mp4Local = mp4;
+        IVideoWriter? mp4Local = mp4;
         int framesWritten = await Task.Run(() =>
         {
             int written = 0;
@@ -432,8 +440,12 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                     }
 
                     string framePath = Path.Combine(pngFolder, $"frame_{f + 1:D6}.png");
-                    ImageExportGdi.SavePixelsToFile(
-                        buffer, outW, outH, framePath, ImageFormat.Png,
+                    // S-X7.1b (2026-06-23) — cross-plat Skia PNG via ImageExport.
+                    // ImageExportGdi lives in FracturingFog.Win and is Win-only;
+                    // ImageExport.SavePixelsToFile is the Skia path used everywhere
+                    // else (FractalRenderHost.SaveLastFrameToPng etc.).
+                    ImageExport.SavePixelsToFile(
+                        buffer, outW, outH, framePath, ImageFileFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
                     written++;

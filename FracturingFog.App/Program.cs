@@ -81,29 +81,26 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--ubspike")
             return FracturingFog.Calculators.UserBulbSandboxGpuSpike.Run();
 
-        // S-X7.1 (2026-06-23) — headless JSON-RPC server flag. Without this
-        // dispatch the child process re-entered AvaloniaShell.Run and opened
-        // a second GUI window. Full server (ServerEntry + HostFractalRenderEngine)
-        // still drags System.Drawing.Imaging via PosterRenderer PNG export, so
-        // wire-up is gated to Windows for now; the legacy WinExe carries the
-        // running server until HostFractalRenderEngine ports to SkiaSharp.
-        // Linux/macOS: exit early with a clear error rather than silently
-        // opening a duplicate GUI shell.
+        // S-X3 (2026-06-23) — Windows-only services install via direct call
+        // on the net10.0-windows TFM. The MSBuild WINDOWS constant is defined
+        // only when TargetFramework ends with -windows; the net10.0 TFM
+        // compiles this block out entirely, so the cross-plat publish has
+        // no reference to FracturingFog.Win at all.
+        //
+        // S-X7.1b (2026-06-23) — moved above the --server check so the
+        // headless server gets the Win hooks too (Mp4Writer factory, etc).
+        // Both the GUI shell and the server path consume the bootstrap hook
+        // surface, so the install needs to run before either entry point.
+#if WINDOWS
+        FracturingFog.Win.WindowsBootstrap.Install();
+#endif
+
+        // S-X7.1b (2026-06-23) — headless JSON-RPC server, now cross-plat.
+        // ServerEntry + HostFractalRenderEngine ported off System.Drawing /
+        // Media Foundation onto ImageExport (Skia) + BootstrapHooks.NativeVideoWriterFactoryHook
+        // (Mp4Writer on Win, ffmpeg fallback on Linux/macOS).
         if (args.Length > 0 && args[0] == "--server")
-        {
-            if (!OperatingSystem.IsWindows())
-            {
-                Console.Error.WriteLine(
-                    "FracturingFog: --server is not yet supported on this platform. " +
-                    "Server-side PosterRenderer still depends on System.Drawing.Imaging; " +
-                    "cross-platform port is tracked as S-X7.1 follow-up.");
-                return 2;
-            }
-            Console.Error.WriteLine(
-                "FracturingFog: --server requires the legacy WinExe (FracturingFog.exe). " +
-                "Launch via 'FracturingFog.exe --server' instead of FracturingFog.App.");
-            return 2;
-        }
+            return FracturingFog.ServerHost.ServerEntry.Run(args);
 
         // Phase X.4 / Slice 4.1 — --renderer override. Default is
         // RendererBackend.Auto (DX on Win, Silk on Linux/macOS, picked by
@@ -139,18 +136,8 @@ internal static class Program
             break;
         }
 
-        // S-X3 (2026-06-23) — Windows-only services install via direct call
-        // on the net10.0-windows TFM. The MSBuild WINDOWS constant is defined
-        // only when TargetFramework ends with -windows; the net10.0 TFM
-        // compiles this block out entirely, so the cross-plat publish has
-        // no reference to FracturingFog.Win at all. ColorSampleBridge +
-        // SyncDialogs remain wired by the legacy WinExe (their backends still
-        // live in the WinForms-bound WinExe) — moving those into
-        // FracturingFog.Win is a later slice.
-#if WINDOWS
-        FracturingFog.Win.WindowsBootstrap.Install();
-#endif
-
+        // S-X7.1b — WindowsBootstrap.Install moved above the --server check
+        // (see comment further up); no second install needed here.
         return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
             args,
             FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);

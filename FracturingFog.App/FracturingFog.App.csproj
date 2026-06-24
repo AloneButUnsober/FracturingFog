@@ -81,6 +81,25 @@
       and the silk-smoke entry point. Cross-plat net10.0; safe everywhere.
     -->
     <ProjectReference Include="..\Rendering.Silk\FracturingFog.Rendering.Silk.csproj" />
+
+    <!--
+      S-X7.1b (2026-06-23) — headless JSON-RPC server now cross-plat. HostFractalRenderEngine
+      and ServerEntry are source-linked below; the protocol + transport ship
+      from FracturingFog.Server.
+    -->
+    <ProjectReference Include="..\Server\FracturingFog.Server.csproj" />
+  </ItemGroup>
+
+  <!--
+    S-X7.1b (2026-06-23) — server entry + render engine sources linked from
+    ServerHost/. Lives in the legacy WinExe project root which globs them via
+    root *.cs; linking is lower-friction than carving a new project for two
+    files. HostFractalRenderEngine routes through BootstrapHooks.NativeVideoWriterFactoryHook
+    + ImageExport (SkiaSharp) so it has zero Win-only deps now.
+  -->
+  <ItemGroup>
+    <Compile Include="..\ServerHost\ServerEntry.cs" Link="ServerEntry.cs" />
+    <Compile Include="..\ServerHost\HostFractalRenderEngine.cs" Link="HostFractalRenderEngine.cs" />
   </ItemGroup>
 
   <!--
