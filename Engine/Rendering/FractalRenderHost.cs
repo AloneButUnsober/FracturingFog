@@ -2139,10 +2139,27 @@ namespace FracturingFog.Rendering
         /// followed by an upload to the renderer. Grid + watermark overlays
         /// are intentionally omitted in this host — they will be drawn by
         /// the Avalonia shell with Avalonia.Media in step F.</summary>
+        // S-X9 (2026-06-27) — leak diagnostic. Set FF_LEAK_DEBUG=1 to log
+        // managed-heap + working-set deltas per upload frame so we can tell
+        // whether the user-reported climb is .NET-side (managed bytes climb,
+        // chase allocations) or native-side (WS climbs but managed stays
+        // flat, chase Mesa / Avalonia / Skia). Logs every N frames to keep
+        // output legible; N defaults to 30 (≈1 s at 30 FPS) but overridable
+        // via FF_LEAK_DEBUG_EVERY=<n>.
+        private static readonly bool s_leakDiag =
+            string.Equals(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG"), "1", StringComparison.Ordinal);
+        private static readonly int s_leakDiagEvery =
+            int.TryParse(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG_EVERY"), out var __n) && __n > 0 ? __n : 30;
+        private long _leakDiagFrame;
+        private long _leakDiagBaselineManagedBytes;
+        private long _leakDiagBaselineWorkingSet;
+        private int _leakDiagBaselineGen0, _leakDiagBaselineGen1, _leakDiagBaselineGen2;
+
         private void UploadProcessedBuffer(uint[] src, int w, int h)
         {
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
+            if (s_leakDiag) LeakDiagSample(w, h);
             lock (_uploadGate)
             {
 
@@ -2308,6 +2325,43 @@ namespace FracturingFog.Rendering
             _lastUploadedWidth = w;
             _lastUploadedHeight = h;
             } // _uploadGate
+        }
+
+        // S-X9 (2026-06-27) — see UploadProcessedBuffer for activation gate.
+        // Reports managed-heap bytes, working set, and per-generation GC
+        // collection counts. Frame-0 snapshot is the baseline; subsequent
+        // logs print delta-from-baseline so a monotonic climb is obvious at
+        // a glance. Reads Process.WorkingSet64 every sample (cheap on Linux,
+        // ~1 µs syscall on Windows — negligible vs the upload itself).
+        private void LeakDiagSample(int w, int h)
+        {
+            long frame = System.Threading.Interlocked.Increment(ref _leakDiagFrame) - 1;
+            if (frame > 0 && (frame % s_leakDiagEvery) != 0) return;
+
+            long managed = GC.GetTotalMemory(forceFullCollection: false);
+            int g0 = GC.CollectionCount(0);
+            int g1 = GC.CollectionCount(1);
+            int g2 = GC.CollectionCount(2);
+            long ws;
+            try { ws = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64; }
+            catch { ws = -1; }
+
+            if (frame == 0)
+            {
+                _leakDiagBaselineManagedBytes = managed;
+                _leakDiagBaselineWorkingSet = ws;
+                _leakDiagBaselineGen0 = g0;
+                _leakDiagBaselineGen1 = g1;
+                _leakDiagBaselineGen2 = g2;
+                Console.Error.WriteLine(
+                    $"[FF_LEAK] baseline f=0 {w}x{h} managed={managed / (1024 * 1024)}MB ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB g0={g0} g1={g1} g2={g2}");
+                return;
+            }
+
+            long dManaged = managed - _leakDiagBaselineManagedBytes;
+            long dWs = ws < 0 ? 0 : ws - _leakDiagBaselineWorkingSet;
+            Console.Error.WriteLine(
+                $"[FF_LEAK] f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB (Δ{dManaged / (1024 * 1024):+#;-#;0}) ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB (Δ{dWs / (1024 * 1024):+#;-#;0}) g0={g0 - _leakDiagBaselineGen0} g1={g1 - _leakDiagBaselineGen1} g2={g2 - _leakDiagBaselineGen2}");
         }
 
         /// <summary>
