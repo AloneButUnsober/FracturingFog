@@ -131,4 +131,12 @@ public sealed class RenderRequestDto
     /// client override even when <see cref="UseClientWatermark"/> is true.</summary>
     [JsonPropertyName("clientWatermarkJson")]
     public string? ClientWatermarkJson { get; set; }
+
+    /// <summary>D-2b — cluster tile renders set this so the engine emits
+    /// raw fractal pixels with no watermark / sub-text / region branding
+    /// composited. The master adds the single watermark once on the
+    /// merged artifact (D-3+). Single-server renders leave it false so
+    /// existing decoration behaviour is unchanged.</summary>
+    [JsonPropertyName("suppressDecorations")]
+    public bool SuppressDecorations { get; set; }
 }

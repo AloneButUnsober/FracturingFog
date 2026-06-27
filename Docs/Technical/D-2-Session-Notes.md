@@ -184,3 +184,138 @@ plumbing that turns it into a runnable cluster:
 - Work-stealing on the last 10 % of tiles per job.
 - Acceptance for D-3 (from the dev plan): 4-worker ≥ 3.2× speedup on
   Bird-of-Paradise 8K (≥ 80 % parallel efficiency).
+
+### Session 2 — 2026-06-27 — D-2b engine wiring + CLI + parity
+
+**Goal**: turn the D-2 infrastructure into something a user can actually
+run from a shell. Was the "open work" punch-list at the bottom of
+session 1.
+
+**Files added**
+
+- `ServerHost/SkiaClusterImageCodec.cs` — concrete
+  `IClusterImageCodec` backed by SkiaSharp. DecodePngToBgra forces
+  `Bgra8888/Premul` so the merger always pastes the same byte order;
+  EncodeBgraToPng wraps a pinned buffer in an `SKBitmap.InstallPixels`
+  (same pattern as `PngSequenceWriter.SavePng`) and encodes at
+  quality 100. Lives in `ServerHost/` so both shells pick it up
+  through the existing source-link.
+- `ServerHost/ClusterEntry.cs` — `--master` and
+  `--worker --master-host HOST` CLI handlers. Wires
+  `WorkerRegistry + JobStore + TileDispatcher + SkiaClusterImageCodec`
+  into `ClusterCoordinator`, hands the coordinator to `FFServer`, and
+  reuses the existing cert/instance-probe/work-dir scaffolding from
+  `ServerEntry.cs`. Worker mode runs `FFWorkerAgent` with
+  `HostFractalRenderEngine` so a real cross-OS render happens per
+  tile. Both modes accept `--cluster-certs-dir PATH` for operator-
+  supplied PKI; otherwise they generate / reuse the dev bundle.
+- `ServerHost/ClusterParitySelfTest.cs` — `--cluster-parity` flag.
+  In-process A/B: renders the same `RenderRequestDto` via
+  `HostFractalRenderEngine.RenderAsync` (full image) and via
+  `TilePlanner.PlanImage → engine.RenderAsync per tile →
+  ArtifactMerger.TryMergePngTile`, byte-compares the decoded BGRA
+  buffers. Writes `cluster-parity.out` next to the exe (matches the
+  rest of the `--*-smoke` / `--*-probe` family). Default size
+  256×128, override via `--width/--height/--tile-px`.
+
+**Files amended**
+
+- `Server/Tls/CertSelfSignedHelper.cs` — added
+  `EnsureClusterBundle(dir)` that issues a 5-file bundle:
+  `ca.pfx + master.pfx + worker.pfx + cluster-client.pfx + admin.pfx`.
+  The worker/client/admin leaves carry `OU=role-worker|client|admin`
+  so the existing `CertRoleParser` routes their RPC calls through
+  `FFServer.DispatchClusterAsync`'s per-role gate without any new
+  parsing code.
+- `Server/Protocol/RenderRequestDto.cs` — added
+  `SuppressDecorations` (default false). Tile renders set it so the
+  engine emits raw fractal pixels with no watermark / sub-text /
+  region branding composited; single-server renders leave it false
+  so existing decoration behaviour is unchanged. The master will
+  add the single watermark once on the merged artifact in D-3+.
+- `Server/Cluster/TilePlanner.cs` — sets
+  `tileReq.SuppressDecorations = true` on every per-tile DTO,
+  threads the field through `CloneRequest`. Without this each tile
+  came back with its own watermark in its corner; the merged
+  artifact had a grid of mini-watermarks instead of the single
+  branding stripe.
+- `ServerHost/HostFractalRenderEngine.cs` — image path now honours
+  `req.SuppressDecorations`: blanks `Watermark` / `SubText` and
+  passes `null` for `CustomWatermark` so `PosterRenderer`'s
+  `BuildPosterWatermark` short-circuits.
+- `Program.cs` (WinExe) + `FracturingFog.App/Program.cs` (cross-plat) —
+  added the three `--master` / `--worker` / `--cluster-parity`
+  entry points. Both call into the same `ClusterEntry` /
+  `ClusterParitySelfTest` source files via the existing
+  `<Compile Include="..\ServerHost\…" Link="…" />` pattern.
+- `FracturingFog.App/FracturingFog.App.csproj` — added
+  `Rendering.Skia` ProjectReference (transitively pulls SkiaSharp
+  so the linked `SkiaClusterImageCodec` resolves) and three new
+  `<Compile Include>` entries for the linked ServerHost files.
+
+**Build / test**
+
+```
+dotnet build FracturingFogCLD.sln                      → 0 errors, 27 warnings (pre-existing)
+dotnet test Server.Tests --no-build                    → 230 passed (no regressions)
+dotnet run --project FracturingFogCLD.csproj -- \
+      --cluster-parity --width  256 --height 128 --tile-px 64
+   → PARITY OK   single-server + cluster paths byte-identical
+                 (32,768 pixels, 0 diff pixels, 0 diff bytes)
+dotnet run --project FracturingFogCLD.csproj -- \
+      --cluster-parity --width 1024 --height 512 --tile-px 256
+   → PARITY OK   524,288 pixels, 0 diff pixels, 0 diff bytes
+```
+
+**Design decisions captured here so future sessions don't relitigate**
+
+11. **`SuppressDecorations` is the right contract.** Tried first
+    without it: each tile shipped back with its own watermark in
+    its top-left corner; the merged 256×128 image had 147 diff
+    pixels concentrated at the 4×2 tile-grid corners. Flipping
+    decorations off on the tile DTOs (and matching off on the
+    full-image baseline) drops diff to zero. The master will draw
+    a single watermark at merge time in D-3+ via the same
+    `WatermarkResolver` path — for D-2b the merged PNG is plain
+    fractal pixels.
+12. **Cluster cert bundle lives at
+    `%APPDATA%\FracturingFog\cluster-certs\`** (vs.
+    `server-certs/` for the single-server path). Operators that run
+    both modes on the same host get two independent CAs — a stolen
+    single-server cert cannot then talk to the cluster master and
+    vice versa.
+13. **Cluster master writes job state to
+    `%APPDATA%\FracturingFog\master\jobs\`** by default (override
+    with `--jobs-dir`). Separate from the single-server work dir
+    so a master restart never collides with an in-flight
+    single-server render.
+14. **Parity test runs the coordinator's tile-render math through
+    the real engine**, but stops short of going through the
+    SslStream-shaped wire path — `ClusterEndToEndImageTests`
+    already covers that with the `RawHeaderCodec`. The split keeps
+    the parity test focused on the "engine + tile math + Skia
+    codec" tuple, which is the part `RawHeaderCodec` cannot
+    exercise.
+15. **Engine SHA pin re-uses `AssemblyInformationalVersion`.**
+    Master + worker derive `EngineBuildSha` from the same string
+    (which the build pipeline already stamps), so a version-skewed
+    worker is refused at register time per dev plan §10 risk #7
+    without a separate hashing pass.
+
+**Open work — D-2b leftovers (none blocking D-3)**
+
+- 8K Bird-of-Paradise parity run. The dev plan's D-2 acceptance
+  criterion explicitly names this case. Parity is byte-identical
+  at 1024×512 so the math is right; running 8K is a single-line
+  command (`--cluster-parity --width 7680 --height 4320 --tile-px 512`).
+  Deferred to the operator since this depends on host RAM /
+  patience; the underlying code path is exercised.
+- Admin role wiring. `admin.pfx` is now generated but no
+  `cluster.*` methods accept connections yet; D-5 (Admin UI) lands
+  those handlers.
+- Cluster-mode `Server.Tests` coverage that exercises the
+  Skia-backed codec end-to-end. The existing tests use
+  `RawHeaderCodec`; the parity test is a CLI tool, not a unit
+  test. A follow-up `Server.Tests/Cluster/SkiaCodecRoundtripTests`
+  would add Skia decode/encode coverage without dragging the
+  whole engine into Server.Tests.

@@ -135,6 +135,11 @@ public static class TilePlanner
                 // job and writing to a shared file would race. Pinning
                 // null lets the engine auto-derive a per-tile workdir name.
                 tileReq.OutputName = null;
+                // D-2b — tiles produce raw fractal pixels; watermark /
+                // sub-text / region-branding land once at merge time on
+                // the master (D-3+). Per-tile decoration would yield a
+                // grid of mini-watermarks in the merged artifact.
+                tileReq.SuppressDecorations = true;
 
                 tiles.Add(new TileJobDto
                 {
@@ -217,6 +222,7 @@ public static class TilePlanner
             PosterPortrait       = src.PosterPortrait,
             UseClientWatermark   = src.UseClientWatermark,
             ClientWatermarkJson  = src.ClientWatermarkJson,
+            SuppressDecorations  = src.SuppressDecorations,
         };
     }
 
