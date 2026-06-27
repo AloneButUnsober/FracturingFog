@@ -46,6 +46,13 @@ public sealed class FFWorkerAgent : IAsyncDisposable
         /// useful for connection-only smoke tests.</summary>
         public IFractalRenderEngine? Engine { get; init; }
 
+        /// <summary>Optional image codec. When set, the worker decodes the
+        /// engine's PNG output into raw BGRA and ships it via the binary
+        /// envelope trailer (D-3 raw-RGBA path) — saves a base64 expansion
+        /// on the wire and a decode on the master. When null, the worker
+        /// falls back to D-2 base64-PNG delivery.</summary>
+        public IClusterImageCodec? Codec { get; init; }
+
         /// <summary>Workdir root for per-tile scratch files. Each tile
         /// gets a fresh subdirectory; the engine writes a PNG there
         /// which the worker reads, ships, then deletes.</summary>
@@ -286,20 +293,53 @@ public sealed class FFWorkerAgent : IAsyncDisposable
             return;
         }
 
+        // D-3: when a codec is wired, decode the engine's PNG into raw
+        // BGRA and ship it via the binary envelope trailer. Saves the
+        // 33 % base64 expansion + a JSON-string traversal at the master.
+        // The master's ArtifactMerger already accepts raw BGRA via
+        // TryMergeRgbaTile, so no merger change is needed.
+        byte[] wireBytes;
+        string payloadKind;
+        if (_opts.Codec != null)
+        {
+            try
+            {
+                wireBytes = _opts.Codec.DecodePngToBgra(payload, out int dw, out int dh);
+                if (dw != tile.Render.Width || dh != tile.Render.Height)
+                    throw new InvalidDataException(
+                        $"codec decoded {dw}x{dh}, expected {tile.Render.Width}x{tile.Render.Height}");
+                payloadKind = "rgba";
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[worker] codec decode failed, falling back to PNG: {ex.Message}");
+                wireBytes = payload;
+                payloadKind = "png";
+            }
+        }
+        else
+        {
+            wireBytes = payload;
+            payloadKind = "png";
+        }
+
         string sha = Convert.ToBase64String(
-            System.Security.Cryptography.SHA256.HashData(payload));
-        var ack = await CallAsync<TileDeliverAckDto>(ssl, "tile.deliver", new TileDeliverDto
+            System.Security.Cryptography.SHA256.HashData(wireBytes));
+        var deliverDto = new TileDeliverDto
         {
             WorkerId    = CurrentWorkerId,
             JobId       = tile.JobId,
             TileId      = tile.TileId,
-            PayloadKind = "png",
+            PayloadKind = payloadKind,
             Width       = tile.Render.Width,
             Height      = tile.Render.Height,
-            BytesBase64 = Convert.ToBase64String(payload),
+            // Binary trailer path leaves BytesBase64 empty — server
+            // prefers the trailer when present.
+            BytesBase64 = "",
             Sha256      = sha,
             RenderMs    = sw.ElapsedMilliseconds,
-        }, ct).ConfigureAwait(false);
+        };
+        var ack = await CallAsync<TileDeliverAckDto>(ssl, "tile.deliver", deliverDto, ct, binaryTrailer: wireBytes).ConfigureAwait(false);
 
         if (!ack.Accepted)
             Console.Error.WriteLine($"[worker] master refused tile {tile.JobId}/{tile.TileId}: {ack.RefuseReason}");
@@ -337,7 +377,8 @@ public sealed class FFWorkerAgent : IAsyncDisposable
         }, ct);
 
     private async Task<TResult> CallAsync<TResult>(
-        SslStream ssl, string method, object payload, CancellationToken ct)
+        SslStream ssl, string method, object payload, CancellationToken ct,
+        byte[]? binaryTrailer = null)
     {
         long id = Interlocked.Increment(ref _nextId);
         var env = new MessageEnvelope
@@ -346,6 +387,7 @@ public sealed class FFWorkerAgent : IAsyncDisposable
             Id     = id.ToString(System.Globalization.CultureInfo.InvariantCulture),
             Method = method,
             Params = JsonSerializer.SerializeToElement(payload, JsonRpcFraming.JsonOpts),
+            Binary = binaryTrailer,
         };
         await JsonRpcFraming.WriteAsync(ssl, env, ct: ct).ConfigureAwait(false);
 

@@ -65,13 +65,14 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     }
 
     public Task<ClusterDispatchOutcome> HandleAsync(
-        string method, JsonElement? @params, CertRole role, string thumbprint, CancellationToken ct)
+        string method, JsonElement? @params, CertRole role, string thumbprint, CancellationToken ct,
+        byte[]? binaryPayload = null)
         => method switch
         {
             "worker.register"  => HandleRegisterAsync(@params, thumbprint),
             "worker.heartbeat" => HandleHeartbeatAsync(@params, thumbprint),
             "tile.next"        => HandleTileNextAsync(@params, thumbprint, ct),
-            "tile.deliver"     => HandleTileDeliverAsync(@params, thumbprint),
+            "tile.deliver"     => HandleTileDeliverAsync(@params, thumbprint, binaryPayload),
             "tile.error"       => HandleTileErrorAsync(@params, thumbprint),
             "job.submit"       => HandleJobSubmitAsync(@params),
             "job.status"       => HandleJobStatusAsync(@params),
@@ -234,7 +235,8 @@ public sealed class ClusterCoordinator : IClusterCoordinator
 
     // ── tile.deliver / tile.error ───────────────────────────────────────
 
-    private Task<ClusterDispatchOutcome> HandleTileDeliverAsync(JsonElement? rawParams, string thumbprint)
+    private Task<ClusterDispatchOutcome> HandleTileDeliverAsync(
+        JsonElement? rawParams, string thumbprint, byte[]? binaryPayload)
     {
         if (Dispatcher is null || Jobs is null || Codec is null)
             return Err("not-configured", "master has no dispatcher/jobs/codec");
@@ -251,9 +253,20 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         if (!Dispatcher.KnowsJob(dto.JobId))
             return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "unknown-job" });
 
+        // D-3: prefer the binary trailer when present. Worker advertises
+        // PayloadKind="rgba" (raw BGRA) or "png" via binary trailer to
+        // avoid base64+JSON-string overhead on the hot path. Legacy
+        // bytesBase64 path is kept for back-compat.
         byte[] decoded;
-        try { decoded = Convert.FromBase64String(dto.BytesBase64); }
-        catch (Exception ex) { return Err("bad-request", $"bytesBase64: {ex.Message}"); }
+        if (binaryPayload != null)
+        {
+            decoded = binaryPayload;
+        }
+        else
+        {
+            try { decoded = Convert.FromBase64String(dto.BytesBase64); }
+            catch (Exception ex) { return Err("bad-request", $"bytesBase64: {ex.Message}"); }
+        }
 
         // SHA-256 check first — TLS already authenticates the stream, so
         // a mismatch means the worker hashed pre-encode and we decoded

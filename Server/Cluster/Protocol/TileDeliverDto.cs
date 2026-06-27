@@ -2,10 +2,11 @@
 // Worker → Master, body of tile.deliver. Carries the rendered tile
 // pixels back to the master so they can be merged into the final image.
 //
-// D-2 uses a single inline message per tile (PNG-encoded bytes, base64).
-// D-3 introduces a chunked binary path for large tiles — but the typical
-// 512×512 RGBA tile is ~ 256 KB raw / ~ 150 KB PNG which fits in one
-// envelope (under the 256 MB frame cap) without trouble.
+// D-2: single inline message per tile (PNG bytes, base64) on the JSON
+// path — BytesBase64 populated, no envelope trailer.
+// D-3: raw bytes ride the envelope's binary trailer instead (PayloadKind
+// = "rgba" or "png"; BytesBase64 left empty). Server prefers the
+// trailer when present and falls back to BytesBase64 for older workers.
 
 using System.Text.Json.Serialization;
 

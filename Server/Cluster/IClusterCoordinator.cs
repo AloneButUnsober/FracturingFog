@@ -21,13 +21,17 @@ public interface IClusterCoordinator
 {
     /// <summary>Dispatch a cluster method. Implementations may hold the
     /// task for the duration of a long-poll; FFServer's per-session loop
-    /// is single-flight so this back-pressures the worker naturally.</summary>
+    /// is single-flight so this back-pressures the worker naturally.
+    /// <paramref name="binaryPayload"/> carries the optional binary
+    /// trailer the wire envelope advertised (D-3 raw-RGBA tile path);
+    /// null when the caller used the JSON-only path.</summary>
     Task<ClusterDispatchOutcome> HandleAsync(
         string method,
         JsonElement? @params,
         CertRole role,
         string thumbprint,
-        CancellationToken ct);
+        CancellationToken ct,
+        byte[]? binaryPayload = null);
 }
 
 public readonly record struct ClusterDispatchOutcome(
