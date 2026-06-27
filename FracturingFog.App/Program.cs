@@ -102,6 +102,14 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--server")
             return FracturingFog.ServerHost.ServerEntry.Run(args);
 
+        // D-2b — cluster master / worker entry points.
+        if (args.Length > 0 && args[0] == "--master")
+            return FracturingFog.ServerHost.ClusterEntry.RunMaster(args);
+        if (args.Length > 0 && args[0] == "--worker")
+            return FracturingFog.ServerHost.ClusterEntry.RunWorker(args);
+        if (args.Length > 0 && args[0] == "--cluster-parity")
+            return FracturingFog.ServerHost.ClusterParitySelfTest.Run(args);
+
         // Phase X.4 / Slice 4.1 — --renderer override. Default is
         // RendererBackend.Auto (DX on Win, Silk on Linux/macOS, picked by
         // RendererFactory.Create from the surface kind). Explicit values let

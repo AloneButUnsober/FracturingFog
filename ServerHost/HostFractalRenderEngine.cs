@@ -296,10 +296,10 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             Rotate = posterMode && req.PosterPortrait,
             Path = outPath,
             Format = FracturingFog.Imaging.ImageFileFormat.Png,
-            Watermark = region?.Name ?? "",
-            SubText = "Fracturing Fog server render",
+            Watermark = req.SuppressDecorations ? "" : (region?.Name ?? ""),
+            SubText = req.SuppressDecorations ? "" : "Fracturing Fog server render",
             Dpi = dpiStamp,
-            CustomWatermark = ResolveServerWatermark(req, region, log),
+            CustomWatermark = req.SuppressDecorations ? null : ResolveServerWatermark(req, region, log),
         };
 
         // CPU-bound rasterization runs on a thread-pool worker. The outer
