@@ -116,22 +116,39 @@ namespace FracturingFog.Rendering
         // Cached previous frame — re-uploaded on the next trigger so the
         // user sees the stale (correct) image while the next one calculates,
         // instead of black flashes at High/Ultra quality.
+        //
+        // S-X9d note was wrong: progressive ¼ / ½ uploads go straight through
+        // _renderer.UpdateTexture without touching _lastUploadedBuffer, so it
+        // always holds the last FULL-RES finished frame (pre-pan content
+        // while/after a pan). _lastUploadedBuffer keeps those semantics —
+        // SnapshotFrame, SaveLastFrameToPng, RepaintWithSelectionBox all
+        // depend on it being the last full-res content.
         private uint[]? _lastUploadedBuffer;
         private int _lastUploadedWidth;
         private int _lastUploadedHeight;
-        // S-X9d (2026-06-27) — separately cache the last FULL-RES upload.
-        // Progressive ¼ / ½ res sidecar Triggers during pan write small-dim
-        // buffers into _lastUploadedBuffer; on pan-stop the Full Trigger's
-        // stale-upload step required StaleW == CalcW && StaleH == CalcH so
-        // it skipped the small previews, leaving the display showing
-        // whatever back-buffer the swap chain had (in some Mesa/X11 swap
-        // chains the OS damages the surface back to a pre-pan composite —
-        // the snap-back symptom). Keep the most recent full-res snapshot
-        // here so the stale-upload path always has a matching-dims buffer
-        // to paint while the full calc runs.
+        // Same content as _lastUploadedBuffer for full-res frames, retained
+        // here for RepaintWithSelectionBox (needs the most recent pre-overlay
+        // full-res frame, not a panned-but-blurry preview).
         private uint[]? _lastFullResBuffer;
         private int _lastFullResWidth;
         private int _lastFullResHeight;
+        // S-X9g (2026-06-27) — last buffer that was actually presented to the
+        // screen, at WHATEVER res. Updated by both the full-res upload path
+        // and the progressive ¼/½ preview upload path. The stale-frame
+        // re-upload that paints "something" while the next calc runs picks
+        // this so a pan-stop debounce doesn't paint pre-pan content over the
+        // panned preview the user just saw (= snap-back). UpdateTexture
+        // handles arbitrary dims; the fullscreen quad sampler stretches a
+        // ¼-res preview to back-buffer size so the position is right even
+        // if the resolution is blurry until the full-res calc lands.
+        private uint[]? _lastPresentedBuffer;
+        private int _lastPresentedWidth;
+        private int _lastPresentedHeight;
+        // Pinned scratch for the progressive ¼/½ preview snapshot above.
+        // Grown lazily — typical sizes are 480x270 (¼) and 960x540 (½) at
+        // 1080p, so ~0.5 MB / 2 MB respectively. Pinned (POH) so the GPU
+        // upload path doesn't need a per-frame GCHandle.Alloc.
+        private uint[]? _uploadPreviewPool;
         // Tracks the renderer's CURRENT back-buffer size (last value passed to
         // Resize). Survives _lastUploadedBuffer being nulled by Resize, so the
         // slideshow cold-start path can build a black source buffer at the right
@@ -900,30 +917,22 @@ namespace FracturingFog.Rendering
             // upload before Calculate even starts — Finding A render-start
             // lag fix).
             //
-            // S-X9d (2026-06-27) — prefer the cached full-res buffer over
-            // _lastUploadedBuffer when the latter holds a progressive ¼/½
-            // preview from a pan. The downstream stale-upload gate at line
-            // 1027 needs StaleW/H == CalcW/H to fire; without this fallback
-            // a pan + release at deep zoom skipped stale upload entirely
-            // and the user saw the swap-chain back-buffer reappear (pan
-            // snap-back symptom).
+            // S-X9g (2026-06-27) — pick _lastPresentedBuffer (whatever res it
+            // is) so a pan-stop debounce Trigger paints the most recent thing
+            // the user saw (= the panned ¼/½ progressive preview) rather than
+            // the pre-pan full-res frame. The previous dim-equality gate
+            // forced a fall back to pre-pan content and produced a visible
+            // snap-back. UpdateTexture handles arbitrary dims (the fullscreen
+            // quad sampler stretches).
             int calcW = _calculator.Width;
             int calcH = _calculator.Height;
             uint[]? staleBuf;
             int staleW, staleH;
-            if (_lastUploadedBuffer != null
-                && _lastUploadedWidth == calcW && _lastUploadedHeight == calcH)
+            if (_lastPresentedBuffer != null)
             {
-                staleBuf = _lastUploadedBuffer;
-                staleW = _lastUploadedWidth;
-                staleH = _lastUploadedHeight;
-            }
-            else if (_lastFullResBuffer != null
-                && _lastFullResWidth == calcW && _lastFullResHeight == calcH)
-            {
-                staleBuf = _lastFullResBuffer;
-                staleW = _lastFullResWidth;
-                staleH = _lastFullResHeight;
+                staleBuf = _lastPresentedBuffer;
+                staleW = _lastPresentedWidth;
+                staleH = _lastPresentedHeight;
             }
             else
             {
@@ -1063,7 +1072,15 @@ namespace FracturingFog.Rendering
             // against the calc-completion upload via _d3dGate, so the
             // new frame in the continuation always paints over the
             // stale here (never the reverse).
-            if (job.StaleBuf != null && job.StaleW == job.CalcW && job.StaleH == job.CalcH)
+            //
+            // S-X9g (2026-06-27) — dim-equality gate dropped. UpdateTexture
+            // accepts any (w,h) and the fullscreen quad sampler stretches.
+            // Letting a ¼-res progressive preview upload here (when that's
+            // the most recent thing the user saw) keeps the displayed
+            // POSITION correct through a pan-stop debounce; pre-fix the gate
+            // skipped the preview because StaleW != CalcW, and the fallback
+            // to the pre-pan full-res frame produced the visible snap-back.
+            if (job.StaleBuf != null)
             {
                 lock (_uploadGate)
                 {
@@ -1548,6 +1565,24 @@ namespace FracturingFog.Rendering
                         _renderer.UpdateTexture(preview.ColorBuffer, preview.Width, preview.Height);
                         _renderer.Render();
                     }
+
+                    // S-X9g (2026-06-27) — snapshot the preview buffer into
+                    // _lastPresentedBuffer so the next stale-upload (e.g.
+                    // pan-stop debounce Trigger) re-paints the panned preview
+                    // instead of the pre-pan full-res frame held in
+                    // _lastUploadedBuffer. Pinned scratch pool grows lazily.
+                    int pw = preview.Width;
+                    int ph = preview.Height;
+                    int pn = pw * ph;
+                    if (pn > 0 && preview.ColorBuffer != null && preview.ColorBuffer.Length >= pn)
+                    {
+                        if (_uploadPreviewPool == null || _uploadPreviewPool.Length < pn)
+                            _uploadPreviewPool = GC.AllocateUninitializedArray<uint>(pn, pinned: true);
+                        Array.Copy(preview.ColorBuffer, _uploadPreviewPool, pn);
+                        _lastPresentedBuffer = _uploadPreviewPool;
+                        _lastPresentedWidth = pw;
+                        _lastPresentedHeight = ph;
+                    }
                 }
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
 
@@ -1683,6 +1718,13 @@ namespace FracturingFog.Rendering
             _lastFullResBuffer = null;
             _lastFullResWidth = 0;
             _lastFullResHeight = 0;
+            // S-X9g — the presented-buffer tracker and its scratch pool are
+            // both sized for old dims too. Drop them so the next progressive
+            // upload alloc-grows fresh.
+            _lastPresentedBuffer = null;
+            _lastPresentedWidth = 0;
+            _lastPresentedHeight = 0;
+            _uploadPreviewPool = null;
             _currentTargetWidth = w;
             _currentTargetHeight = h;
             // Buffer dimensions changing → old CDF is sized for old buffers.
@@ -2419,6 +2461,13 @@ namespace FracturingFog.Rendering
             _lastUploadedBuffer = dst;
             _lastUploadedWidth = w;
             _lastUploadedHeight = h;
+            // S-X9g (2026-06-27) — full-res upload is also "what's on screen
+            // right now"; mirror into the presented-buffer tracker so the
+            // next stale-upload pulls from the freshest content. Cheap —
+            // same pointer, no copy.
+            _lastPresentedBuffer = dst;
+            _lastPresentedWidth = w;
+            _lastPresentedHeight = h;
 
             // S-X9d (2026-06-27) — keep a separate full-res snapshot for the
             // stale-upload fallback. Updated only when this frame matches the
@@ -2644,6 +2693,10 @@ namespace FracturingFog.Rendering
             _lastUploadedBuffer = bgra;
             _lastUploadedWidth = width;
             _lastUploadedHeight = height;
+            // S-X9g — external present is also "current screen content".
+            _lastPresentedBuffer = bgra;
+            _lastPresentedWidth = width;
+            _lastPresentedHeight = height;
         }
 
         /// <summary>
