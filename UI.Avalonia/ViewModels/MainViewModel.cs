@@ -104,7 +104,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _renderHost.SetSelectionBox(null, null, null, null);
         };
         _renderHost.FrameCompleted += OnFrameCompleted;
-        _renderHost.StatusRequested += (_, txt) => StatusText = txt;
+        _renderHost.StatusRequested += OnRenderHostStatusRequested;
         _renderHost.ColorMapChanged += OnRenderHostColorMapChanged;
         _renderHost.RenderCancelled += OnRenderCancelled;
         _overlayContrastLuma = _renderHost.OverlayContrastLuma;
@@ -863,6 +863,62 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private RenderFrameInfo? _lastFrameInfo;
 
+    // S-X9c (2026-06-27) — minimum-visible hold for "Calculating…".
+    // Shallow renders complete in <20 ms so OnFrameCompleted overwrites
+    // the busy string before the next display refresh — user reports
+    // never seeing "Calculating…" at all and being unsure whether the
+    // app responded to their input. Hold the busy string for at least
+    // MinBusyVisibleMs before letting FrameCompleted overwrite it; if
+    // the calc finishes faster, queue the frame-info string and apply
+    // it on a UI-thread timer when the hold expires. RenderCancelled
+    // takes the same path so cancelled fast calcs still show the busy
+    // hint briefly.
+    private const int MinBusyVisibleMs = 250;
+    private readonly System.Diagnostics.Stopwatch _busyClock = new();
+    private bool _busyActive;
+    private string? _pendingStatusText;
+    private System.Threading.Timer? _busyReleaseTimer;
+
+    private void OnRenderHostStatusRequested(object? sender, string text)
+    {
+        // Render host raises this exactly once per Trigger with
+        // "Calculating…". Mark busy, start the clock, push to the bar.
+        _busyActive = true;
+        _busyClock.Restart();
+        _pendingStatusText = null;
+        StatusText = text;
+    }
+
+    private void ApplyOrDeferStatusText(string text)
+    {
+        if (!_busyActive)
+        {
+            StatusText = text;
+            return;
+        }
+        long elapsed = _busyClock.ElapsedMilliseconds;
+        if (elapsed >= MinBusyVisibleMs)
+        {
+            _busyActive = false;
+            _busyClock.Stop();
+            StatusText = text;
+            _pendingStatusText = null;
+            return;
+        }
+        _pendingStatusText = text;
+        int remaining = MinBusyVisibleMs - (int)elapsed;
+        _busyReleaseTimer ??= new System.Threading.Timer(_ =>
+        {
+            string? queued = _pendingStatusText;
+            if (queued == null) return;
+            _pendingStatusText = null;
+            _busyActive = false;
+            _busyClock.Stop();
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = queued);
+        }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        _busyReleaseTimer.Change(remaining, System.Threading.Timeout.Infinite);
+    }
+
     private void OnFrameCompleted(object? sender, RenderFrameInfo info)
     {
         // Prefer the calculator's actual precision label (PT, QD-PT,
@@ -874,12 +930,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             ? $"[{info.PrecisionLabel}]"
             : (info.HighPrecisionActive ? "[DD]" : "[SP]");
         string typeTag = $"[{info.FractalType}]";
-        StatusText =
+        string text =
             $"{typeTag}  cx={info.CenterX:G12}  cy={info.CenterY:G12}  " +
             $"zoom={info.Zoom:G6}  iter={info.Iterations}  " +
             $"{precTag}  [{info.ElapsedMs} ms  {info.Width}×{info.Height}]" +
             (info.IterLocked ? "  [ITER LOCKED]" : "");
         _lastFrameInfo = info;
+        ApplyOrDeferStatusText(text);
     }
 
     // S-X8 (2026-06-27) — RenderHost cancelled the in-flight calc (rapid
@@ -893,7 +950,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var info = _lastFrameInfo;
         if (info == null)
         {
-            StatusText = string.Empty;
+            ApplyOrDeferStatusText(string.Empty);
             return;
         }
         OnFrameCompleted(this, info.Value);
@@ -903,10 +960,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         _input.ViewChanged -= OnInputViewChanged;
         _renderHost.FrameCompleted -= OnFrameCompleted;
+        _renderHost.StatusRequested -= OnRenderHostStatusRequested;
         _renderHost.ColorMapChanged -= OnRenderHostColorMapChanged;
         _renderHost.RenderCancelled -= OnRenderCancelled;
         _panStopDebounce.Dispose();
         _adaptiveRepaintDebounce.Dispose();
         _fullCoalesceTimer.Dispose();
+        _busyReleaseTimer?.Dispose();
     }
 }
