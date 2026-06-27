@@ -2458,7 +2458,14 @@ namespace FracturingFog.Rendering
             if (!_leakDiagBaselineTaken && (w < 65 || h < 65)) return;
 
             long frame = System.Threading.Interlocked.Increment(ref _leakDiagFrame) - 1;
-            if (_leakDiagBaselineTaken && (frame % s_leakDiagEvery) != 0) return;
+            // S-X9f (2026-06-27) — also log the first 5 frames after baseline
+            // unconditionally. One-shot user actions (region jump from combo,
+            // theme pick) produce just 1-4 uploads; if those land between
+            // modulo hits at the default EVERY=30 the diag drops them silently
+            // and the user reports "no log lines fired" for what looked like a
+            // bypass bug. Burst window guarantees those single triggers show
+            // up in the log.
+            if (_leakDiagBaselineTaken && frame >= 6 && (frame % s_leakDiagEvery) != 0) return;
 
             long managed = GC.GetTotalMemory(forceFullCollection: false);
             long retained = s_leakDiagForceGc
