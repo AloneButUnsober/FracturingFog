@@ -13,6 +13,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Server.Cluster.Protocol;
 using FracturingFog.Server.Protocol;
 using FracturingFog.Server.Wire;
 
@@ -216,11 +217,119 @@ public sealed class FFClientConnection : IAsyncDisposable
             ?? throw new System.IO.InvalidDataException("response result deserialised to null");
     }
 
+    // ── Cluster / distributed-rendering helpers (Phase D-2) ──────────────
+    //
+    // Same connection, same TLS session — these methods just call
+    // master-side methods that the coordinator routes. The client cert's
+    // role OU decides whether the master accepts: Client and Admin may
+    // call job.*; Worker cannot.
+
+    /// <summary>Submit a render job to a cluster master. Returns the
+    /// freshly-issued JobId — the caller polls status via
+    /// <see cref="GetJobStatusAsync"/> and fetches with
+    /// <see cref="FetchJobArtifactAsync"/>.</summary>
+    public Task<JobAckDto> SubmitJobAsync(JobSubmitDto submit, CancellationToken ct)
+        => CallAsync<JobAckDto>("job.submit", submit, ct);
+
+    public Task<JobStatusDto> GetJobStatusAsync(string jobId, CancellationToken ct)
+        => CallAsync<JobStatusDto>("job.status", new JobStatusRequestDto { JobId = jobId }, ct);
+
+    public Task<JobCancelAckDto> CancelJobAsync(string jobId, CancellationToken ct)
+        => CallAsync<JobCancelAckDto>("job.cancel", new JobCancelRequestDto { JobId = jobId }, ct);
+
+    /// <summary>Block until <paramref name="jobId"/> reaches a terminal
+    /// state, polling every <paramref name="pollInterval"/>. Returns the
+    /// final status. Throws via the underlying CallAsync on connection
+    /// loss; the caller decides whether to reconnect + resume polling.</summary>
+    public async Task<JobStatusDto> PollUntilTerminalAsync(
+        string jobId, TimeSpan pollInterval, CancellationToken ct)
+    {
+        while (true)
+        {
+            var st = await GetJobStatusAsync(jobId, ct).ConfigureAwait(false);
+            if (st.JobState is "ready" or "failed" or "cancelled") return st;
+            await Task.Delay(pollInterval, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Fetch the rendered artifact bytes once the job is ready.
+    /// Replies with the ack envelope then reads N chunk envelopes off
+    /// the same socket — same chunked path as
+    /// <see cref="RenderImageAsync"/>. Verifies the per-chunk SHA-256
+    /// and the whole-artifact SHA-256.</summary>
+    public async Task<JobFetchResult> FetchJobArtifactAsync(string jobId, CancellationToken ct)
+    {
+        var ack = await CallAsync<JobFetchAckDto>("job.fetch",
+            new JobFetchRequestDto { JobId = jobId }, ct).ConfigureAwait(false);
+
+        if (ack.TotalBytes < 0 || ack.TotalBytes > int.MaxValue)
+            throw new System.IO.InvalidDataException(
+                $"job.fetch declared invalid totalBytes={ack.TotalBytes}");
+
+        using var ms = new System.IO.MemoryStream(checked((int)ack.TotalBytes));
+        for (int seq = 0; seq < ack.ChunkCount; seq++)
+        {
+            var chunkEnv = await JsonRpcFraming.ReadAsync(_ssl, ct: ct).ConfigureAwait(false)
+                ?? throw new System.IO.EndOfStreamException(
+                    $"master closed mid-stream at chunk {seq}/{ack.ChunkCount}");
+            if (chunkEnv.Kind != "chunk" || chunkEnv.Result is not JsonElement chEl)
+                throw new System.IO.InvalidDataException(
+                    $"expected chunk envelope, got kind='{chunkEnv.Kind}'");
+            var chunk = chEl.Deserialize<ChunkDto>(JsonRpcFraming.JsonOpts)
+                ?? throw new System.IO.InvalidDataException("chunk payload null");
+            if (chunk.Seq != seq)
+                throw new System.IO.InvalidDataException(
+                    $"chunk out of order: expected seq={seq}, got {chunk.Seq}");
+
+            byte[] decoded = Convert.FromBase64String(chunk.BytesBase64);
+            if (!string.IsNullOrEmpty(chunk.Sha256))
+            {
+                string actual = Convert.ToBase64String(
+                    System.Security.Cryptography.SHA256.HashData(decoded));
+                if (!string.Equals(actual, chunk.Sha256, StringComparison.Ordinal))
+                    throw new System.IO.InvalidDataException(
+                        $"chunk {seq}: sha256 mismatch (expected {chunk.Sha256}, got {actual})");
+            }
+            ms.Write(decoded, 0, decoded.Length);
+        }
+
+        if (ms.Length != ack.TotalBytes)
+            throw new System.IO.InvalidDataException(
+                $"job.fetch byte count mismatch: assembled={ms.Length} declared={ack.TotalBytes}");
+
+        byte[] bytes = ms.ToArray();
+        if (!string.IsNullOrEmpty(ack.Sha256))
+        {
+            string actual = Convert.ToBase64String(
+                System.Security.Cryptography.SHA256.HashData(bytes));
+            if (!string.Equals(actual, ack.Sha256, StringComparison.Ordinal))
+                throw new System.IO.InvalidDataException(
+                    $"job.fetch artifact sha256 mismatch (expected {ack.Sha256}, got {actual})");
+        }
+
+        return new JobFetchResult
+        {
+            JobId       = ack.JobId,
+            ArtifactExt = ack.ArtifactExt,
+            Bytes       = bytes,
+        };
+    }
+
     public async ValueTask DisposeAsync()
     {
         try { await _ssl.DisposeAsync().ConfigureAwait(false); } catch { }
         try { _tcp.Close(); } catch { }
     }
+}
+
+/// <summary>Client-side result of <see cref="FFClientConnection.FetchJobArtifactAsync"/>.
+/// Bytes are the fully-assembled, hash-verified artifact (PNG / MP4 /
+/// MKV); ArtifactExt drives the save-as default extension.</summary>
+public sealed class JobFetchResult
+{
+    public required string JobId       { get; init; }
+    public required string ArtifactExt { get; init; }
+    public required byte[] Bytes       { get; init; }
 }
 
 public sealed class FFServerException : Exception
