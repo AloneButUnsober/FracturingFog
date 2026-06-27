@@ -80,9 +80,17 @@ public static class ClusterParitySelfTest
         int rc;
         try
         {
-            byte[] fullBgra  = RenderFullBgra(engine, codec, baseReq, log, ct, sb);
+            byte[] fullBgra   = RenderFullBgra(engine, codec, baseReq, log, ct, sb);
             byte[] mergedBgra = RenderTiledBgra(engine, codec, baseReq, tilePx, log, ct, sb);
-            rc = CompareBuffers(fullBgra, mergedBgra, width, height, sb);
+            int rcPng         = CompareBuffers(fullBgra, mergedBgra, width, height, sb, "png-path");
+            // D-3 raw-RGBA wire path: worker decodes PNG→BGRA itself, ships
+            // raw bytes via the binary envelope trailer; master pastes via
+            // TryMergeRgbaTile (no master-side decode). Exercises the same
+            // codec on the worker side and `TryMergeRgbaTile` on the
+            // merger side.
+            byte[] mergedRgbaBgra = RenderTiledBgraViaRgbaWire(engine, codec, baseReq, tilePx, log, ct, sb);
+            int rcRgba            = CompareBuffers(fullBgra, mergedRgbaBgra, width, height, sb, "rgba-path");
+            rc = (rcPng != 0 || rcRgba != 0) ? 1 : 0;
         }
         catch (Exception ex)
         {
@@ -163,11 +171,59 @@ public static class ClusterParitySelfTest
         return mergedBgra;
     }
 
-    private static int CompareBuffers(byte[] full, byte[] tiled, int w, int h, System.Text.StringBuilder sb)
+    private static byte[] RenderTiledBgraViaRgbaWire(
+        HostFractalRenderEngine engine, IClusterImageCodec codec,
+        RenderRequestDto baseReq, int tilePx, ISessionLog log, CancellationToken ct,
+        System.Text.StringBuilder sb)
+    {
+        var plan = TilePlanner.PlanImage(baseReq, tilePx, workerPrefHints: null);
+
+        using var merger = new ArtifactMerger(plan.ImageWidth, plan.ImageHeight, plan.TileCount, codec);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int n = 0;
+        foreach (var tile in plan.Tiles)
+        {
+            string workDir = NewWorkDir($"rgba-tile-{tile.TileId}");
+            try
+            {
+                var art = engine.RenderAsync(tile.Render, workDir, log, ct).GetAwaiter().GetResult();
+                byte[] png = File.ReadAllBytes(art.FilePath);
+                // Worker-side decode → ship raw BGRA. Mirrors D-3 worker
+                // path; the master then takes the RGBA branch in the
+                // coordinator and merges via TryMergeRgbaTile.
+                byte[] bgra = codec.DecodePngToBgra(png, out int dw, out int dh);
+                if (dw != tile.Render.Width || dh != tile.Render.Height)
+                    throw new InvalidDataException(
+                        $"rgba-path tile {tile.TileId}: codec produced {dw}x{dh}, expected {tile.Render.Width}x{tile.Render.Height}");
+                if (!merger.TryMergeRgbaTile(tile.TileId, tile.OffsetX, tile.OffsetY,
+                                             tile.Render.Width, tile.Render.Height, bgra))
+                    throw new InvalidOperationException($"merger refused rgba tile {tile.TileId}");
+                n++;
+            }
+            finally { TryDelete(workDir); }
+        }
+        sw.Stop();
+        sb.AppendLine($"  rgba path     : {sw.ElapsedMilliseconds,6} ms, {n} tiles rendered + merged");
+
+        if (!merger.IsComplete)
+            throw new InvalidOperationException($"rgba merger incomplete: {merger.TilesAccepted}/{merger.TilesTotal}");
+
+        string mergedPath = Path.Combine(NewWorkDir("rgba-merged"), "merged.png");
+        merger.WritePng(mergedPath);
+        byte[] mergedPng = File.ReadAllBytes(mergedPath);
+        byte[] mergedBgra = codec.DecodePngToBgra(mergedPng, out int dw2, out int dh2);
+        TryDelete(Path.GetDirectoryName(mergedPath)!);
+        if (dw2 != plan.ImageWidth || dh2 != plan.ImageHeight)
+            throw new InvalidDataException(
+                $"rgba merged decoded dims {dw2}x{dh2} != plan {plan.ImageWidth}x{plan.ImageHeight}");
+        return mergedBgra;
+    }
+
+    private static int CompareBuffers(byte[] full, byte[] tiled, int w, int h, System.Text.StringBuilder sb, string label)
     {
         if (full.LongLength != tiled.LongLength)
         {
-            sb.AppendLine($"FAIL: buffer sizes differ ({full.LongLength} vs {tiled.LongLength})");
+            sb.AppendLine($"FAIL ({label}): buffer sizes differ ({full.LongLength} vs {tiled.LongLength})");
             return 1;
         }
         long diffBytes = 0;
@@ -185,16 +241,16 @@ public static class ClusterParitySelfTest
         }
         long totalPixels = (long)w * h;
         sb.AppendLine();
-        sb.AppendLine($"  pixels        : {totalPixels:N0} total");
-        sb.AppendLine($"  diff pixels   : {diffPixels:N0}");
-        sb.AppendLine($"  diff bytes    : {diffBytes:N0}");
-        sb.AppendLine($"  max ΔchannelB : {maxAbsChannelDelta}");
+        sb.AppendLine($"  [{label}] pixels        : {totalPixels:N0} total");
+        sb.AppendLine($"  [{label}] diff pixels   : {diffPixels:N0}");
+        sb.AppendLine($"  [{label}] diff bytes    : {diffBytes:N0}");
+        sb.AppendLine($"  [{label}] max ΔchannelB : {maxAbsChannelDelta}");
         if (diffPixels == 0)
         {
-            sb.AppendLine("  PARITY OK     : single-server and cluster paths produce byte-identical pixels.");
+            sb.AppendLine($"  [{label}] PARITY OK     : single-server and cluster paths produce byte-identical pixels.");
             return 0;
         }
-        sb.AppendLine($"  PARITY FAIL   : {diffPixels}/{totalPixels} pixels differ.");
+        sb.AppendLine($"  [{label}] PARITY FAIL   : {diffPixels}/{totalPixels} pixels differ.");
         return 1;
     }
 

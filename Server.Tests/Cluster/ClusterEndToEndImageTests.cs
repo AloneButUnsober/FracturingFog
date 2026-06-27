@@ -170,6 +170,135 @@ public sealed class ClusterEndToEndImageTests : IDisposable
     }
 
     [Fact]
+    public async Task Submit_Status_TileLoop_Fetch_Yields_Final_Artifact_Via_Binary_Trailer()
+    {
+        // D-3 raw-RGBA path: tile.deliver carries the BGRA payload in the
+        // envelope binary trailer instead of base64. BytesBase64 is empty;
+        // the coordinator must prefer the trailer.
+        const string thumb = "BBCCDD";
+        string workerId = await RegisterWorkerAsync(thumb);
+
+        var submit = new JobSubmitDto
+        {
+            Request = new RenderRequestDto
+            {
+                Mode = "image", FractalType = "Mandelbrot",
+                Width = 128, Height = 64,
+                CenterX = 0, CenterY = 0, Zoom = 1.0,
+            },
+            TilePixelsHint = 64,
+        };
+        var submitOut = await _coord.HandleAsync("job.submit", ToParams(submit),
+            CertRole.Client, "", CancellationToken.None);
+        var ack = Assert.IsType<JobAckDto>(submitOut.Result);
+        Assert.Equal(2, ack.TileCount);
+
+        for (int i = 0; i < 4; i++)
+        {
+            var nextOut = await _coord.HandleAsync("tile.next",
+                ToParams(new HeartbeatDto { WorkerId = workerId }),
+                CertRole.Worker, thumb, CancellationToken.None);
+            var res = Assert.IsType<TileNextResultDto>(nextOut.Result);
+            if (res.WaitAgain) break;
+            var tile = res.Tile!;
+
+            // Raw BGRA, NO header. This is what the worker would ship
+            // after decoding its engine's PNG output to BGRA.
+            int tw = tile.Render.Width, th = tile.Render.Height;
+            byte[] bgra = new byte[tw * th * 4];
+            for (int p = 0; p < tw * th; p++)
+            {
+                bgra[p * 4 + 0] = 200;                       // B
+                bgra[p * 4 + 1] = 50;                        // G
+                bgra[p * 4 + 2] = (byte)(tile.TileId * 100); // R
+                bgra[p * 4 + 3] = 0xFF;                      // A
+            }
+            string sha = Convert.ToBase64String(
+                System.Security.Cryptography.SHA256.HashData(bgra));
+
+            var delOut = await _coord.HandleAsync("tile.deliver",
+                ToParams(new TileDeliverDto
+                {
+                    WorkerId = workerId, JobId = ack.JobId, TileId = tile.TileId,
+                    PayloadKind = "rgba",
+                    Width = tw, Height = th,
+                    BytesBase64 = "",            // intentionally empty — trailer carries bytes
+                    Sha256 = sha,
+                    RenderMs = 1,
+                }),
+                CertRole.Worker, thumb, CancellationToken.None,
+                binaryPayload: bgra);
+            Assert.Null(delOut.ErrorCode);
+            var delAck = Assert.IsType<TileDeliverAckDto>(delOut.Result);
+            Assert.True(delAck.Accepted, $"tile.deliver refused: {delAck.RefuseReason}");
+        }
+
+        JobStatusDto? status = null;
+        for (int i = 0; i < 50; i++)
+        {
+            var sOut = await _coord.HandleAsync("job.status",
+                ToParams(new JobStatusRequestDto { JobId = ack.JobId }),
+                CertRole.Client, "", CancellationToken.None);
+            status = Assert.IsType<JobStatusDto>(sOut.Result);
+            if (status.JobState is "ready" or "failed" or "cancelled") break;
+            await Task.Delay(20);
+        }
+        Assert.Equal("ready", status!.JobState);
+        Assert.True(status.ArtifactReady);
+        Assert.Equal(2, status.TilesDone);
+
+        var fetchOut = await _coord.HandleAsync("job.fetch",
+            ToParams(new JobFetchRequestDto { JobId = ack.JobId }),
+            CertRole.Client, "", CancellationToken.None);
+        Assert.Null(fetchOut.ErrorCode);
+        byte[] artifact = File.ReadAllBytes(fetchOut.StreamFilePath!);
+        // RawHeaderCodec adds a 12-byte header + 128×64×4 BGRA bytes.
+        Assert.Equal(12 + 128 * 64 * 4, artifact.Length);
+    }
+
+    [Fact]
+    public async Task Tile_Deliver_Binary_Trailer_Sha_Mismatch_Is_Rejected()
+    {
+        const string thumb = "BADBAD";
+        string workerId = await RegisterWorkerAsync(thumb);
+
+        var submit = new JobSubmitDto
+        {
+            Request = new RenderRequestDto
+            {
+                Mode = "image", FractalType = "Mandelbrot",
+                Width = 64, Height = 64, CenterX = 0, CenterY = 0, Zoom = 1.0,
+            },
+            TilePixelsHint = 64,
+        };
+        var submitOut = await _coord.HandleAsync("job.submit", ToParams(submit),
+            CertRole.Client, "", CancellationToken.None);
+        var ack = Assert.IsType<JobAckDto>(submitOut.Result);
+
+        var nextOut = await _coord.HandleAsync("tile.next",
+            ToParams(new HeartbeatDto { WorkerId = workerId }),
+            CertRole.Worker, thumb, CancellationToken.None);
+        var tile = Assert.IsType<TileNextResultDto>(nextOut.Result).Tile!;
+        byte[] bgra = new byte[tile.Render.Width * tile.Render.Height * 4];
+
+        var delOut = await _coord.HandleAsync("tile.deliver",
+            ToParams(new TileDeliverDto
+            {
+                WorkerId = workerId, JobId = ack.JobId, TileId = tile.TileId,
+                PayloadKind = "rgba",
+                Width = tile.Render.Width, Height = tile.Render.Height,
+                BytesBase64 = "",
+                Sha256 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",  // wrong
+                RenderMs = 1,
+            }),
+            CertRole.Worker, thumb, CancellationToken.None,
+            binaryPayload: bgra);
+        var delAck = Assert.IsType<TileDeliverAckDto>(delOut.Result);
+        Assert.False(delAck.Accepted);
+        Assert.Equal("sha-mismatch", delAck.RefuseReason);
+    }
+
+    [Fact]
     public async Task Submit_Refuses_Untileable_Fractal()
     {
         var submit = new JobSubmitDto

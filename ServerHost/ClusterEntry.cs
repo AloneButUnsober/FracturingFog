@@ -167,6 +167,7 @@ public static class ClusterEntry
             ExpectedMasterHostName = CertSelfSignedHelper.DefaultServerCnDnsName,
             Identity               = identity,
             Engine                 = engine,
+            Codec                  = new SkiaClusterImageCodec(),
             WorkDirRoot            = workDir,
         });
 

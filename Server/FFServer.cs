@@ -303,7 +303,8 @@ public sealed class FFServer
         ClusterDispatchOutcome outcome;
         try
         {
-            outcome = await Coordinator!.HandleAsync(method, env.Params, role, thumbprint, ct).ConfigureAwait(false);
+            outcome = await Coordinator!.HandleAsync(
+                method, env.Params, role, thumbprint, ct, env.Binary).ConfigureAwait(false);
         }
         catch (System.OperationCanceledException)
         {
