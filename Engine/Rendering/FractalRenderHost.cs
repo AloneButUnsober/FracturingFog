@@ -395,6 +395,7 @@ namespace FracturingFog.Rendering
         public event EventHandler? AnimationFrameUploaded;
         public event EventHandler<string>? StatusRequested;
         public event EventHandler? ColorMapChanged;
+        public event EventHandler? RenderCancelled;
 
         // ── Overlay state (CPU-composited into the BGRA buffer) ──────────
         //
@@ -1004,7 +1005,11 @@ namespace FracturingFog.Rendering
                     // frame quietly (the next user-initiated Trigger will
                     // present a fresh image). Still fire AnimationFrameUploaded
                     // so any in-flight gate doesn't get stuck.
+                    // S-X8 (2026-06-27) — also raise RenderCancelled so the
+                    // status bar's "Calculating…" set by Trigger gets cleared
+                    // instead of lingering until the next user action.
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
                 }
 
@@ -1486,7 +1491,12 @@ namespace FracturingFog.Rendering
             {
                 if (token.IsCancellationRequested || _disposed)
                 {
+                    // S-X8 (2026-06-27) — progressive intermediate cancelled
+                    // before the final stage queued. Status bar would stay
+                    // "Calculating…" until next user input; raise
+                    // RenderCancelled so the consumer clears it now.
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
                 }
                 MandelbrotCalculator preview = job.ProgressiveStage >= 4
@@ -1524,7 +1534,12 @@ namespace FracturingFog.Rendering
                     // Cancelled render still counts as "done" for animation
                     // gating — otherwise a mid-animation cancel would leave
                     // the gate stuck.
+                    // S-X8 (2026-06-27) — raise RenderCancelled so the status
+                    // bar consumer drops the "Calculating…" set at Trigger
+                    // entry. Without this, a cancelled deep-Extreme frame
+                    // leaves the status string stuck indefinitely.
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
                 }
                 if (_disposed) return;
@@ -1588,9 +1603,20 @@ namespace FracturingFog.Rendering
                 double curCy = useAlt ? altCalc!.CenterY : calc.CenterY;
                 double curZoom = useAlt ? altCalc!.Zoom : calc.Zoom;
 
-                FrameCompleted?.Invoke(this, new RenderFrameInfo(
-                    curCx, curCy, curZoom, curIter, ms, curW, curH,
-                    hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+                // S-X8 (2026-06-27) — only the initial sample (TaaSampleIndex
+                // == 0) updates the status bar via FrameCompleted. TAA
+                // continuation samples carry a cumulative job.Sw elapsed
+                // that climbs with every refinement pass, so firing per
+                // sample makes the status-bar ms oscillate up and down as
+                // overlapping continuations cancel and restart. PerfHud +
+                // AnimationFrameUploaded still fire each sample so HUD +
+                // animation gating stay accurate.
+                if (job.TaaSampleIndex == 0)
+                {
+                    FrameCompleted?.Invoke(this, new RenderFrameInfo(
+                        curCx, curCy, curZoom, curIter, ms, curW, curH,
+                        hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+                }
 
                 if (ShowPerfHud) _perfStats.RecordFrame(ms);
 

@@ -106,6 +106,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _renderHost.FrameCompleted += OnFrameCompleted;
         _renderHost.StatusRequested += (_, txt) => StatusText = txt;
         _renderHost.ColorMapChanged += OnRenderHostColorMapChanged;
+        _renderHost.RenderCancelled += OnRenderCancelled;
         _overlayContrastLuma = _renderHost.OverlayContrastLuma;
 
         _panStopDebounce = new System.Threading.Timer(_ =>
@@ -860,6 +861,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OverlayContrastLuma = _renderHost.OverlayContrastLuma;
     }
 
+    private RenderFrameInfo? _lastFrameInfo;
+
     private void OnFrameCompleted(object? sender, RenderFrameInfo info)
     {
         // Prefer the calculator's actual precision label (PT, QD-PT,
@@ -876,6 +879,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             $"zoom={info.Zoom:G6}  iter={info.Iterations}  " +
             $"{precTag}  [{info.ElapsedMs} ms  {info.Width}×{info.Height}]" +
             (info.IterLocked ? "  [ITER LOCKED]" : "");
+        _lastFrameInfo = info;
+    }
+
+    // S-X8 (2026-06-27) — RenderHost cancelled the in-flight calc (rapid
+    // pan/zoom, deep-Extreme TAA tick beat the prior frame). Without this
+    // handler the "Calculating…" string Trigger pushed stays on screen
+    // forever. Replay the last good FrameInfo when available so the bar
+    // returns to its prior render's geometry; fall back to a blank if no
+    // frame has landed yet.
+    private void OnRenderCancelled(object? sender, EventArgs e)
+    {
+        var info = _lastFrameInfo;
+        if (info == null)
+        {
+            StatusText = string.Empty;
+            return;
+        }
+        OnFrameCompleted(this, info.Value);
     }
 
     public void Dispose()
@@ -883,6 +904,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _input.ViewChanged -= OnInputViewChanged;
         _renderHost.FrameCompleted -= OnFrameCompleted;
         _renderHost.ColorMapChanged -= OnRenderHostColorMapChanged;
+        _renderHost.RenderCancelled -= OnRenderCancelled;
         _panStopDebounce.Dispose();
         _adaptiveRepaintDebounce.Dispose();
         _fullCoalesceTimer.Dispose();

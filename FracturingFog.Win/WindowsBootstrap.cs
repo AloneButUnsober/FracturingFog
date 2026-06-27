@@ -68,6 +68,15 @@ public static class WindowsBootstrap
         };
 
         BootstrapHooks.NativeInputBridge = new WindowsNativeInputBridge();
+
+        // S-X8 (2026-06-27) — desktop pixel sampler. Was wired only from the
+        // legacy WinExe's Program.cs via WinExeColorSampleBridge (WinForms-
+        // bound DesktopEyedropper wrapper), so FracturingFog.App on Windows
+        // left the bridge null and the Color Theme Editor's Eyedropper
+        // silently no-op'd. WindowsColorSampleBridge has no WinForms dep so
+        // it works from both entry points.
+        if (BootstrapHooks.ColorSampleBridge == null)
+            BootstrapHooks.ColorSampleBridge = new WindowsColorSampleBridge();
     }
 }
 
