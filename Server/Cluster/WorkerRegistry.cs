@@ -116,6 +116,27 @@ public sealed class WorkerRegistry
     /// iterate without holding any internal lock.</summary>
     public IReadOnlyList<WorkerEntry> Snapshot() => _byId.Values.ToArray();
 
+    /// <summary>Median of per-worker EMA tile cost (ms per kilopixel)
+    /// across workers that have at least one sample. Returns 0 when no
+    /// worker has reported yet — the planner falls back to default tile
+    /// sizing in that case.</summary>
+    public double MedianMsPerKilopixel()
+    {
+        List<double>? samples = null;
+        foreach (var w in _byId.Values)
+        {
+            double e = w.EmaMsPerKilopixel;
+            if (e > 0)
+            {
+                samples ??= new List<double>();
+                samples.Add(e);
+            }
+        }
+        if (samples == null || samples.Count == 0) return 0;
+        samples.Sort();
+        return samples[samples.Count / 2];
+    }
+
     /// <summary>Number of workers currently considered live (within the
     /// stale window).</summary>
     public int LiveCount()
@@ -212,6 +233,34 @@ public sealed class WorkerEntry
 
     private int _quiesce;
     public bool Quiesced => Volatile.Read(ref _quiesce) != 0;
+
+    // D-3b — per-worker tile-time EMA. Coordinator calls RecordTileTime
+    // on each tile.deliver; planner uses the registry's median for
+    // adaptive tile sizing on subsequent jobs. 0 = no data yet.
+    private readonly object _emaLock = new();
+    private double _emaMsPerKilopixel;
+    public double EmaMsPerKilopixel
+    {
+        get { lock (_emaLock) return _emaMsPerKilopixel; }
+    }
+    public int TileSamples { get; private set; }
+    private const double EmaAlpha = 0.3;
+
+    /// <summary>Append a per-tile timing sample to the worker's EMA.
+    /// pixels = tile width × height; renderMs = worker-reported wall ms.
+    /// Calls are thread-safe; cheap (one lock per delivery).</summary>
+    public void RecordTileTime(long pixels, long renderMs)
+    {
+        if (pixels <= 0 || renderMs <= 0) return;
+        double sample = renderMs * 1000.0 / pixels; // ms per kilopixel
+        lock (_emaLock)
+        {
+            _emaMsPerKilopixel = _emaMsPerKilopixel <= 0
+                ? sample
+                : EmaAlpha * sample + (1.0 - EmaAlpha) * _emaMsPerKilopixel;
+            TileSamples++;
+        }
+    }
 
     internal WorkerEntry(string workerId, string thumbprint)
     {

@@ -201,4 +201,72 @@ public sealed class WorkerRegistryTests
         var entry = reg.Register(dto, "TT", out _)!;
         Assert.Equal(1, entry.MaxConcurrentTiles);    // 0 → 1 (minimum)
     }
+
+    // ── D-3b — per-worker EMA + median ──────────────────────────────────
+
+    [Fact]
+    public void Ema_Starts_Zero_Until_First_Sample()
+    {
+        var reg = new WorkerRegistry();
+        var entry = reg.Register(SampleDto(), "TT", out _)!;
+
+        Assert.Equal(0.0, entry.EmaMsPerKilopixel);
+        Assert.Equal(0, entry.TileSamples);
+    }
+
+    [Fact]
+    public void Ema_Updates_With_Tile_Time()
+    {
+        var reg = new WorkerRegistry();
+        var entry = reg.Register(SampleDto(), "TT", out _)!;
+
+        // 1024×1024 pixels rendered in 1000 ms → 1000 ms / 1048.576 kpx ≈ 0.953
+        entry.RecordTileTime(1024 * 1024, 1000);
+        double first = entry.EmaMsPerKilopixel;
+        Assert.True(first > 0.9 && first < 1.0, $"unexpected first sample {first}");
+        Assert.Equal(1, entry.TileSamples);
+
+        // 2nd sample at 2 ms/kpx → α=0.3 blend should land between samples.
+        entry.RecordTileTime(1000, 2);
+        double blended = entry.EmaMsPerKilopixel;
+        Assert.True(blended > first && blended < 2.0, $"unexpected blended {blended}");
+        Assert.Equal(2, entry.TileSamples);
+    }
+
+    [Fact]
+    public void Median_Across_Workers_Skips_Untouched_Entries()
+    {
+        var reg = new WorkerRegistry();
+        var a = reg.Register(SampleDto("a"), "TA", out _)!;
+        var b = reg.Register(SampleDto("b"), "TB", out _)!;
+        var c = reg.Register(SampleDto("c"), "TC", out _)!;   // never reports
+
+        // a → 1 ms/kpx, b → 3 ms/kpx; median across reporters = 3 (upper of [1,3]).
+        a.RecordTileTime(1000, 1);
+        b.RecordTileTime(1000, 3);
+
+        double median = reg.MedianMsPerKilopixel();
+        Assert.True(median >= 1 && median <= 3, $"median {median} out of range");
+    }
+
+    [Fact]
+    public void Median_Returns_Zero_With_No_Samples()
+    {
+        var reg = new WorkerRegistry();
+        reg.Register(SampleDto(), "TT", out _);
+        Assert.Equal(0.0, reg.MedianMsPerKilopixel());
+    }
+
+    [Fact]
+    public void RecordTileTime_Ignores_Nonpositive_Args()
+    {
+        var reg = new WorkerRegistry();
+        var entry = reg.Register(SampleDto(), "TT", out _)!;
+
+        entry.RecordTileTime(0, 100);
+        entry.RecordTileTime(100, 0);
+        entry.RecordTileTime(-1, -1);
+        Assert.Equal(0.0, entry.EmaMsPerKilopixel);
+        Assert.Equal(0, entry.TileSamples);
+    }
 }

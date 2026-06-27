@@ -41,6 +41,27 @@ public sealed class TileDispatcher
     /// pass their own deadline.</summary>
     public TimeSpan DefaultWaitTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+    // ── D-3b work-stealing knobs ───────────────────────────────────────
+    /// <summary>When a job's pending queue is empty and idle workers
+    /// arrive on tile.next, the dispatcher may hand a duplicate of an
+    /// already-in-flight tile to the idle worker. First delivery wins;
+    /// the merger is idempotent. Only fires when the remaining in-flight
+    /// count drops below this fraction of the total tile count.</summary>
+    public double StealRemainingFraction { get; init; } = 0.10;
+
+    /// <summary>Minimum age of an in-flight tile before stealing is
+    /// allowed — defends against stealing a tile from a worker that has
+    /// only just received it.</summary>
+    public TimeSpan StealMinAge { get; init; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Tiny jobs (fewer than this many tiles) skip stealing —
+    /// per-tile setup cost dominates and the speedup is below noise.</summary>
+    public int StealMinTotalTiles { get; init; } = 4;
+
+    /// <summary>Wall-clock provider — swappable so tests can age in-flight
+    /// tiles deterministically without sleeping.</summary>
+    public Func<DateTime> NowUtc { get; init; } = () => DateTime.UtcNow;
+
     private readonly object _lock = new();
 
     // jobId → job state. Coordinator adds a job on submit, removes on
@@ -92,6 +113,11 @@ public sealed class TileDispatcher
             lock (_lock)
             {
                 tile = TryClaimAnyLocked(workerId);
+                // D-3b — when no fresh tile is pending, look for a
+                // straggler we can shadow. The duplicate carries the
+                // same TileId; the first worker to deliver wins (merger
+                // and AcceptDelivery are idempotent).
+                tile ??= TryStealLocked(workerId);
                 if (tile != null) return tile;
 
                 // Nothing available right now — register and sleep.
@@ -124,7 +150,7 @@ public sealed class TileDispatcher
     {
         // Round-robin between jobs: each pending tile is claimed FIFO
         // across jobs in id order. Tiny job count makes the cost
-        // negligible; rebalancing strategy lands in D-3.
+        // negligible.
         foreach (var kv in _jobs)
         {
             var st = kv.Value;
@@ -134,11 +160,57 @@ public sealed class TileDispatcher
                 st.InFlight[t.TileId] = new InFlightTile
                 {
                     WorkerId   = workerId,
-                    AssignedAt = DateTime.UtcNow,
+                    AssignedAt = NowUtc(),
                     Tile       = t,
                 };
                 return t;
             }
+        }
+        return null;
+    }
+
+    /// <summary>D-3b work-stealing path. When a job's pending queue is
+    /// empty AND we are in the last <see cref="StealRemainingFraction"/>
+    /// of tiles, hand an idle worker a duplicate of the oldest in-flight
+    /// tile. The original assignment stays in InFlight — both workers
+    /// race; the first delivery wins (ArtifactMerger's per-tile seen
+    /// gate and AcceptDelivery's TryRemove both no-op the duplicate).
+    /// Defends against:
+    ///   - re-stealing the same tile to the same worker (Stealers set)
+    ///   - stealing from the same worker that owns the tile (skip self)
+    ///   - stealing tiles that just got assigned (StealMinAge)
+    ///   - over-fragmenting tiny jobs (StealMinTotalTiles).</summary>
+    private TileJobDto? TryStealLocked(string workerId)
+    {
+        DateTime now = NowUtc();
+        foreach (var kv in _jobs)
+        {
+            var st = kv.Value;
+            if (!st.Pending.IsEmpty) continue;
+            if (st.InFlight.IsEmpty) continue;
+
+            int inFlight = st.InFlight.Count;
+            int total    = inFlight + st.Completed.Count;
+            if (total < StealMinTotalTiles) continue;
+            if (inFlight > Math.Max(1, total * StealRemainingFraction)) continue;
+
+            InFlightTile? victim = null;
+            foreach (var f in st.InFlight.Values)
+            {
+                if (f.WorkerId == workerId) continue;
+                if (f.Stealers != null && f.Stealers.Contains(workerId)) continue;
+                if (now - f.AssignedAt < StealMinAge) continue;
+                if (victim is null || f.AssignedAt < victim.AssignedAt) victim = f;
+            }
+            if (victim is null) continue;
+            victim.Stealers ??= new HashSet<string>(StringComparer.Ordinal);
+            victim.Stealers.Add(workerId);
+            // Return the SAME TileJobDto reference. Worker code paths
+            // only read its fields; no mutation that would race the
+            // original worker's local copy on the other side of the
+            // wire (the dto was serialised + deserialised per worker
+            // anyway in the real wire path).
+            return victim.Tile;
         }
         return null;
     }
@@ -238,5 +310,9 @@ public sealed class TileDispatcher
         public required string WorkerId { get; init; }
         public required DateTime AssignedAt { get; init; }
         public required TileJobDto Tile { get; init; }
+        /// <summary>D-3b — set of worker ids that have been handed a
+        /// duplicate of this tile via work-stealing. Null until the
+        /// first steal. Guarded by the dispatcher monitor.</summary>
+        public HashSet<string>? Stealers { get; set; }
     }
 }

@@ -247,7 +247,8 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         if (dto is null) return Err("bad-request", "missing params");
 
         string normThumb = ServerCertLoader.NormalizeThumbprint(thumbprint);
-        if (Registry.Lookup(dto.WorkerId, normThumb, out string? err) is null)
+        var workerEntry = Registry.Lookup(dto.WorkerId, normThumb, out string? err);
+        if (workerEntry is null)
             return Err(err ?? "unknown-worker", "tile.deliver refused");
 
         if (!Dispatcher.KnowsJob(dto.JobId))
@@ -326,6 +327,14 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         try { Jobs.WriteTileBytes(dto.JobId, dto.TileId, decoded); } catch { }
 
         Dispatcher.AcceptDelivery(dto.JobId, dto.TileId);
+
+        // D-3b — feed the EMA so future jobs adapt tile size to this
+        // worker's measured throughput. Stolen-tile duplicates land here
+        // too: both deliveries record a sample, which is fine — the
+        // straggler being late is exactly the signal we want averaged
+        // into ms-per-kilopixel.
+        try { workerEntry.RecordTileTime((long)meta.Width * meta.Height, dto.RenderMs); }
+        catch { }
 
         int done = Dispatcher.CompletedCount(dto.JobId);
         int total = plan.Count;
@@ -459,7 +468,11 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             var workerHints = new List<int>();
             foreach (var w in Registry.Snapshot())
                 if (w.PreferredTilePixels > 0) workerHints.Add(w.PreferredTilePixels);
-            plan = TilePlanner.PlanImage(dto.Request, dto.TilePixelsHint, workerHints);
+            // D-3b — feed the registry's learned per-worker EMA into the
+            // planner. First job sees median=0 (no data); planner falls
+            // back to PreferredTilePixels. Subsequent jobs auto-size.
+            double medianMsPerKpx = Registry.MedianMsPerKilopixel();
+            plan = TilePlanner.PlanImage(dto.Request, dto.TilePixelsHint, workerHints, medianMsPerKpx);
         }
         catch (Exception ex) { return Err("plan-failed", ex.Message); }
 

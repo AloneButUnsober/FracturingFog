@@ -110,6 +110,48 @@ public sealed class TilePlannerTests
         Assert.Equal(512, plan.TileTargetPixels);
     }
 
+    // ── D-3b adaptive sizing ───────────────────────────────────────────
+
+    [Fact]
+    public void Adaptive_Sizing_Picks_Side_For_Median_Worker()
+    {
+        // 1 ms/kpx workers, 2000 ms target → 2000 kpx = 2_000_000 px → ~1414 side.
+        int side = TilePlanner.ComputeAdaptiveTilePixels(medianMsPerKilopixel: 1.0, targetTileMs: 2000.0);
+        Assert.InRange(side, 1400, 1430);
+    }
+
+    [Fact]
+    public void Adaptive_Sizing_Falls_Back_When_No_Data()
+    {
+        Assert.Equal(0, TilePlanner.ComputeAdaptiveTilePixels(0, 2000));
+        Assert.Equal(0, TilePlanner.ComputeAdaptiveTilePixels(1.0, 0));
+    }
+
+    [Fact]
+    public void Plan_Uses_Adaptive_Tile_Size_When_Median_Provided()
+    {
+        // Fast workers: 0.1 ms/kpx, 200 ms target → 200/0.1 = 2000 kpx → side ≈ 1414.
+        var plan = TilePlanner.PlanImage(
+            Req(8192, 8192),
+            tilePixelsHint: 0,
+            workerPrefHints: null,
+            medianMsPerKilopixel: 0.1,
+            targetTileMs: 200);
+        Assert.InRange(plan.TileTargetPixels, 1400, 1430);
+    }
+
+    [Fact]
+    public void Plan_Explicit_Hint_Overrides_Adaptive()
+    {
+        var plan = TilePlanner.PlanImage(
+            Req(2048, 2048),
+            tilePixelsHint: 256,
+            workerPrefHints: new List<int> { 1024 },
+            medianMsPerKilopixel: 0.5,
+            targetTileMs: 2000);
+        Assert.Equal(256, plan.TileTargetPixels);
+    }
+
     [Theory]
     [InlineData("Mandelbrot",   true)]
     [InlineData("BurningShip",  true)]

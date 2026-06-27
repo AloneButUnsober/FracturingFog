@@ -129,4 +129,151 @@ public sealed class TileDispatcherTests
         var t = await task;
         Assert.Null(t);
     }
+
+    // ── D-3b work-stealing ─────────────────────────────────────────────
+
+    private static List<TileJobDto> TenTiles(string jobId)
+    {
+        var list = new List<TileJobDto>();
+        for (int i = 0; i < 10; i++)
+            list.Add(new() { JobId = jobId, TileId = i, Render = new RenderRequestDto { Width = 16, Height = 16 } });
+        return list;
+    }
+
+    [Fact]
+    public async Task Work_Stealing_Returns_Duplicate_When_Pending_Empty_And_Near_End()
+    {
+        DateTime now = new(2026, 6, 27, 12, 0, 0, DateTimeKind.Utc);
+        var d = new TileDispatcher
+        {
+            NowUtc = () => now,
+            StealMinAge = TimeSpan.FromSeconds(1),
+            StealMinTotalTiles = 4,
+            StealRemainingFraction = 0.10,
+        };
+        d.EnqueueJob("J1", TenTiles("J1"));
+
+        // First worker drains the whole queue (1 in-flight at a time
+        // — for the test we just claim all 10).
+        var claimed = new List<TileJobDto>();
+        for (int i = 0; i < 10; i++)
+        {
+            var t = await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+            Assert.NotNull(t);
+            claimed.Add(t!);
+        }
+
+        // Complete 9 of the 10 — last one (TileId=9) is the straggler.
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+        Assert.Equal(1, d.InFlightCount("J1"));
+        Assert.Equal(0, d.PendingCount("J1"));
+
+        // Age the in-flight tile past the steal-min-age window.
+        now = now.AddSeconds(2);
+
+        // Idle worker arrives — should steal a duplicate of tile 9.
+        var stolen = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+        Assert.NotNull(stolen);
+        Assert.Equal(9, stolen!.TileId);
+        // In-flight count stays 1 — work-stealing does not consume the
+        // original slot; the duplicate races for first delivery.
+        Assert.Equal(1, d.InFlightCount("J1"));
+    }
+
+    [Fact]
+    public async Task Work_Stealing_Skipped_For_Tiny_Jobs()
+    {
+        DateTime now = new(2026, 6, 27, 12, 0, 0, DateTimeKind.Utc);
+        var d = new TileDispatcher
+        {
+            NowUtc = () => now,
+            StealMinAge = TimeSpan.FromSeconds(1),
+            StealMinTotalTiles = 4,
+        };
+        // Only 3 tiles — under StealMinTotalTiles, no stealing.
+        d.EnqueueJob("J1", new List<TileJobDto>
+        {
+            new() { JobId = "J1", TileId = 0, Render = new RenderRequestDto { Width = 16, Height = 16 } },
+            new() { JobId = "J1", TileId = 1, Render = new RenderRequestDto { Width = 16, Height = 16 } },
+            new() { JobId = "J1", TileId = 2, Render = new RenderRequestDto { Width = 16, Height = 16 } },
+        });
+        for (int i = 0; i < 3; i++)
+            await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Assert.True(d.AcceptDelivery("J1", 0));
+        Assert.True(d.AcceptDelivery("J1", 1));
+        now = now.AddSeconds(2);
+
+        var stolen = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+        Assert.Null(stolen);
+    }
+
+    [Fact]
+    public async Task Work_Stealing_Honors_Min_Age()
+    {
+        DateTime now = new(2026, 6, 27, 12, 0, 0, DateTimeKind.Utc);
+        var d = new TileDispatcher
+        {
+            NowUtc = () => now,
+            StealMinAge = TimeSpan.FromSeconds(5),
+            StealMinTotalTiles = 4,
+        };
+        d.EnqueueJob("J1", TenTiles("J1"));
+        for (int i = 0; i < 10; i++)
+            await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+
+        // Only 1 second past assignment — under 5 s min age.
+        now = now.AddSeconds(1);
+        var notStolen = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+        Assert.Null(notStolen);
+
+        // Past the window — steal allowed.
+        now = now.AddSeconds(5);
+        var stolen = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+        Assert.NotNull(stolen);
+        Assert.Equal(9, stolen!.TileId);
+    }
+
+    [Fact]
+    public async Task Work_Stealing_Does_Not_Steal_From_Self()
+    {
+        DateTime now = new(2026, 6, 27, 12, 0, 0, DateTimeKind.Utc);
+        var d = new TileDispatcher
+        {
+            NowUtc = () => now,
+            StealMinAge = TimeSpan.FromMilliseconds(100),
+            StealMinTotalTiles = 4,
+        };
+        d.EnqueueJob("J1", TenTiles("J1"));
+        for (int i = 0; i < 10; i++)
+            await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+
+        now = now.AddSeconds(1);
+        // Same worker asking again must not steal its own tile.
+        var t = await d.ClaimNextAsync("wA", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+        Assert.Null(t);
+    }
+
+    [Fact]
+    public async Task Work_Stealing_Does_Not_Re_Hand_Same_Tile_To_Same_Stealer()
+    {
+        DateTime now = new(2026, 6, 27, 12, 0, 0, DateTimeKind.Utc);
+        var d = new TileDispatcher
+        {
+            NowUtc = () => now,
+            StealMinAge = TimeSpan.FromMilliseconds(100),
+            StealMinTotalTiles = 4,
+        };
+        d.EnqueueJob("J1", TenTiles("J1"));
+        for (int i = 0; i < 10; i++)
+            await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+
+        now = now.AddSeconds(1);
+        var first  = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+        Assert.NotNull(first);
+        var second = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
+        Assert.Null(second);
+    }
 }
