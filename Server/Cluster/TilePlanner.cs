@@ -37,6 +37,13 @@ public static class TilePlanner
     public const int MinTilePixels = 64;
     public const int MaxTilePixels = 8192;
 
+    /// <summary>Default target wall-time per tile, in milliseconds.
+    /// Adaptive sizing aims so the median worker finishes each tile in
+    /// roughly this window — short enough to keep stragglers cheap, long
+    /// enough that per-tile fixed costs (JSON-RPC frame, codec encode,
+    /// per-tile workdir setup) stay under ~5 % of the tile budget.</summary>
+    public const double DefaultTargetTileMs = 2000.0;
+
     /// <summary>Fractal types this planner can shard. All use the shared
     /// `(3.5 / max(W,H)) / Zoom` per-pixel world-unit formula. Other
     /// fractal types render the whole image as a single tile (or are
@@ -74,7 +81,11 @@ public static class TilePlanner
         return false;
     }
 
-    public static Plan PlanImage(RenderRequestDto request, int tilePixelsHint, IReadOnlyList<int>? workerPrefHints = null)
+    public static Plan PlanImage(
+        RenderRequestDto request, int tilePixelsHint,
+        IReadOnlyList<int>? workerPrefHints = null,
+        double medianMsPerKilopixel = 0,
+        double targetTileMs = DefaultTargetTileMs)
     {
         if (request.Width <= 0 || request.Height <= 0)
             throw new ArgumentException(
@@ -84,7 +95,7 @@ public static class TilePlanner
         if (request.CenterX is null || request.CenterY is null)
             throw new ArgumentException("CenterX/CenterY required for tiled planning");
 
-        int target = PickTargetPixels(tilePixelsHint, workerPrefHints);
+        int target = PickTargetPixels(tilePixelsHint, workerPrefHints, medianMsPerKilopixel, targetTileMs);
 
         int W = request.Width;
         int H = request.Height;
@@ -164,9 +175,21 @@ public static class TilePlanner
         };
     }
 
-    private static int PickTargetPixels(int hint, IReadOnlyList<int>? workerHints)
+    private static int PickTargetPixels(
+        int hint, IReadOnlyList<int>? workerHints,
+        double medianMsPerKilopixel, double targetTileMs)
     {
         if (hint > 0) return Math.Clamp(hint, MinTilePixels, MaxTilePixels);
+
+        // D-3b adaptive sizing: with a learned per-tile cost, pick a tile
+        // side that lands the median worker inside the target window.
+        // pixels = tileKpx * 1000; side ≈ sqrt(pixels) for square tiles.
+        if (medianMsPerKilopixel > 0 && targetTileMs > 0)
+        {
+            double tileKpx = targetTileMs / medianMsPerKilopixel;
+            int side = (int)Math.Round(Math.Sqrt(tileKpx * 1000.0));
+            if (side >= MinTilePixels) return Math.Clamp(side, MinTilePixels, MaxTilePixels);
+        }
 
         if (workerHints != null && workerHints.Count > 0)
         {
@@ -178,6 +201,17 @@ public static class TilePlanner
             if (median > 0) return Math.Clamp(median, MinTilePixels, MaxTilePixels);
         }
         return DefaultTilePixels;
+    }
+
+    /// <summary>Exposes the same adaptive math used inside <see cref="PlanImage"/>
+    /// so the coordinator (and tests) can preview the tile side a plan
+    /// will land on. Returns 0 when no data is available.</summary>
+    public static int ComputeAdaptiveTilePixels(double medianMsPerKilopixel, double targetTileMs = DefaultTargetTileMs)
+    {
+        if (medianMsPerKilopixel <= 0 || targetTileMs <= 0) return 0;
+        double tileKpx = targetTileMs / medianMsPerKilopixel;
+        int side = (int)Math.Round(Math.Sqrt(tileKpx * 1000.0));
+        return Math.Clamp(side, MinTilePixels, MaxTilePixels);
     }
 
     private static RenderRequestDto CloneRequest(RenderRequestDto src)

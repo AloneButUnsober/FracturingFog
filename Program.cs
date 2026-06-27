@@ -520,6 +520,10 @@ static class Program
             return FracturingFog.ServerHost.ClusterEntry.RunWorker(args);
         if (args.Length > 0 && args[0] == "--cluster-parity")
             return FracturingFog.ServerHost.ClusterParitySelfTest.Run(args);
+        // D-3b — scale harness: in-process N-worker render to measure
+        // walltime + speedup vs the single-worker baseline.
+        if (args.Length > 0 && args[0] == "--cluster-scale")
+            return FracturingFog.ServerHost.ClusterScaleSelfTest.Run(args);
 
         // Phase X.4 / Slice 4.1 — --renderer override. Default is RendererBackend.Auto
         // (DX on Win, Silk on Linux/macOS, picked by RendererFactory.Create
