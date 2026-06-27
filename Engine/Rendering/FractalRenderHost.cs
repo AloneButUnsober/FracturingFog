@@ -1767,7 +1767,40 @@ namespace FracturingFog.Rendering
                 _selectionBox = null;
             else
                 _selectionBox = (x.Value, y.Value, w.Value, h.Value);
-            RepaintWithPostFx();
+            // S-X9e (2026-06-27) — composite over the last-known-good frame,
+            // not over calc.ColorBuffer. At deep zoom the active calc holds
+            // a partial buffer (mid-render rows / cancelled state); reading
+            // it for the selection-box repaint stamped partial-render
+            // artifacts that compounded as the user dragged. Prefer the
+            // cached full-res snapshot; fall back to RepaintWithPostFx when
+            // we don't have one yet (first-frame edge case).
+            RepaintWithSelectionBox();
+        }
+
+        private void RepaintWithSelectionBox()
+        {
+            uint[]? srcBuf;
+            int srcW, srcH;
+            lock (_uploadGate)
+            {
+                if (_lastFullResBuffer != null
+                    && _lastFullResWidth == _currentTargetWidth
+                    && _lastFullResHeight == _currentTargetHeight)
+                {
+                    srcBuf = _lastFullResBuffer;
+                    srcW = _lastFullResWidth;
+                    srcH = _lastFullResHeight;
+                }
+                else
+                {
+                    srcBuf = null;
+                    srcW = srcH = 0;
+                }
+            }
+            if (srcBuf != null)
+                UploadProcessedBuffer(srcBuf, srcW, srcH);
+            else
+                RepaintWithPostFx();
         }
 
         /// <summary>
@@ -2390,12 +2423,17 @@ namespace FracturingFog.Rendering
             // S-X9d (2026-06-27) — keep a separate full-res snapshot for the
             // stale-upload fallback. Updated only when this frame matches the
             // current target dims so progressive ¼/½ previews don't clobber
-            // it. Allocated lazily, grown like the other pinned pools.
-            if (w == _currentTargetWidth && h == _currentTargetHeight)
+            // it. Source is _lastPreOverlayBuffer (= dst before grid/water/
+            // selection-box composite) so SetSelectionBox can repaint over
+            // it without double-stamping the overlay. Allocated lazily and
+            // grown like the other pinned pools. Skip if no pre-overlay
+            // snapshot was taken (recording mode suppresses it).
+            if (w == _currentTargetWidth && h == _currentTargetHeight
+                && _lastPreOverlayBuffer != null)
             {
                 if (_lastFullResBuffer == null || _lastFullResBuffer.Length < n)
                     _lastFullResBuffer = GC.AllocateUninitializedArray<uint>(n, pinned: true);
-                Array.Copy(dst, _lastFullResBuffer, n);
+                Array.Copy(_lastPreOverlayBuffer, _lastFullResBuffer, n);
                 _lastFullResWidth = w;
                 _lastFullResHeight = h;
             }
