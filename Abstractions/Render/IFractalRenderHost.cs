@@ -108,6 +108,14 @@ namespace FracturingFog.Render
         /// info MainForm currently pushes into the status bar.</summary>
         event EventHandler<RenderFrameInfo>? FrameCompleted;
 
+        /// <summary>Raised when an in-flight calculate gets cancelled (rapid
+        /// pan/zoom or animation tick before the prior frame's TAA / final
+        /// stage reaches FrameCompleted). Lets the status-bar consumer clear
+        /// the lingering "Calculating…" string the matching Trigger posted.
+        /// No payload — caller decides whether to restore prior frame info
+        /// or fall back to a generic idle string.</summary>
+        event EventHandler? RenderCancelled;
+
         /// <summary>Raised after the GPU texture upload for the most recent
         /// frame finishes — including the cancelled case so the UserBulb
         /// animation timer doesn't get stuck waiting on a render that never

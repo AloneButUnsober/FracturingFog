@@ -249,6 +249,14 @@ void main()
         {
         _gl.BindTexture(TextureTarget.Texture2D, _tex);
 
+        // S-X8 (2026-06-27) — explicit unpack state. Mesa drivers under
+        // memory pressure leave UNPACK_ROW_LENGTH at a non-zero stride from
+        // an earlier client call, which the next TexSubImage2D reads as
+        // padded → horizontal banding. UNPACK_ALIGNMENT=4 is the default
+        // but pin it too so no upstream driver fiddle can flip it to 1/2.
+        _gl.PixelStore(PixelStoreParameter.UnpackRowLength, 0);
+        _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 4);
+
         // Source layout from MandelbrotCalculator is BGRA per uint (little
         // endian byte order: B, G, R, A). GL_BGRA + GL_UNSIGNED_INT_8_8_8_8_REV
         // (= PixelType.UnsignedInt8888Rev) consumes the packed uint correctly
@@ -308,6 +316,19 @@ void main()
             _gl.BindTexture(TextureTarget.Texture2D, _tex);
             _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
             CheckGlError($"DrawArrays render #{_renderCount}");
+
+            // S-X8 (2026-06-27) — force GPU sync before swap on Linux/X11.
+            // glXSwapBuffers is non-blocking with most Mesa drivers; if the
+            // calc thread queues a new UpdateTexture before the previous
+            // swap-buffers actually composites, the X server delays the
+            // present until next user input forces an implicit sync (the
+            // "right-click reveals image" symptom). glFinish is heavyweight
+            // (CPU stalls until GPU drained) but the alternative — silent
+            // presents stalled behind in-flight commands — is worse. Skip
+            // on Windows where the Silk path is rare + DXGI present already
+            // syncs.
+            if (OperatingSystem.IsLinux())
+                _gl.Finish();
 
             _swap();
             CheckGlError($"swap render #{_renderCount}");

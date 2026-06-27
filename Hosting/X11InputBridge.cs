@@ -131,10 +131,40 @@ internal sealed class X11InputBridge : INativeInputBridge
     public bool TrySampleClient(IntPtr surfaceHandle, int clientX, int clientY,
                                 out byte r, out byte g, out byte b)
     {
-        // Eyedropper sampling deferred — wire when the Linux IColorSampleBridge
-        // lands. The shell falls back gracefully when this returns false.
+        // S-X8 (2026-06-27) — XGetImage on the surface window at (clientX,
+        // clientY) returns a 1×1 ZPixmap whose first 32-bit word is the
+        // pixel value. On TrueColor visuals (every modern Linux desktop)
+        // the layout is BGRX little-endian, matching the WindowsNativeInputBridge
+        // GdiGetPixel decode. Sampling the foreign Drawable directly avoids
+        // having to compose window manager + root-window state.
         r = g = b = 0;
-        return false;
+        if (surfaceHandle == IntPtr.Zero || _display == IntPtr.Zero) return false;
+        nuint win = (nuint)surfaceHandle.ToInt64();
+        IntPtr img = IntPtr.Zero;
+        try
+        {
+            img = XGetImage(_display, win, clientX, clientY, 1, 1,
+                            unchecked((nuint)~0UL), ZPixmap);
+            if (img == IntPtr.Zero) return false;
+
+            // XImage data pointer lives at offset 16 (width:4, height:4,
+            // xoffset:4, format:4, data:ptr). Stable across Xlib versions.
+            IntPtr dataPtr = Marshal.ReadIntPtr(img, XImageDataOffset);
+            if (dataPtr == IntPtr.Zero) return false;
+            int pixel = Marshal.ReadInt32(dataPtr, 0);
+            b = (byte)(pixel & 0xFF);
+            g = (byte)((pixel >> 8) & 0xFF);
+            r = (byte)((pixel >> 16) & 0xFF);
+            return true;
+        }
+        catch { return false; }
+        finally
+        {
+            if (img != IntPtr.Zero)
+            {
+                try { XDestroyImage(img); } catch { /* libX11 without symbol */ }
+            }
+        }
     }
 
     private void PumpLoop()
@@ -234,6 +264,23 @@ internal sealed class X11InputBridge : INativeInputBridge
 
         // Pull focus so subsequent keyboard events arrive at the InputSponge.
         FocusRequested?.Invoke();
+
+        // S-X8 (2026-06-27) — Color Theme Editor Inspect hook. Mirrors the
+        // Win NativeMouseForwarder branch: a left-button-down while Inspect
+        // mode is on samples the pixel under the cursor and feeds it into
+        // the editor instead of starting a pan. Returning true means the
+        // click was consumed — bail before the pan dispatch.
+        if (btn == PointerButton.Left)
+        {
+            var inspectHook = InspectClickHook;
+            if (inspectHook != null)
+            {
+                bool consumed = false;
+                try { consumed = inspectHook(e.x, e.y); }
+                catch { /* UI errors must not crash the X11 pump callback */ }
+                if (consumed) return;
+            }
+        }
 
         // Double-click detection: same button, within threshold + radius.
         long now = Environment.TickCount64;
@@ -365,7 +412,16 @@ internal sealed class X11InputBridge : INativeInputBridge
         public int same_screen;
     }
 
+    // ZPixmap format for XGetImage (X.h).
+    private const int ZPixmap = 2;
+    // Byte offset of `data` field within XImage struct (width:int, height:int,
+    // xoffset:int, format:int, data:pointer). 16 on both ILP32 + LP64.
+    private const int XImageDataOffset = 16;
+
     [DllImport("libX11.so.6")] private static extern IntPtr XOpenDisplay(IntPtr name);
+    [DllImport("libX11.so.6")] private static extern IntPtr XGetImage(IntPtr display, nuint d,
+        int x, int y, uint width, uint height, nuint plane_mask, int format);
+    [DllImport("libX11.so.6")] private static extern int    XDestroyImage(IntPtr ximg);
     [DllImport("libX11.so.6")] private static extern int    XCloseDisplay(IntPtr display);
     [DllImport("libX11.so.6")] private static extern int    XSelectInput(IntPtr display, nuint w, long event_mask);
     [DllImport("libX11.so.6")] private static extern int    XFlush(IntPtr display);

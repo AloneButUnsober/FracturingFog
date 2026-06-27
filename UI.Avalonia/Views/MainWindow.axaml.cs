@@ -46,6 +46,14 @@ public sealed partial class MainWindow : Window
     private MiniWindowTether? _miniMapTether;
     private MiniWindowTether? _miniDepthTether;
 
+    // S-X8 (2026-06-27) — hold the delegates ConfigureMiniDepth subscribes
+    // to RenderHost.ColorMapChanged / FrameCompleted so DetachShell can
+    // remove them. Without the field, the lambda capture pinned the window
+    // on the long-lived RenderHost event list across shell rebuilds and
+    // mini-depth open/close cycles, accumulating one handler per cycle.
+    private EventHandler? _miniDepthColorMapHandler;
+    private EventHandler<FracturingFog.Render.RenderFrameInfo>? _miniDepthFrameCompletedHandler;
+
     // Mini Mode (#12) — saved geometry restored on exit.
     private bool _miniModeActive;
     private global::Avalonia.Controls.WindowState _preMiniState;
@@ -498,6 +506,16 @@ public sealed partial class MainWindow : Window
             _shell.Main.PropertyChanged -= OnMainPropertyChanged;
             _shell.MiniModeToggleRequested -= OnMiniModeToggleRequested;
             _shell.ToyModeToggleRequested  -= OnToyModeToggleRequested;
+
+            // S-X8 (2026-06-27) — drop MiniDepth handlers off the long-lived
+            // RenderHost event list so the captured window can be collected
+            // and re-attach doesn't double-fire.
+            if (_miniDepthColorMapHandler != null)
+                _shell.Main.RenderHost.ColorMapChanged -= _miniDepthColorMapHandler;
+            if (_miniDepthFrameCompletedHandler != null)
+                _shell.Main.RenderHost.FrameCompleted -= _miniDepthFrameCompletedHandler;
+            _miniDepthColorMapHandler = null;
+            _miniDepthFrameCompletedHandler = null;
         }
         _shell = null;
     }
@@ -622,12 +640,15 @@ public sealed partial class MainWindow : Window
         // Initial gradient build using the active theme.
         win.Inner.RequestRedraw();
 
+        // S-X8 (2026-06-27) — held as fields so DetachShell can unsub.
         // Theme/region/type change → rebuild gradient.
-        shell.Main.RenderHost.ColorMapChanged += (_, _) =>
+        _miniDepthColorMapHandler = (_, _) =>
             global::Avalonia.Threading.Dispatcher.UIThread.Post(() => win.Inner.RequestRedraw());
+        shell.Main.RenderHost.ColorMapChanged += _miniDepthColorMapHandler;
         // Refresh indicator each frame to track pan/zoom.
-        shell.Main.RenderHost.FrameCompleted += (_, _) =>
+        _miniDepthFrameCompletedHandler = (_, _) =>
             global::Avalonia.Threading.Dispatcher.UIThread.Post(() => win.Inner.RefreshIndicator());
+        shell.Main.RenderHost.FrameCompleted += _miniDepthFrameCompletedHandler;
     }
 
     private void OnMiniModeToggleRequested(object? sender, bool enter)

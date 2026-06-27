@@ -139,6 +139,16 @@ namespace FracturingFog.Hosting
             if (OperatingSystem.IsLinux() && BootstrapHooks.NativeInputBridge == null)
                 BootstrapHooks.NativeInputBridge = new X11InputBridge();
 
+            // S-X8 (2026-06-27) — Linux desktop pixel sampler. Was unwired
+            // (BootstrapHooks.ColorSampleBridge null on Linux) so the Color
+            // Theme Editor's per-stop Sample button silently no-op'd.
+            // X11ColorSampleBridge XGrabPointers root with a crosshair cursor
+            // and samples the next button-press via XGetImage. Windows hosts
+            // install WindowsColorSampleBridge ahead of this in
+            // WindowsBootstrap.Install.
+            if (OperatingSystem.IsLinux() && BootstrapHooks.ColorSampleBridge == null)
+                BootstrapHooks.ColorSampleBridge = new X11ColorSampleBridge();
+
             // Phase X.5 / Slice 5.2 — register Help → Hardware tab probes.
             // The callables read live state each time the user opens the
             // help window so they reflect the audio backend / ILGPU device
