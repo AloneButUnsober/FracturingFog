@@ -148,7 +148,7 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
                 Console.Error.Flush();
                 if (button == 1)
                 {
-                    if (TrySampleRoot(display, root, rx, ry,
+                    if (TrySamplePoint(display, root, rx, ry,
                                        out byte r, out byte g, out byte b))
                     {
                         Console.Error.WriteLine($"[X11ColorSampleBridge] Sample ok RGB=({r},{g},{b}).");
@@ -157,7 +157,7 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
                         try { onPicked((r, g, b)); } catch { }
                         return;
                     }
-                    Console.Error.WriteLine($"[X11ColorSampleBridge] TrySampleRoot failed at root=({rx},{ry}) — XGetImage returned null or no data. Composited root or BadDrawable.");
+                    Console.Error.WriteLine($"[X11ColorSampleBridge] TrySamplePoint failed at root=({rx},{ry}) — no drawable yielded a pixel.");
                     Console.Error.Flush();
                     break;
                 }
@@ -199,18 +199,54 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
         }
     }
 
-    private static bool TrySampleRoot(IntPtr display, nuint root, int x, int y,
-                                       out byte r, out byte g, out byte b)
+    // S-X10b (2026-06-27) — Composited desktops redirect every top-level
+    // window into off-screen pixmaps; the root window's pixmap is then
+    // blank or unreadable, so XGetImage(root, ...) returns null on KDE /
+    // GNOME / picom / mutter. But each top-level X11 window's own pixmap
+    // is still live (the compositor reads from it to composite). So walk
+    // XTranslateCoordinates from root down to the leaf descendant under
+    // the click and XGetImage that window in its local coord system.
+    // Falls back to root as a last resort for pure-X11 (uncomposited) WMs.
+    private static bool TrySamplePoint(IntPtr display, nuint root, int rootX, int rootY,
+                                        out byte r, out byte g, out byte b)
+    {
+        r = g = b = 0;
+
+        nuint target = root;
+        int lx = rootX, ly = rootY;
+        for (int depth = 0; depth < 32; depth++)
+        {
+            int ok = XTranslateCoordinates(display, root, target, rootX, rootY,
+                                            out int destX, out int destY, out nuint child);
+            if (ok == 0) break;       // different screen — bail
+            if (child == 0) break;    // no further descendant
+            target = child;
+            lx = destX;
+            ly = destY;
+        }
+
+        Console.Error.WriteLine($"[X11ColorSampleBridge] Walk: leaf window=0x{target:X} local=({lx},{ly}).");
+        Console.Error.Flush();
+
+        if (target != root && TryGetPixel(display, target, lx, ly, out r, out g, out b))
+            return true;
+        Console.Error.WriteLine($"[X11ColorSampleBridge] Leaf XGetImage failed — trying root fallback at ({rootX},{rootY}).");
+        Console.Error.Flush();
+        return TryGetPixel(display, root, rootX, rootY, out r, out g, out b);
+    }
+
+    private static bool TryGetPixel(IntPtr display, nuint window, int x, int y,
+                                     out byte r, out byte g, out byte b)
     {
         r = g = b = 0;
         IntPtr img = IntPtr.Zero;
         try
         {
-            img = XGetImage(display, root, x, y, 1, 1,
+            img = XGetImage(display, window, x, y, 1, 1,
                             unchecked((nuint)~0UL), ZPixmap);
             if (img == IntPtr.Zero)
             {
-                Console.Error.WriteLine($"[X11ColorSampleBridge] XGetImage returned null at ({x},{y}).");
+                Console.Error.WriteLine($"[X11ColorSampleBridge] XGetImage returned null on window=0x{window:X} at ({x},{y}).");
                 Console.Error.Flush();
                 return false;
             }
@@ -229,7 +265,7 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[X11ColorSampleBridge] TrySampleRoot threw {ex.GetType().Name}: {ex.Message}");
+            Console.Error.WriteLine($"[X11ColorSampleBridge] TryGetPixel threw {ex.GetType().Name}: {ex.Message}");
             return false;
         }
         finally
@@ -285,4 +321,7 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
     [DllImport("libX11.so.6")] private static extern IntPtr XGetImage(IntPtr display, nuint d,
         int x, int y, uint width, uint height, nuint plane_mask, int format);
     [DllImport("libX11.so.6")] private static extern int    XDestroyImage(IntPtr ximg);
+    [DllImport("libX11.so.6")] private static extern int    XTranslateCoordinates(IntPtr display,
+        nuint src_w, nuint dest_w, int src_x, int src_y,
+        out int dest_x_return, out int dest_y_return, out nuint child_return);
 }
