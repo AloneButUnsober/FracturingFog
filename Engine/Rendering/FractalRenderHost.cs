@@ -2146,14 +2146,32 @@ namespace FracturingFog.Rendering
         // flat, chase Mesa / Avalonia / Skia). Logs every N frames to keep
         // output legible; N defaults to 30 (≈1 s at 30 FPS) but overridable
         // via FF_LEAK_DEBUG_EVERY=<n>.
+        //
+        // S-X9b (2026-06-27) — first probe revealed two issues:
+        //   1. Baseline at f=0 fired during the ctor's 1×1 dummy Render()
+        //      before the 20-calc pool warms, making the +812 MB Linux delta
+        //      mostly warm-up artifact (20 calcs × 1280×733 × ~40 B/px ≈
+        //      750 MB). Skip baseline until the first frame at real surface
+        //      dims (W > 64 && H > 64).
+        //   2. GC.GetTotalMemory(forceFullCollection: false) reports the
+        //      live heap including not-yet-collected gen-0 garbage, so what
+        //      looks like a leak may be transient churn the GC just hasn't
+        //      reaped yet. FF_LEAK_DEBUG_FORCEGC=1 adds a forced full-
+        //      collection sample so retained-vs-transient is separable. Off
+        //      by default — forcing gen-2 blocks every worker thread for tens
+        //      of ms and skews the workload.
         private static readonly bool s_leakDiag =
             string.Equals(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG"), "1", StringComparison.Ordinal);
         private static readonly int s_leakDiagEvery =
             int.TryParse(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG_EVERY"), out var __n) && __n > 0 ? __n : 30;
+        private static readonly bool s_leakDiagForceGc =
+            string.Equals(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG_FORCEGC"), "1", StringComparison.Ordinal);
         private long _leakDiagFrame;
         private long _leakDiagBaselineManagedBytes;
+        private long _leakDiagBaselineRetainedBytes;
         private long _leakDiagBaselineWorkingSet;
         private int _leakDiagBaselineGen0, _leakDiagBaselineGen1, _leakDiagBaselineGen2;
+        private bool _leakDiagBaselineTaken;
 
         private void UploadProcessedBuffer(uint[] src, int w, int h)
         {
@@ -2329,16 +2347,28 @@ namespace FracturingFog.Rendering
 
         // S-X9 (2026-06-27) — see UploadProcessedBuffer for activation gate.
         // Reports managed-heap bytes, working set, and per-generation GC
-        // collection counts. Frame-0 snapshot is the baseline; subsequent
-        // logs print delta-from-baseline so a monotonic climb is obvious at
-        // a glance. Reads Process.WorkingSet64 every sample (cheap on Linux,
-        // ~1 µs syscall on Windows — negligible vs the upload itself).
+        // collection counts. First sample at a real surface (W,H > 64) is
+        // the baseline; subsequent logs print delta-from-baseline.
+        //
+        // S-X9b (2026-06-27) — baseline gating + forced-GC option.
+        //   * Skip the ctor's 1×1 dummy frame so warm-up isn't counted as
+        //     leak.
+        //   * FF_LEAK_DEBUG_FORCEGC=1 runs a blocking Gen-2 collect so
+        //     "retained" reflects only objects the GC can't reclaim.
+        //     Compare retained-Δ vs managed-Δ to separate transient churn
+        //     from real leaks. Off by default — forcing gen-2 blocks every
+        //     thread for tens of ms.
         private void LeakDiagSample(int w, int h)
         {
+            if (!_leakDiagBaselineTaken && (w < 65 || h < 65)) return;
+
             long frame = System.Threading.Interlocked.Increment(ref _leakDiagFrame) - 1;
-            if (frame > 0 && (frame % s_leakDiagEvery) != 0) return;
+            if (_leakDiagBaselineTaken && (frame % s_leakDiagEvery) != 0) return;
 
             long managed = GC.GetTotalMemory(forceFullCollection: false);
+            long retained = s_leakDiagForceGc
+                ? GC.GetTotalMemory(forceFullCollection: true)
+                : managed;
             int g0 = GC.CollectionCount(0);
             int g1 = GC.CollectionCount(1);
             int g2 = GC.CollectionCount(2);
@@ -2346,22 +2376,29 @@ namespace FracturingFog.Rendering
             try { ws = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64; }
             catch { ws = -1; }
 
-            if (frame == 0)
+            if (!_leakDiagBaselineTaken)
             {
+                _leakDiagBaselineTaken = true;
                 _leakDiagBaselineManagedBytes = managed;
+                _leakDiagBaselineRetainedBytes = retained;
                 _leakDiagBaselineWorkingSet = ws;
                 _leakDiagBaselineGen0 = g0;
                 _leakDiagBaselineGen1 = g1;
                 _leakDiagBaselineGen2 = g2;
                 Console.Error.WriteLine(
-                    $"[FF_LEAK] baseline f=0 {w}x{h} managed={managed / (1024 * 1024)}MB ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB g0={g0} g1={g1} g2={g2}");
+                    s_leakDiagForceGc
+                        ? $"[FF_LEAK] baseline f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB retained={retained / (1024 * 1024)}MB ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB g0={g0} g1={g1} g2={g2}"
+                        : $"[FF_LEAK] baseline f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB g0={g0} g1={g1} g2={g2}");
                 return;
             }
 
             long dManaged = managed - _leakDiagBaselineManagedBytes;
+            long dRetained = retained - _leakDiagBaselineRetainedBytes;
             long dWs = ws < 0 ? 0 : ws - _leakDiagBaselineWorkingSet;
             Console.Error.WriteLine(
-                $"[FF_LEAK] f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB (Δ{dManaged / (1024 * 1024):+#;-#;0}) ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB (Δ{dWs / (1024 * 1024):+#;-#;0}) g0={g0 - _leakDiagBaselineGen0} g1={g1 - _leakDiagBaselineGen1} g2={g2 - _leakDiagBaselineGen2}");
+                s_leakDiagForceGc
+                    ? $"[FF_LEAK] f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB (Δ{dManaged / (1024 * 1024):+#;-#;0}) retained={retained / (1024 * 1024)}MB (Δ{dRetained / (1024 * 1024):+#;-#;0}) ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB (Δ{dWs / (1024 * 1024):+#;-#;0}) g0={g0 - _leakDiagBaselineGen0} g1={g1 - _leakDiagBaselineGen1} g2={g2 - _leakDiagBaselineGen2}"
+                    : $"[FF_LEAK] f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB (Δ{dManaged / (1024 * 1024):+#;-#;0}) ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB (Δ{dWs / (1024 * 1024):+#;-#;0}) g0={g0 - _leakDiagBaselineGen0} g1={g1 - _leakDiagBaselineGen1} g2={g2 - _leakDiagBaselineGen2}");
         }
 
         /// <summary>
