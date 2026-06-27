@@ -119,6 +119,19 @@ namespace FracturingFog.Rendering
         private uint[]? _lastUploadedBuffer;
         private int _lastUploadedWidth;
         private int _lastUploadedHeight;
+        // S-X9d (2026-06-27) — separately cache the last FULL-RES upload.
+        // Progressive ¼ / ½ res sidecar Triggers during pan write small-dim
+        // buffers into _lastUploadedBuffer; on pan-stop the Full Trigger's
+        // stale-upload step required StaleW == CalcW && StaleH == CalcH so
+        // it skipped the small previews, leaving the display showing
+        // whatever back-buffer the swap chain had (in some Mesa/X11 swap
+        // chains the OS damages the surface back to a pre-pan composite —
+        // the snap-back symptom). Keep the most recent full-res snapshot
+        // here so the stale-upload path always has a matching-dims buffer
+        // to paint while the full calc runs.
+        private uint[]? _lastFullResBuffer;
+        private int _lastFullResWidth;
+        private int _lastFullResHeight;
         // Tracks the renderer's CURRENT back-buffer size (last value passed to
         // Resize). Survives _lastUploadedBuffer being nulled by Resize, so the
         // slideshow cold-start path can build a black source buffer at the right
@@ -886,11 +899,37 @@ namespace FracturingFog.Rendering
             // threadpool so the UI thread doesn't block on a 5-15 ms GPU
             // upload before Calculate even starts — Finding A render-start
             // lag fix).
-            uint[]? staleBuf = _lastUploadedBuffer;
-            int staleW = _lastUploadedWidth;
-            int staleH = _lastUploadedHeight;
+            //
+            // S-X9d (2026-06-27) — prefer the cached full-res buffer over
+            // _lastUploadedBuffer when the latter holds a progressive ¼/½
+            // preview from a pan. The downstream stale-upload gate at line
+            // 1027 needs StaleW/H == CalcW/H to fire; without this fallback
+            // a pan + release at deep zoom skipped stale upload entirely
+            // and the user saw the swap-chain back-buffer reappear (pan
+            // snap-back symptom).
             int calcW = _calculator.Width;
             int calcH = _calculator.Height;
+            uint[]? staleBuf;
+            int staleW, staleH;
+            if (_lastUploadedBuffer != null
+                && _lastUploadedWidth == calcW && _lastUploadedHeight == calcH)
+            {
+                staleBuf = _lastUploadedBuffer;
+                staleW = _lastUploadedWidth;
+                staleH = _lastUploadedHeight;
+            }
+            else if (_lastFullResBuffer != null
+                && _lastFullResWidth == calcW && _lastFullResHeight == calcH)
+            {
+                staleBuf = _lastFullResBuffer;
+                staleW = _lastFullResWidth;
+                staleH = _lastFullResHeight;
+            }
+            else
+            {
+                staleBuf = null;
+                staleW = staleH = 0;
+            }
 
             // Wave 2.5 — progressive only on the canonical Mandelbrot path
             // and only when the dynamic alt slot is empty. Alt calcs run a
@@ -1639,6 +1678,11 @@ namespace FracturingFog.Rendering
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
             _lastUploadedBuffer = null;
+            // S-X9d — kill stale full-res snapshot on resize too; old buffer
+            // is sized for old dims and would fail the stale-upload size gate.
+            _lastFullResBuffer = null;
+            _lastFullResWidth = 0;
+            _lastFullResHeight = 0;
             _currentTargetWidth = w;
             _currentTargetHeight = h;
             // Buffer dimensions changing → old CDF is sized for old buffers.
@@ -2342,6 +2386,19 @@ namespace FracturingFog.Rendering
             _lastUploadedBuffer = dst;
             _lastUploadedWidth = w;
             _lastUploadedHeight = h;
+
+            // S-X9d (2026-06-27) — keep a separate full-res snapshot for the
+            // stale-upload fallback. Updated only when this frame matches the
+            // current target dims so progressive ¼/½ previews don't clobber
+            // it. Allocated lazily, grown like the other pinned pools.
+            if (w == _currentTargetWidth && h == _currentTargetHeight)
+            {
+                if (_lastFullResBuffer == null || _lastFullResBuffer.Length < n)
+                    _lastFullResBuffer = GC.AllocateUninitializedArray<uint>(n, pinned: true);
+                Array.Copy(dst, _lastFullResBuffer, n);
+                _lastFullResWidth = w;
+                _lastFullResHeight = h;
+            }
             } // _uploadGate
         }
 
