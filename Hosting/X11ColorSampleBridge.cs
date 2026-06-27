@@ -79,54 +79,103 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
         nuint cursor = 0;
         bool grabbed = false;
         bool fired = false;
+        Console.Error.WriteLine("[X11ColorSampleBridge] Pump thread started.");
+        Console.Error.Flush();
         try
         {
             display = XOpenDisplay(IntPtr.Zero);
-            if (display == IntPtr.Zero) { onCancelled(); return; }
+            if (display == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("[X11ColorSampleBridge] XOpenDisplay returned null (DISPLAY env unset or libX11 missing).");
+                Console.Error.Flush();
+                onCancelled();
+                return;
+            }
+            Console.Error.WriteLine($"[X11ColorSampleBridge] XOpenDisplay ok display=0x{display.ToInt64():X}.");
+            Console.Error.Flush();
 
             nuint root = XDefaultRootWindow(display);
             cursor = XCreateFontCursor(display, XC_CROSSHAIR);
+            if (cursor == 0)
+                Console.Error.WriteLine("[X11ColorSampleBridge] XCreateFontCursor returned 0 — falling back to no-cursor grab.");
 
-            int rc = XGrabPointer(display, root, 0,
-                ButtonPressMask | ButtonReleaseMask,
-                GrabModeAsync, GrabModeAsync,
-                0, cursor, CurrentTime);
-            if (rc != GrabSuccess) { onCancelled(); return; }
+            // S-X10a (2026-06-27) — Retry XGrabPointer up to ~500 ms. The
+            // eyedropper button's PointerPressed leaves Avalonia's X client
+            // in an implicit pointer grab until PointerReleased dispatches;
+            // a separate-connection XGrabPointer on root races against that
+            // and the server returns AlreadyGrabbed (1) until Avalonia
+            // releases. 20 × 25 ms covers human click duration with margin.
+            int rc = -1;
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                rc = XGrabPointer(display, root, 0,
+                    ButtonPressMask | ButtonReleaseMask,
+                    GrabModeAsync, GrabModeAsync,
+                    0, cursor, CurrentTime);
+                if (rc == GrabSuccess) break;
+                Thread.Sleep(25);
+            }
+            if (rc != GrabSuccess)
+            {
+                Console.Error.WriteLine($"[X11ColorSampleBridge] XGrabPointer failed after retries: rc={rc} (1=AlreadyGrabbed, 2=InvalidTime, 3=NotViewable, 4=Frozen).");
+                Console.Error.Flush();
+                onCancelled();
+                return;
+            }
             grabbed = true;
             XFlush(display);
+            Console.Error.WriteLine("[X11ColorSampleBridge] XGrabPointer ok — entering XPending poll loop (30 s deadline).");
+            Console.Error.Flush();
 
             var ev = new XEvent();
             // Cap the wait so a stuck grab can't lock the bridge forever.
             // 30 s is enough for a user to cancel via right-click; if XNextEvent
             // is never reached the finally still releases the grab.
             long deadline = Environment.TickCount64 + 30000;
+            bool sawAnyEvent = false;
             while (Environment.TickCount64 < deadline)
             {
                 if (XPending(display) == 0) { Thread.Sleep(10); continue; }
                 XNextEvent(display, ref ev);
+                sawAnyEvent = true;
                 if (ev.type != ButtonPress) continue;
 
                 uint button = ev.xbutton.button;
                 int rx = ev.xbutton.x_root;
                 int ry = ev.xbutton.y_root;
 
+                Console.Error.WriteLine($"[X11ColorSampleBridge] ButtonPress button={button} root=({rx},{ry}).");
+                Console.Error.Flush();
                 if (button == 1)
                 {
                     if (TrySampleRoot(display, root, rx, ry,
                                        out byte r, out byte g, out byte b))
                     {
+                        Console.Error.WriteLine($"[X11ColorSampleBridge] Sample ok RGB=({r},{g},{b}).");
+                        Console.Error.Flush();
                         fired = true;
                         try { onPicked((r, g, b)); } catch { }
                         return;
                     }
-                    // Sample failed — treat as cancel.
+                    Console.Error.WriteLine($"[X11ColorSampleBridge] TrySampleRoot failed at root=({rx},{ry}) — XGetImage returned null or no data. Composited root or BadDrawable.");
+                    Console.Error.Flush();
                     break;
                 }
-                // Any non-primary button cancels.
+                Console.Error.WriteLine($"[X11ColorSampleBridge] Cancel: non-primary button={button} at root=({rx},{ry}).");
+                Console.Error.Flush();
                 break;
             }
+            if (!sawAnyEvent)
+            {
+                Console.Error.WriteLine("[X11ColorSampleBridge] 30 s deadline reached with no events received. Grab succeeded but X server delivered nothing — XWayland or compositor intercept likely.");
+                Console.Error.Flush();
+            }
         }
-        catch { /* swallow — cancel below */ }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[X11ColorSampleBridge] Pump threw {ex.GetType().Name}: {ex.Message}");
+            Console.Error.Flush();
+        }
         finally
         {
             if (grabbed && display != IntPtr.Zero)
@@ -159,16 +208,30 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
         {
             img = XGetImage(display, root, x, y, 1, 1,
                             unchecked((nuint)~0UL), ZPixmap);
-            if (img == IntPtr.Zero) return false;
+            if (img == IntPtr.Zero)
+            {
+                Console.Error.WriteLine($"[X11ColorSampleBridge] XGetImage returned null at ({x},{y}).");
+                Console.Error.Flush();
+                return false;
+            }
             IntPtr data = Marshal.ReadIntPtr(img, XImageDataOffset);
-            if (data == IntPtr.Zero) return false;
+            if (data == IntPtr.Zero)
+            {
+                Console.Error.WriteLine("[X11ColorSampleBridge] XImage.data pointer null.");
+                Console.Error.Flush();
+                return false;
+            }
             int pixel = Marshal.ReadInt32(data, 0);
             b = (byte)(pixel & 0xFF);
             g = (byte)((pixel >> 8) & 0xFF);
             r = (byte)((pixel >> 16) & 0xFF);
             return true;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[X11ColorSampleBridge] TrySampleRoot threw {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
         finally
         {
             if (img != IntPtr.Zero)
