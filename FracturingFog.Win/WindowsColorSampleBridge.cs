@@ -126,6 +126,12 @@ internal sealed class WindowsColorSampleBridge : IColorSampleBridge
         s_proc = null;
     }
 
+    // S-X10 deferred (2026-06-27) — DWM-aware desktop-wide sampling.
+    // GetDC(NULL) + GdiGetPixel only returns this app's pixels under DWM
+    // on Win 8+; cross-app sampling needs BitBlt(SRCCOPY|CAPTUREBLT) to a
+    // 1×1 compatible bitmap (mirrors legacy DesktopEyedropper.SamplePixel
+    // via Graphics.CopyFromScreen). Lands together with the Linux portal
+    // path as S-X11. See Docs/Technical/S-X10-Session-Notes.md.
     private static (byte R, byte G, byte B, bool Ok) SamplePixel(int x, int y)
     {
         IntPtr dc = GetDC(IntPtr.Zero);

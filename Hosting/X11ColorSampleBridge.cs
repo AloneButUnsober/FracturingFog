@@ -207,6 +207,18 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
     // XTranslateCoordinates from root down to the leaf descendant under
     // the click and XGetImage that window in its local coord system.
     // Falls back to root as a last resort for pure-X11 (uncomposited) WMs.
+    //
+    // S-X10 deferred (2026-06-27) — desktop-wide parity with the legacy
+    // WinForms eyedropper still requires a cross-app pixel source. This
+    // walk works for software-drawn windows and X11-GL clients whose
+    // compositor backing is a server-side pixmap (incl. the Avalonia /
+    // Silk surface). It fails for direct-GPU-rendered windows (Chrome,
+    // Firefox, Steam) whose pixel content lives in GPU memory the X
+    // server never sees, and for XWayland proxy windows of Wayland-native
+    // clients. Follow-up (S-X11) wires xdg-desktop-portal's
+    // org.freedesktop.portal.Screenshot.PickColor via gdbus shell-out so
+    // the compositor itself does the pick. See
+    // Docs/Technical/S-X10-Session-Notes.md.
     private static bool TrySamplePoint(IntPtr display, nuint root, int rootX, int rootY,
                                         out byte r, out byte g, out byte b)
     {
