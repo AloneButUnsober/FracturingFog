@@ -787,26 +787,40 @@ namespace FracturingFog.Hosting
                 // (Linux/macOS) the request completes immediately without
                 // picking — UI shows the prior swatch unchanged.
                 var bridge = BootstrapHooks.ColorSampleBridge;
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] SampleColorRequested fired. bridge={(bridge?.GetType().Name ?? "null")} IsActive={(bridge?.IsActive.ToString() ?? "n/a")}");
+                Console.Error.Flush();
                 if (bridge == null || bridge.IsActive)
                 {
+                    Console.Error.WriteLine("[AvaloniaShellBootstrap] Sample short-circuit: bridge null or already active.");
+                    Console.Error.Flush();
                     args.Completion.TrySetResult(true);
                     return;
                 }
                 try
                 {
+                    Console.Error.WriteLine("[AvaloniaShellBootstrap] Calling bridge.Begin().");
+                    Console.Error.Flush();
                     bridge.Begin(
                         picked =>
                         {
+                            Console.Error.WriteLine($"[AvaloniaShellBootstrap] bridge picked RGB=({picked.R},{picked.G},{picked.B})");
+                            Console.Error.Flush();
                             args.PickedR = picked.R;
                             args.PickedG = picked.G;
                             args.PickedB = picked.B;
                             args.Completion.TrySetResult(true);
                         },
-                        () => args.Completion.TrySetResult(true));
+                        () =>
+                        {
+                            Console.Error.WriteLine("[AvaloniaShellBootstrap] bridge cancelled.");
+                            Console.Error.Flush();
+                            args.Completion.TrySetResult(true);
+                        });
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Sample failed: {ex.Message}");
+                    Console.Error.Flush();
                     args.Completion.TrySetResult(true);
                 }
             };
