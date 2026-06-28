@@ -97,6 +97,7 @@ public sealed class JobStore
             WriteStatusLocked(dir, new PersistedStatus
             {
                 JobState        = "queued",
+                Mode            = plan.Mode ?? "",
                 TilesTotal      = plan.TileCount,
                 TilesDone       = 0,
                 CreatedUnixMs   = now,
@@ -386,6 +387,11 @@ public sealed class PersistedStatus
 {
     /// <summary>queued | planning | rendering | merging | ready | failed | cancelled</summary>
     public string JobState { get; set; } = "";
+
+    /// <summary>D-5a — mode the plan was built for (image | video |
+    /// slideshow). Cached here so admin UI summaries don't have to crack
+    /// plan.json per row. Static once the job is created.</summary>
+    public string Mode { get; set; } = "";
 
     public int  TilesTotal      { get; set; }
     public int  TilesDone       { get; set; }
