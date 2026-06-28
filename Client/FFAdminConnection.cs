@@ -79,22 +79,30 @@ public sealed class FFAdminConnection : IAsyncDisposable
             new JobTileMapRequestDto { JobId = jobId },
             ct);
 
-    /// <summary>cluster.config.get — read the three live-tunable cluster
-    /// knobs (max jobs, artifact retention minutes, default tile target).
-    /// Backs the MasterConfigView load.</summary>
+    /// <summary>cluster.config.get — read the live-tunable cluster knobs
+    /// (D-5e: max jobs, retention, tile target. D-6c1: client + worker
+    /// rate-limit per-minute + burst). Backs the MasterConfigView load
+    /// and any admin tooling that wants to inspect the running master.</summary>
     public Task<ClusterConfigDto> GetClusterConfigAsync(CancellationToken ct)
         => _inner.CallAsync<ClusterConfigDto>(
             "cluster.config.get",
             new ClusterConfigGetRequestDto(),
             ct);
 
-    /// <summary>cluster.config.set — apply any subset of the three knobs.
-    /// Returns the post-apply snapshot so the UI can show the clamped /
-    /// persisted values without a second round-trip. Pass null for fields
-    /// the operator did not change.</summary>
+    /// <summary>cluster.config.set — apply any subset of the live-tunable
+    /// knobs. Returns the post-apply snapshot so the UI can show the
+    /// clamped / persisted values without a second round-trip. Pass null
+    /// for fields the operator did not change. D-6c1 grew this helper
+    /// with the four per-role rate-limit knobs; existing callers that
+    /// only set the D-5e trio remain source-compatible (new args are
+    /// optional and default to null).</summary>
     public Task<ClusterConfigDto> SetClusterConfigAsync(
         int? maxJobs, int? artifactRetentionMinutes, int? tileTargetPixels,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? clientCallPerMinute       = null,
+        int? clientCallBurst           = null,
+        int? workerTileNextPerMinute   = null,
+        int? workerTileNextBurst       = null)
         => _inner.CallAsync<ClusterConfigDto>(
             "cluster.config.set",
             new ClusterConfigSetRequestDto
@@ -102,6 +110,10 @@ public sealed class FFAdminConnection : IAsyncDisposable
                 ClusterMaxJobs                  = maxJobs,
                 ClusterArtifactRetentionMinutes = artifactRetentionMinutes,
                 ClusterTileTargetPixels         = tileTargetPixels,
+                ClientCallPerMinute             = clientCallPerMinute,
+                ClientCallBurst                 = clientCallBurst,
+                WorkerTileNextPerMinute         = workerTileNextPerMinute,
+                WorkerTileNextBurst             = workerTileNextBurst,
             },
             ct);
 

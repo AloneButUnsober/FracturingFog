@@ -79,6 +79,30 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     /// Null = in-memory only; admin UI changes vanish on master restart.</summary>
     public Action<ClusterConfigDto>? PersistConfig { get; init; }
 
+    /// <summary>D-6c1 — per-IP client-call per-minute cap. Mirrors
+    /// <see cref="ServerConfig.ClientCallPerMinute"/>; live-mutable via
+    /// cluster.config.set. 0 = limiter disabled for the client role.</summary>
+    public int ClientCallPerMinute { get; set; } = 600;
+
+    /// <summary>D-6c1 — client-call burst allowance. Live-mutable.</summary>
+    public int ClientCallBurst { get; set; } = 30;
+
+    /// <summary>D-6c1 — per-thumbprint worker tile.next per-minute cap.
+    /// Live-mutable. 0 = limiter disabled for the worker role.</summary>
+    public int WorkerTileNextPerMinute { get; set; } = 600;
+
+    /// <summary>D-6c1 — worker tile.next burst allowance. Live-mutable.</summary>
+    public int WorkerTileNextBurst { get; set; } = 30;
+
+    /// <summary>D-6c1 — invoked after a cluster.config.set call mutates the
+    /// rate-limit knobs so the host can apply the new values to the active
+    /// <see cref="Guard.RoleAwareRateLimiter"/> on FFServer. Set after the
+    /// FFServer is built (ClusterCoordinator is constructed first, then
+    /// passed into FFServer, so this is wired post-construction rather
+    /// than via init-only). Null = config changes persist + take effect
+    /// only after a master restart.</summary>
+    public Action<int, int, int, int>? ApplyRoleLimiterChange { get; set; }
+
     public WorkerRegistry  Registry   { get; }
     public JobStore?       Jobs       { get; init; }
     public TileDispatcher? Dispatcher { get; init; }
@@ -1588,6 +1612,35 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 : Math.Clamp(t, TilePlanner.MinTilePixels, TilePlanner.MaxTilePixels);
         }
 
+        // D-6c1 rate-limit knobs. Negative perMinute clamps to 0
+        // (disabled); negative burst clamps to 1 (bucket's lower bound,
+        // mirrors RoleAwareRateLimiter.Bucket's own Math.Max(1, burst)).
+        bool roleLimiterTouched = false;
+        if (dto.ClientCallPerMinute is int ccpm)
+        { ClientCallPerMinute = Math.Max(0, ccpm); roleLimiterTouched = true; }
+        if (dto.ClientCallBurst is int ccb)
+        { ClientCallBurst = Math.Max(1, ccb); roleLimiterTouched = true; }
+        if (dto.WorkerTileNextPerMinute is int wpm)
+        { WorkerTileNextPerMinute = Math.Max(0, wpm); roleLimiterTouched = true; }
+        if (dto.WorkerTileNextBurst is int wb)
+        { WorkerTileNextBurst = Math.Max(1, wb); roleLimiterTouched = true; }
+        if (roleLimiterTouched)
+        {
+            try
+            {
+                ApplyRoleLimiterChange?.Invoke(
+                    ClientCallPerMinute, ClientCallBurst,
+                    WorkerTileNextPerMinute, WorkerTileNextBurst);
+            }
+            catch (Exception ex)
+            {
+                _log.Event("cluster-config-limiter-apply-failed", new Dictionary<string, object?>
+                {
+                    ["error"] = ex.Message,
+                });
+            }
+        }
+
         var snap = SnapshotConfig();
         try { PersistConfig?.Invoke(snap); }
         catch (Exception ex)
@@ -1604,20 +1657,28 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         }
         _log.Event("cluster-config-set", new Dictionary<string, object?>
         {
-            ["maxJobs"]            = snap.ClusterMaxJobs,
-            ["retentionMinutes"]   = snap.ClusterArtifactRetentionMinutes,
-            ["tileTargetPixels"]   = snap.ClusterTileTargetPixels,
+            ["maxJobs"]                 = snap.ClusterMaxJobs,
+            ["retentionMinutes"]        = snap.ClusterArtifactRetentionMinutes,
+            ["tileTargetPixels"]        = snap.ClusterTileTargetPixels,
+            ["clientCallPerMinute"]     = snap.ClientCallPerMinute,
+            ["clientCallBurst"]         = snap.ClientCallBurst,
+            ["workerTileNextPerMinute"] = snap.WorkerTileNextPerMinute,
+            ["workerTileNextBurst"]     = snap.WorkerTileNextBurst,
         });
         return Ok(snap);
     }
 
-    /// <summary>D-5e — returns the live config as the same shape that
-    /// cluster.config.get and cluster.config.set respond with.</summary>
+    /// <summary>D-5e + D-6c1 — returns the live config as the same shape
+    /// that cluster.config.get and cluster.config.set respond with.</summary>
     public ClusterConfigDto SnapshotConfig() => new()
     {
         ClusterMaxJobs                  = ClusterMaxJobs,
         ClusterArtifactRetentionMinutes = ClusterArtifactRetentionMinutes,
         ClusterTileTargetPixels         = ClusterTileTargetPixels,
+        ClientCallPerMinute             = ClientCallPerMinute,
+        ClientCallBurst                 = ClientCallBurst,
+        WorkerTileNextPerMinute         = WorkerTileNextPerMinute,
+        WorkerTileNextBurst             = WorkerTileNextBurst,
     };
 
     /// <summary>D-5c — read tile geometry off plan.json for the given mode.

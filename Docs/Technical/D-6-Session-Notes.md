@@ -849,3 +849,200 @@ sub-rect adaptation (D-6b1), QD/OD orbit limbs growth (D-6b #97),
 the four rate-limit knobs surfaced through `cluster.config.get/set`
 for live tuning (D-6c #-deferred), and video / slideshow crash
 recovery (D-6a #93 deferral). None block the phase close.
+
+---
+
+## Session 6 — D-6c1 — Live-tunable rate-limit knobs (2026-06-28)
+
+**Goal**: close the D-6c "live-config follow-up" called out in §-deferred.
+The four per-role rate-limit knobs (`ClientCallPerMinute`,
+`ClientCallBurst`, `WorkerTileNextPerMinute`, `WorkerTileNextBurst`)
+were startup-only — an admin who wanted to retune had to edit
+`server-config.json` and bounce the master. Surface them through the
+existing `cluster.config.get` / `cluster.config.set` round-trip so
+`FFAdminConnection.SetClusterConfigAsync` (and a future Master Config
+dialog growth) can dial them without a restart.
+
+**Sub-slice decision**: a single slice. The wire surface (DTO fields),
+the coordinator handler, the live-apply hook into FFServer's
+`RoleAwareRateLimiter`, and the client helper extension co-locate
+naturally — splitting would have stranded a passing wire layer
+without the live-apply or vice versa. UI growth (a second
+`MasterConfigView` row group for the rate-limit knobs) is the
+natural next slice but is deferred: the wire is the load-bearing
+half of the follow-up, and the existing MasterConfigView already
+covers the three D-5e knobs; a UI-only follow-up can grow the form
+without further protocol work.
+
+**Server-side changes**
+
+- `Server/Guard/RoleAwareRateLimiter.cs`:
+  * `Bucket._ratePerSec` / `_capacity` switched from `readonly` to
+    plain instance fields with `Volatile.Read` / `Volatile.Write`
+    accessors. Lets the limiter mutate its rate without rebuilding
+    the bucket map — in-flight per-key `Slot._tokens` state survives
+    the swap. Reads on the hot path snapshot via `Volatile.Read`
+    once per call so a concurrent reconfigure can't tear a `double`
+    on a 32-bit platform (we ship 64-bit only today, but the
+    Volatile.* pattern is what the analyzer expects and is free).
+  * New public `Reconfigure(clientPerMinute, clientBurst,
+    workerTileNextPerMinute, workerTileNextBurst)` — forwards to
+    the per-bucket `Reconfigure`.
+- `Server/FFServer.cs`:
+  * New public `ReconfigureRoleLimiter(int,int,int,int)` that
+    forwards into the private `_roleLimiter`. Avoids exposing the
+    limiter reference itself; the only caller (ClusterEntry) needs
+    only the apply-with-four-ints surface.
+- `Server/Cluster/Protocol/ClusterConfigDto.cs`:
+  * Both `ClusterConfigSetRequestDto` and `ClusterConfigDto` grew
+    four optional / non-optional fields respectively
+    (`clientCallPerMinute`, `clientCallBurst`,
+    `workerTileNextPerMinute`, `workerTileNextBurst`). JSON property
+    names mirror the `ServerConfig` casing so an operator reading a
+    `cluster.config.get` response can map directly to the
+    `server-config.json` keys.
+- `Server/Cluster/ClusterCoordinator.cs`:
+  * Four new `{ get; set; }` properties seeded from defaults
+    matching `ServerConfig` defaults (600 / 30 / 600 / 30).
+  * New `ApplyRoleLimiterChange` `Action<int,int,int,int>?` —
+    `{ get; set; }` rather than `init` because the coordinator is
+    constructed before FFServer (it's an FFServer init dependency),
+    so the apply hook is wired post-construction in ClusterEntry.
+  * `HandleClusterConfigSetAsync` now parses the four new fields,
+    clamps (`Math.Max(0, perMinute)` / `Math.Max(1, burst)` — same
+    bounds as `Bucket`'s own constructor floor), records
+    `roleLimiterTouched`, and on touch invokes the hook and emits
+    `cluster-config-limiter-apply-failed` on hook exception (the
+    in-memory value still updates — operator can retry). `cluster-
+    config-set` event line gained four new keys for audit-log
+    visibility.
+- `ServerHost/ClusterEntry.cs`:
+  * Seed the four new coordinator fields from `cfg` so the master
+    boots with whatever the admin last persisted.
+  * `PersistConfig` callback writes the four new fields back to
+    `cfg` so cluster.config.set survives a master restart.
+  * After `new FFServer(...)`, assign
+    `coord.ApplyRoleLimiterChange = (cpm, cb, wpm, wb) =>
+      server.ReconfigureRoleLimiter(cpm, cb, wpm, wb);`. Coord is
+    built first (FFServer init dependency); the hook closes the
+    loop post-construction.
+
+**Client-side change**
+
+- `Client/FFAdminConnection.cs`:
+  * `SetClusterConfigAsync` grew four optional `int?` parameters
+    after the existing `CancellationToken`. Default `null` so the
+    one existing caller (`MasterConfigViewModel.ApplyAsync`) stays
+    source-compatible. New callers (admin CLI tooling, a future
+    MasterConfigView row group) pass any subset of the four.
+
+**Tests**
+
+- `Server.Tests/Cluster/RoleAwareRateLimiterTests.cs` — three new
+  facts covering the reconfigure surface:
+  * `Reconfigure_From_Disabled_To_Enabled_Starts_Refusing` —
+    starting with `perMinute=0` (disabled) then dialing up to
+    `60/burst=1` consumes the single token, then refuses.
+  * `Reconfigure_From_Enabled_To_Disabled_Stops_Refusing` —
+    inverse: a previously-refusing bucket dialled to `perMinute=0`
+    goes back to unconditional Allow on the next call.
+  * `Reconfigure_Worker_Bucket_Independent_Of_Client_Bucket` —
+    tightening the worker bucket alone leaves the client bucket's
+    original burst capacity intact. Guards against an accidental
+    cross-wire in the `Reconfigure` forwarder.
+- `Server.Tests/Cluster/ClusterAdminRpcTests.cs` — five new facts:
+  * `ClusterConfig_Get_Returns_RoleLimiter_Defaults` — the four
+    knobs default to 600/30/600/30 on a fresh coordinator (matches
+    `ServerConfig` defaults).
+  * `ClusterConfig_Set_Updates_RoleLimiter_And_Fires_ApplyHook` —
+    a set call updates the four coordinator fields and invokes
+    `ApplyRoleLimiterChange` with the post-clamp values.
+  * `ClusterConfig_Set_RoleLimiter_Clamps_Negative_Values` —
+    negative perMinute → 0, negative / zero burst → 1.
+  * `ClusterConfig_Set_RoleLimiter_NullFields_DoNotFireApplyHook` —
+    touching only D-5e knobs leaves `ApplyRoleLimiterChange`
+    untouched; no gratuitous limiter churn.
+  * `ClusterConfig_Set_RoleLimiter_ApplyHook_Failure_Does_Not_Fail_Call`
+    — a throwing hook is swallowed; the in-memory value still
+    updates and the call returns Ok (mirrors the existing
+    `PersistConfig` swallow path).
+
+**Design decisions**
+
+#120. Bucket reconfigure mutates rate/capacity in place rather than
+  rebuilding the limiter from scratch. The alternative — swap the
+  `RoleAwareRateLimiter` reference inside `FFServer` — would have
+  required `FFServer._roleLimiter` to be `volatile` or behind a
+  lock, dropped every in-flight per-key bucket's accrued tokens
+  (a runaway worker would get a fresh burst of `burst` calls on
+  every set), and forced a CAS dance for ConfigureAwait-style
+  swap. In-place mutation keeps the per-key bookkeeping warm,
+  which is what an operator dialling a rate down actually wants —
+  the burst budget the abuser already exhausted should stay
+  exhausted across the swap.
+
+#121. `ApplyRoleLimiterChange` is `Action<int,int,int,int>?`
+  rather than `Action<ClusterConfigDto>?`. Reason: passing the
+  whole snapshot would bind ClusterCoordinator's apply contract
+  to the DTO shape, which is the wire surface. The apply hook is
+  an internal seam between two server-internal collaborators
+  (coordinator + FFServer) — the four-int signature is the
+  minimum surface for the job and won't grow if the DTO grows
+  later for unrelated knobs.
+
+#122. Hook is `{ get; set; }`, not `init`. PersistConfig is
+  `init`-only because it's assigned at coordinator-construction
+  time (inside the object initializer). The limiter hook can't
+  follow that pattern: the FFServer it forwards into is built
+  *with* the coordinator already in hand. Splitting the apply
+  surface from FFServer (e.g. via an `IRoleLimiterApplier`
+  parameter passed into both constructors) would buy the `init`
+  immutability at the cost of a third interface for a one-method
+  surface; not worth it.
+
+#123. `SetClusterConfigAsync` grew with four optional trailing
+  parameters rather than via a builder or a second method. Reason:
+  existing callers (MasterConfigViewModel) call positionally; an
+  options struct would have broken the call site for zero gain
+  (the four new params are independent, mostly absent, and
+  default to "leave alone"). A second method
+  (`SetRoleLimiterAsync`) would have meant two RPCs to update a
+  mixed D-5e + D-6c1 set, when the coordinator already supports
+  a single atomic update.
+
+#124. The four `cluster.config.set` audit-log keys are added to
+  the existing `cluster-config-set` event rather than emitted as
+  a parallel `cluster-config-limiter-set` event. Reason: an
+  operator reading the audit log wants the full
+  "what changed in one apply" line in one place; splitting would
+  make a join across two adjacent NDJSON lines necessary to
+  reconstruct a single user action. The new event
+  `cluster-config-limiter-apply-failed` is separate because it's
+  an error condition with its own diagnostic body, not the
+  same-shape success path.
+
+#125. The Master Config UI is not extended in this slice. Reason:
+  the wire is the load-bearing half of the follow-up — any admin
+  tooling (a CLI script, a future dashboard widget) can now dial
+  the knobs over the same `FFAdminConnection.SetClusterConfigAsync`
+  the existing dialog already uses. Growing the dialog with a
+  second row group (four spinners + load/apply sharing the
+  existing buttons) is a UI-only follow-up that doesn't need a
+  protocol change and would bloat the slice unnecessarily.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing warnings only
+  (35 total — AVLN5001 + codegen CS0219 + xUnit1051, unchanged
+  from D-6e).
+- Test suite: **346 passed, 0 failed** (+8 since D-6e's 338).
+- Filtered runs:
+  * `--filter "FullyQualifiedName~RoleAwareRateLimiterTests"`: 9
+    passed in 442 ms (3 new + 6 existing).
+  * `--filter "FullyQualifiedName~ClusterAdminRpcTests"`: includes
+    5 new D-6c1 tests alongside the existing D-5a/D-5e coverage.
+
+**Open follow-ups remaining** (unchanged): D-6b1 (SIMD PT4/PT8
+sub-rect adaptation), D-6b #97 (QD/OD orbit limbs), D-6a #93
+(video / slideshow crash recovery), and the UI-only growth of
+MasterConfigView noted in #125.

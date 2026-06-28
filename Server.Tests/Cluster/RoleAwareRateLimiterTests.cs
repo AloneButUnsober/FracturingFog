@@ -136,6 +136,81 @@ public sealed class RoleAwareRateLimiterTests
                 lim.TryAccept(CertRole.Worker, "AAA", "tile.next"));
         }
     }
+
+    // ── D-6c1 — live reconfigure ────────────────────────────────────────
+
+    [Fact]
+    public void Reconfigure_From_Disabled_To_Enabled_Starts_Refusing()
+    {
+        var lim = new RoleAwareRateLimiter(
+            clientPerMinute: 0, clientBurst: 1,
+            workerTileNextPerMinute: 0, workerTileNextBurst: 1);
+        Assert.False(lim.ClientEnabled);
+
+        // Was disabled; tighten to 60/min burst=1. First call drains the
+        // single token, second refuses.
+        lim.Reconfigure(
+            clientPerMinute: 60, clientBurst: 1,
+            workerTileNextPerMinute: 0, workerTileNextBurst: 1);
+        Assert.True(lim.ClientEnabled);
+
+        Assert.Equal(RoleLimiterDecision.Allow,
+            lim.TryAccept(CertRole.Client, "10.0.0.1", "job.status"));
+        Assert.Equal(RoleLimiterDecision.RefusedRate,
+            lim.TryAccept(CertRole.Client, "10.0.0.1", "job.status"));
+    }
+
+    [Fact]
+    public void Reconfigure_From_Enabled_To_Disabled_Stops_Refusing()
+    {
+        var lim = new RoleAwareRateLimiter(
+            clientPerMinute: 60, clientBurst: 1,
+            workerTileNextPerMinute: 0, workerTileNextBurst: 1);
+        Assert.Equal(RoleLimiterDecision.Allow,
+            lim.TryAccept(CertRole.Client, "10.0.0.1", "job.status"));
+        Assert.Equal(RoleLimiterDecision.RefusedRate,
+            lim.TryAccept(CertRole.Client, "10.0.0.1", "job.status"));
+
+        // Operator dials per-minute to 0; the limiter goes back to
+        // unconditional Allow for the client role on the next call.
+        lim.Reconfigure(
+            clientPerMinute: 0, clientBurst: 1,
+            workerTileNextPerMinute: 0, workerTileNextBurst: 1);
+        Assert.False(lim.ClientEnabled);
+
+        for (int i = 0; i < 50; i++)
+        {
+            Assert.Equal(RoleLimiterDecision.Allow,
+                lim.TryAccept(CertRole.Client, "10.0.0.1", "job.status"));
+        }
+    }
+
+    [Fact]
+    public void Reconfigure_Worker_Bucket_Independent_Of_Client_Bucket()
+    {
+        // Tighten only the worker bucket; the client bucket retains its
+        // original rate. This guards against an accidental cross-wiring
+        // in the Reconfigure forwarder.
+        var lim = new RoleAwareRateLimiter(
+            clientPerMinute: 60, clientBurst: 5,
+            workerTileNextPerMinute: 60, workerTileNextBurst: 5);
+
+        lim.Reconfigure(
+            clientPerMinute: 60, clientBurst: 5,
+            workerTileNextPerMinute: 60, workerTileNextBurst: 1);
+
+        Assert.Equal(RoleLimiterDecision.Allow,
+            lim.TryAccept(CertRole.Worker, "AAA", "tile.next"));
+        Assert.Equal(RoleLimiterDecision.RefusedRate,
+            lim.TryAccept(CertRole.Worker, "AAA", "tile.next"));
+
+        // Client side still has its original burst of 5.
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.Equal(RoleLimiterDecision.Allow,
+                lim.TryAccept(CertRole.Client, "10.0.0.1", "job.status"));
+        }
+    }
 }
 
 /// <summary>Covers the admin-call audit-log half of D-6c. The coordinator

@@ -92,18 +92,29 @@ public static class ClusterEntry
             Dispatcher     = disp,
             Codec          = codec,
             EngineBuildSha = MasterEngineBuildSha(),
-            // D-5e — live-tunable cluster knobs. Seed from server-config.json
-            // so a master restart picks up whatever the admin UI last saved.
-            // cluster.config.set persists back through PersistConfig so the
-            // dial sticks across restarts without an out-of-band edit.
+            // D-5e + D-6c1 — live-tunable cluster knobs. Seed from
+            // server-config.json so a master restart picks up whatever the
+            // admin UI last saved. cluster.config.set persists back through
+            // PersistConfig so the dial sticks across restarts without an
+            // out-of-band edit. The D-6c1 rate-limit knobs additionally
+            // apply to the live FFServer.RoleAwareRateLimiter via
+            // ApplyRoleLimiterChange wired below (after FFServer is built).
             ClusterMaxJobs                  = cfg.ClusterMaxJobs,
             ClusterArtifactRetentionMinutes = cfg.ClusterArtifactRetentionMinutes,
             ClusterTileTargetPixels         = cfg.ClusterTileTargetPixels,
+            ClientCallPerMinute             = cfg.ClientCallPerMinute,
+            ClientCallBurst                 = cfg.ClientCallBurst,
+            WorkerTileNextPerMinute         = cfg.WorkerTileNextPerMinute,
+            WorkerTileNextBurst             = cfg.WorkerTileNextBurst,
             PersistConfig = snap =>
             {
                 cfg.ClusterMaxJobs                  = snap.ClusterMaxJobs;
                 cfg.ClusterArtifactRetentionMinutes = snap.ClusterArtifactRetentionMinutes;
                 cfg.ClusterTileTargetPixels         = snap.ClusterTileTargetPixels;
+                cfg.ClientCallPerMinute             = snap.ClientCallPerMinute;
+                cfg.ClientCallBurst                 = snap.ClientCallBurst;
+                cfg.WorkerTileNextPerMinute         = snap.WorkerTileNextPerMinute;
+                cfg.WorkerTileNextBurst             = snap.WorkerTileNextBurst;
                 cfg.Save();
             },
             // D-6b — master-side reference orbit compute. Engine-assembly
@@ -154,6 +165,14 @@ public static class ClusterEntry
 
         var engine = new HostFractalRenderEngine();
         var server = new FFServer(cfg, engine, trust) { Coordinator = coord };
+
+        // D-6c1 — wire the coordinator's rate-limit knobs into the live
+        // FFServer limiter so cluster.config.set takes effect on the next
+        // call without bouncing the master. Coordinator was built first
+        // (it's an FFServer init dependency), so the apply hook is set
+        // here post-construction.
+        coord.ApplyRoleLimiterChange = (clientPm, clientBurst, workerPm, workerBurst) =>
+            server.ReconfigureRoleLimiter(clientPm, clientBurst, workerPm, workerBurst);
 
         using var lifetime = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>

@@ -1,10 +1,18 @@
 // Server/Cluster/Protocol/ClusterConfigDto.cs
-// Admin → Master. Read / write the three live-tunable cluster knobs
-// surfaced by the MasterConfigView in UI.Avalonia (D-5e):
+// Admin → Master. Read / write live-tunable cluster knobs surfaced by the
+// MasterConfigView in UI.Avalonia.
+//
+// D-5e knobs:
 //   - clusterMaxJobs                    (concurrent-job cap; 0 = unlimited)
 //   - clusterArtifactRetentionMinutes   (job-dir eviction window; 0 = never)
 //   - clusterTileTargetPixels           (planner fallback when no hint /
 //                                        worker EMA; 0 = TilePlanner.DefaultTilePixels)
+//
+// D-6c1 knobs (per-role rate limiter, previously startup-only):
+//   - clientCallPerMinute               (per-IP client-call cap; 0 = disabled)
+//   - clientCallBurst                   (client-call burst allowance)
+//   - workerTileNextPerMinute           (per-thumbprint tile.next cap; 0 = disabled)
+//   - workerTileNextBurst               (tile.next burst allowance)
 //
 // Get is parameter-less. Set returns the post-apply values so the UI can
 // distinguish "saved exactly what I sent" from "clamped to the allowed
@@ -25,6 +33,12 @@ public sealed class ClusterConfigSetRequestDto
     [JsonPropertyName("clusterMaxJobs")]                  public int? ClusterMaxJobs                  { get; set; }
     [JsonPropertyName("clusterArtifactRetentionMinutes")] public int? ClusterArtifactRetentionMinutes { get; set; }
     [JsonPropertyName("clusterTileTargetPixels")]         public int? ClusterTileTargetPixels         { get; set; }
+
+    // D-6c1
+    [JsonPropertyName("clientCallPerMinute")]             public int? ClientCallPerMinute             { get; set; }
+    [JsonPropertyName("clientCallBurst")]                 public int? ClientCallBurst                 { get; set; }
+    [JsonPropertyName("workerTileNextPerMinute")]         public int? WorkerTileNextPerMinute         { get; set; }
+    [JsonPropertyName("workerTileNextBurst")]             public int? WorkerTileNextBurst             { get; set; }
 }
 
 public sealed class ClusterConfigDto
@@ -32,4 +46,10 @@ public sealed class ClusterConfigDto
     [JsonPropertyName("clusterMaxJobs")]                  public int ClusterMaxJobs                  { get; set; }
     [JsonPropertyName("clusterArtifactRetentionMinutes")] public int ClusterArtifactRetentionMinutes { get; set; }
     [JsonPropertyName("clusterTileTargetPixels")]         public int ClusterTileTargetPixels         { get; set; }
+
+    // D-6c1
+    [JsonPropertyName("clientCallPerMinute")]             public int ClientCallPerMinute             { get; set; }
+    [JsonPropertyName("clientCallBurst")]                 public int ClientCallBurst                 { get; set; }
+    [JsonPropertyName("workerTileNextPerMinute")]         public int WorkerTileNextPerMinute         { get; set; }
+    [JsonPropertyName("workerTileNextBurst")]             public int WorkerTileNextBurst             { get; set; }
 }
