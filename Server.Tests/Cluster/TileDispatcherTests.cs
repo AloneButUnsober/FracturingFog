@@ -276,4 +276,57 @@ public sealed class TileDispatcherTests
         var second = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
         Assert.Null(second);
     }
+
+    // ── D-4b — ReturnPending (backpressure path) ───────────────────────
+
+    [Fact]
+    public async Task ReturnPending_Puts_Tile_Back_Without_Bumping_Attempt()
+    {
+        var d = new TileDispatcher();
+        d.EnqueueJob("J1", ThreeTiles("J1"));
+
+        var t = await d.ClaimNextAsync("w1", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Assert.NotNull(t);
+        Assert.Equal(1, t!.Attempt);
+        Assert.Equal(1, d.InFlightCount("J1"));
+
+        Assert.True(d.ReturnPending("J1", t));
+        Assert.Equal(0, d.InFlightCount("J1"));
+
+        var again = await d.ClaimNextAsync("w1", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Assert.NotNull(again);
+        // Attempt unchanged — backpressure is not the worker's fault.
+        Assert.Equal(1, again!.Attempt);
+    }
+
+    [Fact]
+    public async Task ReturnPending_Signals_Waiting_Worker()
+    {
+        var d = new TileDispatcher();
+        d.EnqueueJob("J1", ThreeTiles("J1"));
+
+        // Worker A claims tile 0, then the master returns it for backpressure.
+        var first = await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Assert.NotNull(first);
+        // Drain remaining pending so the next claim has to wait for our requeue.
+        var second = await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+        var third  = await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
+        Assert.NotNull(second); Assert.NotNull(third);
+
+        // Worker B is waiting on tile.next — should wake when we ReturnPending.
+        var waitTask = d.ClaimNextAsync("wB", TimeSpan.FromSeconds(5), CancellationToken.None);
+        await Task.Delay(50);
+        Assert.True(d.ReturnPending("J1", first!));
+
+        var got = await waitTask;
+        Assert.NotNull(got);
+        Assert.Equal(first.TileId, got!.TileId);
+    }
+
+    [Fact]
+    public void ReturnPending_Unknown_Job_Returns_False()
+    {
+        var d = new TileDispatcher();
+        Assert.False(d.ReturnPending("missing", new TileJobDto { JobId = "missing", TileId = 0 }));
+    }
 }

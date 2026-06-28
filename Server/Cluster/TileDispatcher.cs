@@ -229,6 +229,27 @@ public sealed class TileDispatcher
         }
     }
 
+    /// <summary>D-4b — return a freshly claimed tile to the pending queue
+    /// without counting it as a failure. The coordinator uses this when
+    /// the video framepipeline is behind its <c>MaxFrameQueueDepth</c>
+    /// gate: the worker that was about to receive the tile gets WaitAgain
+    /// instead and the tile stays available for whoever asks next (which
+    /// may be the same worker once the encoder catches up). Attempt count
+    /// is preserved — backpressure is not the worker's fault.</summary>
+    public bool ReturnPending(string jobId, TileJobDto tile)
+    {
+        if (!_jobs.TryGetValue(jobId, out var st)) return false;
+        lock (_lock)
+        {
+            // Clear in-flight bookkeeping if present. The tile may be
+            // a stealer-clone that was never recorded; either way is OK.
+            st.InFlight.TryRemove(tile.TileId, out _);
+            st.Pending.Enqueue(tile);
+        }
+        SignalAll();
+        return true;
+    }
+
     /// <summary>Worker reported failure on a tile. If retry budget
     /// remains, re-enqueue with incremented Attempt. Returns true when
     /// the tile was re-queued, false when the budget is exhausted (the

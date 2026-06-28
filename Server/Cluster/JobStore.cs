@@ -352,4 +352,11 @@ public sealed class PersistedStatus
     /// progress bar in video mode (per-tile progress is misleading when
     /// each tile carries 30 frames).</summary>
     public int FramesDone { get; set; }
+
+    /// <summary>D-4b — frames consumed by the master's streaming ffmpeg
+    /// encoder so far. Lags <see cref="FramesDone"/> by at most
+    /// <c>MaxFrameQueueDepth</c> (the backpressure gate). Stays at 0 for
+    /// video jobs that fall back to the frames-manifest stub (no
+    /// lossless preset or no ffmpeg on disk).</summary>
+    public int EncodedFrames { get; set; }
 }
