@@ -74,6 +74,19 @@ public sealed class FFServer
             workerTileNextBurst:     config.WorkerTileNextBurst);
     }
 
+    /// <summary>D-6c1 — swap the per-role rate-limit knobs at runtime.
+    /// Wired from ClusterEntry into <see cref="ClusterCoordinator.ApplyRoleLimiterChange"/>
+    /// so cluster.config.set applies without bouncing the master. Per-key
+    /// bucket state (in-flight tokens) is preserved across the swap.</summary>
+    public void ReconfigureRoleLimiter(
+        int clientPerMinute, int clientBurst,
+        int workerTileNextPerMinute, int workerTileNextBurst)
+    {
+        _roleLimiter.Reconfigure(
+            clientPerMinute, clientBurst,
+            workerTileNextPerMinute, workerTileNextBurst);
+    }
+
     public async Task RunAsync(CancellationToken ct)
     {
         IPAddress bindAddr;

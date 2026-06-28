@@ -498,6 +498,129 @@ public sealed class ClusterAdminRpcTests : IDisposable
         Assert.Equal(128, snap.ClusterTileTargetPixels);
     }
 
+    // ── cluster.config.* — D-6c1 rate-limit knobs ───────────────────────
+
+    [Fact]
+    public async Task ClusterConfig_Get_Returns_RoleLimiter_Defaults()
+    {
+        var outcome = await _coord.HandleAsync("cluster.config.get",
+            ToParams(new ClusterConfigGetRequestDto()),
+            CertRole.Admin, "X", CancellationToken.None);
+        Assert.Null(outcome.ErrorCode);
+        var snap = Assert.IsType<ClusterConfigDto>(outcome.Result);
+        Assert.Equal(600, snap.ClientCallPerMinute);
+        Assert.Equal(30,  snap.ClientCallBurst);
+        Assert.Equal(600, snap.WorkerTileNextPerMinute);
+        Assert.Equal(30,  snap.WorkerTileNextBurst);
+    }
+
+    [Fact]
+    public async Task ClusterConfig_Set_Updates_RoleLimiter_And_Fires_ApplyHook()
+    {
+        (int Cpm, int Cb, int Wpm, int Wb)? applied = null;
+        var coord = new ClusterCoordinator(_registry, _log)
+        {
+            Jobs       = _jobs,
+            Dispatcher = _disp,
+        };
+        coord.ApplyRoleLimiterChange = (cpm, cb, wpm, wb)
+            => applied = (cpm, cb, wpm, wb);
+
+        var outcome = await coord.HandleAsync("cluster.config.set",
+            ToParams(new ClusterConfigSetRequestDto
+            {
+                ClientCallPerMinute     = 1200,
+                ClientCallBurst         = 50,
+                WorkerTileNextPerMinute = 900,
+                WorkerTileNextBurst     = 20,
+            }),
+            CertRole.Admin, "X", CancellationToken.None);
+
+        Assert.Null(outcome.ErrorCode);
+        var snap = Assert.IsType<ClusterConfigDto>(outcome.Result);
+        Assert.Equal(1200, snap.ClientCallPerMinute);
+        Assert.Equal(50,   snap.ClientCallBurst);
+        Assert.Equal(900,  snap.WorkerTileNextPerMinute);
+        Assert.Equal(20,   snap.WorkerTileNextBurst);
+
+        Assert.Equal(1200, coord.ClientCallPerMinute);
+        Assert.Equal(50,   coord.ClientCallBurst);
+        Assert.Equal(900,  coord.WorkerTileNextPerMinute);
+        Assert.Equal(20,   coord.WorkerTileNextBurst);
+
+        Assert.NotNull(applied);
+        Assert.Equal((1200, 50, 900, 20), applied);
+    }
+
+    [Fact]
+    public async Task ClusterConfig_Set_RoleLimiter_Clamps_Negative_Values()
+    {
+        // Negative perMinute clamps to 0 (disabled); negative burst clamps
+        // to 1 (Bucket's own floor).
+        var outcome = await _coord.HandleAsync("cluster.config.set",
+            ToParams(new ClusterConfigSetRequestDto
+            {
+                ClientCallPerMinute     = -5,
+                ClientCallBurst         = -10,
+                WorkerTileNextPerMinute = -1,
+                WorkerTileNextBurst     = 0,
+            }),
+            CertRole.Admin, "X", CancellationToken.None);
+
+        Assert.Null(outcome.ErrorCode);
+        var snap = Assert.IsType<ClusterConfigDto>(outcome.Result);
+        Assert.Equal(0, snap.ClientCallPerMinute);
+        Assert.Equal(1, snap.ClientCallBurst);
+        Assert.Equal(0, snap.WorkerTileNextPerMinute);
+        Assert.Equal(1, snap.WorkerTileNextBurst);
+    }
+
+    [Fact]
+    public async Task ClusterConfig_Set_RoleLimiter_NullFields_DoNotFireApplyHook()
+    {
+        // Touching only the D-5e knobs leaves the rate-limiter alone — no
+        // call into ApplyRoleLimiterChange. Avoids gratuitous limiter
+        // churn (the per-key bucket state survives the swap, but the call
+        // is still wasted work if nothing changed).
+        int applyCalls = 0;
+        var coord = new ClusterCoordinator(_registry, _log)
+        {
+            Jobs       = _jobs,
+            Dispatcher = _disp,
+        };
+        coord.ApplyRoleLimiterChange = (_, _, _, _) => applyCalls++;
+
+        var outcome = await coord.HandleAsync("cluster.config.set",
+            ToParams(new ClusterConfigSetRequestDto { ClusterMaxJobs = 3 }),
+            CertRole.Admin, "X", CancellationToken.None);
+
+        Assert.Null(outcome.ErrorCode);
+        Assert.Equal(0, applyCalls);
+    }
+
+    [Fact]
+    public async Task ClusterConfig_Set_RoleLimiter_ApplyHook_Failure_Does_Not_Fail_Call()
+    {
+        // Mirrors PersistConfig: a throwing apply-hook is swallowed +
+        // logged; the in-memory values still update. Operator can retry
+        // once the underlying issue is fixed (very rare path — the only
+        // reasonable failure mode is FFServer being torn down mid-set).
+        var coord = new ClusterCoordinator(_registry, _log)
+        {
+            Jobs       = _jobs,
+            Dispatcher = _disp,
+        };
+        coord.ApplyRoleLimiterChange = (_, _, _, _)
+            => throw new InvalidOperationException("simulated");
+
+        var outcome = await coord.HandleAsync("cluster.config.set",
+            ToParams(new ClusterConfigSetRequestDto { ClientCallPerMinute = 1500 }),
+            CertRole.Admin, "X", CancellationToken.None);
+
+        Assert.Null(outcome.ErrorCode);
+        Assert.Equal(1500, coord.ClientCallPerMinute);
+    }
+
     [Fact]
     public async Task JobSubmit_Refuses_When_ClusterMaxJobs_Reached()
     {

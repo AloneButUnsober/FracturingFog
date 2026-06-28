@@ -30,6 +30,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Threading;
 
 using FracturingFog.Server.Tls;
 
@@ -61,6 +62,18 @@ public sealed class RoleAwareRateLimiter
 
     public bool ClientEnabled         => _client.Enabled;
     public bool WorkerTileNextEnabled => _workerTileNext.Enabled;
+
+    /// <summary>D-6c1 — swap the rate / burst on both buckets without
+    /// rebuilding the limiter, so cluster.config.set takes effect on the
+    /// next call without dropping in-flight per-key state. perMinute = 0
+    /// disables that bucket (same convention as the constructor).</summary>
+    public void Reconfigure(
+        int clientPerMinute, int clientBurst,
+        int workerTileNextPerMinute, int workerTileNextBurst)
+    {
+        _client.Reconfigure(clientPerMinute, clientBurst);
+        _workerTileNext.Reconfigure(workerTileNextPerMinute, workerTileNextBurst);
+    }
 
     /// <summary>Resolve whether <paramref name="role"/> may execute
     /// <paramref name="method"/> right now. <paramref name="key"/> is the
@@ -99,8 +112,8 @@ public sealed class RoleAwareRateLimiter
     /// thumbprint-keyed (worker) policies in one limiter.</summary>
     private sealed class Bucket
     {
-        private readonly double _ratePerSec;
-        private readonly double _capacity;
+        private double _ratePerSec;
+        private double _capacity;
         private readonly ConcurrentDictionary<string, Slot> _slots = new();
         private long _lastSweepTicks = DateTime.UtcNow.Ticks;
 
@@ -110,12 +123,23 @@ public sealed class RoleAwareRateLimiter
             _capacity   = Math.Max(1, burst);
         }
 
-        public bool Enabled => _ratePerSec > 0;
+        public bool Enabled => Volatile.Read(ref _ratePerSec) > 0;
+
+        public void Reconfigure(int perMinute, int burst)
+        {
+            // Volatile write so a concurrent TryTake reading these on the
+            // next call sees the new value. Per-slot _tokens stay as-is —
+            // callers in flight keep the burst they already accrued.
+            Volatile.Write(ref _ratePerSec, perMinute > 0 ? perMinute / 60.0 : 0.0);
+            Volatile.Write(ref _capacity,   Math.Max(1, burst));
+        }
 
         public bool TryTake(string key)
         {
-            var slot = _slots.GetOrAdd(key ?? "(null)", _ => new Slot(_capacity));
-            bool ok = slot.TryTake(_ratePerSec, _capacity);
+            double rate = Volatile.Read(ref _ratePerSec);
+            double cap  = Volatile.Read(ref _capacity);
+            var slot = _slots.GetOrAdd(key ?? "(null)", _ => new Slot(cap));
+            bool ok = slot.TryTake(rate, cap);
             SweepIfDue();
             return ok;
         }
@@ -127,9 +151,10 @@ public sealed class RoleAwareRateLimiter
             if (new TimeSpan(now - last) < TimeSpan.FromMinutes(1)) return;
             if (System.Threading.Interlocked.CompareExchange(ref _lastSweepTicks, now, last) != last) return;
 
+            double cap = Volatile.Read(ref _capacity);
             long staleCutoffTicks = DateTime.UtcNow.AddMinutes(-10).Ticks;
             foreach (var kv in _slots)
-                if (kv.Value.IsIdleSince(staleCutoffTicks, _capacity))
+                if (kv.Value.IsIdleSince(staleCutoffTicks, cap))
                     _slots.TryRemove(kv.Key, out _);
         }
 
