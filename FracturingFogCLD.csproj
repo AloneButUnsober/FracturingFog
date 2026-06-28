@@ -18,7 +18,6 @@
     <Configurations>Debug;Release;Publish</Configurations>
     <ProduceReferenceAssembly>False</ProduceReferenceAssembly>
     <Title>Fracturing Fog</Title>
-    <Version>0.7.0</Version>
     <ApplicationIcon>Resources\FracturingFog.ico</ApplicationIcon>
   </PropertyGroup>
 
