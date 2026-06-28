@@ -525,3 +525,186 @@ UI tour from D-5, plus the new rate-limit knobs from this session. D-6e
 closes the phase with the stress-test (`Server.Tests`: 50 concurrent
 client connections, 8 workers, 200 queued jobs) and any cleanup the
 doc-writing surfaces.
+
+---
+
+## Session 4 — D-6d — Distributed Rendering operator doc + Master Config help button (2026-06-28)
+
+**Goal**: ship `Docs/User/Distributed-UserGuide.md` as the operator's
+single landing page for the cluster path D-1..D-6c built up, and wire
+a `?` help button on the Master Config dialog so the live-tuning
+surface from D-5e is one click from its own documentation section.
+
+**Sub-slice decision**: a single slice. The doc is one Markdown file
+plus a one-row insert into `Docs/User/_Index.md` plus a four-line
+help-button on `MasterConfigView`. Splitting into a doc-only slice +
+a UI-only slice would have meant two commits whose only coupling is
+the shared anchor name. Doc + button land together so the anchor
+("Master Config Dialog") cannot drift between them without one of the
+two callers noticing immediately.
+
+**Doc-side changes**
+
+- `Docs/User/Distributed-UserGuide.md` (new) — 17 sections, matches
+  the existing user-guide tone (table of contents at top, friendly
+  tour + worked example up front, dense reference toward the bottom,
+  See-Also footer). Sections in order:
+  1. **Overview** — what cluster mode is, what wall-clock win it
+     buys, LAN-only scope.
+  2. **Architecture at a Glance** — ASCII diagram from the dev plan
+     §2, role-OU routing summary, "friendly tour" + worked-example
+     pair mirroring `ClientServer-UserGuide.md` §A.
+  3. **First-Time Master Launch** — `--master`, on-disk artifacts
+     created on first run, recovery banner from D-6a, bind / cert
+     dir overrides.
+  4. **The Cluster Cert Bundle** — five-file table, role→capability
+     matrix, empty-password ACL trade-off pointing at
+     `CertSelfSignedHelper.cs`'s own trade-off note.
+  5. **Sharing Keys Between Hosts** — which PFX each role needs,
+     acceptable + unacceptable transfer channels, PowerShell
+     copy-and-ACL recipe for adding a worker host, separate
+     walkthrough for handing out the admin role.
+  6. **Production PKI — Per-Role Certificates** — full openssl
+     recipes for CA / master / worker / client / admin certs with
+     the `OU=role-*` Subject DN convention and the
+     `extendedKeyUsage=serverAuth` extension on the master.
+     Lay-out diagram for the five expected filenames so the
+     `EnsureClusterBundle` discovery path matches.
+  7. **Launching Workers** — `--worker` CLI, required + common
+     options, capability registration table covering the fields
+     emitted in `ClusterEntry.RunWorker` including the
+     `EngineBuildSha` fidelity check from risk #7. Service-manager
+     guidance for unattended hosts.
+  8. **Admin UI Tour** — Cluster Dashboard, Worker Detail,
+     Job Detail, Job List. Reiterates the colour-blind alert
+     convention (yellow `#FFCC00`, never red).
+  9. **Master Config Dialog** — the three live-tunable knobs from
+     D-5e + the new `?` button.
+  10. **Submitting Jobs as a Client** — covers the `job.submit` /
+      `job.status` / `job.fetch` polling shape and `--batch
+      --remote` against a cluster connection.
+  11. **Rate Limits + Admin Audit Log** — the D-6c knobs + the
+      `kind:"admin-call"` event format. Notes that the four
+      rate-limit fields are read at master startup (not live-
+      tunable today).
+  12. **Crash Recovery** — what `RecoverFromDisk` from D-6a does +
+      doesn't replay; corrupt-tile + worker-disappeared retry
+      behaviour.
+  13. **Logs, Metrics, and Troubleshooting** — single table mapping
+      every on-disk artifact to its purpose; common-errors table;
+      step-by-step "my N-worker cluster runs at 1-worker speed"
+      diagnostics walkthrough; pointer to the three built-in
+      `--cluster-*` self-tests.
+  14. **CLI Reference** — master + worker + self-test flag tables.
+  15. **Config File Reference** — exact JSON keys + a worked example
+      block.
+  16. **File Locations** — appdata directory map mirroring the
+      ClientServer guide's §7.
+  17. **See Also** — cross-link to Client/Server, Server Admin,
+      Avalonia, dev plan, this session-notes file.
+- `Docs/User/_Index.md` — one new row in the "Where do I start?"
+  routing table immediately after the Server Admin row:
+  `Stand up a multi-machine render cluster → Distributed-UserGuide.md`.
+
+**UI-side changes**
+
+- `UI.Avalonia/Views/MasterConfigView.axaml`:
+  * Bottom button row promoted from a single right-aligned
+    `StackPanel` to a 3-column `Grid` so a left-aligned `?` button
+    can sit next to the existing right-aligned Load / Apply / Close
+    cluster. Button is 32×28 px, the same proportions
+    `ServerAdminView` uses for its help button.
+  * `ToolTip.Tip` text states the anchor the button jumps to so a
+    hover preview is enough to know what page opens.
+- `UI.Avalonia/Views/MasterConfigView.axaml.cs`:
+  * `using Avalonia.Interactivity;` added for `RoutedEventArgs`.
+  * New `OnHelpClick` private handler calls
+    `HelpViewerLauncher.Show(this, "User/Distributed-UserGuide.md",
+    "Master Config Dialog", "Master Config — Help")`. Mirrors
+    `ServerAdminView`'s pattern exactly so any future tooling that
+    rewrites help wiring (HelpViewerViewModel's anchor slicer, for
+    example) treats the two dialogs uniformly.
+
+The `FracturingFog.UI.Avalonia.csproj` `AvaloniaResource` glob
+(`..\Docs\**\*.md`) already enrols every Markdown file under `Docs/`,
+so `Distributed-UserGuide.md` is embedded automatically on the next
+build — no project-file edit required for the help viewer to find it.
+
+**Tests**
+
+- No new test classes — D-6d is a docs + view-wiring slice. The
+  embedded resource path is exercised at runtime by the help-viewer
+  load attempt (legacy bare-filename fallback in
+  `HelpViewerViewModel.LoadDocResource` covers any historical
+  callers).
+- Test suite: **337 passed, 0 failed** — unchanged from D-6c. The
+  one-button-and-a-Markdown-file diff touches no compiled assertions.
+
+**Design decisions**
+
+#108. Five-file cluster bundle documented as load-bearing names, not
+  as a recommendation. Reason: `CertSelfSignedHelper.EnsureClusterBundle`
+  identifies an existing bundle by the literal filenames
+  `ca.pfx`/`master.pfx`/`worker.pfx`/`cluster-client.pfx`/`admin.pfx`.
+  A user who mints their own bundle with `worker-tower2.pfx` in the
+  same directory will see the helper regenerate the dev bundle on
+  next startup. The doc's §6.6 calls this out with a layout block so
+  the production-PKI walkthrough doesn't dead-end on a re-generated
+  CA.
+
+#109. openssl recipes pin `OU=role-*` on the Subject DN, not on a SAN
+  URI. Reason: `CertRoleParser.FromCertificate` splits on `,` and
+  reads OUs; the comment block at the top of `CertRole.cs` explicitly
+  reserves the SAN-URI path as a future hardening option. Documenting
+  the OU path is the *only* path that works in v1; documenting both
+  would invite mismatches when the operator picks the URI form.
+
+#110. Help button anchors via the dialog's section heading literal
+  ("Master Config Dialog") rather than via an HTML-style `#section-9`
+  fragment. Reason: `HelpViewerViewModel.SliceToSection` does a
+  case-insensitive `Contains` match against rendered heading text,
+  not against numbered slugs. Anchoring on the heading text is
+  resilient to section-renumbering inside the guide — if §9 becomes
+  §10 in a future revision the button still lands on the right page.
+
+#111. Rate-limit knobs documented as startup-only, not as a known gap.
+  Reason: the D-6c session notes left the live-config question as
+  "out of scope; a follow-up can add them to the live-config DTO if
+  operator workflow calls for it." Telling the operator the truth
+  (edit + restart) is correct guidance today; flagging it as a
+  limitation would falsely imply someone is working on the
+  follow-up, and surface area that's actually live-tunable
+  (`clusterMaxJobs` / retention / tile target via Master Config) is
+  already documented.
+
+#112. Help button placed left-aligned in a 3-column Grid rather than
+  prepended to the existing right-aligned StackPanel. Reason: every
+  other help button in the project (`ServerAdminView`,
+  `FFClientView`, `ColorThemeEditorView`, etc.) sits on the *left*
+  edge of its bottom button row, opposite the primary action
+  cluster. Keeping that layout convention means an operator's eye
+  finds the `?` in the same screen quadrant across every dialog.
+
+#113. The doc is added as one ~16K-line Markdown file rather than
+  split per-topic. Reason: every existing user guide
+  (`ClientServer-UserGuide.md`, `ServerAdmin-Guide.md`,
+  `Capture-Guide.md`) is one self-contained file. Splitting cluster
+  docs across multiple files would orphan the See-Also footer
+  pattern and make the `_Index.md` row ambiguous (which sub-file is
+  "the" entry point?). One file is also one anchor namespace for the
+  help-viewer's section slicer to walk.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing 4 AVLN5001
+  `TextBox.Watermark` obsoletes only (unchanged from D-6c).
+- Test suite: **337 passed, 0 failed** (unchanged from D-6c).
+
+**Next session** opens D-6e: the §9 stress test — 50 concurrent
+client connections, 8 workers, 200 queued jobs through the existing
+`Server.Tests` harness. Once D-6e lands, phase D-6 closes and the
+distributed-rendering line item is done; any further work (the
+SIMD PT4/PT8 sub-rect adaptation tagged D-6b1, the QD orbit limbs
+growth tagged D-6b's #97, or making the four rate-limit knobs
+live-tunable) is follow-up perf/operator work scheduled
+independently.

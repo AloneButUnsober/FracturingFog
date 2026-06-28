@@ -44,6 +44,7 @@ as your imagination wants to take you.
 | Explore Mandelbulb-style 3-D fractals                    | [User Bulb 3D Guide](UserBulb-Guide.md)                        |
 | Render on a powerful workstation, drive from a laptop    | [Client / Server Guide](ClientServer-UserGuide.md)             |
 | Configure the local render server                        | [Server Admin Guide](ServerAdmin-Guide.md)                     |
+| Stand up a multi-machine render cluster                  | [Distributed Rendering Guide](Distributed-UserGuide.md)        |
 | Memorise the keyboard shortcuts                          | [Keyboard Shortcuts](Keyboard-Shortcuts.md)                    |
 
 ---

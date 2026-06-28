@@ -93,11 +93,17 @@
                 </StackPanel>
             </Border>
 
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
-                <Button Classes="primary" Content="Load"  Command="{Binding LoadCommand}" />
-                <Button Classes="primary" Content="Apply" Command="{Binding ApplyCommand}" />
-                <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
-            </StackPanel>
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Content="?"
+                        Width="32" Height="28" Padding="0"
+                        Click="OnHelpClick"
+                        ToolTip.Tip="Open the Distributed Rendering user guide at the Master Config section." />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+                    <Button Classes="primary" Content="Load"  Command="{Binding LoadCommand}" />
+                    <Button Classes="primary" Content="Apply" Command="{Binding ApplyCommand}" />
+                    <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
+                </StackPanel>
+            </Grid>
         </StackPanel>
     </ScrollViewer>
 </Window>
