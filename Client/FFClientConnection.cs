@@ -189,7 +189,10 @@ public sealed class FFClientConnection : IAsyncDisposable
                 $"artifact sha256 mismatch (expected {resp.ArtifactSha256}, got {actual})");
     }
 
-    private async Task<TResult> CallAsync<TResult>(string method, object payload, CancellationToken ct)
+    // internal so FFAdminConnection (same assembly) can call cluster.*
+    // admin methods through the same TLS session without duplicating the
+    // framing + error-envelope plumbing.
+    internal async Task<TResult> CallAsync<TResult>(string method, object payload, CancellationToken ct)
     {
         long id = Interlocked.Increment(ref _nextId);
         var env = new MessageEnvelope

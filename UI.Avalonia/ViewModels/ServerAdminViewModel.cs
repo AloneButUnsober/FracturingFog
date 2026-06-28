@@ -48,6 +48,8 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         ApplyCommand   = ReactiveCommand.Create(Apply);
         RefreshCommand = ReactiveCommand.CreateFromTask(PollOnceAsync);
         CloseCommand   = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        OpenClusterDashboardCommand = ReactiveCommand.Create(
+            () => OpenClusterDashboardRequested?.Invoke(this, EventArgs.Empty));
         BrowseCertsDirCommand = ReactiveCommand.Create(() => BrowseFolderRequested?.Invoke(this,
             ("certsDir", (Action<string>)(p => CertsDir = p))));
         BrowseLogDirCommand   = ReactiveCommand.Create(() => BrowseFolderRequested?.Invoke(this,
@@ -301,11 +303,17 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenClusterDashboardCommand { get; }
     public ReactiveCommand<Unit, Unit> BrowseCertsDirCommand { get; }
     public ReactiveCommand<Unit, Unit> BrowseLogDirCommand { get; }
     public ReactiveCommand<Unit, Unit> BrowseWorkDirCommand { get; }
 
     public event EventHandler? CloseRequested;
+    /// <summary>Raised when the operator hits "Cluster Dashboard…". The shell
+    /// flips its dashboard visibility flag in response — the SAVM itself
+    /// owns no knowledge of the cluster view, mirroring how Help and other
+    /// sibling windows are routed.</summary>
+    public event EventHandler? OpenClusterDashboardRequested;
     public event EventHandler<(string kind, Action<string> assign)>? BrowseFolderRequested;
 
     public void Dispose()

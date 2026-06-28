@@ -1,0 +1,194 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        mc:Ignorable="d"
+        x:Class="FracturingFog.UI.Avalonia.Views.ClusterDashboardView"
+        x:DataType="vm:ClusterDashboardViewModel"
+        Title="FracturingFog — Cluster Dashboard"
+        Width="980" Height="640"
+        MinWidth="720" MinHeight="420"
+        Background="#171717">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#DDD" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Background" Value="#1B1B1B" />
+            <Setter Property="BorderBrush" Value="#2E2E2E" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#2E6BC8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="12,5" />
+        </Style>
+        <Style Selector="Border.gridRow">
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="BorderBrush" Value="#262626" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.gridHeader">
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Background" Value="#242424" />
+            <Setter Property="BorderBrush" Value="#3A3A3A" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="Border.gridHeader TextBlock">
+            <Setter Property="Foreground" Value="#CCC" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Border.gridRow TextBlock">
+            <Setter Property="Foreground" Value="#222" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+
+        <!-- ── Header / connection status ───────────────────────────── -->
+        <Border Grid.Row="0" Classes="group">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="section" Text="Master Connection" />
+                <Grid ColumnDefinitions="140,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Status" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding Status}" TextWrapping="Wrap" />
+                    <Button    Grid.Row="0" Grid.Column="2" Classes="primary" Content="Refresh"
+                               Command="{Binding RefreshCommand}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Host" Margin="0,4,0,0" />
+                    <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Host, Mode=TwoWay}" Margin="0,4,0,0" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Port" Margin="0,4,0,0" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding Port}"
+                                   Minimum="1" Maximum="65535" Margin="0,4,0,0" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Recent jobs cap" Margin="0,4,0,0" />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding RecentJobLimit}"
+                                   Minimum="1" Maximum="500" Margin="0,4,0,0" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">
+                    <TextBlock Classes="label" Text="Live workers:" />
+                    <TextBlock Classes="value" Text="{Binding LiveWorkerCount}" />
+                    <TextBlock Classes="label" Text="Heartbeat (s):" />
+                    <TextBlock Classes="value" Text="{Binding HeartbeatIntervalSeconds}" />
+                    <TextBlock Classes="label" Text="Server time:" />
+                    <TextBlock Classes="value" Text="{Binding ServerUnixSeconds}" />
+                </StackPanel>
+                <TextBlock Classes="value" Text="{Binding LastError}" TextWrapping="Wrap"
+                           Foreground="#FFCC00" Margin="0,4,0,0"
+                           IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+        </Border>
+
+        <!-- ── Workers + Jobs grids ─────────────────────────────────── -->
+        <Grid Grid.Row="1" RowDefinitions="*,*" RowSpacing="8">
+
+            <Border Grid.Row="0" Classes="group">
+                <DockPanel LastChildFill="True">
+                    <TextBlock DockPanel.Dock="Top" Classes="section" Text="Workers" />
+
+                    <!-- Header row -->
+                    <Border DockPanel.Dock="Top" Classes="gridHeader">
+                        <Grid ColumnDefinitions="160,90,80,60,90,80,80,80,90">
+                            <TextBlock Grid.Column="0" Text="Worker" />
+                            <TextBlock Grid.Column="1" Text="State" />
+                            <TextBlock Grid.Column="2" Text="OS" />
+                            <TextBlock Grid.Column="3" Text="Cores" />
+                            <TextBlock Grid.Column="4" Text="RAM" />
+                            <TextBlock Grid.Column="5" Text="In flight" />
+                            <TextBlock Grid.Column="6" Text="CPU" />
+                            <TextBlock Grid.Column="7" Text="ms/kpx" />
+                            <TextBlock Grid.Column="8" Text="HB age (s)" />
+                        </Grid>
+                    </Border>
+
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Workers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:ClusterWorkerRowVm">
+                                    <Border Classes="gridRow"
+                                            Background="{Binding RowBackgroundHex}"
+                                            ToolTip.Tip="{Binding WorkerId}">
+                                        <Grid ColumnDefinitions="160,90,80,60,90,80,80,80,90">
+                                            <TextBlock Grid.Column="0" Text="{Binding WorkerName}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding StatusBadge}" FontWeight="Bold" />
+                                            <TextBlock Grid.Column="2" Text="{Binding OsPlatform}" />
+                                            <TextBlock Grid.Column="3" Text="{Binding LogicalCores}" />
+                                            <TextBlock Grid.Column="4" Text="{Binding RamGb}" />
+                                            <TextBlock Grid.Column="5" Text="{Binding TilesInFlight}" />
+                                            <TextBlock Grid.Column="6" Text="{Binding CpuPercentText}" />
+                                            <TextBlock Grid.Column="7" Text="{Binding EmaMsPerKiloPx}" />
+                                            <TextBlock Grid.Column="8" Text="{Binding HeartbeatAgeSec}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="1" Classes="group">
+                <DockPanel LastChildFill="True">
+                    <TextBlock DockPanel.Dock="Top" Classes="section" Text="Recent Jobs" />
+
+                    <Border DockPanel.Dock="Top" Classes="gridHeader">
+                        <Grid ColumnDefinitions="220,80,90,160,70,110,*">
+                            <TextBlock Grid.Column="0" Text="Job ID" />
+                            <TextBlock Grid.Column="1" Text="Mode" />
+                            <TextBlock Grid.Column="2" Text="State" />
+                            <TextBlock Grid.Column="3" Text="Tiles" />
+                            <TextBlock Grid.Column="4" Text="Done %" />
+                            <TextBlock Grid.Column="5" Text="Created" />
+                            <TextBlock Grid.Column="6" Text="Fail reason" />
+                        </Grid>
+                    </Border>
+
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding RecentJobs}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:ClusterJobRowVm">
+                                    <Border Classes="gridRow"
+                                            Background="{Binding RowBackgroundHex}">
+                                        <Grid ColumnDefinitions="220,80,90,160,70,110,*">
+                                            <TextBlock Grid.Column="0" Text="{Binding JobId}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Mode}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding JobState}" FontWeight="Bold" />
+                                            <TextBlock Grid.Column="3" Text="{Binding TilesProgress}" />
+                                            <TextBlock Grid.Column="4" Text="{Binding ProgressPercent}" />
+                                            <TextBlock Grid.Column="5" Text="{Binding CreatedLocal}" />
+                                            <TextBlock Grid.Column="6" Text="{Binding FailReason}" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ── Footer ───────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="6">
+            <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>
