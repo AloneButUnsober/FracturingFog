@@ -81,6 +81,16 @@ public sealed class WorkerSummaryDto
     public double EmaMsPerKilopixel { get; set; }
 
     [JsonPropertyName("tileSamples")] public int TileSamples { get; set; }
+
+    // D-5d — capability metadata surfaced for WorkerDetailView. Already lives
+    // on WorkerEntry; promoted here so the detail view doesn't need a second
+    // RPC. Optional/empty for older masters (the JSON contract stays
+    // forward-compatible).
+    [JsonPropertyName("supportedFractalTypes")]
+    public List<string> SupportedFractalTypes { get; set; } = new();
+
+    [JsonPropertyName("engineBuildSha")]  public string EngineBuildSha { get; set; } = "";
+    [JsonPropertyName("protocolVersion")] public string ProtocolVersion { get; set; } = "";
 }
 
 public sealed class JobSummaryDto

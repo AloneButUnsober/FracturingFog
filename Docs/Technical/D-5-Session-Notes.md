@@ -350,3 +350,137 @@ config tab inside `ServerAdminView`). `cluster.quiesceWorker` and
 `cluster.killWorker` already exist (D-5a); the work is the UI affordance
 and a per-worker drill-in window — same shell pattern as `JobDetailView`
 but parameterised by `workerId` instead of `jobId`.
+
+---
+
+## Session 4 — D-5d — WorkerDetailView (2026-06-28)
+
+**Goal**: per-worker drill-in from the dashboard workers grid. Capabilities
++ live telemetry + quiesce / resume / kill action buttons. Single-instance
+window parameterised by `workerId`, mirroring `JobDetailView`. No new
+master RPCs — `cluster.status` already returns every worker; the detail
+view filters client-side.
+
+**Sub-slice decision**: D-5d in §9 lists both `WorkerDetailView` *and*
+`MasterConfigView`. Splitting them keeps each commit a single cohesive
+chunk (matches D-5a/b/c cadence). `MasterConfigView` slides to D-5e —
+that work needs three new `ServerConfig` cluster fields (`ClusterMaxJobs`,
+`ClusterArtifactRetentionMinutes`, `ClusterTileTargetPixels`) plus
+`cluster.config.get/set` RPCs, which is its own coherent slice.
+
+**Wire protocol** (additive, no new methods)
+
+- `WorkerSummaryDto` gains three capability fields previously only on
+  `WorkerEntry`:
+  `SupportedFractalTypes` (list), `EngineBuildSha` (string), `ProtocolVersion`
+  (string). Promoting them to the snapshot avoids a second RPC for the
+  detail view. JSON contract stays forward-compatible — older masters
+  return empty/missing values and the UI renders "—".
+
+**Server-side changes**
+
+- `Server/Cluster/Protocol/ClusterStatusDto.cs` — three new
+  `[JsonPropertyName]` properties on `WorkerSummaryDto`.
+- `Server/Cluster/ClusterCoordinator.cs` — `BuildWorkerSummary` populates
+  the new fields off `WorkerEntry` (already tracked since D-1).
+- No new tests: the wire shape change is a pass-through of fields already
+  validated by D-1 registration tests; existing `ClusterAdminRpcTests`
+  continue to pass unchanged.
+
+**Client-side changes**
+
+- New `UI.Avalonia/ViewModels/WorkerDetailViewModel.cs` — composes
+  `FFAdminConnection`, polls `cluster.status` at 5 s (same cadence as the
+  dashboard; tile-level data is not the point of this view), filters by
+  `WorkerId`. Exposes:
+  * Identity / capabilities panel: name, OS, CPU, cores, RAM, GPUs,
+    fractal types, max-concurrent-tiles, preferred tile pixels, engine
+    SHA, protocol version, registered-at.
+  * Telemetry panel: heartbeat age, tiles in flight, CPU%, free RAM,
+    EMA ms/kilopixel, tile samples, last note.
+  * Actions: `QuiesceCommand` / `ResumeCommand` → `cluster.quiesceWorker`,
+    `KillCommand` → `cluster.killWorker`. Each refreshes the local view
+    after the RPC so the badge flips without waiting for the 5 s tick.
+  * `IsPresent` flag flips false on a successful Kill — view keeps the
+    last-seen capabilities visible but marks the badge "GONE" so the
+    operator doesn't lose context (the row would otherwise blank out).
+- New `UI.Avalonia/Views/WorkerDetailView.axaml` + `.cs` — header with
+  WorkerId + status badge (yellow `#FFCC00` background for STALE /
+  QUIESCED / GONE per the colour-blind convention), two capability /
+  telemetry forms, action button strip with `danger`-class Kill button,
+  scroll-viewer wrap so the forms stay readable at 480 px width.
+- `ClusterDashboardViewModel` — new `OpenWorkerDetailCommand`
+  (`<ClusterWorkerRowVm>`) + `OpenWorkerDetailRequested` event. Routes
+  through the shell the same way `OpenJobDetailRequested` does.
+- `ClusterDashboardView.axaml` — workers grid grew a 10th column "Detail"
+  with a per-row "Open" button (mirrors the existing Open button on the
+  recent-jobs grid).
+- `ShellViewModel` — lazy-singleton `WorkerDetail` property +
+  `IsWorkerDetailVisible` flag + `ShowWorkerDetail(workerId)` private
+  method. Re-open with a different workerId swaps the VM-bound id and
+  brings the window to the front (same single-instance pattern as
+  `JobDetailView`).
+- `MainWindow.axaml.cs` — `_workerDetailWin` field + `SyncWorkerDetail`
+  clone of `SyncJobDetail` + matching `OnClosed` close. Property-change
+  switch routes both `IsWorkerDetailVisible` and `WorkerDetail`.
+
+**Design decisions**
+
+#78. No new `cluster.workerDetail` RPC. Reason: `cluster.status` already
+  returns every connected worker plus the capability metadata the detail
+  view needs (after the small `WorkerSummaryDto` extension). A dedicated
+  per-worker RPC would add round-trip churn for no information not in
+  the existing snapshot, and would require a parallel role-gate +
+  handler + test. Filtering client-side costs O(workers) per refresh —
+  even at 1000 workers, well under a millisecond.
+
+#79. `WorkerSummaryDto` extended in place rather than introducing a
+  parallel `WorkerDetailDto`. Reason: same admin caller, same trust
+  level, three small string/list fields. A separate DTO would double
+  the wire shape for one consumer and force two code paths in
+  `BuildWorkerSummary`. The forward-compat story holds because every
+  new field is optional with a sensible empty default — older masters
+  serialise nothing for them and `System.Text.Json` deserialises to
+  the empty/null values the UI already coerces to "—".
+
+#80. Detail view stays on the dashboard's 5 s poll cadence rather than
+  the tile-map's 2 s. Reason: per-worker telemetry changes slower than
+  tile state — heartbeats arrive at the 5 s interval the master
+  advertises in `cluster.status.heartbeatIntervalSeconds`, so polling
+  faster than that wouldn't surface fresher data. Tile-map at 2 s is
+  the one place faster matters (in-flight tile coloration), and it
+  pays the higher mTLS handshake cost only on the open job.
+
+#81. Successful Kill leaves the last-seen capabilities visible with a
+  "GONE" badge instead of blanking the form. Reason: the operator
+  clicked Kill on purpose; immediately erasing what the worker *was*
+  removes the context needed to confirm "yes that was the right
+  machine to evict". The badge plus telemetry going to "—" is the
+  honest signal: identity preserved, live state cleared.
+
+#82. `MasterConfigView` deferred to D-5e rather than bundled here.
+  Reason: it requires three new `ServerConfig` fields, plumbing
+  through `ClusterCoordinator.Start` at master spawn, two new
+  `cluster.config.*` RPCs, and a new tab on `ServerAdminView`. That's
+  a second cohesive chunk; bundling would conflate UI surface
+  (D-5d) with config-knob plumbing (D-5e). D-5a/b/c established the
+  one-chunk-per-commit cadence.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing AVLN5001
+  `TextBox.Watermark` obsoletes + codegen CS0219 warnings only (35
+  total, unchanged from D-5c).
+- Test suite: **311 passed, 0 failed** (unchanged from D-5c; no new
+  tests since the wire path is a pass-through of already-validated
+  fields and the view-model is a thin client of `cluster.status` /
+  `cluster.quiesceWorker` / `cluster.killWorker` — each already
+  covered by `ClusterAdminRpcTests`).
+
+**Next session** opens D-5e: `MasterConfigView` — new `ServerConfig`
+cluster fields (`ClusterMaxJobs`, `ClusterArtifactRetentionMinutes`,
+`ClusterTileTargetPixels`), `cluster.config.get` / `cluster.config.set`
+admin-only RPCs, and a "Cluster Config" tab inside `ServerAdminView`.
+After D-5e the §9 D-5 exit criteria are met (end-to-end render via UI
+with no CLI, clean recovery from a worker dying mid-job) and D-6 opens
+with crash recovery + per-role rate limiting.

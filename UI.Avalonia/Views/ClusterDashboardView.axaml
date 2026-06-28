@@ -108,7 +108,7 @@
 
                     <!-- Header row -->
                     <Border DockPanel.Dock="Top" Classes="gridHeader">
-                        <Grid ColumnDefinitions="160,90,80,60,90,80,80,80,90">
+                        <Grid ColumnDefinitions="160,90,80,60,90,80,80,80,90,70">
                             <TextBlock Grid.Column="0" Text="Worker" />
                             <TextBlock Grid.Column="1" Text="State" />
                             <TextBlock Grid.Column="2" Text="OS" />
@@ -118,6 +118,7 @@
                             <TextBlock Grid.Column="6" Text="CPU" />
                             <TextBlock Grid.Column="7" Text="ms/kpx" />
                             <TextBlock Grid.Column="8" Text="HB age (s)" />
+                            <TextBlock Grid.Column="9" Text="Detail" />
                         </Grid>
                     </Border>
 
@@ -129,7 +130,7 @@
                                     <Border Classes="gridRow"
                                             Background="{Binding RowBackgroundHex}"
                                             ToolTip.Tip="{Binding WorkerId}">
-                                        <Grid ColumnDefinitions="160,90,80,60,90,80,80,80,90">
+                                        <Grid ColumnDefinitions="160,90,80,60,90,80,80,80,90,70">
                                             <TextBlock Grid.Column="0" Text="{Binding WorkerName}" />
                                             <TextBlock Grid.Column="1" Text="{Binding StatusBadge}" FontWeight="Bold" />
                                             <TextBlock Grid.Column="2" Text="{Binding OsPlatform}" />
@@ -139,6 +140,10 @@
                                             <TextBlock Grid.Column="6" Text="{Binding CpuPercentText}" />
                                             <TextBlock Grid.Column="7" Text="{Binding EmaMsPerKiloPx}" />
                                             <TextBlock Grid.Column="8" Text="{Binding HeartbeatAgeSec}" />
+                                            <Button    Grid.Column="9" Content="Open" Padding="6,2"
+                                                       Background="#2E6BC8" Foreground="White"
+                                                       Command="{Binding $parent[ItemsControl].((vm:ClusterDashboardViewModel)DataContext).OpenWorkerDetailCommand}"
+                                                       CommandParameter="{Binding}" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
