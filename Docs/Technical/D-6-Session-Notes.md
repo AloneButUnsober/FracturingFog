@@ -169,3 +169,192 @@ worker skip the per-tile re-derivation. Wire-shape change is additive
 (new optional blob field); the engine seam is the
 `SeriesApproximation` calculator path identified in §4 image-tiling
 caveats.
+
+---
+
+## Session 2 — D-6b — Shared reference orbit for image tiles (2026-06-28)
+
+**Goal**: Mandelbrot image jobs at zoom ≥ 1e8 (perturbation engaged) and
+≤ 1e25 (DD precision sufficient) compute one DD reference orbit on the
+master and ship it to every tile, so each worker seeds its calculator
+instead of re-deriving the same orbit per tile. The shipped tile carries
+the full image's centre + dims + the tile's pixel offset; the calculator
+derives per-pixel dc from the IMAGE coordinate system so every tile of
+the same image shares the orbit bit-for-bit. Out-of-range jobs (low
+zoom, QD+ zoom, non-Mandelbrot, video, slideshow) fall through to the
+existing per-tile compute — wire change is purely additive.
+
+**Sub-slice decision**: v1 ships DD precision only (limbs=2 in the blob
+header). QD (zoom > 1e25) and OD (zoom > 1e50) orbit shipping is a
+follow-up: the wire format reserves the limbs byte for that growth.
+SIMD PT4/PT8 fall back to scalar when sub-rect mode engages — the dc-
+origin shift adapts cleanly to the scalar path's `(SubRectOffset + x -
+halfW_image) * scale` formula, but retrofitting the SIMD inner loops to
+the new origin would touch a lot of carefully-tuned code for a perf
+follow-up that's only worthwhile under measurement. SIMD adaptation
+lands in D-6b1.
+
+**Server-side changes**
+
+- `Server/Protocol/RenderRequestDto.cs`:
+  * New optional fields: `ImageWidth`, `ImageHeight`, `SubRectOffsetX`,
+    `SubRectOffsetY`, `RefOrbitBlobBase64`, `RefOrbitMaxIter`. All zero/
+    null on legacy single-server requests — geometry unchanged.
+- `Server/Cluster/ReferenceOrbitBlobCodec.cs` (new):
+  * Binary blob format: 44-byte header (magic 0xD6, format v1, limbs=2,
+    escaped flag, refLen, maxIter, centreX/XLo/Y/YLo) + Zr Hi / Zi Hi /
+    Zr Lo / Zi Lo arrays sized `refLen + 1`. Base64-wrapped on the wire
+    so it fits the existing JSON-RPC envelope (binary trailer support is
+    a perf path for D-6b1 if blob size justifies it — DD orbits at 1M
+    iters are ~32 MB which is borderline).
+- `Server/Cluster/TilePlanner.cs`:
+  * New `QualifiesForSharedReferenceOrbit(submitRequest)` — gates on
+    Mandelbrot + zoom in `[SharedRefOrbitMinZoom (1e8), SharedRefOrbitMaxZoom
+    (1e25)]`.
+  * New `AttachSharedReferenceOrbit(plan, submitRequest, blob, maxIter)` —
+    rewrites every tile into image-frame mode: tile.Render.CenterX/Y set
+    to the IMAGE centre, tile.Render.Zoom set to the IMAGE zoom, tile.
+    Render.ImageWidth/Height set to the image dims, tile.Render.SubRectOffsetX/Y
+    set from the tile's plan offset, blob attached.
+- `Server/Cluster/ClusterCoordinator.cs`:
+  * New `ReferenceOrbitProvider` init-only delegate (`Func<centreX,
+    centreXLo, centreY, centreYLo, maxIter, (byte[], int)?>?`). Server
+    library stays Engine-free — the host wires the Engine-side compute.
+  * `HandleJobSubmitAsync`: after `Jobs.Create` would have run, calls
+    the provider when qualifying conditions hold, attaches the blob via
+    `TilePlanner.AttachSharedReferenceOrbit`, persists the modified
+    plan. Provider failure or null return leaves the plan untouched and
+    logs `ref-orbit-attach-failed`; success logs `ref-orbit-attached`.
+
+**Engine-side changes**
+
+- `Engine/Calculators/MandelbrotCalculator.cs`:
+  * New public properties: `ImageWidth`, `ImageHeight`, `SubRectOffsetX`,
+    `SubRectOffsetY`. Defaults zero; the calculator's `EffectiveImageWidth/
+    Height` getter falls back to `Width/Height` so legacy renders are
+    bit-identical (the new dc formula collapses to the legacy
+    `(x - Width*0.5) * scale` by arithmetic when offsets are zero).
+  * `CalculateHighPrecision` — scale derives from the effective image
+    dims; dcMaxAbs uses the effective image corner. SIMD PT4 / PT8
+    forced off when sub-rect mode active.
+  * `ComputeRowPTScalar` — halfW/H measured from the effective image,
+    per-pixel offset adds `SubRectOffsetX/Y` so dc reflects the pixel's
+    position in image coordinates (not tile-local). HP fallback inside
+    the row (DD/QD/OD `FromCenterOffset` calls) gets the same shift.
+  * New `OrbitDD` record + public static `ComputeReferenceOrbitDDPublic`
+    — mirrors the private `ComputeReferenceOrbit(DD,DD,int)` math so the
+    master computes orbits without inheriting the calculator's instance
+    state.
+  * New instance method `SeedReferenceOrbitDD(orbit)` — pre-fills the
+    `_refZr/Zi/Lo`, `_refCx*/Cy*`, `_refOrbitLen`, `_refCachedMaxIter/
+    Escaped` and bumps `_refOrbitGen`. The calculator's next
+    `ComputeReferenceOrbit` sees centerSame == true and short-circuits.
+- `Engine/Imaging/PosterRenderer.cs`:
+  * `PosterRequest` gains `ImageWidth/Height/SubRectOffsetX/Y` and
+    `SeededOrbit`. Mandelbrot branch forwards to the calculator and
+    calls `SeedReferenceOrbitDD` when an orbit is supplied.
+
+**Host-side changes**
+
+- `ServerHost/HostFractalRenderEngine.cs`:
+  * When `req.RefOrbitBlobBase64` is present on a Mandelbrot tile,
+    decodes via `ReferenceOrbitBlobCodec.Decode`, validates centre +
+    maxIter match the request, wraps as `MandelbrotCalculator.OrbitDD`,
+    and forwards via `PosterRequest.SeededOrbit`. Mismatch → seed
+    skipped (the calculator's centerSame check would refuse it anyway;
+    avoiding one Decode allocation per refused tile). Decode failure →
+    logged warning + per-tile recompute (never a hard failure on a
+    perf-path).
+  * Forwards `ImageWidth/Height/SubRectOffsetX/Y` from the request DTO
+    to `PosterRequest`.
+- `ServerHost/ClusterEntry.cs`:
+  * Wires `ReferenceOrbitProvider` on the new coordinator: compute via
+    `MandelbrotCalculator.ComputeReferenceOrbitDDPublic`, encode via
+    `ReferenceOrbitBlobCodec.EncodeDD`, return `(blob, maxIter)`. Engine
+    + Server.Cluster references are local to the host assembly.
+
+**Tests**
+
+- `Server.Tests/Cluster/ReferenceOrbitBlobTests.cs` (new) — 6 cases:
+  * codec round-trip preserves header + centre limbs + Hi/Lo arrays
+  * decode of a blob with wrong magic byte throws
+  * decode of a truncated blob (header-only) throws
+  * `QualifiesForSharedReferenceOrbit` accepts Mandelbrot at 1e10,
+    refuses low-zoom (1.0), past-DD-ceiling zoom (1e26), and Julia
+  * `AttachSharedReferenceOrbit` rewrites both tiles of a 256×128 plan
+    into image-frame mode with the blob attached
+  * **pixel-parity**: 64×64 full Mandelbrot render at zoom 1e9 vs. four
+    32×32 sub-rect tiles seeded with the master-computed orbit — every
+    pixel matches bit-for-bit. This is the load-bearing correctness
+    guard for the dc-origin shift in `ComputeRowPTScalar`.
+
+- `Server.Tests/FracturingFog.Server.Tests.csproj` — gains a project
+  reference to `Engine/FracturingFog.Engine.csproj` so the pixel-parity
+  test can drive `MandelbrotCalculator` directly. Test project was
+  previously Server+Client+Abstractions only.
+
+- Test suite: **329 passed, 0 failed** (was 323; +6 in new
+  `ReferenceOrbitBlobTests`). No existing test churn.
+
+**Design decisions**
+
+#95. Sub-rect rendering instead of per-tile dc-shift overlays. The
+  alternative — keeping tile.Render.CenterX = tile centre and shipping a
+  separate `RefCenterX/Y` for the orbit — would have required threading a
+  new pair of "where is the orbit centred" fields through every PT inner
+  loop AND careful Hi/Lo subtraction to preserve DD precision in the dc
+  shift. Sub-rect mode is mathematically equivalent (the dc origin
+  collapses to `(x - imageHalfW) * scale + tileWorldOffset` in either
+  formulation) but the calculator already takes CenterX as the orbit
+  anchor, so reusing that field means zero new precision plumbing.
+
+#96. SIMD PT4/PT8 forced to scalar when sub-rect active. The SIMD
+  inner loops hardcode `Width/halfW` into vector setup; retrofitting
+  them with sub-rect math would touch dense AVX2/AVX-512 code paths that
+  the project hand-tuned over many sessions. The scalar path is the
+  single source of truth for the dc-origin shift in v1; SIMD adaptation
+  (~3× speedup on the PT inner loop) lands as D-6b1 once a perf
+  measurement justifies the surgery.
+
+#97. v1 ships DD-precision orbits only (limbs = 2 in the blob header).
+  QD (zoom > 1e25) and OD (zoom > 1e50) require shipping additional
+  limb arrays — 4× / 8× the wire bytes and 4× / 8× the calculator
+  cache-seed surface. The wire format reserves the `limbs` header byte
+  for that growth; the codec refuses non-DD blobs in v1 with a clear
+  error so a future blob shipped from a QD-capable master against a
+  DD-only worker fails closed instead of producing wrong pixels.
+
+#98. ReferenceOrbitProvider is a delegate on the coordinator, not a
+  trait on TilePlanner. The Server library stays Engine-free — the
+  planner doesn't know how to compute an orbit, only how to rewrite a
+  plan when given a blob. The compute lives in `ClusterEntry` which is
+  already the assembly that pulls Engine references.
+
+#99. Blob is base64 inside the JSON-RPC envelope rather than a binary
+  trailer. Binary trailer support exists for `tile.deliver`; reusing it
+  for `tile.next`'s response would let blobs >1 MB ride the same path.
+  DD orbits at typical maxIter (1K–10K) are 32–320 KB — base64's 33%
+  overhead is tolerable. When 1M+ iter renders become the workload
+  driver (deep-zoom video), D-6b1 swaps to a binary trailer.
+
+#100. Sub-rect mode is invariant under `SubRectOffsetX = 0 && SubRectOffsetY
+  = 0 && ImageWidth <= Width && ImageHeight <= Height`. That guard collapses
+  the new dc formula to the legacy `(x - Width*0.5) * scale` exactly, so
+  the change is a strict superset of the prior behaviour and existing
+  pixel-parity tests for single-server renders remain valid without
+  needing an explicit "sub-rect disabled" toggle.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing warnings only
+  (35 total — AVLN5001 + codegen CS0219, unchanged from D-6a).
+- Test suite: **329 passed, 0 failed** (+6 since D-6a's 323).
+- Filtered `--filter "FullyQualifiedName~ReferenceOrbitBlobTests"`:
+  6 passed in 311 ms (includes the pixel-parity render).
+
+**Next session** opens D-6c: per-role rate limiting (§9 D-6 item 3).
+Extends `EndpointRateLimiter` to a per-role policy: client-role uses
+the existing per-IP per-minute, worker-role lower bound on `tile.next`
+long-poll churn, admin-role unlimited but every call logged. D-6b1
+(SIMD PT4/PT8 sub-rect adaptation) is a perf follow-up — schedule
+behind D-6c → D-6d (doc) → D-6e (stress test) per the plan §9 ordering.

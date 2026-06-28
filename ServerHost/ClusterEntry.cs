@@ -106,6 +106,24 @@ public static class ClusterEntry
                 cfg.ClusterTileTargetPixels         = snap.ClusterTileTargetPixels;
                 cfg.Save();
             },
+            // D-6b — master-side reference orbit compute. Engine-assembly
+            // dependency lives here (Server library stays Engine-free).
+            // Fires only for Mandelbrot image jobs in the supported zoom
+            // range; see TilePlanner.QualifiesForSharedReferenceOrbit.
+            ReferenceOrbitProvider = (cx, cxLo, cy, cyLo, maxIter) =>
+            {
+                try
+                {
+                    var orbit = FracturingFog.MandelbrotCalculator
+                        .ComputeReferenceOrbitDDPublic(cx, cxLo, cy, cyLo, maxIter);
+                    byte[] blob = FracturingFog.Server.Cluster.ReferenceOrbitBlobCodec.EncodeDD(
+                        orbit.RefLen, orbit.MaxIter, orbit.Escaped,
+                        orbit.CentreX, orbit.CentreXLo, orbit.CentreY, orbit.CentreYLo,
+                        orbit.Zr, orbit.Zi, orbit.ZrLo, orbit.ZiLo);
+                    return (blob, orbit.MaxIter);
+                }
+                catch { return null; }
+            },
         };
 
         // D-6a — replay any non-terminal jobs left on disk by a previous
