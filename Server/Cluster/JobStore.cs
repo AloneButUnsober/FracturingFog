@@ -377,8 +377,11 @@ public sealed class JobStore
         string final = Path.Combine(dir, "status.json");
         string tmp   = final + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(s, JsonOpts));
-        if (File.Exists(final)) File.Delete(final);
-        File.Move(tmp, final);
+        // Atomic replace — keeps the destination visible to concurrent
+        // readers across the swap. The previous Delete + Move opened a
+        // window where ReadStatus saw status.json missing and the
+        // coordinator answered "unknown-job" on a healthy in-flight job.
+        File.Move(tmp, final, overwrite: true);
     }
 
     private static void AppendEventLocked(string dir, string kind, IReadOnlyDictionary<string, object?>? fields)

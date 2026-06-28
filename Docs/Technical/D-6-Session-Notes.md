@@ -708,3 +708,144 @@ SIMD PT4/PT8 sub-rect adaptation tagged D-6b1, the QD orbit limbs
 growth tagged D-6b's #97, or making the four rate-limit knobs
 live-tunable) is follow-up perf/operator work scheduled
 independently.
+
+---
+
+## Session 5 — D-6e — Cluster stress test + JobStore race fix (2026-06-28)
+
+**Goal**: stand up the §9 D-6 acceptance workload — 50 concurrent
+client connections submit 200 jobs against an 8-worker pool — as a
+Server.Tests case that fails fast on any dispatcher / status / fetch
+regression introduced under contention. Phase D-6 (and the
+distributed-rendering line item) closes when it lands green.
+
+**Sub-slice decision**: a single slice. The stress test is one new
+xUnit class plus a 4-line atomicity fix in `JobStore.WriteStatusLocked`
+that the load surfaced on first run. No split: the fix is the test's
+only prerequisite, and splitting would have meant a passing-test commit
+that landed before the bug it caught was actually closed. The test
+runs in-process against the existing `ClusterCoordinator` surface —
+the same call shape as `ClusterEndToEndImageTests` — rather than over
+TLS+TCP. A socket-level harness would add minutes per run for an
+effect the coordinator surface already represents faithfully (the
+focused end-to-end tests cover the on-wire framing).
+
+**Server-side changes**
+
+- `Server/Cluster/JobStore.cs`:
+  * `WriteStatusLocked` swapped its `File.Exists(final) → File.Delete →
+    File.Move(tmp, final)` sequence for a single
+    `File.Move(tmp, final, overwrite: true)`. The previous pattern
+    opened a window between `Delete` and `Move` where a concurrent
+    `ReadStatusLocked` saw `status.json` missing and the coordinator
+    answered `unknown-job` on a healthy in-flight job. The stress run
+    tripped the race within the first ~50 concurrent jobs and was the
+    first test load tight enough to surface it; the bug was latent in
+    every prior D-2..D-5 release but hidden by the focused tests' low
+    polling cadence.
+
+**Tests**
+
+- New `Server.Tests/Cluster/StressTests.cs` — one fact,
+  `Cluster_Sustains_50_Clients_8_Workers_200_Jobs`:
+  * Registers 8 workers under distinct cert thumbprints.
+  * Spawns 8 worker `Task.Run` loops that pump `tile.next` → render
+    a constant-fill tile via `RawHeaderCodec.BuildTile` → `tile.deliver`.
+  * Spawns 50 client `Task.Run` loops that each submit
+    `totalJobs/numClients = 4` jobs in sequence, poll each to `ready`,
+    then fetch each artifact.
+  * Tight `TileNextHold = 100 ms` so an idle worker round-trips
+    quickly; padding the hold would only mask a regression behind
+    the timeout. `Dispatcher.MaxAttempts = 2` keeps a flake-mode
+    retry available but avoids hiding a real failure behind silent
+    re-render.
+  * Global 2-minute wall-clock guard so a real deadlock fails the
+    CI run instead of hanging it; the healthy run completes in ~2 s
+    on a developer box.
+  * Asserts: all 200 jobs reach `ready`, every job id is distinct,
+    every `job.fetch` returns a streaming artifact ≥ 1 byte, total
+    delivered tile count ≥ 200, and every persisted `status.json`
+    cross-checks to `ready` on the JobStore.
+
+- Test suite: **338 passed, 0 failed** (was 337; +1 stress test).
+  No existing test churn — the JobStore.WriteStatusLocked fix is a
+  strict superset of the prior behaviour (the swap is still atomic;
+  the change is removing the unsafe gap before it).
+
+**Design decisions**
+
+#114. Stress test runs in-process against the coordinator, not over
+  TLS+TCP. The §9 D-6 ask is "Stress tests in `Server.Tests`" — the
+  same harness layer the existing focused tests use. A socket-level
+  variant would buy a TLS-handshake check (already exercised
+  end-to-end by D-1 in `ClusterEndToEndImageTests`'s sibling sockets
+  fixtures) at the cost of multi-minute CI runs from the 50-client
+  fan-out alone. In-process keeps the test surface aligned with the
+  bug class D-6 hardens against — dispatcher contention, status
+  reads under load, queue starvation — none of which depend on the
+  wire framing.
+
+#115. The JobStore race fix lands in the same slice as the stress
+  test, not as a parallel D-6e1 follow-up. Reason: a green stress
+  test before the fix is impossible (the race manifests deterministically
+  inside the first second of the workload); a green stress test
+  after the fix is the proof the fix is correct. Splitting would
+  have left the commit graph with a passing test that landed before
+  the bug it caught was actually closed. The fix is a 4-line atomic
+  primitive swap with no behavioural surface area beyond removing a
+  read-during-write window.
+
+#116. Single-tile jobs (64×64 image, `TilePixelsHint=64`) rather
+  than multi-tile. The §9 wording says "200 queued jobs", and one
+  tile per job means 200 dispatch + deliver round-trips — enough
+  to exercise the awaiter fan-out and per-job status churn without
+  ballooning the test into a multi-thousand-tile run that would
+  dominate on merger work rather than coordinator contention. The
+  merger codepath is independently covered by `ArtifactMergerTests`;
+  the merge-heavy regression surface is not what D-6e is testing.
+
+#117. Worker cert thumbprints synthesised as `WORKER-THUMB-NN`
+  rather than real SHA-1 hex. The registry's pin uniqueness check
+  fires on the literal string; any 8 distinct strings satisfy it.
+  Synthesising real SHA-1 hex would add a `RandomNumberGenerator`
+  call per worker for no test signal — the thumbprint pin behaviour
+  is independently covered by `WorkerRegistryTests`.
+
+#118. `Dispatcher.MaxAttempts = 2` rather than `1`. A constant-fill
+  worker should never fail a tile, but pinning attempts to 1 would
+  turn a single transient hiccup (e.g. an OS scheduling stall that
+  pushes a worker past its `TileNextHold` deadline) into a hard
+  test failure that bears no relation to the bug class D-6e is
+  guarding against. One spare attempt keeps the test focused on
+  what it asserts about (terminal-state correctness) and away from
+  what it doesn't (per-tile timing).
+
+#119. Global wall-clock guard at 2 minutes. Healthy run is ~2 s on
+  the dev box; CI boxes that are swapping under contention have
+  been observed to take ~30 s on similar end-to-end tests in this
+  repo. 2 minutes is a clear "real deadlock vs. slow CI" cliff —
+  if the guard ever fires, the failure mode is a genuine
+  dispatcher / awaiter regression, not a flake.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing 4 AVLN5001
+  `TextBox.Watermark` obsoletes only (unchanged from D-6d).
+- Test suite: **338 passed, 0 failed** (+1 since D-6d's 337).
+- Filtered `--filter "FullyQualifiedName~StressTests"`:
+  1 passed in 2 s (200 jobs × 50 clients × 8 workers, ~3 s including
+  xUnit discovery).
+
+**Phase D-6 closes here.** The distributed-rendering line item from
+`DistributedRendering-DevelopmentPlan.md` §9 is complete:
+- D-6a — master crash recovery for image jobs
+- D-6b — shared reference orbit for Mandelbrot tiles
+- D-6c — per-role rate limiting + admin audit log
+- D-6d — operator doc + Master Config help button
+- D-6e — 50-client / 8-worker / 200-job stress test + JobStore race fix
+
+Open follow-ups scheduled independently of this phase: SIMD PT4/PT8
+sub-rect adaptation (D-6b1), QD/OD orbit limbs growth (D-6b #97),
+the four rate-limit knobs surfaced through `cluster.config.get/set`
+for live tuning (D-6c #-deferred), and video / slideshow crash
+recovery (D-6a #93 deferral). None block the phase close.
