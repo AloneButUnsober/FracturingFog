@@ -40,4 +40,21 @@ public sealed class JobStatusDto
     /// it; do not parse for routing.</summary>
     [JsonPropertyName("failReason")]
     public string? FailReason { get; set; }
+
+    /// <summary>D-4 — total frames in this video job (0 for image mode).
+    /// Static once the job is planned.</summary>
+    [JsonPropertyName("totalFrames")]
+    public int TotalFrames { get; set; }
+
+    /// <summary>D-4 — frames delivered by workers and on disk so far.
+    /// Drives the per-job progress bar in video mode (per-tile progress
+    /// is misleading when each tile carries 30 frames).</summary>
+    [JsonPropertyName("framesDone")]
+    public int FramesDone { get; set; }
+
+    /// <summary>D-4b — frames consumed by the master's streaming ffmpeg
+    /// encoder so far. Always &lt;= <see cref="FramesDone"/>. Stays at 0
+    /// for video jobs that fall back to the frames-manifest stub.</summary>
+    [JsonPropertyName("encodedFrames")]
+    public int EncodedFrames { get; set; }
 }

@@ -182,3 +182,164 @@ dotnet run --project FracturingFogCLD.csproj -- --cluster-parity \
   unchanged.
 - Slideshow assembly: master concatenates per-slide PNGs (or
   per-slide MP4s) into the final deliverable.
+
+### Session 2 — 2026-06-27 — D-4b ffmpeg streaming ingest + backpressure
+
+**Goal**: replace D-4a's `frames-manifest.json` stub with a real
+streaming ffmpeg encoder. Workers continue to deliver per-tile PNG
+batches; the master pipes them into a long-running ffmpeg subprocess
+(`image2pipe / vcodec=png`) as soon as each frame lands on disk. A
+backpressure gate on `tile.next` prevents fast workers from racing
+ahead of sequential encoder ingest.
+
+**Files added**
+
+- `Server/Cluster/VideoFramePipeline.cs` — per-video-job streaming
+  encoder. Spawns ffmpeg with image2pipe stdin and a reader task
+  that loops `nextFrame=1..TotalFrames`, waits for
+  `frame_NNNNNN.png` on disk, reads + pipes to stdin, increments the
+  encoded counter. `IsBehind(maxDepth)` drives the master's
+  backpressure gate. Bundles its own ffmpeg binary lookup
+  (mirroring `Engine/Imaging/FfmpegEncoder.FindFfmpeg`) so the
+  Server assembly doesn't need an Engine reference to use the
+  pipeline. Includes `PresetFromLossless` + `DefaultExtensionFor`
+  helpers translating `RenderRequestDto.Lossless` ↔ output container.
+- `Server.Tests/Cluster/VideoFramePipelineTests.cs` — 7 tests:
+  preset / extension mapping (3), `TryStart` returns null when
+  ffmpeg missing (1), streaming round-trip produces a real MP4
+  with `EncodedFrames == totalFrames` (1, ffmpeg-gated),
+  `IsBehind` tracks delivered-minus-encoded (1, ffmpeg-gated),
+  null-on-no-ffmpeg path (1). Round-trip tests use a hand-rolled
+  PNG generator (`TinyPng`) so the test project stays UI-/imaging-
+  stack-free.
+
+**Files amended**
+
+- `Server/Cluster/TileDispatcher.cs` — new `ReturnPending(jobId, tile)`
+  pops a freshly claimed tile back to the pending queue without
+  incrementing `Attempt`. Used by the coordinator's backpressure gate:
+  the worker that was about to receive a tile gets WaitAgain instead,
+  and the tile remains available for whoever asks next (often the
+  same worker once the encoder catches up). Burning an attempt would
+  be wrong — backpressure is not the worker's fault.
+- `Server/Cluster/Protocol/JobStatusDto.cs` — exposes `TotalFrames`,
+  `FramesDone`, `EncodedFrames` on the wire. Clients can show a real
+  encode-progress bar alongside delivery progress.
+- `Server/Cluster/JobStore.cs` — `PersistedStatus` gains
+  `EncodedFrames` (mirrors the live pipeline counter at every
+  tile-deliver tick + on every status read).
+- `Server/Cluster/ClusterCoordinator.cs`:
+  - New `MaxFrameQueueDepth { get; init; } = 64` (per dev-plan §7.9).
+  - Per-job `_videoPipelines` + `_videoCts` maps.
+  - `HandleJobSubmitAsync` spawns a `VideoFramePipeline` when the
+    request maps to a real lossless preset AND ffmpeg is on disk;
+    otherwise falls back to the D-4a manifest stub at finalise time.
+  - `HandleTileNextAsync` checks `pipeline.IsBehind(MaxFrameQueueDepth)`
+    after `Dispatcher.ClaimNextAsync`. If behind: `ReturnPending` the
+    tile, log `tile-backpressure`, return `WaitAgain`.
+  - `HandleFramesDeliverAsync` calls `pipe.NotifyFramesDelivered(N)`
+    so the pipeline's delivered counter advances; persisted
+    `EncodedFrames` is read back from the pipeline.
+  - New `FinaliseVideoFramesWithEncoderAsync` awaits
+    `pipe.Completion` (off-thread; ffmpeg drain may take seconds for
+    ffv1 / qp0 H.264). Failure surfaces ffmpeg's stderr tail as
+    `FailReason`. Success sets the artifact to the produced
+    `.mp4` / `.mkv` (no more manifest).
+  - `HandleJobCancelAsync` + tile-error-fail path call
+    `DisposeVideoPipelineAsync` so a cancelled / failed video job
+    doesn't leak the ffmpeg child.
+  - `HandleJobStatusAsync` reads the live `pipe.EncodedFrames`
+    instead of the last-persisted value so the wire counter is
+    fresh per poll.
+- `Server.Tests/Cluster/TileDispatcherTests.cs` — 3 new tests for
+  `ReturnPending`: bounces the tile without bumping `Attempt`,
+  signals a waiting worker via the `SignalAll` path, refuses an
+  unknown job.
+
+**Build / test**
+
+```
+dotnet build FracturingFogCLD.sln -c Debug     → 0 errors, 29 warnings (all pre-existing + new xUnit1051 lints)
+dotnet test Server.Tests --no-build            → 284 passed (274 from D-4a + 10 new)
+dotnet run --project FracturingFogCLD.csproj -- --cluster-parity \
+      --width 256 --height 128 --tile-px 64
+  → png-path  PARITY OK   32,768 px, 0 diff
+    rgba-path PARITY OK   32,768 px, 0 diff
+```
+
+(Existing D-4a video-end-to-end tests still pass: they submit jobs
+with `Lossless="none"` so the coordinator skips pipeline creation
+and lands on the manifest stub, exactly as before.)
+
+**Design decisions captured here so future sessions don't relitigate**
+
+41. **`image2pipe / vcodec=png` over an on-disk image2 demuxer.**
+    Disk-mode ffmpeg (`-i frame_%06d.png`) requires every frame on
+    disk before start; image2pipe over stdin lets ffmpeg consume
+    `frame_000001.png` while `frame_000060.png` is still being
+    rendered. This is the §7.9 win — overlapped encode + render
+    cuts wall clock by the encode duration on lossless presets
+    (seconds for h264-qp0 / ffv1 on a 20s clip).
+42. **Master polls the frames dir; doesn't subscribe to filesystem
+    events.** `FileSystemWatcher` works on Win but is unreliable on
+    network shares and has latency quirks. A 20 ms polling interval
+    on a single integer-counter directory listing burns negligible
+    CPU and stays portable to Linux master deployments.
+43. **Backpressure via `Dispatcher.ReturnPending`, not a pause
+    flag.** Pause-flag adds a per-job state field and a cross-call
+    invariant (set on slow, clear on caught-up). ReturnPending
+    re-uses the existing pending queue + signal infrastructure: the
+    tile goes back, the worker gets WaitAgain, and the next poll
+    re-evaluates the gate cleanly. The dispatcher stays job-
+    agnostic; backpressure lives in the coordinator where the
+    pipeline state already is.
+44. **`Attempt` count is preserved on ReturnPending.** Reusing
+    `RecordFailure` would have bumped the retry budget and starved
+    legitimate retries. Backpressure is master-side scheduling, not
+    a tile-execution failure — same tile, same attempt, just
+    later.
+45. **Ffmpeg discovery lives in Server, not pulled from Engine.**
+    Server's `csproj` only references `Abstractions`. Pulling
+    Engine for `FfmpegEncoder.FindFfmpeg` would drag SkiaSharp,
+    the calculator stack, and the render path into the cluster
+    master — bigger surface area, slower build, no real benefit.
+    The discovery code is ~25 lines; duplicating is cheaper than
+    re-architecting the project graph for it.
+46. **`Lossless="none"` → manifest stub, not h264 default.** The
+    test fleet (D-4a end-to-end tests) submits with default
+    `Lossless="none"` and asserts a `frames-manifest.json` artifact;
+    keeping that path live preserves all existing tests AND
+    matches user intent (a request that asked for "no lossless
+    encode" shouldn't silently encode anyway). Encode-or-stub is
+    a single check: `PresetFromLossless != null && IsAvailable()`.
+47. **`FinaliseVideoFramesWithEncoderAsync` runs off-thread.**
+    Awaiting `pipe.Completion` synchronously inside the
+    `tile.deliver` handler would block the JSON-RPC dispatcher
+    thread for the encoder's drain duration. Fire-and-forget via
+    `Task.Run` keeps the wire path snappy; the state machine
+    transition to `ready` happens whenever ffmpeg finishes.
+48. **Live `EncodedFrames` read in `HandleJobStatusAsync`.**
+    Persisted-only would lag by up to one tile-deliver interval
+    (30 frames at typical settings → up to 1 s stale). Reading
+    the pipeline counter at poll time gives clients a tight
+    real-time view at zero persistence cost.
+
+**Open work — D-4c (slideshow per-slide sharding)**
+
+- Each slide is an independent render job: one tile per slide,
+  dispatched through the existing image pipeline. Reuse
+  `ArtifactMerger` unchanged; the merge step concatenates
+  per-slide PNGs into the final slideshow PDF / per-slide MP4
+  stream as required by the slideshow renderer.
+- Slideshow assembly likely lives in a new `SlideshowAssembler`
+  alongside `ArtifactMerger`; the coordinator branches on
+  `Mode="slideshow"` in `HandleJobSubmitAsync` like video does
+  today.
+
+**D-4 exit criteria (after D-4c)**
+
+- ffprobe parity test: a 20s 1080p30 ffv1 zoom across 2 workers
+  must match a single-worker render frame-for-frame
+  (`ffprobe -show_streams` + per-frame SHA-256).
+- Extend `ClusterScaleSelfTest` with `--mode video` so the harness
+  drives multi-worker video as well as image renders.

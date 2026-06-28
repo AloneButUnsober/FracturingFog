@@ -49,6 +49,14 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     /// can be shared.</summary>
     public int FetchChunkBytes { get; init; } = 1 * 1024 * 1024;
 
+    /// <summary>D-4b — backpressure gate. tile.next holds a video tile
+    /// when the per-job streaming ffmpeg encoder has fallen this many
+    /// frames behind the wire delivery. Default 64 matches the dev-plan
+    /// §7.9 recommendation. Higher = more frames buffered on disk
+    /// (faster workers, more memory pressure); lower = stricter pacing
+    /// (tighter wall-clock between deliver and encode).</summary>
+    public int MaxFrameQueueDepth { get; init; } = 64;
+
     public WorkerRegistry  Registry   { get; }
     public JobStore?       Jobs       { get; init; }
     public TileDispatcher? Dispatcher { get; init; }
@@ -56,6 +64,19 @@ public sealed class ClusterCoordinator : IClusterCoordinator
 
     private readonly ClusterLogger _log;
     private readonly ConcurrentDictionary<string, ArtifactMerger> _mergers =
+        new(StringComparer.Ordinal);
+
+    /// <summary>D-4b — per-video-job streaming encoder pipelines. Created
+    /// on job.submit when (a) RenderRequest.Lossless maps to a real
+    /// codec preset AND (b) ffmpeg is on disk. Absent entries mean the
+    /// video job falls back to the D-4a frames-manifest stub.</summary>
+    private readonly ConcurrentDictionary<string, VideoFramePipeline> _videoPipelines =
+        new(StringComparer.Ordinal);
+
+    /// <summary>D-4b — token sources backing each pipeline. Cancelled on
+    /// job cancel / coordinator shutdown so the encoder subprocess dies
+    /// promptly instead of waiting on a dead frame source.</summary>
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _videoCts =
         new(StringComparer.Ordinal);
 
     public ClusterCoordinator(WorkerRegistry registry, ClusterLogger log)
@@ -201,6 +222,31 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 WaitAgain = true,
                 Shutdown  = ct.IsCancellationRequested,
             });
+
+        // D-4b — backpressure: if this is a video tile and the streaming
+        // encoder for its job is behind by more than MaxFrameQueueDepth
+        // frames, hold the worker back. ReturnPending re-enqueues the
+        // tile without burning a retry attempt; the worker gets
+        // WaitAgain and re-polls when the encoder catches up.
+        if (tile.FrameRange != null
+            && _videoPipelines.TryGetValue(tile.JobId, out var gatePipe)
+            && gatePipe.IsBehind(MaxFrameQueueDepth))
+        {
+            Dispatcher.ReturnPending(tile.JobId, tile);
+            _log.Event("tile-backpressure", new Dictionary<string, object?>
+            {
+                ["jobId"]    = tile.JobId,
+                ["tileId"]   = tile.TileId,
+                ["workerId"] = entry.WorkerId,
+                ["backlog"]  = gatePipe.Backlog,
+                ["maxDepth"] = MaxFrameQueueDepth,
+            });
+            return ClusterDispatchOutcome.Ok(new TileNextResultDto
+            {
+                WaitAgain = true,
+                Shutdown  = false,
+            });
+        }
 
         // Bookkeeping: the job goes to "rendering" the first time any
         // tile leaves the queue.
@@ -455,6 +501,16 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         }
         catch { }
 
+        // D-4b — let the streaming encoder know N more frames just landed
+        // on disk. Pipeline is null when the job falls back to the D-4a
+        // frames-manifest stub (no lossless preset or no ffmpeg on box).
+        int encodedNow = 0;
+        if (_videoPipelines.TryGetValue(dto.JobId, out var pipe))
+        {
+            pipe.NotifyFramesDelivered(frames.Count);
+            encodedNow = pipe.EncodedFrames;
+        }
+
         int done = Dispatcher.CompletedCount(dto.JobId);
         int total = planFrames.Count;
         int framesOnDisk = Jobs!.CountFrames(dto.JobId);
@@ -463,14 +519,16 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             s.TilesDone     = done;
             s.TilesInFlight = Dispatcher.InFlightCount(dto.JobId);
             s.FramesDone    = framesOnDisk;
+            s.EncodedFrames = encodedNow;
             if (s.JobState is "queued" or "planning") s.JobState = "rendering";
         });
         Jobs.AppendEvent(dto.JobId, "frames-delivered", new Dictionary<string, object?>
         {
-            ["tileId"] = dto.TileId,
-            ["worker"] = dto.WorkerId,
-            ["frames"] = frames.Count,
-            ["ms"]     = dto.RenderMs,
+            ["tileId"]  = dto.TileId,
+            ["worker"]  = dto.WorkerId,
+            ["frames"]  = frames.Count,
+            ["ms"]      = dto.RenderMs,
+            ["encoded"] = encodedNow,
         });
 
         if (done == total) FinaliseVideoFrames(dto.JobId, framesOnDisk);
@@ -478,11 +536,114 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         return Ok(new TileDeliverAckDto { Accepted = true });
     }
 
-    /// <summary>D-4a stub finaliser for video jobs — writes a manifest of
-    /// the per-frame PNGs and parks the job at "merging". D-4b replaces
-    /// this with the real ffmpeg encode pass that turns the manifest
-    /// into the final .mp4 / .mkv artifact.</summary>
+    /// <summary>D-4 finaliser for video jobs. When a streaming encoder
+    /// pipeline is wired (D-4b), wait for ffmpeg to consume the last
+    /// frame, drain stdin, and exit; the artifact is the produced
+    /// .mp4 / .mkv. Otherwise (no lossless preset, or no ffmpeg on the
+    /// master) fall back to the D-4a frames-manifest stub so the state
+    /// machine still reaches "ready" and clients can inspect frame
+    /// counts.</summary>
     private void FinaliseVideoFrames(string jobId, int framesOnDisk)
+    {
+        if (_videoPipelines.TryGetValue(jobId, out var pipe))
+        {
+            _ = Task.Run(() => FinaliseVideoFramesWithEncoderAsync(jobId, framesOnDisk, pipe));
+            return;
+        }
+        FinaliseVideoFramesAsManifest(jobId, framesOnDisk);
+    }
+
+    /// <summary>D-4b — fence the streaming encoder, mark the encoded
+    /// artifact ready. Runs off-thread because <see cref="VideoFramePipeline.Completion"/>
+    /// only resolves after ffmpeg drains stdin and exits, which can be
+    /// seconds for ffv1 / qp0 H.264.</summary>
+    private async Task FinaliseVideoFramesWithEncoderAsync(
+        string jobId, int framesOnDisk, VideoFramePipeline pipe)
+    {
+        try
+        {
+            Jobs!.UpdateStatus(jobId, s => s.JobState = "merging");
+
+            var (ok, log) = await pipe.Completion.ConfigureAwait(false);
+            if (!ok)
+            {
+                string tail = log.Length > 2000 ? log[^2000..] : log;
+                Jobs.UpdateStatus(jobId, s =>
+                {
+                    s.JobState   = "failed";
+                    s.FailReason = "ffmpeg-encode-failed: " + tail;
+                });
+                _log.Event("job-failed", new Dictionary<string, object?>
+                {
+                    ["jobId"] = jobId,
+                    ["where"] = "ffmpeg-encode",
+                    ["error"] = tail,
+                });
+                Dispatcher!.RetireJob(jobId);
+                return;
+            }
+
+            string outPath = pipe.ArtifactPath;
+            if (!File.Exists(outPath))
+            {
+                Jobs.UpdateStatus(jobId, s =>
+                {
+                    s.JobState   = "failed";
+                    s.FailReason = "ffmpeg-output-missing: " + outPath;
+                });
+                Dispatcher!.RetireJob(jobId);
+                return;
+            }
+
+            long size = new FileInfo(outPath).Length;
+            string sha = ComputeFileSha256Base64(outPath);
+            int encoded = pipe.EncodedFrames;
+            Jobs.UpdateStatus(jobId, s =>
+            {
+                s.JobState       = "ready";
+                s.ArtifactExt    = pipe.ArtifactExt;
+                s.ArtifactBytes  = size;
+                s.ArtifactSha256 = sha;
+                s.TilesInFlight  = 0;
+                s.EncodedFrames  = encoded;
+            });
+            Jobs.AppendEvent(jobId, "video-ready", new Dictionary<string, object?>
+            {
+                ["frames"]  = framesOnDisk,
+                ["encoded"] = encoded,
+                ["bytes"]   = size,
+                ["ext"]     = pipe.ArtifactExt,
+            });
+            _log.Event("job-video-ready", new Dictionary<string, object?>
+            {
+                ["jobId"]  = jobId,
+                ["bytes"]  = size,
+                ["frames"] = framesOnDisk,
+                ["ext"]    = pipe.ArtifactExt,
+            });
+            Dispatcher!.RetireJob(jobId);
+        }
+        catch (Exception ex)
+        {
+            Jobs?.UpdateStatus(jobId, s => { s.JobState = "failed"; s.FailReason = "video-finalise-failed: " + ex.Message; });
+            _log.Event("job-failed", new Dictionary<string, object?>
+            {
+                ["jobId"] = jobId,
+                ["where"] = "finalise-video",
+                ["error"] = ex.Message,
+            });
+        }
+        finally
+        {
+            await DisposeVideoPipelineAsync(jobId).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>D-4a fallback path — writes a frames-manifest.json
+    /// artifact describing the per-frame PNGs on disk and transitions
+    /// the job to ready. Used when no lossless preset was requested or
+    /// when ffmpeg is unavailable on the master.</summary>
+    private void FinaliseVideoFramesAsManifest(string jobId, int framesOnDisk)
     {
         try
         {
@@ -540,6 +701,14 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 ["error"] = ex.Message,
             });
         }
+    }
+
+    private async Task DisposeVideoPipelineAsync(string jobId)
+    {
+        if (_videoPipelines.TryRemove(jobId, out var p))
+            try { await p.DisposeAsync().ConfigureAwait(false); } catch { }
+        if (_videoCts.TryRemove(jobId, out var cts))
+            try { cts.Cancel(); cts.Dispose(); } catch { }
     }
 
     private void FinaliseMerge(string jobId, ArtifactMerger merger)
@@ -620,6 +789,8 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             });
             Dispatcher.RetireJob(dto.JobId);
             if (_mergers.TryRemove(dto.JobId, out var m)) m.Dispose();
+            // D-4b — fail-the-job teardown for the streaming encoder.
+            _ = DisposeVideoPipelineAsync(dto.JobId);
             _log.Event("job-failed", new Dictionary<string, object?>
             {
                 ["jobId"]  = dto.JobId,
@@ -688,8 +859,35 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             var merger = new ArtifactMerger(plan.ImageWidth, plan.ImageHeight, plan.TileCount, Codec);
             _mergers[jobId] = merger;
         }
-        // Video jobs have no ArtifactMerger — frames land directly on disk
-        // and the D-4b finaliser stitches them via ffmpeg at completion.
+        else
+        {
+            // D-4b — video jobs that asked for a lossless preset spin up
+            // the streaming ffmpeg encoder. The reader task starts watching
+            // FramesDir immediately; it'll block on Task.Delay until the
+            // first frame_000001.png lands. Pipelines are torn down by
+            // FinaliseVideoFramesWithEncoderAsync or HandleJobCancelAsync.
+            var preset = VideoFramePipeline.PresetFromLossless(dto.Request.Lossless);
+            if (preset != null && VideoFramePipeline.IsAvailable())
+            {
+                var cts = new CancellationTokenSource();
+                string framesDir = Jobs.FramesDir(jobId);
+                string artifactBase = Path.Combine(Jobs.JobDir(jobId), "artifact");
+                var pipe = VideoFramePipeline.TryStart(
+                    framesDir, plan.TotalFrames, dto.Request.VideoFps,
+                    preset.Value, artifactBase, cts.Token);
+                if (pipe != null)
+                {
+                    _videoPipelines[jobId] = pipe;
+                    _videoCts[jobId]       = cts;
+                }
+                else
+                {
+                    cts.Dispose();
+                }
+            }
+            // No-preset / no-ffmpeg / spawn-failed → fall back to the
+            // D-4a frames-manifest stub at finalise time.
+        }
 
         Dispatcher.EnqueueJob(jobId, plan.Tiles);
         Jobs.UpdateStatus(jobId, s =>
@@ -758,6 +956,13 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             eta = (long)(msPerTile * (st.TilesTotal - st.TilesDone));
         }
 
+        // D-4b — pipeline may have consumed more frames since the last
+        // tile.deliver wrote status. Read live so the encoded counter
+        // reflects current progress, not the last delivery.
+        int encoded = st.EncodedFrames;
+        if (_videoPipelines.TryGetValue(dto.JobId, out var livePipe))
+            encoded = livePipe.EncodedFrames;
+
         return Ok(new JobStatusDto
         {
             JobState         = st.JobState,
@@ -770,6 +975,9 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             ArtifactReady    = st.JobState == "ready",
             ArtifactBytes    = st.ArtifactBytes,
             FailReason       = st.FailReason,
+            TotalFrames      = st.TotalFrames,
+            FramesDone       = st.FramesDone,
+            EncodedFrames    = encoded,
         });
     }
 
@@ -837,6 +1045,10 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             Jobs.AppendEvent(dto.JobId, "cancelled", null);
             Dispatcher.RetireJob(dto.JobId);
             if (_mergers.TryRemove(dto.JobId, out var m)) m.Dispose();
+            // D-4b — kill the encoder subprocess so a cancelled video
+            // job doesn't leave an ffmpeg child running until the master
+            // exits. Fire-and-forget; dispose is best-effort.
+            _ = DisposeVideoPipelineAsync(dto.JobId);
             _log.Event("job-cancelled", new Dictionary<string, object?>
             {
                 ["jobId"] = dto.JobId,
