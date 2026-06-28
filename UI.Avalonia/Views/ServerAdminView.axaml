@@ -156,10 +156,13 @@
                 <StackPanel Spacing="6">
                     <TextBlock Classes="section" Text="Cluster" />
                     <TextBlock Foreground="#7E7E7E" FontSize="11" TextWrapping="Wrap"
-                               Text="Open the live workers + recent-jobs dashboard. Reads %APPDATA%\FracturingFog\cluster-certs\admin.pfx; run the master once to mint the bundle." />
-                    <Button Classes="primary" Content="Cluster Dashboard…"
-                            Command="{Binding OpenClusterDashboardCommand}"
-                            HorizontalAlignment="Left" />
+                               Text="Live workers + recent-jobs dashboard and live cluster-knob editor. Both read %APPDATA%\FracturingFog\cluster-certs\admin.pfx; run the master once to mint the bundle." />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Classes="primary" Content="Cluster Dashboard…"
+                                Command="{Binding OpenClusterDashboardCommand}" />
+                        <Button Classes="primary" Content="Master Config…"
+                                Command="{Binding OpenMasterConfigCommand}" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

@@ -81,6 +81,30 @@ public sealed class ServerConfig
     [JsonPropertyName("logDir")]          public string? LogDir         { get; set; }
     [JsonPropertyName("workDir")]         public string? WorkDir        { get; set; }
 
+    // ── Cluster (D-5e) ───────────────────────────────────────────────────
+    // Apply to running master only via cluster.config.set; --master picks
+    // them up at startup. Defaults match the dev plan §6.12 / §9 D-6 guidance.
+
+    /// <summary>Cap on concurrent non-terminal cluster jobs. 0 = unlimited.
+    /// Submit beyond this returns "queue-full". Defends against a flood of
+    /// poster jobs exhausting master disk + merge-buffer RAM.</summary>
+    [JsonPropertyName("clusterMaxJobs")]
+    public int ClusterMaxJobs { get; set; } = 0;
+
+    /// <summary>How long terminal cluster jobs (ready/failed/cancelled) stay
+    /// on disk before <see cref="FracturingFog.Server.Cluster.JobStore.EvictExpired"/>
+    /// removes them. 0 = never evict. Default 60 minutes per the dev plan.</summary>
+    [JsonPropertyName("clusterArtifactRetentionMinutes")]
+    public int ClusterArtifactRetentionMinutes { get; set; } = 60;
+
+    /// <summary>Default per-tile pixel side used by <c>TilePlanner.PlanImage</c>
+    /// when the client supplies no <c>tilePixelsHint</c> and the registry has
+    /// no learned EMA / worker hints. 0 = use <c>TilePlanner.DefaultTilePixels</c>
+    /// (512). Larger = fewer tiles + less merge overhead; smaller = better
+    /// straggler tolerance.</summary>
+    [JsonPropertyName("clusterTileTargetPixels")]
+    public int ClusterTileTargetPixels { get; set; } = 0;
+
     /// <summary>How the server resolves the watermark on a render job.
     /// "Default" preserves today's behaviour (region/theme + auto contrast).
     /// "Custom" uses a server-side saved watermark named by

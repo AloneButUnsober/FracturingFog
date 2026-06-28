@@ -484,3 +484,171 @@ admin-only RPCs, and a "Cluster Config" tab inside `ServerAdminView`.
 After D-5e the §9 D-5 exit criteria are met (end-to-end render via UI
 with no CLI, clean recovery from a worker dying mid-job) and D-6 opens
 with crash recovery + per-role rate limiting.
+
+---
+
+## Session 5 — D-5e — MasterConfigView + cluster.config.* (2026-06-28)
+
+**Goal**: live-tunable cluster knobs from the Avalonia admin surface. Three
+fields (concurrent-job cap, artifact-retention window, default tile target)
+land in `ServerConfig`, two new admin-only RPCs (`cluster.config.get` /
+`cluster.config.set`) expose them on the master, the eviction sweep gets
+wired into `ClusterEntry`, and a standalone `MasterConfigView` window
+(launched from `ServerAdminView`, mirrors the dashboard sibling pattern)
+binds Load + Apply to the wire calls.
+
+**Wire protocol** (D-5e)
+
+- New `cluster.config.get` → `ClusterConfigDto`. Parameter-less; returns
+  the coordinator's current live values for the three knobs.
+- New `cluster.config.set` → `ClusterConfigDto`. Any subset of
+  `clusterMaxJobs`, `clusterArtifactRetentionMinutes`,
+  `clusterTileTargetPixels`; null fields preserve existing values.
+  Master clamps negatives to 0 and clamps positive tile pixels into
+  `[TilePlanner.MinTilePixels, TilePlanner.MaxTilePixels]`. Returns the
+  post-apply snapshot so the UI sees what actually stuck.
+
+**Server-side changes**
+
+- `Server/ServerConfig.cs` — three new properties:
+  `ClusterMaxJobs` (default 0 = unlimited), `ClusterArtifactRetentionMinutes`
+  (default 60), `ClusterTileTargetPixels` (default 0 = use
+  `TilePlanner.DefaultTilePixels`).
+- `Server/Cluster/Protocol/ClusterConfigDto.cs` (new) — request +
+  response DTOs in the same shape as the existing `cluster.*` admin
+  payloads.
+- `Server/Cluster/ClusterCoordinator.cs` —
+  * Three new public init-or-set properties matching the
+    `ServerConfig` fields. `PersistConfig` callback for the host to
+    flush an applied change to `server-config.json`.
+  * Two new route entries (`cluster.config.get`, `cluster.config.set`)
+    + handlers + a `SnapshotConfig()` helper used by both.
+  * `HandleJobSubmitAsync` — `ClusterMaxJobs > 0` gate counts
+    non-terminal jobs from `Jobs.ListJobIds()` and returns
+    `"queue-full"` once the cap is reached. Fires before the planner.
+  * Image submit forwards `ClusterTileTargetPixels` to
+    `TilePlanner.PlanImage` as the hint when the client passes none and
+    no worker EMA/preferences are available.
+- `ServerHost/ClusterEntry.cs` — `RunMaster` seeds the three coordinator
+  fields off `ServerConfig`, wires `PersistConfig` to flush back through
+  `cfg.Save()`, and arms a 1-minute `System.Threading.Timer` that calls
+  `JobStore.EvictExpired(coord.ClusterArtifactRetentionMinutes)`
+  (existing API since D-4 — was uncalled until now).
+
+**Client + UI changes**
+
+- `Client/FFAdminConnection.cs` — `GetClusterConfigAsync` /
+  `SetClusterConfigAsync(maxJobs?, retentionMinutes?, tileTargetPixels?)`
+  thin wrappers.
+- `UI.Avalonia/ViewModels/MasterConfigViewModel.cs` (new) — Load +
+  Apply commands; no background polling (values change rarely; a
+  timer would clobber an in-progress edit). Cert bundle resolved the
+  same way as `ClusterDashboardViewModel` (`%APPDATA%\FracturingFog\cluster-certs\admin.pfx`).
+  Form pre-seeds from local `ServerConfig` so a "blank dialog" doesn't
+  flash before the first round-trip. Apply re-applies the server-side
+  snapshot to the form fields so a clamp is visible (e.g. tile pixels
+  out of range → reverts to the clamped value).
+- `UI.Avalonia/Views/MasterConfigView.axaml` (+ `.cs`) — standalone
+  Window mirroring the other cluster windows; one `Border.group` per
+  section (Master / Cluster Limits) + Load / Apply / Close button row.
+  Yellow `#FFCC00` foreground for `LastError` per the project
+  colour-blind convention.
+- `UI.Avalonia/ViewModels/ServerAdminViewModel.cs` — gains
+  `OpenMasterConfigCommand` + `OpenMasterConfigRequested` event,
+  symmetric with the existing `OpenClusterDashboard*` pair.
+- `UI.Avalonia/Views/ServerAdminView.axaml` — Cluster section now hosts
+  two buttons side-by-side (Dashboard / Master Config) inside a
+  horizontal stack; help text updated.
+- `UI.Avalonia/ViewModels/ShellViewModel.cs` — `MasterConfig`
+  lazy-singleton property + `IsMasterConfigVisible` flag +
+  `ShowMasterConfig()` private method; subscribes
+  `OpenMasterConfigRequested` when the SAVM is lazily constructed in
+  `ShowServerAdmin`.
+- `UI.Avalonia/Views/MainWindow.axaml.cs` — `_masterConfigWin` field +
+  `SyncMasterConfig()` clone of `SyncWorkerDetail`, property-change
+  switch routes both `IsMasterConfigVisible` and `MasterConfig`,
+  matching close in `OnClosed`.
+
+**Design decisions**
+
+#83. Standalone `MasterConfigView` window rather than a tab inside
+  `ServerAdminView`. Reason: `ServerAdminView` is a `ScrollViewer`/
+  `StackPanel` of `Border.group` sections, not a `TabControl`; promoting
+  it to tabs would re-flow every existing section. The cluster windows
+  (dashboard, job list, job detail, worker detail) already follow a
+  sibling-window pattern launched from SAVM — this slots in beside them
+  without changing the parent's shape. The dev-plan §8 phrasing
+  ("extends ServerAdminView/ServerAdminViewModel to add cluster-only
+  fields") is honoured by *adding the launcher* in SAVM rather than
+  inlining the form.
+
+#84. No background polling on the MasterConfigView. Reason: the values
+  change rarely (operator action only) and a 5 s timer would race an
+  in-progress edit — typing "150" into the tile-target field would get
+  reset to "0" mid-keystroke when the timer fired before Apply. Manual
+  Load button covers the "another admin changed it" case without
+  surprising the local editor.
+
+#85. Apply re-binds the form to the server's returned snapshot. Reason:
+  the master clamps tile pixels into `[64, 8192]` and clamps negatives
+  to 0; without re-binding, the form would still show the operator's
+  rejected value (`999999`) even though the master accepted `8192`.
+  Showing the post-apply state matches the WYSIWYG mental model.
+
+#86. `ClusterMaxJobs` enforced via `JobStore.ListJobIds()` count rather
+  than an in-memory counter. Reason: the on-disk store is the source of
+  truth — a master restart would zero an in-memory counter while
+  rendering/queued jobs remained on disk. The list scan is bounded by
+  the retention-sweep'd job count (small in practice), and the cap path
+  only runs on submit so it's not on the hot wire path. Reconsider if
+  the master starts serving >1000 concurrent jobs (mirrors decision
+  #66 from D-5a).
+
+#87. `PersistConfig` is a callback handed in at coordinator
+  construction rather than the coordinator owning a `ServerConfig`
+  reference. Reason: the coordinator's existing seam to its host is
+  through small init-properties; pulling `ServerConfig` into
+  `Server/Cluster/` would invert the layering and tie the test
+  harnesses (which want no on-disk config) to a real config file.
+  Tests pass a stub callback (or null) and verify it fires.
+
+#88. Eviction timer lives in `ClusterEntry`, not the coordinator.
+  Reason: the coordinator is a request-router with no lifecycle of its
+  own; spawning a long-lived `Timer` from it would force a
+  `Stop`/`Dispose` API and a matching cleanup in every test. The host
+  already owns lifecycle (`using var probe`, cancellation token,
+  process-level wiring), so threading the sweep through there matches
+  the existing layering. Timer reads `coord.ClusterArtifactRetentionMinutes`
+  live so a `cluster.config.set` change takes effect on the next tick
+  without bouncing the master.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing AVLN5001
+  `TextBox.Watermark` obsoletes + codegen CS0219 warnings + new xUnit1051
+  CancellationToken nags — 35 warnings unchanged in flavour, +small drift
+  from the new tests.
+- Test suite: **316 passed, 0 failed** (was 311; +5 in
+  `ClusterAdminRpcTests` covering `cluster.config.get`, `cluster.config.set`
+  apply + clamp + null-fields-preserve, and the `ClusterMaxJobs`
+  submit-refusal path).
+
+**D-5 exit criteria status**: §9 calls for "the UI can drive an
+end-to-end render with no CLI involvement, and can cleanly recover from
+a worker dying mid-job (kill the worker process during a render; UI
+shows the tile retry; final artifact is correct)". The five sub-slices
+(D-5a admin RPCs, D-5b dashboard, D-5c job list + detail, D-5d worker
+detail, D-5e master config) now cover the surface; the recovery side
+(tile retry visibility on a worker kill) is satisfied by the existing
+`JobDetailView` tile-map + `ClusterDashboardView` worker-grid behaviour
+plus the new `MasterConfigView` for live limit tuning. The end-to-end
+demo (start master from SAVM → open dashboard → submit a job from
+FFClientView → kill a worker mid-render → watch tile re-assignment in
+JobDetailView → final artifact downloads cleanly) requires no CLI.
+
+**Next session** opens **D-6** — hardening + polish: crash recovery
+(resume `rendering` jobs after master restart, currently flipped to
+`failed` with `"master-restart"`), reference-orbit caching for
+perturbation deep zooms, per-role rate limiting, the operator doc at
+`Docs/User/Distributed-UserGuide.md`, and the 8-worker / 200-job stress
+test in `Server.Tests`.

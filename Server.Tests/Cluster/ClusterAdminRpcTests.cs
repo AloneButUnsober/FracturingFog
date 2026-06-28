@@ -412,6 +412,116 @@ public sealed class ClusterAdminRpcTests : IDisposable
         });
     }
 
+    // ── cluster.config.* (D-5e) ─────────────────────────────────────────
+
+    [Fact]
+    public async Task ClusterConfig_Get_Returns_Coordinator_Defaults()
+    {
+        var outcome = await _coord.HandleAsync("cluster.config.get",
+            ToParams(new ClusterConfigGetRequestDto()),
+            CertRole.Admin, "X", CancellationToken.None);
+        Assert.Null(outcome.ErrorCode);
+        var snap = Assert.IsType<ClusterConfigDto>(outcome.Result);
+        Assert.Equal(0,  snap.ClusterMaxJobs);
+        Assert.Equal(60, snap.ClusterArtifactRetentionMinutes);
+        Assert.Equal(0,  snap.ClusterTileTargetPixels);
+    }
+
+    [Fact]
+    public async Task ClusterConfig_Set_Updates_Coordinator_And_Invokes_Persist()
+    {
+        ClusterConfigDto? persisted = null;
+        var coord = new ClusterCoordinator(_registry, _log)
+        {
+            Jobs          = _jobs,
+            Dispatcher    = _disp,
+            PersistConfig = snap => persisted = snap,
+        };
+
+        var outcome = await coord.HandleAsync("cluster.config.set",
+            ToParams(new ClusterConfigSetRequestDto
+            {
+                ClusterMaxJobs                  = 4,
+                ClusterArtifactRetentionMinutes = 10,
+                ClusterTileTargetPixels         = 256,
+            }),
+            CertRole.Admin, "X", CancellationToken.None);
+
+        Assert.Null(outcome.ErrorCode);
+        var snap = Assert.IsType<ClusterConfigDto>(outcome.Result);
+        Assert.Equal(4,   snap.ClusterMaxJobs);
+        Assert.Equal(10,  snap.ClusterArtifactRetentionMinutes);
+        Assert.Equal(256, snap.ClusterTileTargetPixels);
+
+        Assert.Equal(4,   coord.ClusterMaxJobs);
+        Assert.Equal(10,  coord.ClusterArtifactRetentionMinutes);
+        Assert.Equal(256, coord.ClusterTileTargetPixels);
+
+        Assert.NotNull(persisted);
+        Assert.Equal(256, persisted!.ClusterTileTargetPixels);
+    }
+
+    [Fact]
+    public async Task ClusterConfig_Set_Clamps_Negative_And_OutOfRange_TilePixels()
+    {
+        var outcome = await _coord.HandleAsync("cluster.config.set",
+            ToParams(new ClusterConfigSetRequestDto
+            {
+                ClusterMaxJobs                  = -5,
+                ClusterArtifactRetentionMinutes = -1,
+                ClusterTileTargetPixels         = 999_999,
+            }),
+            CertRole.Admin, "X", CancellationToken.None);
+
+        Assert.Null(outcome.ErrorCode);
+        var snap = Assert.IsType<ClusterConfigDto>(outcome.Result);
+        Assert.Equal(0, snap.ClusterMaxJobs);
+        Assert.Equal(0, snap.ClusterArtifactRetentionMinutes);
+        Assert.Equal(TilePlanner.MaxTilePixels, snap.ClusterTileTargetPixels);
+    }
+
+    [Fact]
+    public async Task ClusterConfig_Set_Null_Fields_Leave_Existing_Values_Untouched()
+    {
+        _coord.ClusterMaxJobs                  = 7;
+        _coord.ClusterArtifactRetentionMinutes = 30;
+        _coord.ClusterTileTargetPixels         = 128;
+
+        var outcome = await _coord.HandleAsync("cluster.config.set",
+            ToParams(new ClusterConfigSetRequestDto { ClusterMaxJobs = 9 }),
+            CertRole.Admin, "X", CancellationToken.None);
+
+        Assert.Null(outcome.ErrorCode);
+        var snap = Assert.IsType<ClusterConfigDto>(outcome.Result);
+        Assert.Equal(9,   snap.ClusterMaxJobs);
+        Assert.Equal(30,  snap.ClusterArtifactRetentionMinutes);
+        Assert.Equal(128, snap.ClusterTileTargetPixels);
+    }
+
+    [Fact]
+    public async Task JobSubmit_Refuses_When_ClusterMaxJobs_Reached()
+    {
+        _coord.ClusterMaxJobs = 2;
+        SeedJob("image", "rendering", 1, 0);
+        SeedJob("image", "queued",    1, 0);
+
+        var submit = new JobSubmitDto
+        {
+            Request = new RenderRequestDto
+            {
+                Mode = "image",
+                FractalType = "Mandelbrot",
+                Width  = 64,
+                Height = 64,
+                Zoom   = 1.0,
+            },
+        };
+        var outcome = await _coord.HandleAsync("job.submit",
+            ToParams(submit),
+            CertRole.Client, "X", CancellationToken.None);
+        Assert.Equal("queue-full", outcome.ErrorCode);
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private string SeedJobReturningId(string mode, string state, int tilesTotal, int tilesDone)
