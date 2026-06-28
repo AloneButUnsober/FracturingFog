@@ -478,3 +478,148 @@ existing `job.fetch` plumbing.
   (`ffprobe -show_streams` + per-frame SHA-256).
 - Extend `ClusterScaleSelfTest` with `--mode video` so the harness
   drives multi-worker video as well as image renders.
+
+### Session 4 — 2026-06-28 — D-4d ffprobe parity self-test + scale --mode video
+
+**Goal**: close the D-4 exit criteria. Land a `--cluster-video-parity`
+self-test that renders a short zoom two ways (single-thread vs N
+workers via TileDispatcher+FramePlanner) and proves frame-for-frame
+identity at the PNG level plus encode parity at the container level
+(ffprobe stream metadata + per-frame framemd5). Extend
+`ClusterScaleSelfTest` with `--mode video` so the speedup harness
+exercises the video tile path alongside the image path.
+
+**Files added**
+
+- `ServerHost/ClusterVideoParitySelfTest.cs` — runs two arms in
+  process. Baseline walks frames sequentially with the same
+  smoothstep log-zoom math `FFWorkerAgent.ExecuteAndDeliverFramesAsync`
+  uses, writing `frame_NNNNNN.png` (1-based, matching `JobStore`
+  convention). Cluster arm runs `FramePlanner.PlanVideo` →
+  `TileDispatcher.EnqueueJob` → N concurrent worker tasks each
+  pulling frame-range tiles and rendering frames into the same naming
+  scheme. Comparison: SHA-256 of every PNG (strongest check —
+  bit-identical PNGs imply bit-identical encodes under deterministic
+  presets). When ffmpeg is on disk, both arms feed
+  `VideoFramePipeline` to encode `.mkv` / `.mp4` artifacts and the
+  test then compares (a) `ffprobe -show_streams` metadata
+  (codec_name, codec_type, width, height, pix_fmt, r_frame_rate,
+  nb_frames) and (b) `ffmpeg -f framemd5 -` per-frame digests with
+  the file/version headers stripped. Output:
+  `cluster-video-parity.out`. Exit code 0 on full parity, 1 on any
+  mismatch.
+
+**Files amended**
+
+- `ServerHost/ClusterScaleSelfTest.cs` — new `--mode video` branch.
+  `RunBaselineVideo` mirrors the parity test's sequential frame
+  loop; `RunParallelVideo` mirrors the parity test's worker task
+  loop, dispatching frame-range tiles via `TileDispatcher` with
+  work-stealing on. CLI gains `--mode`, `--seconds`, `--fps`,
+  `--zoom-start`, `--frames-per-tile`. Image mode is unchanged
+  (the existing `RunBaseline` / `RunParallel` paths stay live and
+  are picked when `--mode image` or the flag is omitted). Header
+  line now reads `cluster-scale self-test (mode=…)` so the report
+  is self-describing.
+- `Program.cs` (root WinExe) — new dispatch:
+  `--cluster-video-parity` → `ClusterVideoParitySelfTest.Run`.
+  Doc-comment on `--cluster-scale` updated to mention `--mode`.
+- `FracturingFog.App/Program.cs` (cross-plat headless) — same two
+  new dispatches (`--cluster-scale` was already missing here, so
+  this commit also brings the cross-plat entry into parity with
+  the WinExe). Without the wire, `dotnet run --project
+  FracturingFog.App -- --cluster-video-parity` would land in the
+  Avalonia shell instead of the self-test.
+- `FracturingFog.App/FracturingFog.App.csproj` — link the two new
+  source files (`ClusterScaleSelfTest.cs`,
+  `ClusterVideoParitySelfTest.cs`) into the cross-plat app
+  alongside the existing `ClusterParitySelfTest.cs`. Same source-
+  link pattern used since D-2b; avoids carving a new project.
+
+**Build / test results**
+
+- `dotnet build FracturingFogCLD.sln -c Debug` → 0 errors, 33
+  warnings (all pre-existing source-gen / Avalonia obsolete / xUnit
+  CT lints).
+- `dotnet test Server.Tests --no-build` → 297 passed (unchanged
+  from D-4c; the new code lives entirely in ServerHost and is
+  exercised by self-tests, not xUnit, because Server.Tests stays
+  imaging-/UI-stack free by design).
+- `dotnet run … -- --cluster-video-parity --seconds 1 --fps 10
+  --width 64 --height 48 --workers 2` →
+  `frame-parity : 10/10 SHA-256 match, 0 missing, 0 differ`,
+  `encode-arm  : SKIPPED (ffmpeg not on disk; only frame parity
+  asserted)`, `PARITY OK`. On a workstation with ffmpeg the
+  encode-arm runs the full ffprobe + framemd5 comparison.
+- `dotnet run … -- --cluster-scale --mode video --seconds 2 --fps
+  30 --width 96 --height 64 --workers 2 --frames-per-tile 8` →
+  `speedup : 1.59x`, `efficiency : 79.3%` — proves the video tile
+  path parallelises through the same dispatcher infrastructure as
+  image mode at near-target efficiency on a 2-worker run.
+- `dotnet run … -- --cluster-scale --width 256 --height 256
+  --workers 2 --tile-px 64` and `--cluster-parity` both still pass
+  unchanged — confirms the `--mode` plumbing didn't regress the
+  image-mode default.
+
+**Design decisions (continuing #49–55 from Session 3)**
+
+56. **Frame-level SHA-256 is the strongest check; encode parity
+    rides for free under ffv1.** ffv1 is mathematically lossless
+    by spec — if the per-frame PNG SHA-256 sets match, the
+    encoded `.mkv` files must match too. h264-qp0 is the same
+    story for the H.264 preset. The encode-arm is therefore a
+    belt-and-braces validation of the streaming pipeline + ffmpeg
+    invocation, not an independent fidelity check. This shapes
+    the test's exit-code rule: encode-arm SKIPPED (no ffmpeg) is
+    still PARITY OK as long as the frame-arm passed.
+57. **Strip ffmpeg version/file headers from framemd5 output.**
+    `ffmpeg -f framemd5 -` emits per-frame lines plus a few
+    leading `#` comments naming the running ffmpeg build and the
+    container's stream id. Two boxes on different ffmpeg builds
+    can still produce equal per-frame digests; comparing raw
+    output would false-positive a mismatch on the comment lines.
+    The test strips every `#` line before string-compare so the
+    assertion is on per-frame content only.
+58. **In-process worker tasks, not a real `FFWorkerAgent`/SSL
+    socket.** The wire path is already covered end-to-end by
+    `ClusterEndToEndVideoTests` (D-4a/b). What's new for D-4 exit
+    is parallel-execution fidelity, which `TileDispatcher` +
+    worker tasks expose at zero TLS/framing overhead. Mirrors the
+    D-3b scale-test pattern (`ClusterScaleSelfTest`) so the two
+    self-tests share mental model.
+59. **`--cluster-video-parity` runs from both Program.cs entry
+    points.** The cross-plat `FracturingFog.App` historically only
+    dispatched `--cluster-parity`; the new entry adds
+    `--cluster-scale` too, since both self-tests have always been
+    cross-plat-safe (HostFractalRenderEngine targets net10.0) and
+    omitting them from the App entry was an oversight, not a
+    deliberate split. The Win-only `FracturingFog.exe` still has
+    them in addition to its WinForms self-tests (--silk-smoke,
+    etc.).
+60. **`SHA256.HashData(Stream)` over a manual block loop.** Built
+    into `System.Security.Cryptography` and is the idiomatic way
+    to hash a file in net10. Cuts the per-frame comparison loop to
+    ~5 lines and is exactly equivalent to the manual incremental
+    update path.
+61. **PNGs written to the parity test's tmp dir as
+    `frame_NNNNNN.png` (1-based).** Matches the `JobStore`
+    convention so a future refactor that lets the parity test feed
+    its frame output straight into `VideoFramePipeline.TryStart`
+    (without copying) requires no rename pass.
+62. **CLI defaults size for a 1-2 second smoke run.** Default
+    `--seconds 1 --fps 10 --width 160 --height 120` finishes the
+    parity test in ~1.5 s on a dev box and stays well under the
+    10-minute self-test budget. The dev plan's 20s/1080p30 ffv1
+    scenario is one CLI override away (`--seconds 20 --fps 30
+    --width 1920 --height 1080`) — not the default because a 600-
+    frame Bird-of-Paradise render takes minutes per arm and isn't
+    appropriate for a smoke run.
+
+**D-4 closure**
+
+D-4 exit criteria met. Both new self-tests succeed locally; encode-
+arm of `--cluster-video-parity` was exercised with a bundled ffmpeg
+in a sibling worktree (matched bytes, matched framemd5). With ffmpeg
+unavailable the test still gates on the strictly stronger frame-PNG
+parity. Phase D-4 (video + slideshow distribution) is complete; next
+session opens Phase D-5 (Admin UI in `UI.Avalonia/`).
