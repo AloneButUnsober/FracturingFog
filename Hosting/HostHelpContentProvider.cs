@@ -44,10 +44,10 @@ namespace FracturingFog.Hosting
         {
             get
             {
-                var v = Assembly.GetEntryAssembly()?.GetName().Version;
-                return v != null
-                    ? $"{v.Major}.{v.Minor}.{v.Build}"
-                    : "(unknown)";
+                // BAB (2026-06-28) - Change version referenced for display
+                return Assembly.GetEntryAssembly()?
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                    .InformationalVersion ?? "(unknown)";
             }
         }
 
