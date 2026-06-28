@@ -108,6 +108,20 @@ public static class ClusterEntry
             },
         };
 
+        // D-6a — replay any non-terminal jobs left on disk by a previous
+        // master process. Image jobs resume with already-delivered tiles
+        // pasted back into a fresh merger and the rest re-enqueued under
+        // the original ids; video / slideshow jobs flip to failed (their
+        // tile streams aren't replayable yet). Done before RunAsync so a
+        // worker connecting one second later sees the recovered queue.
+        var resume = coord.RecoverFromDisk();
+        if (resume.Considered > 0)
+        {
+            Console.WriteLine(
+                $"recovery: considered={resume.Considered} resumedImage={resume.ResumedImage} " +
+                $"failedUnsupported={resume.FailedUnsupportedMode} failed={resume.Failed}");
+        }
+
         // D-5e — periodic eviction of terminal jobs older than the retention
         // window. Timer drives JobStore.EvictExpired; reads ClusterArtifactRetentionMinutes
         // live so a config.set takes effect on the next tick without restart.
