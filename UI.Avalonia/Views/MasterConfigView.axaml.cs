@@ -6,6 +6,7 @@
 
 using System;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
@@ -31,4 +32,13 @@ public partial class MasterConfigView : Window
             Opened += (_, _) => _ = vm.LoadAsync();
         }
     }
+
+    // D-6d — open the Distributed Rendering user guide jumped to the
+    // "Master Config Dialog" section so the operator gets immediate
+    // context for each live-tunable knob.
+    private void OnHelpClick(object? sender, RoutedEventArgs e)
+        => HelpViewerLauncher.Show(this,
+            "User/Distributed-UserGuide.md",
+            "Master Config Dialog",
+            "Master Config — Help");
 }
