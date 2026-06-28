@@ -18,10 +18,12 @@ public sealed class TileDeliverDto
     [JsonPropertyName("jobId")]    public string JobId    { get; set; } = "";
     [JsonPropertyName("tileId")]   public int    TileId   { get; set; }
 
-    /// <summary>"png" | "rgba". D-2 ships PNG (worker calls its existing
-    /// encoder so engine wiring stays minimal). D-3 will add "rgba"
-    /// for raw uncompressed transport — saves encode/decode CPU at the
-    /// price of more bytes on the wire.</summary>
+    /// <summary>"png" | "rgba" | "frames". D-2 ships PNG (worker uses
+    /// its existing encoder). D-3 adds "rgba" for raw uncompressed
+    /// transport (saves encode/decode CPU at the price of more bytes).
+    /// D-4 adds "frames" for a video frame range: trailer is the
+    /// concatenated per-frame PNGs framed by a small header — see
+    /// <see cref="FramesPayloadCodec"/> for the on-wire shape.</summary>
     [JsonPropertyName("payloadKind")]
     public string PayloadKind { get; set; } = "png";
 

@@ -64,6 +64,15 @@ public static class TilePlanner
         public required int Rows    { get; init; }
         public required IReadOnlyList<TileJobDto> Tiles { get; init; }
         public int TileCount => Tiles.Count;
+
+        /// <summary>D-4 — "image" (default) or "video". Set by FramePlanner.</summary>
+        public string Mode { get; init; } = "image";
+
+        /// <summary>D-4 — total frame count for video plans, 0 for image
+        /// plans. Drives status.TilesTotal-style progress accounting on a
+        /// per-frame basis if the caller wants finer granularity than
+        /// per-tile.</summary>
+        public int TotalFrames { get; init; }
     }
 
     /// <summary>Refuses a fractal type that the planner cannot tile (uses

@@ -51,4 +51,13 @@ public sealed class TileJobDto
     /// for log correlation; workers may log it but otherwise ignore.</summary>
     [JsonPropertyName("attempt")]
     public int Attempt { get; set; } = 1;
+
+    /// <summary>D-4 — when non-null, this tile owns a contiguous range of
+    /// video frames instead of a 2-D pixel rect. Worker iterates the
+    /// range, derives per-frame Zoom from the smoothstep schedule, and
+    /// delivers all frames in one tile.deliver call with
+    /// PayloadKind="frames" (see <see cref="TileDeliverDto"/>). For
+    /// image-mode tiles this stays null.</summary>
+    [JsonPropertyName("frameRange")]
+    public FrameRangeDto? FrameRange { get; set; }
 }

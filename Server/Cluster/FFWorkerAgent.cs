@@ -12,6 +12,7 @@
 // so framing reads + writes serialise naturally.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -249,6 +250,15 @@ public sealed class FFWorkerAgent : IAsyncDisposable
             return;
         }
 
+        // D-4 — frame-range tiles run their own path. Render each frame
+        // in the range with smoothstep-interpolated zoom, pack the PNGs
+        // into one FRMS trailer, deliver in one tile.deliver call.
+        if (tile.FrameRange != null)
+        {
+            await ExecuteAndDeliverFramesAsync(ssl, tile, tile.FrameRange, ct).ConfigureAwait(false);
+            return;
+        }
+
         string root = _opts.WorkDirRoot ?? Path.Combine(Path.GetTempPath(), "ff-worker");
         string workDir = Path.Combine(root,
             $"job-{tile.JobId}-t{tile.TileId}-{Guid.NewGuid():N}".Substring(0, 48));
@@ -346,6 +356,148 @@ public sealed class FFWorkerAgent : IAsyncDisposable
 
         TryClean(workDir);
     }
+
+    /// <summary>D-4 — render every frame in <paramref name="range"/>,
+    /// pack the resulting PNGs into a FRMS trailer, ship via one
+    /// tile.deliver call with PayloadKind="frames". Math mirrors
+    /// BatchRenderer.RenderVideo so a cluster-rendered video is
+    /// frame-for-frame identical to the single-server output.</summary>
+    private async Task ExecuteAndDeliverFramesAsync(
+        System.Net.Security.SslStream ssl, TileJobDto tile,
+        FrameRangeDto range, CancellationToken ct)
+    {
+        if (range.StartFrame < 0 || range.EndFrame <= range.StartFrame || range.TotalFrames < 2)
+        {
+            await CallVoidAsync(ssl, "tile.error", new TileErrorDto
+            {
+                WorkerId = CurrentWorkerId,
+                JobId    = tile.JobId,
+                TileId   = tile.TileId,
+                Code     = "bad-request",
+                Message  = $"invalid frame range [{range.StartFrame},{range.EndFrame}) of {range.TotalFrames}",
+            }, ct).ConfigureAwait(false);
+            return;
+        }
+
+        string root = _opts.WorkDirRoot ?? Path.Combine(Path.GetTempPath(), "ff-worker");
+        string workDirBase = Path.Combine(root,
+            $"job-{tile.JobId}-t{tile.TileId}-{Guid.NewGuid():N}".Substring(0, 48));
+        Directory.CreateDirectory(workDirBase);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var packed = new List<FramesPayloadCodec.Frame>(range.EndFrame - range.StartFrame);
+
+        try
+        {
+            for (int f = range.StartFrame; f < range.EndFrame; f++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                double t = range.TotalFrames == 1 ? 1.0 : (double)f / (range.TotalFrames - 1);
+                double te = t * t * (3.0 - 2.0 * t);
+                double zoomF = Math.Exp(range.LogStartZoom + range.LogZoomDelta * te);
+
+                var perFrame = CloneRender(tile.Render);
+                perFrame.Zoom = zoomF;
+
+                string frameDir = Path.Combine(workDirBase, $"f{f:D6}");
+                Directory.CreateDirectory(frameDir);
+                RenderArtifact art = await _opts.Engine!.RenderAsync(
+                    perFrame, frameDir,
+                    new ConsoleSessionLog($"frame-{tile.JobId}/{tile.TileId}/{f}"),
+                    ct).ConfigureAwait(false);
+                byte[] png = await File.ReadAllBytesAsync(art.FilePath, ct).ConfigureAwait(false);
+                packed.Add(new FramesPayloadCodec.Frame(f, png));
+
+                try { Directory.Delete(frameDir, recursive: true); } catch { }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            TryClean(workDirBase);
+            return;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[worker] frame render failed: {ex.GetType().Name}: {ex.Message}");
+            await CallVoidAsync(ssl, "tile.error", new TileErrorDto
+            {
+                WorkerId = CurrentWorkerId,
+                JobId    = tile.JobId,
+                TileId   = tile.TileId,
+                Code     = "engine-failed",
+                Message  = $"{ex.GetType().Name}: {ex.Message}",
+            }, ct).ConfigureAwait(false);
+            TryClean(workDirBase);
+            return;
+        }
+        sw.Stop();
+
+        byte[] trailer;
+        try { trailer = FramesPayloadCodec.Pack(packed); }
+        catch (Exception ex)
+        {
+            await CallVoidAsync(ssl, "tile.error", new TileErrorDto
+            {
+                WorkerId = CurrentWorkerId,
+                JobId    = tile.JobId,
+                TileId   = tile.TileId,
+                Code     = "engine-failed",
+                Message  = $"packing frames: {ex.Message}",
+            }, ct).ConfigureAwait(false);
+            TryClean(workDirBase);
+            return;
+        }
+
+        string sha = Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(trailer));
+        var deliverDto = new TileDeliverDto
+        {
+            WorkerId    = CurrentWorkerId,
+            JobId       = tile.JobId,
+            TileId      = tile.TileId,
+            PayloadKind = "frames",
+            Width       = tile.Render.Width,
+            Height      = tile.Render.Height,
+            BytesBase64 = "",
+            Sha256      = sha,
+            RenderMs    = sw.ElapsedMilliseconds,
+        };
+        var ack = await CallAsync<TileDeliverAckDto>(
+            ssl, "tile.deliver", deliverDto, ct, binaryTrailer: trailer).ConfigureAwait(false);
+
+        if (!ack.Accepted)
+            Console.Error.WriteLine(
+                $"[worker] master refused frames tile {tile.JobId}/{tile.TileId}: {ack.RefuseReason}");
+
+        TryClean(workDirBase);
+    }
+
+    private static RenderRequestDto CloneRender(RenderRequestDto src) => new()
+    {
+        Mode                 = src.Mode,
+        RegionName           = src.RegionName,
+        FractalType          = src.FractalType,
+        CenterX              = src.CenterX,
+        CenterY              = src.CenterY,
+        Zoom                 = src.Zoom,
+        Iterations           = src.Iterations,
+        CenterXLo            = src.CenterXLo,
+        CenterX2             = src.CenterX2,
+        CenterX3             = src.CenterX3,
+        CenterYLo            = src.CenterYLo,
+        CenterY2             = src.CenterY2,
+        CenterY3             = src.CenterY3,
+        ThemeName            = src.ThemeName,
+        QualityName          = src.QualityName,
+        ThemeJson            = src.ThemeJson,
+        RegionJson           = src.RegionJson,
+        Width                = src.Width,
+        Height               = src.Height,
+        OutputName           = src.OutputName,
+        ReturnMode           = src.ReturnMode,
+        SuppressDecorations  = src.SuppressDecorations,
+    };
 
     private static void TryClean(string dir)
     {

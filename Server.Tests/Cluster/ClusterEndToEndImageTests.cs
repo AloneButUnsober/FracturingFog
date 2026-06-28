@@ -316,13 +316,14 @@ public sealed class ClusterEndToEndImageTests : IDisposable
     }
 
     [Fact]
-    public async Task Submit_Refuses_Video_Mode_In_D2()
+    public async Task Submit_Refuses_Unknown_Mode()
     {
+        // D-4 accepts video; an unknown mode string is still refused.
         var submit = new JobSubmitDto
         {
             Request = new RenderRequestDto
             {
-                Mode = "video", FractalType = "Mandelbrot",
+                Mode = "audio-reactive", FractalType = "Mandelbrot",
                 Width = 128, Height = 64, CenterX = 0, CenterY = 0, Zoom = 1.0,
             },
         };
