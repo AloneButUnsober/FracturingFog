@@ -36,8 +36,16 @@ public sealed class ClusterDashboardViewModel : ViewModelBase, IDisposable
         Port = cfg.Port;
         RecentJobLimit = 50;
 
-        RefreshCommand = ReactiveCommand.CreateFromTask(PollOnceAsync);
-        CloseCommand   = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        RefreshCommand   = ReactiveCommand.CreateFromTask(PollOnceAsync);
+        CloseCommand     = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        // D-5c — drill-in commands. Shell handles routing so the dashboard
+        // doesn't need to know about window construction.
+        OpenJobListCommand   = ReactiveCommand.Create(
+            () => OpenJobListRequested?.Invoke(this, EventArgs.Empty));
+        OpenJobDetailCommand = ReactiveCommand.Create<ClusterJobRowVm>(row =>
+        {
+            if (row != null) OpenJobDetailRequested?.Invoke(this, row.JobId);
+        });
 
         // 5 s mirrors ServerAdminViewModel — every poll opens a fresh mTLS
         // handshake (~50–100 ms server CPU). 1 Hz would impose a 5–10% CPU
@@ -89,10 +97,14 @@ public sealed class ClusterDashboardViewModel : ViewModelBase, IDisposable
 
     // ── commands + events ────────────────────────────────────────────────
 
-    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
-    public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<Unit, Unit>             RefreshCommand     { get; }
+    public ReactiveCommand<Unit, Unit>             CloseCommand       { get; }
+    public ReactiveCommand<Unit, Unit>             OpenJobListCommand { get; }
+    public ReactiveCommand<ClusterJobRowVm, Unit>  OpenJobDetailCommand { get; }
 
-    public event EventHandler? CloseRequested;
+    public event EventHandler?         CloseRequested;
+    public event EventHandler?         OpenJobListRequested;
+    public event EventHandler<string>? OpenJobDetailRequested;
 
     public void StartPolling() => _poll.Start();
     public void StopPolling()  => _poll.Stop();

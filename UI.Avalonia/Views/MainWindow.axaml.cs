@@ -42,6 +42,8 @@ public sealed partial class MainWindow : Window
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
     private ClusterDashboardView? _clusterDashboardWin;
+    private JobListView? _jobListWin;
+    private JobDetailView? _jobDetailWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
     private MiniWindowTether? _miniMapTether;
@@ -564,6 +566,14 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsClusterDashboardVisible):
             case nameof(ShellViewModel.ClusterDashboard):
                 SyncClusterDashboard();
+                break;
+            case nameof(ShellViewModel.IsJobListVisible):
+            case nameof(ShellViewModel.JobList):
+                SyncJobList();
+                break;
+            case nameof(ShellViewModel.IsJobDetailVisible):
+            case nameof(ShellViewModel.JobDetail):
+                SyncJobDetail();
                 break;
             case nameof(ShellViewModel.IsMiniMapVisible):
                 SyncMiniMap();
@@ -1113,6 +1123,64 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncJobList()
+    {
+        if (_shell == null) return;
+        if (_shell.IsJobListVisible && _shell.JobList != null)
+        {
+            if (_jobListWin == null)
+            {
+                _jobListWin = new JobListView { DataContext = _shell.JobList };
+                _jobListWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsJobListVisible = false;
+                };
+            }
+            else if (_jobListWin.DataContext != _shell.JobList)
+            {
+                _jobListWin.DataContext = _shell.JobList;
+            }
+            if (!_jobListWin.IsVisible) _jobListWin.Show(this);
+        }
+        else
+        {
+            _jobListWin?.Hide();
+        }
+    }
+
+    private void SyncJobDetail()
+    {
+        if (_shell == null) return;
+        if (_shell.IsJobDetailVisible && _shell.JobDetail != null)
+        {
+            if (_jobDetailWin == null)
+            {
+                _jobDetailWin = new JobDetailView { DataContext = _shell.JobDetail };
+                _jobDetailWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsJobDetailVisible = false;
+                };
+            }
+            else if (_jobDetailWin.DataContext != _shell.JobDetail)
+            {
+                _jobDetailWin.DataContext = _shell.JobDetail;
+            }
+            if (!_jobDetailWin.IsVisible) _jobDetailWin.Show(this);
+            // Bring to front when re-opened with a different jobId so the
+            // user knows the swap landed rather than seeing the same chrome
+            // unchanged behind another window.
+            else _jobDetailWin.Activate();
+        }
+        else
+        {
+            _jobDetailWin?.Hide();
+        }
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         _shuttingDown = true;
@@ -1133,6 +1201,8 @@ public sealed partial class MainWindow : Window
         _ffClientWin?.Close();
         _serverAdminWin?.Close();
         _clusterDashboardWin?.Close();
+        _jobListWin?.Close();
+        _jobDetailWin?.Close();
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
 

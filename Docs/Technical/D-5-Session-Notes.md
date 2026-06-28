@@ -206,3 +206,147 @@ in the dashboard, polled every 5 s.
 worker, polled via the existing `job.status` route). Will need to surface
 per-tile `WorkerId` in `JobStatusDto` — currently the status payload has
 counters only.
+
+---
+
+## Session 3 — D-5c — JobListView + JobDetailView (2026-06-28)
+
+**Goal**: drill-in from the dashboard. Paged + filterable job browser
+(`JobListView`) and a per-job tile map coloured by worker (`JobDetailView`).
+Operator should be able to click a job row from the dashboard, see the
+spatial grid filling in as tiles deliver, and tell at a glance which worker
+is rendering which tile.
+
+**Wire protocol**
+
+- New method `cluster.jobTileMap { jobId } → JobTileMapDto`. The payload
+  scales with tile count, so this is a separate RPC from `job.status`
+  (which stays counters-only and high-rate) rather than a fatter
+  status payload. JobDetailView polls at 2 s on the open job; the
+  master clamps nothing (the caller is admin-role and the payload bound
+  is `TileCount * ~80 bytes`, fine for image jobs up to a few thousand
+  tiles).
+- `JobTileMapDto`: jobId + jobState + mode + imageW/H + per-tile
+  `{ tileId, offsetX, offsetY, width, height, state, workerId? }`. Image
+  mode emits real rects; video / slideshow emit empty rects (no spatial
+  layout) and the UI auto-tiles into a near-square grid so the per-tile
+  worker colour is still visible.
+
+**Server-side changes**
+
+- `TileDispatcher.AcceptDelivery` signature grew a `string workerId`
+  parameter; the completed-tile map flipped from
+  `ConcurrentDictionary<int, bool>` to `<int, string>` so the per-tile
+  worker is remembered for the dashboard. All call sites updated
+  (ClusterCoordinator's 3 routes + two ServerHost self-tests + 8 unit
+  tests). `CompletedCount` is value-type-agnostic so the rest of the
+  code didn't move.
+- New `TileDispatcher.SnapshotTileStates(jobId)` returns a fresh
+  `Dictionary<int, TileLiveState>` keyed by tileId, value carries
+  state ("pending" / "inflight" / "completed") + worker id. In-flight
+  loses ties to completed so a stolen-tile duplicate that already
+  delivered shows as completed, not inflight.
+- `ClusterCoordinator.HandleClusterJobTileMapAsync` reads
+  `PersistedStatus.Mode`, walks `plan.json` for tile rects in image
+  mode (`ReadTileLayout`), and merges with the dispatcher snapshot.
+  Terminal jobs (ready / failed / cancelled) have an empty dispatcher
+  state — handler synthesises "completed" entries from `TilesTotal`
+  so the UI still shows a finished grid.
+- 5 new tests in `ClusterAdminRpcTests` (unknown-job, image rects,
+  in-flight + completed worker attribution, terminal synthesis,
+  video counters-without-rects). Total Server.Tests: **311 passed**
+  (was 306; +5).
+
+**Client-side changes**
+
+- `FFAdminConnection.GetJobTileMapAsync(jobId)` thin wrapper.
+- `JobListViewModel` + `JobListView.axaml` — header form for state
+  filter dropdown + include-terminal checkbox + limit, paginated grid
+  with per-row "Open" button bound to `OpenJobDetailCommand`. 10 s
+  poll cadence (browse, not monitor).
+- `JobDetailViewModel` + `JobDetailView.axaml` — 2 s poll, builds
+  `Tiles` (canvas-laid-out rects) + `Workers` (legend strip). Per-
+  worker colour is FNV-1a hash → HSL with fixed S/L for readable
+  contrast on the dark grid; pending tiles are `#3A3A3A`. Polling
+  stops automatically when the job hits a terminal state so a
+  finished job doesn't keep the timer hot.
+- Dashboard launchers: header "All Jobs…" button → `JobListView`;
+  per-row "Open" button → `JobDetailView` with that jobId. SAVM
+  remains the single launch point for `ClusterDashboardView`.
+- Shell wiring: `JobList` + `JobDetail` lazy-singleton VMs +
+  `IsJobListVisible` / `IsJobDetailVisible` flags +
+  `ShowJobList()` / `ShowJobDetail(jobId)`. `JobDetailView` is
+  single-instance; re-open with a different jobId swaps the
+  VM-bound id and brings the window to the front.
+- MainWindow: new `_jobListWin` / `_jobDetailWin` fields,
+  `SyncJobList` / `SyncJobDetail` clones of `SyncClusterDashboard`,
+  plus matching `OnClosed` close.
+
+**Design decisions**
+
+#73. `cluster.jobTileMap` is a distinct RPC from `job.status`, not
+  an extension of it. Reason: `job.status` is on the hot client-
+  polling path (rendering progress bar, etc.) and runs at 1 Hz on
+  every active job. The tile-map payload scales with `TileCount` —
+  a 64-tile image job would add ~5 KiB per status poll for nothing
+  the client renderer needs. Keeping it admin-only behind a separate
+  route means the per-tile array never bloats normal traffic, and
+  the master's role gate (cluster.* → admin) handles authorisation
+  for free.
+
+#74. Per-tile workerId tracked in the dispatcher (in-memory),
+  not parsed back from `events.ndjson`. Reason: the events log is
+  append-only audit and re-parsing per request is O(events) per
+  call — fine for forensics, terrible for a 2 s poll. The
+  dispatcher already tracks per-tile state; changing the value
+  type of `Completed` from `bool` to `string` (workerId) cost zero
+  memory in practice and gives the snapshot accessor an O(1)
+  lookup. Trade-off: terminal jobs lose the per-tile worker
+  attribution (the dispatcher retires the job on completion) — the
+  handler synthesises "completed" rows without a workerId in that
+  case. Acceptable; the operator opens the tile map mostly while
+  the job is in flight.
+
+#75. Tile-grid colour assignment uses FNV-1a hash → HSL, not a
+  fixed palette. Reason: the cluster has no upper bound on worker
+  count (admin may attach + detach over time), so a fixed palette
+  would either be too short (collisions) or too long (low-contrast
+  shades to fill the slots). Hashing means the colour is stable per
+  workerId across refreshes — important so the operator can build a
+  mental "worker X is the green one" map — and HSL with fixed S/L
+  keeps contrast predictable against the `#0E0E0E` canvas. Yellow
+  `#FFCC00` stays reserved for problem rows (matches existing
+  dashboard convention for the colour-blind user) so the hash never
+  generates a tile in that hue.
+
+#76. JobDetailView is single-instance with a settable `JobId`, not
+  a per-id window dictionary. Reason: the operator drills in,
+  reads the grid, picks another job. Windows-per-jobId would
+  proliferate and confuse — same workflow as a browser tab vs.
+  a new browser. The setter clears tile + worker collections and
+  kicks an immediate poll so the swap is visible without waiting
+  for the next 2 s tick.
+
+#77. Polling stops automatically on terminal job state. Reason:
+  a ready / failed / cancelled job will never change tiles again;
+  a 2 s timer firing forever would burn CPU + mTLS handshakes on
+  the master for no gain. Refresh button stays wired so an
+  operator can manually re-pull (useful right after a kill+restart
+  if the dashboard cached a stale terminal).
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing AVLN5001
+  `TextBox.Watermark` obsoletes + codegen CS0219 warnings only.
+- Test suite: **311 passed, 0 failed** (was 306; +5 in
+  `ClusterAdminRpcTests` for the new RPC).
+- Filtered run `--filter "FullyQualifiedName~ClusterAdminRpcTests|FullyQualifiedName~TileDispatcherTests"`:
+  30 passed (16 dispatcher + 14 admin — admin grew from 9 → 14
+  with the new tile-map tests).
+
+**Next session** opens D-5d: `WorkerDetailView` (quiesce / resume / kill
+buttons + per-worker throughput history) and `MasterConfigView` (cluster
+config tab inside `ServerAdminView`). `cluster.quiesceWorker` and
+`cluster.killWorker` already exist (D-5a); the work is the UI affordance
+and a per-worker drill-in window — same shell pattern as `JobDetailView`
+but parameterised by `workerId` instead of `jobId`.

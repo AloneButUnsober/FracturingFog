@@ -67,7 +67,7 @@ public sealed class TileDispatcherTests
         Assert.NotNull(t);
 
         Assert.Equal(1, d.InFlightCount("J1"));
-        Assert.True(d.AcceptDelivery("J1", t!.TileId));
+        Assert.True(d.AcceptDelivery("J1", t!.TileId, "w1"));
         Assert.Equal(0, d.InFlightCount("J1"));
         Assert.Equal(1, d.CompletedCount("J1"));
     }
@@ -164,7 +164,7 @@ public sealed class TileDispatcherTests
         }
 
         // Complete 9 of the 10 — last one (TileId=9) is the straggler.
-        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i, "wA"));
         Assert.Equal(1, d.InFlightCount("J1"));
         Assert.Equal(0, d.PendingCount("J1"));
 
@@ -199,8 +199,8 @@ public sealed class TileDispatcherTests
         });
         for (int i = 0; i < 3; i++)
             await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
-        Assert.True(d.AcceptDelivery("J1", 0));
-        Assert.True(d.AcceptDelivery("J1", 1));
+        Assert.True(d.AcceptDelivery("J1", 0, "wA"));
+        Assert.True(d.AcceptDelivery("J1", 1, "wA"));
         now = now.AddSeconds(2);
 
         var stolen = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);
@@ -220,7 +220,7 @@ public sealed class TileDispatcherTests
         d.EnqueueJob("J1", TenTiles("J1"));
         for (int i = 0; i < 10; i++)
             await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
-        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i, "wA"));
 
         // Only 1 second past assignment — under 5 s min age.
         now = now.AddSeconds(1);
@@ -247,7 +247,7 @@ public sealed class TileDispatcherTests
         d.EnqueueJob("J1", TenTiles("J1"));
         for (int i = 0; i < 10; i++)
             await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
-        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i, "wA"));
 
         now = now.AddSeconds(1);
         // Same worker asking again must not steal its own tile.
@@ -268,7 +268,7 @@ public sealed class TileDispatcherTests
         d.EnqueueJob("J1", TenTiles("J1"));
         for (int i = 0; i < 10; i++)
             await d.ClaimNextAsync("wA", TimeSpan.FromSeconds(1), CancellationToken.None);
-        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i));
+        for (int i = 0; i < 9; i++) Assert.True(d.AcceptDelivery("J1", i, "wA"));
 
         now = now.AddSeconds(1);
         var first  = await d.ClaimNextAsync("wB", TimeSpan.FromMilliseconds(50), CancellationToken.None);

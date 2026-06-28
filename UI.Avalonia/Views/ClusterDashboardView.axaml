@@ -67,8 +67,12 @@
                 <Grid ColumnDefinitions="140,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Status" />
                     <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding Status}" TextWrapping="Wrap" />
-                    <Button    Grid.Row="0" Grid.Column="2" Classes="primary" Content="Refresh"
-                               Command="{Binding RefreshCommand}" />
+                    <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                        <Button Classes="primary" Content="All Jobs…"
+                                Command="{Binding OpenJobListCommand}" />
+                        <Button Classes="primary" Content="Refresh"
+                                Command="{Binding RefreshCommand}" />
+                    </StackPanel>
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Host" Margin="0,4,0,0" />
                     <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Host, Mode=TwoWay}" Margin="0,4,0,0" />
@@ -149,14 +153,15 @@
                     <TextBlock DockPanel.Dock="Top" Classes="section" Text="Recent Jobs" />
 
                     <Border DockPanel.Dock="Top" Classes="gridHeader">
-                        <Grid ColumnDefinitions="220,80,90,160,70,110,*">
+                        <Grid ColumnDefinitions="220,80,90,160,70,110,70,*">
                             <TextBlock Grid.Column="0" Text="Job ID" />
                             <TextBlock Grid.Column="1" Text="Mode" />
                             <TextBlock Grid.Column="2" Text="State" />
                             <TextBlock Grid.Column="3" Text="Tiles" />
                             <TextBlock Grid.Column="4" Text="Done %" />
                             <TextBlock Grid.Column="5" Text="Created" />
-                            <TextBlock Grid.Column="6" Text="Fail reason" />
+                            <TextBlock Grid.Column="6" Text="Detail" />
+                            <TextBlock Grid.Column="7" Text="Fail reason" />
                         </Grid>
                     </Border>
 
@@ -167,14 +172,18 @@
                                 <DataTemplate DataType="vm:ClusterJobRowVm">
                                     <Border Classes="gridRow"
                                             Background="{Binding RowBackgroundHex}">
-                                        <Grid ColumnDefinitions="220,80,90,160,70,110,*">
+                                        <Grid ColumnDefinitions="220,80,90,160,70,110,70,*">
                                             <TextBlock Grid.Column="0" Text="{Binding JobId}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="1" Text="{Binding Mode}" />
                                             <TextBlock Grid.Column="2" Text="{Binding JobState}" FontWeight="Bold" />
                                             <TextBlock Grid.Column="3" Text="{Binding TilesProgress}" />
                                             <TextBlock Grid.Column="4" Text="{Binding ProgressPercent}" />
                                             <TextBlock Grid.Column="5" Text="{Binding CreatedLocal}" />
-                                            <TextBlock Grid.Column="6" Text="{Binding FailReason}" TextWrapping="Wrap" />
+                                            <Button    Grid.Column="6" Content="Open" Padding="6,2"
+                                                       Background="#2E6BC8" Foreground="White"
+                                                       Command="{Binding $parent[ItemsControl].((vm:ClusterDashboardViewModel)DataContext).OpenJobDetailCommand}"
+                                                       CommandParameter="{Binding}" />
+                                            <TextBlock Grid.Column="7" Text="{Binding FailReason}" TextWrapping="Wrap" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

@@ -1,0 +1,124 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        mc:Ignorable="d"
+        x:Class="FracturingFog.UI.Avalonia.Views.JobDetailView"
+        x:DataType="vm:JobDetailViewModel"
+        Title="FracturingFog — Job Detail"
+        Width="780" Height="780"
+        MinWidth="520" MinHeight="540"
+        Background="#171717">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#DDD" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Background" Value="#1B1B1B" />
+            <Setter Property="BorderBrush" Value="#2E2E2E" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#2E6BC8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="12,5" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" Margin="12">
+
+        <!-- Header: jobId + state + refresh -->
+        <Border Grid.Row="0" Classes="group">
+            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Job ID" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding JobId}"
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="8,0,0,0" />
+                <Button    Grid.Row="0" Grid.Column="2" Classes="primary" Content="Refresh"
+                           Command="{Binding RefreshCommand}" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Summary" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding Summary}"
+                           TextWrapping="Wrap" Margin="8,4,0,0" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Classes="value"
+                           Text="{Binding LastError}" Foreground="#FFCC00"
+                           TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </Grid>
+        </Border>
+
+        <!-- Tile-map heading -->
+        <TextBlock Grid.Row="1" Classes="section" Text="Tile Map (colour = worker)" />
+
+        <!-- Tile grid canvas -->
+        <Border Grid.Row="2" Classes="group" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Canvas Background="#0E0E0E"
+                    Width="{Binding CanvasWidth}"
+                    Height="{Binding CanvasHeight}">
+                <ItemsControl ItemsSource="{Binding Tiles}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Canvas />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:JobTileVm">
+                            <Border Canvas.Left="{Binding X}"
+                                    Canvas.Top="{Binding Y}"
+                                    Width="{Binding Width}"
+                                    Height="{Binding Height}"
+                                    Background="{Binding FillHex}"
+                                    BorderBrush="#111"
+                                    BorderThickness="0.5"
+                                    ToolTip.Tip="{Binding Tooltip}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Canvas>
+        </Border>
+
+        <!-- Worker legend -->
+        <Border Grid.Row="3" Classes="group">
+            <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Top" Classes="section" Text="Workers" />
+                <ItemsControl ItemsSource="{Binding Workers}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:JobWorkerLegendVm">
+                            <StackPanel Orientation="Horizontal" Margin="0,2,12,2" Spacing="6">
+                                <Border Width="14" Height="14" Background="{Binding SwatchHex}"
+                                        BorderBrush="#333" BorderThickness="1" />
+                                <TextBlock Classes="value" Text="{Binding WorkerId}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Border>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="6">
+            <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -305,7 +305,7 @@ public static class ClusterVideoParitySelfTest
                         }
                         finally { TryDelete(wd); }
                     }
-                    disp.AcceptDelivery(jobId, tile.TileId);
+                    disp.AcceptDelivery(jobId, tile.TileId, $"w{idx}");
                     Interlocked.Increment(ref perWorkerTiles[idx]);
                 }
             });
