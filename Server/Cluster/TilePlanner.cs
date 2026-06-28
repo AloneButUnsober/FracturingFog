@@ -37,6 +37,26 @@ public static class TilePlanner
     public const int MinTilePixels = 64;
     public const int MaxTilePixels = 8192;
 
+    /// <summary>D-6b — minimum job zoom at which the planner computes a
+    /// shared Mandelbrot reference orbit and attaches it to every tile.
+    /// Below this, the perturbation engine is not engaged (the calculator's
+    /// SP path handles low-zoom renders) and the orbit blob would be
+    /// dead bytes on the wire.</summary>
+    public const double SharedRefOrbitMinZoom = 1e8;
+
+    /// <summary>D-6b — maximum job zoom for v1 shared-orbit support. Above
+    /// this the calculator promotes to QD ref orbit (CenterX2/X3 limbs
+    /// engage); the wire format ships DD limbs only in v1 so the seeded
+    /// orbit's centerSame check would miss and the tile would recompute.
+    /// Skipping the blob saves bandwidth on workloads that wouldn't
+    /// benefit from it.</summary>
+    public const double SharedRefOrbitMaxZoom = MandelbrotQDZoomThreshold;
+
+    /// <summary>Mirrors <c>MandelbrotCalculator.QDZoomThreshold</c> —
+    /// duplicated here so the planner can gate without taking an Engine
+    /// dependency.</summary>
+    private const double MandelbrotQDZoomThreshold = 1e25;
+
     /// <summary>Default target wall-time per tile, in milliseconds.
     /// Adaptive sizing aims so the median worker finishes each tile in
     /// roughly this window — short enough to keep stragglers cheap, long
@@ -267,6 +287,71 @@ public static class TilePlanner
             ClientWatermarkJson  = src.ClientWatermarkJson,
             SuppressDecorations  = src.SuppressDecorations,
         };
+    }
+
+    /// <summary>D-6b — rewrite every tile in a plan into shared-reference-
+    /// orbit mode: each tile renders the IMAGE coordinate system (centre +
+    /// zoom + dims) and uses SubRectOffset + ImageWidth/Height to confine
+    /// its output to its own pixel rect. The shipped <paramref name="blob"/>
+    /// is base64-encoded and attached so the worker seeds its calculator
+    /// instead of recomputing the orbit per tile.
+    ///
+    /// Idempotent in the sense that calling it on a non-Mandelbrot or
+    /// off-zoom plan is a no-op (the caller decides eligibility).
+    ///
+    /// Original tile coordinates (CenterX/Y, Zoom, Width, Height) are
+    /// overwritten; callers that need the per-tile coords for diagnostics
+    /// should capture them before this call.</summary>
+    public static void AttachSharedReferenceOrbit(
+        Plan plan, RenderRequestDto submitRequest, byte[] blob, int orbitMaxIter)
+    {
+        if (plan == null) throw new ArgumentNullException(nameof(plan));
+        if (submitRequest == null) throw new ArgumentNullException(nameof(submitRequest));
+        if (blob == null || blob.Length == 0) throw new ArgumentException("blob empty", nameof(blob));
+
+        string blobB64 = Convert.ToBase64String(blob);
+        int    imgW    = plan.ImageWidth;
+        int    imgH    = plan.ImageHeight;
+        double imgCx   = submitRequest.CenterX!.Value;
+        double imgCy   = submitRequest.CenterY!.Value;
+        double imgZoom = submitRequest.Zoom!.Value;
+
+        foreach (var t in plan.Tiles)
+        {
+            // tW / tH remain the tile's output buffer dims (subrect dims).
+            int tW = t.Render.Width;
+            int tH = t.Render.Height;
+
+            t.Render.CenterX    = imgCx;
+            t.Render.CenterXLo  = submitRequest.CenterXLo;
+            t.Render.CenterX2   = submitRequest.CenterX2;
+            t.Render.CenterX3   = submitRequest.CenterX3;
+            t.Render.CenterY    = imgCy;
+            t.Render.CenterYLo  = submitRequest.CenterYLo;
+            t.Render.CenterY2   = submitRequest.CenterY2;
+            t.Render.CenterY3   = submitRequest.CenterY3;
+            t.Render.Zoom       = imgZoom;
+            t.Render.Width      = tW;
+            t.Render.Height     = tH;
+            t.Render.ImageWidth     = imgW;
+            t.Render.ImageHeight    = imgH;
+            t.Render.SubRectOffsetX = t.OffsetX;
+            t.Render.SubRectOffsetY = t.OffsetY;
+            t.Render.RefOrbitBlobBase64 = blobB64;
+            t.Render.RefOrbitMaxIter    = orbitMaxIter;
+        }
+    }
+
+    /// <summary>D-6b — true when this submission qualifies for a shared
+    /// reference orbit: image mode, Mandelbrot, zoom in the supported
+    /// range (perturbation engages AND v1 DD precision is sufficient).</summary>
+    public static bool QualifiesForSharedReferenceOrbit(RenderRequestDto submitRequest)
+    {
+        if (submitRequest == null) return false;
+        if (!string.Equals(submitRequest.FractalType, "Mandelbrot", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (submitRequest.Zoom is not double z) return false;
+        return z >= SharedRefOrbitMinZoom && z <= SharedRefOrbitMaxZoom;
     }
 
     /// <summary>Diagnostic-only string form of the planning math —

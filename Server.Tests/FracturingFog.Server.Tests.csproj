@@ -29,6 +29,12 @@
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <ProjectReference Include="..\Server\FracturingFog.Server.csproj" />
     <ProjectReference Include="..\Client\FracturingFog.Client.csproj" />
+    <!--
+      D-6b — Engine ref added so cluster ref-orbit tests can compare a
+      shared-orbit sub-rect render against a full-image render for pixel
+      parity. Engine is the smallest superset that exposes MandelbrotCalculator.
+    -->
+    <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
   </ItemGroup>
 
 </Project>

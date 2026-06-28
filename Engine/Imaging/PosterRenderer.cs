@@ -70,6 +70,23 @@ namespace FracturingFog.Imaging
         /// drivers read this to scale the image to physical inches without
         /// the user having to type a size at print time.</summary>
         public float Dpi { get; init; }
+
+        // ── D-6b — sub-rect rendering for cluster tile workers ─────────────
+        // When non-zero, the worker renders only a sub-rect of a larger
+        // image and derives per-pixel dc from the FULL image's centre +
+        // dims, so every tile of the same image shares the master-shipped
+        // reference orbit. Zero = legacy single-render / per-tile-centre.
+
+        public int ImageWidth     { get; init; }
+        public int ImageHeight    { get; init; }
+        public int SubRectOffsetX { get; init; }
+        public int SubRectOffsetY { get; init; }
+
+        /// <summary>D-6b — master-computed DD reference orbit. When non-null
+        /// (and the centre + maxIter match), the calculator's
+        /// ComputeReferenceOrbit step short-circuits and the per-tile
+        /// recompute is skipped. <c>null</c> = legacy compute-per-tile.</summary>
+        public MandelbrotCalculator.OrbitDD? SeededOrbit { get; init; }
     }
 
     /// <summary>Outcome of a poster render — the on-disk pixel dimensions
@@ -132,7 +149,23 @@ namespace FracturingFog.Imaging
                     MaxIterations = req.MaxIterations,
                     ColorMap = req.ColorMap,
                     Quality = req.Quality,
+                    // D-6b — sub-rect + seeded orbit for cluster tile workers.
+                    // All four properties default to 0 (= legacy full-image render);
+                    // any non-zero value engages the sub-rect dc geometry.
+                    ImageWidth     = req.ImageWidth,
+                    ImageHeight    = req.ImageHeight,
+                    SubRectOffsetX = req.SubRectOffsetX,
+                    SubRectOffsetY = req.SubRectOffsetY,
                 };
+                if (req.SeededOrbit != null)
+                {
+                    // Pre-fill the calculator's ref-orbit cache so its
+                    // internal ComputeReferenceOrbit hits the centre-cache
+                    // short-circuit. Mismatched centre / insufficient cap
+                    // is detected by the calculator and falls back to
+                    // per-tile compute — no silent stale-orbit reuse.
+                    calc.SeedReferenceOrbitDD(req.SeededOrbit);
+                }
                 calc.Calculate(token);
                 token.ThrowIfCancellationRequested();
                 buffer = calc.ColorBuffer;

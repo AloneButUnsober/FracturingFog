@@ -84,6 +84,20 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     public TileDispatcher? Dispatcher { get; init; }
     public IClusterImageCodec? Codec { get; init; }
 
+    /// <summary>D-6b — host-side hook that computes a Mandelbrot DD
+    /// reference orbit. Wired by ClusterEntry from the Engine assembly so
+    /// the Server library stays UI- and Engine-free. Null = orbit caching
+    /// disabled (every tile recomputes its orbit, legacy D-2..D-5
+    /// behaviour). When set, image jobs that
+    /// <see cref="TilePlanner.QualifiesForSharedReferenceOrbit"/> get one
+    /// orbit computed up-front and the blob attached to every tile.
+    ///
+    /// Args: centreX, centreXLo, centreY, centreYLo, maxIter.
+    /// Returns: encoded blob bytes + orbit's maxIter cap. Null return =
+    /// provider declined (compute failed, out-of-range centre, etc.); the
+    /// job falls back to per-tile compute.</summary>
+    public Func<double, double, double, double, int, (byte[] Blob, int MaxIter)?>? ReferenceOrbitProvider { get; init; }
+
     private readonly ClusterLogger _log;
     private readonly ConcurrentDictionary<string, ArtifactMerger> _mergers =
         new(StringComparer.Ordinal);
@@ -1084,6 +1098,43 @@ public sealed class ClusterCoordinator : IClusterCoordinator
 
         string jobId = JobStore.NewJobId();
         foreach (var t in plan.Tiles) t.JobId = jobId;
+
+        // D-6b — shared reference-orbit attach. Image jobs that meet the
+        // Mandelbrot + zoom gate AND have a provider wired get one orbit
+        // computed up-front; every tile carries the blob + image-frame
+        // geometry so the worker seeds its calculator. Compute failure or
+        // a null return leaves the plan untouched (per-tile recompute,
+        // identical to pre-D-6b behaviour).
+        if (isImage && ReferenceOrbitProvider != null
+            && TilePlanner.QualifiesForSharedReferenceOrbit(dto.Request))
+        {
+            try
+            {
+                int orbitMaxIter = dto.Request.Iterations is int ri && ri > 0 ? ri : 1000;
+                var result = ReferenceOrbitProvider(
+                    dto.Request.CenterX!.Value, dto.Request.CenterXLo,
+                    dto.Request.CenterY!.Value, dto.Request.CenterYLo,
+                    orbitMaxIter);
+                if (result is { Blob: var blob, MaxIter: var capUsed })
+                {
+                    TilePlanner.AttachSharedReferenceOrbit(plan, dto.Request, blob, capUsed);
+                    _log.Event("ref-orbit-attached", new Dictionary<string, object?>
+                    {
+                        ["jobId"] = jobId,
+                        ["blobBytes"] = blob.Length,
+                        ["orbitMaxIter"] = capUsed,
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Event("ref-orbit-attach-failed", new Dictionary<string, object?>
+                {
+                    ["jobId"] = jobId,
+                    ["err"] = $"{ex.GetType().Name}: {ex.Message}",
+                });
+            }
+        }
 
         try { Jobs.Create(jobId, dto, plan); }
         catch (Exception ex) { return Err("internal", $"persist failed: {ex.Message}"); }

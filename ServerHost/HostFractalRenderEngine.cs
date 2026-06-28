@@ -16,6 +16,7 @@ using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Server;
+using FracturingFog.Server.Cluster;
 using FracturingFog.Server.Guard;
 using FracturingFog.Server.Protocol;
 
@@ -275,6 +276,58 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                           && req.PosterInchesH is double pih0 && pih0 > 0;
         float dpiStamp = posterMode ? req.PosterDpi!.Value : 0f;
 
+        // D-6b — when the master attached a precomputed reference orbit
+        // blob to a tile render, decode it once here and forward to the
+        // calculator via PosterRequest.SeededOrbit. Decode failures fall
+        // back to per-tile compute (logged warning) — never abort the
+        // render, because a partial degradation beats a hard failure for
+        // an opt-in perf path.
+        MandelbrotCalculator.OrbitDD? seededOrbit = null;
+        if (!string.IsNullOrEmpty(req.RefOrbitBlobBase64) && ftype == FractalType.Mandelbrot)
+        {
+            try
+            {
+                byte[] blob = Convert.FromBase64String(req.RefOrbitBlobBase64!);
+                var decoded = ReferenceOrbitBlobCodec.Decode(blob);
+                // Accept the seed only when the calculator's centre + cap
+                // match what the master used. Centre mismatch would let
+                // the calculator's own centerSame check fall through to
+                // per-tile compute anyway; we short-circuit one Decode
+                // allocation by checking here.
+                bool centreOk = decoded.CentreX   == cx
+                             && decoded.CentreXLo == cxLo
+                             && decoded.CentreY   == cy
+                             && decoded.CentreYLo == cyLo;
+                bool capOk = iter <= decoded.MaxIter;
+                if (centreOk && capOk)
+                {
+                    seededOrbit = new MandelbrotCalculator.OrbitDD
+                    {
+                        CentreX   = decoded.CentreX,
+                        CentreXLo = decoded.CentreXLo,
+                        CentreY   = decoded.CentreY,
+                        CentreYLo = decoded.CentreYLo,
+                        MaxIter   = decoded.MaxIter,
+                        RefLen    = decoded.RefLen,
+                        Escaped   = decoded.Escaped,
+                        Zr        = decoded.RefZr,
+                        Zi        = decoded.RefZi,
+                        ZrLo      = decoded.RefZrLo,
+                        ZiLo      = decoded.RefZiLo,
+                    };
+                    log.Info($"seeded ref orbit: refLen={decoded.RefLen} maxIter={decoded.MaxIter} escaped={decoded.Escaped}");
+                }
+                else
+                {
+                    log.Warn($"ref orbit blob rejected: centreOk={centreOk} capOk={capOk} (orbitMaxIter={decoded.MaxIter} vs reqIter={iter})");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Warn($"ref orbit blob decode failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
         var poster = new PosterRequest
         {
             FractalType = ftype,
@@ -300,6 +353,13 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             SubText = req.SuppressDecorations ? "" : "Fracturing Fog server render",
             Dpi = dpiStamp,
             CustomWatermark = req.SuppressDecorations ? null : ResolveServerWatermark(req, region, log),
+            // D-6b — sub-rect geometry + seeded orbit forwarded to the
+            // calculator. All zero / null for legacy single-server renders.
+            ImageWidth     = req.ImageWidth,
+            ImageHeight    = req.ImageHeight,
+            SubRectOffsetX = req.SubRectOffsetX,
+            SubRectOffsetY = req.SubRectOffsetY,
+            SeededOrbit    = seededOrbit,
         };
 
         // CPU-bound rasterization runs on a thread-pool worker. The outer
