@@ -172,6 +172,49 @@ public sealed class JobStore
     public string ArtifactPath(string jobId, string ext)
         => Path.Combine(JobDir(jobId), $"artifact.{ext.TrimStart('.')}");
 
+    /// <summary>D-4 — directory holding per-frame PNGs for a video job.
+    /// Named to match the ffmpeg image2 demuxer convention so the D-4b
+    /// encode pass can point ffmpeg at this folder directly.</summary>
+    public string FramesDir(string jobId)
+        => Path.Combine(JobDir(jobId), "frames");
+
+    /// <summary>D-4 — frame filename for the image2 demuxer
+    /// (frame_NNNNNN.png, 1-based to match ffmpeg's start_number=1
+    /// default). frameIndex on the wire is 0-based; we add 1 when
+    /// turning it into a filename.</summary>
+    public static string FrameFileName(int frameIndex0Based)
+        => $"frame_{frameIndex0Based + 1:D6}.png";
+
+    /// <summary>D-4 — persist one frame's PNG bytes for a video job.
+    /// Same write-and-rename pattern as tile bytes so a crashed master
+    /// never leaves a half-written frame the encoder would later trip
+    /// over.</summary>
+    public void WriteFrameBytes(string jobId, int frameIndex, byte[] png)
+    {
+        string dir = FramesDir(jobId);
+        Directory.CreateDirectory(dir);
+        string finalPath = Path.Combine(dir, FrameFileName(frameIndex));
+        string tmpPath   = finalPath + ".tmp";
+        File.WriteAllBytes(tmpPath, png);
+        if (File.Exists(finalPath)) File.Delete(finalPath);
+        File.Move(tmpPath, finalPath);
+    }
+
+    public bool FrameExists(string jobId, int frameIndex)
+        => File.Exists(Path.Combine(FramesDir(jobId), FrameFileName(frameIndex)));
+
+    /// <summary>D-4 — count of per-frame files on disk for this job. Used
+    /// by the coordinator to detect a complete video tile-set and by the
+    /// D-4b finaliser to gate the ffmpeg encode pass.</summary>
+    public int CountFrames(string jobId)
+    {
+        string dir = FramesDir(jobId);
+        if (!Directory.Exists(dir)) return 0;
+        int n = 0;
+        foreach (var _ in Directory.EnumerateFiles(dir, "frame_*.png")) n++;
+        return n;
+    }
+
     /// <summary>Crash-recovery sweep — invoke at master start. Any job
     /// stuck in rendering/merging/planning becomes "failed" with reason
     /// "master-restart". Returns the count of jobs that were marked.
@@ -298,4 +341,15 @@ public sealed class PersistedStatus
     public long LastUpdateUnixMs { get; set; }
 
     public string? FailReason { get; set; }
+
+    /// <summary>D-4 — total video frames in the parent job (0 for image
+    /// mode). Static once the job is created so the client can show
+    /// per-frame progress alongside per-tile progress.</summary>
+    public int TotalFrames { get; set; }
+
+    /// <summary>D-4 — frames written to disk so far. Master updates this
+    /// at every tile.deliver; cluster admin UI uses it for the per-job
+    /// progress bar in video mode (per-tile progress is misleading when
+    /// each tile carries 30 frames).</summary>
+    public int FramesDone { get; set; }
 }

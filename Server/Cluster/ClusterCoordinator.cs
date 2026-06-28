@@ -238,8 +238,8 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     private Task<ClusterDispatchOutcome> HandleTileDeliverAsync(
         JsonElement? rawParams, string thumbprint, byte[]? binaryPayload)
     {
-        if (Dispatcher is null || Jobs is null || Codec is null)
-            return Err("not-configured", "master has no dispatcher/jobs/codec");
+        if (Dispatcher is null || Jobs is null)
+            return Err("not-configured", "master has no dispatcher/jobs");
 
         TileDeliverDto? dto;
         try { dto = rawParams?.Deserialize<TileDeliverDto>(JsonRpcFraming.JsonOpts); }
@@ -286,6 +286,15 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             Dispatcher.RecordFailure(dto.JobId, dto.TileId);
             return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "sha-mismatch" });
         }
+
+        // D-4 — frames trailer: video tile carries a packed batch of PNGs.
+        // Routed to its own handler so the image-tile fast path stays
+        // exactly as in D-3.
+        if (string.Equals(dto.PayloadKind, "frames", StringComparison.Ordinal))
+            return HandleFramesDeliverAsync(dto, workerEntry, decoded);
+
+        if (Codec is null)
+            return Err("not-configured", "master has no image codec wired");
 
         // Look up the merger and tile rect.
         if (!_mergers.TryGetValue(dto.JobId, out var merger))
@@ -353,6 +362,184 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         if (done == total) FinaliseMerge(dto.JobId, merger);
 
         return Ok(new TileDeliverAckDto { Accepted = true });
+    }
+
+    /// <summary>D-4 frames-payload tile delivery. Parses the FRMS trailer
+    /// (worker-packed concatenated PNGs), validates frames against the
+    /// persisted plan's frame range for this tile, and writes each frame
+    /// to the job's frames/ folder. D-4b will attach an ffmpeg encode
+    /// step when all tiles have delivered.</summary>
+    private Task<ClusterDispatchOutcome> HandleFramesDeliverAsync(
+        TileDeliverDto dto, WorkerEntry workerEntry, byte[] decoded)
+    {
+        var planFrames = ReadFramePlan(dto.JobId);
+        if (planFrames is null || dto.TileId < 0 || dto.TileId >= planFrames.Count)
+            return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "tile-not-in-flight" });
+
+        var range = planFrames[dto.TileId];
+        if (range is null)
+            return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "not-a-video-tile" });
+
+        List<FramesPayloadCodec.Frame> frames;
+        try { frames = FramesPayloadCodec.Unpack(decoded); }
+        catch (Exception ex) { return Err("bad-request", $"frames trailer: {ex.Message}"); }
+
+        int expectedCount = range.EndFrame - range.StartFrame;
+        if (frames.Count != expectedCount)
+        {
+            _log.Event("frames-count-mismatch", new Dictionary<string, object?>
+            {
+                ["jobId"]    = dto.JobId,
+                ["tileId"]   = dto.TileId,
+                ["got"]      = frames.Count,
+                ["expected"] = expectedCount,
+            });
+            Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+            return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "frame-count-mismatch" });
+        }
+
+        foreach (var f in frames)
+        {
+            if (f.FrameIndex < range.StartFrame || f.FrameIndex >= range.EndFrame)
+            {
+                _log.Event("frame-out-of-range", new Dictionary<string, object?>
+                {
+                    ["jobId"]   = dto.JobId,
+                    ["tileId"]  = dto.TileId,
+                    ["frame"]   = f.FrameIndex,
+                    ["range"]   = $"[{range.StartFrame},{range.EndFrame})",
+                });
+                Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+                return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "frame-out-of-range" });
+            }
+        }
+
+        // Idempotent: if every frame already lives on disk, the worker
+        // is delivering a duplicate (stealer race). Accept silently.
+        bool alreadyAllOnDisk = true;
+        for (int f = range.StartFrame; f < range.EndFrame; f++)
+            if (!Jobs!.FrameExists(dto.JobId, f)) { alreadyAllOnDisk = false; break; }
+
+        if (!alreadyAllOnDisk)
+        {
+            try
+            {
+                foreach (var f in frames)
+                    Jobs!.WriteFrameBytes(dto.JobId, f.FrameIndex, f.Png);
+            }
+            catch (Exception ex)
+            {
+                _log.Event("frames-write-failed", new Dictionary<string, object?>
+                {
+                    ["jobId"]  = dto.JobId,
+                    ["tileId"] = dto.TileId,
+                    ["error"]  = ex.Message,
+                });
+                Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+                return Err("frames-write-failed", ex.Message);
+            }
+        }
+
+        // Accept the tile — duplicate-delivery first-wins handled inside
+        // the dispatcher (returns false for already-completed tile, which
+        // is fine here too).
+        Dispatcher!.AcceptDelivery(dto.JobId, dto.TileId);
+
+        // Per-frame-pixel rate feeds the same EMA as image tiles. Treat
+        // pixels as (W * H * frame count) so a frame-range tile's measured
+        // ms-per-kilopixel is comparable to an image tile's.
+        try
+        {
+            long px = (long)dto.Width * dto.Height * frames.Count;
+            workerEntry.RecordTileTime(px, dto.RenderMs);
+        }
+        catch { }
+
+        int done = Dispatcher.CompletedCount(dto.JobId);
+        int total = planFrames.Count;
+        int framesOnDisk = Jobs!.CountFrames(dto.JobId);
+        Jobs.UpdateStatus(dto.JobId, s =>
+        {
+            s.TilesDone     = done;
+            s.TilesInFlight = Dispatcher.InFlightCount(dto.JobId);
+            s.FramesDone    = framesOnDisk;
+            if (s.JobState is "queued" or "planning") s.JobState = "rendering";
+        });
+        Jobs.AppendEvent(dto.JobId, "frames-delivered", new Dictionary<string, object?>
+        {
+            ["tileId"] = dto.TileId,
+            ["worker"] = dto.WorkerId,
+            ["frames"] = frames.Count,
+            ["ms"]     = dto.RenderMs,
+        });
+
+        if (done == total) FinaliseVideoFrames(dto.JobId, framesOnDisk);
+
+        return Ok(new TileDeliverAckDto { Accepted = true });
+    }
+
+    /// <summary>D-4a stub finaliser for video jobs — writes a manifest of
+    /// the per-frame PNGs and parks the job at "merging". D-4b replaces
+    /// this with the real ffmpeg encode pass that turns the manifest
+    /// into the final .mp4 / .mkv artifact.</summary>
+    private void FinaliseVideoFrames(string jobId, int framesOnDisk)
+    {
+        try
+        {
+            Jobs!.UpdateStatus(jobId, s => s.JobState = "merging");
+
+            string framesDir = Jobs.FramesDir(jobId);
+            long totalBytes = 0;
+            var entries = new List<object>();
+            foreach (var path in Directory.EnumerateFiles(framesDir, "frame_*.png"))
+            {
+                var fi = new FileInfo(path);
+                totalBytes += fi.Length;
+                entries.Add(new { name = fi.Name, bytes = fi.Length });
+            }
+
+            string manifestPath = Jobs.ArtifactPath(jobId, "frames-manifest.json");
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
+            {
+                jobId,
+                frames     = framesOnDisk,
+                totalBytes,
+                entries,
+            }, new JsonSerializerOptions { WriteIndented = true }));
+
+            long manifestSize = new FileInfo(manifestPath).Length;
+            string sha = ComputeFileSha256Base64(manifestPath);
+            Jobs.UpdateStatus(jobId, s =>
+            {
+                s.JobState       = "ready";
+                s.ArtifactExt    = "frames-manifest.json";
+                s.ArtifactBytes  = manifestSize;
+                s.ArtifactSha256 = sha;
+                s.TilesInFlight  = 0;
+            });
+            Jobs.AppendEvent(jobId, "frames-ready", new Dictionary<string, object?>
+            {
+                ["frames"]     = framesOnDisk,
+                ["totalBytes"] = totalBytes,
+            });
+            _log.Event("job-frames-ready", new Dictionary<string, object?>
+            {
+                ["jobId"]      = jobId,
+                ["frames"]     = framesOnDisk,
+                ["totalBytes"] = totalBytes,
+            });
+            Dispatcher!.RetireJob(jobId);
+        }
+        catch (Exception ex)
+        {
+            Jobs?.UpdateStatus(jobId, s => { s.JobState = "failed"; s.FailReason = "frames-finalise-failed: " + ex.Message; });
+            _log.Event("job-failed", new Dictionary<string, object?>
+            {
+                ["jobId"] = jobId,
+                ["where"] = "finalise-frames",
+                ["error"] = ex.Message,
+            });
+        }
     }
 
     private void FinaliseMerge(string jobId, ArtifactMerger merger)
@@ -455,24 +642,36 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
         if (dto is null) return Err("bad-request", "missing params");
 
-        if (!string.Equals(dto.Request.Mode, "image", StringComparison.OrdinalIgnoreCase))
+        bool isVideo = string.Equals(dto.Request.Mode, "video", StringComparison.OrdinalIgnoreCase);
+        bool isImage = string.Equals(dto.Request.Mode, "image", StringComparison.OrdinalIgnoreCase);
+        if (!isVideo && !isImage)
             return Err("unsupported-mode",
-                $"D-2 supports image mode only; got '{dto.Request.Mode}'. Video lands in D-4.");
+                $"cluster supports image|video mode; got '{dto.Request.Mode}'");
 
+        // Both image and video tiles render a single image of the same
+        // fractal type — same allowlist applies. FramePlanner.ValidateForVideo
+        // forwards to TilePlanner so this single check covers both modes.
         if (!TilePlanner.ValidateForTiling(dto.Request.FractalType, out string? whyNot))
             return Err("untileable-fractal", whyNot!);
 
         TilePlanner.Plan plan;
         try
         {
-            var workerHints = new List<int>();
-            foreach (var w in Registry.Snapshot())
-                if (w.PreferredTilePixels > 0) workerHints.Add(w.PreferredTilePixels);
-            // D-3b — feed the registry's learned per-worker EMA into the
-            // planner. First job sees median=0 (no data); planner falls
-            // back to PreferredTilePixels. Subsequent jobs auto-size.
-            double medianMsPerKpx = Registry.MedianMsPerKilopixel();
-            plan = TilePlanner.PlanImage(dto.Request, dto.TilePixelsHint, workerHints, medianMsPerKpx);
+            if (isVideo)
+            {
+                plan = FramePlanner.PlanVideo(dto.Request, dto.TilePixelsHint);
+            }
+            else
+            {
+                var workerHints = new List<int>();
+                foreach (var w in Registry.Snapshot())
+                    if (w.PreferredTilePixels > 0) workerHints.Add(w.PreferredTilePixels);
+                // D-3b — feed the registry's learned per-worker EMA into the
+                // planner. First job sees median=0 (no data); planner falls
+                // back to PreferredTilePixels. Subsequent jobs auto-size.
+                double medianMsPerKpx = Registry.MedianMsPerKilopixel();
+                plan = TilePlanner.PlanImage(dto.Request, dto.TilePixelsHint, workerHints, medianMsPerKpx);
+            }
         }
         catch (Exception ex) { return Err("plan-failed", ex.Message); }
 
@@ -482,19 +681,31 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         try { Jobs.Create(jobId, dto, plan); }
         catch (Exception ex) { return Err("internal", $"persist failed: {ex.Message}"); }
 
-        if (Codec is null)
-            return Err("not-configured", "master has no image codec wired");
-
-        var merger = new ArtifactMerger(plan.ImageWidth, plan.ImageHeight, plan.TileCount, Codec);
-        _mergers[jobId] = merger;
+        if (isImage)
+        {
+            if (Codec is null)
+                return Err("not-configured", "master has no image codec wired");
+            var merger = new ArtifactMerger(plan.ImageWidth, plan.ImageHeight, plan.TileCount, Codec);
+            _mergers[jobId] = merger;
+        }
+        // Video jobs have no ArtifactMerger — frames land directly on disk
+        // and the D-4b finaliser stitches them via ffmpeg at completion.
 
         Dispatcher.EnqueueJob(jobId, plan.Tiles);
-        Jobs.UpdateStatus(jobId, s => s.JobState = "planning");
+        Jobs.UpdateStatus(jobId, s =>
+        {
+            s.JobState = "planning";
+            // For video, track totalFrames so per-frame progress shows up
+            // alongside per-tile progress.
+            if (plan.Mode == "video") s.TotalFrames = plan.TotalFrames;
+        });
         Jobs.AppendEvent(jobId, "submitted", new Dictionary<string, object?>
         {
             ["tiles"] = plan.TileCount,
             ["w"]     = plan.ImageWidth,
             ["h"]     = plan.ImageHeight,
+            ["mode"]  = plan.Mode,
+            ["frames"]= plan.TotalFrames,
         });
 
         _log.Event("job-submitted", new Dictionary<string, object?>
@@ -503,12 +714,16 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             ["tiles"] = plan.TileCount,
             ["w"]     = plan.ImageWidth,
             ["h"]     = plan.ImageHeight,
+            ["mode"]  = plan.Mode,
+            ["frames"]= plan.TotalFrames,
         });
 
-        // Best-effort artifact-size estimate: 0.25 bytes/pixel for PNG of
-        // a typical Mandelbrot image. Overestimate is fine; the client
-        // uses it only to gate disk free.
-        long estBytes = (long)plan.ImageWidth * plan.ImageHeight / 4;
+        // Best-effort artifact-size estimate. Image: ~0.25 bytes/pixel for
+        // PNG of a typical Mandelbrot. Video: same per-frame * frame count
+        // (rough — encoder gets it down further, but the estimate is only
+        // used by the client to gate free disk).
+        long estBytes = (long)plan.ImageWidth * plan.ImageHeight / 4
+                      * Math.Max(1, plan.TotalFrames);
 
         return Ok(new JobAckDto
         {
@@ -658,6 +873,41 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     }
 
     private readonly record struct TileMeta(int TileId, int OffsetX, int OffsetY, int Width, int Height);
+
+    /// <summary>D-4 — for video jobs, parse plan.json and return per-tile
+    /// frame ranges. Null entries indicate image-mode tiles in a mixed
+    /// or malformed plan (shouldn't occur — plan.Mode gates this).</summary>
+    private IReadOnlyList<FrameRangeDto?>? ReadFramePlan(string jobId)
+    {
+        try
+        {
+            string planPath = Path.Combine(Jobs!.JobDir(jobId), "plan.json");
+            if (!File.Exists(planPath)) return null;
+            using var fs = File.OpenRead(planPath);
+            using var doc = JsonDocument.Parse(fs);
+            if (!doc.RootElement.TryGetProperty("Tiles", out var tilesEl)) return null;
+            var list = new List<FrameRangeDto?>(tilesEl.GetArrayLength());
+            foreach (var el in tilesEl.EnumerateArray())
+            {
+                if (!el.TryGetProperty("frameRange", out var fr) || fr.ValueKind == JsonValueKind.Null)
+                {
+                    list.Add(null);
+                    continue;
+                }
+                list.Add(new FrameRangeDto
+                {
+                    StartFrame   = fr.GetProperty("startFrame").GetInt32(),
+                    EndFrame     = fr.GetProperty("endFrame").GetInt32(),
+                    TotalFrames  = fr.GetProperty("totalFrames").GetInt32(),
+                    Fps          = fr.GetProperty("fps").GetInt32(),
+                    LogStartZoom = fr.GetProperty("logStartZoom").GetDouble(),
+                    LogZoomDelta = fr.GetProperty("logZoomDelta").GetDouble(),
+                });
+            }
+            return list;
+        }
+        catch { return null; }
+    }
 
     private static string ComputeFileSha256Base64(string path)
     {
