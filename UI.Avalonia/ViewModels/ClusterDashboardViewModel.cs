@@ -46,6 +46,13 @@ public sealed class ClusterDashboardViewModel : ViewModelBase, IDisposable
         {
             if (row != null) OpenJobDetailRequested?.Invoke(this, row.JobId);
         });
+        // D-5d — per-worker drill-in. Same routing shape as OpenJobDetail:
+        // raise the event with the workerId; the shell owns construction +
+        // window sync.
+        OpenWorkerDetailCommand = ReactiveCommand.Create<ClusterWorkerRowVm>(row =>
+        {
+            if (row != null) OpenWorkerDetailRequested?.Invoke(this, row.WorkerId);
+        });
 
         // 5 s mirrors ServerAdminViewModel — every poll opens a fresh mTLS
         // handshake (~50–100 ms server CPU). 1 Hz would impose a 5–10% CPU
@@ -101,10 +108,12 @@ public sealed class ClusterDashboardViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit>             CloseCommand       { get; }
     public ReactiveCommand<Unit, Unit>             OpenJobListCommand { get; }
     public ReactiveCommand<ClusterJobRowVm, Unit>  OpenJobDetailCommand { get; }
+    public ReactiveCommand<ClusterWorkerRowVm, Unit> OpenWorkerDetailCommand { get; }
 
     public event EventHandler?         CloseRequested;
     public event EventHandler?         OpenJobListRequested;
     public event EventHandler<string>? OpenJobDetailRequested;
+    public event EventHandler<string>? OpenWorkerDetailRequested;
 
     public void StartPolling() => _poll.Start();
     public void StopPolling()  => _poll.Stop();

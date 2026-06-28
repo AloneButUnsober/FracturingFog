@@ -1149,6 +1149,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _jobDetail, value);
     }
 
+    private WorkerDetailViewModel? _workerDetail;
+    public WorkerDetailViewModel? WorkerDetail
+    {
+        get => _workerDetail;
+        private set => this.RaiseAndSetIfChanged(ref _workerDetail, value);
+    }
+
     // ── Window visibility flags (bound to Window.IsVisible) ──────────────
 
     private bool _isFloatingMenuVisible;
@@ -1230,6 +1237,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isJobDetailVisible;
         set => this.RaiseAndSetIfChanged(ref _isJobDetailVisible, value);
+    }
+
+    private bool _isWorkerDetailVisible;
+    public bool IsWorkerDetailVisible
+    {
+        get => _isWorkerDetailVisible;
+        set => this.RaiseAndSetIfChanged(ref _isWorkerDetailVisible, value);
     }
 
     // ── Window title (program name + version + renderer description) ────
@@ -1699,8 +1713,28 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // handles the window lifecycle on the same flag pattern.
             ClusterDashboard.OpenJobListRequested  += (_, _)        => ShowJobList();
             ClusterDashboard.OpenJobDetailRequested += (_, jobId)   => ShowJobDetail(jobId);
+            // D-5d — per-worker drill-in from the workers grid Open button.
+            ClusterDashboard.OpenWorkerDetailRequested += (_, workerId) => ShowWorkerDetail(workerId);
         }
         IsClusterDashboardVisible = true;
+    }
+
+    private void ShowWorkerDetail(string workerId)
+    {
+        if (string.IsNullOrEmpty(workerId)) return;
+        if (WorkerDetail == null)
+        {
+            WorkerDetail = new WorkerDetailViewModel(workerId);
+            WorkerDetail.CloseRequested += (_, _) => IsWorkerDetailVisible = false;
+        }
+        else
+        {
+            // Single-instance window like JobDetailView: swap target id; the
+            // setter clears live state + immediate-polls so the operator sees
+            // fresh data without waiting for the 5 s timer.
+            WorkerDetail.WorkerId = workerId;
+        }
+        IsWorkerDetailVisible = true;
     }
 
     private void ShowJobList()

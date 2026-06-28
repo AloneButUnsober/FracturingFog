@@ -1503,6 +1503,10 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             Quiesced                 = w.Quiesced,
             EmaMsPerKilopixel        = w.EmaMsPerKilopixel,
             TileSamples              = w.TileSamples,
+            // D-5d — capability metadata for WorkerDetailView.
+            SupportedFractalTypes    = new List<string>(w.SupportedFractalTypes),
+            EngineBuildSha           = w.EngineBuildSha,
+            ProtocolVersion          = w.ProtocolVersion,
         };
     }
 

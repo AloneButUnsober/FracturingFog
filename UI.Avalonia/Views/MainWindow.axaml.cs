@@ -44,6 +44,7 @@ public sealed partial class MainWindow : Window
     private ClusterDashboardView? _clusterDashboardWin;
     private JobListView? _jobListWin;
     private JobDetailView? _jobDetailWin;
+    private WorkerDetailView? _workerDetailWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
     private MiniWindowTether? _miniMapTether;
@@ -574,6 +575,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsJobDetailVisible):
             case nameof(ShellViewModel.JobDetail):
                 SyncJobDetail();
+                break;
+            case nameof(ShellViewModel.IsWorkerDetailVisible):
+            case nameof(ShellViewModel.WorkerDetail):
+                SyncWorkerDetail();
                 break;
             case nameof(ShellViewModel.IsMiniMapVisible):
                 SyncMiniMap();
@@ -1181,6 +1186,34 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncWorkerDetail()
+    {
+        if (_shell == null) return;
+        if (_shell.IsWorkerDetailVisible && _shell.WorkerDetail != null)
+        {
+            if (_workerDetailWin == null)
+            {
+                _workerDetailWin = new WorkerDetailView { DataContext = _shell.WorkerDetail };
+                _workerDetailWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsWorkerDetailVisible = false;
+                };
+            }
+            else if (_workerDetailWin.DataContext != _shell.WorkerDetail)
+            {
+                _workerDetailWin.DataContext = _shell.WorkerDetail;
+            }
+            if (!_workerDetailWin.IsVisible) _workerDetailWin.Show(this);
+            else _workerDetailWin.Activate();
+        }
+        else
+        {
+            _workerDetailWin?.Hide();
+        }
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         _shuttingDown = true;
@@ -1203,6 +1236,7 @@ public sealed partial class MainWindow : Window
         _clusterDashboardWin?.Close();
         _jobListWin?.Close();
         _jobDetailWin?.Close();
+        _workerDetailWin?.Close();
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
 
