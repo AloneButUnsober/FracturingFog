@@ -47,6 +47,7 @@ public sealed class FFServer
     private readonly X509RevocationMode _revocationMode;
     private readonly SemaphoreSlim _queueGate;
     private readonly EndpointRateLimiter _rateLimiter;
+    private readonly RoleAwareRateLimiter _roleLimiter;
 
     /// <summary>Outer cap on accepted-but-still-open TCP connections,
     /// including ones still in the TLS handshake. Bounds memory + thread
@@ -66,6 +67,11 @@ public sealed class FFServer
         _queueGate = new SemaphoreSlim(Math.Max(1, config.QueueDepth));
         _connectionGate = new SemaphoreSlim(Math.Max(1, config.MaxConcurrentConnections));
         _rateLimiter = new EndpointRateLimiter(config.RateLimitPerMinute, config.RateLimitBurst);
+        _roleLimiter = new RoleAwareRateLimiter(
+            clientPerMinute:         config.ClientCallPerMinute,
+            clientBurst:             config.ClientCallBurst,
+            workerTileNextPerMinute: config.WorkerTileNextPerMinute,
+            workerTileNextBurst:     config.WorkerTileNextBurst);
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -223,7 +229,8 @@ public sealed class FFServer
                 }
                 if (env is null) break;
 
-                await DispatchAsync(env, ssl, sessLog, clientRole, clientThumb ?? "", ct).ConfigureAwait(false);
+                await DispatchAsync(env, ssl, sessLog, clientRole, clientThumb ?? "",
+                    remote?.Address?.ToString() ?? "(unknown)", ct).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -239,12 +246,28 @@ public sealed class FFServer
     }
 
     private async Task DispatchAsync(MessageEnvelope env, SslStream ssl, SessionLogger log,
-        CertRole role, string thumbprint, CancellationToken ct)
+        CertRole role, string thumbprint, string remoteIp, CancellationToken ct)
     {
         if (env.Kind != "request" || string.IsNullOrEmpty(env.Method))
         {
             await ReplyErrorAsync(ssl, env.Id, "bad-request", "envelope kind/method missing", ct).ConfigureAwait(false);
             return;
+        }
+
+        // D-6c — per-method per-role rate gate. server.status (cheap, used
+        // by liveness probes) bypasses the gate so a probe loop cannot lock
+        // itself out. Worker tile.next + client RPCs flow through.
+        if (!string.Equals(env.Method, "server.status", StringComparison.Ordinal))
+        {
+            string limiterKey = role == CertRole.Worker ? thumbprint : remoteIp;
+            if (_roleLimiter.TryAccept(role, limiterKey, env.Method!) == RoleLimiterDecision.RefusedRate)
+            {
+                log.Warn($"rate-limited: role={role} method='{env.Method}' key={limiterKey}");
+                Metrics.RecordFailure("rate-limited", $"role={role} method={env.Method}");
+                await ReplyErrorAsync(ssl, env.Id, "rate-limited",
+                    $"rate limit exceeded for role={role} method='{env.Method}'", ct).ConfigureAwait(false);
+                return;
+            }
         }
 
         switch (env.Method)
