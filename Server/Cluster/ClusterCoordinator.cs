@@ -134,7 +134,23 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     public Task<ClusterDispatchOutcome> HandleAsync(
         string method, JsonElement? @params, CertRole role, string thumbprint, CancellationToken ct,
         byte[]? binaryPayload = null)
-        => method switch
+    {
+        // D-6c — admin audit log. Dev plan §6.6: admin-role is unlimited
+        // but every call must be logged. cluster.* methods are admin-only
+        // by the FFServer role gate, so logging the entry here covers the
+        // full admin surface (job.* by admin still passes through the
+        // method's own per-job event logging).
+        if (role == CertRole.Admin
+            && method.StartsWith("cluster.", StringComparison.Ordinal))
+        {
+            _log.Event("admin-call", new Dictionary<string, object?>
+            {
+                ["method"]     = method,
+                ["thumbprint"] = ServerCertLoader.NormalizeThumbprint(thumbprint),
+            });
+        }
+
+        return method switch
         {
             "worker.register"  => HandleRegisterAsync(@params, thumbprint),
             "worker.heartbeat" => HandleHeartbeatAsync(@params, thumbprint),
@@ -164,6 +180,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             "cluster.config.set"     => HandleClusterConfigSetAsync(@params),
             _                  => Task.FromResult(ClusterDispatchOutcome.NotHandled),
         };
+    }
 
     // ── Worker registration / heartbeat ─────────────────────────────────
 

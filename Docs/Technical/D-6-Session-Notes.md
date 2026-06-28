@@ -358,3 +358,170 @@ the existing per-IP per-minute, worker-role lower bound on `tile.next`
 long-poll churn, admin-role unlimited but every call logged. D-6b1
 (SIMD PT4/PT8 sub-rect adaptation) is a perf follow-up — schedule
 behind D-6c → D-6d (doc) → D-6e (stress test) per the plan §9 ordering.
+
+---
+
+## Session 3 — D-6c — Per-role rate limiting (2026-06-28)
+
+**Goal**: layer a per-method, per-role token-bucket limiter on top of the
+existing per-IP TCP-accept limiter. Clients get a per-IP per-minute cap on
+dispatched calls inside an authenticated session, workers get a
+per-thumbprint cap on `tile.next` long-poll churn (other worker methods
+bypass), and admins are never refused but every `cluster.*` call they
+make is recorded as an `admin-call` event in the cluster NDJSON log.
+
+**Sub-slice decision**: a single slice. The audit-log half of the §6.6
+ask co-locates with the limiter naturally and adding it cluster-side
+needs only the one event-emission line. No reason to split a D-6c1.
+Persisting the four new config knobs to live cluster.config.set (so the
+admin UI can edit them at runtime) is out of scope — they are picked up
+at master startup from `server-config.json`, which already round-trips
+through the D-5e `cluster.config.get`/`set` path for the cluster knobs
+it explicitly enumerates. A follow-up can add them to the live-config
+DTO if the operator workflow calls for it.
+
+**Server-side changes**
+
+- `Server/Guard/RoleAwareRateLimiter.cs` (new):
+  * `RoleLimiterDecision { Allow, RefusedRate }` enum.
+  * Composes two `Bucket` instances — one per-IP token bucket for client
+    policy, one per-thumbprint token bucket for the worker `tile.next`
+    policy. Admin path returns `Allow` unconditionally.
+  * Worker non-`tile.next` methods bypass — heartbeat cadence and
+    per-tile-budget mechanics already bound their volume.
+  * Bucket impl mirrors the existing `EndpointRateLimiter` math
+    (token-bucket with capacity, time-decay refill, sweep-once-per-minute
+    cleanup of idle full buckets) but keyed by caller-supplied string so
+    one limiter can mix IP-keyed and thumbprint-keyed policies.
+- `Server/ServerConfig.cs`:
+  * Four new fields, all live in `server-config.json` and read at
+    master startup: `ClientCallPerMinute` (default 600 = 10/sec
+    sustained), `ClientCallBurst` (default 30), `WorkerTileNextPerMinute`
+    (default 600), `WorkerTileNextBurst` (default 30). Defaults sized
+    to be invisible under normal UI / dashboard polling but tight enough
+    to catch a runaway loop.
+- `Server/FFServer.cs`:
+  * Constructor builds a `RoleAwareRateLimiter` alongside the existing
+    `EndpointRateLimiter`.
+  * `HandleConnectionAsync` now passes the resolved remote IP through
+    to `DispatchAsync` (per-method limiter needs the per-call key).
+  * `DispatchAsync` consults the limiter before routing. `server.status`
+    bypasses (cheap liveness probe; locking out a probe loop is worse
+    than the call cost). Refusals reply with the new `rate-limited`
+    error code, log a `Warn` line on the session log, and record the
+    failure in `Metrics`.
+- `Server/Cluster/ClusterCoordinator.cs`:
+  * `HandleAsync` now emits a `kind:"admin-call"` event with the method
+    name + normalised thumbprint whenever the caller is `CertRole.Admin`
+    and the method starts with `cluster.`. Coordinator method body
+    expression-bodied switch is now a regular switch so the audit-log
+    prelude can run before the dispatch.
+
+**Tests**
+
+- `Server.Tests/Cluster/RoleAwareRateLimiterTests.cs` (new) — 8 cases
+  across two fixtures:
+  * `Admin_Always_Allowed_Even_With_Tight_Buckets` — admin runs 100
+    calls against a `perMinute=60, burst=1` config that would refuse
+    any other role after one call.
+  * `Worker_TileNext_Bucket_Exhausts_Then_Refuses` — burst-of-3 cap,
+    fourth `tile.next` call refused.
+  * `Worker_NonTileNext_Methods_Bypass_Limiter` — burst-of-1, after
+    the lone `tile.next` token is spent, 50 iterations of
+    `worker.heartbeat`/`tile.deliver`/`tile.error`/`worker.register`
+    all still allow. Load-bearing for the cadence + per-tile-budget
+    reasoning behind the bypass.
+  * `Worker_Buckets_Are_Per_Thumbprint` — two thumbprints share an
+    implicit-NAT IP; each gets its own bucket so a runaway worker
+    cannot starve its peer.
+  * `Client_Bucket_Exhausts_Then_Refuses_Per_IP` — per-IP isolation
+    mirror for the client policy.
+  * `Disabled_PerMinute_Allows_All` — `perMinute=0` on both policies
+    keeps the limiter open across 200 client + worker calls.
+  * `Cluster_Method_By_Admin_Writes_AdminCall_Event` — drives a real
+    `cluster.status` call as admin, disposes the logger to flush,
+    asserts the NDJSON file contains a line with `"kind":"admin-call"`
+    and `"method":"cluster.status"`.
+  * `Cluster_Method_By_NonAdmin_Skipped_From_AdminCall_Event` — same
+    call as `Client` role; the admin-call event must not appear (the
+    FFServer role gate would refuse the call in production, but the
+    coordinator's audit-log path must independently not fire for the
+    non-admin caller).
+
+- Test suite: **337 passed, 0 failed** (was 329; +8 new D-6c tests).
+  No existing test churn.
+
+**Design decisions**
+
+#101. Per-method limiter is layered on top of the existing per-IP
+  TCP-accept limiter, not a replacement. Reason: the accept-loop
+  limiter bounds connection-establish churn before TLS — it never sees
+  calls inside an authenticated session. A long-lived worker holds one
+  socket and pumps `tile.next` in a loop; only a per-method limiter
+  can bound that surface. Two limiters compose naturally (one at TCP,
+  one at JSON-RPC) and the per-IP limiter stays exactly the same.
+
+#102. Worker key is the cert thumbprint, not the IP. Reason: workers
+  reconnect after restarts (the registry's thumbprint pinning is
+  designed for this) and multiple workers may share an IP (LAN NAT,
+  developer machine running two test workers). An IP-keyed worker
+  policy would either share a bucket across peers (one runaway starves
+  all) or reset the bucket on reconnect (defeats the whole point).
+  The cert thumbprint is the stable identity the master already pins.
+
+#103. Only `tile.next` is rate-gated on the worker side. Reason:
+  `worker.heartbeat` is cadence-bounded (one per `HeartbeatIntervalSeconds`,
+  enforced by the registry — too-fast heartbeats refresh the same
+  entry without a downside); `tile.deliver`/`tile.error` are bounded
+  by the number of assigned tiles (the master controls the supply via
+  the dispatcher); `worker.register` is one-shot per session. Adding a
+  limiter to those surfaces would constrain a non-existent attack
+  surface and risk false positives on legitimate reconnect storms.
+
+#104. Admin policy is "log every call" rather than "rate-limit but
+  with a high cap." Reason: the dev plan §6.6 explicitly calls for
+  this asymmetry — the operator must be able to drive a quiesce-all-
+  workers + cancel-all-jobs flow as fast as they can click without
+  the master ever responding `rate-limited`. The audit trail makes
+  the "no limit" surface accountable; the cluster NDJSON file rolls
+  daily so the events join the existing operator-debug stream.
+
+#105. `server.status` bypasses the limiter. Reason: external
+  monitoring (uptime probes, status dashboards) calls it on a tight
+  cadence with the client cert. With the default `ClientCallPerMinute=600`
+  this is already non-blocking, but a probe behind a flapping NAT
+  could reset to a new IP under the bucket and still get caught. The
+  call is cheap (a few microseconds; no engine work, no DB touch),
+  so the limiter buys nothing for it.
+
+#106. `rate-limited` is a new error code rather than reusing `busy`.
+  Reason: `busy` already means "the queue gate is full — try again
+  after current renders finish." Rate-limited means "your specific
+  caller has used its allowance; back off." The two have different
+  client behaviours (`busy` retries after seconds, `rate-limited`
+  retries after a small fraction of a minute) so the error vocabulary
+  is worth distinguishing.
+
+#107. Four config fields rather than one unified
+  `RateLimitPolicy` object. Reason: matches the existing
+  `RateLimitPerMinute`/`RateLimitBurst` shape on the same ServerConfig
+  (which is the per-IP accept-loop limiter) — operators editing the
+  JSON by hand see a flat list. A future consolidation can wrap them
+  in a sub-object without a wire break (the JSON property names stay
+  the same).
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing 4 AVLN5001
+  TextBox.Watermark obsoletes only (unchanged from D-6b).
+- Test suite: **337 passed, 0 failed** (+8 since D-6b's 329).
+- Filtered `--filter "FullyQualifiedName~RoleAwareRateLimiterTests|FullyQualifiedName~AdminAuditLogTests"`:
+  8 passed in 64 ms.
+
+**Next session** opens D-6d: operator doc at
+`Docs/User/Distributed-UserGuide.md` (§9 D-6 item 4). Covers cert
+issuance + role-OU convention, `--master` / worker launch, the admin
+UI tour from D-5, plus the new rate-limit knobs from this session. D-6e
+closes the phase with the stress-test (`Server.Tests`: 50 concurrent
+client connections, 8 workers, 200 queued jobs) and any cleanup the
+doc-writing surfaces.
