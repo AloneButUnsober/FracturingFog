@@ -99,3 +99,110 @@ dev plan's literal `worker.quiesce` / `worker.kill` move here because
 over `FFClientConnection`) + the `ClusterDashboardView` workers grid.
 Yellow `#FFCC00` for stale/quiesced/problem states per the user's
 colourblind note in CLAUDE.md.
+
+---
+
+## Session 2 — D-5b — FFAdminConnection + ClusterDashboardView (2026-06-28)
+
+**Goal**: ship the admin-cert wire wrapper + the first Avalonia view that
+binds against it. A running master with at least one worker should show up
+in the dashboard, polled every 5 s.
+
+**New types**
+
+- `Client/FFAdminConnection.cs` — composes `FFClientConnection`, exposes
+  only the four admin RPCs from D-5a (`GetClusterStatusAsync`,
+  `SetWorkerQuiescedAsync`, `KillWorkerAsync`, `ListJobsAsync`). Same
+  TLS plumbing, just an OU=role-admin cert.
+- `UI.Avalonia/ViewModels/ClusterDashboardViewModel.cs` — `DispatcherTimer`
+  on a 5 s cadence (mirrors `ServerAdminViewModel`); rebuilds `Workers` /
+  `RecentJobs` observable collections from each `cluster.status` snapshot.
+  Cert paths resolved from `%APPDATA%\FracturingFog\cluster-certs\` so no
+  extra config UI is needed for the first cut.
+- `UI.Avalonia/ViewModels/ClusterDashboardViewModel.cs` also carries the
+  two row VMs `ClusterWorkerRowVm` + `ClusterJobRowVm` — formatting +
+  derived state (stale flag, status badge, `#FFCC00` row background) lives
+  there so the XAML stays declarative.
+- `UI.Avalonia/Views/ClusterDashboardView.axaml` (+ `.cs`) — two stacked
+  `ItemsControl` grids (workers above, recent jobs below) with hand-rolled
+  fixed-column rows. Plain `DataGrid` was rejected because Avalonia's
+  DataGrid template can't bind a per-row background to a string property
+  without an `IValueConverter`, and the converter machinery would have
+  been bigger than the markup it replaced.
+
+**Wiring**
+
+- `FFClientConnection.CallAsync<T>` flipped from `private` to `internal` so
+  the new admin wrapper (same assembly) can share the framing/error-envelope
+  plumbing instead of duplicating it.
+- `ServerAdminViewModel` gains `OpenClusterDashboardCommand` +
+  `OpenClusterDashboardRequested` event; the SAVM owns no knowledge of the
+  cluster view — it just raises and the shell handles routing (mirrors the
+  `HelpRequested` pattern used by the colour-theme editor).
+- `ServerAdminView.axaml` — new "Cluster" group below the Lifecycle group
+  with a single "Cluster Dashboard…" button. One-line hint reminds the
+  operator that the master must run once to mint `admin.pfx`.
+- `ShellViewModel` — new `ClusterDashboard` property +
+  `IsClusterDashboardVisible` flag + `ShowClusterDashboard()` private
+  method; subscribes `OpenClusterDashboardRequested` when the SAVM is
+  lazily constructed in `ShowServerAdmin`.
+- `MainWindow.axaml.cs` — new `_clusterDashboardWin` field +
+  `SyncClusterDashboard()` clone of `SyncServerAdmin`, plus the matching
+  `OnClosed` close. Property-change switch routes both
+  `IsClusterDashboardVisible` and `ClusterDashboard` through the sync.
+
+**Design decisions**
+
+#68. `FFAdminConnection` is composition, not inheritance. Reason:
+  inheriting would expose the parent's `RenderImageAsync` /
+  `SubmitJobAsync` surface on an admin connection — those would silently
+  fail with `forbidden` because the master role gate refuses `render.*` and
+  `job.*` from `CertRole.Admin`. Composition makes the smaller surface a
+  compile-time guarantee.
+
+#69. Yellow `#FFCC00` for both stale workers AND quiesced workers, plus
+  failed/cancelled jobs. Reason: the user's red-green colourblindness
+  (CLAUDE.md memory note) means red wouldn't read as a warning. The
+  existing convention in `ServerAdminView` for problem text (the help
+  button's `#FFCC00` foreground) extends naturally to row backgrounds.
+  Distinguishing stale vs. quiesced is left to the `StatusBadge` text
+  ("STALE" / "QUIESCED" / "LIVE") since both states are equally
+  actionable from a dashboard.
+
+#70. Cert bundle is resolved by absolute path
+  (`%APPDATA%\FracturingFog\cluster-certs\admin.pfx`) rather than reusing
+  the per-machine cluster bundle generator. Reason: pulling
+  `ServerHost.ClusterEntry` into `UI.Avalonia/` would drag in the headless
+  render engine + the entire cluster master assembly, blowing up the UI
+  project's transitive closure. The dashboard only needs file paths; the
+  master is what actually mints the bundle on first run.
+
+#71. Per-row `Background="{Binding RowBackgroundHex}"` is bound straight
+  to a string ("#FFCC00" / "Transparent"). Reason: Avalonia auto-converts
+  string colours to `ISolidColorBrush` at bind time. Removed an
+  `IValueConverter` and a `ResourceDictionary` switch from the XAML; if the
+  D-5d kill/quiesce buttons want hover states later, they can promote
+  this to an `IBrush` without changing the wire shape.
+
+#72. Dashboard window is launched from `ServerAdminView` rather than a
+  top-level floating-menu button. Reason: the dev plan §8 puts the whole
+  cluster admin surface (dashboard + per-worker detail + per-job detail +
+  master config) behind one launch point; keeping the entry inside the
+  existing server admin window means D-5d's MasterConfigView can land
+  inline as a tab without re-opening the discovery question. Floating menu
+  stays tidy.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, 35 pre-existing warnings (codegen
+  CS0219 unused vars + 4 `TextBox.Watermark` obsoletes from older Avalonia
+  views).
+- Test suite: **306 passed, 0 failed** — unchanged from D-5a; D-5b adds no
+  test files (the wire is already covered by `ClusterAdminRpcTests`, the
+  wrapper is a pass-through, and the view smoke lands in D-5e).
+
+**Next session** opens D-5c: `JobListView` (paged + filterable, backed by
+`cluster.listJobs`) and `JobDetailView` (per-job tile map coloured by
+worker, polled via the existing `job.status` route). Will need to surface
+per-tile `WorkerId` in `JobStatusDto` — currently the status payload has
+counters only.

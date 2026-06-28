@@ -1128,6 +1128,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _serverAdmin, value);
     }
 
+    private ClusterDashboardViewModel? _clusterDashboard;
+    public ClusterDashboardViewModel? ClusterDashboard
+    {
+        get => _clusterDashboard;
+        private set => this.RaiseAndSetIfChanged(ref _clusterDashboard, value);
+    }
+
     // ── Window visibility flags (bound to Window.IsVisible) ──────────────
 
     private bool _isFloatingMenuVisible;
@@ -1188,6 +1195,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isServerAdminVisible;
         set => this.RaiseAndSetIfChanged(ref _isServerAdminVisible, value);
+    }
+
+    private bool _isClusterDashboardVisible;
+    public bool IsClusterDashboardVisible
+    {
+        get => _isClusterDashboardVisible;
+        set => this.RaiseAndSetIfChanged(ref _isClusterDashboardVisible, value);
     }
 
     // ── Window title (program name + version + renderer description) ────
@@ -1633,8 +1647,25 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private void ShowServerAdmin()
     {
         if (ServerAdmin == null)
+        {
             ServerAdmin = new ServerAdminViewModel();
+            // SAVM exposes a "Cluster Dashboard…" button; bounce that through
+            // the shell so MainWindow's SyncClusterDashboard handles the
+            // window lifecycle on the same visibility-flag pattern as the
+            // other floating windows.
+            ServerAdmin.OpenClusterDashboardRequested += (_, _) => ShowClusterDashboard();
+        }
         IsServerAdminVisible = true;
+    }
+
+    private void ShowClusterDashboard()
+    {
+        if (ClusterDashboard == null)
+        {
+            ClusterDashboard = new ClusterDashboardViewModel();
+            ClusterDashboard.CloseRequested += (_, _) => IsClusterDashboardVisible = false;
+        }
+        IsClusterDashboardVisible = true;
     }
 
     private void ShowHelp()

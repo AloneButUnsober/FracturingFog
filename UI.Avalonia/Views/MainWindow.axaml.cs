@@ -41,6 +41,7 @@ public sealed partial class MainWindow : Window
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
+    private ClusterDashboardView? _clusterDashboardWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
     private MiniWindowTether? _miniMapTether;
@@ -559,6 +560,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsServerAdminVisible):
             case nameof(ShellViewModel.ServerAdmin):
                 SyncServerAdmin();
+                break;
+            case nameof(ShellViewModel.IsClusterDashboardVisible):
+            case nameof(ShellViewModel.ClusterDashboard):
+                SyncClusterDashboard();
                 break;
             case nameof(ShellViewModel.IsMiniMapVisible):
                 SyncMiniMap();
@@ -1081,6 +1086,33 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncClusterDashboard()
+    {
+        if (_shell == null) return;
+        if (_shell.IsClusterDashboardVisible && _shell.ClusterDashboard != null)
+        {
+            if (_clusterDashboardWin == null)
+            {
+                _clusterDashboardWin = new ClusterDashboardView { DataContext = _shell.ClusterDashboard };
+                _clusterDashboardWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsClusterDashboardVisible = false;
+                };
+            }
+            else if (_clusterDashboardWin.DataContext != _shell.ClusterDashboard)
+            {
+                _clusterDashboardWin.DataContext = _shell.ClusterDashboard;
+            }
+            if (!_clusterDashboardWin.IsVisible) _clusterDashboardWin.Show(this);
+        }
+        else
+        {
+            _clusterDashboardWin?.Hide();
+        }
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         _shuttingDown = true;
@@ -1100,6 +1132,7 @@ public sealed partial class MainWindow : Window
         _helpWin?.Close();
         _ffClientWin?.Close();
         _serverAdminWin?.Close();
+        _clusterDashboardWin?.Close();
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
 
