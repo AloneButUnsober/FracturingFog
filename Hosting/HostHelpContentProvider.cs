@@ -44,10 +44,15 @@ namespace FracturingFog.Hosting
         {
             get
             {
-                // BAB (2026-06-28) - Change version referenced for display
-                return Assembly.GetEntryAssembly()?
+                // BAB (2026-06-28) - Change version referenced for display.
+                // User InformationalVersion but strip off the git commit info for 
+                // onscreen and watermark display.
+                string versionInfo = Assembly.GetEntryAssembly()?
                     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
                     .InformationalVersion ?? "(unknown)";
+
+                if (versionInfo.Contains('+')) versionInfo = versionInfo.Split('+')[0];
+                return versionInfo;
             }
         }
 
