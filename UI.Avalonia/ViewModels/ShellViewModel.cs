@@ -1156,6 +1156,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _workerDetail, value);
     }
 
+    private MasterConfigViewModel? _masterConfig;
+    public MasterConfigViewModel? MasterConfig
+    {
+        get => _masterConfig;
+        private set => this.RaiseAndSetIfChanged(ref _masterConfig, value);
+    }
+
     // ── Window visibility flags (bound to Window.IsVisible) ──────────────
 
     private bool _isFloatingMenuVisible;
@@ -1244,6 +1251,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isWorkerDetailVisible;
         set => this.RaiseAndSetIfChanged(ref _isWorkerDetailVisible, value);
+    }
+
+    private bool _isMasterConfigVisible;
+    public bool IsMasterConfigVisible
+    {
+        get => _isMasterConfigVisible;
+        set => this.RaiseAndSetIfChanged(ref _isMasterConfigVisible, value);
     }
 
     // ── Window title (program name + version + renderer description) ────
@@ -1696,8 +1710,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // window lifecycle on the same visibility-flag pattern as the
             // other floating windows.
             ServerAdmin.OpenClusterDashboardRequested += (_, _) => ShowClusterDashboard();
+            // D-5e — sibling launcher for the live cluster-knob editor.
+            ServerAdmin.OpenMasterConfigRequested     += (_, _) => ShowMasterConfig();
         }
         IsServerAdminVisible = true;
+    }
+
+    private void ShowMasterConfig()
+    {
+        if (MasterConfig == null)
+        {
+            MasterConfig = new MasterConfigViewModel();
+            MasterConfig.CloseRequested += (_, _) => IsMasterConfigVisible = false;
+        }
+        IsMasterConfigVisible = true;
     }
 
     private void ShowClusterDashboard()

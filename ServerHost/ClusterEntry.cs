@@ -92,7 +92,33 @@ public static class ClusterEntry
             Dispatcher     = disp,
             Codec          = codec,
             EngineBuildSha = MasterEngineBuildSha(),
+            // D-5e — live-tunable cluster knobs. Seed from server-config.json
+            // so a master restart picks up whatever the admin UI last saved.
+            // cluster.config.set persists back through PersistConfig so the
+            // dial sticks across restarts without an out-of-band edit.
+            ClusterMaxJobs                  = cfg.ClusterMaxJobs,
+            ClusterArtifactRetentionMinutes = cfg.ClusterArtifactRetentionMinutes,
+            ClusterTileTargetPixels         = cfg.ClusterTileTargetPixels,
+            PersistConfig = snap =>
+            {
+                cfg.ClusterMaxJobs                  = snap.ClusterMaxJobs;
+                cfg.ClusterArtifactRetentionMinutes = snap.ClusterArtifactRetentionMinutes;
+                cfg.ClusterTileTargetPixels         = snap.ClusterTileTargetPixels;
+                cfg.Save();
+            },
         };
+
+        // D-5e — periodic eviction of terminal jobs older than the retention
+        // window. Timer drives JobStore.EvictExpired; reads ClusterArtifactRetentionMinutes
+        // live so a config.set takes effect on the next tick without restart.
+        // 0 = never evict (timer stays armed but skips the call).
+        using var evictionTimer = new System.Threading.Timer(_ =>
+        {
+            int mins = coord.ClusterArtifactRetentionMinutes;
+            if (mins <= 0) return;
+            try { jobStore.EvictExpired(TimeSpan.FromMinutes(mins)); }
+            catch { /* best-effort sweep; next tick retries */ }
+        }, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
 
         var engine = new HostFractalRenderEngine();
         var server = new FFServer(cfg, engine, trust) { Coordinator = coord };

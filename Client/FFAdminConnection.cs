@@ -79,5 +79,31 @@ public sealed class FFAdminConnection : IAsyncDisposable
             new JobTileMapRequestDto { JobId = jobId },
             ct);
 
+    /// <summary>cluster.config.get — read the three live-tunable cluster
+    /// knobs (max jobs, artifact retention minutes, default tile target).
+    /// Backs the MasterConfigView load.</summary>
+    public Task<ClusterConfigDto> GetClusterConfigAsync(CancellationToken ct)
+        => _inner.CallAsync<ClusterConfigDto>(
+            "cluster.config.get",
+            new ClusterConfigGetRequestDto(),
+            ct);
+
+    /// <summary>cluster.config.set — apply any subset of the three knobs.
+    /// Returns the post-apply snapshot so the UI can show the clamped /
+    /// persisted values without a second round-trip. Pass null for fields
+    /// the operator did not change.</summary>
+    public Task<ClusterConfigDto> SetClusterConfigAsync(
+        int? maxJobs, int? artifactRetentionMinutes, int? tileTargetPixels,
+        CancellationToken ct)
+        => _inner.CallAsync<ClusterConfigDto>(
+            "cluster.config.set",
+            new ClusterConfigSetRequestDto
+            {
+                ClusterMaxJobs                  = maxJobs,
+                ClusterArtifactRetentionMinutes = artifactRetentionMinutes,
+                ClusterTileTargetPixels         = tileTargetPixels,
+            },
+            ct);
+
     public ValueTask DisposeAsync() => _inner.DisposeAsync();
 }

@@ -57,6 +57,28 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     /// (tighter wall-clock between deliver and encode).</summary>
     public int MaxFrameQueueDepth { get; init; } = 64;
 
+    /// <summary>D-5e — cap on concurrent non-terminal jobs. 0 = unlimited.
+    /// job.submit beyond this returns "queue-full". Live-mutable through
+    /// cluster.config.set so the admin UI can dial it without a master
+    /// restart.</summary>
+    public int ClusterMaxJobs { get; set; } = 0;
+
+    /// <summary>D-5e — retention window for terminal jobs. Drives the
+    /// <see cref="JobStore.EvictExpired"/> sweep that ClusterEntry runs on
+    /// a minute timer. 0 = never evict. Live-mutable.</summary>
+    public int ClusterArtifactRetentionMinutes { get; set; } = 60;
+
+    /// <summary>D-5e — default per-tile pixel side handed to
+    /// <see cref="TilePlanner.PlanImage"/> when the client supplies no
+    /// hint and the registry has no learned EMA / worker hints. 0 = use
+    /// <see cref="TilePlanner.DefaultTilePixels"/>. Live-mutable.</summary>
+    public int ClusterTileTargetPixels { get; set; } = 0;
+
+    /// <summary>D-5e — invoked after a successful cluster.config.set so the
+    /// host (ClusterEntry) can persist the new values to server-config.json.
+    /// Null = in-memory only; admin UI changes vanish on master restart.</summary>
+    public Action<ClusterConfigDto>? PersistConfig { get; init; }
+
     public WorkerRegistry  Registry   { get; }
     public JobStore?       Jobs       { get; init; }
     public TileDispatcher? Dispatcher { get; init; }
@@ -123,6 +145,9 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             // client-facing, polled at 1 Hz) because the payload scales
             // with TileCount; admin UI polls this at 2 s on the open job.
             "cluster.jobTileMap"     => HandleClusterJobTileMapAsync(@params),
+            // D-5e — live-tunable cluster knobs surfaced by MasterConfigView.
+            "cluster.config.get"     => HandleClusterConfigGetAsync(@params),
+            "cluster.config.set"     => HandleClusterConfigSetAsync(@params),
             _                  => Task.FromResult(ClusterDispatchOutcome.NotHandled),
         };
 
@@ -991,6 +1016,25 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
         if (dto is null) return Err("bad-request", "missing params");
 
+        // D-5e — admin-configurable cap on concurrent non-terminal jobs.
+        // 0 = unlimited. Counts off the on-disk store so a restart doesn't
+        // forget queued/rendering work that's still around. Cheap: the
+        // store is bounded by the artifact-retention sweep.
+        if (ClusterMaxJobs > 0)
+        {
+            int active = 0;
+            foreach (var id in Jobs.ListJobIds())
+            {
+                var s = Jobs.ReadStatus(id);
+                if (s is null) continue;
+                if (s.JobState is "ready" or "failed" or "cancelled") continue;
+                active++;
+            }
+            if (active >= ClusterMaxJobs)
+                return Err("queue-full",
+                    $"cluster has {active} active jobs, cap is {ClusterMaxJobs}");
+        }
+
         bool isVideo     = string.Equals(dto.Request.Mode, "video",     StringComparison.OrdinalIgnoreCase);
         bool isImage     = string.Equals(dto.Request.Mode, "image",     StringComparison.OrdinalIgnoreCase);
         bool isSlideshow = string.Equals(dto.Request.Mode, "slideshow", StringComparison.OrdinalIgnoreCase);
@@ -1027,7 +1071,13 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 // planner. First job sees median=0 (no data); planner falls
                 // back to PreferredTilePixels. Subsequent jobs auto-size.
                 double medianMsPerKpx = Registry.MedianMsPerKilopixel();
-                plan = TilePlanner.PlanImage(dto.Request, dto.TilePixelsHint, workerHints, medianMsPerKpx);
+                // D-5e — when the client gave no per-job hint AND the admin
+                // configured a cluster-wide default, prefer that over the
+                // built-in TilePlanner.DefaultTilePixels. Lets operators
+                // dial the planner without touching code.
+                int hint = dto.TilePixelsHint;
+                if (hint <= 0 && ClusterTileTargetPixels > 0) hint = ClusterTileTargetPixels;
+                plan = TilePlanner.PlanImage(dto.Request, hint, workerHints, medianMsPerKpx);
             }
         }
         catch (Exception ex) { return Err("plan-failed", ex.Message); }
@@ -1438,6 +1488,69 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         }
         return Ok(resp);
     }
+
+    // ── cluster.config.* (D-5e) ─────────────────────────────────────────
+
+    private Task<ClusterDispatchOutcome> HandleClusterConfigGetAsync(JsonElement? rawParams)
+    {
+        _ = rawParams; // request is parameter-less; ignore the body
+        return Ok(SnapshotConfig());
+    }
+
+    private Task<ClusterDispatchOutcome> HandleClusterConfigSetAsync(JsonElement? rawParams)
+    {
+        ClusterConfigSetRequestDto? dto;
+        try { dto = rawParams?.Deserialize<ClusterConfigSetRequestDto>(JsonRpcFraming.JsonOpts); }
+        catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
+        if (dto is null) return Err("bad-request", "missing params");
+
+        // Validate then commit atomically. Negative values are nonsense for
+        // every knob; clamp instead of refusing so a slider that drifts to
+        // -1 doesn't surface an error to the operator.
+        if (dto.ClusterMaxJobs is int j)
+            ClusterMaxJobs = Math.Max(0, j);
+        if (dto.ClusterArtifactRetentionMinutes is int r)
+            ClusterArtifactRetentionMinutes = Math.Max(0, r);
+        if (dto.ClusterTileTargetPixels is int t)
+        {
+            // 0 = "use TilePlanner.DefaultTilePixels"; any positive value
+            // gets clamped into the planner's accepted range so an admin
+            // can't break tiling by setting 5 or 99999.
+            ClusterTileTargetPixels = t <= 0 ? 0
+                : Math.Clamp(t, TilePlanner.MinTilePixels, TilePlanner.MaxTilePixels);
+        }
+
+        var snap = SnapshotConfig();
+        try { PersistConfig?.Invoke(snap); }
+        catch (Exception ex)
+        {
+            // Persist failure does not undo the in-memory change — the
+            // operator can hit Apply again once the underlying issue
+            // (file permission, disk full) is fixed. Surface the reason
+            // through the cluster log so it's visible without scraping
+            // server-config.json by hand.
+            _log.Event("cluster-config-persist-failed", new Dictionary<string, object?>
+            {
+                ["error"] = ex.Message,
+            });
+        }
+        _log.Event("cluster-config-set", new Dictionary<string, object?>
+        {
+            ["maxJobs"]            = snap.ClusterMaxJobs,
+            ["retentionMinutes"]   = snap.ClusterArtifactRetentionMinutes,
+            ["tileTargetPixels"]   = snap.ClusterTileTargetPixels,
+        });
+        return Ok(snap);
+    }
+
+    /// <summary>D-5e — returns the live config as the same shape that
+    /// cluster.config.get and cluster.config.set respond with.</summary>
+    public ClusterConfigDto SnapshotConfig() => new()
+    {
+        ClusterMaxJobs                  = ClusterMaxJobs,
+        ClusterArtifactRetentionMinutes = ClusterArtifactRetentionMinutes,
+        ClusterTileTargetPixels         = ClusterTileTargetPixels,
+    };
 
     /// <summary>D-5c — read tile geometry off plan.json for the given mode.
     /// Image mode returns one rect per tile + the full image dims; video
