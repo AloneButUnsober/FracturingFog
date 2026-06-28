@@ -109,6 +109,15 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             "job.status"       => HandleJobStatusAsync(@params),
             "job.fetch"        => HandleJobFetchAsync(@params),
             "job.cancel"       => HandleJobCancelAsync(@params),
+            // D-5a — admin RPCs. Live under cluster.* so the role gate in
+            // FFServer (cluster.* → admin only) covers them; per-worker
+            // mutations that the dev plan names worker.quiesce/kill move
+            // here for the same reason (worker.* is reserved for worker→
+            // master traffic).
+            "cluster.status"         => HandleClusterStatusAsync(@params),
+            "cluster.quiesceWorker"  => HandleClusterQuiesceWorkerAsync(@params),
+            "cluster.killWorker"     => HandleClusterKillWorkerAsync(@params),
+            "cluster.listJobs"       => HandleClusterListJobsAsync(@params),
             _                  => Task.FromResult(ClusterDispatchOutcome.NotHandled),
         };
 
@@ -1238,6 +1247,194 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             });
         }
         return Ok(ack);
+    }
+
+    // ── cluster.* admin RPCs (D-5a) ─────────────────────────────────────
+
+    private Task<ClusterDispatchOutcome> HandleClusterStatusAsync(JsonElement? rawParams)
+    {
+        ClusterStatusRequestDto? req = null;
+        if (rawParams.HasValue && rawParams.Value.ValueKind != JsonValueKind.Null)
+        {
+            try { req = rawParams.Value.Deserialize<ClusterStatusRequestDto>(JsonRpcFraming.JsonOpts); }
+            catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
+        }
+        int recentLimit = Math.Clamp(req?.RecentJobLimit ?? 50, 1, 500);
+
+        var resp = new ClusterStatusDto
+        {
+            ServerUnixSeconds        = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            HeartbeatIntervalSeconds = Registry.HeartbeatIntervalSeconds,
+            LiveWorkerCount          = Registry.LiveCount(),
+        };
+
+        foreach (var w in Registry.Snapshot())
+            resp.Workers.Add(BuildWorkerSummary(w));
+
+        if (Jobs != null)
+        {
+            foreach (var summary in BuildRecentJobSummaries(recentLimit, includeTerminal: true, stateFilter: null))
+                resp.Jobs.Add(summary);
+        }
+
+        return Ok(resp);
+    }
+
+    private Task<ClusterDispatchOutcome> HandleClusterQuiesceWorkerAsync(JsonElement? rawParams)
+    {
+        WorkerQuiesceRequestDto? dto;
+        try { dto = rawParams?.Deserialize<WorkerQuiesceRequestDto>(JsonRpcFraming.JsonOpts); }
+        catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
+        if (dto is null || string.IsNullOrEmpty(dto.WorkerId))
+            return Err("bad-request", "workerId required");
+
+        WorkerEntry? entry = null;
+        foreach (var w in Registry.Snapshot())
+            if (string.Equals(w.WorkerId, dto.WorkerId, StringComparison.Ordinal)) { entry = w; break; }
+        if (entry is null)
+            return Err("unknown-worker", $"worker '{dto.WorkerId}' not in registry");
+
+        bool prev = entry.Quiesced;
+        entry.SetQuiesce(dto.Quiesced);
+
+        _log.Event("worker-quiesce", new Dictionary<string, object?>
+        {
+            ["workerId"] = dto.WorkerId,
+            ["prev"]     = prev,
+            ["current"]  = dto.Quiesced,
+        });
+
+        return Ok(new WorkerQuiesceAckDto
+        {
+            WorkerId      = dto.WorkerId,
+            PreviousState = prev,
+            CurrentState  = dto.Quiesced,
+        });
+    }
+
+    private Task<ClusterDispatchOutcome> HandleClusterKillWorkerAsync(JsonElement? rawParams)
+    {
+        WorkerKillRequestDto? dto;
+        try { dto = rawParams?.Deserialize<WorkerKillRequestDto>(JsonRpcFraming.JsonOpts); }
+        catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
+        if (dto is null || string.IsNullOrEmpty(dto.WorkerId))
+            return Err("bad-request", "workerId required");
+
+        bool removed = Registry.Remove(dto.WorkerId);
+        if (removed)
+        {
+            _log.Event("worker-kill", new Dictionary<string, object?>
+            {
+                ["workerId"] = dto.WorkerId,
+            });
+        }
+
+        return Ok(new WorkerKillAckDto
+        {
+            WorkerId = dto.WorkerId,
+            Removed  = removed,
+        });
+    }
+
+    private Task<ClusterDispatchOutcome> HandleClusterListJobsAsync(JsonElement? rawParams)
+    {
+        if (Jobs is null) return Err("not-configured", "master has no jobs");
+
+        JobListRequestDto? req = null;
+        if (rawParams.HasValue && rawParams.Value.ValueKind != JsonValueKind.Null)
+        {
+            try { req = rawParams.Value.Deserialize<JobListRequestDto>(JsonRpcFraming.JsonOpts); }
+            catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
+        }
+        int limit = Math.Clamp(req?.Limit ?? 50, 1, 500);
+        bool includeTerminal = req?.IncludeTerminal ?? true;
+        string? stateFilter = string.IsNullOrEmpty(req?.StateFilter) ? null : req!.StateFilter;
+
+        int total = 0;
+        foreach (var _ in Jobs.ListJobIds()) total++;
+
+        var resp = new JobListDto { TotalCount = total };
+        foreach (var summary in BuildRecentJobSummaries(limit, includeTerminal, stateFilter))
+            resp.Jobs.Add(summary);
+        return Ok(resp);
+    }
+
+    private WorkerSummaryDto BuildWorkerSummary(WorkerEntry w)
+    {
+        return new WorkerSummaryDto
+        {
+            WorkerId                 = w.WorkerId,
+            WorkerName               = w.WorkerName,
+            OsPlatform               = w.OsPlatform,
+            CpuModel                 = w.CpuModel,
+            LogicalCores             = w.LogicalCores,
+            TotalRamBytes            = w.TotalRamBytes,
+            Gpus                     = new List<string>(w.Gpus),
+            MaxConcurrentTiles       = w.MaxConcurrentTiles,
+            PreferredTilePixels      = w.PreferredTilePixels,
+            TilesInFlight            = w.TilesInFlight,
+            CpuPercent               = w.CpuPercent,
+            FreeRamBytes             = w.FreeRamBytes,
+            LastNote                 = w.LastNote,
+            LastHeartbeatUnixSeconds = new DateTimeOffset(w.LastHeartbeatUtc, TimeSpan.Zero).ToUnixTimeSeconds(),
+            RegisteredAtUnixSeconds  = new DateTimeOffset(w.RegisteredAtUtc, TimeSpan.Zero).ToUnixTimeSeconds(),
+            Quiesced                 = w.Quiesced,
+            EmaMsPerKilopixel        = w.EmaMsPerKilopixel,
+            TileSamples              = w.TileSamples,
+        };
+    }
+
+    /// <summary>D-5a — pull job summaries from the on-disk store, newest
+    /// first, capped at <paramref name="limit"/>. Honours
+    /// <paramref name="includeTerminal"/> and <paramref name="stateFilter"/>.
+    /// Reads status.json per job; cheap relative to plan.json and avoids
+    /// a second I/O for the (per-status-cached) Mode field.</summary>
+    private IEnumerable<JobSummaryDto> BuildRecentJobSummaries(
+        int limit, bool includeTerminal, string? stateFilter)
+    {
+        if (Jobs is null) yield break;
+
+        // Build (jobId, status) pairs, sort by createdUnixMs desc, then
+        // filter + cap. JobStore.ListJobIds is dir-order; we re-sort.
+        var pairs = new List<(string Id, PersistedStatus St)>();
+        foreach (var id in Jobs.ListJobIds())
+        {
+            PersistedStatus? st = null;
+            try { st = Jobs.ReadStatus(id); } catch { /* skip races */ }
+            if (st is null) continue;
+            if (!includeTerminal && st.JobState is "ready" or "failed" or "cancelled")
+                continue;
+            if (stateFilter != null && !string.Equals(st.JobState, stateFilter, StringComparison.Ordinal))
+                continue;
+            pairs.Add((id, st));
+        }
+        pairs.Sort((a, b) => b.St.CreatedUnixMs.CompareTo(a.St.CreatedUnixMs));
+
+        int taken = 0;
+        foreach (var (id, st) in pairs)
+        {
+            if (taken++ >= limit) yield break;
+            double pct = st.TilesTotal == 0 ? 0
+                       : 100.0 * st.TilesDone / st.TilesTotal;
+            yield return new JobSummaryDto
+            {
+                JobId            = id,
+                JobState         = st.JobState,
+                Mode             = st.Mode,
+                TilesTotal       = st.TilesTotal,
+                TilesDone        = st.TilesDone,
+                TilesInFlight    = st.TilesInFlight,
+                TotalFrames      = st.TotalFrames,
+                FramesDone       = st.FramesDone,
+                EncodedFrames    = st.EncodedFrames,
+                ProgressPercent  = pct,
+                CreatedUnixMs    = st.CreatedUnixMs,
+                LastUpdateUnixMs = st.LastUpdateUnixMs,
+                ArtifactBytes    = st.ArtifactBytes,
+                ArtifactExt      = st.ArtifactExt,
+                FailReason       = st.FailReason,
+            };
+        }
     }
 
     // ── helpers ─────────────────────────────────────────────────────────
