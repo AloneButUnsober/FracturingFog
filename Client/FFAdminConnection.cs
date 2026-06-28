@@ -69,5 +69,15 @@ public sealed class FFAdminConnection : IAsyncDisposable
             },
             ct);
 
+    /// <summary>cluster.jobTileMap — per-tile rect + state + workerId for the
+    /// JobDetailView tile-map. Polled at ~2 s on the open job; distinct from
+    /// job.status (counters-only, polled at 1 Hz) because the payload scales
+    /// with TileCount.</summary>
+    public Task<JobTileMapDto> GetJobTileMapAsync(string jobId, CancellationToken ct)
+        => _inner.CallAsync<JobTileMapDto>(
+            "cluster.jobTileMap",
+            new JobTileMapRequestDto { JobId = jobId },
+            ct);
+
     public ValueTask DisposeAsync() => _inner.DisposeAsync();
 }

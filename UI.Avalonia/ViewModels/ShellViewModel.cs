@@ -1135,6 +1135,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _clusterDashboard, value);
     }
 
+    private JobListViewModel? _jobList;
+    public JobListViewModel? JobList
+    {
+        get => _jobList;
+        private set => this.RaiseAndSetIfChanged(ref _jobList, value);
+    }
+
+    private JobDetailViewModel? _jobDetail;
+    public JobDetailViewModel? JobDetail
+    {
+        get => _jobDetail;
+        private set => this.RaiseAndSetIfChanged(ref _jobDetail, value);
+    }
+
     // ── Window visibility flags (bound to Window.IsVisible) ──────────────
 
     private bool _isFloatingMenuVisible;
@@ -1202,6 +1216,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isClusterDashboardVisible;
         set => this.RaiseAndSetIfChanged(ref _isClusterDashboardVisible, value);
+    }
+
+    private bool _isJobListVisible;
+    public bool IsJobListVisible
+    {
+        get => _isJobListVisible;
+        set => this.RaiseAndSetIfChanged(ref _isJobListVisible, value);
+    }
+
+    private bool _isJobDetailVisible;
+    public bool IsJobDetailVisible
+    {
+        get => _isJobDetailVisible;
+        set => this.RaiseAndSetIfChanged(ref _isJobDetailVisible, value);
     }
 
     // ── Window title (program name + version + renderer description) ────
@@ -1663,9 +1691,46 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (ClusterDashboard == null)
         {
             ClusterDashboard = new ClusterDashboardViewModel();
-            ClusterDashboard.CloseRequested += (_, _) => IsClusterDashboardVisible = false;
+            ClusterDashboard.CloseRequested      += (_, _)       => IsClusterDashboardVisible = false;
+            // D-5c — dashboard surfaces two drill-in points: "All Jobs"
+            // opens the full paginated list, and per-row "Detail" opens
+            // the tile-map view scoped to one jobId. Both route through
+            // the shell so MainWindow's SyncJobList / SyncJobDetail
+            // handles the window lifecycle on the same flag pattern.
+            ClusterDashboard.OpenJobListRequested  += (_, _)        => ShowJobList();
+            ClusterDashboard.OpenJobDetailRequested += (_, jobId)   => ShowJobDetail(jobId);
         }
         IsClusterDashboardVisible = true;
+    }
+
+    private void ShowJobList()
+    {
+        if (JobList == null)
+        {
+            JobList = new JobListViewModel();
+            JobList.CloseRequested          += (_, _)     => IsJobListVisible = false;
+            // Same drill-in path from the list view as from the dashboard.
+            JobList.OpenJobDetailRequested  += (_, jobId) => ShowJobDetail(jobId);
+        }
+        IsJobListVisible = true;
+    }
+
+    private void ShowJobDetail(string jobId)
+    {
+        if (string.IsNullOrEmpty(jobId)) return;
+        if (JobDetail == null)
+        {
+            JobDetail = new JobDetailViewModel(jobId);
+            JobDetail.CloseRequested += (_, _) => IsJobDetailVisible = false;
+        }
+        else
+        {
+            // Single-instance window: swap target jobId. The setter clears
+            // tile/worker collections + kicks an immediate poll so the
+            // operator sees fresh data without waiting for the 2 s timer.
+            JobDetail.JobId = jobId;
+        }
+        IsJobDetailVisible = true;
     }
 
     private void ShowHelp()

@@ -217,14 +217,18 @@ public sealed class TileDispatcher
 
     /// <summary>Worker successfully delivered a tile. Returns true if
     /// the master should accept the delivery; false if it was already
-    /// completed (idempotent — duplicate delivery from a slow retry).</summary>
-    public bool AcceptDelivery(string jobId, int tileId)
+    /// completed (idempotent — duplicate delivery from a slow retry).
+    /// The accepting worker's id is recorded against the tile so D-5c's
+    /// cluster.jobTileMap can colour the per-tile grid by who rendered
+    /// it. Duplicate delivery (work-steal race) preserves the first
+    /// winner — second delivery sees TryRemove fail and returns false.</summary>
+    public bool AcceptDelivery(string jobId, int tileId, string workerId)
     {
         if (!_jobs.TryGetValue(jobId, out var st)) return false;
         lock (_lock)
         {
             if (!st.InFlight.TryRemove(tileId, out _)) return false;
-            st.Completed.TryAdd(tileId, true);
+            st.Completed[tileId] = workerId;
             return true;
         }
     }
@@ -292,6 +296,41 @@ public sealed class TileDispatcher
 
     public bool KnowsJob(string jobId) => _jobs.ContainsKey(jobId);
 
+    /// <summary>D-5c — snapshot of every tile's current live state for the
+    /// admin tile-map view. Returned dictionary is keyed by tileId; the
+    /// value records whether the tile is pending / in-flight / completed,
+    /// plus the worker id (in-flight → assignee, completed → deliverer).
+    /// Pending tiles have no worker id yet. Callers receive a fresh copy
+    /// taken under the dispatcher monitor so iteration is safe without
+    /// holding the lock; tiles missing from the result are pending and
+    /// have never been claimed.</summary>
+    public IReadOnlyDictionary<int, TileLiveState> SnapshotTileStates(string jobId)
+    {
+        if (!_jobs.TryGetValue(jobId, out var st))
+            return new Dictionary<int, TileLiveState>();
+        var result = new Dictionary<int, TileLiveState>(st.InFlight.Count + st.Completed.Count);
+        lock (_lock)
+        {
+            foreach (var kv in st.Completed)
+                result[kv.Key] = new TileLiveState("completed", kv.Value);
+            // InFlight wins ties: a tile that was completed by one worker
+            // and re-stolen for a duplicate run still shows as completed
+            // (first delivery is canonical). The dispatcher never moves
+            // a tile from Completed back to InFlight, so this branch only
+            // fills in tiles that haven't been delivered.
+            foreach (var kv in st.InFlight)
+                if (!result.ContainsKey(kv.Key))
+                    result[kv.Key] = new TileLiveState("inflight", kv.Value.WorkerId);
+        }
+        return result;
+    }
+
+    /// <summary>D-5c — one tile's live state in the dispatcher. <c>State</c>
+    /// is <c>pending</c>, <c>inflight</c>, or <c>completed</c>. <c>WorkerId</c>
+    /// is null for pending tiles, the assignee for in-flight, and the first
+    /// successful deliverer for completed.</summary>
+    public readonly record struct TileLiveState(string State, string? WorkerId);
+
     private void SignalAll()
     {
         LinkedListNode<TaskCompletionSource<bool>>? node;
@@ -323,7 +362,12 @@ public sealed class TileDispatcher
     {
         public ConcurrentQueue<TileJobDto> Pending { get; } = new();
         public ConcurrentDictionary<int, InFlightTile> InFlight { get; } = new();
-        public ConcurrentDictionary<int, bool> Completed { get; } = new();
+        /// <summary>D-5c — value is the workerId that delivered this tile so
+        /// the cluster.jobTileMap RPC can colour the per-tile grid by who
+        /// rendered it. Pre-D-5c the value was a plain <c>bool</c>; the
+        /// only consumer was <see cref="CompletedCount"/> which still works
+        /// because <c>Count</c> is value-type-agnostic.</summary>
+        public ConcurrentDictionary<int, string> Completed { get; } = new();
     }
 
     private sealed class InFlightTile

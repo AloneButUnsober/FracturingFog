@@ -118,6 +118,11 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             "cluster.quiesceWorker"  => HandleClusterQuiesceWorkerAsync(@params),
             "cluster.killWorker"     => HandleClusterKillWorkerAsync(@params),
             "cluster.listJobs"       => HandleClusterListJobsAsync(@params),
+            // D-5c — per-job tile map for JobDetailView (rect + state +
+            // workerId per tile). Distinct from job.status (counters-only,
+            // client-facing, polled at 1 Hz) because the payload scales
+            // with TileCount; admin UI polls this at 2 s on the open job.
+            "cluster.jobTileMap"     => HandleClusterJobTileMapAsync(@params),
             _                  => Task.FromResult(ClusterDispatchOutcome.NotHandled),
         };
 
@@ -406,7 +411,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         // Persist the raw payload too — useful for crash recovery + debug.
         try { Jobs.WriteTileBytes(dto.JobId, dto.TileId, decoded); } catch { }
 
-        Dispatcher.AcceptDelivery(dto.JobId, dto.TileId);
+        Dispatcher.AcceptDelivery(dto.JobId, dto.TileId, dto.WorkerId);
 
         // D-3b — feed the EMA so future jobs adapt tile size to this
         // worker's measured throughput. Stolen-tile duplicates land here
@@ -514,7 +519,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         // Accept the tile — duplicate-delivery first-wins handled inside
         // the dispatcher (returns false for already-completed tile, which
         // is fine here too).
-        Dispatcher!.AcceptDelivery(dto.JobId, dto.TileId);
+        Dispatcher!.AcceptDelivery(dto.JobId, dto.TileId, dto.WorkerId);
 
         // Per-frame-pixel rate feeds the same EMA as image tiles. Treat
         // pixels as (W * H * frame count) so a frame-range tile's measured
@@ -625,7 +630,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             }
         }
 
-        Dispatcher!.AcceptDelivery(dto.JobId, dto.TileId);
+        Dispatcher!.AcceptDelivery(dto.JobId, dto.TileId, dto.WorkerId);
 
         // Per-tile EMA feed: each slide is its own full render so pixels
         // == W * H of the delivered tile.
@@ -1357,6 +1362,123 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         foreach (var summary in BuildRecentJobSummaries(limit, includeTerminal, stateFilter))
             resp.Jobs.Add(summary);
         return Ok(resp);
+    }
+
+    private Task<ClusterDispatchOutcome> HandleClusterJobTileMapAsync(JsonElement? rawParams)
+    {
+        if (Jobs is null || Dispatcher is null)
+            return Err("not-configured", "master has no jobs/dispatcher");
+
+        JobTileMapRequestDto? dto;
+        try { dto = rawParams?.Deserialize<JobTileMapRequestDto>(JsonRpcFraming.JsonOpts); }
+        catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
+        if (dto is null || string.IsNullOrEmpty(dto.JobId))
+            return Err("bad-request", "jobId required");
+
+        var st = Jobs.ReadStatus(dto.JobId);
+        if (st is null) return Err("unknown-job", $"job '{dto.JobId}' not found");
+
+        var resp = new JobTileMapDto
+        {
+            JobId         = dto.JobId,
+            JobState      = st.JobState,
+            Mode          = st.Mode,
+            TilesTotal    = st.TilesTotal,
+            TilesDone     = st.TilesDone,
+            TilesInFlight = st.TilesInFlight,
+        };
+
+        // Plan.json carries tile rects (image), frame ranges (video) or
+        // slide indices (slideshow). Read once and walk it; per-tile state
+        // pulled from the dispatcher snapshot.
+        var (rects, imgW, imgH) = ReadTileLayout(dto.JobId, st.Mode);
+        resp.ImageWidth  = imgW;
+        resp.ImageHeight = imgH;
+
+        var liveStates = Dispatcher.SnapshotTileStates(dto.JobId);
+        // Terminal jobs (ready / failed / cancelled): the dispatcher has
+        // retired the job and SnapshotTileStates returns empty. Synthesise
+        // completed entries from TilesTotal so the UI still has something
+        // to render — workerId is gone, but the rect + state is enough to
+        // show a "finished" view.
+        bool retired = liveStates.Count == 0
+                    && st.JobState is "ready" or "failed" or "cancelled";
+
+        int total = rects.Count > 0 ? rects.Count : st.TilesTotal;
+        for (int i = 0; i < total; i++)
+        {
+            var rect = i < rects.Count ? rects[i] : default;
+            string state;
+            string? workerId;
+            if (liveStates.TryGetValue(i, out var live))
+            {
+                state    = live.State;
+                workerId = live.WorkerId;
+            }
+            else if (retired)
+            {
+                state    = st.JobState == "ready" ? "completed" : st.JobState;
+                workerId = null;
+            }
+            else
+            {
+                state    = "pending";
+                workerId = null;
+            }
+            resp.Tiles.Add(new TileMapEntryDto
+            {
+                TileId   = i,
+                OffsetX  = rect.OffsetX,
+                OffsetY  = rect.OffsetY,
+                Width    = rect.Width,
+                Height   = rect.Height,
+                State    = state,
+                WorkerId = workerId,
+            });
+        }
+        return Ok(resp);
+    }
+
+    /// <summary>D-5c — read tile geometry off plan.json for the given mode.
+    /// Image mode returns one rect per tile + the full image dims; video
+    /// and slideshow return empty rects + 0/0 dims because their tile
+    /// layout has no spatial component (video = frame ranges, slideshow =
+    /// per-slide PNGs). Failures (missing plan, malformed JSON) collapse
+    /// to empty so the handler can still emit a counters-only response.</summary>
+    private (IReadOnlyList<TileMeta> Rects, int ImageWidth, int ImageHeight) ReadTileLayout(
+        string jobId, string mode)
+    {
+        var empty = (Rects: (IReadOnlyList<TileMeta>)Array.Empty<TileMeta>(), 0, 0);
+        try
+        {
+            string planPath = Path.Combine(Jobs!.JobDir(jobId), "plan.json");
+            if (!File.Exists(planPath)) return empty;
+            using var fs = File.OpenRead(planPath);
+            using var doc = JsonDocument.Parse(fs);
+            int imgW = doc.RootElement.TryGetProperty("ImageWidth",  out var w) ? w.GetInt32() : 0;
+            int imgH = doc.RootElement.TryGetProperty("ImageHeight", out var h) ? h.GetInt32() : 0;
+
+            // Image mode: every tile carries an offset/render rect — read.
+            // Video / slideshow: tile rects are not meaningful for a 2D
+            // grid; return counters only.
+            if (!string.Equals(mode, "image", StringComparison.OrdinalIgnoreCase))
+                return (Array.Empty<TileMeta>(), imgW, imgH);
+
+            if (!doc.RootElement.TryGetProperty("Tiles", out var tilesEl))
+                return (Array.Empty<TileMeta>(), imgW, imgH);
+            var list = new List<TileMeta>(tilesEl.GetArrayLength());
+            foreach (var el in tilesEl.EnumerateArray())
+            {
+                list.Add(new TileMeta(
+                    el.GetProperty("tileId").GetInt32(),
+                    el.GetProperty("offsetX").GetInt32(),
+                    el.GetProperty("offsetY").GetInt32(),
+                    el.GetProperty("render").GetProperty("width").GetInt32(),
+                    el.GetProperty("render").GetProperty("height").GetInt32()));
+            }
+            return (list, imgW, imgH);
+        }
+        catch { return empty; }
     }
 
     private WorkerSummaryDto BuildWorkerSummary(WorkerEntry w)

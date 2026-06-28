@@ -292,7 +292,7 @@ public static class ClusterScaleSelfTest
                             tile.Render.Width, tile.Render.Height, bgra);
                         if (merged) Interlocked.Increment(ref perWorkerTiles[idx]);
                         else        Interlocked.Increment(ref perWorkerSteals[idx]);
-                        disp.AcceptDelivery(jobId, tile.TileId);
+                        disp.AcceptDelivery(jobId, tile.TileId, $"sw{idx}");
                     }
                     finally { TryDelete(wd); }
                 }
@@ -400,7 +400,7 @@ public static class ClusterScaleSelfTest
                         }
                         finally { TryDelete(wd); }
                     }
-                    disp.AcceptDelivery(jobId, tile.TileId);
+                    disp.AcceptDelivery(jobId, tile.TileId, $"vw{idx}");
                     Interlocked.Increment(ref perWorkerTiles[idx]);
                 }
             });
