@@ -215,6 +215,64 @@ public sealed class JobStore
         return n;
     }
 
+    /// <summary>D-4c — directory holding per-slide PNGs for a slideshow
+    /// job. One file per slide; final artifact is a slides-manifest.json
+    /// produced by the finaliser.</summary>
+    public string SlidesDir(string jobId)
+        => Path.Combine(JobDir(jobId), "slides");
+
+    /// <summary>D-4c — slide filename. 1-based for easy mental
+    /// correspondence with the slideshow's display order; the
+    /// slideIndex on the wire is 0-based (tile id).</summary>
+    public static string SlideFileName(int slideIndex0Based)
+        => $"slide_{slideIndex0Based + 1:D5}.png";
+
+    /// <summary>D-4c — persist one slide's PNG bytes. Same write-and-
+    /// rename pattern as tile / frame bytes so a crashed master never
+    /// leaves a half-written slide that the manifest writer would later
+    /// trip over.</summary>
+    public void WriteSlideBytes(string jobId, int slideIndex, byte[] png)
+    {
+        string dir = SlidesDir(jobId);
+        Directory.CreateDirectory(dir);
+        string finalPath = Path.Combine(dir, SlideFileName(slideIndex));
+        string tmpPath   = finalPath + ".tmp";
+        File.WriteAllBytes(tmpPath, png);
+        if (File.Exists(finalPath)) File.Delete(finalPath);
+        File.Move(tmpPath, finalPath);
+    }
+
+    public bool SlideExists(string jobId, int slideIndex)
+        => File.Exists(Path.Combine(SlidesDir(jobId), SlideFileName(slideIndex)));
+
+    /// <summary>D-4c — write-and-rename helper for slide payloads that
+    /// need an encode step (RGBA → PNG via <see cref="IClusterImageCodec"/>).
+    /// The callback writes to <paramref name="tmpPath"/>; this method then
+    /// atomically renames over the final slide_NNNNN.png. Mirrors the
+    /// crash-safety of <see cref="WriteSlideBytes"/>.</summary>
+    public void EncodeSlideTo(string jobId, int slideIndex, Action<string> encodeToTmp)
+    {
+        string dir = SlidesDir(jobId);
+        Directory.CreateDirectory(dir);
+        string finalPath = Path.Combine(dir, SlideFileName(slideIndex));
+        string tmpPath   = finalPath + ".tmp";
+        encodeToTmp(tmpPath);
+        if (File.Exists(finalPath)) File.Delete(finalPath);
+        File.Move(tmpPath, finalPath);
+    }
+
+    /// <summary>D-4c — count of per-slide files on disk. Used by the
+    /// coordinator to detect a complete slideshow tile-set and by the
+    /// finaliser to know how many entries the manifest should describe.</summary>
+    public int CountSlides(string jobId)
+    {
+        string dir = SlidesDir(jobId);
+        if (!Directory.Exists(dir)) return 0;
+        int n = 0;
+        foreach (var _ in Directory.EnumerateFiles(dir, "slide_*.png")) n++;
+        return n;
+    }
+
     /// <summary>Crash-recovery sweep — invoke at master start. Any job
     /// stuck in rendering/merging/planning becomes "failed" with reason
     /// "master-restart". Returns the count of jobs that were marked.

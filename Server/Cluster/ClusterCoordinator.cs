@@ -79,6 +79,16 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _videoCts =
         new(StringComparer.Ordinal);
 
+    /// <summary>D-4c — slideshow jobs use neither the ArtifactMerger
+    /// (no sub-rect math; each tile is a complete PNG) nor a
+    /// VideoFramePipeline (no encode pass; final artifact is a manifest).
+    /// This set marks slideshow jobs so tile.deliver can route to the
+    /// per-slide write path instead of falling through merger lookup.
+    /// The value is the JobSubmitDto kept alive for the finaliser, which
+    /// consults it for per-slide display-ms + region/theme labels.</summary>
+    private readonly ConcurrentDictionary<string, JobSubmitDto> _slideshowJobs =
+        new(StringComparer.Ordinal);
+
     public ClusterCoordinator(WorkerRegistry registry, ClusterLogger log)
     {
         Registry = registry;
@@ -339,6 +349,12 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         if (string.Equals(dto.PayloadKind, "frames", StringComparison.Ordinal))
             return HandleFramesDeliverAsync(dto, workerEntry, decoded);
 
+        // D-4c — slideshow jobs deliver one whole PNG per tile (no
+        // sub-rect math, no merger). Route past the image-tile path
+        // before it tries to look up a merger that doesn't exist.
+        if (_slideshowJobs.TryGetValue(dto.JobId, out var slideSubmit))
+            return HandleSlideDeliverAsync(dto, workerEntry, decoded, slideSubmit);
+
         if (Codec is null)
             return Err("not-configured", "master has no image codec wired");
 
@@ -534,6 +550,150 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         if (done == total) FinaliseVideoFrames(dto.JobId, framesOnDisk);
 
         return Ok(new TileDeliverAckDto { Accepted = true });
+    }
+
+    /// <summary>D-4c — slideshow tile delivery. The worker rendered a
+    /// whole slide PNG; treat the tile id as the 0-based slide index,
+    /// write the PNG into <see cref="JobStore.SlidesDir"/>, update
+    /// counters. On the last slide trigger the manifest assembler.
+    /// Mirrors <see cref="HandleFramesDeliverAsync"/> for video except
+    /// (a) one file per tile (b) no encoder gate (c) no FrameRange.</summary>
+    private Task<ClusterDispatchOutcome> HandleSlideDeliverAsync(
+        TileDeliverDto dto, WorkerEntry workerEntry, byte[] decoded,
+        JobSubmitDto submit)
+    {
+        if (submit.Slides is null || dto.TileId < 0 || dto.TileId >= submit.Slides.Count)
+            return Ok(new TileDeliverAckDto { Accepted = false, RefuseReason = "tile-not-in-flight" });
+
+        // Idempotent: if the slide PNG is already on disk a duplicate
+        // delivery (stealer race) is a no-op accept.
+        bool already = Jobs!.SlideExists(dto.JobId, dto.TileId);
+        if (!already)
+        {
+            // Slideshow tiles arrive as PNG (default) or RGBA — the
+            // worker chose its delivery format per its global config and
+            // doesn't know the parent job is a slideshow. PNG: store as-
+            // is. RGBA: encode through the registered codec straight to
+            // disk so the artifact dir is uniformly PNGs.
+            try
+            {
+                bool isRgba = string.Equals(dto.PayloadKind, "rgba", StringComparison.Ordinal);
+                if (isRgba)
+                {
+                    if (Codec is null)
+                        return Ok(new TileDeliverAckDto
+                        {
+                            Accepted     = false,
+                            RefuseReason = "not-configured",
+                        });
+                    Jobs.EncodeSlideTo(dto.JobId, dto.TileId,
+                        tmp => Codec.EncodeBgraToPng(decoded, dto.Width, dto.Height, tmp));
+                }
+                else if (string.IsNullOrEmpty(dto.PayloadKind)
+                         || string.Equals(dto.PayloadKind, "png", StringComparison.Ordinal))
+                {
+                    Jobs.WriteSlideBytes(dto.JobId, dto.TileId, decoded);
+                }
+                else
+                {
+                    return Ok(new TileDeliverAckDto
+                    {
+                        Accepted     = false,
+                        RefuseReason = "wrong-payload-kind",
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Event("slide-write-failed", new Dictionary<string, object?>
+                {
+                    ["jobId"]  = dto.JobId,
+                    ["tileId"] = dto.TileId,
+                    ["error"]  = ex.Message,
+                });
+                Dispatcher!.RecordFailure(dto.JobId, dto.TileId);
+                return Err("slide-write-failed", ex.Message);
+            }
+        }
+
+        Dispatcher!.AcceptDelivery(dto.JobId, dto.TileId);
+
+        // Per-tile EMA feed: each slide is its own full render so pixels
+        // == W * H of the delivered tile.
+        try { workerEntry.RecordTileTime((long)dto.Width * dto.Height, dto.RenderMs); }
+        catch { }
+
+        int done = Dispatcher.CompletedCount(dto.JobId);
+        int total = submit.Slides.Count;
+        int slidesOnDisk = Jobs.CountSlides(dto.JobId);
+        Jobs.UpdateStatus(dto.JobId, s =>
+        {
+            s.TilesDone     = done;
+            s.TilesInFlight = Dispatcher.InFlightCount(dto.JobId);
+            if (s.JobState is "queued" or "planning") s.JobState = "rendering";
+        });
+        Jobs.AppendEvent(dto.JobId, "slide-delivered", new Dictionary<string, object?>
+        {
+            ["tileId"] = dto.TileId,
+            ["worker"] = dto.WorkerId,
+            ["bytes"]  = decoded.Length,
+            ["ms"]     = dto.RenderMs,
+        });
+
+        if (done == total) FinaliseSlidesAsManifest(dto.JobId, submit, slidesOnDisk);
+
+        return Ok(new TileDeliverAckDto { Accepted = true });
+    }
+
+    /// <summary>D-4c — finaliser for slideshow jobs. Hands off to
+    /// <see cref="SlideshowAssembler"/> which writes a slides-manifest.json
+    /// next to the per-slide PNGs. The manifest is the fetched artifact;
+    /// the per-slide PNGs stay on disk so the client can fetch them
+    /// individually if the renderer prefers streaming the slides.</summary>
+    private void FinaliseSlidesAsManifest(string jobId, JobSubmitDto submit, int slidesOnDisk)
+    {
+        try
+        {
+            Jobs!.UpdateStatus(jobId, s => s.JobState = "merging");
+
+            var result = SlideshowAssembler.Assemble(Jobs, jobId, submit);
+
+            Jobs.UpdateStatus(jobId, s =>
+            {
+                s.JobState       = "ready";
+                s.ArtifactExt    = SlideshowAssembler.ArtifactExt;
+                s.ArtifactBytes  = result.ArtifactBytes;
+                s.ArtifactSha256 = result.ArtifactSha256;
+                s.TilesInFlight  = 0;
+            });
+            Jobs.AppendEvent(jobId, "slides-ready", new Dictionary<string, object?>
+            {
+                ["slides"]      = result.SlideCount,
+                ["slideBytes"]  = result.SlideTotalBytes,
+                ["manifestBytes"] = result.ArtifactBytes,
+            });
+            _log.Event("job-slides-ready", new Dictionary<string, object?>
+            {
+                ["jobId"]      = jobId,
+                ["slides"]     = result.SlideCount,
+                ["slideBytes"] = result.SlideTotalBytes,
+            });
+            Dispatcher!.RetireJob(jobId);
+        }
+        catch (Exception ex)
+        {
+            Jobs?.UpdateStatus(jobId, s => { s.JobState = "failed"; s.FailReason = "slides-finalise-failed: " + ex.Message; });
+            _log.Event("job-failed", new Dictionary<string, object?>
+            {
+                ["jobId"] = jobId,
+                ["where"] = "finalise-slides",
+                ["error"] = ex.Message,
+            });
+        }
+        finally
+        {
+            _slideshowJobs.TryRemove(jobId, out _);
+        }
     }
 
     /// <summary>D-4 finaliser for video jobs. When a streaming encoder
@@ -791,6 +951,10 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             if (_mergers.TryRemove(dto.JobId, out var m)) m.Dispose();
             // D-4b — fail-the-job teardown for the streaming encoder.
             _ = DisposeVideoPipelineAsync(dto.JobId);
+            // D-4c — drop slideshow registration so a re-submitted job
+            // with a colliding id (impossible in practice, defensive)
+            // doesn't inherit stale state.
+            _slideshowJobs.TryRemove(dto.JobId, out _);
             _log.Event("job-failed", new Dictionary<string, object?>
             {
                 ["jobId"]  = dto.JobId,
@@ -813,16 +977,20 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         catch (Exception ex) { return Err("bad-request", $"invalid params: {ex.Message}"); }
         if (dto is null) return Err("bad-request", "missing params");
 
-        bool isVideo = string.Equals(dto.Request.Mode, "video", StringComparison.OrdinalIgnoreCase);
-        bool isImage = string.Equals(dto.Request.Mode, "image", StringComparison.OrdinalIgnoreCase);
-        if (!isVideo && !isImage)
+        bool isVideo     = string.Equals(dto.Request.Mode, "video",     StringComparison.OrdinalIgnoreCase);
+        bool isImage     = string.Equals(dto.Request.Mode, "image",     StringComparison.OrdinalIgnoreCase);
+        bool isSlideshow = string.Equals(dto.Request.Mode, "slideshow", StringComparison.OrdinalIgnoreCase);
+        if (!isVideo && !isImage && !isSlideshow)
             return Err("unsupported-mode",
-                $"cluster supports image|video mode; got '{dto.Request.Mode}'");
+                $"cluster supports image|video|slideshow mode; got '{dto.Request.Mode}'");
 
         // Both image and video tiles render a single image of the same
         // fractal type — same allowlist applies. FramePlanner.ValidateForVideo
         // forwards to TilePlanner so this single check covers both modes.
-        if (!TilePlanner.ValidateForTiling(dto.Request.FractalType, out string? whyNot))
+        // Slideshow validates per-slide inside SlideshowPlanner.PlanSlideshow
+        // because each slide may carry its own FractalType.
+        if (!isSlideshow
+            && !TilePlanner.ValidateForTiling(dto.Request.FractalType, out string? whyNot))
             return Err("untileable-fractal", whyNot!);
 
         TilePlanner.Plan plan;
@@ -831,6 +999,10 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             if (isVideo)
             {
                 plan = FramePlanner.PlanVideo(dto.Request, dto.TilePixelsHint);
+            }
+            else if (isSlideshow)
+            {
+                plan = SlideshowPlanner.PlanSlideshow(dto);
             }
             else
             {
@@ -858,6 +1030,14 @@ public sealed class ClusterCoordinator : IClusterCoordinator
                 return Err("not-configured", "master has no image codec wired");
             var merger = new ArtifactMerger(plan.ImageWidth, plan.ImageHeight, plan.TileCount, Codec);
             _mergers[jobId] = merger;
+        }
+        else if (isSlideshow)
+        {
+            // D-4c — register the slideshow so tile.deliver routes to the
+            // per-slide path. The JobSubmitDto is retained here (not just
+            // on disk) so the finaliser can build the slides-manifest
+            // without re-deserialising request.json.
+            _slideshowJobs[jobId] = dto;
         }
         else
         {
@@ -1049,6 +1229,8 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             // job doesn't leave an ffmpeg child running until the master
             // exits. Fire-and-forget; dispose is best-effort.
             _ = DisposeVideoPipelineAsync(dto.JobId);
+            // D-4c — drop slideshow registration.
+            _slideshowJobs.TryRemove(dto.JobId, out _);
             _log.Event("job-cancelled", new Dictionary<string, object?>
             {
                 ["jobId"] = dto.JobId,

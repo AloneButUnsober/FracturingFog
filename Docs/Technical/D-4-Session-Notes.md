@@ -343,3 +343,138 @@ and lands on the manifest stub, exactly as before.)
   (`ffprobe -show_streams` + per-frame SHA-256).
 - Extend `ClusterScaleSelfTest` with `--mode video` so the harness
   drives multi-worker video as well as image renders.
+
+### Session 3 — 2026-06-27 — D-4c slideshow per-slide sharding
+
+**Goal**: extend the cluster pipeline to accept slideshow jobs.
+One tile per slide; each tile is an independent image-mode render
+of one complete slide PNG (no sub-rect math, no merger). The final
+artifact is a `slides-manifest.json` describing every per-slide PNG
+on disk — clients consume it (or stream individual slides) via the
+existing `job.fetch` plumbing.
+
+**Files added**
+
+- `Server/Cluster/SlideshowPlanner.cs` — `PlanSlideshow(JobSubmitDto)`
+  returns a `TilePlanner.Plan` with `Mode="slideshow"` and one
+  image-mode `TileJobDto` per slide. Each tile's `Render` inherits
+  unset fields from the parent template, pins `Mode="image"`,
+  `ReturnMode="inline"`, `OutputName=null`, `SuppressDecorations=true`.
+  `ValidateForSlideshow` enforces `[MinSlides=2, MaxSlides=2000]`,
+  the tileable-fractal allowlist per slide, and matching
+  `SlideDisplayMs` length when supplied.
+- `Server/Cluster/SlideshowAssembler.cs` — static `Assemble(jobs,
+  jobId, submit)` walks `<jobdir>/slides/`, computes per-slide
+  SHA-256, applies per-slide `displayMs` overrides, and writes
+  `artifact.slides-manifest.json` containing the per-slide
+  `{slideIndex, name, bytes, sha256, displayMs, regionName,
+  themeName}` array. Mirrors `ArtifactMerger` / `VideoFramePipeline`
+  naming so the per-mode finaliser surface stays uniform.
+- `Server.Tests/Cluster/SlideshowPlannerTests.cs` — 9 tests:
+  tile-per-slide invariant, image-mode tile templates, parent-
+  template inheritance, fractal-type allowlist per slide, dim
+  inheritance + per-slide override, displayMs length validation,
+  plan image-dim derivation.
+- `Server.Tests/Cluster/SlideshowAssemblerTests.cs` — 4 tests:
+  manifest schema + per-slide entries, per-slide displayMs override
+  semantics (0 → default), missing-file refusal, JobStore
+  slides-dir + counters round-trip.
+
+**Files amended**
+
+- `Server/Cluster/Protocol/JobSubmitDto.cs` — added `Slides`
+  (`List<RenderRequestDto>?`), `SlideshowDefaultDisplayMs` (int),
+  and `SlideDisplayMs` (`List<int>?`). Image / video jobs leave
+  `Slides=null`; slideshow jobs require it.
+- `Server/Cluster/JobStore.cs` — added `SlidesDir`, `SlideFileName`,
+  `WriteSlideBytes`, `SlideExists`, `CountSlides`, `EncodeSlideTo`.
+  Mirrors the `FramesDir` / `WriteFrameBytes` convention. The
+  `EncodeSlideTo` helper takes a write-callback so the coordinator
+  can pass `IClusterImageCodec.EncodeBgraToPng` straight to a temp
+  path when an RGBA-mode worker delivers a slide.
+- `Server/Cluster/ClusterCoordinator.cs` —
+  - Added `_slideshowJobs` map (`ConcurrentDictionary<string, JobSubmitDto>`).
+  - `HandleJobSubmitAsync` accepts `Mode="slideshow"`; routes through
+    `SlideshowPlanner.PlanSlideshow`; registers the JobSubmitDto in
+    `_slideshowJobs` so the finaliser keeps per-slide metadata
+    without re-reading `request.json`.
+  - `HandleTileDeliverAsync` checks `_slideshowJobs` before merger
+    lookup (after the frames-trailer branch, before the Codec-null
+    image-tile check). Slideshow tiles route to
+    `HandleSlideDeliverAsync`.
+  - `HandleSlideDeliverAsync` — idempotent (no-op accept on duplicate
+    delivery), supports `PayloadKind="png"` / `""` (default) by
+    writing bytes, supports `PayloadKind="rgba"` by re-encoding
+    through the wired codec, refuses anything else. Feeds the
+    per-worker EMA, updates tilesDone, transitions
+    `queued/planning → rendering`, triggers
+    `FinaliseSlidesAsManifest` on the last tile.
+  - `FinaliseSlidesAsManifest` — `merging → ready` via
+    `SlideshowAssembler.Assemble`. Artifact ext recorded as
+    `slides-manifest.json`. Failure path identical to the
+    video-manifest finaliser.
+  - Cancel / tile-error-fail paths drop the `_slideshowJobs` entry.
+
+**Build / test results**
+
+- `dotnet build FracturingFogCLD.sln -c Debug` → 0 errors, 24 warnings
+  (pre-existing source-gen / Avalonia obsolete warnings).
+- `dotnet test Server.Tests` → 297 passed (was 284, +13: 9 planner +
+  4 assembler). 0 failed, 0 skipped.
+- `--cluster-parity --width 256 --height 128 --tile-px 64` →
+  PARITY OK on both png-path and rgba-path (0 diff pixels), proving
+  the new slideshow branch did not regress image-tile delivery.
+
+**Design decisions (continuing #41–48 from Session 2)**
+
+49. **One tile per slide; no sub-tile sharding in v1.** The dev plan
+    explicitly says "subdivide per-slide later if a single slide is
+    the long pole." Sub-tile sharding inside a slide would compose
+    cleanly with `ArtifactMerger`, but the per-slide independence
+    of slideshows already gives parallelism = slide count, which
+    is typically 10–50 — well above worker count. v2 escalation
+    when a single slide dominates wall-clock.
+50. **Slideshow tiles bypass the merger entirely.** Image tiles
+    write into a shared mmap RGBA buffer; slideshow tiles each
+    own a complete PNG. Adding a merger that "stitches" 1×1 slide
+    grids would be code obfuscation. Direct-to-disk via
+    `JobStore.WriteSlideBytes` matches the video-frame ingestion
+    pattern (one file per unit; manifest on completion).
+51. **`_slideshowJobs` holds the JobSubmitDto, not just a bool.**
+    The finaliser needs per-slide `displayMs` overrides and
+    region/theme names. We could re-read `request.json`, but a
+    32-slide submit is ≤ 32 KB in memory, and keeping the live
+    submit in the map (a) avoids file IO on hot-path completion
+    and (b) lets future per-slide retries consult the original
+    spec without disk round-trips.
+52. **Both PNG and RGBA worker deliveries accepted.** Workers
+    don't know they're rendering for a slideshow — they choose
+    payload kind per their own config. Refusing RGBA would break
+    any cluster whose workers are in the D-3 raw-RGBA fast path.
+    Encoding RGBA → PNG via `Codec.EncodeBgraToPng` straight to
+    the slide temp file is one method call; tiny cost for major
+    capability.
+53. **`SlideshowAssembler` is static.** Unlike `VideoFramePipeline`
+    (owns a long-running ffmpeg subprocess) or `ArtifactMerger`
+    (owns a memory-mapped buffer), the slideshow finaliser is a
+    one-shot read-files-write-manifest pass. No per-job state
+    means no map to maintain, no disposal lifecycle to thread
+    through cancel/fail paths.
+54. **Plan `ImageWidth/ImageHeight` = max across slides.** The
+    plan's image-dim fields are advisory only for slideshow
+    (each tile carries its own per-slide dims). Reporting the
+    max gives the admin UI a single "largest slide" hint for
+    artifact-size estimation. Per-slide variation is fully
+    supported — the test exercise multiple dim sizes.
+55. **`MaxSlides=2000`.** At 1920×1080 with ~1.5 MB per
+    high-detail PNG, 2000 slides ≈ 3 GB on disk — a sensible
+    upper bound that protects the master from runaway client
+    requests without blocking realistic slideshow lengths.
+
+**D-4 exit criteria (Session 4)**
+
+- ffprobe parity test: a 20s 1080p30 ffv1 zoom across 2 workers
+  must match a single-worker render frame-for-frame
+  (`ffprobe -show_streams` + per-frame SHA-256).
+- Extend `ClusterScaleSelfTest` with `--mode video` so the harness
+  drives multi-worker video as well as image renders.
