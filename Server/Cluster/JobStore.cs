@@ -277,7 +277,9 @@ public sealed class JobStore
     /// <summary>Crash-recovery sweep — invoke at master start. Any job
     /// stuck in rendering/merging/planning becomes "failed" with reason
     /// "master-restart". Returns the count of jobs that were marked.
-    /// Phase D-6 will swap this for true resume.</summary>
+    /// D-6a swaps this with <see cref="ClusterCoordinator.RecoverFromDisk"/>
+    /// for image jobs; this method remains the fallback path for video /
+    /// slideshow modes whose tile streams cannot yet be replayed.</summary>
     public int FailInflightAfterRestart()
     {
         int n = 0;
@@ -297,6 +299,45 @@ public sealed class JobStore
             }
         }
         return n;
+    }
+
+    /// <summary>D-6a — enumerate non-terminal jobs on disk so the master
+    /// can rebuild dispatcher + merger state on restart. Yields one record
+    /// per job in <c>queued | planning | rendering | merging</c>. Terminal
+    /// jobs (ready / failed / cancelled) and jobs whose status.json is
+    /// missing or malformed are skipped silently — they cannot be resumed
+    /// and have no work the master needs to remember.</summary>
+    public IEnumerable<ResumeRecord> EnumerateResumableJobs()
+    {
+        foreach (var jobId in ListJobIds().ToArray())
+        {
+            PersistedStatus? st;
+            try { st = ReadStatus(jobId); }
+            catch { continue; }
+            if (st is null) continue;
+            if (st.JobState is "ready" or "failed" or "cancelled") continue;
+            var submit = ReadSubmit(jobId);
+            if (submit is null) continue;
+            yield return new ResumeRecord(jobId, st, submit);
+        }
+    }
+
+    /// <summary>D-6a — list the tile ids whose payload bytes are on disk.
+    /// Used by <see cref="ClusterCoordinator.RecoverFromDisk"/> to skip
+    /// tiles that already delivered before the master died. File name
+    /// pattern matches <see cref="WriteTileBytes"/> (<c>{id}.bin</c>).</summary>
+    public IReadOnlyList<int> ListTilesOnDisk(string jobId)
+    {
+        string tilesDir = Path.Combine(JobDir(jobId), "tiles");
+        if (!Directory.Exists(tilesDir)) return Array.Empty<int>();
+        var ids = new List<int>();
+        foreach (var path in Directory.EnumerateFiles(tilesDir, "*.bin"))
+        {
+            string name = Path.GetFileNameWithoutExtension(path);
+            if (int.TryParse(name, out int id)) ids.Add(id);
+        }
+        ids.Sort();
+        return ids;
     }
 
     /// <summary>Evict jobs in terminal state whose last update is older
@@ -382,6 +423,13 @@ public sealed class JobStore
         return new string(outBuf[..outIx]);
     }
 }
+
+/// <summary>D-6a — payload for <see cref="JobStore.EnumerateResumableJobs"/>.
+/// Carries the persisted status snapshot + the original submit DTO so
+/// the recovering coordinator can rebuild planner-derived state (tile
+/// rects, frame ranges, slide list) by deserialising plan.json
+/// separately if needed.</summary>
+public sealed record ResumeRecord(string JobId, PersistedStatus Status, JobSubmitDto Submit);
 
 public sealed class PersistedStatus
 {

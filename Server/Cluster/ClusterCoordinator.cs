@@ -1676,6 +1676,198 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         }
     }
 
+    // ── crash recovery (D-6a) ───────────────────────────────────────────
+
+    /// <summary>D-6a — rebuild dispatcher + merger state for any non-
+    /// terminal job left on disk by a previous master process. Image jobs
+    /// resume: every tile already on disk is replayed into a fresh
+    /// merger, the remaining tiles re-enqueue into the dispatcher under
+    /// their original ids, and status returns to <c>queued</c> (or
+    /// <c>rendering</c> if some tiles were already done). Video and
+    /// slideshow jobs fall back to <see cref="JobStore.FailInflightAfterRestart"/>
+    /// behaviour — their tile streams (frame ranges, slide indices) are
+    /// not yet rebuildable. Caller invokes once before the master starts
+    /// accepting connections; returns counts for logging.</summary>
+    public ResumeCounts RecoverFromDisk()
+    {
+        var counts = new ResumeCounts();
+        if (Jobs is null || Dispatcher is null) return counts;
+
+        foreach (var rec in Jobs.EnumerateResumableJobs())
+        {
+            counts.Considered++;
+            try
+            {
+                if (string.Equals(rec.Status.Mode, "image", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryResumeImageJob(rec)) counts.ResumedImage++;
+                    else { FailResumeJob(rec.JobId, "resume-image-failed"); counts.Failed++; }
+                }
+                else
+                {
+                    FailResumeJob(rec.JobId, "master-restart");
+                    counts.FailedUnsupportedMode++;
+                }
+            }
+            catch (Exception ex)
+            {
+                FailResumeJob(rec.JobId, "resume-error: " + ex.Message);
+                counts.Failed++;
+                _log.Event("job-resume-failed", new Dictionary<string, object?>
+                {
+                    ["jobId"] = rec.JobId,
+                    ["error"] = ex.Message,
+                });
+            }
+        }
+        return counts;
+    }
+
+    /// <summary>D-6a — counts returned by <see cref="RecoverFromDisk"/>.
+    /// Host logs these so the operator can see at a glance whether the
+    /// restart preserved any inflight work.</summary>
+    public struct ResumeCounts
+    {
+        public int Considered;
+        public int ResumedImage;
+        public int FailedUnsupportedMode;
+        public int Failed;
+    }
+
+    private bool TryResumeImageJob(ResumeRecord rec)
+    {
+        if (Codec is null) return false;
+        var plan = ReadPlan(rec.JobId);
+        if (plan is null || plan.Count == 0) return false;
+
+        int width  = plan[0].OffsetX + plan[0].Width;
+        int height = plan[0].OffsetY + plan[0].Height;
+        foreach (var t in plan)
+        {
+            if (t.OffsetX + t.Width  > width)  width  = t.OffsetX + t.Width;
+            if (t.OffsetY + t.Height > height) height = t.OffsetY + t.Height;
+        }
+
+        var merger = new ArtifactMerger(width, height, plan.Count, Codec);
+
+        var onDisk = Jobs!.ListTilesOnDisk(rec.JobId);
+        var doneSet = new HashSet<int>(onDisk);
+        int replayed = 0;
+        foreach (var tileId in onDisk)
+        {
+            if (tileId < 0 || tileId >= plan.Count) continue;
+            var meta = plan[tileId];
+            if (!Jobs.TryReadTileBytes(rec.JobId, tileId, out var bytes)) continue;
+            try
+            {
+                bool merged = IsPng(bytes)
+                    ? merger.TryMergePngTile (tileId, meta.OffsetX, meta.OffsetY, meta.Width, meta.Height, bytes)
+                    : merger.TryMergeRgbaTile(tileId, meta.OffsetX, meta.OffsetY, meta.Width, meta.Height, bytes);
+                if (merged) replayed++;
+            }
+            catch
+            {
+                // Corrupt on-disk tile: drop it from the done set so the
+                // dispatcher re-renders it. Better than failing the whole
+                // job because one .bin got truncated mid-write.
+                doneSet.Remove(tileId);
+            }
+        }
+
+        var remaining = new List<TileJobDto>(plan.Count - doneSet.Count);
+        var planTiles = ReadPlanTileDtos(rec.JobId);
+        if (planTiles is null) return false;
+        foreach (var t in planTiles)
+            if (!doneSet.Contains(t.TileId)) remaining.Add(t);
+
+        _mergers[rec.JobId] = merger;
+
+        if (remaining.Count > 0)
+        {
+            Dispatcher!.EnqueueJob(rec.JobId, remaining);
+        }
+
+        Jobs.UpdateStatus(rec.JobId, s =>
+        {
+            s.TilesDone     = replayed;
+            s.TilesInFlight = 0;
+            s.JobState      = replayed > 0 ? "rendering" : "queued";
+            s.FailReason    = null;
+        });
+        Jobs.AppendEvent(rec.JobId, "resumed", new Dictionary<string, object?>
+        {
+            ["replayed"]  = replayed,
+            ["remaining"] = remaining.Count,
+            ["total"]     = plan.Count,
+        });
+        _log.Event("job-resumed", new Dictionary<string, object?>
+        {
+            ["jobId"]     = rec.JobId,
+            ["replayed"]  = replayed,
+            ["remaining"] = remaining.Count,
+            ["total"]     = plan.Count,
+        });
+
+        if (replayed == plan.Count)
+            FinaliseMerge(rec.JobId, merger);
+        return true;
+    }
+
+    private void FailResumeJob(string jobId, string reason)
+    {
+        try
+        {
+            Jobs!.UpdateStatus(jobId, s =>
+            {
+                s.JobState   = "failed";
+                s.FailReason = reason;
+            });
+            Jobs.AppendEvent(jobId, "failed-on-restart", new Dictionary<string, object?>
+            {
+                ["reason"] = reason,
+            });
+        }
+        catch { /* status file may be corrupt; best effort */ }
+        _log.Event("job-resume-skipped", new Dictionary<string, object?>
+        {
+            ["jobId"]  = jobId,
+            ["reason"] = reason,
+        });
+    }
+
+    private static bool IsPng(byte[] bytes)
+    {
+        if (bytes.Length < 8) return false;
+        return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+            && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+    }
+
+    /// <summary>D-6a — read plan.json and return the full TileJobDto list
+    /// so resumed tiles can be re-enqueued with their original render
+    /// parameters (centre, zoom, theme, region). Returns null on any
+    /// parse failure — caller treats that as "cannot resume".</summary>
+    private IReadOnlyList<TileJobDto>? ReadPlanTileDtos(string jobId)
+    {
+        try
+        {
+            string planPath = Path.Combine(Jobs!.JobDir(jobId), "plan.json");
+            if (!File.Exists(planPath)) return null;
+            using var fs = File.OpenRead(planPath);
+            using var doc = JsonDocument.Parse(fs);
+            if (!doc.RootElement.TryGetProperty("Tiles", out var tilesEl)) return null;
+            var list = new List<TileJobDto>(tilesEl.GetArrayLength());
+            foreach (var el in tilesEl.EnumerateArray())
+            {
+                var dto = el.Deserialize<TileJobDto>(JsonRpcFraming.JsonOpts);
+                if (dto is null) return null;
+                dto.JobId = jobId;
+                list.Add(dto);
+            }
+            return list;
+        }
+        catch { return null; }
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private IReadOnlyList<TileMeta>? ReadPlan(string jobId)
