@@ -1635,3 +1635,113 @@ FramePlanner.CloneFrameTemplate OD-limb propagation (D-6b2
 leftover), JobStore.WriteSlideBytes race (mirror of the D-6e
 WriteStatusLocked fix). All non-blocking; phase D-6 stays
 closed.
+
+---
+
+## Session 10 — D-6c2 — Master Config UI growth for rate-limit knobs (2026-06-29)
+
+**Goal**: close #125, the UI-only follow-up deferred by D-6c1. The four
+per-role rate-limiter knobs (`ClientCallPerMinute`, `ClientCallBurst`,
+`WorkerTileNextPerMinute`, `WorkerTileNextBurst`) have been live-tunable
+over `cluster.config.set` since D-6c1, but the existing MasterConfigView
+only exposed the three D-5e knobs. An operator who wanted to retune a
+rate had to fall through to an admin CLI script or hand-craft a JSON-RPC
+call. D-6c2 surfaces them in the same dialog so the seven knobs are
+edited in one round-trip.
+
+**Sub-slice decision**: a single slice. No new wire surface, no new
+server code — D-6c1 already landed the protocol fields, the coordinator
+clamp, the `ApplyRoleLimiterChange` hook into FFServer's limiter, and
+the client-side `SetClusterConfigAsync` overloads. This is purely
+ViewModel + axaml growth on top of an existing surface, which is why
+#125 was deferrable in the first place.
+
+**ViewModel changes** — `UI.Avalonia/ViewModels/MasterConfigViewModel.cs`:
+
+- Four new `int` properties with `RaiseAndSetIfChanged` backing —
+  matches the existing pattern for `ClusterMaxJobs` /
+  `ClusterArtifactRetentionMinutes` / `ClusterTileTargetPixels`. No
+  reactive bridges between knobs; each is independently edited and
+  applied.
+- Constructor pre-seeds the four new fields from
+  `ServerConfig.LoadOrDefault()` so the dialog shows the same
+  defaults (600 / 30 / 600 / 30) the master would use at boot, before
+  the first Load round-trip. Same rationale as the existing three:
+  Load reconciles against the running master in case another admin
+  instance issued a `cluster.config.set` in the meantime.
+- `ApplyAsync` now passes the four new values as named optional
+  parameters to `SetClusterConfigAsync` — keeps the existing
+  positional call shape (`maxJobs, artifactRetentionMinutes,
+  tileTargetPixels, ct`) source-stable while extending the apply
+  surface. Reading the call site, every knob in the dialog is
+  visible in the apply.
+- `ApplySnapshot` mirrors the post-apply DTO back into the four new
+  properties so a server-side clamp (perMinute floor 0, burst floor
+  1) is visible in the same beat as the existing tile-pixel clamp.
+
+**View changes** — `UI.Avalonia/Views/MasterConfigView.axaml`:
+
+- New `Border.group` titled "Per-Role Rate Limits" with the same
+  visual treatment as the existing "Cluster Limits" group. Four
+  rows: Client perMinute, Client burst, Worker tile.next perMinute,
+  Worker tile.next burst. Each tooltip describes the knob, what 0
+  means where 0 is meaningful, and the default value — same hint
+  format as the existing rows.
+- Burst rows have `Minimum="1"` to match the server-side `Bucket`
+  constructor floor (clamping client-side avoids a redundant Apply
+  round-trip just to see the floor bounce back). PerMinute rows
+  keep `Minimum="0"` because 0 is the documented "disable" sentinel.
+- Window grew from `520x440` to `540x600` and `MinWidth/MinHeight`
+  bumped to fit four extra rows without forcing the operator to
+  scroll. The outer `ScrollViewer` still catches anything smaller.
+- Load / Apply / Close buttons unchanged — the new group hangs off
+  the same commands.
+
+**Design decisions**
+
+#126. Burst spinners enforce `Minimum="1"` client-side mirroring the
+  server's `Math.Max(1, burst)` clamp. The alternative — let the
+  user type 0 and have the server bounce it to 1 via `ApplySnapshot`
+  — was rejected because the bounce would look like the apply
+  "silently overrode" the input. A spinner that won't go below 1
+  matches operator intent better; the documented "disable" knob is
+  perMinute=0, not burst=0.
+
+#127. Constructor pre-seeds from `ServerConfig.LoadOrDefault()`
+  rather than waiting for the auto-Load in `OnDcChanged` to populate
+  the form. Reason: same as D-5e — the dialog is single-instance,
+  Opened-driven, and an operator who closes before the first round-
+  trip completes (e.g. cancels because they realised they're
+  pointing at the wrong host) still sees sensible numbers in the
+  brief moment the dialog is visible. Plain consistency with the
+  existing three knobs.
+
+#128. UI growth landed as `D-6c2` rather than `D-6c1a`. The repo
+  convention (per the dev plan §12) uses single-letter suffixes for
+  same-day follow-ups within a phase letter, but D-6c1 already
+  carries an "exposes wire only, defer UI" decision (#125) and the
+  UI half is a coherent slice in its own right. Numbered suffix
+  matches D-6b1 / D-6b2's slice-then-codec-then-engine cadence.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing warnings only
+  (36 total — unchanged from D-6b1's baseline). The new axaml rows
+  generate no new bindings warnings (every binding resolves
+  against the typed `MasterConfigViewModel`).
+- Test suite: **354 passed, 0 failed** (no new tests this slice —
+  the ViewModel binding surface is exercised by manual UI smoke;
+  the underlying coordinator clamp / limiter-apply is already
+  covered by the eight D-6c1 facts in
+  `ClusterAdminRpcTests` + `RoleAwareRateLimiterTests`).
+  StressTests remains parallelization-flaky in the all-suite run
+  (D-6e #119), passes when isolated.
+- Filtered confirmation: `--filter "FullyQualifiedName~
+  ClusterAdminRpcTests|FullyQualifiedName~RoleAwareRateLimiterTests"`
+  → 33 passed in 481 ms.
+
+**Open follow-ups remaining**: binary-trailer transport for OD-scale
+blobs (D-6b3), FramePlanner.CloneFrameTemplate OD-limb propagation
+(D-6b2 leftover), JobStore.WriteSlideBytes race (mirror of the D-6e
+WriteStatusLocked fix). #125 closed. All remaining items
+non-blocking; phase D-6 stays closed.
