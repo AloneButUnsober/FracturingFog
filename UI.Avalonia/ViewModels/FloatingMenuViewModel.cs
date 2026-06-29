@@ -131,6 +131,11 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private const bool _themeEditableOnly = false;
     private RegionSortMode _regionSort = RegionSortMode.Default;
     private FractalType _regionType = FractalType.Mandelbrot;
+    /// <summary>Active fractal type used as the compat filter target when
+    /// <see cref="ThemeSortMode.ByFractalCompat"/> is selected. Pushed in by
+    /// the shell whenever the user switches fractals so the theme combo
+    /// auto-rebuilds against the new type.</summary>
+    private FractalType _compatFractalType = FractalType.Mandelbrot;
 
     /// <summary>Hand the menu the host theme service so its Region / Theme
     /// combos can sort + filter themselves. Performs the initial fill.</summary>
@@ -147,8 +152,19 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     {
         if (_themeService == null) return;
         string? prev = _selectedTheme;
-        SetThemes(_themeService.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly));
+        FractalType? compat = _themeSort == ThemeSortMode.ByFractalCompat ? _compatFractalType : null;
+        SetThemes(_themeService.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly, compat));
         if (!string.IsNullOrEmpty(prev) && ThemeNames.Contains(prev)) SetThemeSilent(prev);
+    }
+
+    /// <summary>Push the active fractal type from the shell. When the theme
+    /// combo is in <see cref="ThemeSortMode.ByFractalCompat"/> the list is
+    /// rebuilt immediately so the visible options track the new fractal.</summary>
+    public void SetCompatFractalType(FractalType ft)
+    {
+        if (_compatFractalType == ft) return;
+        _compatFractalType = ft;
+        if (_themeSort == ThemeSortMode.ByFractalCompat) RefreshThemes();
     }
 
     /// <summary>Re-pull region names under the current sort state, preserving the
@@ -172,6 +188,10 @@ public sealed class FloatingMenuViewModel : ViewModelBase
                 () => { _themeSort = ThemeSortMode.Default; RefreshThemes(); }),
             ComboMenuItem.Item("All (A–Z)", _themeSort == ThemeSortMode.All,
                 () => { _themeSort = ThemeSortMode.All; RefreshThemes(); }),
+            ComboMenuItem.Item(
+                $"Compatible with {_compatFractalType}",
+                _themeSort == ThemeSortMode.ByFractalCompat,
+                () => { _themeSort = ThemeSortMode.ByFractalCompat; RefreshThemes(); }),
             ComboMenuItem.Separator,
         };
         if (_themeService != null)

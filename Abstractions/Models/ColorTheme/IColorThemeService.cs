@@ -30,6 +30,13 @@ namespace FracturingFog.Models
         All,
         /// <summary>Filtered to a single palette kind (see kindFilter), alpha.</summary>
         ByKind,
+        /// <summary>Filtered to themes whose required calculator data the active
+        /// fractal type supplies — see <c>ColorPalette.IsCompatible</c>. The
+        /// compat fractal type is passed alongside in the new
+        /// <c>compatFor</c> overload of <see cref="IColorThemeService.EnumerateThemeNames(ThemeSortMode,string?,bool,FractalType?)"/>.
+        /// Falls back to the unfiltered grouped list when no compat type is
+        /// supplied so callers never see an empty combo.</summary>
+        ByFractalCompat,
     }
 
     /// <summary>Sort/filter mode for a region combo. Mirrors the WinForms
@@ -73,6 +80,22 @@ namespace FracturingFog.Models
         /// is true only themes openable in the editor are listed.
         /// </summary>
         IReadOnlyList<string> EnumerateThemeNames(ThemeSortMode mode, string? kindFilter, bool editableOnly);
+
+        /// <summary>
+        /// Compatibility-aware overload. Same semantics as the 3-arg call, but
+        /// when <paramref name="mode"/> is
+        /// <see cref="ThemeSortMode.ByFractalCompat"/>, the list is filtered to
+        /// themes whose required calculator data the
+        /// <paramref name="compatFor"/> fractal supplies (e.g. orbit-trap
+        /// themes are dropped when compatFor is not Mandelbrot). When
+        /// <paramref name="compatFor"/> is null, the call delegates to the
+        /// 3-arg overload (back-compat — same result as Default mode).
+        /// Default implementation ignores the compat hint so legacy
+        /// implementations keep compiling; the host implementation overrides.
+        /// </summary>
+        IReadOnlyList<string> EnumerateThemeNames(
+            ThemeSortMode mode, string? kindFilter, bool editableOnly, FractalType? compatFor)
+            => EnumerateThemeNames(mode, kindFilter, editableOnly);
 
         /// <summary>Display names of every palette kind, in enum order. Used to
         /// build the per-kind entries of the theme combo's right-click sort

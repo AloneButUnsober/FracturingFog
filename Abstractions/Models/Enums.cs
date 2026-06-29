@@ -195,4 +195,128 @@ namespace FracturingFog
 
     public enum RenderProfile { Preview, Final }
 
+    /// <summary>
+    /// Bitmask describing which per-pixel data a fractal calculator surfaces to
+    /// the active <see cref="FracturingFog.Interefaces.IColorMap"/> at render
+    /// time. Used by the slideshow / video slideshow + UI to filter out themes
+    /// whose required data the active fractal cannot supply (e.g. orbit-trap
+    /// themes need <see cref="SuppliesOrbit"/>, interior themes need
+    /// <see cref="SuppliesInterior"/>, Phong/PBR 3D themes need
+    /// <see cref="SuppliesNormals"/>).
+    /// </summary>
+    [Flags]
+    public enum FractalCapabilities
+    {
+        None               = 0,
+        /// <summary>Calculator fills <c>nx, ny</c> surface-normal channels
+        /// (calls the 5-param <c>Map(..., nx, ny)</c> overload).</summary>
+        SuppliesNormals    = 1 << 0,
+        /// <summary>Calculator supplies a valid exterior distance estimate.</summary>
+        SuppliesDE         = 1 << 1,
+        /// <summary>Calculator routes orbit-aware themes through a scalar path
+        /// that calls <c>IOrbitAwareColorMap.Sample</c> once per iteration.</summary>
+        SuppliesOrbit      = 1 << 2,
+        /// <summary>Calculator runs cycle detection over in-set pixels and
+        /// dispatches to <c>IInteriorAwareColorMap.MapInterior</c>.</summary>
+        SuppliesInterior   = 1 << 3,
+        /// <summary>Calculator passes <c>finalZr, finalZi</c> at escape (9-param overload).</summary>
+        SuppliesFinalZ     = 1 << 4,
+        /// <summary>Calculator passes <c>dzdcR, dzdcI</c> at escape (9-param overload).</summary>
+        SuppliesDerivative = 1 << 5,
+        /// <summary>Calculator produces output amenable to histogram equalisation
+        /// (smooth-count distribution dense enough that the EQ slider helps).</summary>
+        SuppliesHistogram  = 1 << 6,
+    }
+
+    /// <summary>
+    /// Per-<see cref="FractalType"/> lookup of which calculator features are
+    /// available to colour maps at render time. Single source of truth for
+    /// theme / fractal compatibility filtering. Add new fractal types to the
+    /// switch — the default arm conservatively returns <c>None</c>.
+    /// </summary>
+    public static class FractalCapabilityMap
+    {
+        public static FractalCapabilities For(FractalType ft) => ft switch
+        {
+            // Holomorphic 2D escape-time set — full pipeline.
+            FractalType.Mandelbrot
+                or FractalType.Julia
+                or FractalType.Multibrot
+                or FractalType.GeneratedMandelbrotZ2
+                or FractalType.GeneratedMandelbrotZ3
+                or FractalType.GeneratedMandelbrotZ4
+                or FractalType.GeneratedMandelbrotZ5
+                or FractalType.Phoenix
+                or FractalType.Spider
+                or FractalType.Magnet1
+                or FractalType.Magnet2
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesDE
+                 | FractalCapabilities.SuppliesOrbit
+                 | FractalCapabilities.SuppliesInterior
+                 | FractalCapabilities.SuppliesFinalZ
+                 | FractalCapabilities.SuppliesDerivative
+                 | FractalCapabilities.SuppliesHistogram,
+
+            // Antiholomorphic / non-holomorphic 2D — no DE, no derivative.
+            FractalType.BurningShip
+                or FractalType.Tricorn
+                or FractalType.GeneratedBurningShip
+                or FractalType.GeneratedTricorn
+                or FractalType.Glynn
+                or FractalType.TearDrop
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesOrbit
+                 | FractalCapabilities.SuppliesFinalZ
+                 | FractalCapabilities.SuppliesHistogram,
+
+            // Newton-like root finders — basins + iteration shading.
+            FractalType.Newton
+                or FractalType.Nova
+                or FractalType.Halley
+                or FractalType.Secant
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesFinalZ
+                 | FractalCapabilities.SuppliesHistogram,
+
+            // 3D distance-estimation raymarchers — normals + DE only.
+            FractalType.Mandelbulb
+                or FractalType.Kleinian
+                or FractalType.Mandelbox
+                or FractalType.QuaternionJulia
+                or FractalType.QuaternionMandelbrot
+                or FractalType.Kifs
+                or FractalType.BicomplexMandelbrot
+                or FractalType.UserBulb
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesDE,
+
+            // User-equation / Sandbox — currently 5-param. Orbit/interior get
+            // added by P5 of the Theme-Compat roadmap.
+            FractalType.UserEquation
+                or FractalType.Sandbox
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesHistogram,
+
+            // Histogram / chaos-game families — no normals, no orbit data
+            // surfaced to per-pixel themes (each calculator paints through the
+            // 3-param Map overload only).
+            FractalType.IFS
+                or FractalType.LSystem
+                or FractalType.StrangeAttractor
+                or FractalType.BuddhaBrot
+                or FractalType.Nebulabrot
+                or FractalType.AntiBuddhabrot
+                or FractalType.AntiNebulabrot
+                or FractalType.Dla
+                or FractalType.Apollonian
+                or FractalType.Flame
+                or FractalType.Plasma
+                or FractalType.Logistic
+                => FractalCapabilities.SuppliesHistogram,
+
+            _ => FractalCapabilities.None,
+        };
+    }
+
 }
