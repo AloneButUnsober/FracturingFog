@@ -291,11 +291,13 @@ namespace FracturingFog
                 => FractalCapabilities.SuppliesNormals
                  | FractalCapabilities.SuppliesDE,
 
-            // User-equation / Sandbox — currently 5-param. Orbit/interior get
-            // added by P5 of the Theme-Compat roadmap.
+            // User-equation / Sandbox — orbit-aware via IOrbitAwareColorMap
+            // dispatch in the per-pixel loop (P5). Interior (Brent cycle
+            // detection) remains out of scope.
             FractalType.UserEquation
                 or FractalType.Sandbox
                 => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesOrbit
                  | FractalCapabilities.SuppliesHistogram,
 
             // Histogram / chaos-game families — no normals, no orbit data

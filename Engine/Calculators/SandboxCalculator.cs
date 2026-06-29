@@ -112,6 +112,9 @@ public sealed class SandboxCalculator : IFractalCalculator
         int height = Height;
         const double bailout2 = 1024.0;
 
+        // P5: gate orbit sampling once. Non-orbit themes pay nothing.
+        var orbitMap = ColorMap as IOrbitAwareColorMap;
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, () => expr.NewEnv(),
             (y, _, env) =>
             {
@@ -126,11 +129,16 @@ public sealed class SandboxCalculator : IFractalCalculator
                     var cP = new Complex(cx + h, cy);
                     var z = Complex.Zero;
                     var zP = Complex.Zero;
+                    OrbitAccumulator acc = default;
+                    if (orbitMap != null) orbitMap.InitOrbit(out acc);
                     int iter;
                     for (iter = 0; iter < maxIt; iter++)
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
                         if (r2 >= bailout2) break;
+                        // Sample BEFORE update; skip iter==0 (z_0 = 0 has no arg).
+                        if (orbitMap != null && iter > 0)
+                            orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
                         try
                         {
                             z = expr.EvalStep(z, c, iter, env);
@@ -162,7 +170,9 @@ public sealed class SandboxCalculator : IFractalCalculator
                         NormalXBuffer[idx] = nx;
                         NormalYBuffer[idx] = ny;
 
-                        ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
+                        ColorBuffer[idx] = orbitMap != null
+                            ? (uint)orbitMap.MapWithOrbit(smooth, 0f, maxIt, nx, ny, in acc)
+                            : (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
                     }
                 }
                 return env;

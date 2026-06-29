@@ -1619,7 +1619,8 @@ namespace FracturingFog
                 // cap to enforce is the leg's deep end. The compat filter
                 // excludes themes whose required data the active fractal
                 // doesn't supply (orbit-trap on non-Mandelbrot, etc.).
-                var legPalettes = Models.ColorPalette.GetPaletteNamesFor(region.FractalType, tz);
+                var legPalettes = Models.ColorPalette.GetPaletteNamesFor(
+                    region.FractalType, tz, region.CuratedThemes);
                 if (legPalettes.Count == 0) legPalettes = palettes;
 
                 // Pick a theme using the rolling-recent picker so themes don't

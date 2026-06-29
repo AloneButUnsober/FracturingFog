@@ -747,5 +747,36 @@ namespace FracturingFog.Models
             if (zoomOnly.Count > 0) return zoomOnly;
             return all;
         }
+
+        /// <summary>
+        /// P6 — curated-aware overload. When <paramref name="curated"/> is non-null
+        /// and contains at least one registered palette name, returns the subset
+        /// of those known names. Unknown names are silently dropped so a typo in
+        /// a saved region can't fail at render time. If the filtered curated pool
+        /// is empty, delegates to <see cref="GetPaletteNamesFor(FractalType, double)"/>
+        /// so the chain remains:
+        ///   1. Region's curated pool (validated).
+        ///   2. Zoom-eligible AND fractal-compatible.
+        ///   3. Zoom-eligible only.
+        ///   4. Every non-header palette name.
+        /// </summary>
+        public static List<string> GetPaletteNamesFor(
+            FractalType ft, double zoom, IReadOnlyList<string>? curated)
+        {
+            if (curated != null && curated.Count > 0)
+            {
+                var known = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var p in Palettes)
+                {
+                    string n = GetStaticName(p);
+                    if (!string.IsNullOrEmpty(n) && !n.StartsWith("—")) known.Add(n);
+                }
+                var hit = new List<string>(curated.Count);
+                foreach (var n in curated)
+                    if (known.Contains(n)) hit.Add(n);
+                if (hit.Count > 0) return hit;
+            }
+            return GetPaletteNamesFor(ft, zoom);
+        }
     }
 }

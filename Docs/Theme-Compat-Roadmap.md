@@ -69,7 +69,7 @@ goes empty (no zero-pool failure mode).
 
 ## Ship phases
 
-### P1 — `FractalCapabilities` table — **status: pending**
+### P1 — `FractalCapabilities` table — **status: done**
 
 - Add `FractalCapabilities` flags enum in `Abstractions/Models/Enums.cs`.
 - Add `FractalCapabilityMap` static class with `For(FractalType)` switch
@@ -79,7 +79,7 @@ goes empty (no zero-pool failure mode).
 **Files touched:** `Abstractions/Models/Enums.cs` (+ new file possible).
 **Risk:** zero. Pure addition.
 
-### P2 — Compat filter + slideshow call-site swap — **status: pending**
+### P2 — Compat filter + slideshow call-site swap — **status: done**
 
 - `ColorPalette.IsCompatible(IColorMap, FractalType)` — derives
   required caps from features + interface tags, single bitmask test.
@@ -93,7 +93,7 @@ goes empty (no zero-pool failure mode).
 `VideoZoom.cs`.
 **Risk:** low. Fallback path preserves "never empty pool" invariant.
 
-### P3 — Ring-buffer randomization — **status: pending**
+### P3 — Ring-buffer randomization — **status: done**
 
 - Replace immediate-repeat `lastThemeIdx` int with a bounded
   `Queue<int>` of depth `min(8, pool.Count - 1)`.
@@ -106,7 +106,7 @@ goes empty (no zero-pool failure mode).
 `Engine/Models/SlideshowSettings.cs` (optional seed).
 **Risk:** low. O(1) bounded retries, no allocations per pick.
 
-### P4 — UI: ByFractalCompat sort mode — **status: pending**
+### P4 — UI: ByFractalCompat sort mode — **status: done**
 
 - Add `ByFractalCompat` value to
   [Views/Controls.cs ColorComboSortMode](../Views/Controls.cs):190.
@@ -120,7 +120,7 @@ goes empty (no zero-pool failure mode).
 (`UI.Avalonia/Views/`) once located.
 **Risk:** low. Pure UI; no calculator changes.
 
-### P5 — Sandbox / UserEquation orbit-aware — **status: pending**
+### P5 — Sandbox / UserEquation orbit-aware — **status: done**
 
 - Wire orbit accumulator (`OrbitAccumulator`) into the scalar iteration
   loops of `SandboxCalculator` ([Engine/Calculators/SandboxCalculator.cs](../Engine/Calculators/SandboxCalculator.cs))
@@ -137,7 +137,7 @@ goes empty (no zero-pool failure mode).
 **Risk:** medium. Extra per-iteration call cost — gate on
 `ColorMap is IOrbitAwareColorMap` so non-orbit themes pay nothing.
 
-### P6 — Per-region curated theme list — **status: pending**
+### P6 — Per-region curated theme list — **status: done**
 
 - Add `List<string>? CuratedThemes` field on `FractalRegion`
   ([Engine/Models/FractalRegion.cs](../Engine/Models/FractalRegion.cs)).
