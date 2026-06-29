@@ -1277,3 +1277,219 @@ short-circuits is the most expensive), D-6a #93 (video /
 slideshow crash recovery), UI growth of MasterConfigView (#125),
 and binary-trailer transport for OD-scale blobs (D-6b3 if a real
 1M+ iter workload arrives).
+
+---
+
+## Session 8 — D-6f — Video / slideshow crash recovery (2026-06-28)
+
+**Goal**: close the D-6a "video / slideshow falls back to
+fail-on-restart" deferral noted in #93. The image-resume path
+landed in D-6a; video and slideshow stayed on the
+`FailInflightAfterRestart` fallback because their tile streams
+needed different replay logic. This slice grows
+`ClusterCoordinator.RecoverFromDisk` to handle both modes:
+per-frame PNGs on disk count their parent video tile as done, the
+streaming ffmpeg pipeline restarts from frame_000001.png, and
+per-slide PNGs on disk count their slideshow tile as done.
+
+**Sub-slice decision**: a single slice. Video and slideshow
+resume share the "look at the on-disk artifact dir, mark tiles
+done, re-enqueue the rest, mark status, drive finaliser if
+all-done" shape. Splitting (D-6f-video + D-6f-slideshow) would
+have duplicated the dispatcher / status / event wiring and forced
+a second slice to grow `ResumeCounts` again for the second mode.
+
+**Server-side changes**
+
+- `Server/Cluster/ClusterCoordinator.cs`:
+  * `RecoverFromDisk` now dispatches on `rec.Status.Mode`:
+    `"image"` → existing `TryResumeImageJob`; `"video"` → new
+    `TryResumeVideoJob`; `"slideshow"` → new
+    `TryResumeSlideshowJob`. Unknown modes still hit the
+    fail-on-restart path so a malformed status.json can't wedge
+    the queue.
+  * `ResumeCounts` grew `ResumedVideo` and `ResumedSlideshow`
+    counters alongside the existing `ResumedImage`. The struct
+    stays positional (no new constructors), so the ClusterEntry
+    host-side log line is the only call-site that needs growth.
+  * New `TryResumeVideoJob(ResumeRecord)`:
+    1. Reads `plan.json` via the existing `ReadPlanTileDtos`.
+       Pulls `totalFrames` and `videoFps` off the first
+       `FrameRange` tile (every tile in the plan carries the
+       same parent-job header).
+    2. For each plan tile, marks it done only when EVERY frame
+       in `[StartFrame, EndFrame)` is on disk via
+       `Jobs.FrameExists`. Partial coverage re-enqueues the
+       whole tile — the worker re-renders the whole range,
+       which is correct because `WriteFrameBytes` is an
+       idempotent overwrite.
+    3. If the original job carried a lossless preset and
+       ffmpeg is available, restarts
+       `VideoFramePipeline.TryStart`. Frames already on disk
+       are encoded from `frame_000001.png` upward without
+       waiting for a new `tile.deliver`; the pipeline's
+       `_delivered` counter is primed with
+       `NotifyFramesDelivered(Jobs.CountFrames(rec.JobId))` so
+       the `IsBehind` backpressure check accounts for the
+       pre-resume frames (without the prime it would think
+       the encoder was ahead of wire delivery and never gate).
+    4. Updates status with the recovered counts and emits a
+       `kind:"resumed"` event into both the job's NDJSON event
+       log AND the cluster log so an operator can see the
+       resume from either log stream.
+    5. If every tile is already done on disk (the master died
+       in the merging window), drives `FinaliseVideoFrames`
+       directly so the resumed job re-encodes and transitions
+       to `ready`; without this the resumed job would stay
+       `rendering` forever (no future `tile.deliver` to
+       trigger the finaliser).
+  * New `TryResumeSlideshowJob(ResumeRecord)`:
+    1. Reads plan via `ReadPlanTileDtos`. Bails if the submit
+       DTO has no `Slides` list (malformed slideshow that
+       shouldn't exist).
+    2. Marks each tile done when its slide PNG exists in
+       `JobStore.SlidesDir` via `SlideExists`.
+    3. Re-registers `_slideshowJobs[rec.JobId] = rec.Submit`
+       so the next `tile.deliver` routes through
+       `HandleSlideDeliverAsync`'s per-slide writer (D-4c
+       dispatch keys on `_slideshowJobs` presence; without
+       this the resumed slide would fall through to the
+       image-tile path and look for a merger that doesn't
+       exist).
+    4. Drives `FinaliseSlidesAsManifest` directly when every
+       slide is on disk — same all-done short-circuit as
+       video, for the same reason.
+
+- `ServerHost/ClusterEntry.cs`:
+  * Recovery log line now prints the per-mode counts:
+    `resumedImage`, `resumedVideo`, `resumedSlideshow`
+    alongside `failedUnsupported` and `failed`.
+
+**Tests**
+
+- `Server.Tests/Cluster/CrashRecoveryTests.cs`:
+  * Removed `Video_Job_Falls_Back_To_Failed` (the old behaviour
+    that D-6f reverses). Replaced with
+    `Unknown_Mode_Still_Falls_Back_To_Failed` — exercises the
+    fail-closed path with a hand-crafted plan whose mode is
+    `"garbage-mode"`. Confirms the unknown-mode safety net the
+    old test was implicitly relying on.
+  * New `SeedVideoJob(totalFrames, framesPerTile, framesOnDisk,
+    lossless)` helper — drives `FramePlanner.PlanVideo` with
+    `VideoFps=1` so frame count equals "seconds" and a small
+    `totalFrames` gives a small plan. Writes 4-byte
+    PNG-magic placeholders for delivered frames (resume only
+    checks file existence; bytes don't need to be a real PNG).
+  * New `SeedSlideshowJob(slideCount, slidesOnDisk)` helper —
+    same pattern, drives `SlideshowPlanner.PlanSlideshow` via a
+    `List<RenderRequestDto>` of slide requests.
+  * Five new facts:
+    - `Unknown_Mode_Still_Falls_Back_To_Failed` — fail-closed
+      preserved.
+    - `Video_Job_With_No_Frames_Re_Enqueues_All_Tiles` — empty
+      frames dir → all 3 tiles re-enqueue, status returns to
+      `queued`.
+    - `Video_Job_With_Some_Frames_Counts_Completed_Tiles_Only`
+      — 3 frames out of 6 across 3 tiles: tile 0 (frames 0,1)
+      fully done; tile 1 (frames 2,3) partial → re-enqueue the
+      whole tile; tile 2 absent → re-enqueue. Status:
+      `rendering`, TilesDone=1, FramesDone=3.
+    - `Video_Job_With_All_Frames_Drives_Finaliser` — all 4
+      frames on disk → finaliser runs, status reaches `ready`,
+      dispatcher retires the job. Uses `lossless="none"` so the
+      finaliser hits the frames-manifest stub (no ffmpeg
+      required in the test environment).
+    - `Slideshow_Job_With_No_Slides_Re_Enqueues_All_Tiles` —
+      empty slides dir → all 3 tiles re-enqueue.
+    - `Slideshow_Job_With_Partial_Slides_Re_Enqueues_Remainder`
+      — slides 0 and 2 done, 1 and 3 missing → 2 pending in the
+      dispatcher.
+- Test suite: **354 passed, 0 failed** (+5 since D-6b2's 349).
+- Filtered run `--filter "FullyQualifiedName~CrashRecoveryTests"`:
+  12 passed in 417 ms (was 7 — +5 new D-6f tests).
+
+**Design decisions**
+
+#133. A video tile is "done" only when EVERY frame in its
+  `[StartFrame, EndFrame)` range is on disk; a partial range
+  re-enqueues the whole tile. Alternative — mark the tile done
+  when ANY frame is present, then re-render only the missing
+  frames — would have required a sub-tile dispatch surface that
+  doesn't exist (the dispatcher tracks tile completion, not
+  per-frame). Re-rendering the whole range is cheap relative to
+  losing the partial work entirely (the old D-6a fail path) and
+  the frame-write path is idempotent (write-and-rename), so a
+  duplicate frame delivery is a no-op accept.
+
+#134. The streaming ffmpeg pipeline restarts from scratch on
+  resume rather than picking up mid-encode. Reason: the ffmpeg
+  subprocess died with the master and its `image2pipe` stdin
+  buffer is gone. The on-disk artifact is at best partially
+  written (no `moov` atom for mp4, no terminating Cluster for
+  mkv) — fundamentally unusable. Re-encoding from
+  `frame_000001.png` is correct and bounded by the total frame
+  count, which is bounded by `FramePlanner.MaxTotalFrames`
+  (18000). Worst-case re-encode time at 30 fps is minutes, not
+  hours.
+
+#135. The pipeline's `_delivered` counter is primed with the
+  on-disk frame count via `NotifyFramesDelivered`. The
+  alternative — leave it at zero — would have left the backpressure
+  gate (`Backlog = Delivered - Encoded > MaxFrameQueueDepth`)
+  off until the encoder caught up; a fast worker re-delivering
+  a 30-frame tile would push the on-disk queue past 64 before
+  the gate engaged. Priming keeps the gate accurate from the
+  first post-resume tile.
+
+#136. Resume re-registers `_slideshowJobs[rec.JobId] = rec.Submit`
+  before the dispatcher gets the remaining tiles. The
+  alternative — register lazily on the first `tile.deliver` —
+  would have raced with the dispatcher: a worker could have
+  reached the deliver path before the lazy-register fired, and
+  the dispatch lookup would have fallen through to the
+  image-tile path looking for a non-existent merger. The
+  eager registration is constant-time and avoids the race
+  entirely.
+
+#137. `Mode` switch uses `string.Equals(..., StringComparison.
+  OrdinalIgnoreCase)` rather than a pre-normalised enum. The
+  alternative would have required a `JobMode` enum stored in
+  `PersistedStatus` and a migration path for existing on-disk
+  status.json files (or a tolerant parser). The mode string is
+  small, fixed, and already what the rest of the cluster
+  routes on (FramePlanner.PlanVideo checks `request.Mode`,
+  HandleSlideDeliverAsync keys on the submitJob.Slides
+  presence). Keeping it a string here matches the rest of the
+  code.
+
+#138. `Video_Job_Falls_Back_To_Failed` test deleted (not
+  modified to assert the new resume behaviour). The original
+  test asserted a behaviour D-6f explicitly reverses; keeping
+  it as a "now passes because we resume" test would have
+  misleadingly implied the file documented the resume path,
+  but the resume coverage lives in the three new
+  `Video_Job_With_*` facts. The replacement
+  `Unknown_Mode_Still_Falls_Back_To_Failed` documents the
+  fail-closed safety net the old test was implicitly covering.
+
+#139. Resume helper `SeedVideoJob` uses `VideoFps=1` so frame
+  count and `VideoSeconds` are 1:1. Alternative — use `Fps=30`
+  with `VideoSeconds=0.2` (= 6 frames) — would have made the
+  arithmetic harder to read and produced fractional-second
+  values the planner's float math could land off-by-one on.
+  `Fps=1` keeps the test arithmetic transparent.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing warnings only
+  (32 in Server.Tests project; AVLN5001 + codegen CS0219
+  unchanged from D-6b2).
+- Test suite: **354 passed, 0 failed** (+5 since D-6b2's 349).
+
+**Open follow-ups remaining** (unchanged from D-6b2 minus this
+slice): D-6b1 (SIMD PT4/PT8 sub-rect adaptation), UI growth of
+MasterConfigView (#125), binary-trailer transport for OD-scale
+blobs (D-6b3), and FramePlanner.CloneFrameTemplate not
+propagating the new CenterX4..X7 limbs (D-6b2 leftover — would
+matter only for cluster video at zoom > 1e50, an unusual
+workload).

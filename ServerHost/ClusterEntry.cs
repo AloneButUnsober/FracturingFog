@@ -198,8 +198,12 @@ public static class ClusterEntry
         if (resume.Considered > 0)
         {
             Console.WriteLine(
-                $"recovery: considered={resume.Considered} resumedImage={resume.ResumedImage} " +
-                $"failedUnsupported={resume.FailedUnsupportedMode} failed={resume.Failed}");
+                $"recovery: considered={resume.Considered} " +
+                $"resumedImage={resume.ResumedImage} " +
+                $"resumedVideo={resume.ResumedVideo} " +
+                $"resumedSlideshow={resume.ResumedSlideshow} " +
+                $"failedUnsupported={resume.FailedUnsupportedMode} " +
+                $"failed={resume.Failed}");
         }
 
         // D-5e — periodic eviction of terminal jobs older than the retention

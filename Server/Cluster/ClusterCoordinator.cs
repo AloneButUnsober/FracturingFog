@@ -1812,16 +1812,24 @@ public sealed class ClusterCoordinator : IClusterCoordinator
 
     // ── crash recovery (D-6a) ───────────────────────────────────────────
 
-    /// <summary>D-6a — rebuild dispatcher + merger state for any non-
-    /// terminal job left on disk by a previous master process. Image jobs
-    /// resume: every tile already on disk is replayed into a fresh
-    /// merger, the remaining tiles re-enqueue into the dispatcher under
-    /// their original ids, and status returns to <c>queued</c> (or
-    /// <c>rendering</c> if some tiles were already done). Video and
-    /// slideshow jobs fall back to <see cref="JobStore.FailInflightAfterRestart"/>
-    /// behaviour — their tile streams (frame ranges, slide indices) are
-    /// not yet rebuildable. Caller invokes once before the master starts
-    /// accepting connections; returns counts for logging.</summary>
+    /// <summary>D-6a / D-6f — rebuild dispatcher + per-mode state for any
+    /// non-terminal job left on disk by a previous master process.
+    /// <para>Image jobs (D-6a): every tile already on disk is replayed
+    /// into a fresh merger, the remaining tiles re-enqueue into the
+    /// dispatcher under their original ids, and status returns to
+    /// <c>queued</c> (or <c>rendering</c> if some tiles were already
+    /// done).</para>
+    /// <para>Video jobs (D-6f): per-frame PNGs already on disk count
+    /// their parent tile as done; tiles whose frame range is incomplete
+    /// re-enqueue. If the original job asked for a lossless preset, the
+    /// streaming ffmpeg pipeline restarts from frame_000001.png — the
+    /// prior encoder died with the master, so any partial artifact is
+    /// discarded and re-encoded from the on-disk frames.</para>
+    /// <para>Slideshow jobs (D-6f): per-slide PNGs on disk mark their
+    /// tile done; the submit DTO is re-registered so subsequent slide
+    /// deliveries land on the per-slide writer.</para>
+    /// Caller invokes once before the master starts accepting
+    /// connections; returns counts for logging.</summary>
     public ResumeCounts RecoverFromDisk()
     {
         var counts = new ResumeCounts();
@@ -1832,13 +1840,27 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             counts.Considered++;
             try
             {
-                if (string.Equals(rec.Status.Mode, "image", StringComparison.OrdinalIgnoreCase))
+                string mode = rec.Status.Mode ?? "";
+                if (string.Equals(mode, "image", StringComparison.OrdinalIgnoreCase))
                 {
                     if (TryResumeImageJob(rec)) counts.ResumedImage++;
                     else { FailResumeJob(rec.JobId, "resume-image-failed"); counts.Failed++; }
                 }
+                else if (string.Equals(mode, "video", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryResumeVideoJob(rec)) counts.ResumedVideo++;
+                    else { FailResumeJob(rec.JobId, "resume-video-failed"); counts.Failed++; }
+                }
+                else if (string.Equals(mode, "slideshow", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryResumeSlideshowJob(rec)) counts.ResumedSlideshow++;
+                    else { FailResumeJob(rec.JobId, "resume-slideshow-failed"); counts.Failed++; }
+                }
                 else
                 {
+                    // Unknown mode — preserve the original D-6a
+                    // FailInflightAfterRestart fallback so a malformed
+                    // status.json doesn't wedge the queue.
                     FailResumeJob(rec.JobId, "master-restart");
                     counts.FailedUnsupportedMode++;
                 }
@@ -1857,13 +1879,15 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         return counts;
     }
 
-    /// <summary>D-6a — counts returned by <see cref="RecoverFromDisk"/>.
+    /// <summary>D-6a / D-6f — counts returned by <see cref="RecoverFromDisk"/>.
     /// Host logs these so the operator can see at a glance whether the
     /// restart preserved any inflight work.</summary>
     public struct ResumeCounts
     {
         public int Considered;
         public int ResumedImage;
+        public int ResumedVideo;
+        public int ResumedSlideshow;
         public int FailedUnsupportedMode;
         public int Failed;
     }
@@ -1944,6 +1968,176 @@ public sealed class ClusterCoordinator : IClusterCoordinator
 
         if (replayed == plan.Count)
             FinaliseMerge(rec.JobId, merger);
+        return true;
+    }
+
+    /// <summary>D-6f — rebuild dispatcher state for a video job left
+    /// inflight by a previous master process. Tiles whose full frame
+    /// range is on disk count as done; tiles with any missing frame in
+    /// their range re-enqueue (the worker re-renders the whole range —
+    /// frame writes are idempotent overwrites). If the original job
+    /// asked for a lossless preset, restart the streaming ffmpeg
+    /// pipeline so the on-disk frames re-encode from scratch (the prior
+    /// encoder died with the master, leaving at most a partial / empty
+    /// artifact). Slideshow's sibling helper is
+    /// <see cref="TryResumeSlideshowJob"/>.</summary>
+    private bool TryResumeVideoJob(ResumeRecord rec)
+    {
+        var planTiles = ReadPlanTileDtos(rec.JobId);
+        if (planTiles is null || planTiles.Count == 0) return false;
+
+        // Pull totalFrames + fps off the first frame-range tile (every
+        // tile in the plan carries the same parent-job header). A plan
+        // with no FrameRange tiles is malformed for video; bail rather
+        // than mis-resume.
+        var firstRange = planTiles[0].FrameRange;
+        if (firstRange is null) return false;
+        int totalFrames = firstRange.TotalFrames;
+        int videoFps    = firstRange.Fps;
+        if (totalFrames <= 0 || videoFps <= 0) return false;
+
+        var done = new HashSet<int>();
+        var remaining = new List<TileJobDto>(planTiles.Count);
+        foreach (var t in planTiles)
+        {
+            if (t.FrameRange is null) { remaining.Add(t); continue; }
+            bool allPresent = true;
+            for (int f = t.FrameRange.StartFrame; f < t.FrameRange.EndFrame; f++)
+            {
+                if (!Jobs!.FrameExists(rec.JobId, f)) { allPresent = false; break; }
+            }
+            if (allPresent) done.Add(t.TileId);
+            else            remaining.Add(t);
+        }
+
+        // Streaming encoder restart. The prior ffmpeg subprocess died
+        // with the master; any partial mp4/mkv on disk is unusable.
+        // Restart the pipeline; it scans frame_000001.png onward and
+        // encodes any frame already on disk before the first new tile
+        // delivery lands. Pipeline null = no lossless preset / no
+        // ffmpeg on box → fall back to the frames-manifest stub at
+        // finalise time (same as the D-4b cold-start path).
+        var preset = VideoFramePipeline.PresetFromLossless(rec.Submit.Request.Lossless);
+        if (preset != null && VideoFramePipeline.IsAvailable())
+        {
+            var cts = new CancellationTokenSource();
+            string framesDir    = Jobs!.FramesDir(rec.JobId);
+            string artifactBase = Path.Combine(Jobs.JobDir(rec.JobId), "artifact");
+            var pipe = VideoFramePipeline.TryStart(
+                framesDir, totalFrames, videoFps,
+                preset.Value, artifactBase, cts.Token);
+            if (pipe != null)
+            {
+                // Prime the pipeline's delivered counter so the
+                // backpressure gate accounts for frames already on disk
+                // pre-resume; without this it would think the encoder
+                // is N frames ahead of wire delivery and never gate.
+                int already = Jobs.CountFrames(rec.JobId);
+                if (already > 0) pipe.NotifyFramesDelivered(already);
+                _videoPipelines[rec.JobId] = pipe;
+                _videoCts[rec.JobId]       = cts;
+            }
+            else
+            {
+                cts.Dispose();
+            }
+        }
+
+        if (remaining.Count > 0)
+            Dispatcher!.EnqueueJob(rec.JobId, remaining);
+
+        int framesOnDisk = Jobs!.CountFrames(rec.JobId);
+        Jobs.UpdateStatus(rec.JobId, s =>
+        {
+            s.TilesDone     = done.Count;
+            s.TilesInFlight = 0;
+            s.FramesDone    = framesOnDisk;
+            s.TotalFrames   = totalFrames;
+            s.JobState      = done.Count > 0 ? "rendering" : "queued";
+            s.FailReason    = null;
+        });
+        Jobs.AppendEvent(rec.JobId, "resumed", new Dictionary<string, object?>
+        {
+            ["mode"]         = "video",
+            ["framesOnDisk"] = framesOnDisk,
+            ["tilesDone"]    = done.Count,
+            ["remaining"]    = remaining.Count,
+            ["total"]        = planTiles.Count,
+        });
+        _log.Event("job-resumed", new Dictionary<string, object?>
+        {
+            ["jobId"]        = rec.JobId,
+            ["mode"]         = "video",
+            ["framesOnDisk"] = framesOnDisk,
+            ["tilesDone"]    = done.Count,
+            ["remaining"]    = remaining.Count,
+            ["total"]        = planTiles.Count,
+        });
+
+        // All tiles already complete on disk → drive the finaliser
+        // directly so the resumed job re-encodes + transitions to ready.
+        // Without this a job that crashed during the merging window
+        // would stay "rendering" forever (no future tile.deliver to
+        // trigger FinaliseVideoFrames).
+        if (remaining.Count == 0 && done.Count == planTiles.Count)
+            FinaliseVideoFrames(rec.JobId, framesOnDisk);
+
+        return true;
+    }
+
+    /// <summary>D-6f — rebuild dispatcher state for a slideshow job
+    /// left inflight by a previous master process. Slides already
+    /// written to <see cref="JobStore.SlidesDir"/> count as done; the
+    /// rest re-enqueue. Re-registers the submit DTO in
+    /// <see cref="_slideshowJobs"/> so subsequent slide deliveries land
+    /// on the per-slide writer path.</summary>
+    private bool TryResumeSlideshowJob(ResumeRecord rec)
+    {
+        var planTiles = ReadPlanTileDtos(rec.JobId);
+        if (planTiles is null || planTiles.Count == 0) return false;
+        if (rec.Submit.Slides is null || rec.Submit.Slides.Count == 0) return false;
+
+        var done = new HashSet<int>();
+        var remaining = new List<TileJobDto>(planTiles.Count);
+        foreach (var t in planTiles)
+        {
+            if (Jobs!.SlideExists(rec.JobId, t.TileId)) done.Add(t.TileId);
+            else                                        remaining.Add(t);
+        }
+
+        // Submit DTO must be live in memory for HandleSlideDeliverAsync
+        // to find — D-4c's dispatch path keys on _slideshowJobs presence.
+        _slideshowJobs[rec.JobId] = rec.Submit;
+
+        if (remaining.Count > 0)
+            Dispatcher!.EnqueueJob(rec.JobId, remaining);
+
+        Jobs.UpdateStatus(rec.JobId, s =>
+        {
+            s.TilesDone     = done.Count;
+            s.TilesInFlight = 0;
+            s.JobState      = done.Count > 0 ? "rendering" : "queued";
+            s.FailReason    = null;
+        });
+        Jobs.AppendEvent(rec.JobId, "resumed", new Dictionary<string, object?>
+        {
+            ["mode"]      = "slideshow",
+            ["tilesDone"] = done.Count,
+            ["remaining"] = remaining.Count,
+            ["total"]     = planTiles.Count,
+        });
+        _log.Event("job-resumed", new Dictionary<string, object?>
+        {
+            ["jobId"]     = rec.JobId,
+            ["mode"]      = "slideshow",
+            ["tilesDone"] = done.Count,
+            ["remaining"] = remaining.Count,
+            ["total"]     = planTiles.Count,
+        });
+
+        if (remaining.Count == 0 && done.Count == planTiles.Count)
+            FinaliseSlidesAsManifest(rec.JobId, rec.Submit, done.Count);
+
         return true;
     }
 
