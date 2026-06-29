@@ -639,13 +639,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Context-menu + Floating Menu "Slideshow" buttons run an unnamed
-        // ad-hoc session: built-in defaults, independent of whatever is
-        // saved as the active preset (which the user may have renamed,
-        // deleted, or never saved). The Slideshow Settings dialog's own
-        // Start button still honours the user's explicit preset choice via
-        // StartSlideshowFromConfig.
-        StartSlideshowWithConfig(new SlideshowConfig());
+        // Context-menu + Floating Menu "Slideshow" buttons honour the user's
+        // active saved preset — RecordSlideshow, AdaptiveSweep, AudioReactive,
+        // filters etc. were unreachable when this path constructed a fresh
+        // default config. Falls back to defaults when the library load fails
+        // (corrupt JSON / first run) so the toggle still works.
+        SlideshowConfig active;
+        try { active = SlideshowConfigLibrary.GetActive(SlideshowConfigLibrary.Load()); }
+        catch { active = new SlideshowConfig(); }
+        StartSlideshowWithConfig(active);
     }
 
     /// <summary>Start the image slideshow from an explicit in-memory
@@ -673,6 +675,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             _slideshow.Stopped += (_, _) =>
             {
                 IsSlideshowVcrVisible = false;
+                FloatingMenu.SlideshowButtonText = "Slideshow";
                 this.RaisePropertyChanged(nameof(IsSlideshowRunning));
                 FinalizeSlideshowRecording();
                 // Detach beat source + tell the host to spin down its
@@ -784,6 +787,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
+        FloatingMenu.SlideshowButtonText = "Stop";
         _slideshow.Start();
         this.RaisePropertyChanged(nameof(IsSlideshowRunning));
     }

@@ -92,7 +92,7 @@
                             <Button Classes="action neutral" Content="Poster" Command="{Binding PosterCommand}"     ToolTip.Tip="Print-ready poster image" Margin="0,0,0,4" />
                         </UniformGrid>
                         <UniformGrid Columns="3">
-                            <Button Classes="action slideshow" Content="Slideshow"     Command="{Binding SlideshowCommand}"     ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />
+                            <Button Classes="action slideshow" Content="{Binding SlideshowButtonText}" Command="{Binding SlideshowCommand}"     ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />
                             <Button Classes="action video"     Content="{Binding VideoButtonText}" Command="{Binding VideoCommand}" ToolTip.Tip="Animated zoom" Margin="0,0,4,0" />
                             <Button Classes="action danger"    Content="Close Program" Command="{Binding CloseProgramCommand}"  ToolTip.Tip="Exit Fracturing Fog" />
                         </UniformGrid>

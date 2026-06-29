@@ -299,6 +299,17 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _videoButtonText, value);
     }
 
+    /// <summary>Label for the Slideshow button. Flips between "Slideshow" and
+    /// "Stop" while the image slideshow cycler is running. ShellViewModel sets
+    /// this when it toggles the engine. Matches the legacy MainForm parity
+    /// where _slideshowButton.Text tracked _slideshowRunning.</summary>
+    private string _slideshowButtonText = "Slideshow";
+    public string SlideshowButtonText
+    {
+        get => _slideshowButtonText;
+        set => this.RaiseAndSetIfChanged(ref _slideshowButtonText, value);
+    }
+
     /// <summary>Mirror an externally-driven region selection without firing
     /// <see cref="RegionComboChanged"/>. Used when the toolbar or theme editor
     /// jumps to a region and we want the menu combo to track it.</summary>
