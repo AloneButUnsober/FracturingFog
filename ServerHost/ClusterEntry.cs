@@ -117,21 +117,72 @@ public static class ClusterEntry
                 cfg.WorkerTileNextBurst             = snap.WorkerTileNextBurst;
                 cfg.Save();
             },
-            // D-6b — master-side reference orbit compute. Engine-assembly
-            // dependency lives here (Server library stays Engine-free).
-            // Fires only for Mandelbrot image jobs in the supported zoom
-            // range; see TilePlanner.QualifiesForSharedReferenceOrbit.
-            ReferenceOrbitProvider = (cx, cxLo, cy, cyLo, maxIter) =>
+            // D-6b / D-6b2 — master-side reference orbit compute. Engine-
+            // assembly dependency lives here (Server library stays Engine-
+            // free). Fires only for Mandelbrot image jobs in the supported
+            // zoom range; see TilePlanner.QualifiesForSharedReferenceOrbit.
+            // Limbs choice tracks the calculator's own QD / OD promotion
+            // thresholds so the blob the master computes matches the
+            // precision the worker would have computed locally.
+            ReferenceOrbitProvider = (request, maxIter) =>
             {
                 try
                 {
-                    var orbit = FracturingFog.MandelbrotCalculator
-                        .ComputeReferenceOrbitDDPublic(cx, cxLo, cy, cyLo, maxIter);
-                    byte[] blob = FracturingFog.Server.Cluster.ReferenceOrbitBlobCodec.EncodeDD(
-                        orbit.RefLen, orbit.MaxIter, orbit.Escaped,
-                        orbit.CentreX, orbit.CentreXLo, orbit.CentreY, orbit.CentreYLo,
-                        orbit.Zr, orbit.Zi, orbit.ZrLo, orbit.ZiLo);
-                    return (blob, orbit.MaxIter);
+                    double zoom = request.Zoom ?? 0.0;
+                    if (zoom > FracturingFog.Server.Cluster.TilePlanner.SharedRefOrbitODThreshold)
+                    {
+                        var orbit = FracturingFog.MandelbrotCalculator
+                            .ComputeReferenceOrbitODPublic(
+                                request.CenterX!.Value, request.CenterXLo,
+                                request.CenterX2, request.CenterX3,
+                                request.CenterX4, request.CenterX5,
+                                request.CenterX6, request.CenterX7,
+                                request.CenterY!.Value, request.CenterYLo,
+                                request.CenterY2, request.CenterY3,
+                                request.CenterY4, request.CenterY5,
+                                request.CenterY6, request.CenterY7,
+                                maxIter);
+                        byte[] blob = FracturingFog.Server.Cluster.ReferenceOrbitBlobCodec.EncodeOD(
+                            orbit.RefLen, orbit.MaxIter, orbit.Escaped,
+                            orbit.CentreX,  orbit.CentreXLo, orbit.CentreX2, orbit.CentreX3,
+                            orbit.CentreX4, orbit.CentreX5,  orbit.CentreX6, orbit.CentreX7,
+                            orbit.CentreY,  orbit.CentreYLo, orbit.CentreY2, orbit.CentreY3,
+                            orbit.CentreY4, orbit.CentreY5,  orbit.CentreY6, orbit.CentreY7,
+                            orbit.Zr, orbit.Zi, orbit.ZrLo, orbit.ZiLo,
+                            orbit.ZrX2, orbit.ZiX2, orbit.ZrX3, orbit.ZiX3,
+                            orbit.ZrX4, orbit.ZiX4, orbit.ZrX5, orbit.ZiX5,
+                            orbit.ZrX6, orbit.ZiX6, orbit.ZrX7, orbit.ZiX7);
+                        return (blob, orbit.MaxIter);
+                    }
+                    if (zoom > FracturingFog.Server.Cluster.TilePlanner.SharedRefOrbitQDThreshold)
+                    {
+                        var orbit = FracturingFog.MandelbrotCalculator
+                            .ComputeReferenceOrbitQDPublic(
+                                request.CenterX!.Value, request.CenterXLo,
+                                request.CenterX2, request.CenterX3,
+                                request.CenterY!.Value, request.CenterYLo,
+                                request.CenterY2, request.CenterY3,
+                                maxIter);
+                        byte[] blob = FracturingFog.Server.Cluster.ReferenceOrbitBlobCodec.EncodeQD(
+                            orbit.RefLen, orbit.MaxIter, orbit.Escaped,
+                            orbit.CentreX, orbit.CentreXLo, orbit.CentreX2, orbit.CentreX3,
+                            orbit.CentreY, orbit.CentreYLo, orbit.CentreY2, orbit.CentreY3,
+                            orbit.Zr, orbit.Zi, orbit.ZrLo, orbit.ZiLo,
+                            orbit.ZrX2, orbit.ZiX2, orbit.ZrX3, orbit.ZiX3);
+                        return (blob, orbit.MaxIter);
+                    }
+                    {
+                        var orbit = FracturingFog.MandelbrotCalculator
+                            .ComputeReferenceOrbitDDPublic(
+                                request.CenterX!.Value, request.CenterXLo,
+                                request.CenterY!.Value, request.CenterYLo,
+                                maxIter);
+                        byte[] blob = FracturingFog.Server.Cluster.ReferenceOrbitBlobCodec.EncodeDD(
+                            orbit.RefLen, orbit.MaxIter, orbit.Escaped,
+                            orbit.CentreX, orbit.CentreXLo, orbit.CentreY, orbit.CentreYLo,
+                            orbit.Zr, orbit.Zi, orbit.ZrLo, orbit.ZiLo);
+                        return (blob, orbit.MaxIter);
+                    }
                 }
                 catch { return null; }
             },

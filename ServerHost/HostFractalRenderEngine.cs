@@ -282,18 +282,20 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         // back to per-tile compute (logged warning) — never abort the
         // render, because a partial degradation beats a hard failure for
         // an opt-in perf path.
-        MandelbrotCalculator.OrbitDD? seededOrbit = null;
+        MandelbrotCalculator.OrbitDD? seededOrbit   = null;
+        MandelbrotCalculator.OrbitQD? seededOrbitQD = null;
+        MandelbrotCalculator.OrbitOD? seededOrbitOD = null;
         if (!string.IsNullOrEmpty(req.RefOrbitBlobBase64) && ftype == FractalType.Mandelbrot)
         {
             try
             {
                 byte[] blob = Convert.FromBase64String(req.RefOrbitBlobBase64!);
                 var decoded = ReferenceOrbitBlobCodec.Decode(blob);
-                // Accept the seed only when the calculator's centre + cap
-                // match what the master used. Centre mismatch would let
-                // the calculator's own centerSame check fall through to
-                // per-tile compute anyway; we short-circuit one Decode
-                // allocation by checking here.
+                // Accept the seed only when the calculator's centre Hi/Lo
+                // + cap match what the master used. Higher limbs (QD X2/X3,
+                // OD X4..X7) are derived from the same request fields the
+                // master used; the calculator's centerSame check still
+                // guards against any silent stale-orbit reuse.
                 bool centreOk = decoded.CentreX   == cx
                              && decoded.CentreXLo == cxLo
                              && decoded.CentreY   == cy
@@ -301,21 +303,66 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                 bool capOk = iter <= decoded.MaxIter;
                 if (centreOk && capOk)
                 {
-                    seededOrbit = new MandelbrotCalculator.OrbitDD
+                    switch (decoded.Limbs)
                     {
-                        CentreX   = decoded.CentreX,
-                        CentreXLo = decoded.CentreXLo,
-                        CentreY   = decoded.CentreY,
-                        CentreYLo = decoded.CentreYLo,
-                        MaxIter   = decoded.MaxIter,
-                        RefLen    = decoded.RefLen,
-                        Escaped   = decoded.Escaped,
-                        Zr        = decoded.RefZr,
-                        Zi        = decoded.RefZi,
-                        ZrLo      = decoded.RefZrLo,
-                        ZiLo      = decoded.RefZiLo,
-                    };
-                    log.Info($"seeded ref orbit: refLen={decoded.RefLen} maxIter={decoded.MaxIter} escaped={decoded.Escaped}");
+                        case ReferenceOrbitBlobCodec.LimbsDD:
+                            seededOrbit = new MandelbrotCalculator.OrbitDD
+                            {
+                                CentreX   = decoded.CentreX,
+                                CentreXLo = decoded.CentreXLo,
+                                CentreY   = decoded.CentreY,
+                                CentreYLo = decoded.CentreYLo,
+                                MaxIter   = decoded.MaxIter,
+                                RefLen    = decoded.RefLen,
+                                Escaped   = decoded.Escaped,
+                                Zr        = decoded.RefZr,
+                                Zi        = decoded.RefZi,
+                                ZrLo      = decoded.RefZrLo,
+                                ZiLo      = decoded.RefZiLo,
+                            };
+                            break;
+                        case ReferenceOrbitBlobCodec.LimbsQD:
+                            seededOrbitQD = new MandelbrotCalculator.OrbitQD
+                            {
+                                CentreX   = decoded.CentreX,  CentreXLo = decoded.CentreXLo,
+                                CentreX2  = decoded.CentreX2, CentreX3  = decoded.CentreX3,
+                                CentreY   = decoded.CentreY,  CentreYLo = decoded.CentreYLo,
+                                CentreY2  = decoded.CentreY2, CentreY3  = decoded.CentreY3,
+                                MaxIter   = decoded.MaxIter,
+                                RefLen    = decoded.RefLen,
+                                Escaped   = decoded.Escaped,
+                                Zr   = decoded.RefZr,   Zi   = decoded.RefZi,
+                                ZrLo = decoded.RefZrLo, ZiLo = decoded.RefZiLo,
+                                ZrX2 = decoded.RefZrX2, ZiX2 = decoded.RefZiX2,
+                                ZrX3 = decoded.RefZrX3, ZiX3 = decoded.RefZiX3,
+                            };
+                            break;
+                        case ReferenceOrbitBlobCodec.LimbsOD:
+                            seededOrbitOD = new MandelbrotCalculator.OrbitOD
+                            {
+                                CentreX   = decoded.CentreX,  CentreXLo = decoded.CentreXLo,
+                                CentreX2  = decoded.CentreX2, CentreX3  = decoded.CentreX3,
+                                CentreX4  = decoded.CentreX4, CentreX5  = decoded.CentreX5,
+                                CentreX6  = decoded.CentreX6, CentreX7  = decoded.CentreX7,
+                                CentreY   = decoded.CentreY,  CentreYLo = decoded.CentreYLo,
+                                CentreY2  = decoded.CentreY2, CentreY3  = decoded.CentreY3,
+                                CentreY4  = decoded.CentreY4, CentreY5  = decoded.CentreY5,
+                                CentreY6  = decoded.CentreY6, CentreY7  = decoded.CentreY7,
+                                MaxIter   = decoded.MaxIter,
+                                RefLen    = decoded.RefLen,
+                                Escaped   = decoded.Escaped,
+                                Zr   = decoded.RefZr,   Zi   = decoded.RefZi,
+                                ZrLo = decoded.RefZrLo, ZiLo = decoded.RefZiLo,
+                                ZrX2 = decoded.RefZrX2, ZiX2 = decoded.RefZiX2,
+                                ZrX3 = decoded.RefZrX3, ZiX3 = decoded.RefZiX3,
+                                ZrX4 = decoded.RefZrX4, ZiX4 = decoded.RefZiX4,
+                                ZrX5 = decoded.RefZrX5, ZiX5 = decoded.RefZiX5,
+                                ZrX6 = decoded.RefZrX6, ZiX6 = decoded.RefZiX6,
+                                ZrX7 = decoded.RefZrX7, ZiX7 = decoded.RefZiX7,
+                            };
+                            break;
+                    }
+                    log.Info($"seeded ref orbit: limbs={decoded.Limbs} refLen={decoded.RefLen} maxIter={decoded.MaxIter} escaped={decoded.Escaped}");
                 }
                 else
                 {
@@ -337,10 +384,20 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             CenterXLo = cxLo,
             CenterX2 = cx2,
             CenterX3 = cx3,
+            // D-6b2 — OD limbs from the request (zero outside the OD
+            // cluster path so legacy single-server renders are unchanged).
+            CenterX4 = req.CenterX4,
+            CenterX5 = req.CenterX5,
+            CenterX6 = req.CenterX6,
+            CenterX7 = req.CenterX7,
             CenterY = cy,
             CenterYLo = cyLo,
             CenterY2 = cy2,
             CenterY3 = cy3,
+            CenterY4 = req.CenterY4,
+            CenterY5 = req.CenterY5,
+            CenterY6 = req.CenterY6,
+            CenterY7 = req.CenterY7,
             Zoom = zoom,
             MaxIterations = iter,
             ColorMap = theme,
@@ -360,6 +417,8 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             SubRectOffsetX = req.SubRectOffsetX,
             SubRectOffsetY = req.SubRectOffsetY,
             SeededOrbit    = seededOrbit,
+            SeededOrbitQD  = seededOrbitQD,
+            SeededOrbitOD  = seededOrbitOD,
         };
 
         // CPU-bound rasterization runs on a thread-pool worker. The outer

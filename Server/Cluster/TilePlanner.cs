@@ -44,18 +44,21 @@ public static class TilePlanner
     /// dead bytes on the wire.</summary>
     public const double SharedRefOrbitMinZoom = 1e8;
 
-    /// <summary>D-6b — maximum job zoom for v1 shared-orbit support. Above
-    /// this the calculator promotes to QD ref orbit (CenterX2/X3 limbs
-    /// engage); the wire format ships DD limbs only in v1 so the seeded
-    /// orbit's centerSame check would miss and the tile would recompute.
-    /// Skipping the blob saves bandwidth on workloads that wouldn't
-    /// benefit from it.</summary>
-    public const double SharedRefOrbitMaxZoom = MandelbrotQDZoomThreshold;
+    /// <summary>D-6b2 — maximum job zoom for shared-orbit support. The
+    /// codec now ships DD (limbs=2), QD (limbs=4) and OD (limbs=8); the
+    /// calculator's OD path covers zoom up to ~10^116 before the
+    /// X7-limb noise floor takes over. Cap conservatively below that —
+    /// jobs above this fall back to per-tile compute (still correct,
+    /// just slower).</summary>
+    public const double SharedRefOrbitMaxZoom = 1e115;
 
-    /// <summary>Mirrors <c>MandelbrotCalculator.QDZoomThreshold</c> —
-    /// duplicated here so the planner can gate without taking an Engine
-    /// dependency.</summary>
-    private const double MandelbrotQDZoomThreshold = 1e25;
+    /// <summary>D-6b2 — zoom at which the planner asks for a QD-limbs
+    /// orbit instead of DD. Mirrors <c>MandelbrotCalculator.QDZoomThreshold</c>.</summary>
+    public const double SharedRefOrbitQDThreshold = 1e25;
+
+    /// <summary>D-6b2 — zoom at which the planner asks for an OD-limbs
+    /// orbit instead of QD. Mirrors <c>MandelbrotCalculator.ODZoomThreshold</c>.</summary>
+    public const double SharedRefOrbitODThreshold = 1e50;
 
     /// <summary>Default target wall-time per tile, in milliseconds.
     /// Adaptive sizing aims so the median worker finishes each tile in
@@ -330,6 +333,16 @@ public static class TilePlanner
             t.Render.CenterYLo  = submitRequest.CenterYLo;
             t.Render.CenterY2   = submitRequest.CenterY2;
             t.Render.CenterY3   = submitRequest.CenterY3;
+            // D-6b2 — OD-limbs propagation. Zero at DD/QD zoom; non-zero
+            // only when the submission carried an OD-precision centre.
+            t.Render.CenterX4   = submitRequest.CenterX4;
+            t.Render.CenterX5   = submitRequest.CenterX5;
+            t.Render.CenterX6   = submitRequest.CenterX6;
+            t.Render.CenterX7   = submitRequest.CenterX7;
+            t.Render.CenterY4   = submitRequest.CenterY4;
+            t.Render.CenterY5   = submitRequest.CenterY5;
+            t.Render.CenterY6   = submitRequest.CenterY6;
+            t.Render.CenterY7   = submitRequest.CenterY7;
             t.Render.Zoom       = imgZoom;
             t.Render.Width      = tW;
             t.Render.Height     = tH;

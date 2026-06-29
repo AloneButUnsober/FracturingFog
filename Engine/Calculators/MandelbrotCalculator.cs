@@ -3441,6 +3441,202 @@ public sealed class MandelbrotCalculator
         public required double[] ZiLo    { get; init; }
     }
 
+    /// <summary>D-6b2 — public QD-precision reference-orbit computation.
+    /// Mirrors the private <c>ComputeReferenceOrbitQD(QD,QD,int)</c>
+    /// instance method bit-for-bit so a cluster master can pre-compute the
+    /// orbit once per deep-zoom job (zoom &gt; 1e25) and ship it to every
+    /// tile via <see cref="SeedReferenceOrbitQD"/>.</summary>
+    public static OrbitQD ComputeReferenceOrbitQDPublic(
+        double centreX,  double centreXLo, double centreX2, double centreX3,
+        double centreY,  double centreYLo, double centreY2, double centreY3,
+        int maxIter)
+    {
+        if (maxIter <= 0) throw new ArgumentOutOfRangeException(nameof(maxIter));
+        var cx = new QD(centreX, centreXLo, centreX2, centreX3);
+        var cy = new QD(centreY, centreYLo, centreY2, centreY3);
+        int sz = maxIter + 1;
+        var zr   = new double[sz]; var zi   = new double[sz];
+        var zrLo = new double[sz]; var ziLo = new double[sz];
+        var zrX2 = new double[sz]; var ziX2 = new double[sz];
+        var zrX3 = new double[sz]; var ziX3 = new double[sz];
+
+        QD z_r = QD.Zero, z_i = QD.Zero;
+        int n;
+        for (n = 0; n < maxIter; n++)
+        {
+            zr[n]   = z_r.X0; zi[n]   = z_i.X0;
+            zrLo[n] = z_r.X1; ziLo[n] = z_i.X1;
+            zrX2[n] = z_r.X2; ziX2[n] = z_i.X2;
+            zrX3[n] = z_r.X3; ziX3[n] = z_i.X3;
+            if (z_r.X0 * z_r.X0 + z_i.X0 * z_i.X0 >= EscapeRadius2) break;
+            QD newZi = (z_r * z_i) * 2.0 + cy;
+            z_r = z_r.Square() - z_i.Square() + cx;
+            z_i = newZi;
+        }
+        zr[n]   = z_r.X0; zi[n]   = z_i.X0;
+        zrLo[n] = z_r.X1; ziLo[n] = z_i.X1;
+        zrX2[n] = z_r.X2; ziX2[n] = z_i.X2;
+        zrX3[n] = z_r.X3; ziX3[n] = z_i.X3;
+
+        return new OrbitQD
+        {
+            CentreX   = centreX,   CentreXLo = centreXLo,
+            CentreX2  = centreX2,  CentreX3  = centreX3,
+            CentreY   = centreY,   CentreYLo = centreYLo,
+            CentreY2  = centreY2,  CentreY3  = centreY3,
+            MaxIter   = maxIter,
+            RefLen    = n,
+            Escaped   = n < maxIter,
+            Zr   = zr,   Zi   = zi,
+            ZrLo = zrLo, ZiLo = ziLo,
+            ZrX2 = zrX2, ZiX2 = ziX2,
+            ZrX3 = zrX3, ZiX3 = ziX3,
+        };
+    }
+
+    /// <summary>D-6b2 — container for a QD-precision reference orbit.
+    /// Arrays sized <c>RefLen + 1</c>.</summary>
+    public sealed class OrbitQD
+    {
+        public required double CentreX   { get; init; }
+        public required double CentreXLo { get; init; }
+        public required double CentreX2  { get; init; }
+        public required double CentreX3  { get; init; }
+        public required double CentreY   { get; init; }
+        public required double CentreYLo { get; init; }
+        public required double CentreY2  { get; init; }
+        public required double CentreY3  { get; init; }
+        public required int    MaxIter   { get; init; }
+        public required int    RefLen    { get; init; }
+        public required bool   Escaped   { get; init; }
+        public required double[] Zr   { get; init; }
+        public required double[] Zi   { get; init; }
+        public required double[] ZrLo { get; init; }
+        public required double[] ZiLo { get; init; }
+        public required double[] ZrX2 { get; init; }
+        public required double[] ZiX2 { get; init; }
+        public required double[] ZrX3 { get; init; }
+        public required double[] ZiX3 { get; init; }
+    }
+
+    /// <summary>D-6b2 — public OD-precision reference-orbit computation.
+    /// Mirrors the private <c>ComputeReferenceOrbitOD(OD,OD,int)</c>
+    /// instance method bit-for-bit so a cluster master can pre-compute the
+    /// orbit once per ultra-deep-zoom job (zoom &gt; 1e50) and ship it to
+    /// every tile via <see cref="SeedReferenceOrbitOD"/>.</summary>
+    public static OrbitOD ComputeReferenceOrbitODPublic(
+        double centreX,  double centreXLo, double centreX2, double centreX3,
+        double centreX4, double centreX5,  double centreX6, double centreX7,
+        double centreY,  double centreYLo, double centreY2, double centreY3,
+        double centreY4, double centreY5,  double centreY6, double centreY7,
+        int maxIter)
+    {
+        if (maxIter <= 0) throw new ArgumentOutOfRangeException(nameof(maxIter));
+        var cx = new OD(centreX, centreXLo, centreX2, centreX3,
+                        centreX4, centreX5, centreX6, centreX7);
+        var cy = new OD(centreY, centreYLo, centreY2, centreY3,
+                        centreY4, centreY5, centreY6, centreY7);
+        int sz = maxIter + 1;
+        var zr   = new double[sz]; var zi   = new double[sz];
+        var zrLo = new double[sz]; var ziLo = new double[sz];
+        var zrX2 = new double[sz]; var ziX2 = new double[sz];
+        var zrX3 = new double[sz]; var ziX3 = new double[sz];
+        var zrX4 = new double[sz]; var ziX4 = new double[sz];
+        var zrX5 = new double[sz]; var ziX5 = new double[sz];
+        var zrX6 = new double[sz]; var ziX6 = new double[sz];
+        var zrX7 = new double[sz]; var ziX7 = new double[sz];
+
+        OD z_r = OD.Zero, z_i = OD.Zero;
+        int n;
+        for (n = 0; n < maxIter; n++)
+        {
+            zr[n]   = z_r.X0; zi[n]   = z_i.X0;
+            zrLo[n] = z_r.X1; ziLo[n] = z_i.X1;
+            zrX2[n] = z_r.X2; ziX2[n] = z_i.X2;
+            zrX3[n] = z_r.X3; ziX3[n] = z_i.X3;
+            zrX4[n] = z_r.X4; ziX4[n] = z_i.X4;
+            zrX5[n] = z_r.X5; ziX5[n] = z_i.X5;
+            zrX6[n] = z_r.X6; ziX6[n] = z_i.X6;
+            zrX7[n] = z_r.X7; ziX7[n] = z_i.X7;
+            if (z_r.X0 * z_r.X0 + z_i.X0 * z_i.X0 >= EscapeRadius2) break;
+            OD newZi = (z_r * z_i) * 2.0 + cy;
+            z_r = z_r.Square() - z_i.Square() + cx;
+            z_i = newZi;
+        }
+        zr[n]   = z_r.X0; zi[n]   = z_i.X0;
+        zrLo[n] = z_r.X1; ziLo[n] = z_i.X1;
+        zrX2[n] = z_r.X2; ziX2[n] = z_i.X2;
+        zrX3[n] = z_r.X3; ziX3[n] = z_i.X3;
+        zrX4[n] = z_r.X4; ziX4[n] = z_i.X4;
+        zrX5[n] = z_r.X5; ziX5[n] = z_i.X5;
+        zrX6[n] = z_r.X6; ziX6[n] = z_i.X6;
+        zrX7[n] = z_r.X7; ziX7[n] = z_i.X7;
+
+        return new OrbitOD
+        {
+            CentreX  = centreX,  CentreXLo = centreXLo,
+            CentreX2 = centreX2, CentreX3  = centreX3,
+            CentreX4 = centreX4, CentreX5  = centreX5,
+            CentreX6 = centreX6, CentreX7  = centreX7,
+            CentreY  = centreY,  CentreYLo = centreYLo,
+            CentreY2 = centreY2, CentreY3  = centreY3,
+            CentreY4 = centreY4, CentreY5  = centreY5,
+            CentreY6 = centreY6, CentreY7  = centreY7,
+            MaxIter  = maxIter,
+            RefLen   = n,
+            Escaped  = n < maxIter,
+            Zr   = zr,   Zi   = zi,
+            ZrLo = zrLo, ZiLo = ziLo,
+            ZrX2 = zrX2, ZiX2 = ziX2,
+            ZrX3 = zrX3, ZiX3 = ziX3,
+            ZrX4 = zrX4, ZiX4 = ziX4,
+            ZrX5 = zrX5, ZiX5 = ziX5,
+            ZrX6 = zrX6, ZiX6 = ziX6,
+            ZrX7 = zrX7, ZiX7 = ziX7,
+        };
+    }
+
+    /// <summary>D-6b2 — container for an OD-precision reference orbit.
+    /// Arrays sized <c>RefLen + 1</c>.</summary>
+    public sealed class OrbitOD
+    {
+        public required double CentreX   { get; init; }
+        public required double CentreXLo { get; init; }
+        public required double CentreX2  { get; init; }
+        public required double CentreX3  { get; init; }
+        public required double CentreX4  { get; init; }
+        public required double CentreX5  { get; init; }
+        public required double CentreX6  { get; init; }
+        public required double CentreX7  { get; init; }
+        public required double CentreY   { get; init; }
+        public required double CentreYLo { get; init; }
+        public required double CentreY2  { get; init; }
+        public required double CentreY3  { get; init; }
+        public required double CentreY4  { get; init; }
+        public required double CentreY5  { get; init; }
+        public required double CentreY6  { get; init; }
+        public required double CentreY7  { get; init; }
+        public required int    MaxIter   { get; init; }
+        public required int    RefLen    { get; init; }
+        public required bool   Escaped   { get; init; }
+        public required double[] Zr   { get; init; }
+        public required double[] Zi   { get; init; }
+        public required double[] ZrLo { get; init; }
+        public required double[] ZiLo { get; init; }
+        public required double[] ZrX2 { get; init; }
+        public required double[] ZiX2 { get; init; }
+        public required double[] ZrX3 { get; init; }
+        public required double[] ZiX3 { get; init; }
+        public required double[] ZrX4 { get; init; }
+        public required double[] ZiX4 { get; init; }
+        public required double[] ZrX5 { get; init; }
+        public required double[] ZiX5 { get; init; }
+        public required double[] ZrX6 { get; init; }
+        public required double[] ZiX6 { get; init; }
+        public required double[] ZrX7 { get; init; }
+        public required double[] ZiX7 { get; init; }
+    }
+
     /// <summary>Seed the internal ref-orbit cache with an externally-
     /// computed DD-precision orbit so the next <see cref="Calculate"/>
     /// short-circuits its own <c>ComputeReferenceOrbit</c> step. Caller
@@ -3495,6 +3691,110 @@ public sealed class MandelbrotCalculator
         _refCx2 = 0; _refCx3 = 0; _refCx4 = 0; _refCx5 = 0; _refCx6 = 0; _refCx7 = 0;
         _refCyHi = orbit.CentreY; _refCyLo = orbit.CentreYLo;
         _refCy2 = 0; _refCy3 = 0; _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
+        _refCachedMaxIter = orbit.MaxIter;
+        _refCachedEscaped = orbit.Escaped;
+    }
+
+    /// <summary>D-6b2 — seed the internal ref-orbit cache with an
+    /// externally-computed QD-precision orbit. Caller MUST set
+    /// <see cref="CenterX"/>/<see cref="CenterX2"/>/etc. + Y limbs to
+    /// match the orbit's centre and call this before
+    /// <see cref="Calculate"/>. Arrays are stored by reference; caller
+    /// must not mutate them after the call. OD limbs (X4..X7) zeroed to
+    /// match what the QD path's centerSame check expects.</summary>
+    public void SeedReferenceOrbitQD(OrbitQD orbit)
+    {
+        if (orbit == null) throw new ArgumentNullException(nameof(orbit));
+        if (orbit.RefLen < 0)
+            throw new ArgumentException("RefLen must be >= 0", nameof(orbit));
+        int sz = orbit.RefLen + 1;
+        if (orbit.Zr.Length < sz || orbit.Zi.Length < sz
+            || orbit.ZrLo.Length < sz || orbit.ZiLo.Length < sz
+            || orbit.ZrX2.Length < sz || orbit.ZiX2.Length < sz
+            || orbit.ZrX3.Length < sz || orbit.ZiX3.Length < sz)
+            throw new ArgumentException(
+                $"orbit arrays shorter than RefLen+1 ({sz})", nameof(orbit));
+
+        EnsureRefOrbitCapacity(orbit.MaxIter);
+
+        Array.Copy(orbit.Zr,   _refZr,   sz);
+        Array.Copy(orbit.Zi,   _refZi,   sz);
+        Array.Copy(orbit.ZrLo, _refZrLo, sz);
+        Array.Copy(orbit.ZiLo, _refZiLo, sz);
+        Array.Copy(orbit.ZrX2, _refZrX2, sz);
+        Array.Copy(orbit.ZiX2, _refZiX2, sz);
+        Array.Copy(orbit.ZrX3, _refZrX3, sz);
+        Array.Copy(orbit.ZiX3, _refZiX3, sz);
+        Array.Clear(_refZrX4, 0, sz);  Array.Clear(_refZiX4, 0, sz);
+        Array.Clear(_refZrX5, 0, sz);  Array.Clear(_refZiX5, 0, sz);
+        Array.Clear(_refZrX6, 0, sz);  Array.Clear(_refZiX6, 0, sz);
+        Array.Clear(_refZrX7, 0, sz);  Array.Clear(_refZiX7, 0, sz);
+
+        _refOrbitLen = orbit.RefLen;
+        _refOrbitGen++;
+
+        _refCxHi = orbit.CentreX;  _refCxLo = orbit.CentreXLo;
+        _refCx2  = orbit.CentreX2; _refCx3  = orbit.CentreX3;
+        _refCx4 = 0; _refCx5 = 0; _refCx6 = 0; _refCx7 = 0;
+        _refCyHi = orbit.CentreY;  _refCyLo = orbit.CentreYLo;
+        _refCy2  = orbit.CentreY2; _refCy3  = orbit.CentreY3;
+        _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
+        _refCachedMaxIter = orbit.MaxIter;
+        _refCachedEscaped = orbit.Escaped;
+    }
+
+    /// <summary>D-6b2 — seed the internal ref-orbit cache with an
+    /// externally-computed OD-precision orbit. Caller MUST set the full
+    /// 8-limb centre on <see cref="CenterX"/>..<see cref="CenterX7"/> +
+    /// Y limbs and call this before <see cref="Calculate"/>. Arrays are
+    /// stored by reference; caller must not mutate them after the call.</summary>
+    public void SeedReferenceOrbitOD(OrbitOD orbit)
+    {
+        if (orbit == null) throw new ArgumentNullException(nameof(orbit));
+        if (orbit.RefLen < 0)
+            throw new ArgumentException("RefLen must be >= 0", nameof(orbit));
+        int sz = orbit.RefLen + 1;
+        if (orbit.Zr.Length < sz   || orbit.Zi.Length < sz
+            || orbit.ZrLo.Length < sz || orbit.ZiLo.Length < sz
+            || orbit.ZrX2.Length < sz || orbit.ZiX2.Length < sz
+            || orbit.ZrX3.Length < sz || orbit.ZiX3.Length < sz
+            || orbit.ZrX4.Length < sz || orbit.ZiX4.Length < sz
+            || orbit.ZrX5.Length < sz || orbit.ZiX5.Length < sz
+            || orbit.ZrX6.Length < sz || orbit.ZiX6.Length < sz
+            || orbit.ZrX7.Length < sz || orbit.ZiX7.Length < sz)
+            throw new ArgumentException(
+                $"orbit arrays shorter than RefLen+1 ({sz})", nameof(orbit));
+
+        EnsureRefOrbitCapacity(orbit.MaxIter);
+
+        Array.Copy(orbit.Zr,   _refZr,   sz);
+        Array.Copy(orbit.Zi,   _refZi,   sz);
+        Array.Copy(orbit.ZrLo, _refZrLo, sz);
+        Array.Copy(orbit.ZiLo, _refZiLo, sz);
+        Array.Copy(orbit.ZrX2, _refZrX2, sz);
+        Array.Copy(orbit.ZiX2, _refZiX2, sz);
+        Array.Copy(orbit.ZrX3, _refZrX3, sz);
+        Array.Copy(orbit.ZiX3, _refZiX3, sz);
+        Array.Copy(orbit.ZrX4, _refZrX4, sz);
+        Array.Copy(orbit.ZiX4, _refZiX4, sz);
+        Array.Copy(orbit.ZrX5, _refZrX5, sz);
+        Array.Copy(orbit.ZiX5, _refZiX5, sz);
+        Array.Copy(orbit.ZrX6, _refZrX6, sz);
+        Array.Copy(orbit.ZiX6, _refZiX6, sz);
+        Array.Copy(orbit.ZrX7, _refZrX7, sz);
+        Array.Copy(orbit.ZiX7, _refZiX7, sz);
+
+        _refOrbitLen = orbit.RefLen;
+        _refOrbitGen++;
+
+        _refCxHi = orbit.CentreX;  _refCxLo = orbit.CentreXLo;
+        _refCx2  = orbit.CentreX2; _refCx3  = orbit.CentreX3;
+        _refCx4  = orbit.CentreX4; _refCx5  = orbit.CentreX5;
+        _refCx6  = orbit.CentreX6; _refCx7  = orbit.CentreX7;
+        _refCyHi = orbit.CentreY;  _refCyLo = orbit.CentreYLo;
+        _refCy2  = orbit.CentreY2; _refCy3  = orbit.CentreY3;
+        _refCy4  = orbit.CentreY4; _refCy5  = orbit.CentreY5;
+        _refCy6  = orbit.CentreY6; _refCy7  = orbit.CentreY7;
         _refCachedMaxIter = orbit.MaxIter;
         _refCachedEscaped = orbit.Escaped;
     }
