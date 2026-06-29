@@ -341,7 +341,8 @@ namespace FracturingFog
                 // or whose required calculator data the region's fractal type
                 // doesn't supply (orbit-trap on non-Mandelbrot, interior on
                 // non-Mandelbrot, 3D-relief on IFS/LSystem/etc.) are excluded.
-                paletteNames = Models.ColorPalette.GetPaletteNamesFor(region.FractalType, region.Zoom);
+                paletteNames = Models.ColorPalette.GetPaletteNamesFor(
+                    region.FractalType, region.Zoom, region.CuratedThemes);
                 if (paletteNames.Count == 0) return;
                 recentThemes.Clear();   // pool changed — drop stale indices
 

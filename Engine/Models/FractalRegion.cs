@@ -200,6 +200,19 @@ namespace FracturingFog.Models
         public LightingFxPresetData? LightingOverride { get; set; }
 
         /// <summary>
+        /// P6: optional hand-picked colour-theme names this region looks best
+        /// with. When non-null+non-empty the slideshow / video slideshow draw
+        /// theme picks from this pool first; unknown names are dropped, and if
+        /// the curated pool produces zero valid entries the picker falls back
+        /// to the compat-filtered list and then the unfiltered list (three-tier
+        /// chain, never empty). Omitted from JSON when null thanks to
+        /// <c>JsonIgnoreCondition.WhenWritingNull</c> so legacy regions stay
+        /// clean.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? CuratedThemes { get; set; }
+
+        /// <summary>
         /// Apply this region's lighting override (if any) to the given params.
         /// No-op when the override is null. Pair with a host-side
         /// "Lock lighting on recall" toggle to let the user opt out of the

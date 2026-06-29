@@ -214,6 +214,9 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
         double sinA = Math.Sin(rot);
         bool skipJacobian = FractalParameters.UserEquationSkipJacobian;
 
+        // P5: gate orbit sampling once per render. Non-orbit themes pay nothing.
+        var orbitMap = ColorMap as IOrbitAwareColorMap;
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -253,6 +256,8 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
                 var cP = new Complex(cx + h, cy);
                 var z = Complex.Zero;
                 var zP = Complex.Zero;
+                OrbitAccumulator acc = default;
+                if (orbitMap != null) orbitMap.InitOrbit(out acc);
                 int iter;
                 if (skipJacobian)
                 {
@@ -264,6 +269,8 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
                         if (r2 >= bailout2) break;
+                        if (orbitMap != null && iter > 0)
+                            orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
                         try { z = fn(z, c, iter); }
                         catch { iter = maxIt; break; }
                     }
@@ -274,6 +281,8 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
                         if (r2 >= bailout2) break;
+                        if (orbitMap != null && iter > 0)
+                            orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
                         try { z = fn(z, c, iter); zP = fn(zP, cP, iter); }
                         catch { iter = maxIt; break; }
                     }
@@ -312,7 +321,9 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
                     NormalXBuffer[idx] = nx;
                     NormalYBuffer[idx] = ny;
 
-                    ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
+                    ColorBuffer[idx] = orbitMap != null
+                        ? (uint)orbitMap.MapWithOrbit(smooth, 0f, maxIt, nx, ny, in acc)
+                        : (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
                 }
             }
         });
