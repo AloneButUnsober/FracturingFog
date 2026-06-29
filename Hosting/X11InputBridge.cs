@@ -294,8 +294,16 @@ internal sealed class X11InputBridge : INativeInputBridge
 
         // Left-click toy-drag hook: when the shell wants the click to start
         // a window move (toy mode), it returns true and we skip dispatch.
+        // On Linux the shell can't drive the move itself (no Avalonia
+        // PointerPressedEventArgs reaches the sponge — this bridge already
+        // consumed the X ButtonPress), so we issue the EWMH _NET_WM_MOVERESIZE
+        // request directly to the compositor here.
         if (btn == PointerButton.Left && (LeftDragWindowHook?.Invoke() ?? false))
+        {
+            try { BeginX11MoveDrag(e.x_root, e.y_root); }
+            catch { /* compositor refused; click already swallowed */ }
             return;
+        }
 
         if (isDouble) _input!.OnPointerDoubleClick(pi);
         else _input!.OnPointerDown(pi);
@@ -364,16 +372,80 @@ internal sealed class X11InputBridge : INativeInputBridge
         return (int)h;
     }
 
+    // ── Toy-mode window move ─────────────────────────────────────────────
+    // EWMH _NET_WM_MOVERESIZE protocol: tell the WM/compositor to drag the
+    // window from the current cursor position. Direction 8 = _NET_WM_MOVERESIZE_MOVE;
+    // button 1 = left; source 1 = "normal application". Sent to the root
+    // window with Substructure{Redirect,Notify}Mask per the EWMH spec.
+    //
+    // Must release the implicit pointer grab the X server installed on
+    // ButtonPress, otherwise the WM cannot acquire the grab it needs to
+    // track the drag.
+    private const int ClientMessage = 33;
+    private const long SubstructureNotifyMask  = 1L << 19;
+    private const long SubstructureRedirectMask = 1L << 20;
+    private const int _NET_WM_MOVERESIZE_MOVE = 8;
+    private static readonly IntPtr CurrentTime = IntPtr.Zero;
+
+    private void BeginX11MoveDrag(int rootX, int rootY)
+    {
+        if (_display == IntPtr.Zero || _window == 0) return;
+
+        IntPtr atom = XInternAtom(_display, "_NET_WM_MOVERESIZE", false);
+        if (atom == IntPtr.Zero) return;
+
+        XUngrabPointer(_display, CurrentTime);
+
+        var ev = new XEvent();
+        ev.type = ClientMessage;
+        ev.xclient.type = ClientMessage;
+        ev.xclient.send_event = 1;
+        ev.xclient.display = _display;
+        ev.xclient.window = _window;
+        ev.xclient.message_type = atom;
+        ev.xclient.format = 32;
+        ev.xclient.data0 = (IntPtr)rootX;
+        ev.xclient.data1 = (IntPtr)rootY;
+        ev.xclient.data2 = (IntPtr)_NET_WM_MOVERESIZE_MOVE;
+        ev.xclient.data3 = (IntPtr)1;  // left button
+        ev.xclient.data4 = (IntPtr)1;  // source: normal application
+
+        nuint root = XDefaultRootWindow(_display);
+        XSendEvent(_display, root, 0,
+            SubstructureNotifyMask | SubstructureRedirectMask, ref ev);
+        XFlush(_display);
+    }
+
     // ── X11 P/Invoke ──────────────────────────────────────────────────────
-    // XEvent union approximation. We only need type + xbutton + xmotion
-    // fields; the union is sized large enough that overlapping accesses are
-    // safe (XEvent in C is 192 bytes).
+    // XEvent union approximation. We only need type + xbutton + xmotion +
+    // xclient fields; the union is sized large enough that overlapping
+    // accesses are safe (XEvent in C is 192 bytes).
     [StructLayout(LayoutKind.Explicit, Size = 192)]
     private struct XEvent
     {
         [FieldOffset(0)] public int type;
         [FieldOffset(0)] public XButtonEvent xbutton;
         [FieldOffset(0)] public XMotionEvent xmotion;
+        [FieldOffset(0)] public XClientMessageEvent xclient;
+    }
+
+    // EWMH ClientMessage layout — 5 long-sized data slots after the header.
+    // Field types use IntPtr so the longs are LP64-sized on 64-bit Linux.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XClientMessageEvent
+    {
+        public int type;
+        public nuint serial;
+        public int send_event;
+        public IntPtr display;
+        public nuint window;
+        public IntPtr message_type;
+        public int format;
+        public IntPtr data0;
+        public IntPtr data1;
+        public IntPtr data2;
+        public IntPtr data3;
+        public IntPtr data4;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -430,4 +502,10 @@ internal sealed class X11InputBridge : INativeInputBridge
     [DllImport("libX11.so.6")] private static extern int    XGetGeometry(IntPtr display, nuint d,
         out nuint root, out int x, out int y, out uint width, out uint height,
         out uint borderWidth, out uint depth);
+    [DllImport("libX11.so.6")] private static extern IntPtr XInternAtom(IntPtr display,
+        [MarshalAs(UnmanagedType.LPStr)] string atom_name, [MarshalAs(UnmanagedType.Bool)] bool only_if_exists);
+    [DllImport("libX11.so.6")] private static extern nuint  XDefaultRootWindow(IntPtr display);
+    [DllImport("libX11.so.6")] private static extern int    XSendEvent(IntPtr display, nuint w,
+        int propagate, long event_mask, ref XEvent event_send);
+    [DllImport("libX11.so.6")] private static extern int    XUngrabPointer(IntPtr display, IntPtr time);
 }
