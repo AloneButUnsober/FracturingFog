@@ -869,16 +869,28 @@ public sealed partial class MainWindow : Window
     // swap-chain HWND eats pointer events before Avalonia sees them.
     private bool ToyDragWindow()
     {
-        if (!OperatingSystem.IsWindows()) return false;
-        try
+        if (OperatingSystem.IsWindows())
         {
-            var handle = TryGetPlatformHandle();
-            if (handle == null) return false;
-            ReleaseCapture();
-            SendMessage(handle.Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
-            return true;
+            try
+            {
+                var handle = TryGetPlatformHandle();
+                if (handle == null) return false;
+                ReleaseCapture();
+                SendMessage(handle.Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+                return true;
+            }
+            catch { return false; }
         }
-        catch { return false; }
+
+        // Linux: X11InputBridge consumed the ButtonPress before the Avalonia
+        // sponge could see it, so AttachToySpongeDrag's BeginMoveDrag path
+        // never fires. Signal "yes, drag the window" — the bridge itself
+        // issues _NET_WM_MOVERESIZE to the compositor since it owns the X
+        // display + window handles.
+        if (OperatingSystem.IsLinux() && _toyModeActive)
+            return true;
+
+        return false;
     }
 
     private const uint WM_NCLBUTTONDOWN = 0x00A1;
