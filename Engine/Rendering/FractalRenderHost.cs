@@ -765,6 +765,13 @@ namespace FracturingFog.Rendering
                 _calculator.MaxIterations = ViewState.LockedIterations;
             else if (maxIters > 0)
                 _calculator.MaxIterations = maxIters;
+            else if (ViewState.PreferredIterations > 0)
+                // Region-supplied iter override (cleared on first user pan/zoom).
+                // Without this the live render falls back to Quality.ComputeIterations
+                // and drops to a lower iter count than the cross-fade source used,
+                // causing visible detail loss the moment the post-commit Trigger
+                // present overwrites the faded-in offscreen buffer.
+                _calculator.MaxIterations = ViewState.PreferredIterations;
             else
                 _calculator.MaxIterations = ViewState.Quality.ComputeIterations(ViewState.Zoom);
 

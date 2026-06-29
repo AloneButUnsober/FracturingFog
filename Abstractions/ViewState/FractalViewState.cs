@@ -99,6 +99,17 @@ namespace FracturingFog.ViewState
         /// <summary>Iter count to hold when <see cref="IterLocked"/> is true.</summary>
         public int LockedIterations { get; set; }
 
+        /// <summary>Region-supplied iter override. > 0 = use this value in
+        /// place of <see cref="Models.QualityPreset.ComputeIterations"/> when
+        /// no lock + no explicit per-call arg overrides. Set by
+        /// <c>HostColorThemeService.ApplyRegion</c> from
+        /// <c>FractalRegion.Iterations</c>; cleared on any zoom/pan input so
+        /// the saved value only governs the first render after a region jump.
+        /// Mirrors legacy <c>MainForm.ApplyRegion</c> which wrote
+        /// <c>region.Iterations</c> directly into <c>_calculator.MaxIterations</c>
+        /// when not iter-locked.</summary>
+        public int PreferredIterations { get; set; }
+
         // ── Post-process ──────────────────────────────────────────────────────
 
         /// <summary>Brightness offset in [-100, 100]; 0 = neutral.</summary>
@@ -126,6 +137,7 @@ namespace FracturingFog.ViewState
             Zoom = DefaultZoom;
             IterLocked = false;
             LockedIterations = 0;
+            PreferredIterations = 0;
         }
 
         /// <summary>
@@ -193,6 +205,7 @@ namespace FracturingFog.ViewState
             CenterY4 = CenterY5 = CenterY6 = CenterY7 = 0;
             IterLocked = false;
             LockedIterations = 0;
+            PreferredIterations = 0;
         }
 
         /// <summary>True when the active <see cref="Zoom"/> requires OD math

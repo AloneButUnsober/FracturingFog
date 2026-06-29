@@ -230,14 +230,37 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
                         int themesPerRegionNow = FocusRegion ? 3 : 8;
                         int legMs = Math.Max(800, totalRegionMs / Math.Max(1, themesPerRegionNow));
-                        using var legSweepCts = StartAdaptiveSweep(legMs, ct);
+                        var sweep = StartAdaptiveSweep(legMs, ct);
 
                         // themeMs is recomputed each WaitAsync tick so a
                         // FocusRegion toggle mid-theme shortens (or extends)
                         // the visible duration immediately.
-                        if (await WaitAsync(
-                            () => Math.Max(800, totalRegionMs / Math.Max(1, FocusRegion ? 3 : 8)),
-                            ct)) break; // skip-region
+                        bool skipRegion;
+                        try
+                        {
+                            skipRegion = await WaitAsync(
+                                () => Math.Max(800, totalRegionMs / Math.Max(1, FocusRegion ? 3 : 8)),
+                                ct);
+                        }
+                        finally
+                        {
+                            // CTS.Dispose alone does NOT cancel the token —
+                            // must explicitly Cancel + await the sweep Task
+                            // or each leg leaks a Task.Run that keeps writing
+                            // to AdaptiveValueSink. N legs = N racing tasks =
+                            // slider jitter + Stop() can't reach them
+                            // (linked CTS already disposed, parent-cancel
+                            // callback unregistered).
+                            try { sweep.Cts.Cancel(); } catch { /* already disposed */ }
+                            try { await sweep.Task.ConfigureAwait(false); }
+                            catch (OperationCanceledException) { /* expected */ }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine($"[SlideshowEngine] sweep task failed: {ex.Message}");
+                            }
+                            sweep.Cts.Dispose();
+                        }
+                        if (skipRegion) break;
                         if (ct.IsCancellationRequested) break;
                         t++;
                     }
@@ -588,20 +611,22 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         // Drives the FloatingMenu Adaptive slider over the lifetime of a leg
         // per <see cref="SlideshowConfig.AdaptiveSweep"/>. The shell wires
         // <see cref="AdaptiveValueSink"/> to <c>FloatingMenu.Adaptive</c>.
-        // Returns a CTS that the caller should dispose to abort the sweep
-        // when the leg ends early (skip / stop).
+        // Returns the linked CTS plus the running Task — caller MUST Cancel
+        // the CTS and await the Task before disposing, otherwise the sweep
+        // leaks (CTS.Dispose does not cancel) and successive legs accumulate
+        // racing tasks all writing to the slider.
         //
         // Audio-reactive mode (Config.AudioReactive=true + BeatSource set):
         //   • Cycle duration = BeatFraction × beatPeriodMs (recomputed each
         //     tick so BPM drift updates live; falls back to legMs when BPM
         //     is still 0).
         //   • Loop is forced true for the slideshow's lifetime — user spec.
-        private CancellationTokenSource StartAdaptiveSweep(int legMs, CancellationToken parentCt)
+        private (CancellationTokenSource Cts, Task Task) StartAdaptiveSweep(int legMs, CancellationToken parentCt)
         {
             var legCts = CancellationTokenSource.CreateLinkedTokenSource(parentCt);
             var cfg = Config?.AdaptiveSweep;
             if (cfg == null || !cfg.Enabled || AdaptiveValueSink == null || legMs <= 0)
-                return legCts;
+                return (legCts, Task.CompletedTask);
 
             int start = Math.Clamp(cfg.Start, 0, 100);
             int end = Math.Clamp(cfg.End, 0, 100);
@@ -612,7 +637,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             var sink = AdaptiveValueSink;
             var ct = legCts.Token;
 
-            _ = Task.Run(async () =>
+            var task = Task.Run(async () =>
             {
                 const int tickMs = 50;
                 int elapsed = 0;
@@ -642,7 +667,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 }
             }, ct);
 
-            return legCts;
+            return (legCts, task);
         }
 
         // Resolve full-sweep cycle duration. Audio-reactive: beatFrac × beatPeriod

@@ -870,6 +870,15 @@ namespace FracturingFog.Input
         }
 
         private void RaiseViewChanged(RenderHint hint)
-            => ViewChanged?.Invoke(this, new ViewChangedArgs(hint));
+        {
+            // Any user-initiated view change drops the region's preferred iter
+            // hint — subsequent renders fall back to Quality.ComputeIterations
+            // (or LockedIterations if the user explicitly locked). Region
+            // jumps + slideshow-driven applies don't pass through this
+            // controller, so they keep the hint until the user actually
+            // moves the view.
+            ViewState.PreferredIterations = 0;
+            ViewChanged?.Invoke(this, new ViewChangedArgs(hint));
+        }
     }
 }
