@@ -7,8 +7,8 @@
         x:Class="FracturingFog.UI.Avalonia.Views.MasterConfigView"
         x:DataType="vm:MasterConfigViewModel"
         Title="FracturingFog — Master Config"
-        Width="520" Height="440"
-        MinWidth="440" MinHeight="360"
+        Width="540" Height="600"
+        MinWidth="460" MinHeight="420"
         Background="#171717">
 
     <Window.Styles>
@@ -89,6 +89,41 @@
                                        Value="{Binding ClusterTileTargetPixels}"
                                        Minimum="0" Maximum="8192" Margin="0,6,0,0"
                                        ToolTip.Tip="Default per-tile pixel side used by TilePlanner when the client gives no hint and the registry has no learned EMA. 0 = use built-in default (512). Server clamps positive values to [64, 8192]." />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- D-6c2 (#125) — per-role rate-limiter knobs wired up by D-6c1. -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Per-Role Rate Limits" />
+                    <TextBlock Classes="hint"
+                               Text="Live-tunable token-bucket limits. perMinute=0 disables; burst clamps to >=1. In-flight per-key buckets keep their accrued tokens across an Apply." />
+
+                    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Client call / minute (per IP)" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Value="{Binding ClientCallPerMinute}"
+                                       Minimum="0" Maximum="600000"
+                                       ToolTip.Tip="Per-IP cap on dispatched client-role JSON-RPC calls inside an authenticated session. 0 disables. Default 600 = 10/sec sustained." />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Client call burst" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Value="{Binding ClientCallBurst}"
+                                       Minimum="1" Maximum="100000" Margin="0,6,0,0"
+                                       ToolTip.Tip="Burst allowance for the client-call limiter. Server floor: 1. Default 30." />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Worker tile.next / minute" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                       Value="{Binding WorkerTileNextPerMinute}"
+                                       Minimum="0" Maximum="600000" Margin="0,6,0,0"
+                                       ToolTip.Tip="Per-thumbprint cap on worker tile.next long-poll calls. Other worker methods (heartbeat, deliver, register, error) bypass this gate. 0 disables. Default 600 = 10/sec." />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Worker tile.next burst" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                       Value="{Binding WorkerTileNextBurst}"
+                                       Minimum="1" Maximum="100000" Margin="0,6,0,0"
+                                       ToolTip.Tip="Burst allowance for the worker tile.next limiter. Server floor: 1. Default 30 — covers reconnect/replay storms after a worker resume." />
                     </Grid>
                 </StackPanel>
             </Border>
