@@ -1083,6 +1083,107 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // Wallpaper screenshot — render an offscreen image sized to the
+            // union of every connected monitor's pixel bounds, regardless of
+            // the current window state. Sidesteps the GNOME/Wayland limitation
+            // where Span mode (borderless Topmost) cannot overlay the shell's
+            // top bar + dock across multiple monitors: by going through
+            // PosterRenderer we never touch the window chrome at all and the
+            // output matches what Span+Screenshot produces on Windows.
+            shell.WallpaperScreenshotRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+
+                    var win = AvaloniaDialogs.ActiveMainWindow;
+                    var screens = win?.Screens;
+                    if (screens == null || screens.All.Count == 0)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper",
+                            "Could not enumerate monitors for the wallpaper render.",
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    // Virtual-screen union (mirrors EnterSpanMode math). Screen
+                    // bounds are in physical pixels — exactly what we want for
+                    // the wallpaper render dimensions.
+                    int minX = int.MaxValue, minY = int.MaxValue;
+                    int maxX = int.MinValue, maxY = int.MinValue;
+                    foreach (var s in screens.All)
+                    {
+                        var b = s.Bounds;
+                        if (b.X < minX) minX = b.X;
+                        if (b.Y < minY) minY = b.Y;
+                        if (b.X + b.Width  > maxX) maxX = b.X + b.Width;
+                        if (b.Y + b.Height > maxY) maxY = b.Y + b.Height;
+                    }
+                    int wpW = maxX - minX;
+                    int wpH = maxY - minY;
+                    if (wpW <= 0 || wpH <= 0)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper",
+                            "Computed wallpaper dimensions are invalid.",
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Save Wallpaper Screenshot",
+                        suggestedName: BuildSuggestedFileName(
+                            "png", imageWidth: wpW, imageHeight: wpH, isSpanning: true),
+                        filter: "PNG image (*.png)|*.png|TIFF image (*.tiff;*.tif)|*.tiff;*.tif|BMP image (*.bmp)|*.bmp");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                    var format = ext switch
+                    {
+                        ".bmp" => FracturingFog.Imaging.ImageFileFormat.Bmp,
+                        ".tif" or ".tiff" => FracturingFog.Imaging.ImageFileFormat.Tiff,
+                        _ => FracturingFog.Imaging.ImageFileFormat.Png,
+                    };
+
+                    // Re-use the Poster watermark plumbing so wallpaper output
+                    // honours the current region/theme watermark + the custom
+                    // override toggle, matching what Poster does.
+                    string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
+                        ? s_renderHost.RegionName!
+                        : "Fracturing Fog";
+                    if (!string.IsNullOrEmpty(s_renderHost.ThemeName))
+                        watermark += " - " + s_renderHost.ThemeName;
+                    string subText = $"Fracturing Fog {DateTime.Now.Year}";
+
+                    var customWm = shell.Main.UseCustomWatermark
+                        ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
+                        : null;
+
+                    var req = s_renderHost.CreatePosterRequest(
+                        wpW, wpH, rotate: false,
+                        path, format, watermark, subText, customWm);
+
+                    try
+                    {
+                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None));
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper Saved",
+                            $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
+                            expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper", $"Render failed:\n{ex.Message}", expectsConfirmation: false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Wallpaper failed: {ex.Message}");
+                }
+            };
+
             // ── New #54 wires ────────────────────────────────────────────
 
             // Export user regions — pick a path, then serialize the bundle.

@@ -39,6 +39,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ResetCommand            = MakeCmd(() => ResetClick?.Invoke(this, EventArgs.Empty));
         SpanCommand             = MakeCmd(() => SpanClick?.Invoke(this, EventArgs.Empty));
         ScreenshotCommand       = MakeCmd(() => ScreenshotClick?.Invoke(this, EventArgs.Empty));
+        WallpaperCommand        = MakeCmd(() => WallpaperClick?.Invoke(this, EventArgs.Empty));
         PosterCommand           = MakeCmd(() => PosterClick?.Invoke(this, EventArgs.Empty));
         SlideshowCommand        = MakeCmd(() => SlideshowClick?.Invoke(this, EventArgs.Empty));
         VideoCommand            = MakeCmd(() => VideoClick?.Invoke(this, EventArgs.Empty));
@@ -826,6 +827,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ResetCommand { get; }
     public ReactiveCommand<Unit, Unit> SpanCommand { get; }
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
+    public ReactiveCommand<Unit, Unit> WallpaperCommand { get; }
     public ReactiveCommand<Unit, Unit> PosterCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowCommand { get; }
     public ReactiveCommand<Unit, Unit> VideoCommand { get; }
@@ -858,6 +860,11 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? ResetClick;
     public event EventHandler? SpanClick;
     public event EventHandler? ScreenshotClick;
+    /// <summary>User clicked the "Wallpaper" button — render an image sized to
+    /// the union of every connected monitor's pixel bounds, regardless of the
+    /// current window state. Works around the GNOME/Wayland limitation where
+    /// Span mode cannot overlay the top bar + dock across multiple monitors.</summary>
+    public event EventHandler? WallpaperClick;
     public event EventHandler? PosterClick;
     public event EventHandler? SlideshowClick;
     public event EventHandler? VideoClick;
