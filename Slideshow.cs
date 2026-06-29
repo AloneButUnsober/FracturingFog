@@ -14,6 +14,42 @@ namespace FracturingFog
 {
     public sealed partial class MainForm
     {
+        /// <summary>
+        /// Rolling window depth used by <see cref="PickAvoidingRecent"/> in the
+        /// slideshow / video-slideshow theme pickers. The picker rejects any
+        /// index currently inside the recent queue; queue length is clamped to
+        /// <c>min(SlideshowRecentThemeDepth, pool.Count - 1)</c> so a small
+        /// pool can't deadlock the picker. 8 is wide enough to feel
+        /// non-repeating across a long session, narrow enough that pools of
+        /// ~12 themes still rotate freely.
+        /// </summary>
+        private const int SlideshowRecentThemeDepth = 8;
+
+        /// <summary>
+        /// Picks a uniform random index in <c>[0, poolSize)</c> while avoiding
+        /// any index still inside <paramref name="recent"/>. Updates the queue
+        /// in place (FIFO, bounded length). Constant memory; bounded retries.
+        /// Falls back to ignoring the dedupe queue if the pool can't satisfy
+        /// the window (poolSize ≤ 1).
+        /// </summary>
+        private int PickAvoidingRecent(int poolSize, Queue<int> recent)
+        {
+            if (poolSize <= 1) return 0;
+            int window = System.Math.Min(SlideshowRecentThemeDepth, poolSize - 1);
+            // Trim queue if pool shrunk between calls.
+            while (recent.Count > window) recent.Dequeue();
+
+            int idx = 0;
+            for (int tries = 0; tries < 32; tries++)
+            {
+                idx = _slideshowRng.Next(poolSize);
+                if (!recent.Contains(idx)) break;
+            }
+            recent.Enqueue(idx);
+            if (recent.Count > window) recent.Dequeue();
+            return idx;
+        }
+
         // Timing
         //   • Each region is shown for 30 s total.
         //   • Within each region the colour theme changes every 10 s.
@@ -267,12 +303,18 @@ namespace FracturingFog
                 }
             }
             int lastRegionIdx = -1;
-            int lastThemeIdx = -1;
             int renderCounter = 0;
             int regionIdx = -1;
             bool[] regionsUsed = new bool[builtIns.Count];
             FractalRegion? lockedRegion = null;
             bool focusRegion = true; // starts in Region Focus mode
+
+            // Rolling recent-theme dedupe. Picks reject any index still inside
+            // the queue; queue length = min(SlideshowRecentThemeDepth, pool-1)
+            // so the pool can never become smaller than the dedupe window
+            // (which would deadlock the picker). Rebuilt when the pool size
+            // changes (per-region palette refresh).
+            var recentThemes = new Queue<int>(SlideshowRecentThemeDepth);
 
             while (!ct.IsCancellationRequested)
             {
@@ -294,11 +336,14 @@ namespace FracturingFog
 
                 lockedRegion = region;
 
-                // Refresh the palette pool for this region's zoom so themes
-                // whose MaxRecommendedZoom is below region.Zoom are excluded.
-                paletteNames = Models.ColorPalette.GetPaletteNamesForZoom(region.Zoom);
+                // Refresh the palette pool for this region's zoom AND fractal
+                // type so themes whose MaxRecommendedZoom is below region.Zoom
+                // or whose required calculator data the region's fractal type
+                // doesn't supply (orbit-trap on non-Mandelbrot, interior on
+                // non-Mandelbrot, 3D-relief on IFS/LSystem/etc.) are excluded.
+                paletteNames = Models.ColorPalette.GetPaletteNamesFor(region.FractalType, region.Zoom);
                 if (paletteNames.Count == 0) return;
-                lastThemeIdx = -1;   // pool changed — clear "different from last" anchor
+                recentThemes.Clear();   // pool changed — drop stale indices
 
                 string lockStatus = regionLockFunc() ? "(L)" : "";
                 // Mark the just-used region to avoid immediate repeats until all have been shown.
@@ -309,10 +354,7 @@ namespace FracturingFog
                 }
 
                 // ── Pick an initial theme ─────────────────────────────────────────
-                int themeIdx;
-                do { themeIdx = _slideshowRng.Next(paletteNames.Count); }
-                while (paletteNames.Count > 1 && themeIdx == lastThemeIdx);
-                lastThemeIdx = themeIdx;
+                int themeIdx = PickAvoidingRecent(paletteNames.Count, recentThemes);
                 string themeName = paletteNames[themeIdx];
 
                 // ── Render the new region with the initial theme ───────────────────
@@ -423,10 +465,7 @@ namespace FracturingFog
                     lockStatus = regionLockFunc() ? "(L)" : "";
                     // Pick next theme.
 
-                    int newThemeIdx;
-                    do { newThemeIdx = _slideshowRng.Next(paletteNames.Count); }
-                    while (paletteNames.Count > 1 && newThemeIdx == lastThemeIdx);
-                    lastThemeIdx = newThemeIdx;
+                    int newThemeIdx = PickAvoidingRecent(paletteNames.Count, recentThemes);
                     string newThemeName = paletteNames[newThemeIdx];
 
                     if (_calculator == null || _renderer == null) break;

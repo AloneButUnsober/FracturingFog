@@ -115,6 +115,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // group + sort + right-click-filter themselves (parity with the
         // WinForms combos). AttachThemeService performs the initial fill.
         FloatingMenu.AttachThemeService(_themeService);
+        // Seed the menu's compat-fractal-type mirror so the
+        // "Compatible with {type}" menu entry shows the right name at startup
+        // and ByFractalCompat (if selected later) filters against the live type.
+        FloatingMenu.SetCompatFractalType(Main.SelectedFractalType);
         // Quality combo lives on FloatingMenu but its presets come from
         // QualityPreset.All — the same list MainViewModel already exposes.
         FloatingMenu.SetQualities(QualityPreset.All.Select(q => q.Name));
@@ -290,6 +294,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (ev.PropertyName == nameof(MainViewModel.SelectedFractalType)
              || ev.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
                 RecordNavChange();
+            // Push the active fractal type into the FloatingMenu so a
+            // ByFractalCompat theme combo re-filters as the user switches
+            // fractal type.
+            if (ev.PropertyName == nameof(MainViewModel.SelectedFractalType))
+                FloatingMenu.SetCompatFractalType(Main.SelectedFractalType);
             // Mirror watermark master toggle so the menu checkbox stays in
             // sync with the auto-enable from MainViewModel.UseCustomWatermark
             // and with right-click toggles outside the menu.

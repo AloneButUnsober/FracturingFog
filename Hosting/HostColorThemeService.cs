@@ -78,6 +78,11 @@ namespace FracturingFog.Hosting
 
         /// <inheritdoc/>
         public IReadOnlyList<string> EnumerateThemeNames(ThemeSortMode mode, string? kindFilter, bool editableOnly)
+            => EnumerateThemeNames(mode, kindFilter, editableOnly, compatFor: null);
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateThemeNames(
+            ThemeSortMode mode, string? kindFilter, bool editableOnly, FractalType? compatFor)
         {
             // Force user-library reload so freshly-imported themes appear.
             ColorPalette.LoadUserThemes();
@@ -98,6 +103,29 @@ namespace FracturingFog.Hosting
                         result.AddRange(byKind.ToImmutableSortedDictionary().Keys.Where(Allow));
                     }
                     break;
+
+                case ThemeSortMode.ByFractalCompat:
+                    // Flat list, grouped by kind for readability. Names whose
+                    // required calculator data is not supplied by compatFor
+                    // are dropped. Falls back to Default grouping when no
+                    // compat type is supplied so the combo never goes empty.
+                    if (compatFor is FractalType ft)
+                    {
+                        foreach (var type in Enum.GetValues<ColorPaletteType>())
+                        {
+                            var palettes = ColorPalette.GetPalettesByType(type);
+                            if (palettes.Count == 0) continue;
+                            var names = palettes.ToImmutableSortedDictionary().Keys
+                                .Where(Allow)
+                                .Where(n => ColorPalette.IsCompatible(ColorPalette.GetPaletteByName(n), ft))
+                                .ToList();
+                            if (names.Count == 0) continue;
+                            result.Add($"— {type} —");
+                            result.AddRange(names);
+                        }
+                        if (result.Count > 0) break;
+                    }
+                    goto default; // fall through to grouped Default
 
                 default: // Default — grouped by kind with "— {kind} —" headers
                     foreach (var type in Enum.GetValues<ColorPaletteType>())

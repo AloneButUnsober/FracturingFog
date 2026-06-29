@@ -1555,7 +1555,12 @@ namespace FracturingFog
             var palettes = GetAllPaletteNames();
             if (regions.Count == 0 || palettes.Count == 0) return;
 
-            int lastRegion = -1, lastTheme = -1;
+            int lastRegion = -1;
+            // Rolling recent-theme dedupe — same policy as the regular
+            // Slideshow loop. Queue is cleared whenever the per-leg pool
+            // changes size so stale indices can't survive a pool swap.
+            var recentLegThemes = new System.Collections.Generic.Queue<int>(SlideshowRecentThemeDepth);
+            int lastLegPoolSize = -1;
             double ultraMax = QualityPreset.Ultra.ZoomMax;
             double draftMin = QualityPreset.Draft.ZoomMin;
 
@@ -1608,23 +1613,25 @@ namespace FracturingFog
                 if (tz > ultraMax) tz = ultraMax;
                 if (tz < draftMin) tz = draftMin;
 
-                // Refresh the palette pool for this leg's deepest endpoint.
-                // Reverse legs start deep and zoom out, forward legs zoom in to
-                // a deep target — either way the cap to enforce is the leg's
-                // deep end. Pick a theme from the filtered pool, then fall back
-                // to the unfiltered list only if the filter empties everything.
-                var legPalettes = Models.ColorPalette.GetPaletteNamesForZoom(tz);
+                // Refresh the palette pool for this leg's deepest endpoint AND
+                // the region's fractal type. Reverse legs start deep and zoom
+                // out, forward legs zoom in to a deep target — either way the
+                // cap to enforce is the leg's deep end. The compat filter
+                // excludes themes whose required data the active fractal
+                // doesn't supply (orbit-trap on non-Mandelbrot, etc.).
+                var legPalettes = Models.ColorPalette.GetPaletteNamesFor(region.FractalType, tz);
                 if (legPalettes.Count == 0) legPalettes = palettes;
 
-                // Pick a theme different from the previous one. lastTheme
-                // is reset whenever the per-leg pool differs in size from the
-                // full pool, since the previous index may no longer point at
-                // the same name.
-                if (legPalettes.Count != palettes.Count) lastTheme = -1;
-                int ti;
-                do { ti = _slideshowRng.Next(legPalettes.Count); }
-                while (legPalettes.Count > 1 && ti == lastTheme);
-                lastTheme = ti;
+                // Pick a theme using the rolling-recent picker so themes don't
+                // repeat within the dedupe window. Drop the queue if the pool
+                // size changed (previous indices may not point at the same
+                // name in the new pool).
+                if (legPalettes.Count != lastLegPoolSize)
+                {
+                    recentLegThemes.Clear();
+                    lastLegPoolSize = legPalettes.Count;
+                }
+                int ti = PickAvoidingRecent(legPalettes.Count, recentLegThemes);
                 string theme = legPalettes[ti];
 
                 // Per-leg duration: fixed in variable-rate mode; scales with
