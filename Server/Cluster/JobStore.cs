@@ -154,12 +154,13 @@ public sealed class JobStore
         string tilesDir = Path.Combine(dir, "tiles");
         Directory.CreateDirectory(tilesDir);
         // Write-and-rename so a crashed master never leaves a half-written
-        // tile that the merge path would treat as complete.
+        // tile that the merge path would treat as complete. D-6g — atomic
+        // replace; the prior Delete + Move opened the same race the D-6e
+        // WriteStatusLocked fix closed for status.json.
         string finalPath = Path.Combine(tilesDir, $"{tileId}.bin");
         string tmpPath   = finalPath + ".tmp";
         File.WriteAllBytes(tmpPath, payload);
-        if (File.Exists(finalPath)) File.Delete(finalPath);
-        File.Move(tmpPath, finalPath);
+        File.Move(tmpPath, finalPath, overwrite: true);
     }
 
     public bool TryReadTileBytes(string jobId, int tileId, out byte[] payload)
@@ -197,8 +198,8 @@ public sealed class JobStore
         string finalPath = Path.Combine(dir, FrameFileName(frameIndex));
         string tmpPath   = finalPath + ".tmp";
         File.WriteAllBytes(tmpPath, png);
-        if (File.Exists(finalPath)) File.Delete(finalPath);
-        File.Move(tmpPath, finalPath);
+        // D-6g — atomic replace; see WriteTileBytes for the race rationale.
+        File.Move(tmpPath, finalPath, overwrite: true);
     }
 
     public bool FrameExists(string jobId, int frameIndex)
@@ -239,8 +240,11 @@ public sealed class JobStore
         string finalPath = Path.Combine(dir, SlideFileName(slideIndex));
         string tmpPath   = finalPath + ".tmp";
         File.WriteAllBytes(tmpPath, png);
-        if (File.Exists(finalPath)) File.Delete(finalPath);
-        File.Move(tmpPath, finalPath);
+        // D-6g — atomic replace mirrors the WriteStatusLocked fix (D-6e).
+        // The previous Delete + Move opened a window where a concurrent
+        // SlideExists / manifest enumeration saw the file missing on a
+        // retry-driven re-deliver of the same slide id.
+        File.Move(tmpPath, finalPath, overwrite: true);
     }
 
     public bool SlideExists(string jobId, int slideIndex)
@@ -258,8 +262,8 @@ public sealed class JobStore
         string finalPath = Path.Combine(dir, SlideFileName(slideIndex));
         string tmpPath   = finalPath + ".tmp";
         encodeToTmp(tmpPath);
-        if (File.Exists(finalPath)) File.Delete(finalPath);
-        File.Move(tmpPath, finalPath);
+        // D-6g — atomic replace; see WriteSlideBytes for the race rationale.
+        File.Move(tmpPath, finalPath, overwrite: true);
     }
 
     /// <summary>D-4c — count of per-slide files on disk. Used by the
