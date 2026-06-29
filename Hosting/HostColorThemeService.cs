@@ -270,6 +270,18 @@ namespace FracturingFog.Hosting
             // legacy MainForm.LoadRegionFractalParams.
             LoadRegionFractalParams(region, state);
             if (region.QualityPreset != null) state.Quality = region.QualityPreset;
+            // Region's saved iter count drives the next render via
+            // FractalViewState.PreferredIterations (ApplyView reads it after
+            // IterLocked + maxIters arg, before Quality.ComputeIterations
+            // fallback). Cleared on the next user pan/zoom by
+            // FractalInputController so it only governs the immediate
+            // region-jump frame. Mirrors legacy MainForm.ApplyRegion:2980
+            // which wrote region.Iterations directly into _calculator.MaxIterations
+            // when !_iterLocked. Without this the slideshow cross-fade renders
+            // its offscreen source at region.Iterations but the post-commit
+            // Trigger drops back to Quality.ComputeIterations — visible iter
+            // collapse the moment the fade-in completes.
+            state.PreferredIterations = region.Iterations > 0 ? region.Iterations : 0;
             // A region jump must NOT toggle the iteration lock — legacy
             // MainForm.ApplyRegion leaves _iterLocked untouched and lets the
             // adaptive (zoom-scaled) iteration count drive the render. Forcing
@@ -467,7 +479,19 @@ namespace FracturingFog.Hosting
                 CenterY  = state.CenterY,  CenterYLo = state.CenterYLo,
                 CenterY2 = state.CenterY2, CenterY3  = state.CenterY3,
                 Zoom = state.Zoom,
-                Iterations = state.IterLocked ? state.LockedIterations : 0,
+                // Capture the live iter count so the saved region renders at
+                // the same detail it had on screen — matches legacy MainForm:2248
+                // (`Iterations = _calculator?.MaxIterations ?? 512`). Falls back
+                // through the same precedence ApplyView uses: lock → preferred
+                // (region jump still pinned) → Quality.ComputeIterations.
+                // Saving 0 when unlocked lost the live count; the recalled
+                // region then re-derived a (typically lower) default from the
+                // quality preset.
+                Iterations = state.IterLocked
+                    ? state.LockedIterations
+                    : state.PreferredIterations > 0
+                        ? state.PreferredIterations
+                        : (state.Quality ?? QualityPreset.Standard).ComputeIterations(state.Zoom),
                 FractalType = state.FractalType,
                 QualityPreset = state.Quality ?? QualityPreset.Standard,
                 RegionType = RegionType.UserDefined,
