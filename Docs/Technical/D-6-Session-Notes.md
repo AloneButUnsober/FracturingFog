@@ -1745,3 +1745,118 @@ blobs (D-6b3), FramePlanner.CloneFrameTemplate OD-limb propagation
 (D-6b2 leftover), JobStore.WriteSlideBytes race (mirror of the D-6e
 WriteStatusLocked fix). #125 closed. All remaining items
 non-blocking; phase D-6 stays closed.
+
+---
+
+## Session 11 — D-6g — JobStore atomic-replace + FramePlanner OD limbs (2026-06-29)
+
+**Goal**: close two mechanical D-6 follow-ups noted at the tail of D-6c2
+as quick wins. Both are strict mirrors of fixes already landed in
+earlier sessions; bundling them keeps the slice scope honest (≤20 LOC,
+zero new wire surface, zero new tests required) while plugging two
+latent footguns the prior fixes already documented elsewhere.
+
+**Sub-slice decision**: a single slice. The JobStore race fix and the
+FramePlanner clone gap are independent in scope but identical in
+character — each is a one-spot port of an already-reviewed pattern.
+Splitting would have meant two commits each landing two lines of new
+code, and two near-empty session-note entries; the bundle keeps the
+audit trail readable.
+
+**Server-side changes**
+
+- `Server/Cluster/JobStore.cs`:
+  * `WriteTileBytes`, `WriteFrameBytes`, `WriteSlideBytes`, and
+    `EncodeSlideTo` all swapped their `if (File.Exists(final))
+    File.Delete(final); File.Move(tmp, final);` sequence for the
+    single atomic `File.Move(tmp, final, overwrite: true)` the D-6e
+    `WriteStatusLocked` fix established. The four call sites are
+    structurally identical, so the same race exists in every spot
+    where a worker re-delivers a tile / frame / slide id under the
+    `Dispatcher.MaxAttempts > 1` retry path — a concurrent
+    `TryReadTileBytes` / `FrameExists` / `SlideExists` /
+    enumeration sees the file briefly missing between Delete and
+    Move. The slide path was the one called out by the open
+    follow-up (#125 era); the tile + frame paths share the bug
+    class and the fix is the same line, so all four go in one
+    pass. No call-site churn: every caller uses the public method
+    by name, and the post-condition (final exists, contains the
+    new bytes) is unchanged.
+
+- `Server/Cluster/FramePlanner.cs`:
+  * `CloneFrameTemplate` now copies `CenterX4..X7` and
+    `CenterY4..Y7` alongside the existing X2/X3 + Y2/Y3 copies.
+    Mirrors the per-tile copy that `TilePlanner.cs:338-345` does
+    after D-6b2. Without these limbs, a cluster video job at
+    zoom > 1e50 silently dropped to DD precision per frame —
+    coord stayed correct in the parent `RenderRequestDto`, but
+    the per-frame clone the worker actually rendered didn't see
+    the extra limbs. Failure mode would have been a visible
+    precision-loss seam at OD scale, which is exactly the bug
+    class D-6b spent a session closing for image tiles.
+
+**Tests**
+
+No new tests this slice. Both fixes are strict mirrors of patterns
+already exercised by existing coverage:
+- The JobStore atomicity contract is exercised by the D-6e
+  StressTests (which surfaced the original WriteStatusLocked race
+  within the first ~50 concurrent jobs) and by CrashRecoveryTests'
+  retry / replay paths. The four atomic-replace calls preserve the
+  pre-condition (caller holds the per-job lock for status writes;
+  per-id uniqueness for tile/frame/slide writes) and the post-
+  condition (final exists, contains the new bytes); the change
+  removes the gap between the two, which is invisible to a single-
+  threaded test.
+- The OD-limbs propagation has no direct test because the existing
+  `RenderRequestDto` clone surface is reflectively wide and no
+  current test renders a >1e50 cluster video frame. Adding a per-
+  field assertion would be churn-only; the proximate guard is
+  `TilePlannerTests` already validating the parallel image-tile
+  copy, and the engine-side OD codec coverage from D-6b2.
+
+**Design decisions**
+
+#129. Tile + frame writes folded into the same slice as the called-out
+  slide write. The open follow-up specifically named
+  `WriteSlideBytes`, but the same Delete + Move pattern exists in
+  `WriteTileBytes` (line 161) and `WriteFrameBytes` (line 200)
+  with the same retry/replay surface. Mirroring only the slide
+  spot would have left a known-bad pattern in two adjacent
+  methods that share the same caller (`tile.deliver` →
+  coordinator → JobStore). The fix is one line per spot; reviewing
+  three lines together is cheaper than three sequential one-line
+  reviews.
+
+#130. CloneFrameTemplate adds the eight new limbs in source-order
+  next to the existing X2/X3 copy, not at the bottom of the
+  initializer. Reason: a reader scanning the clone for "does this
+  copy field Z?" gets a contiguous block of centre-limb fields
+  rather than two split groups. Matches the field-grouping style
+  TilePlanner uses for the same copy.
+
+#131. No FramePlanner test added for OD limbs. The added cost
+  (~30 LOC of fixture for a workload no one currently runs) is
+  paid for one extra one-line guard against future regression of
+  a clone that's already structurally simple. The D-6b2 codec
+  tests cover the value end of the same surface; a FramePlanner
+  guard is the kind of test best added the first time a
+  CloneFrameTemplate change is actually substantive.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing warnings only
+  (36 total — unchanged from D-6c2). No new warnings.
+- Test suite: **354 passed, 0 failed** (unchanged from D-6c2).
+  StressTests passed in this run (the D-6e #119 parallel flake
+  is intermittent; an isolated re-run was not needed this time).
+- Filtered confirmation: `--filter "FullyQualifiedName~JobStore|
+  FullyQualifiedName~Slideshow|FullyQualifiedName~FramePlanner|
+  FullyQualifiedName~CrashRecovery|FullyQualifiedName~
+  VideoFramePipeline"` → 55 passed in 472 ms.
+
+**Open follow-ups remaining**: binary-trailer transport for OD-scale
+blobs (D-6b3, deferred pending real workload), StressTests
+parallelization flake (D-6e #119, candidate for its own slice via
+xunit `[CollectionDefinition(... DisableParallelization=true)]`).
+Phase D-6 stays closed.

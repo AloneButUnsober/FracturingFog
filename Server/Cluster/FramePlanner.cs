@@ -182,6 +182,18 @@ public static class FramePlanner
             CenterYLo            = src.CenterYLo,
             CenterY2             = src.CenterY2,
             CenterY3             = src.CenterY3,
+            // D-6g — OD-limbs propagation (mirrors TilePlanner's image-tile
+            // copy). Zero at DD/QD zoom; non-zero only when the submission
+            // carried an OD-precision centre. Without these, a cluster video
+            // at zoom > 1e50 silently degrades to DD precision per frame.
+            CenterX4             = src.CenterX4,
+            CenterX5             = src.CenterX5,
+            CenterX6             = src.CenterX6,
+            CenterX7             = src.CenterX7,
+            CenterY4             = src.CenterY4,
+            CenterY5             = src.CenterY5,
+            CenterY6             = src.CenterY6,
+            CenterY7             = src.CenterY7,
             ThemeName            = src.ThemeName,
             QualityName          = src.QualityName,
             ThemeJson            = src.ThemeJson,
