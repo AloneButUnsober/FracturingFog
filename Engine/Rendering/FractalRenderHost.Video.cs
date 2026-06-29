@@ -245,12 +245,21 @@ namespace FracturingFog.Rendering
                 targetCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
                 targetZoom = FractalViewState.DefaultZoom;
 
-                _videoQuality = QualityPreset.Standard;
+                // Natural-for-zoom is a floor; authored region preset wins
+                // when richer. Without this, a region authored at Ultra with
+                // a zoom in the High range plays back at High and loses the
+                // detail the standalone view shows.
+                QualityPreset natural = QualityPreset.Standard;
                 foreach (var p in QualityPreset.All)
                 {
                     if (p.Tier == QualityTier.Extreme) continue;
-                    if (p.ZoomMax >= startZoom) { _videoQuality = p; break; }
+                    if (p.ZoomMax >= startZoom) { natural = p; break; }
                 }
+                QualityPreset authored = string.IsNullOrEmpty(request.TargetQualityPresetName)
+                    ? natural
+                    : QualityPreset.FromName(request.TargetQualityPresetName);
+                if (authored.Tier == QualityTier.Extreme) authored = natural;
+                _videoQuality = authored.Tier > natural.Tier ? authored : natural;
             }
             else
             {
@@ -263,7 +272,25 @@ namespace FracturingFog.Rendering
                 _videoQuality = QualityPreset.Standard;
             }
 
-            _videoTargetIterations = request.TargetIterations;
+            // Honour the authored region iter count as a floor. When the dialog
+            // was driven from raw coords (no region pick), fall back to the
+            // calculator's current MaxIterations so a reverse zoom from a
+            // hand-tuned deep view doesn't drop iterations below what the
+            // user is already seeing on screen.
+            int reqIters = request.TargetIterations;
+            if (reqIters <= 0 && request.IsReverse && _calculator != null)
+                reqIters = _calculator.MaxIterations;
+            _videoTargetIterations = reqIters;
+
+            // Same fallback for the authored Quality preset.
+            if (request.IsReverse
+                && string.IsNullOrEmpty(request.TargetQualityPresetName)
+                && _calculator?.Quality != null
+                && _calculator.Quality.Tier > _videoQuality.Tier
+                && _calculator.Quality.Tier != QualityTier.Extreme)
+            {
+                _videoQuality = _calculator.Quality;
+            }
 
             // Update the watermark's TopText to the picked region so the
             // recorded / on-screen overlay reflects the zoom destination
@@ -1336,22 +1363,25 @@ namespace FracturingFog.Rendering
             }
             else
             {
-                int it = _videoQuality.ComputeIterations(clampedZoom);
-                if (_videoTargetIterations > it) it = _videoTargetIterations;
+                int formula = _videoQuality.ComputeIterations(clampedZoom);
                 // Finding C: apply adaptive cap (set by RenderVideoFrame from
-                // prior-frame elapsed). Min floor of 64 so the image never
-                // collapses to all-in-set even when the cap clamps hard.
-                // For Global mode this is the per-frame scalar multiplier;
-                // for PerTile it sets the upper-bound MaxIterations the
-                // per-row cap array is computed against.
+                // prior-frame elapsed) ONLY to the formula-derived count.
+                // The authored region iter floor (_videoTargetIterations) is
+                // then taken as a hard lower bound — otherwise a 0.40 cap
+                // shrinks the floor too, so deep frames render with 40% of
+                // the iter budget the region was authored for and the start
+                // of a reverse zoom (or the end of a forward zoom) collapses
+                // into in-set black.
                 if (VideoAdaptiveIterEnabled
                     && IterCapMode != FracturingFog.Models.VideoIterCapMode.Off
                     && _videoIterCap < VideoIterCapMax)
                 {
-                    int capped = (int)(it * _videoIterCap);
+                    int capped = (int)(formula * _videoIterCap);
                     if (capped < 64) capped = 64;
-                    it = capped;
+                    formula = capped;
                 }
+                int it = formula;
+                if (_videoTargetIterations > it) it = _videoTargetIterations;
                 _calculator.MaxIterations = it;
                 // Phase 2: PerTile mode builds a per-row cap array from
                 // prior-frame band stats. SP path honours it directly; HP
@@ -1542,12 +1572,19 @@ namespace FracturingFog.Rendering
                     ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
                     ViewState.Zoom = tz;
 
-                    _videoQuality = QualityPreset.Standard;
+                    // Natural-for-zoom acts as a floor; authored region preset
+                    // wins when richer so the played-back leg matches the
+                    // standalone region view (a region authored at Ultra with
+                    // a zoom in the High range otherwise downgrades).
+                    QualityPreset natural = QualityPreset.Standard;
                     foreach (var p in QualityPreset.All)
                     {
                         if (p.Tier == QualityTier.Extreme) continue;
-                        if (p.ZoomMax >= tz) { _videoQuality = p; break; }
+                        if (p.ZoomMax >= tz) { natural = p; break; }
                     }
+                    QualityPreset authored = region.QualityPreset ?? natural;
+                    if (authored.Tier == QualityTier.Extreme) authored = natural;
+                    _videoQuality = authored.Tier > natural.Tier ? authored : natural;
                 }
                 else
                 {

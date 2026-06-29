@@ -793,14 +793,16 @@ namespace FracturingFog.Input
 
         private bool AdaptQualityForWheel(double oldZoom, double newZoom)
         {
+            // Promotion only — zoom-in past the current preset's ZoomMax
+            // bumps the tier up. Zoom-out never auto-demotes; the user can
+            // pick a lower preset manually from the Quality combo if they
+            // want the iter count to drop. Prior behaviour demoted as the
+            // natural-for-zoom tier crossed a boundary downward, which
+            // surprised users tuning a deep view and zooming out for
+            // context.
             if (newZoom > ViewState.Quality.ZoomMax)
                 return AdaptQualityForZoom(newZoom);
-
-            QualityPreset natOld = NaturalQualityForZoom(oldZoom);
-            QualityPreset natNew = NaturalQualityForZoom(newZoom);
-            if (natOld.Tier == natNew.Tier) return false;
-            if (ViewState.Quality.Tier != natOld.Tier) return false;
-            return AdaptQualityForZoom(newZoom);
+            return false;
         }
 
         private bool AdaptQualityForZoom(double targetZoom)
