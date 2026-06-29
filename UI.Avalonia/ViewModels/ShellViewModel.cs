@@ -319,6 +319,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Screenshot — host saves the most-recent BGRA buffer to disk.
         FloatingMenu.ScreenshotClick   += (_, _) => ScreenshotRequested?.Invoke(this, EventArgs.Empty);
 
+        // Wallpaper — host renders an offscreen image sized to the union of
+        // every connected monitor's pixel bounds, regardless of the current
+        // window state. Works around the GNOME/Wayland limitation where Span
+        // mode cannot overlay the shell's top bar + dock across monitors.
+        FloatingMenu.WallpaperClick    += (_, _) => WallpaperScreenshotRequested?.Invoke(this, EventArgs.Empty);
+
         // Export / Import user regions — host pops a file picker then asks
         // IColorThemeService to serialize / merge. After an import the host
         // refreshes the region combo so new entries show without a restart.
@@ -1882,6 +1888,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Save the most-recent rendered frame to a PNG. Host pops a
     /// SaveFilePicker and writes the BGRA buffer.</summary>
     public event EventHandler? ScreenshotRequested;
+
+    /// <summary>Render a wallpaper-sized image at the virtual-screen union of
+    /// every connected monitor, regardless of the current window state. Host
+    /// reads the screen bounds off the active Window, then runs
+    /// <c>PosterRenderer</c> offscreen at the computed dimensions. Use this on
+    /// Linux/GNOME where Span mode cannot overlay the shell's top bar + dock.</summary>
+    public event EventHandler? WallpaperScreenshotRequested;
 
     /// <summary>Export user-defined regions to a JSON bundle. Host pops a
     /// SaveFilePicker then calls IColorThemeService.ExportUserRegionsToFile.</summary>
