@@ -119,9 +119,6 @@ public sealed class MandelbrotCalculator
 
     private int EffectiveImageWidth  => ImageWidth  > 0 ? ImageWidth  : Width;
     private int EffectiveImageHeight => ImageHeight > 0 ? ImageHeight : Height;
-    private bool SubRectActive       =>
-        ImageWidth > Width || ImageHeight > Height
-        || SubRectOffsetX != 0 || SubRectOffsetY != 0;
 
     /// <summary>Zoom threshold above which QD ref orbit is used (else DD).</summary>
     private const double QDZoomThreshold = 1e25;
@@ -1597,12 +1594,13 @@ public sealed class MandelbrotCalculator
         _saAppliedTotal = 0;
         _saIterSkippedTotal = 0;
 
-        // D-6b — sub-rect mode forces scalar PT dispatch. The SIMD PT4/PT8
-        // paths compute per-pixel dc from Width/halfW directly; retrofitting
-        // them with SubRectOffset + ImageWidth lives in a follow-up slice.
-        bool subRect = SubRectActive;
-        bool useSimd512 = !subRect && Avx512F.IsSupported && Vector512.IsHardwareAccelerated;
-        bool useSimd = !subRect && DD4.IsSupported;
+        // D-6b1 — SIMD PT4 / PT8 now honour sub-rect geometry; the legacy
+        // single-render path (SubRectOffsetX/Y == 0, ImageWidth/Height ==
+        // Width/Height) collapses to the original Width/halfW formula by
+        // arithmetic. The `subRect` local is gone — the same SIMD
+        // dispatch fires for tile and full-image renders.
+        bool useSimd512 = Avx512F.IsSupported && Vector512.IsHardwareAccelerated;
+        bool useSimd = DD4.IsSupported;
         if (!_loggedSimdPath)
         {
             Debug.WriteLine(useSimd512 ? "PT path: AVX-512 (8 lanes)"
@@ -2489,20 +2487,29 @@ public sealed class MandelbrotCalculator
         int y, double scale, int maxIter, int rowBase, TMap colorMap)
         where TMap : IColorMap
     {
-        double halfW = Width * 0.5;
-        double halfH = Height * 0.5;
-        double dcY = (y - halfH) * scale;
+        // D-6b1 — sub-rect aware. halfW/halfH measure from the FULL
+        // image centre; the per-pixel offset adds SubRectOffsetX/Y so
+        // dc reflects the pixel's IMAGE position (not tile-local).
+        // Inactive sub-rect mode (ImageWidth == Width, SubRectOffsetX
+        // == 0, etc.) collapses to the legacy `(x - Width*0.5) * scale`
+        // formula by arithmetic — bit-identical to the pre-D-6b1 path.
+        double halfW = EffectiveImageWidth  * 0.5;
+        double halfH = EffectiveImageHeight * 0.5;
+        int    offX  = SubRectOffsetX;
+        int    offY  = SubRectOffsetY;
+        double rowOffsetY = offY + y - halfH;
+        double dcY = rowOffsetY * scale;
         bool useOD = Zoom > ODZoomThreshold;
         bool useQD = Zoom > QDZoomThreshold && !useOD;
-        DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
+        DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), rowOffsetY, scale);
         QD cy_qd = useQD
-            ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
+            ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), rowOffsetY, scale)
             : QD.Zero;
         OD cy_od = useOD
             ? OD.FromCenterOffset(
                 new OD(CenterY, CenterYLo, CenterY2, CenterY3,
                        CenterY4, CenterY5, CenterY6, CenterY7),
-                y - halfH, scale)
+                rowOffsetY, scale)
             : OD.Zero;
 
         var er2v = Vector256.Create(EscapeRadius2);
@@ -2527,10 +2534,10 @@ public sealed class MandelbrotCalculator
 
         for (; x + 4 <= Width; x += 4)
         {
-            double dcR0 = (x - halfW) * scale;
-            double dcR1 = (x + 1 - halfW) * scale;
-            double dcR2 = (x + 2 - halfW) * scale;
-            double dcR3 = (x + 3 - halfW) * scale;
+            double dcR0 = (offX + x     - halfW) * scale;
+            double dcR1 = (offX + x + 1 - halfW) * scale;
+            double dcR2 = (offX + x + 2 - halfW) * scale;
+            double dcR3 = (offX + x + 3 - halfW) * scale;
             var dcRv = Vector256.Create(dcR0, dcR1, dcR2, dcR3);
 
             var dr = Vector256<double>.Zero;
@@ -2707,24 +2714,25 @@ public sealed class MandelbrotCalculator
                 // (pixel spacing ~2e-32 < DD precision ~6e-32); use QD instead.
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
+                    double colOffsetX = offX + x + k - halfW;
                     if (useOD)
                     {
                         OD cx_od = OD.FromCenterOffset(
                             new OD(CenterX, CenterXLo, CenterX2, CenterX3,
                                    CenterX4, CenterX5, CenterX6, CenterX7),
-                            x + k - halfW, scale);
+                            colOffsetX, scale);
                         ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
                     }
                     else if (useQD)
                     {
                         QD cx_qd = QD.FromCenterOffset(
-                            new QD(CenterX, CenterXLo, CenterX2, CenterX3), x + k - halfW, scale);
+                            new QD(CenterX, CenterXLo, CenterX2, CenterX3), colOffsetX, scale);
                         ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
                     }
                     else
                     {
                         DD cx_dd = DD.FromCenterOffset(
-                            new DD(CenterX, CenterXLo), x + k - halfW, scale);
+                            new DD(CenterX, CenterXLo), colOffsetX, scale);
                         ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
                     }
                     continue;
@@ -2742,7 +2750,8 @@ public sealed class MandelbrotCalculator
         // Scalar tail (0–3 remaining pixels)
         for (; x < Width; x++)
         {
-            double dcX = (x - halfW) * scale;
+            double colOffsetX = offX + x - halfW;
+            double dcX = colOffsetX * scale;
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
@@ -2751,18 +2760,18 @@ public sealed class MandelbrotCalculator
                     OD cx_od = OD.FromCenterOffset(
                         new OD(CenterX, CenterXLo, CenterX2, CenterX3,
                                CenterX4, CenterX5, CenterX6, CenterX7),
-                        x - halfW, scale);
+                        colOffsetX, scale);
                     ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
                 }
                 else if (useQD)
                 {
                     QD cx_qd = QD.FromCenterOffset(
-                        new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);
+                        new QD(CenterX, CenterXLo, CenterX2, CenterX3), colOffsetX, scale);
                     ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
                 }
                 else
                 {
-                    DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), x - halfW, scale);
+                    DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), colOffsetX, scale);
                     ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
                 }
             }
@@ -2791,20 +2800,24 @@ public sealed class MandelbrotCalculator
         int y, double scale, int maxIter, int rowBase, TMap colorMap)
         where TMap : IColorMap
     {
-        double halfW = Width * 0.5;
-        double halfH = Height * 0.5;
-        double dcY = (y - halfH) * scale;
+        // D-6b1 — sub-rect aware (see ComputeRowPT4 head for details).
+        double halfW = EffectiveImageWidth  * 0.5;
+        double halfH = EffectiveImageHeight * 0.5;
+        int    offX  = SubRectOffsetX;
+        int    offY  = SubRectOffsetY;
+        double rowOffsetY = offY + y - halfH;
+        double dcY = rowOffsetY * scale;
         bool useOD = Zoom > ODZoomThreshold;
         bool useQD = Zoom > QDZoomThreshold && !useOD;
-        DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), y - halfH, scale);
+        DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), rowOffsetY, scale);
         QD cy_qd = useQD
-            ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), y - halfH, scale)
+            ? QD.FromCenterOffset(new QD(CenterY, CenterYLo, CenterY2, CenterY3), rowOffsetY, scale)
             : QD.Zero;
         OD cy_od = useOD
             ? OD.FromCenterOffset(
                 new OD(CenterY, CenterYLo, CenterY2, CenterY3,
                        CenterY4, CenterY5, CenterY6, CenterY7),
-                y - halfH, scale)
+                rowOffsetY, scale)
             : OD.Zero;
 
         var er2v = Vector512.Create(EscapeRadius2);
@@ -2829,14 +2842,14 @@ public sealed class MandelbrotCalculator
 
         for (; x + 8 <= Width; x += 8)
         {
-            double dcR0 = (x - halfW) * scale;
-            double dcR1 = (x + 1 - halfW) * scale;
-            double dcR2 = (x + 2 - halfW) * scale;
-            double dcR3 = (x + 3 - halfW) * scale;
-            double dcR4 = (x + 4 - halfW) * scale;
-            double dcR5 = (x + 5 - halfW) * scale;
-            double dcR6 = (x + 6 - halfW) * scale;
-            double dcR7 = (x + 7 - halfW) * scale;
+            double dcR0 = (offX + x     - halfW) * scale;
+            double dcR1 = (offX + x + 1 - halfW) * scale;
+            double dcR2 = (offX + x + 2 - halfW) * scale;
+            double dcR3 = (offX + x + 3 - halfW) * scale;
+            double dcR4 = (offX + x + 4 - halfW) * scale;
+            double dcR5 = (offX + x + 5 - halfW) * scale;
+            double dcR6 = (offX + x + 6 - halfW) * scale;
+            double dcR7 = (offX + x + 7 - halfW) * scale;
             var dcRv = Vector512.Create(dcR0, dcR1, dcR2, dcR3, dcR4, dcR5, dcR6, dcR7);
 
             var dr = Vector512<double>.Zero;
@@ -2998,24 +3011,25 @@ public sealed class MandelbrotCalculator
                 int idx = rowBase + x + k;
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
+                    double colOffsetX = offX + x + k - halfW;
                     if (useOD)
                     {
                         OD cx_od = OD.FromCenterOffset(
                             new OD(CenterX, CenterXLo, CenterX2, CenterX3,
                                    CenterX4, CenterX5, CenterX6, CenterX7),
-                            x + k - halfW, scale);
+                            colOffsetX, scale);
                         ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
                     }
                     else if (useQD)
                     {
                         QD cx_qd = QD.FromCenterOffset(
-                            new QD(CenterX, CenterXLo, CenterX2, CenterX3), x + k - halfW, scale);
+                            new QD(CenterX, CenterXLo, CenterX2, CenterX3), colOffsetX, scale);
                         ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
                     }
                     else
                     {
                         DD cx_dd = DD.FromCenterOffset(
-                            new DD(CenterX, CenterXLo), x + k - halfW, scale);
+                            new DD(CenterX, CenterXLo), colOffsetX, scale);
                         ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
                     }
                     continue;
@@ -3032,7 +3046,8 @@ public sealed class MandelbrotCalculator
         // Scalar tail (0–7 remaining pixels)
         for (; x < Width; x++)
         {
-            double dcX = (x - halfW) * scale;
+            double colOffsetX = offX + x - halfW;
+            double dcX = colOffsetX * scale;
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
@@ -3041,18 +3056,18 @@ public sealed class MandelbrotCalculator
                     OD cx_od = OD.FromCenterOffset(
                         new OD(CenterX, CenterXLo, CenterX2, CenterX3,
                                CenterX4, CenterX5, CenterX6, CenterX7),
-                        x - halfW, scale);
+                        colOffsetX, scale);
                     ComputePixelOD(cx_od, cy_od, maxIter, idx, colorMap);
                 }
                 else if (useQD)
                 {
                     QD cx_qd = QD.FromCenterOffset(
-                        new QD(CenterX, CenterXLo, CenterX2, CenterX3), x - halfW, scale);
+                        new QD(CenterX, CenterXLo, CenterX2, CenterX3), colOffsetX, scale);
                     ComputePixelQD(cx_qd, cy_qd, maxIter, idx, colorMap);
                 }
                 else
                 {
-                    DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), x - halfW, scale);
+                    DD cx_dd = DD.FromCenterOffset(new DD(CenterX, CenterXLo), colOffsetX, scale);
                     ComputePixelHP(cx_dd, cy_dd, maxIter, idx, colorMap);
                 }
             }
