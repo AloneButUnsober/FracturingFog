@@ -1046,3 +1046,234 @@ without further protocol work.
 sub-rect adaptation), D-6b #97 (QD/OD orbit limbs), D-6a #93
 (video / slideshow crash recovery), and the UI-only growth of
 MasterConfigView noted in #125.
+
+---
+
+## Session 7 — D-6b2 — QD/OD shared reference orbit (2026-06-28)
+
+**Goal**: close the D-6b "QD/OD limbs growth" deferred in #97. The wire
+format reserved the `limbs` header byte for the higher-precision
+variants; v1 shipped DD only and the codec refused QD/OD blobs with
+a clear error. Phase D-6b2 grows the codec, engine, and worker
+plumbing so deep-zoom jobs at zoom > 1e25 (QD) and > 1e50 (OD)
+benefit from the same per-tile recompute short-circuit DD jobs
+already get.
+
+**Sub-slice decision**: a single slice. The wire format, the
+engine compute hooks, the seed methods, the worker decoder switch,
+and the tile-planner zoom-range bump all co-depend — splitting
+would have stranded a passing codec slice without the engine
+support to use it, or vice versa. Binary-trailer transport for
+the ~MB-scale OD blobs (a perf escalation #99 enumerated for
+1M+ iter renders) stays out of scope: base64 inside the JSON-RPC
+envelope still works for the typical 1K–10K-iter range deep zooms
+target. The binary trailer becomes D-6b3 if a real workload
+justifies it.
+
+**Server-side changes**
+
+- `Server/Cluster/ReferenceOrbitBlobCodec.cs`:
+  * Added `LimbsQD = 4` and `LimbsOD = 8` constants alongside the
+    existing `LimbsDD = 2`. Format version stays at 1 — the limbs
+    byte differentiates so a DD-only worker decoding a QD blob
+    fails closed with a clear "limbs=4 not supported" message
+    instead of silently mis-parsing the array block.
+  * On-wire format extended additively after the existing 44-byte
+    DD header:
+    * `limbs >= 4` appends 4 centre doubles (cx X2, cx X3, cy X2,
+      cy X3) = 32 bytes.
+    * `limbs == 8` appends a further 8 centre doubles (cx X4..X7,
+      cy X4..X7) = 64 bytes.
+    * Array block grows from 4 arrays (DD) → 8 (QD) → 16 (OD).
+  * New `EncodeQD` and `EncodeOD` static factories with explicit
+    per-limb parameters; the DD path stays byte-identical.
+  * `Decode` now switches on `limbs`, reads the extended centre
+    block + the right array count, and populates the new
+    optional X2..X7 fields on `DecodedOrbit`. Unknown `limbs`
+    values (e.g. 3, 5) are refused with a clear error so a
+    forward-compat version mismatch never silently produces
+    wrong pixels.
+- `Server/Cluster/TilePlanner.cs`:
+  * `SharedRefOrbitMaxZoom` raised from `MandelbrotQDZoomThreshold`
+    (1e25) to `1e115` — a conservative cap below the OD path's
+    X7-limb noise floor (~10^116). Jobs above this still render
+    correctly, just without the shared-orbit short-circuit.
+  * New constants `SharedRefOrbitQDThreshold` (1e25) and
+    `SharedRefOrbitODThreshold` (1e50) mirror the calculator's
+    own QD / OD promotion thresholds; the host's provider switches
+    on them so the shipped blob's precision matches what the
+    worker's calculator would have computed locally.
+  * `AttachSharedReferenceOrbit` now propagates the submission's
+    CenterX4..X7 / CenterY4..X7 onto every tile's render request
+    so an OD-tier tile arrives with the full 8-limb centre, not
+    just the DD pair.
+- `Server/Cluster/ClusterCoordinator.cs`:
+  * `ReferenceOrbitProvider` signature widened from
+    `Func<double, double, double, double, int, (byte[], int)?>`
+    to `Func<RenderRequestDto, int, (byte[], int)?>`. The narrower
+    pre-D-6b2 signature lost the upper QD/OD centre limbs by
+    construction; routing the whole DTO lets the provider read
+    CenterX2..X7 straight off the submission.
+- `Server/Protocol/RenderRequestDto.cs`:
+  * Added `CenterX4..X7` and `CenterY4..Y7` `double` fields with
+    matching JSON property names (camelCase). DD/QD renders leave
+    them 0; the OD-tier shared-orbit path fills them.
+
+**Engine-side changes**
+
+- `Engine/Calculators/MandelbrotCalculator.cs`:
+  * New public static `ComputeReferenceOrbitQDPublic` mirroring the
+    private `ComputeReferenceOrbitQD(QD,QD,int)` instance method
+    bit-for-bit, returning a new `OrbitQD` container with the
+    8 limb arrays + 8 centre limbs.
+  * New public static `ComputeReferenceOrbitODPublic` mirroring
+    `ComputeReferenceOrbitOD(OD,OD,int)`, returning a new `OrbitOD`
+    container with all 16 limb arrays + 16 centre limbs.
+  * New `OrbitQD` and `OrbitOD` containers paralleling `OrbitDD`'s
+    `required`-property shape so the cluster host has a single
+    canonical container per precision tier.
+  * New `SeedReferenceOrbitQD(OrbitQD)` and
+    `SeedReferenceOrbitOD(OrbitOD)` instance methods. Mirror
+    `SeedReferenceOrbitDD`'s array-copy + cache-key prime, plus
+    the appropriate higher-limb writes. OD path writes all 8
+    limbs of centre + per-slot arrays; QD path writes X0..X3
+    and clears X4..X7 so a stale OD orbit residue from a prior
+    render can't bleed through.
+- `Engine/Imaging/PosterRenderer.cs`:
+  * `PosterRequest` grew `SeededOrbitQD` and `SeededOrbitOD`
+    init-only properties alongside `SeededOrbit`. The renderer's
+    Mandelbrot branch picks the first non-null and calls the
+    matching `SeedReferenceOrbit{DD,QD,OD}`. At most one is non-
+    null per render — enforced by the host (the worker's decoder
+    sets exactly one based on `decoded.Limbs`).
+  * `PosterRequest` grew `CenterX4..X7` / `CenterY4..Y7` so the
+    Mandelbrot calculator's full 8-limb centre flows through. The
+    calculator's `ComputeReferenceOrbitOD` centerSame check
+    requires the full 8-limb match; without these, a seeded OD
+    orbit would have been ignored as "stale centre" and the
+    worker would have recomputed per-tile.
+- `ServerHost/HostFractalRenderEngine.cs`:
+  * The worker decoder now switches on `decoded.Limbs` and builds
+    the matching `MandelbrotCalculator.OrbitDD / OrbitQD / OrbitOD`
+    container, forwarding it onto the new `PosterRequest`
+    seeded-orbit slots.
+  * PosterRequest construction now copies `req.CenterX4..X7` /
+    `req.CenterY4..Y7` so OD limbs from the wire DTO reach the
+    calculator's instance properties (where the calculator reads
+    them when promoting to its OD compute path).
+- `ServerHost/ClusterEntry.cs`:
+  * `ReferenceOrbitProvider` lambda now switches on
+    `request.Zoom`: > `SharedRefOrbitODThreshold` → OD compute +
+    `EncodeOD`; > `SharedRefOrbitQDThreshold` → QD compute +
+    `EncodeQD`; else → DD compute + `EncodeDD`. Catches around
+    the whole switch swallow any compute exception to `null`,
+    matching the pre-D-6b2 fail-soft behaviour (the job falls
+    back to per-tile compute).
+
+**Tests**
+
+- `Server.Tests/Cluster/ReferenceOrbitBlobTests.cs`:
+  * `QualifiesForSharedReferenceOrbit_Gates` updated: zooms 1e30
+    (QD) and 1e80 (OD) now accepted; only zoom 1e120 (above the
+    OD cap) is refused.
+  * New `EncodeDecode_RoundTrip_QD` — round-trips a 10-slot QD
+    blob; asserts limbs byte, centre X2/X3 + Y2/Y3 fields, and
+    every array element. Spot-checks that OD arrays are empty
+    on a QD decode.
+  * New `EncodeDecode_RoundTrip_OD` — round-trips a 6-slot OD
+    blob with all 16 arrays and 16 centre limbs; asserts the
+    far-tail limbs (`CentreX7`, `CentreY6`, `RefZrX4`,
+    `RefZiX7`) round-trip exactly.
+  * New `Decode_UnknownLimbs_Throws` — plants `limbs=3` in an
+    otherwise valid header; decoder must refuse with a
+    "limbs"-mentioning message rather than silently misparse.
+- Test suite: **349 passed, 0 failed** (+3 since D-6c1's 346).
+  Includes the existing `Calculator_SubRect_With_SeededOrbit_
+  Matches_FullRender_Pixel_For_Pixel` pixel-parity test, which
+  continues to pass after the codec extension because the DD
+  path stays byte-identical.
+
+**Design decisions**
+
+#126. Format version stays at 1; the limbs byte is the
+  precision discriminator. Alternative — bump to version 2 for
+  QD, version 3 for OD — would have forced every existing DD
+  blob to be re-encoded under v2 even when nothing about its
+  shape changed. The limbs byte was always reserved for this
+  growth (#97 explicitly called it out) and a DD-only consumer
+  already errors clean on `limbs != 2` per the v1 spec, so
+  forward compat across the limbs dimension is intact.
+
+#127. Additive centre extension after the 44-byte header rather
+  than a fixed 108-byte centre block. A fixed-size centre would
+  pay 64 bytes per DD blob for limbs the consumer ignores;
+  appending only when `limbs >= 4` keeps the DD wire footprint
+  byte-identical to the v1 release. The decoder's
+  `expectedBytes` formula handles the additive layout in one
+  arithmetic step, so the code complexity tax is one
+  conditional.
+
+#128. `ReferenceOrbitProvider` signature widened from five
+  doubles to the whole `RenderRequestDto`. The alternative —
+  passing six more doubles (X4..X7 + Y4..Y7) and re-deriving
+  limbs choice on the host side from a separate `zoom` arg —
+  would have added 10+ scalar arguments to the delegate, made
+  every test mock awkward, and lost the natural "pick precision
+  from the request" point. The DTO already lives in
+  `Server.Protocol` (no Engine dependency leak) and the lambda
+  is the single call site in the production code.
+
+#129. `SharedRefOrbitMaxZoom` raised to 1e115, not to
+  `double.MaxValue`. The calculator's OD path has an empirical
+  noise floor around 10^116 (the X7 limb runs out of significant
+  bits); above that the worker would compute a different orbit
+  than the master and the seeded centerSame check would fall
+  through to per-tile compute anyway. Capping the planner at
+  the same threshold means the master never wastes time
+  computing an OD orbit a worker won't use. Jobs above 1e115
+  still render — just without the shared-orbit speedup.
+
+#130. `Decode` rejects unknown limbs values (3, 5, etc.) with a
+  clear error rather than treating them as a forward-compat
+  fallback. Reason: the array-block layout depends on `limbs`
+  by construction; an unknown value can only mean either a
+  protocol-version skew the master should have refused at
+  `worker.register` (engine SHA mismatch) or a corrupted blob.
+  Either way, mis-parsing produces wrong pixels — failing
+  closed is the only correct behaviour.
+
+#131. Worker-side OD-limb plumbing (CenterX4..X7) lives in
+  PosterRequest, not in `RenderImageArtifactAsync`'s positional
+  args. The alternative — bumping
+  `RenderImageArtifactAsync(req, ftype, cx, cxLo, cx2, cx3, cy,
+  cyLo, cy2, cy3, ...)` to a 14-double signature — would have
+  cascaded through `RenderVideoArtifactAsync`, the video-frame
+  loop, and the slideshow path. PosterRequest already has the
+  X2/X3 limbs as init-only properties; growing it to X4..X7 is
+  an in-place extension that touches one constructor call.
+
+#132. PosterRenderer's QD/QO orbit selection is a `else if`
+  chain on the three SeededOrbit slots rather than a `switch`
+  on a single "kind" enum. Reason: the three properties are
+  mutually exclusive by host construction (the decoder sets
+  exactly one based on `decoded.Limbs`); a kind-enum would have
+  meant adding a parallel field and an invariant the host has
+  to maintain in two places. An `else if` chain is
+  self-documenting and the compiler enforces no-fallthrough.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing warnings only
+  (35 total — AVLN5001 + codegen CS0219 + xUnit1051, unchanged
+  from D-6c1).
+- Test suite: **349 passed, 0 failed** (+3 since D-6c1's 346).
+- Filtered run `--filter "FullyQualifiedName~ReferenceOrbitBlobTests"`:
+  9 passed in 436 ms (was 6 — +3 new D-6b2 tests).
+
+**Open follow-ups remaining**: D-6b1 (SIMD PT4/PT8 sub-rect
+adaptation — now harder to skip because the perf delta is more
+visible at QD/OD where the per-tile recompute the seed
+short-circuits is the most expensive), D-6a #93 (video /
+slideshow crash recovery), UI growth of MasterConfigView (#125),
+and binary-trailer transport for OD-scale blobs (D-6b3 if a real
+1M+ iter workload arrives).

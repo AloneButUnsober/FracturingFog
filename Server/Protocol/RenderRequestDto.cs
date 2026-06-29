@@ -41,6 +41,17 @@ public sealed class RenderRequestDto
     [JsonPropertyName("centerY2")]  public double CenterY2  { get; set; }
     [JsonPropertyName("centerY3")]  public double CenterY3  { get; set; }
 
+    // D-6b2 — OD limbs of the centre (used at zoom > 1e50 for the
+    // shared-reference-orbit OD path). DD / QD renders leave them 0.
+    [JsonPropertyName("centerX4")] public double CenterX4 { get; set; }
+    [JsonPropertyName("centerX5")] public double CenterX5 { get; set; }
+    [JsonPropertyName("centerX6")] public double CenterX6 { get; set; }
+    [JsonPropertyName("centerX7")] public double CenterX7 { get; set; }
+    [JsonPropertyName("centerY4")] public double CenterY4 { get; set; }
+    [JsonPropertyName("centerY5")] public double CenterY5 { get; set; }
+    [JsonPropertyName("centerY6")] public double CenterY6 { get; set; }
+    [JsonPropertyName("centerY7")] public double CenterY7 { get; set; }
+
     [JsonPropertyName("themeName")]   public string ThemeName   { get; set; } = "HSV";
     [JsonPropertyName("qualityName")] public string QualityName { get; set; } = "Standard";
 

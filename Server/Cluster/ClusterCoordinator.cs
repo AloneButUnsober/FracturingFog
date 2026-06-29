@@ -116,11 +116,19 @@ public sealed class ClusterCoordinator : IClusterCoordinator
     /// <see cref="TilePlanner.QualifiesForSharedReferenceOrbit"/> get one
     /// orbit computed up-front and the blob attached to every tile.
     ///
-    /// Args: centreX, centreXLo, centreY, centreYLo, maxIter.
+    /// Args: full submit request (so the provider can pick DD / QD / OD
+    /// from the zoom + read X2..X7 limbs out of CenterX2/3 etc.),
+    /// resolved maxIter.
     /// Returns: encoded blob bytes + orbit's maxIter cap. Null return =
     /// provider declined (compute failed, out-of-range centre, etc.); the
-    /// job falls back to per-tile compute.</summary>
-    public Func<double, double, double, double, int, (byte[] Blob, int MaxIter)?>? ReferenceOrbitProvider { get; init; }
+    /// job falls back to per-tile compute.
+    ///
+    /// D-6b2 widened the signature from <c>(cx, cxLo, cy, cyLo, maxIter)</c>
+    /// to <c>(RenderRequestDto, maxIter)</c> so the host can pull the
+    /// upper QD/OD centre limbs straight off the submission rather than
+    /// us re-deriving them from the Hi/Lo pair (which loses precision at
+    /// zoom &gt; 1e25).</summary>
+    public Func<RenderRequestDto, int, (byte[] Blob, int MaxIter)?>? ReferenceOrbitProvider { get; init; }
 
     private readonly ClusterLogger _log;
     private readonly ConcurrentDictionary<string, ArtifactMerger> _mergers =
@@ -1152,10 +1160,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
             try
             {
                 int orbitMaxIter = dto.Request.Iterations is int ri && ri > 0 ? ri : 1000;
-                var result = ReferenceOrbitProvider(
-                    dto.Request.CenterX!.Value, dto.Request.CenterXLo,
-                    dto.Request.CenterY!.Value, dto.Request.CenterYLo,
-                    orbitMaxIter);
+                var result = ReferenceOrbitProvider(dto.Request, orbitMaxIter);
                 if (result is { Blob: var blob, MaxIter: var capUsed })
                 {
                     TilePlanner.AttachSharedReferenceOrbit(plan, dto.Request, blob, capUsed);
