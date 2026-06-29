@@ -52,6 +52,13 @@ namespace FracturingFog.Render
         /// entry → fall back to the quality preset's auto-computed count).</summary>
         public int TargetIterations { get; set; }
 
+        /// <summary>Authored Quality preset name for the picked region
+        /// (null/empty = no region → engine picks tier from target zoom).
+        /// Honoured by reverse-zoom and slideshow legs so the played-back
+        /// zoom uses the same quality tier the region was authored at,
+        /// rather than the lower tier implied by raw zoom magnitude.</summary>
+        public string? TargetQualityPresetName { get; set; }
+
         /// <summary>Name of the region the user picked in the VideoDialog
         /// (single-shot only). Used by the engine to push
         /// <c>FractalRenderHost.RegionName</c> so the watermark top line

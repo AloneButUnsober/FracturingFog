@@ -941,6 +941,7 @@ namespace FracturingFog.Hosting
                 double targetCXLo = 0, targetCX2 = 0, targetCX3 = 0;
                 double targetCYLo = 0, targetCY2 = 0, targetCY3 = 0;
                 int targetIterations = 0;
+                string? targetQualityPresetName = null;
                 bool suppressRegionPick = false;
 
                 // ── Controls ─────────────────────────────────────────────
@@ -1149,6 +1150,7 @@ namespace FracturingFog.Hosting
                     if (z > ultraCap) z = ultraCap;
                     txZoom.Text = z.ToString("G6", ic);
                     targetIterations = region.Iterations;
+                    targetQualityPresetName = region.QualityPreset?.Name;
                 };
 
                 // ── Parsing ──────────────────────────────────────────────
@@ -1289,6 +1291,7 @@ namespace FracturingFog.Hosting
                         TargetCYHi = cyHi, TargetCYLo = cyLo, TargetCY2 = cy2, TargetCY3 = cy3,
                         TargetZoom = zoom,
                         TargetIterations = targetIterations,
+                        TargetQualityPresetName = targetQualityPresetName,
                         TargetRegionName = regionCombo.SelectedIndex > 0
                             ? regionCombo.SelectedItem as string
                             : null,
