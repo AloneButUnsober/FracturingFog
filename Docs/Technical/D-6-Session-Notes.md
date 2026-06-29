@@ -1493,3 +1493,145 @@ blobs (D-6b3), and FramePlanner.CloneFrameTemplate not
 propagating the new CenterX4..X7 limbs (D-6b2 leftover — would
 matter only for cluster video at zoom > 1e50, an unusual
 workload).
+
+---
+
+## Session 9 — D-6b1 — SIMD PT4 / PT8 sub-rect adaptation (2026-06-28)
+
+**Goal**: close the D-6b SIMD deferral noted in #96. The PT4
+(AVX2, 4-wide) and PT8 (AVX-512, 8-wide) inner loops hard-coded
+`Width*0.5` and `(y - halfH)` / `(x+k - halfW)` into their dc
+math, so a sub-rect tile would have computed dc relative to the
+tile origin rather than the IMAGE origin — the shared
+reference-orbit seed would be off by `(SubRectOffset + tileHalfW)
+- imageHalfW` per pixel. The pre-D-6b1 dispatcher caught this by
+forcing scalar PT for any sub-rect render. The cost: cluster
+tiles missed the ~3× SIMD speedup on the PT inner loop — the
+single hottest loop in the cluster's wall-clock budget.
+
+**Sub-slice decision**: a single slice. PT4 and PT8 are
+near-identical (PT8 is PT4 with the lane count doubled); the
+sub-rect math change is the same in both, and splitting would
+have meant landing PT4 first with a still-scalar PT8 that any
+AVX-512 box hit instead — net no perf win until both shipped.
+Removing the `subRect` gate in `Calculate` co-locates with the
+loop changes for the same reason: a half-shipped state would
+have either disabled SIMD on tiles (no win) or routed sub-rect
+to a broken PT4 (correctness regression).
+
+**Engine-side changes**
+
+- `Engine/Calculators/MandelbrotCalculator.cs`:
+  * `Calculate` dispatch: removed the `subRect` local that
+    forced scalar. SIMD dispatch now fires on every render that
+    meets the hardware-availability check. The `subRect`
+    comment block above the dispatch is updated to reference
+    the new bit-identical-collapse property of the sub-rect
+    formula.
+  * `ComputeRowPT4`: head rewrote `halfW`/`halfH` to use
+    `EffectiveImageWidth/Height * 0.5`, added `offX`/`offY`
+    locals from `SubRectOffsetX/Y`, replaced bare `(y - halfH)`
+    with `rowOffsetY = offY + y - halfH`. Column inner loop's
+    four `dcR{k}` doubles now use `offX + x + k - halfW`. HP
+    fallback (`if (glitched && !escaped)`) and scalar tail
+    both pull through the same `colOffsetX = offX + x + k - halfW`
+    local. The HP-fallback `cy_dd`/`cy_qd`/`cy_od` constructors
+    use `rowOffsetY` instead of `y - halfH` so the y-coord
+    HP-tier seed agrees with the SIMD dc.
+  * `ComputeRowPT8`: identical surgery, eight-wide instead of
+    four. The Vector512.Create call's eight `dcR{k}` values now
+    use the sub-rect formula; the HP-fallback + scalar tail use
+    the same `colOffsetX` local.
+  * Removed `SubRectActive` private property (unused now that
+    the dispatch gate is gone).
+
+**Why the math collapses identically**
+
+For a full-image render: `ImageWidth == Width`, `SubRectOffsetX
+== 0`. So `offX + x - halfW = 0 + x - Width*0.5 = x - halfW` —
+byte-identical to the pre-D-6b1 formula. The legacy code path
+is preserved bit-for-bit by arithmetic, not by a runtime guard.
+
+**Tests**
+
+The existing
+`Calculator_SubRect_With_SeededOrbit_Matches_FullRender_Pixel_For_Pixel`
+in `ReferenceOrbitBlobTests.cs` is the load-bearing guard for
+this change. It renders a 64×64 full image, then four 32×32
+sub-rect tiles seeded with the same shared orbit, and asserts
+pixel-for-pixel parity. Before D-6b1 it passed because sub-rect
+forced scalar; after D-6b1 it passes because the SIMD path
+computes the same dc. A drift here would mean the sub-rect
+math change in PT4/PT8 was wrong — exactly what the test exists
+to catch.
+
+- Test suite: **354 passed, 0 failed** (unchanged from D-6f).
+  `ReferenceOrbitBlobTests` filtered run: 9 passed in 262 ms.
+
+**Design decisions**
+
+#140. SIMD dispatch gate removed entirely rather than wrapped
+  in a "sub-rect SIMD enabled" flag. The flag would have been
+  set unconditionally to true at ship time (the whole point of
+  D-6b1 is enabling SIMD for sub-rect); a flag with one possible
+  value is dead weight. The arithmetic-collapse guarantee
+  (legacy renders compute the same dc as before) makes the
+  switch safe to remove outright.
+
+#141. `offX + x - halfW` left as three-term sum rather than
+  pre-computed `(x - halfW) + offX`. Reason: `halfW` is `double`
+  and `offX + x` is `int`; the compiler's mixed-arithmetic
+  promotion produces a single `vcvtsi2sd + vsubsd` per lane in
+  the JIT output, identical to the original two-term cost. The
+  three-term form reads cleaner and the codegen analyzer's
+  inspection confirmed no extra IL.
+
+#142. `SubRectActive` removed rather than left as
+  `[Obsolete]`. The property had one caller and that caller is
+  gone; keeping it `[Obsolete]` would have left a confusing
+  dead method that the next reader has to chase. The Engine
+  API surface is internal to the project so there's no public-
+  contract break — the only external consumers are the
+  cluster's tile path (which sets the four sub-rect properties
+  directly) and the legacy single-server path (which leaves them
+  zero).
+
+#143. `cy_dd`/`cy_qd`/`cy_od` constructors switched to
+  `rowOffsetY` rather than recomputing `y - halfH` per
+  constructor. Reason: the new sub-rect head defines
+  `rowOffsetY = offY + y - halfH` once at the top; passing the
+  local through to the y-coord HP seed keeps PT and HP in
+  lockstep (both see the IMAGE y offset, not tile-local). A
+  divergence here would mean the HP fallback computed at one
+  coordinate while the PT loop computed at another — exactly
+  the kind of seam D-6b's pixel-parity test exists to catch.
+
+**Perf note**
+
+A formal benchmark wasn't run in this slice — the perf claim
+"~3×" cited in #96 is from the pre-D-6b SIMD-vs-scalar PT
+comparison in `Docs/Technical/Performance-DevelopmentPlan.md`.
+The point of D-6b1 isn't a new perf measurement; it's
+unblocking the SIMD path for cluster tiles so the existing
+~3× win actually applies to the cluster's hot path instead of
+being silently disabled. A real measurement belongs in
+whichever stress test runs an 8K deep-zoom poster across
+multiple workers — out of scope for the engine-level change.
+
+**Build + test**
+
+- Solution build (Debug): 0 errors, pre-existing warnings only
+  (36 total — net dead-code removal of `SubRectActive`
+  cancelled out by no new warnings, unchanged warning count
+  modulo +1 from earlier sessions).
+- Test suite: **354 passed, 0 failed** (unchanged from D-6f).
+  StressTests remains parallelization-flaky in the all-suite
+  run; passes when run isolated or sequentially — a known
+  pre-existing flake (D-6e #119), not introduced by D-6b1.
+
+**Open follow-ups remaining**: UI growth of MasterConfigView
+(#125), binary-trailer transport for OD-scale blobs (D-6b3),
+FramePlanner.CloneFrameTemplate OD-limb propagation (D-6b2
+leftover), JobStore.WriteSlideBytes race (mirror of the D-6e
+WriteStatusLocked fix). All non-blocking; phase D-6 stays
+closed.
