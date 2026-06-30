@@ -311,6 +311,12 @@
                                 HorizontalAlignment="Stretch"
                                 Margin="0,4,0,0"
                                 ToolTip.Tip="Open the Watermark Editor" />
+                        <Button Classes="action help"
+                                Content="Edit Animation…"
+                                Command="{Binding EditAnimationCommand}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,4,0,0"
+                                ToolTip.Tip="Open the Animation Editor (Roadmap Phase 3c)" />
                     </StackPanel>
                 </Border>
 

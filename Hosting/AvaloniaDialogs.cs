@@ -626,16 +626,22 @@ namespace FracturingFog.Hosting
         /// <summary>
         /// Save-Region prompt: like PromptForTextAsync but with an additional
         /// "Include watermark" checkbox shown only when a custom watermark is
-        /// active. Returns (Name, IncludeWatermark) on OK, null on cancel.
+        /// active and an optional Animation dropdown populated from the host
+        /// animation library. Returns (Name, IncludeWatermark, AnimationName)
+        /// on OK, null on cancel. <paramref name="animationNames"/> may be
+        /// empty — the dropdown is hidden in that case. AnimationName is null
+        /// when "(none)" is selected.
         /// </summary>
-        public static Task<(string Name, bool IncludeWatermark)?> PromptForSaveRegionAsync(
+        public static Task<(string Name, bool IncludeWatermark, string? AnimationName)?> PromptForSaveRegionAsync(
             string title,
             string prompt,
             string suggested,
-            bool customWatermarkAvailable)
+            bool customWatermarkAvailable,
+            System.Collections.Generic.IReadOnlyList<string>? animationNames = null,
+            string? animationDefault = null)
         {
             var owner = ActiveMainWindow;
-            var tcs = new TaskCompletionSource<(string, bool)?>();
+            var tcs = new TaskCompletionSource<(string, bool, string?)?>();
 
             void Run()
             {
@@ -660,6 +666,33 @@ namespace FracturingFog.Hosting
                         "Enable \"Use custom watermark\" + pick a saved watermark first.");
                 }
 
+                // Animation dropdown — hidden when the library is empty.
+                bool hasAnimations = animationNames != null && animationNames.Count > 0;
+                const string NoneSentinel = "(none)";
+                var animLabel = new TextBlock
+                {
+                    Text = "Attach animation:",
+                    Foreground = Brushes.White,
+                    Margin = new Thickness(16, 0, 16, 2),
+                    IsVisible = hasAnimations,
+                };
+                var animCombo = new ComboBox
+                {
+                    MinWidth = 320,
+                    Margin = new Thickness(16, 0, 16, 8),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    IsVisible = hasAnimations,
+                };
+                animCombo.Items.Add(NoneSentinel);
+                if (hasAnimations)
+                {
+                    foreach (var n in animationNames!) animCombo.Items.Add(n);
+                    animCombo.SelectedItem = !string.IsNullOrEmpty(animationDefault)
+                        && animCombo.Items.Contains(animationDefault)
+                            ? animationDefault
+                            : NoneSentinel;
+                }
+
                 var win = new Window
                 {
                     Title = string.IsNullOrEmpty(title) ? "Save Region" : title,
@@ -680,11 +713,20 @@ namespace FracturingFog.Hosting
                 };
                 var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
                 var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
-                (string, bool)? pending = null;
-                void Close((string, bool)? r) { pending = r; win.Close(); }
-                ok.Click += (_, _) => Close(string.IsNullOrWhiteSpace(box.Text)
-                    ? null
-                    : ((string Name, bool IncludeWatermark)?)(box.Text!, includeWatermark.IsChecked == true));
+                (string, bool, string?)? pending = null;
+                void Close((string, bool, string?)? r) { pending = r; win.Close(); }
+                ok.Click += (_, _) =>
+                {
+                    if (string.IsNullOrWhiteSpace(box.Text)) { Close(null); return; }
+                    string? animName = null;
+                    if (hasAnimations
+                        && animCombo.SelectedItem is string s
+                        && !string.Equals(s, NoneSentinel, StringComparison.Ordinal))
+                    {
+                        animName = s;
+                    }
+                    Close((box.Text!, includeWatermark.IsChecked == true, animName));
+                };
                 cancel.Click += (_, _) => Close(null);
 
                 var buttonRow = new StackPanel
@@ -697,14 +739,18 @@ namespace FracturingFog.Hosting
                 buttonRow.Children.Add(cancel);
                 buttonRow.Children.Add(ok);
 
-                var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto") };
+                var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto") };
                 Grid.SetRow(promptText, 0);
                 Grid.SetRow(box, 1);
                 Grid.SetRow(includeWatermark, 2);
-                Grid.SetRow(buttonRow, 3);
+                Grid.SetRow(animLabel, 3);
+                Grid.SetRow(animCombo, 4);
+                Grid.SetRow(buttonRow, 5);
                 grid.Children.Add(promptText);
                 grid.Children.Add(box);
                 grid.Children.Add(includeWatermark);
+                grid.Children.Add(animLabel);
+                grid.Children.Add(animCombo);
                 grid.Children.Add(buttonRow);
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };

@@ -475,6 +475,29 @@ namespace FracturingFog.Hosting
             return AnimationLibrary.Instance.GetByName(animationName);
         }
 
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateAnimationNames()
+        {
+            var lib = AnimationLibrary.Instance;
+            var list = new List<string>(lib.Animations.Count);
+            foreach (var a in lib.Animations) list.Add(a.Name);
+            return list;
+        }
+
+        /// <inheritdoc/>
+        public bool AnimationExistsInLibrary(string animationName)
+        {
+            if (string.IsNullOrWhiteSpace(animationName)) return false;
+            return AnimationLibrary.Instance.GetByName(animationName) != null;
+        }
+
+        /// <inheritdoc/>
+        public bool SaveAnimation(FracturingFog.Abstractions.Animation.AnimationData animation)
+        {
+            if (animation == null || string.IsNullOrWhiteSpace(animation.Name)) return false;
+            return AnimationLibrary.Instance.ReplaceOrAdd(animation);
+        }
+
         public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null)
         {
             if (string.IsNullOrWhiteSpace(regionName) || state == null) return false;
