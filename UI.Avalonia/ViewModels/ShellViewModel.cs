@@ -37,6 +37,7 @@ using FracturingFog.Input;
 using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.UI.Avalonia.Slideshow;
+using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -110,6 +111,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         _paletteService = paletteService;
 
         Main = new MainViewModel(renderHost, input);
+
+        // Animation Roadmap Phase 3b — app-scoped animation bus for
+        // region-attached animations. Initialised once; the JumpToRegion path
+        // below populates its dynamic animator set per recall. Render-completion
+        // released on every FrameCompleted from the host, so the gate fires
+        // regardless of which UI surface kicked the render.
+        AnimationBusHost.Initialize(() => renderHost.Trigger());
+        renderHost.FrameCompleted += (_, _) =>
+            AnimationBusHost.Bus?.NotifyRenderCompleted();
         FloatingMenu = new FloatingMenuViewModel();
         // Hand the menu the theme service so its Region / Theme combos can
         // group + sort + right-click-filter themselves (parity with the
@@ -1587,6 +1597,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 if (!string.IsNullOrWhiteSpace(lightOverride.EnvironmentName))
                     FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(lightOverride.EnvironmentName);
             }
+            // Animation Roadmap Phase 3b — region's attached animation, if
+            // any. Wipes the prior dynamic animator set even when this region
+            // has no animation attached (silent transition off). Bus starts
+            // its dispatcher timer on Refresh inside LoadRegionAnimation.
+            var attachedAnimName = _themeService.GetRegionAnimationName(name);
+            var attachedAnim = string.IsNullOrEmpty(attachedAnimName)
+                ? null
+                : _themeService.GetAnimation(attachedAnimName);
+            AnimationBusHost.LoadRegionAnimation(
+                attachedAnim,
+                Main.ViewState.FractalParameters);
             Main.RenderHost.Trigger();
         }
     }
