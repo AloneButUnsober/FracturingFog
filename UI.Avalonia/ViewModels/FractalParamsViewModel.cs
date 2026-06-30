@@ -5,6 +5,7 @@ using System.Reactive;
 using global::Avalonia.Threading;
 using FracturingFog;
 using FracturingFog.Models;
+using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -272,23 +273,42 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     public ReactiveCommand<Unit, Unit> ToggleJuliaAnimateCommand { get; }
 
-    // Render-pacing gate: the param dialog drives renders via ParamChanged,
-    // and each render can take 10s–100s of ms (deep zoom or high iter). A
-    // free-running 30 Hz timer flooded the renderer with cancel/restart calls
-    // that pegged the UI thread until the app appeared to hang. The fix is to
-    // integrate the angle silently on every tick but only fire ParamChanged
-    // once the previous render reports back via NotifyRenderCompleted. The
-    // host wires that callback while the dialog is open.
-    private DispatcherTimer? _juliaTimer;
-    private DateTime _juliaLastTick;
-    private bool _juliaRenderInFlight;
+    // Render-pacing gate + dispatcher tick lives in ParameterAnimationBus
+    // (Animation/ParameterAnimationBus.cs). The Julia orbit body lives in
+    // JuliaCAnimator. Reason: the same gate handles every future animator
+    // we plug in (Phase 0 of the Animation Roadmap). Behaviour for the
+    // Julia-only case is preserved bit-for-bit — same 50 ms Background
+    // tick, same render-completion gate, same dt cap, same |c| floor.
+    private ParameterAnimationBus? _animationBus;
+    private JuliaCAnimator? _juliaAnimator;
+
+    private void EnsureAnimationBus()
+    {
+        if (_animationBus != null) return;
+        _animationBus = new ParameterAnimationBus(Fire);
+        _juliaAnimator = new JuliaCAnimator(this);
+        _animationBus.Register(_juliaAnimator);
+    }
 
     /// <summary>Host calls this after each render frame completes. Releases the
-    /// animation gate so the next integrated c value can drive the next
-    /// render.</summary>
-    public void NotifyRenderCompleted()
+    /// animation gate so the next integrated parameter values can drive the
+    /// next render.</summary>
+    public void NotifyRenderCompleted() => _animationBus?.NotifyRenderCompleted();
+
+    /// <summary>Bus-only-internal silent setter. Updates the cached fields and
+    /// the underlying <see cref="FractalParameters.JuliaC"/> with property-
+    /// change notifications, but suppresses <see cref="Fire"/> so the bus
+    /// can coalesce a single render trigger after every enabled animator
+    /// has ticked.</summary>
+    internal void SetJuliaSilent(double r, double i)
     {
-        _juliaRenderInFlight = false;
+        _suppress = true;
+        try
+        {
+            JuliaR = r;
+            JuliaI = i;
+        }
+        finally { _suppress = false; }
     }
 
     private void ToggleJuliaAnimate()
@@ -299,72 +319,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     private void StartJuliaAnimate()
     {
-        if (_juliaTimer == null)
-        {
-            // Background priority lets the UI thread service input + paint
-            // between integration ticks; Render priority caused visible
-            // stalls when a long render kept stealing the slot.
-            _juliaTimer = new DispatcherTimer(
-                TimeSpan.FromMilliseconds(50),
-                DispatcherPriority.Background,
-                OnJuliaTick);
-        }
-        _juliaLastTick = DateTime.UtcNow;
-        _juliaRenderInFlight = false;
-        _juliaTimer.Start();
+        EnsureAnimationBus();
+        _juliaAnimator!.IsEnabled = true;
+        _animationBus!.Refresh();
         JuliaAnimating = true;
     }
 
     private void StopJuliaAnimate()
     {
-        _juliaTimer?.Stop();
-        _juliaRenderInFlight = false;
+        if (_juliaAnimator != null) _juliaAnimator.IsEnabled = false;
+        _animationBus?.Refresh();
         JuliaAnimating = false;
-    }
-
-    private void OnJuliaTick(object? sender, EventArgs e)
-    {
-        // Render-completion-gated kick: skip the whole step while the previous
-        // render is still in flight. Earlier revisions integrated dt every
-        // tick and only gated Fire, which made the angle race ahead while
-        // the renderer was warming up — first frame after the gate opened
-        // showed a visible jump. Skipping integration while blocked makes
-        // motion track render cadence instead.
-        if (_juliaRenderInFlight) return;
-
-        var now = DateTime.UtcNow;
-        double dt = (now - _juliaLastTick).TotalSeconds;
-        _juliaLastTick = now;
-        if (dt <= 0) return;
-
-        // Cap per-step dt so a slow first render (cold JIT + cold pixel-scale
-        // cache) can't translate into a single big jump. 0.1 s ≈ two tick
-        // intervals — enough headroom for jitter, low enough that the worst
-        // jump matches a typical mid-zoom render time.
-        if (dt > 0.1) dt = 0.1;
-
-        double r = Math.Sqrt(_juliaR * _juliaR + _juliaI * _juliaI);
-        // Origin is a fixed point under pure rotation — bootstrap to a visible
-        // radius so the user always sees motion even from a fresh dialog.
-        if (r < 1e-6) r = 0.5;
-
-        double theta = Math.Atan2(_juliaI, _juliaR);
-        double dir = _juliaAnimateForward ? 1.0 : -1.0;
-        theta += dir * _juliaAnimateSpeed * dt;
-
-        double nr = r * Math.Cos(theta);
-        double ni = r * Math.Sin(theta);
-
-        _suppress = true;
-        try
-        {
-            JuliaR = nr;
-            JuliaI = ni;
-        }
-        finally { _suppress = false; }
-
-        _juliaRenderInFlight = true;
-        Fire();
     }
 
     // ── Multibrot ──
