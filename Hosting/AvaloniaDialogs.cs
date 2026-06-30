@@ -1592,6 +1592,16 @@ namespace FracturingFog.Hosting
                     CanResize = false,
                     ShowInTaskbar = false,
                     Background = Brushes.Black,
+                    // FloatingMenu is a sibling child of MainWindow that
+                    // typically sits in front of any modal opened against the
+                    // owner; users reported the prompt was firing but
+                    // invisible when stop came from the FloatingMenu Slideshow
+                    // button or the VCR (only context-menu stop "worked"
+                    // because the right-click menu closed before the prompt
+                    // appeared, leaving the main window clear). Topmost +
+                    // explicit Activate force the dialog above any non-modal
+                    // child windows.
+                    Topmost = true,
                 };
 
                 var bodyText = new TextBlock
@@ -1639,6 +1649,7 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
+                win.Opened += (_, _) => { try { win.Activate(); } catch { } };
                 if (owner != null) _ = win.ShowDialog(owner);
                 else win.Show();
             }
