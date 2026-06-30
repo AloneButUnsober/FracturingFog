@@ -72,6 +72,7 @@ shipped, and where the project is going.
 | [Performance Roadmap](Performance-Roadmap.md)                              | Tier 1 / 2 / 3 perf wins across the render pipeline.                    |
 | [Lighting + FX Roadmap](Lighting-FX-Roadmap.md)                            | HDR DoF, bloom, GGX importance sampling, HDRI environments.             |
 | [Fractal Expansion Roadmap](Fractal-Expansion-Roadmap.md)                  | New families (KIFS, L-systems, Apollonian, Flame, Bicomplex, …).        |
+| [Animation Roadmap](Animation-Roadmap.md)                                  | Animated `FractalParameters`, Animation asset, Animation Slideshow.     |
 | [CalculatorGen Roadmap](Technical/CalculatorGen-Roadmap.md)                | Perturbation + SA + DD/QD/OD + cluster-rebase pipeline.                 |
 | [Documentation Plan](Documentation-Plan.md)                                | What is still being written and how to contribute.                      |
 | [Resources & Bibliography](Resources-Bibliography.md)                      | Citations for every formula, algorithm, and paper referenced in code.   |
