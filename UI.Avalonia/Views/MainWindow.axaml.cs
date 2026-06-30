@@ -38,6 +38,7 @@ public sealed partial class MainWindow : Window
     private FloatingMenuView? _menuWin;
     private ColorThemeEditorView? _editorWin;
     private WatermarkEditorView? _watermarkEditorWin;
+    private AnimationEditorView? _animationEditorWin;
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
@@ -553,6 +554,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.WatermarkEditor):
                 SyncWatermarkEditor();
                 break;
+            case nameof(ShellViewModel.IsAnimationEditorVisible):
+            case nameof(ShellViewModel.AnimationEditor):
+                SyncAnimationEditor();
+                break;
             case nameof(ShellViewModel.IsHelpVisible):
             case nameof(ShellViewModel.Help):
                 SyncHelp();
@@ -1034,6 +1039,33 @@ public sealed partial class MainWindow : Window
         else
         {
             _watermarkEditorWin?.Hide();
+        }
+    }
+
+    private void SyncAnimationEditor()
+    {
+        if (_shell == null) return;
+        if (_shell.IsAnimationEditorVisible && _shell.AnimationEditor != null)
+        {
+            if (_animationEditorWin == null)
+            {
+                _animationEditorWin = new AnimationEditorView { DataContext = _shell.AnimationEditor };
+                _animationEditorWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsAnimationEditorVisible = false;
+                };
+            }
+            else if (_animationEditorWin.DataContext != _shell.AnimationEditor)
+            {
+                _animationEditorWin.DataContext = _shell.AnimationEditor;
+            }
+            if (!_animationEditorWin.IsVisible) _animationEditorWin.Show(this);
+        }
+        else
+        {
+            _animationEditorWin?.Hide();
         }
     }
 

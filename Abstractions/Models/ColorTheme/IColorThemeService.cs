@@ -216,6 +216,22 @@ namespace FracturingFog.Models
         /// region's attached animation into runtime animators.</summary>
         AnimationData? GetAnimation(string animationName);
 
+        /// <summary>Animation Roadmap Phase 3c — display names of every
+        /// animation in the library (built-in seed + user). Used by the
+        /// Save Region dialog's Animation dropdown and the Animation
+        /// Editor's Load combo.</summary>
+        IReadOnlyList<string> EnumerateAnimationNames();
+
+        /// <summary>Animation Roadmap Phase 3c — true if an animation with
+        /// this name already exists (case-insensitive). Used by the editor
+        /// to confirm overwrite before <see cref="SaveAnimation"/>.</summary>
+        bool AnimationExistsInLibrary(string animationName);
+
+        /// <summary>Animation Roadmap Phase 3c — persist the given asset to
+        /// the user library. Replaces by case-insensitive name. Returns
+        /// true on success.</summary>
+        bool SaveAnimation(AnimationData animation);
+
         /// <summary>
         /// Remove the named region from the user library. Returns true if a
         /// region was actually removed. Built-in regions are never deletable;

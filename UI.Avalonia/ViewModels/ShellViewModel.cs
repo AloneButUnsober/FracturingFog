@@ -145,6 +145,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // user saw no view change and the symptom looked like flaky bindings.
         FloatingMenu.RegionComboChanged += (_, name) => JumpToRegion(name);
         FloatingMenu.EditWatermarkClick += (_, _) => ShowWatermarkEditor();
+        FloatingMenu.EditAnimationClick += (_, _) => ShowAnimationEditor();
         FloatingMenu.WatermarkChanged += (_, name) => Main.SelectedCustomWatermarkName = name;
         FloatingMenu.UseCustomWatermarkChanged += (_, v) => Main.UseCustomWatermark = v;
         FloatingMenu.OverrideRegionWatermarkChanged += (_, v) => Main.OverrideRegionWatermark = v;
@@ -1141,6 +1142,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _watermarkEditor, value);
     }
 
+    /// <summary>Animation Roadmap Phase 3c. Lazily-constructed VM for the
+    /// Animation Editor dialog; null until the first ShowAnimationEditor call.</summary>
+    private AnimationEditorViewModel? _animationEditor;
+    public AnimationEditorViewModel? AnimationEditor
+    {
+        get => _animationEditor;
+        private set => this.RaiseAndSetIfChanged(ref _animationEditor, value);
+    }
+
     // ── Phase 3 dialogs ──────────────────────────────────────────────────
 
     private FFClientViewModel? _ffClient;
@@ -1213,6 +1223,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isWatermarkEditorVisible;
         set => this.RaiseAndSetIfChanged(ref _isWatermarkEditorVisible, value);
+    }
+
+    private bool _isAnimationEditorVisible;
+    public bool IsAnimationEditorVisible
+    {
+        get => _isAnimationEditorVisible;
+        set => this.RaiseAndSetIfChanged(ref _isAnimationEditorVisible, value);
     }
 
     private bool _isHelpVisible;
@@ -1728,6 +1745,31 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             WatermarkEditor = vm;
         }
         IsWatermarkEditorVisible = true;
+    }
+
+    /// <summary>Animation Roadmap Phase 3c — open the Animation Editor.
+    /// Modeless, lives alongside the existing editors. The preview target is
+    /// the live FractalParameters record so Live Preview / Preview push
+    /// onto the same params the renderer reads.</summary>
+    public void ShowAnimationEditor()
+    {
+        if (AnimationEditor == null)
+        {
+            var vm = new AnimationEditorViewModel(
+                _themeService,
+                Main.ViewState.FractalParameters);
+            vm.AnimationSavedToLibrary += (_, _) =>
+            {
+                // No FloatingMenu animation dropdown today — the Save Region
+                // dialog picks up the new entry on its next open via
+                // EnumerateAnimationNames(). Hook stays here for the future
+                // SlideshowSettings animation filter UI.
+            };
+            vm.CloseRequested += (_, _) => IsAnimationEditorVisible = false;
+            vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
+            AnimationEditor = vm;
+        }
+        IsAnimationEditorVisible = true;
     }
 
     private void ShowFFClient()

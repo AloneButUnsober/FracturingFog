@@ -1001,9 +1001,11 @@ namespace FracturingFog.Hosting
                         shell.Main.UseCustomWatermark
                         && shell.Main.ActiveCustomWatermark != null;
 
+                    var animationNames = ((IColorThemeService)s_themeService!).EnumerateAnimationNames();
                     var prompt = await AvaloniaDialogs.PromptForSaveRegionAsync(
                         "Save Region", "Region name:", BuildRegionNameDefault(shell),
-                        customWatermarkAvailable);
+                        customWatermarkAvailable,
+                        animationNames);
 
                     if (prompt is { } picked && !string.IsNullOrWhiteSpace(picked.Name) && s_renderHost != null)
                     {
@@ -1011,7 +1013,7 @@ namespace FracturingFog.Hosting
                             ? shell.Main.ActiveCustomWatermark
                             : null;
                         bool ok = ((IColorThemeService)s_themeService!)
-                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded);
+                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded, picked.AnimationName);
                         if (ok)
                         {
                             // RefreshRegions honours the menu's active sort +
