@@ -394,6 +394,14 @@ internal sealed class X11InputBridge : INativeInputBridge
         IntPtr atom = XInternAtom(_display, "_NET_WM_MOVERESIZE", false);
         if (atom == IntPtr.Zero) return;
 
+        // _NET_WM_MOVERESIZE must target the top-level window the WM tracks,
+        // NOT the GpuSurface child XID this bridge attached to. Mutter +
+        // XWayland silently drop the message when window field references a
+        // child window. Walk parents via XQueryTree until parent == root.
+        nuint root = XDefaultRootWindow(_display);
+        nuint topLevel = FindToplevel(_window, root);
+        if (topLevel == 0) topLevel = _window;
+
         XUngrabPointer(_display, CurrentTime);
 
         var ev = new XEvent();
@@ -401,7 +409,7 @@ internal sealed class X11InputBridge : INativeInputBridge
         ev.xclient.type = ClientMessage;
         ev.xclient.send_event = 1;
         ev.xclient.display = _display;
-        ev.xclient.window = _window;
+        ev.xclient.window = topLevel;
         ev.xclient.message_type = atom;
         ev.xclient.format = 32;
         ev.xclient.data0 = (IntPtr)rootX;
@@ -410,10 +418,26 @@ internal sealed class X11InputBridge : INativeInputBridge
         ev.xclient.data3 = (IntPtr)1;  // left button
         ev.xclient.data4 = (IntPtr)1;  // source: normal application
 
-        nuint root = XDefaultRootWindow(_display);
         XSendEvent(_display, root, 0,
             SubstructureNotifyMask | SubstructureRedirectMask, ref ev);
         XFlush(_display);
+    }
+
+    // Walk parent chain from start until we reach a window whose parent is
+    // the root. That's the WM-managed top-level. Returns 0 on failure.
+    private nuint FindToplevel(nuint start, nuint root)
+    {
+        nuint w = start;
+        for (int i = 0; i < 16; i++)
+        {
+            if (XQueryTree(_display, w, out nuint qroot, out nuint parent,
+                    out IntPtr children, out _) == 0)
+                return 0;
+            if (children != IntPtr.Zero) XFree(children);
+            if (parent == root || parent == 0) return w;
+            w = parent;
+        }
+        return 0;
     }
 
     // ── X11 P/Invoke ──────────────────────────────────────────────────────
@@ -508,4 +532,7 @@ internal sealed class X11InputBridge : INativeInputBridge
     [DllImport("libX11.so.6")] private static extern int    XSendEvent(IntPtr display, nuint w,
         int propagate, long event_mask, ref XEvent event_send);
     [DllImport("libX11.so.6")] private static extern int    XUngrabPointer(IntPtr display, IntPtr time);
+    [DllImport("libX11.so.6")] private static extern int    XQueryTree(IntPtr display, nuint w,
+        out nuint root, out nuint parent, out IntPtr children, out uint nchildren);
+    [DllImport("libX11.so.6")] private static extern int    XFree(IntPtr data);
 }
