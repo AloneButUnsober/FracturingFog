@@ -23,7 +23,13 @@ namespace FracturingFog.UI.Avalonia.ViewModels.Animation;
 public sealed class ParameterAnimationBus
 {
     private readonly DispatcherTimer _timer;
-    private readonly List<IParameterAnimator> _animators = new();
+    // Animators split by lifecycle. Permanent = long-lived (Julia animator
+    // owned by the FractalParams dialog VM, lifetime tied to that VM).
+    // Dynamic = region-attached animations swapped on every JumpToRegion;
+    // ClearDynamic wipes them before each new region's set is installed
+    // without touching the permanent set.
+    private readonly List<IParameterAnimator> _permanent = new();
+    private readonly List<IParameterAnimator> _dynamic = new();
     private readonly Action _fire;
     private DateTime _lastTick;
     private bool _renderInFlight;
@@ -37,11 +43,34 @@ public sealed class ParameterAnimationBus
             OnTick);
     }
 
+    /// <summary>Add a long-lived animator. Caller owns its lifecycle and
+    /// must call <see cref="UnregisterPermanent"/> when done.</summary>
     public void Register(IParameterAnimator animator)
     {
         ArgumentNullException.ThrowIfNull(animator);
-        _animators.Add(animator);
+        _permanent.Add(animator);
     }
+
+    /// <summary>Remove a previously-registered permanent animator. No-op
+    /// if not present.</summary>
+    public void UnregisterPermanent(IParameterAnimator animator)
+    {
+        if (animator == null) return;
+        _permanent.Remove(animator);
+    }
+
+    /// <summary>Add a dynamic (region-scoped) animator. Wiped by
+    /// <see cref="ClearDynamic"/> on each region jump.</summary>
+    public void RegisterDynamic(IParameterAnimator animator)
+    {
+        ArgumentNullException.ThrowIfNull(animator);
+        _dynamic.Add(animator);
+    }
+
+    /// <summary>Drop every dynamic animator. Call before installing a new
+    /// region's animation set so the old set doesn't keep ticking against
+    /// stale params.</summary>
+    public void ClearDynamic() => _dynamic.Clear();
 
     /// <summary>Host calls this after each render frame completes. Releases
     /// the gate so the next bus tick can fire.</summary>
@@ -53,9 +82,16 @@ public sealed class ParameterAnimationBus
     public void Refresh()
     {
         bool anyEnabled = false;
-        foreach (var a in _animators)
+        foreach (var a in _permanent)
         {
             if (a.IsEnabled) { anyEnabled = true; break; }
+        }
+        if (!anyEnabled)
+        {
+            foreach (var a in _dynamic)
+            {
+                if (a.IsEnabled) { anyEnabled = true; break; }
+            }
         }
 
         if (anyEnabled && !_timer.IsEnabled)
@@ -90,7 +126,13 @@ public sealed class ParameterAnimationBus
         if (dt > 0.1) dt = 0.1;
 
         bool anyTicked = false;
-        foreach (var a in _animators)
+        foreach (var a in _permanent)
+        {
+            if (!a.IsEnabled) continue;
+            a.Tick(dt);
+            anyTicked = true;
+        }
+        foreach (var a in _dynamic)
         {
             if (!a.IsEnabled) continue;
             a.Tick(dt);

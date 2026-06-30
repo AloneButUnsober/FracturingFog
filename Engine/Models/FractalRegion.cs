@@ -213,6 +213,17 @@ namespace FracturingFog.Models
         public List<string>? CuratedThemes { get; set; }
 
         /// <summary>
+        /// Animation Roadmap Phase 3 — optional name of a saved
+        /// <c>AnimationData</c> entry in <c>AnimationLibrary</c>. On region
+        /// recall the shell loads the animation onto the shared
+        /// <c>AnimationBusHost</c> bus and starts playback. Null = no
+        /// attached animation (default for legacy regions). Omitted from
+        /// JSON when null.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? AnimationName { get; set; }
+
+        /// <summary>
         /// Apply this region's lighting override (if any) to the given params.
         /// No-op when the override is null. Pair with a host-side
         /// "Lock lighting on recall" toggle to let the user opt out of the

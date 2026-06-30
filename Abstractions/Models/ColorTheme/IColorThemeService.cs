@@ -13,6 +13,7 @@
 
 using System.Collections.Generic;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Rendering.Lighting;
 using FracturingFog.ViewState;
 
@@ -193,7 +194,7 @@ namespace FracturingFog.Models
         /// host's region library (built-in regions are never overwritten —
         /// the host should pop a friendly error and bail in that case).
         /// </summary>
-        bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null);
+        bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null);
 
         /// <summary>Look up the watermark embedded into a saved region, if any.
         /// Returns null when the region doesn't exist or has no embedded
@@ -201,6 +202,19 @@ namespace FracturingFog.Models
         /// MainViewModel.RegionEmbeddedWatermark so the precedence resolver
         /// picks it up on the next render.</summary>
         WatermarkDef? GetRegionEmbeddedWatermark(string regionName);
+
+        /// <summary>Animation Roadmap Phase 3 — name of the AnimationData
+        /// asset attached to the named region, or null when the region
+        /// doesn't exist or carries no animation. Looked up on every
+        /// region-recall so the shell can populate the shared animation
+        /// bus.</summary>
+        string? GetRegionAnimationName(string regionName);
+
+        /// <summary>Animation Roadmap Phase 3 — fetch a saved animation
+        /// asset by name. Returns null when the library has no entry by
+        /// that name. Used by the shared animation bus host to resolve a
+        /// region's attached animation into runtime animators.</summary>
+        AnimationData? GetAnimation(string animationName);
 
         /// <summary>
         /// Remove the named region from the user library. Returns true if a
