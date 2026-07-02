@@ -24,6 +24,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -334,13 +335,23 @@ public static class CalculatorGenHotLoad
         int adAdded = 0, adSkipped = 0;
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
-            if (asm.IsDynamic) { adSkipped++; continue; }
-            string loc;
-            try { loc = asm.Location; } catch { adSkipped++; continue; }
-            if (string.IsNullOrEmpty(loc)) { adSkipped++; continue; }
-            if (!seen.Add(loc)) { adSkipped++; continue; }
-            try { refs.Add(MetadataReference.CreateFromFile(loc)); adAdded++; }
-            catch { adSkipped++; }
+            if (asm != null)
+            {
+                if (asm.IsDynamic) { adSkipped++; continue; }
+                string loc = asm.Location;
+                //try { loc = } catch { adSkipped++; continue; }
+                if (string.IsNullOrEmpty(loc)) { adSkipped++; continue; }
+                if (!seen.Add(loc)) { adSkipped++; continue; }
+                try
+                {
+                    refs.Add(MetadataReference.CreateFromFile(loc)); adAdded++;
+                }
+                catch (Exception ex)
+                {
+                    adSkipped++;
+                    if (s_diag) Console.Error.WriteLine($"[CalcGenHotLoad] location bundle skip {loc}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
         }
 
         // S-X7.11 (2026-06-23) — single-file bundle fallback. TPA is empty
@@ -354,6 +365,7 @@ public static class CalculatorGenHotLoad
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;
+            if (string.IsNullOrEmpty(asm.Location)) continue;
             string? simpleName = asm.GetName().Name;
             if (string.IsNullOrEmpty(simpleName)) continue;
             if (!seen.Add("bundle:" + simpleName)) continue;
@@ -365,7 +377,8 @@ public static class CalculatorGenHotLoad
                         && blob != null && length > 0)
                     {
                         var module = ModuleMetadata.CreateFromMetadata((IntPtr)blob, length);
-                        refs.Add(AssemblyMetadata.Create(module).GetReference());
+                        var assembly = AssemblyMetadata.Create(module);
+                        refs.Add(assembly.GetReference());
                         bundleAdded++;
                     }
                 }
