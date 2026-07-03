@@ -13,13 +13,20 @@ namespace FracturingFog.Abstractions.Animation;
 /// shell wires in the real D3D vendor string.</param>
 public readonly record struct HardwareProfile(int LogicalCores, bool DiscreteGpu)
 {
+    /// <summary>Real discrete-GPU signal, installed by the shell at startup
+    /// (Windows wires it to the DXGI adapter probe in
+    /// <c>WindowsD3D11HardwareInfoProvider.HasDiscreteGpu</c>). Left null on
+    /// headless / non-D3D hosts, where <see cref="Detect"/> falls back to the
+    /// conservative iGPU assumption. Lives here rather than in the Engine's
+    /// D3D init path so <see cref="Detect"/> stays a single call site.</summary>
+    public static Func<bool>? DiscreteGpuProbe { get; set; }
+
     /// <summary>Best-effort live probe. CPU core count is exact; GPU class is
-    /// left conservative (<see cref="DiscreteGpu"/> = false) because the
-    /// discrete-GPU signal lives in the Engine's D3D init path, not here. The
-    /// shell can build a profile with the real flag and hand it to
-    /// <see cref="AnimatedParamCeilingPolicy.DefaultCeiling"/> directly.</summary>
+    /// taken from <see cref="DiscreteGpuProbe"/> when the shell has installed
+    /// it, else conservatively false (assume an iGPU).</summary>
     public static HardwareProfile Detect()
-        => new(System.Math.Max(1, Environment.ProcessorCount), DiscreteGpu: false);
+        => new(System.Math.Max(1, Environment.ProcessorCount),
+               DiscreteGpu: DiscreteGpuProbe?.Invoke() ?? false);
 }
 
 /// <summary>Pure policy behind Animation Roadmap Phase 6's animated-param
