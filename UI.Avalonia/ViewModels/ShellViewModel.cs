@@ -2078,6 +2078,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             UseRegionWatermark = config.Timing.UseRegionWatermark,
             ThemeFadeEnabled = v.ThemeFadeEnabled,
             ThemesPerLeg = v.ThemesPerLeg,
+            EnableAnimations = config.EnableAnimations,
+            IncludedAnimations = config.IncludedAnimations,
+            FilterAnimations = config.FilterAnimations,
+            RandomizeAnimationsByFractalType = config.RandomizeAnimationsByFractalType,
         };
 
         _video.VideoSweepConfig = config.AdaptiveSweep;

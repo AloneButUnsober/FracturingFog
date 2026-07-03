@@ -342,31 +342,42 @@
             </StackPanel>
         </Expander>
 
-        <!-- Row 15: Animations panel (Animation slideshow type only) -->
+        <!-- Row 15: Animations panel. Always available; the Animation type
+             animates unconditionally, while Image / Video opt in via the
+             "Enable animations" toggle (Phase 5). -->
         <Expander Grid.Row="15" Grid.ColumnSpan="2"
                   Header="Animations"
                   Margin="0,8,0,0"
-                  IsExpanded="{Binding IsAnimation}"
-                  IsVisible="{Binding IsAnimation}">
+                  IsExpanded="{Binding AnimationsExpanded}">
             <StackPanel Spacing="6" Margin="0,6,0,0">
-                <CheckBox Content="Randomize animation by fractal type"
-                          IsChecked="{Binding RandomizeAnimationsByFractalType, Mode=TwoWay}"
+                <CheckBox Content="Enable animations on this slideshow"
+                          IsChecked="{Binding EnableAnimations, Mode=TwoWay}"
+                          IsVisible="{Binding ShowEnableAnimationsToggle}"
                           FontWeight="Bold" Foreground="#B4DCB4"
-                          ToolTip.Tip="When on, ignore each region's attached animation and draw a random library animation whose target fractal types include the region's type." />
-                <TextBlock Text="Included Animations  (unchecked all = all eligible)"
-                           Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
-                <ListBox ItemsSource="{Binding AvailableAnimations}"
-                         MaxHeight="160"
-                         SelectionMode="Multiple">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <CheckBox Content="{Binding Name}"
-                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-                <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Regions with no compatible animation play static."
-                           Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap" />
+                          ToolTip.Tip="Play region-attached (or random type-compatible) animations during each Image/Video leg. Off = unchanged classic behaviour." />
+                <TextBlock Text="Animation type always animates each leg."
+                           IsVisible="{Binding IsAnimation}"
+                           Foreground="#969696" FontStyle="Italic" />
+                <StackPanel Spacing="6" IsEnabled="{Binding AnimationsExpanded}">
+                    <CheckBox Content="Randomize animation by fractal type"
+                              IsChecked="{Binding RandomizeAnimationsByFractalType, Mode=TwoWay}"
+                              FontWeight="Bold" Foreground="#B4DCB4"
+                              ToolTip.Tip="When on, ignore each region's attached animation and draw a random library animation whose target fractal types include the region's type." />
+                    <TextBlock Text="Included Animations  (unchecked all = all eligible)"
+                               Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
+                    <ListBox ItemsSource="{Binding AvailableAnimations}"
+                             MaxHeight="160"
+                             SelectionMode="Multiple">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Name}"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Regions with no compatible animation play static. (Video slideshow legs are Mandelbrot-only.)"
+                               Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap" />
+                </StackPanel>
             </StackPanel>
         </Expander>
 

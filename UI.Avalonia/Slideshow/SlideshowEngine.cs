@@ -411,7 +411,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
         private AnimationData? ResolveLegAnimation(string regionName)
         {
-            if (Config?.Type != SlideshowType.Animation) return null;
+            // Animation type always animates. Image (this engine also drives
+            // the Image slideshow) opts in via EnableAnimations (Phase 5).
+            // Video is a separate engine (FractalRenderHost.Video).
+            bool animate = Config?.Type == SlideshowType.Animation
+                || (Config?.EnableAnimations ?? false);
+            if (!animate) return null;
 
             var names = _service.EnumerateAnimationNames();
             if (names == null || names.Count == 0) return null;

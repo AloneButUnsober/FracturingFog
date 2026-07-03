@@ -35,6 +35,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -59,6 +60,22 @@ namespace FracturingFog.Rendering
 
         private const double VideoSlideshowSeconds = 30.0;
         private const int VideoSlideshowPauseMs = 7_000;
+
+        // ── Per-leg animation (Animation Roadmap Phase 5) ─────────────────
+        // Opt-in via VideoZoomRequest.EnableAnimations. Each slideshow leg
+        // resolves an animation (region-attached or a random type-compatible
+        // library animation), materialises it against ViewState.FractalParameters,
+        // and ticks it once per frame before Calculate. Empty list ⇒ no
+        // animation on the leg and the video path runs exactly as before.
+        // TAA reprojection + the leg-locked histogram CDF are disabled while
+        // an animation is active because both assume only pan/zoom moves
+        // between frames — animating a per-type param invalidates that.
+        private bool _videoAnimEnabled;
+        private IReadOnlyList<string>? _videoAnimIncluded;
+        private IReadOnlyList<string>? _videoAnimFilter;
+        private bool _videoAnimRandomize;
+        private readonly List<IParameterAnimator> _videoLegAnimators = new();
+        private long _videoAnimLastTicks;
 
         // Fraction of total duration spent panning (rest is the zoom phase).
         private const double VideoPanFraction = 0.05;
@@ -408,6 +425,13 @@ namespace FracturingFog.Rendering
             _bandStatsValid = false;
             _calculator.PerRowMaxIter = null;
 
+            // Phase 5 animation config — captured for the per-leg picker.
+            _videoAnimEnabled = request.EnableAnimations;
+            _videoAnimIncluded = request.IncludedAnimations;
+            _videoAnimFilter = request.FilterAnimations;
+            _videoAnimRandomize = request.RandomizeAnimationsByFractalType;
+            _videoLegAnimators.Clear();
+
             _videoSlideshowRunning = true;
             string mode = reverse ? "reverse " : "";
             RaiseStatus(constantRate
@@ -432,6 +456,7 @@ namespace FracturingFog.Rendering
                     // global-MaxIterations path.
                     _calculator.PerRowMaxIter = null;
                     _bandStatsValid = false;
+                    _videoLegAnimators.Clear();
                     if (t.IsFaulted)
                         RaiseStatus($"Video slideshow error: {t.Exception?.InnerException?.Message}");
                     else
@@ -863,6 +888,11 @@ namespace FracturingFog.Rendering
             ApplyVideoFrameState(cx, cy, zoom);
             if (ct.IsCancellationRequested) { _videoLastFrameMs = frameSw.Elapsed.TotalMilliseconds; return; }
 
+            // Phase 5: advance the leg's animation AFTER the zoom-leg view
+            // state so animation param mutations win on any (rare) conflict,
+            // and BEFORE Calculate so the fresh params are what gets rendered.
+            TickVideoLegAnimators();
+
             // Non-Mandelbrot fractals: dispatch to the alt calculator and upload
             // its buffer directly. Histogram-eq / TAA / dither read from the
             // Mandelbrot ColorBuffer and have no equivalent here, so they skip.
@@ -912,6 +942,9 @@ namespace FracturingFog.Rendering
             if (eq > 0)
             {
                 double strength = eq / 100.0;
+                // Animated legs mutate params every frame → the histogram
+                // shifts, so the leg-locked CDF must rebuild each frame.
+                if (_videoLegAnimators.Count > 0) _videoLegCdfStale = true;
                 EnsureVideoLegCdf();
                 if (_videoLegCdf != null)
                 {
@@ -937,7 +970,11 @@ namespace FracturingFog.Rendering
             }
 
             // Temporal reprojection blend (skipped on frame 0 of a leg).
-            BlendWithPrevFrameInPlace();
+            // Also skipped for animated legs: reprojection maps by complex
+            // coordinate and assumes only pan/zoom moved, so animating a
+            // per-type param would ghost the previous frame's geometry.
+            if (_videoLegAnimators.Count == 0)
+                BlendWithPrevFrameInPlace();
 
             UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
             CaptureVideoFrame();
@@ -1626,6 +1663,10 @@ namespace FracturingFog.Rendering
                 RegionName = region.Name;
                 ThemeName = theme;
 
+                // Phase 5 — resolve + materialise this leg's animation (no-op
+                // when EnableAnimations is off or nothing is compatible).
+                BuildVideoLegAnimators(svc, region);
+
                 // Build the in-leg theme-fade schedule from the user's
                 // ThemeFadeEnabled checkbox + ThemesPerLeg setting. Schedule
                 // swaps fire at t = k / themesPerLeg for k = 1..N-1. Disabled
@@ -1729,6 +1770,71 @@ namespace FracturingFog.Rendering
                     // leg cancel — fall through to next iteration
                 }
             }
+        }
+
+        // ── Per-leg animation helpers (Animation Roadmap Phase 5) ─────────
+        //
+        // Resolve the leg's animation via the pure AnimationLegPicker (shared
+        // with the image SlideshowEngine), materialise it against the live
+        // FractalParameters, and tick it once per RenderVideoFrame. The video
+        // slideshow pool is Mandelbrot-only, so in practice only animations
+        // whose TargetFractalTypes include Mandelbrot resolve here; everything
+        // else falls back to a static (un-animated) leg. No-op unless the run
+        // opted in via VideoZoomRequest.EnableAnimations.
+        private void BuildVideoLegAnimators(IColorThemeService svc, FractalRegion region)
+        {
+            _videoLegAnimators.Clear();
+            if (!_videoAnimEnabled || svc == null || region == null) return;
+
+            var names = svc.EnumerateAnimationNames();
+            if (names == null || names.Count == 0) return;
+
+            var candidates = new List<AnimationLegPicker.Candidate>(names.Count);
+            foreach (var n in names)
+            {
+                var d = svc.GetAnimation(n);
+                if (d == null) continue;
+                candidates.Add(new AnimationLegPicker.Candidate(d.Name, d.TargetFractalTypes, d.Tags));
+            }
+            if (candidates.Count == 0) return;
+
+            string? chosen = AnimationLegPicker.Pick(
+                candidates,
+                region.FractalType.ToString(),
+                svc.GetRegionAnimationName(region.Name),
+                _videoAnimRandomize,
+                _videoAnimIncluded,
+                _videoAnimFilter,
+                _videoRng.Next);
+            if (string.IsNullOrEmpty(chosen)) return;
+
+            var data = svc.GetAnimation(chosen);
+            if (data == null) return;
+
+            foreach (var a in data.ToAnimators(ViewState.FractalParameters))
+                _videoLegAnimators.Add(a);
+
+            if (_videoLegAnimators.Count > 0)
+            {
+                _videoAnimLastTicks = Stopwatch.GetTimestamp();
+                RaiseStatus($"Video slideshow: animating {region.Name} with \"{chosen}\"");
+            }
+        }
+
+        // Advance every leg animator by the wall-clock delta since the prior
+        // tick. Clamps a large dt (post-stall) so params can't jump. Runs on
+        // the video loop thread — same thread that reads FractalParameters in
+        // the following Calculate, so no cross-thread synchronisation needed.
+        private void TickVideoLegAnimators()
+        {
+            if (_videoLegAnimators.Count == 0) return;
+            long now = Stopwatch.GetTimestamp();
+            double dt = (now - _videoAnimLastTicks) / (double)Stopwatch.Frequency;
+            _videoAnimLastTicks = now;
+            if (dt <= 0.0) return;
+            if (dt > 0.25) dt = 0.25;
+            for (int i = 0; i < _videoLegAnimators.Count; i++)
+                _videoLegAnimators[i].Tick(dt);
         }
 
         // Per-pixel CPU dissolve from from→to over steps, presenting each.

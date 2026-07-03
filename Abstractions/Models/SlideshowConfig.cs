@@ -210,6 +210,15 @@ namespace FracturingFog.Models
         /// has one (Animation Roadmap Phase 4).</summary>
         public bool RandomizeAnimationsByFractalType { get; set; }
 
+        /// <summary>Opt-in animation support for the Image and Video slideshow
+        /// types. When true, each leg resolves an animation the same way the
+        /// Animation type does (region-attached or a random type-compatible
+        /// library animation) and plays it during the leg. When false — the
+        /// default — Image / Video behave exactly as before (no animation).
+        /// Ignored for <see cref="Type"/>=Animation, which always animates
+        /// (Animation Roadmap Phase 5).</summary>
+        public bool EnableAnimations { get; set; }
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 
@@ -247,6 +256,7 @@ namespace FracturingFog.Models
                 IncludedAnimations = new List<string>(IncludedAnimations ?? new()),
                 FilterAnimations = new List<string>(FilterAnimations ?? new()),
                 RandomizeAnimationsByFractalType = RandomizeAnimationsByFractalType,
+                EnableAnimations = EnableAnimations,
                 AdaptiveSweep = new AdaptiveSweepConfig
                 {
                     Enabled = AdaptiveSweep.Enabled,
