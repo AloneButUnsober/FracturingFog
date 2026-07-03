@@ -844,25 +844,24 @@ namespace FracturingFog.Models
 
         /// <summary>
         /// All slideshow-eligible regions: built-ins, user-defined, and interesting random pool.
-        /// User regions are filtered to <see cref="FractalType.Mandelbrot"/> only — the slideshow
-        /// pipeline assumes Mandelbrot semantics (escape-time render, log-zoom interpolation), so
-        /// mixing in Julia/Newton/etc. regions without switching the active calculator would break it.
+        /// User regions of every fractal type are included — the Avalonia SlideshowEngine commits
+        /// each leg through <c>ApplyRegion</c> + a host Trigger, which honours the region's own
+        /// fractal type, and its cross-fade already degrades to a fade-through-black for
+        /// non-Mandelbrot incoming regions (the offscreen preview render is Mandelbrot-only).
+        /// The only quality gate is the <see cref="IncludeExtremeInAll"/> toggle, which controls
+        /// whether Extreme-quality user regions join the pool.
         /// </summary>
         public IEnumerable<FractalRegion> AllSlideshowRegions
         {
             get
             {
-
                 foreach (var r in _builtIns) yield return r;
-                if (IncludeExtremeInAll)
+
+                foreach (var r in UserRegions)
                 {
-                    foreach (var r in UserRegions)
-                        if (r.FractalType == FractalType.Mandelbrot) yield return r;
-                }
-                else
-                {
-                    foreach (var r in UserRegions.FindAll(r => !r.QualityPreset.Equals(QualityPreset.Extreme) //)) yield return r;
-                    && r.FractalType == FractalType.Sandbox)) yield return r;
+                    if (!IncludeExtremeInAll && QualityPreset.Extreme.Equals(r.QualityPreset))
+                        continue;
+                    yield return r;
                 }
 
                 foreach (var r in _randomPool) yield return r;
