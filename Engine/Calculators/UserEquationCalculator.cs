@@ -8,12 +8,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Numerics;
+using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
@@ -90,6 +92,11 @@ public sealed class UserEquationCalculator : IFractalCalculator
 
     private Func<Complex, Complex, int, Complex>? _compiled;
     private string _compiledSource = string.Empty;
+    // Keeps the assembly backing _compiled alive. Collectible so a superseded
+    // compile can be GC-unloaded once no delegate references it (the render
+    // loop snapshots `fn = _compiled` into a local, so an in-flight render
+    // pins the old context until it finishes — no mid-call unload).
+    private AssemblyLoadContext? _lastContext;
 
     public UserEquationCalculator(int width, int height) => Resize(width, height);
 
@@ -120,31 +127,52 @@ public sealed class UserEquationCalculator : IFractalCalculator
 
         try
         {
+            // Full CSharpCompilation, NOT the CSharpScript scripting API.
+            // Scripting auto-references the return-type + globals assemblies
+            // via Assembly.Location, which is "" under single-file self-
+            // contained publish (Linux default) — it throws "Can't create a
+            // metadata reference to an assembly without location" no matter
+            // what references we hand it, because that broken ref is one the
+            // engine adds itself. Compiling a real class to an in-memory
+            // assembly (like CalculatorGenHotLoad) sidesteps it entirely and
+            // takes references from RoslynRefs' TPA/in-bundle resolver.
             string code = WrapUserSource(source);
-            // Reference via MetadataReference, not Assembly. The Assembly
-            // overload calls MetadataReference.CreateFromAssembly which reads
-            // Assembly.Location — empty under single-file self-contained publish
-            // (the default on Linux), throwing "Can't create a metadata
-            // reference to an assembly without location." RoslynRefs.GatherAllTpaRefs
-            // resolves TPA paths / in-bundle metadata the same way every other
-            // hot-load surface (UserBulb, Sandbox) does.
-            var options = ScriptOptions.Default
-                .AddReferences(FracturingFog.Calculators.RoslynRefs.GatherAllTpaRefs())
-                .AddImports("System", "System.Numerics", "System.Math");
+            var syntaxTree = CSharpSyntaxTree.ParseText(code);
+            var compilation = CSharpCompilation.Create(
+                assemblyName: $"UserEq_{Environment.TickCount}_{Guid.NewGuid():N}",
+                syntaxTrees: new[] { syntaxTree },
+                references: FracturingFog.Calculators.RoslynRefs.GatherAllTpaRefs(),
+                options: new CSharpCompilationOptions(
+                    OutputKind.DynamicallyLinkedLibrary,
+                    optimizationLevel: OptimizationLevel.Release));
 
-            var script = CSharpScript.Create<Func<Complex, Complex, int, Complex>>(code, options);
-            var compilation = script.Compile();
-            if (compilation.Length > 0)
+            using var ms = new MemoryStream();
+            var emit = compilation.Emit(ms);
+            if (!emit.Success)
             {
                 var sb = new System.Text.StringBuilder();
-                foreach (var diag in compilation)
-                    sb.AppendLine(diag.ToString());
+                foreach (var diag in emit.Diagnostics)
+                    if (diag.Severity == DiagnosticSeverity.Error)
+                        sb.AppendLine(diag.ToString());
                 LastError = sb.ToString();
                 _compiled = null;
                 return;
             }
-            var result = script.RunAsync().GetAwaiter().GetResult();
-            _compiled = result.ReturnValue;
+
+            ms.Seek(0, SeekOrigin.Begin);
+            var ctx = new AssemblyLoadContext($"UserEq_{Environment.TickCount}", isCollectible: true);
+            var asm = ctx.LoadFromStream(ms);
+            var type = asm.GetType("FracturingFog.UserEq.Generated.__UserEq");
+            var del = type?.GetMethod("Get")?.Invoke(null, null)
+                          as Func<Complex, Complex, int, Complex>;
+            if (del == null)
+            {
+                LastError = "Compile succeeded but Step delegate was not found.";
+                _compiled = null;
+                return;
+            }
+            _compiled = del;
+            _lastContext = ctx;   // pin the backing assembly for the live delegate
             _compiledSource = source;
             LastError = string.Empty;
         }
@@ -157,16 +185,30 @@ public sealed class UserEquationCalculator : IFractalCalculator
 
     private static string WrapUserSource(string body)
     {
-        // The script's "return value" is itself a Func — i.e. the script body
-        // is a single Func<...> expression. Wrap with a local Step method
-        // and return a delegate pointing to it.
+        // Emit a real compilation unit: a static Step method holding the user
+        // body, plus a Get() factory returning it as the delegate the render
+        // loop calls. `using static System.Math` re-exports Sin/Cos/Exp/... as
+        // bare calls (matches the old scripting AddImports("System.Math")); the
+        // System.Numerics import brings Complex + its static members.
         string wrappedBody = body.Contains("return") ? body : $"return {body};";
         return $@"
-Complex __Step(Complex z, Complex c, int n)
+using System;
+using System.Numerics;
+using static System.Math;
+
+namespace FracturingFog.UserEq.Generated
 {{
-    {wrappedBody}
+    public static class __UserEq
+    {{
+        public static Complex Step(Complex z, Complex c, int n)
+        {{
+            {wrappedBody}
+        }}
+
+        public static Func<Complex, Complex, int, Complex> Get()
+            => (Func<Complex, Complex, int, Complex>)Step;
+    }}
 }}
-return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => __Step(z, c, n));
 ";
     }
 
