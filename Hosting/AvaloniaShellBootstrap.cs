@@ -1300,7 +1300,11 @@ namespace FracturingFog.Hosting
                         // passing the working config in-memory.
                         if (chosen.Value.StartRequested)
                         {
-                            if (chosen.Value.Config.Type == SlideshowType.Image)
+                            // Image AND Animation both run on the CPU cross-fade
+                            // cycler (SlideshowEngine) — Animation just drives the
+                            // shared ParameterAnimationBus during each leg. Only
+                            // Video routes to the zoom engine.
+                            if (chosen.Value.Config.Type != SlideshowType.Video)
                             {
                                 // Stop any running video slideshow before kicking
                                 // the image engine — the two share the render host.
