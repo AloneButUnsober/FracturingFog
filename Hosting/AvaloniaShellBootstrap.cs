@@ -1266,6 +1266,7 @@ namespace FracturingFog.Hosting
                 {
                     var file = SlideshowConfigLibrary.Load();
                     var themeNames = s_themeService?.EnumerateThemeNames();
+                    var animationNames = s_themeService?.EnumerateAnimationNames();
                     var regionNames = FractalRegionLibrary.Instance
                         .AllSlideshowRegions
                         .Select(r => r.Name)
@@ -1286,7 +1287,8 @@ namespace FracturingFog.Hosting
                         audioReactive: initialAudioReactive,
                         regionNames: regionNames,
                         themeNames: themeNames,
-                        capturePostFxCallback: captureCallback);
+                        capturePostFxCallback: captureCallback,
+                        animationNames: animationNames);
                     if (chosen != null)
                     {
                         // No persistence on dialog close — the Save button is the

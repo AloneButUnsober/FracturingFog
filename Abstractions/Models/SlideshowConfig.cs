@@ -26,6 +26,11 @@ namespace FracturingFog.Models
         Image = 0,
         /// <summary>Video Zoom slideshow — animated zoom per leg.</summary>
         Video = 1,
+        /// <summary>Animation slideshow — each leg picks a region + theme +
+        /// animation triple and plays the animation live during the leg's
+        /// hold. Falls back to a static leg when no library animation is
+        /// compatible with the chosen region (Animation Roadmap Phase 4).</summary>
+        Animation = 2,
     }
 
     /// <summary>Per-frame iteration-cap policy applied during video record /
@@ -186,6 +191,25 @@ namespace FracturingFog.Models
         /// <summary>Restrict regions by quality-preset name. Empty = no quality filter.</summary>
         public List<string> FilterQualityPresets { get; set; } = new();
 
+        /// <summary>Whitelist of animation names. Null/empty = every library
+        /// animation is eligible. Peer of <see cref="IncludedColorThemes"/>;
+        /// consulted only when <see cref="Type"/>=Animation (Animation Roadmap
+        /// Phase 4).</summary>
+        public List<string> IncludedAnimations { get; set; } = new();
+
+        /// <summary>Restrict animations by tag. Empty = no tag filter. An
+        /// animation survives when it carries at least one tag in this list.
+        /// Peer of <see cref="FilterFractalTypes"/> (Animation Roadmap
+        /// Phase 4).</summary>
+        public List<string> FilterAnimations { get; set; } = new();
+
+        /// <summary>When true, the Animation slideshow ignores any animation
+        /// the picked region carries and instead draws a random library
+        /// animation whose <c>TargetFractalTypes</c> include the region's
+        /// fractal type. When false, a region's attached animation wins if it
+        /// has one (Animation Roadmap Phase 4).</summary>
+        public bool RandomizeAnimationsByFractalType { get; set; }
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 
@@ -220,6 +244,9 @@ namespace FracturingFog.Models
                 IncludedColorThemes = new List<string>(IncludedColorThemes ?? new()),
                 FilterFractalTypes = new List<string>(FilterFractalTypes ?? new()),
                 FilterQualityPresets = new List<string>(FilterQualityPresets ?? new()),
+                IncludedAnimations = new List<string>(IncludedAnimations ?? new()),
+                FilterAnimations = new List<string>(FilterAnimations ?? new()),
+                RandomizeAnimationsByFractalType = RandomizeAnimationsByFractalType,
                 AdaptiveSweep = new AdaptiveSweepConfig
                 {
                     Enabled = AdaptiveSweep.Enabled,

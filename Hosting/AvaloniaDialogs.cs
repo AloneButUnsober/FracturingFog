@@ -238,14 +238,15 @@ namespace FracturingFog.Hosting
                 bool audioReactive,
                 IReadOnlyList<string>? regionNames = null,
                 IReadOnlyList<string>? themeNames = null,
-                Action<Action<double, double, double>>? capturePostFxCallback = null)
+                Action<Action<double, double, double>>? capturePostFxCallback = null,
+                IReadOnlyList<string>? animationNames = null)
         {
             var tcs = new TaskCompletionSource<UnifiedSlideshowResult?>();
 
             void Run()
             {
                 var vm = new SlideshowSettingsViewModel(file, audioReactive);
-                vm.PopulateAvailableLists(regionNames, themeNames);
+                vm.PopulateAvailableLists(regionNames, themeNames, animationNames);
                 var win = new SlideshowSettingsView { DataContext = vm };
                 vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
                 vm.CapturePostFxRequested += (_, _) =>
