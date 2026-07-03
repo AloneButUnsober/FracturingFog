@@ -361,6 +361,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // from the persisted SlideshowSettings, then writes back on OK.
         FloatingMenu.SlideshowSettingsClick += (_, _) => SlideshowSettingsRequested?.Invoke(this, EventArgs.Empty);
 
+        // General application settings — host pops the Avalonia AppSettings
+        // dialog seeded from persisted AnimationSettings, saves on OK.
+        FloatingMenu.AppSettingsClick += (_, _) => AppSettingsRequested?.Invoke(this, EventArgs.Empty);
+
         // Export / Import / Delete user colour themes — same shape as the
         // region IO above. Export/Import bubble to a file picker on the host;
         // Delete confirms against the currently-selected theme then asks the
@@ -1984,6 +1988,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Open the slideshow-settings dialog. Host seeds it from the
     /// persisted SlideshowSettings and writes back on OK.</summary>
     public event EventHandler? SlideshowSettingsRequested;
+
+    /// <summary>Open the general application-settings dialog. Host seeds it
+    /// from the persisted AnimationSettings and writes back on OK.</summary>
+    public event EventHandler? AppSettingsRequested;
 
     /// <summary>Export user-defined colour themes to a JSON file. Host pops a
     /// SaveFilePicker then calls IColorThemeService.ExportUserThemesToFile.</summary>

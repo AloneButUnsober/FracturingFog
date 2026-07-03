@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.AppSettingsView"
+        x:DataType="vm:AppSettingsViewModel"
+        Title="Application Settings"
+        Width="520"
+        SizeToContent="Height"
+        MinWidth="440"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#1C1C1C"
+        Foreground="WhiteSmoke">
+
+    <Grid Margin="14" RowDefinitions="*,Auto">
+
+        <StackPanel Grid.Row="0" Spacing="8">
+
+            <!-- Animation section -->
+            <TextBlock Text="Animation"
+                       Foreground="#B4DCB4"
+                       FontWeight="Bold"
+                       FontSize="14" />
+
+            <Grid ColumnDefinitions="180,*" RowDefinitions="Auto">
+                <TextBlock Grid.Column="0"
+                           Text="Animated-param ceiling:"
+                           VerticalAlignment="Center" />
+                <NumericUpDown Grid.Column="1"
+                               Minimum="0" Maximum="64" Increment="1" FormatString="F0"
+                               Value="{Binding AnimatedParamCeilingOverride, Mode=TwoWay}"
+                               Width="130" HorizontalAlignment="Left" />
+            </Grid>
+
+            <TextBlock Text="{Binding HardwareDefaultText}"
+                       Foreground="#9AA0A6"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+
+            <TextBlock Text="Caps how many animation tracks play at once. A positive value pins the ceiling on any hardware; the bus drops the most expensive tracks past it to keep playback smooth."
+                       Foreground="#9AA0A6"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       Margin="0,2,0,0" />
+
+        </StackPanel>
+
+        <!-- Bottom button row -->
+        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,Auto,Auto">
+            <Button Grid.Column="1"
+                    Content="OK"
+                    Command="{Binding OkCommand}"
+                    IsDefault="True"
+                    Padding="18,6"
+                    Background="#284632"
+                    Foreground="White"
+                    Margin="0,0,6,0" />
+            <Button Grid.Column="2"
+                    Content="Cancel"
+                    Command="{Binding CancelCommand}"
+                    IsCancel="True"
+                    Padding="14,6"
+                    Background="#462828"
+                    Foreground="White" />
+        </Grid>
+
+    </Grid>
+
+</Window>

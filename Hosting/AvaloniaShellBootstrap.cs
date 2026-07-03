@@ -1268,6 +1268,18 @@ namespace FracturingFog.Hosting
                 await HandleSlideshowRecordingReadyAsync(args);
             };
 
+            // General application settings — pops the Avalonia AppSettings
+            // dialog (animated-param ceiling override today). Persists on OK
+            // and invalidates the animation bus's cached ceiling.
+            shell.AppSettingsRequested += async (_, _) =>
+            {
+                try { await AvaloniaDialogs.ShowAppSettingsAsync(null); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] AppSettings failed: {ex.Message}");
+                }
+            };
+
             // Slideshow settings — load persisted settings, pop the dialog,
             // write back on OK. The Avalonia shell doesn't run the slideshow
             // engine yet (legacy Slideshow.cs stays intact per scope), but the

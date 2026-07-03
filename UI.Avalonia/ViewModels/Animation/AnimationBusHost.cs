@@ -75,6 +75,12 @@ public static class AnimationBusHost
     // Cached so we hit disk once, not on every region jump.
     private static int _ceilingOverride = -1;
 
+    /// <summary>Drop the cached ceiling override so the next region jump
+    /// re-reads animation-settings.json. Call after the App Settings dialog
+    /// saves a new override, otherwise the stale cached value sticks until
+    /// process restart.</summary>
+    public static void InvalidateCeilingCache() => _ceilingOverride = -1;
+
     /// <summary>Resolve the ceiling for the current leg: the user's manual
     /// override if set (&gt; 0), else the hardware-derived default from
     /// <see cref="AnimatedParamCeilingPolicy"/>.</summary>
