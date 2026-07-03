@@ -396,6 +396,13 @@ namespace FracturingFog.Hosting
             // provider falls back to platform-neutral text.
             var helpProvider = new HostHelpContentProvider(BootstrapHooks.HardwareInfoProvider);
 
+            // Animation Roadmap Phase 6 — feed the real discrete-GPU signal into
+            // the animated-param ceiling. Windows installs the DXGI-backed probe;
+            // elsewhere the hook stays null and Detect() assumes an iGPU.
+            if (BootstrapHooks.HardwareInfoProvider is { } hwInfo)
+                FracturingFog.Abstractions.Animation.HardwareProfile.DiscreteGpuProbe
+                    = hwInfo.HasDiscreteGpu;
+
             // Stamp program name + version onto the render host so the watermark
             // overlay (FractalOverlayCompositor) renders "Fracturing Fog v0.6.1
             // 2026" instead of "Fracturing Fog v? 2026". Source: assembly
