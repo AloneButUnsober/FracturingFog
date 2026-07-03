@@ -36,7 +36,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         private readonly IFractalRenderHost _host;
         private readonly IColorThemeService _service;
         private SlideshowSettings _settings;
-        private readonly Random _rng = new();
+
+        // RNG + region shuffle-bag. _rng is reseeded on each Start from
+        // SlideshowSettings.RandomSeed (0 = fresh entropy per run; non-zero =
+        // reproducible). The bag reads _rng through a lambda so a Start-time
+        // reseed takes effect without rebuilding the bag delegate. _regionBag
+        // draws every region once before repeating (no back-to-back repeats).
+        private Random _rng = new();
+        private readonly ShuffleBag<string> _regionBag;
 
         private CancellationTokenSource? _cts;
         private volatile bool _paused;
@@ -57,6 +64,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _settings = settings ?? new SlideshowSettings();
+            _regionBag = new ShuffleBag<string>(n => _rng.Next(n), StringComparer.Ordinal);
         }
 
         public bool IsRunning { get; private set; }
@@ -141,6 +149,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             _paused = false;
             _skipRegion = false;
             _skipTheme = false;
+
+            // Reseed per run so a fixed RandomSeed reproduces the same order
+            // from the top, and 0 draws fresh entropy. Ordering (region bag,
+            // theme + animation picks) all flow from this instance.
+            _rng = _settings.RandomSeed != 0 ? new Random(_settings.RandomSeed) : new Random();
+
             _cts = new CancellationTokenSource();
             IsRunning = true;
             var token = _cts.Token;
@@ -174,7 +188,6 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 int regionStepMs = Math.Max(8, Math.Max(50, _settings.RegionFadeMs) / fadeSteps);
                 int themeStepMs = Math.Max(8, Math.Max(50, _settings.ColorThemeFadeMs) / fadeSteps);
 
-                string? lastRegion = null;
                 string? heldRegion = null;
 
                 while (!ct.IsCancellationRequested)
@@ -194,13 +207,11 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     }
                     else
                     {
-                        // Name-based dedup (not index) — the pool's size/order can
-                        // change between picks now that we re-enumerate live.
-                        int ri;
-                        do { ri = _rng.Next(regions.Count); }
-                        while (regions.Count > 1 && regions[ri] == lastRegion);
-                        lastRegion = regions[ri];
-                        regionName = regions[ri];
+                        // Draw-without-replacement: every region shows once per
+                        // cycle before any repeat, no back-to-back repeats. The
+                        // bag rebuilds itself when `regions` membership changes
+                        // (live pool refresh above).
+                        regionName = _regionBag.Draw(regions);
                         heldRegion = regionName;
                     }
 
