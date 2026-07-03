@@ -121,8 +121,15 @@ public sealed class UserEquationCalculator : IFractalCalculator
         try
         {
             string code = WrapUserSource(source);
+            // Reference via MetadataReference, not Assembly. The Assembly
+            // overload calls MetadataReference.CreateFromAssembly which reads
+            // Assembly.Location — empty under single-file self-contained publish
+            // (the default on Linux), throwing "Can't create a metadata
+            // reference to an assembly without location." RoslynRefs.GatherAllTpaRefs
+            // resolves TPA paths / in-bundle metadata the same way every other
+            // hot-load surface (UserBulb, Sandbox) does.
             var options = ScriptOptions.Default
-                .AddReferences(typeof(Complex).Assembly, typeof(object).Assembly, typeof(Math).Assembly)
+                .AddReferences(FracturingFog.Calculators.RoslynRefs.GatherAllTpaRefs())
                 .AddImports("System", "System.Numerics", "System.Math");
 
             var script = CSharpScript.Create<Func<Complex, Complex, int, Complex>>(code, options);

@@ -1647,7 +1647,15 @@ namespace FracturingFog.Hosting
             var vm = new UserEquationViewModel(p);
             vm.CompileRequested += () =>
             {
-                var (ok, error) = s_renderHost!.CompileUserEquation(p.UserEquationSource ?? "return z*z + c;");
+                // Reclaim the live Roslyn path. A prior "Compile & Load" installs
+                // a _dynamicAltCalculator that permanently overrides the
+                // UserEquation slot, so live edits would recompile
+                // _userEquationCalculator into a calculator the host no longer
+                // selects — the editor looks dead (no render change) until app
+                // close. Typing raw C# means the user wants the live path back;
+                // drop the hot-load override so this compile is what renders.
+                s_renderHost!.SetDynamicAltCalculator(null);
+                var (ok, error) = s_renderHost.CompileUserEquation(p.UserEquationSource ?? "return z*z + c;");
                 vm.ShowError(error);
                 if (ok) s_renderHost.Trigger();
             };
