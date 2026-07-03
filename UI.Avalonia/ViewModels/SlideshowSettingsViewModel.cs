@@ -38,6 +38,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private int _themeFadeMs;
     private int _regionFadeMs;
     private int _fadeSteps;
+    private int _randomSeed;
     private bool _useRegionWatermark;
     private bool _recordSlideshow;
     private string _recordEncodePreset = "HighQualityH264Mp4";
@@ -415,6 +416,14 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _fadeSteps, Math.Clamp(value, 2, 200)); MarkDirty(); }
     }
 
+    /// <summary>Fixed RNG seed for reproducible ordering (0 = random each
+    /// run). Negatives clamp to 0.</summary>
+    public int RandomSeed
+    {
+        get => _randomSeed;
+        set { this.RaiseAndSetIfChanged(ref _randomSeed, Math.Max(0, value)); MarkDirty(); }
+    }
+
     public bool UseRegionWatermark
     {
         get => _useRegionWatermark;
@@ -570,6 +579,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.Timing.ColorThemeFadeMs = _themeFadeMs;
         _working.Timing.RegionFadeMs = _regionFadeMs;
         _working.Timing.FadeSteps = _fadeSteps;
+        _working.Timing.RandomSeed = _randomSeed;
         _working.Timing.UseRegionWatermark = _useRegionWatermark;
         _working.Timing.RecordSlideshow = _recordSlideshow;
         _working.Timing.RecordEncodePreset = _recordEncodePreset;
@@ -607,6 +617,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _themeFadeMs = _working.Timing.ColorThemeFadeMs;
         _regionFadeMs = _working.Timing.RegionFadeMs;
         _fadeSteps = _working.Timing.FadeSteps;
+        _randomSeed = _working.Timing.RandomSeed;
         _useRegionWatermark = _working.Timing.UseRegionWatermark;
         _recordSlideshow = _working.Timing.RecordSlideshow;
         _recordEncodePreset = string.IsNullOrWhiteSpace(_working.Timing.RecordEncodePreset)
@@ -653,6 +664,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(ThemeFadeMs));
         this.RaisePropertyChanged(nameof(RegionFadeMs));
         this.RaisePropertyChanged(nameof(FadeSteps));
+        this.RaisePropertyChanged(nameof(RandomSeed));
         this.RaisePropertyChanged(nameof(UseRegionWatermark));
         this.RaisePropertyChanged(nameof(RecordSlideshow));
         this.RaisePropertyChanged(nameof(RecordEncodePreset));
