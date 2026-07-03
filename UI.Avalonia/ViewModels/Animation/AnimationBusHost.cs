@@ -1,5 +1,6 @@
 using System;
 using FracturingFog.Abstractions.Animation;
+using FracturingFog.Models;
 
 namespace FracturingFog.UI.Avalonia.ViewModels.Animation;
 
@@ -60,10 +61,32 @@ public static class AnimationBusHost
             return;
         }
 
+        bool includesRaymarched3D = false;
         foreach (var animator in data.ToAnimators(target))
         {
             _bus.RegisterDynamic(animator);
+            if (animator.Cost == AnimatableParamCost.Moderate) includesRaymarched3D = true;
         }
+
+        _bus.Ceiling = ResolveCeiling(includesRaymarched3D);
         _bus.Refresh();
+    }
+
+    // Cached so we hit disk once, not on every region jump.
+    private static int _ceilingOverride = -1;
+
+    /// <summary>Resolve the ceiling for the current leg: the user's manual
+    /// override if set (&gt; 0), else the hardware-derived default from
+    /// <see cref="AnimatedParamCeilingPolicy"/>.</summary>
+    private static int ResolveCeiling(bool includesRaymarched3D)
+    {
+        if (_ceilingOverride < 0)
+        {
+            try { _ceilingOverride = AnimationSettingsStore.Load().AnimatedParamCeilingOverride; }
+            catch { _ceilingOverride = 0; }
+        }
+        if (_ceilingOverride > 0) return _ceilingOverride;
+        return AnimatedParamCeilingPolicy.DefaultCeiling(
+            HardwareProfile.Detect(), includesRaymarched3D);
     }
 }
