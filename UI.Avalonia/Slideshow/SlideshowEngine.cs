@@ -22,9 +22,11 @@ using System.Threading.Tasks;
 
 using Avalonia.Threading;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Audio;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.UI.Avalonia.ViewModels.Animation;
 
 namespace FracturingFog.UI.Avalonia.Slideshow
 {
@@ -196,6 +198,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     var themes = ApplyThemeFilter(_service.EnumerateThemeNamesForZoom(zoom));
                     int lastTheme = -1;
 
+                    // Animation Roadmap Phase 4 — pick the leg's animation once
+                    // per region (reused across the region's theme sub-legs).
+                    // Null when Type != Animation or no library animation is
+                    // compatible → the leg plays static (unchanged behaviour).
+                    var legAnimation = ResolveLegAnimation(regionName);
+
                     // Matches legacy Slideshow.cs cadence:
                     //   FocusRegion=true  (Region Focus) → 3 themes/region;
                     //   FocusRegion=false (Color Focus)  → 8 themes/region,
@@ -232,6 +240,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         int legMs = Math.Max(800, totalRegionMs / Math.Max(1, themesPerRegionNow));
                         var sweep = StartAdaptiveSweep(legMs, ct);
 
+                        // Start the leg's animation on the shared bus AFTER the
+                        // cross-fade committed, so the bus's live renders don't
+                        // race the fade's snapshot/present. Stopped in finally
+                        // (below) before the next transition for the same reason.
+                        await StartLegAnimationAsync(legAnimation, ct);
+
                         // themeMs is recomputed each WaitAsync tick so a
                         // FocusRegion toggle mid-theme shortens (or extends)
                         // the visible duration immediately.
@@ -244,6 +258,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         }
                         finally
                         {
+                            // Stop the leg animation before tearing down the
+                            // sweep so the next transition's snapshot is a
+                            // static frame (no bus render mid-fade).
+                            await StopLegAnimationAsync(legAnimation);
                             // CTS.Dispose alone does NOT cancel the token —
                             // must explicitly Cancel + await the sweep Task
                             // or each leg leaks a Task.Run that keeps writing
@@ -275,6 +293,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             {
                 await OnUiAsync(() =>
                 {
+                    // Animation Roadmap Phase 4 — drop any leg animators still
+                    // registered so the bus doesn't keep ticking after Stop.
+                    var bus = AnimationBusHost.Bus;
+                    if (bus != null) { bus.ClearDynamic(); bus.Refresh(); }
                     IsRunning = false;
                     Stopped?.Invoke(this, EventArgs.Empty);
                     return 0;
@@ -377,6 +399,74 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 if (themeName == null) return null;
             }
             return themeName;
+        }
+
+        // ── Animation leg (Animation Roadmap Phase 4) ─────────────────────
+        //
+        // Resolve the animation for a region leg via the pure AnimationLegPicker
+        // (region's attached animation, or a random type-compatible library
+        // animation), then drive it on the shared AnimationBusHost during the
+        // leg's hold. Returns null when Type != Animation or no animation
+        // qualifies — the caller then plays a static leg.
+
+        private AnimationData? ResolveLegAnimation(string regionName)
+        {
+            if (Config?.Type != SlideshowType.Animation) return null;
+
+            var names = _service.EnumerateAnimationNames();
+            if (names == null || names.Count == 0) return null;
+
+            var candidates = new List<AnimationLegPicker.Candidate>(names.Count);
+            foreach (var n in names)
+            {
+                var data = _service.GetAnimation(n);
+                if (data == null) continue;
+                candidates.Add(new AnimationLegPicker.Candidate(
+                    data.Name, data.TargetFractalTypes, data.Tags));
+            }
+            if (candidates.Count == 0) return null;
+
+            string? chosen = AnimationLegPicker.Pick(
+                candidates,
+                _service.GetRegionFractalTypeName(regionName),
+                _service.GetRegionAnimationName(regionName),
+                Config?.RandomizeAnimationsByFractalType ?? false,
+                Config?.IncludedAnimations,
+                Config?.FilterAnimations,
+                _rng.Next);
+
+            if (string.IsNullOrEmpty(chosen))
+            {
+                StatusChanged?.Invoke(this,
+                    $"Slideshow: no animation compatible with {regionName} — static leg");
+                return null;
+            }
+            return _service.GetAnimation(chosen);
+        }
+
+        private Task StartLegAnimationAsync(AnimationData? animation, CancellationToken ct)
+        {
+            if (animation == null) return Task.CompletedTask;
+            return OnUiAsync(() =>
+            {
+                AnimationBusHost.LoadRegionAnimation(
+                    animation, _host.ViewState.FractalParameters);
+                return 0;
+            }, ct);
+        }
+
+        private Task StopLegAnimationAsync(AnimationData? animation)
+        {
+            if (animation == null) return Task.CompletedTask;
+            // Use CancellationToken.None so the stop always runs even when the
+            // leg's token was cancelled (Stop pressed) — otherwise the bus
+            // keeps ticking against stale params after the slideshow ends.
+            return OnUiAsync(() =>
+            {
+                var bus = AnimationBusHost.Bus;
+                if (bus != null) { bus.ClearDynamic(); bus.Refresh(); }
+                return 0;
+            }, CancellationToken.None);
         }
 
         /// <summary>Region change: offscreen-render incoming, cross-fade, commit live.</summary>

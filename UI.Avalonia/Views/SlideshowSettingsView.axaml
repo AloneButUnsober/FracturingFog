@@ -19,7 +19,7 @@
       4K display at 200% scaling with a 12pt UI font) cannot crop labels.
     -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="780">
-    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="*,Auto">
 
         <!-- Row 0: Saved-config name combo + Type droplist (library mode only) -->
@@ -342,8 +342,36 @@
             </StackPanel>
         </Expander>
 
-        <!-- Row 15: Start / OK / Cancel buttons -->
-        <StackPanel Grid.Row="15" Grid.ColumnSpan="2"
+        <!-- Row 15: Animations panel (Animation slideshow type only) -->
+        <Expander Grid.Row="15" Grid.ColumnSpan="2"
+                  Header="Animations"
+                  Margin="0,8,0,0"
+                  IsExpanded="{Binding IsAnimation}"
+                  IsVisible="{Binding IsAnimation}">
+            <StackPanel Spacing="6" Margin="0,6,0,0">
+                <CheckBox Content="Randomize animation by fractal type"
+                          IsChecked="{Binding RandomizeAnimationsByFractalType, Mode=TwoWay}"
+                          FontWeight="Bold" Foreground="#B4DCB4"
+                          ToolTip.Tip="When on, ignore each region's attached animation and draw a random library animation whose target fractal types include the region's type." />
+                <TextBlock Text="Included Animations  (unchecked all = all eligible)"
+                           Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
+                <ListBox ItemsSource="{Binding AvailableAnimations}"
+                         MaxHeight="160"
+                         SelectionMode="Multiple">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Name}"
+                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Regions with no compatible animation play static."
+                           Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap" />
+            </StackPanel>
+        </Expander>
+
+        <!-- Row 16: Start / OK / Cancel buttons -->
+        <StackPanel Grid.Row="16" Grid.ColumnSpan="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="8"

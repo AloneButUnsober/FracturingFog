@@ -56,6 +56,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private double _postFxBrightness;
     private double _postFxContrast;
     private double _postFxAdaptive;
+    private bool _randomizeAnimByType;
 
     private const string PostFxKeyBrightness = "brightness";
     private const string PostFxKeyContrast   = "contrast";
@@ -121,7 +122,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
 
     /// <summary>Static enum-value list bound to the Type droplist.</summary>
     public IReadOnlyList<SlideshowType> AllSlideshowTypes { get; } =
-        new[] { SlideshowType.Image, SlideshowType.Video };
+        new[] { SlideshowType.Image, SlideshowType.Video, SlideshowType.Animation };
 
     /// <summary>Static enum-value list bound to the Adaptive Sweep Mode droplist.</summary>
     public IReadOnlyList<FracturingFog.Models.AdaptiveSweepMode> AllAdaptiveSweepModes { get; } =
@@ -223,13 +224,26 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     /// <summary>Available quality presets for the filter.</summary>
     public ObservableCollection<CheckableItem> AvailableQualityPresets { get; } = new();
 
+    /// <summary>Available animations for the include-list (Animation type).</summary>
+    public ObservableCollection<CheckableItem> AvailableAnimations { get; } = new();
+
+    /// <summary>When true, an Animation slideshow ignores each region's
+    /// attached animation and draws a random type-compatible library
+    /// animation instead (Animation Roadmap Phase 4).</summary>
+    public bool RandomizeAnimationsByFractalType
+    {
+        get => _randomizeAnimByType;
+        set { this.RaiseAndSetIfChanged(ref _randomizeAnimByType, value); MarkDirty(); }
+    }
+
     /// <summary>Host supplies the region + theme name lists. Either may be
     /// null/empty (legacy mode leaves the panel blank). Fractal-type and
     /// quality-preset choices are static and built from
     /// <see cref="Models.FractalType"/> + a known preset name set.</summary>
     public void PopulateAvailableLists(
         IReadOnlyList<string>? regionNames,
-        IReadOnlyList<string>? themeNames)
+        IReadOnlyList<string>? themeNames,
+        IReadOnlyList<string>? animationNames = null)
     {
         AvailableRegions.Clear();
         if (regionNames != null)
@@ -248,6 +262,11 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         AvailableQualityPresets.Clear();
         foreach (var name in new[] { "Draft", "Standard", "High", "Ultra", "Extreme" })
             AvailableQualityPresets.Add(new CheckableItem(name, _working.FilterQualityPresets.Contains(name)) { Owner = this });
+
+        AvailableAnimations.Clear();
+        if (animationNames != null)
+            foreach (var a in animationNames)
+                AvailableAnimations.Add(new CheckableItem(a, _working.IncludedAnimations.Contains(a)) { Owner = this });
     }
 
     internal void OnFilterItemChanged() => MarkDirty();
@@ -319,11 +338,14 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         {
             this.RaiseAndSetIfChanged(ref _type, value);
             this.RaisePropertyChanged(nameof(IsVideo));
+            this.RaisePropertyChanged(nameof(IsAnimation));
             MarkDirty();
         }
     }
 
     public bool IsVideo => _type == SlideshowType.Video;
+
+    public bool IsAnimation => _type == SlideshowType.Animation;
 
     public bool AudioReactive
     {
@@ -531,6 +553,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.IncludedColorThemes = AvailableThemes.Where(i => i.IsChecked).Select(i => i.Name).ToList();
         _working.FilterFractalTypes = AvailableFractalTypes.Where(i => i.IsChecked).Select(i => i.Name).ToList();
         _working.FilterQualityPresets = AvailableQualityPresets.Where(i => i.IsChecked).Select(i => i.Name).ToList();
+        _working.IncludedAnimations = AvailableAnimations.Where(i => i.IsChecked).Select(i => i.Name).ToList();
+        _working.RandomizeAnimationsByFractalType = _randomizeAnimByType;
 
         _working.AdaptiveSweep.Enabled = _sweepEnabled;
         _working.AdaptiveSweep.Start = _sweepStart;
@@ -573,6 +597,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _postFxBrightness = pv != null && pv.TryGetValue(PostFxKeyBrightness, out var br) ? br : 100.0;
         _postFxContrast = pv != null && pv.TryGetValue(PostFxKeyContrast, out var co) ? co : 100.0;
         _postFxAdaptive = pv != null && pv.TryGetValue(PostFxKeyAdaptive, out var ad) ? ad : 0.0;
+        _randomizeAnimByType = _working.RandomizeAnimationsByFractalType;
 
         // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
         // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
@@ -585,9 +610,13 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
             item.IsChecked = _working.FilterFractalTypes.Contains(item.Name);
         foreach (var item in AvailableQualityPresets)
             item.IsChecked = _working.FilterQualityPresets.Contains(item.Name);
+        foreach (var item in AvailableAnimations)
+            item.IsChecked = _working.IncludedAnimations.Contains(item.Name);
 
         this.RaisePropertyChanged(nameof(Type));
         this.RaisePropertyChanged(nameof(IsVideo));
+        this.RaisePropertyChanged(nameof(IsAnimation));
+        this.RaisePropertyChanged(nameof(RandomizeAnimationsByFractalType));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
         this.RaisePropertyChanged(nameof(TotalDisplaySec));
         this.RaisePropertyChanged(nameof(ThemeFadeMs));
