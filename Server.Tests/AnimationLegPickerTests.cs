@@ -157,6 +157,7 @@ public sealed class AnimationLegPickerTests
             IncludedAnimations = { "A", "B" },
             FilterAnimations = { "calm" },
             RandomizeAnimationsByFractalType = true,
+            EnableAnimations = true,
         };
         var clone = cfg.Clone();
 
@@ -164,6 +165,7 @@ public sealed class AnimationLegPickerTests
         Assert.Equal(new[] { "A", "B" }, clone.IncludedAnimations);
         Assert.Equal(new[] { "calm" }, clone.FilterAnimations);
         Assert.True(clone.RandomizeAnimationsByFractalType);
+        Assert.True(clone.EnableAnimations);
 
         // Independent lists — mutating the clone must not touch the source.
         clone.IncludedAnimations.Add("C");

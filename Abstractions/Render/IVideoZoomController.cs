@@ -129,6 +129,27 @@ namespace FracturingFog.Render
         /// runtime; Phase 2 implements the real per-tile pass).</summary>
         public FracturingFog.Models.VideoIterCapMode IterCapMode { get; set; }
             = FracturingFog.Models.VideoIterCapMode.Global;
+
+        // ── Animation hooks (Animation Roadmap Phase 5) ───────────────────
+        // Opt-in animation support for the video slideshow. Default off ⇒ the
+        // proven video path is byte-for-byte unchanged. When on, each leg
+        // resolves an animation (region-attached or random type-compatible)
+        // and ticks it per frame; TAA reprojection + the leg-locked histogram
+        // CDF are disabled for animated legs since both assume only pan/zoom
+        // moves between frames.
+
+        /// <summary>Enable per-leg animation on the video slideshow.</summary>
+        public bool EnableAnimations { get; set; }
+
+        /// <summary>Whitelist of animation names (null/empty = all eligible).</summary>
+        public System.Collections.Generic.IReadOnlyList<string>? IncludedAnimations { get; set; }
+
+        /// <summary>Tag filter for animations (null/empty = no tag filter).</summary>
+        public System.Collections.Generic.IReadOnlyList<string>? FilterAnimations { get; set; }
+
+        /// <summary>Ignore each region's attached animation and draw a random
+        /// type-compatible library animation instead.</summary>
+        public bool RandomizeAnimationsByFractalType { get; set; }
     }
 
     /// <summary>Outcome of a single-shot recording, raised once the zoom ends

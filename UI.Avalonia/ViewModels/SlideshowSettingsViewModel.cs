@@ -57,6 +57,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private double _postFxContrast;
     private double _postFxAdaptive;
     private bool _randomizeAnimByType;
+    private bool _enableAnimations;
 
     private const string PostFxKeyBrightness = "brightness";
     private const string PostFxKeyContrast   = "contrast";
@@ -236,6 +237,29 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _randomizeAnimByType, value); MarkDirty(); }
     }
 
+    /// <summary>Opt-in animation support for Image / Video slideshow types.
+    /// Ignored for Animation type (which always animates). Drives the
+    /// animations panel expansion for Image / Video (Phase 5).</summary>
+    public bool EnableAnimations
+    {
+        get => _enableAnimations;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _enableAnimations, value);
+            this.RaisePropertyChanged(nameof(AnimationsExpanded));
+            MarkDirty();
+        }
+    }
+
+    /// <summary>Show the "Enable animations" opt-in toggle — only for Image /
+    /// Video. Animation type animates unconditionally, so the toggle is
+    /// hidden there.</summary>
+    public bool ShowEnableAnimationsToggle => !IsAnimation;
+
+    /// <summary>Auto-expand the animations panel when animations are actually
+    /// in play: always for Animation type, or when Image / Video opted in.</summary>
+    public bool AnimationsExpanded => IsAnimation || _enableAnimations;
+
     /// <summary>Host supplies the region + theme name lists. Either may be
     /// null/empty (legacy mode leaves the panel blank). Fractal-type and
     /// quality-preset choices are static and built from
@@ -339,6 +363,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _type, value);
             this.RaisePropertyChanged(nameof(IsVideo));
             this.RaisePropertyChanged(nameof(IsAnimation));
+            this.RaisePropertyChanged(nameof(ShowEnableAnimationsToggle));
+            this.RaisePropertyChanged(nameof(AnimationsExpanded));
             MarkDirty();
         }
     }
@@ -555,6 +581,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.FilterQualityPresets = AvailableQualityPresets.Where(i => i.IsChecked).Select(i => i.Name).ToList();
         _working.IncludedAnimations = AvailableAnimations.Where(i => i.IsChecked).Select(i => i.Name).ToList();
         _working.RandomizeAnimationsByFractalType = _randomizeAnimByType;
+        _working.EnableAnimations = _enableAnimations;
 
         _working.AdaptiveSweep.Enabled = _sweepEnabled;
         _working.AdaptiveSweep.Start = _sweepStart;
@@ -598,6 +625,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _postFxContrast = pv != null && pv.TryGetValue(PostFxKeyContrast, out var co) ? co : 100.0;
         _postFxAdaptive = pv != null && pv.TryGetValue(PostFxKeyAdaptive, out var ad) ? ad : 0.0;
         _randomizeAnimByType = _working.RandomizeAnimationsByFractalType;
+        _enableAnimations = _working.EnableAnimations;
 
         // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
         // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
@@ -616,6 +644,9 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(Type));
         this.RaisePropertyChanged(nameof(IsVideo));
         this.RaisePropertyChanged(nameof(IsAnimation));
+        this.RaisePropertyChanged(nameof(ShowEnableAnimationsToggle));
+        this.RaisePropertyChanged(nameof(EnableAnimations));
+        this.RaisePropertyChanged(nameof(AnimationsExpanded));
         this.RaisePropertyChanged(nameof(RandomizeAnimationsByFractalType));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
         this.RaisePropertyChanged(nameof(TotalDisplaySec));
