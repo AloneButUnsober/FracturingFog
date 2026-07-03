@@ -30,9 +30,21 @@ public sealed class ParameterAnimationBus
     // without touching the permanent set.
     private readonly List<IParameterAnimator> _permanent = new();
     private readonly List<IParameterAnimator> _dynamic = new();
+    // Scratch buffers reused each tick so ceiling enforcement allocates
+    // nothing on the hot path.
+    private readonly List<IParameterAnimator> _tickBuffer = new();
+    private readonly List<AnimatableParamCost> _costBuffer = new();
     private readonly Action _fire;
     private DateTime _lastTick;
     private bool _renderInFlight;
+
+    /// <summary>Max number of animators ticked per frame. &lt;= 0 = unlimited
+    /// (the default). When the enabled count exceeds this, the most expensive
+    /// animators are dropped for the frame per
+    /// <see cref="AnimatedParamCeilingPolicy.SelectActive"/> — keeps playback
+    /// smooth on weak hardware. Animator <c>IsEnabled</c> state is untouched;
+    /// dropped animators simply don't integrate this frame.</summary>
+    public int Ceiling { get; set; }
 
     public ParameterAnimationBus(Action fire)
     {
@@ -125,21 +137,28 @@ public sealed class ParameterAnimationBus
         if (dt <= 0) return;
         if (dt > 0.1) dt = 0.1;
 
-        bool anyTicked = false;
+        // Gather enabled animators in declaration order (permanent first, so
+        // the long-lived Julia animator is never the one starved by the
+        // ceiling), then let the policy decide which survive the frame.
+        _tickBuffer.Clear();
+        _costBuffer.Clear();
         foreach (var a in _permanent)
-        {
-            if (!a.IsEnabled) continue;
-            a.Tick(dt);
-            anyTicked = true;
-        }
+            if (a.IsEnabled) { _tickBuffer.Add(a); _costBuffer.Add(a.Cost); }
         foreach (var a in _dynamic)
-        {
-            if (!a.IsEnabled) continue;
-            a.Tick(dt);
-            anyTicked = true;
-        }
+            if (a.IsEnabled) { _tickBuffer.Add(a); _costBuffer.Add(a.Cost); }
 
-        if (!anyTicked) return;
+        if (_tickBuffer.Count == 0) return;
+
+        if (Ceiling > 0 && _tickBuffer.Count > Ceiling)
+        {
+            var keep = AnimatedParamCeilingPolicy.SelectActive(_costBuffer, Ceiling);
+            for (int i = 0; i < _tickBuffer.Count; i++)
+                if (keep[i]) _tickBuffer[i].Tick(dt);
+        }
+        else
+        {
+            for (int i = 0; i < _tickBuffer.Count; i++) _tickBuffer[i].Tick(dt);
+        }
 
         _renderInFlight = true;
         _fire();

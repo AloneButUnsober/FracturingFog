@@ -34,27 +34,57 @@ public static class AnimationDataExtensions
 
             if (prop == null || !prop.CanRead || !prop.CanWrite) continue;
 
+            var cost = ResolveCost(data, track.ParamName);
+
             if (prop.PropertyType == typeof(double))
             {
                 yield return new DoubleProceduralAnimator(
                     track,
-                    v => prop.SetValue(target, v));
+                    v => prop.SetValue(target, v),
+                    cost);
             }
             else if (prop.PropertyType == typeof(int))
             {
                 yield return new IntProceduralAnimator(
                     track,
-                    v => prop.SetValue(target, v));
+                    v => prop.SetValue(target, v),
+                    cost);
             }
             else if (prop.PropertyType == typeof(Complex))
             {
                 yield return new ComplexProceduralAnimator(
                     track,
-                    c => prop.SetValue(target, c));
+                    c => prop.SetValue(target, c),
+                    cost);
             }
             // Unsupported CLR type → silently skip. Adding a new Kind
             // (Vec3, Color, …) means adding a concrete ProceduralAnimator
             // subclass and a branch here.
         }
+    }
+
+    /// <summary>Look up the cost class for <paramref name="paramName"/> from
+    /// <see cref="FractalAnimatableParamsMap"/>, taking the max cost across
+    /// every fractal type the animation targets (an animation that plays on
+    /// both a 2D and a 3D type is priced at the more expensive one). Returns
+    /// <see cref="AnimatableParamCost.Cheap"/> when the param isn't in the
+    /// map for any target type, or when the animation is unconstrained.</summary>
+    private static AnimatableParamCost ResolveCost(AnimationData data, string paramName)
+    {
+        var cost = AnimatableParamCost.Cheap;
+        if (data.TargetFractalTypes == null) return cost;
+
+        foreach (var ft in data.TargetFractalTypes)
+        {
+            foreach (var d in FractalAnimatableParamsMap.For(ft))
+            {
+                if (string.Equals(d.ParamName, paramName, System.StringComparison.Ordinal)
+                    && d.Cost > cost)
+                {
+                    cost = d.Cost;
+                }
+            }
+        }
+        return cost;
     }
 }

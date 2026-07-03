@@ -1814,11 +1814,47 @@ namespace FracturingFog.Rendering
             foreach (var a in data.ToAnimators(ViewState.FractalParameters))
                 _videoLegAnimators.Add(a);
 
+            ApplyVideoLegCeiling();
+
             if (_videoLegAnimators.Count > 0)
             {
                 _videoAnimLastTicks = Stopwatch.GetTimestamp();
                 RaiseStatus($"Video slideshow: animating {region.Name} with \"{chosen}\"");
             }
+        }
+
+        // Enforce the animated-param ceiling on the video leg. Unlike the
+        // bus (which drops per-frame), the video leg set is fixed for the
+        // leg's duration, so we prune the dropped animators once here rather
+        // than skipping them each frame.
+        private void ApplyVideoLegCeiling()
+        {
+            if (_videoLegAnimators.Count == 0) return;
+
+            bool includesRaymarched3D = false;
+            var costs = new List<AnimatableParamCost>(_videoLegAnimators.Count);
+            foreach (var a in _videoLegAnimators)
+            {
+                costs.Add(a.Cost);
+                if (a.Cost == AnimatableParamCost.Moderate) includesRaymarched3D = true;
+            }
+
+            int overrideCeiling = 0;
+            try { overrideCeiling = AnimationSettingsStore.Load().AnimatedParamCeilingOverride; }
+            catch { overrideCeiling = 0; }
+            int ceiling = overrideCeiling > 0
+                ? overrideCeiling
+                : AnimatedParamCeilingPolicy.DefaultCeiling(
+                    HardwareProfile.Detect(), includesRaymarched3D);
+
+            if (ceiling <= 0 || _videoLegAnimators.Count <= ceiling) return;
+
+            var keep = AnimatedParamCeilingPolicy.SelectActive(costs, ceiling);
+            var survivors = new List<IParameterAnimator>(ceiling);
+            for (int i = 0; i < _videoLegAnimators.Count; i++)
+                if (keep[i]) survivors.Add(_videoLegAnimators[i]);
+            _videoLegAnimators.Clear();
+            _videoLegAnimators.AddRange(survivors);
         }
 
         // Advance every leg animator by the wall-clock delta since the prior

@@ -19,15 +19,21 @@ public abstract class ProceduralAnimator : IParameterAnimator
     /// constructed at the same instant can start out of phase.</summary>
     protected double Phase;
 
-    protected ProceduralAnimator(AnimationTrack track)
+    protected ProceduralAnimator(AnimationTrack track, AnimatableParamCost cost = AnimatableParamCost.Cheap)
     {
         Track = track ?? throw new ArgumentNullException(nameof(track));
         Phase = track.PhaseOffsetRadians;
         IsEnabled = track.Enabled;
+        Cost = cost;
     }
 
     /// <summary>Display name = the param this animator drives.</summary>
     public string Name => Track.ParamName;
+
+    /// <summary>Per-frame cost class, resolved from
+    /// <see cref="FractalAnimatableParamsMap"/> at construction. Drives the
+    /// animated-param ceiling.</summary>
+    public AnimatableParamCost Cost { get; }
 
     /// <summary>Live-toggle from outside the bus. Independent of
     /// <see cref="AnimationTrack.Enabled"/> (which is the as-saved default);
@@ -86,7 +92,8 @@ public sealed class DoubleProceduralAnimator : ProceduralAnimator
 {
     private readonly Action<double> _setter;
 
-    public DoubleProceduralAnimator(AnimationTrack track, Action<double> setter) : base(track)
+    public DoubleProceduralAnimator(AnimationTrack track, Action<double> setter,
+        AnimatableParamCost cost = AnimatableParamCost.Cheap) : base(track, cost)
     {
         _setter = setter ?? throw new ArgumentNullException(nameof(setter));
     }
@@ -103,7 +110,8 @@ public sealed class IntProceduralAnimator : ProceduralAnimator
 {
     private readonly Action<int> _setter;
 
-    public IntProceduralAnimator(AnimationTrack track, Action<int> setter) : base(track)
+    public IntProceduralAnimator(AnimationTrack track, Action<int> setter,
+        AnimatableParamCost cost = AnimatableParamCost.Cheap) : base(track, cost)
     {
         _setter = setter ?? throw new ArgumentNullException(nameof(setter));
     }
@@ -124,7 +132,8 @@ public sealed class ComplexProceduralAnimator : ProceduralAnimator
 {
     private readonly Action<Complex> _setter;
 
-    public ComplexProceduralAnimator(AnimationTrack track, Action<Complex> setter) : base(track)
+    public ComplexProceduralAnimator(AnimationTrack track, Action<Complex> setter,
+        AnimatableParamCost cost = AnimatableParamCost.Cheap) : base(track, cost)
     {
         _setter = setter ?? throw new ArgumentNullException(nameof(setter));
     }
