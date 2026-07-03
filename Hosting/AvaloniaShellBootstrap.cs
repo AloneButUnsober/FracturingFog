@@ -417,6 +417,11 @@ namespace FracturingFog.Hosting
             try { SandboxEquationStore.Instance.Load(); }  catch { }
             try { UserBulbStore.Instance.Load(); }         catch { }
             try { UserWatermarkStore.Instance.Load(); }    catch { }
+            // Animation Roadmap P2/P4 — without this the library stays empty at
+            // runtime, so the editor's Load dropdown, the Save-Region animation
+            // combo, and the Animation slideshow's picker all see zero
+            // animations (built-in seed included).
+            try { AnimationLibrary.Instance.Load(); }      catch { }
 
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
