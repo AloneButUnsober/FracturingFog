@@ -365,7 +365,12 @@ public static class CalculatorGenHotLoad
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;
-            if (string.IsNullOrEmpty(asm.Location)) continue;
+            // NB: do NOT skip on empty Location. This fallback exists precisely
+            // for single-file self-contained publish (default on Linux) where
+            // Location == "" for every loaded assembly and TPA is empty — the
+            // two passes above then contribute nothing and Roslyn sees no BCL,
+            // surfacing as CS0518 (System.Int32 undefined) + CS0246 (System not
+            // found). TryGetRawMetadata pulls the PE straight from the bundle.
             string? simpleName = asm.GetName().Name;
             if (string.IsNullOrEmpty(simpleName)) continue;
             if (!seen.Add("bundle:" + simpleName)) continue;
