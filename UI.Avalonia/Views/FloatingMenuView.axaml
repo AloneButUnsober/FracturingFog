@@ -328,6 +328,14 @@
                         Margin="0,0,0,8"
                         ToolTip.Tip="Configure slideshow timing + audio-reactive options" />
 
+                <!-- App Settings shortcut -->
+                <Button Classes="action slideshow"
+                        Content="App Settings…"
+                        Command="{Binding AppSettingsCommand}"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,0,0,8"
+                        ToolTip.Tip="Application settings (animated-param ceiling)" />
+
                 <!-- FFmpeg install / update launcher -->
                 <Button Classes="action video"
                         Content="FFmpeg…"

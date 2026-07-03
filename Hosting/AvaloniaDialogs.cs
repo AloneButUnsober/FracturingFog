@@ -430,6 +430,48 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
+        // ── General application settings ─────────────────────────────────────
+
+        /// <summary>
+        /// Opens the general <see cref="AppSettingsView"/> seeded from the
+        /// persisted <see cref="FracturingFog.Models.AnimationSettings"/>. On
+        /// OK, persists the edited settings and invalidates the animation
+        /// bus's cached ceiling so the new value takes effect on the next
+        /// region jump without a restart. Cancel discards.
+        /// </summary>
+        public static Task ShowAppSettingsAsync(Window? owner)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            void Run()
+            {
+                var current = FracturingFog.Models.AnimationSettingsStore.Load();
+                var vm = new AppSettingsViewModel(current);
+                var win = new AppSettingsView { DataContext = vm };
+
+                vm.CloseRequested += (_, ok) =>
+                {
+                    if (ok && vm.Result != null)
+                    {
+                        try { FracturingFog.Models.AnimationSettingsStore.Save(vm.Result); } catch { }
+                        FracturingFog.UI.Avalonia.ViewModels.Animation
+                            .AnimationBusHost.InvalidateCeilingCache();
+                    }
+                };
+
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
+
+                if (owner != null) _ = win.ShowDialog(owner);
+                else if (ActiveMainWindow != null) _ = win.ShowDialog(ActiveMainWindow);
+                else win.Show();
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── Add / Replace import prompt ──────────────────────────────────────
 
         public enum AddOrReplaceResult { Cancel, Add, Replace }

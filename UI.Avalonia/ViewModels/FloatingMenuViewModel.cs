@@ -64,6 +64,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         SaveLightingToThemeCommand = MakeCmd(
             () => SaveLightingToThemeClick?.Invoke(this, SelectedTheme ?? string.Empty));
         SlideshowSettingsCommand= MakeCmd(() => SlideshowSettingsClick?.Invoke(this, EventArgs.Empty));
+        AppSettingsCommand      = MakeCmd(() => AppSettingsClick?.Invoke(this, EventArgs.Empty));
         ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
@@ -880,6 +881,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> EditThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveLightingToThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> AppSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ServerCommand { get; }
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
@@ -925,6 +927,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// </summary>
     public event EventHandler<string>? SaveLightingToThemeClick;
     public event EventHandler? SlideshowSettingsClick;
+    /// <summary>Open the general application-settings dialog (animated-param
+    /// ceiling override, and future app-global settings).</summary>
+    public event EventHandler? AppSettingsClick;
     public event EventHandler? ServerClick;
     public event EventHandler? ClientClick;
     public event EventHandler? EditWatermarkClick;
