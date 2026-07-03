@@ -174,11 +174,19 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 int regionStepMs = Math.Max(8, Math.Max(50, _settings.RegionFadeMs) / fadeSteps);
                 int themeStepMs = Math.Max(8, Math.Max(50, _settings.ColorThemeFadeMs) / fadeSteps);
 
-                int lastRegion = -1;
+                string? lastRegion = null;
                 string? heldRegion = null;
 
                 while (!ct.IsCancellationRequested)
                 {
+                    // Re-enumerate every region pick so a region saved (or
+                    // deleted) mid-slideshow joins (or leaves) the pool without
+                    // an app restart. Cheap in-memory library read. Keep the
+                    // previous pool if the fresh read comes back empty (e.g. a
+                    // transient filter mismatch) so the loop never starves.
+                    var fresh = ApplyRegionFilter(_service.EnumerateSlideshowRegionNames());
+                    if (fresh != null && fresh.Count > 0) regions = fresh;
+
                     string regionName;
                     if (LockRegion && heldRegion != null)
                     {
@@ -186,10 +194,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     }
                     else
                     {
+                        // Name-based dedup (not index) — the pool's size/order can
+                        // change between picks now that we re-enumerate live.
                         int ri;
                         do { ri = _rng.Next(regions.Count); }
-                        while (regions.Count > 1 && ri == lastRegion);
-                        lastRegion = ri;
+                        while (regions.Count > 1 && regions[ri] == lastRegion);
+                        lastRegion = regions[ri];
                         regionName = regions[ri];
                         heldRegion = regionName;
                     }
