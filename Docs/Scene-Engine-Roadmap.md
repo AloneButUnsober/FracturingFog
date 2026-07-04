@@ -300,6 +300,33 @@ motion inherits the flicker-free handshake for free). Round-trip tests:
 every field a `CameraKey` claims is actually consumed by each raymarcher's
 primary-ray construction.
 
+**Status — Shipped (engine core).** Three files in `Abstractions/`:
+
+- `Render/CameraTrack.cs` — `CameraState` (distance / theta / phi, matching
+  the raymarchers' orbit-camera triple), `CameraKey`, and `CameraTrack` with a
+  pure `Evaluate(time)` spline: `Linear`, `CatmullRom` (default, C¹ through the
+  keys), and `Bezier` (cubic ease-in/out — settles at each key; per-key handle
+  authoring is the deferred S8 editor). Clamps outside the key range; angles
+  interpolate literally (θ 0→4π orbits twice, no shortest-path collapse);
+  `Add` inserts keys sorted.
+- `Render/CameraParamBinding.cs` — the seam onto the concrete per-type fields,
+  data-driven off one authoritative `FractalType → (distance, theta, phi)`
+  name map. `Apply` / `Read` / `SupportedTypes` cover exactly the 8 raymarch
+  types (Mandelbulb / Mandelbox / Kifs / QJulia / QMandel / Kleinian /
+  Bicomplex / UserBulb).
+- `Animation/CameraTrackAnimator.cs` — an `IParameterAnimator` (same contract
+  as the procedural animators, `Moderate` cost so the ceiling drops it first)
+  that advances a scene clock each `Tick(dt)`, samples the track, and applies
+  via the binding. Bus registration is S6.
+
+17 tests in `Server.Tests/CameraTrackTests.cs`: evaluator structure (empty /
+single / clamp / duration / sorted insert), each interpolation (linear
+midpoint, literal angles, Bezier ease, pass-through-keys for all three), the
+per-type round-trip (supported set == the 8 raymarch types; every claimed
+field is a read/write `double` on `FractalParameters`; `Apply`→`Read` identity;
+unsupported type rejected), and the animator (time advance, loop wrap, enable
+gate, non-camera-type rejection).
+
 ### S4 — Scene asset + library
 
 `SceneData` DTO + `SceneLibrary` singleton + scenes.json. Slots into the
