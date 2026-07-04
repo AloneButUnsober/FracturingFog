@@ -16,6 +16,11 @@ namespace FracturingFog.Server.Tests;
 /// scene sanity. Stays away from singleton mutation / disk I/O where possible so
 /// tests do not pollute the dev's %APPDATA% scenes.json.
 /// </summary>
+/// <remarks>A few cases do touch <c>SceneLibrary.Instance</c> (Save/Load/Remove);
+/// joins the non-parallel <see cref="FractalRegionLibraryCollection"/> so those
+/// serialise with the other singleton-mutating classes rather than racing
+/// <see cref="AssetSourceTests"/> on the shared scenes.json.</remarks>
+[Collection(FractalRegionLibraryCollection.Name)]
 public sealed class SceneLibraryTests
 {
     // ── JSON round-trip ──────────────────────────────────────────────────────
