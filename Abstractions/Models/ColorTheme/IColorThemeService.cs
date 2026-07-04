@@ -356,6 +356,110 @@ namespace FracturingFog.Models
         /// but the inline payload is harmless when the name also resolves.
         /// </summary>
         string? SerializeRegionJsonByName(string regionName);
+
+        /// <summary>
+        /// Region Editor (Animation Roadmap Sub-goal B) — snapshot a saved
+        /// (or built-in) region's editable metadata plus a read-only echo of
+        /// its stored geometry into a <see cref="RegionEditModel"/>. Returns
+        /// null when no region resolves by that name. Built-in regions return
+        /// with <see cref="RegionEditModel.IsBuiltIn"/> set so the editor
+        /// opens in clone-on-save mode.
+        /// </summary>
+        RegionEditModel? GetRegionForEdit(string regionName);
+
+        /// <summary>
+        /// Region Editor (Animation Roadmap Sub-goal B) — write the edited
+        /// metadata back onto the existing user region identified by
+        /// <see cref="RegionEditModel.OriginalName"/>, <b>preserving that
+        /// region's stored geometry</b> (Center / Zoom / Iterations / QD
+        /// limbs / per-engine source fields). When the original is a built-in,
+        /// a new user-region clone is created instead (the built-in is left
+        /// untouched). Refuses a rename that would collide with a
+        /// <i>different</i> existing region. The result carries the final
+        /// saved name and whether a clone was made.
+        /// </summary>
+        RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits);
+    }
+
+    /// <summary>
+    /// Region Editor (Animation Roadmap Sub-goal B) — UI-neutral snapshot of a
+    /// region's <i>editable</i> metadata plus a read-only echo of its stored
+    /// geometry. Mutable because the editor VM binds two-way to it; only the
+    /// metadata fields are written back by
+    /// <see cref="IColorThemeService.UpdateRegionMetadata"/> — the geometry
+    /// echo is display-only and never persisted from here.
+    /// </summary>
+    public sealed class RegionEditModel
+    {
+        /// <summary>Name of the saved region being edited — the lookup key.
+        /// Stays fixed across the edit even if <see cref="Name"/> changes
+        /// (that's how a rename is expressed).</summary>
+        public string OriginalName { get; set; } = string.Empty;
+
+        /// <summary>True when the source is a code-defined built-in. Editing a
+        /// built-in never mutates it; the update clones into a new user region.</summary>
+        public bool IsBuiltIn { get; set; }
+
+        // ── Editable metadata ────────────────────────────────────────────
+        /// <summary>New display name (== <see cref="OriginalName"/> unless renamed).</summary>
+        public string Name { get; set; } = string.Empty;
+        /// <summary>One-line tooltip description.</summary>
+        public string Description { get; set; } = string.Empty;
+        /// <summary>Attached animation asset name, or null for none.</summary>
+        public string? AnimationName { get; set; }
+        /// <summary>Curated colour-theme whitelist, or null for "no opinion".</summary>
+        public List<string>? CuratedThemes { get; set; }
+        /// <summary>Keep the region's existing lighting override on save.
+        /// Only meaningful when <see cref="HasLightingOverride"/>; false = clear it.</summary>
+        public bool KeepLightingOverride { get; set; } = true;
+        /// <summary>Keep the region's existing embedded watermark on save.
+        /// Only meaningful when <see cref="HasEmbeddedWatermark"/>; false = clear it.</summary>
+        public bool KeepEmbeddedWatermark { get; set; } = true;
+
+        // ── Read-only geometry echo (display only; never written back) ────
+        /// <summary>Serialized fractal-type name (e.g. "Mandelbrot").</summary>
+        public string FractalTypeName { get; set; } = string.Empty;
+        /// <summary>Real part of the stored view centre.</summary>
+        public double CenterX { get; set; }
+        /// <summary>Imaginary part of the stored view centre.</summary>
+        public double CenterY { get; set; }
+        /// <summary>Stored zoom factor.</summary>
+        public double Zoom { get; set; }
+        /// <summary>Stored iteration cap.</summary>
+        public int Iterations { get; set; }
+        /// <summary>True when the region currently carries a lighting override.</summary>
+        public bool HasLightingOverride { get; set; }
+        /// <summary>True when the region currently carries an embedded watermark.</summary>
+        public bool HasEmbeddedWatermark { get; set; }
+    }
+
+    /// <summary>Outcome of <see cref="IColorThemeService.UpdateRegionMetadata"/>.</summary>
+    public readonly struct RegionUpdateResult
+    {
+        private RegionUpdateResult(bool success, string? error, string? savedName, bool cloned)
+        {
+            Success = success;
+            ErrorMessage = error;
+            SavedName = savedName;
+            Cloned = cloned;
+        }
+
+        /// <summary>True when the region was written.</summary>
+        public bool Success { get; }
+        /// <summary>Friendly failure reason; null on success.</summary>
+        public string? ErrorMessage { get; }
+        /// <summary>Final persisted name (may differ from the original on rename,
+        /// or be a fresh clone name when a built-in was edited).</summary>
+        public string? SavedName { get; }
+        /// <summary>True when a built-in was cloned into a new user region.</summary>
+        public bool Cloned { get; }
+
+        /// <summary>Build a success result.</summary>
+        public static RegionUpdateResult Ok(string savedName, bool cloned)
+            => new(true, null, savedName, cloned);
+        /// <summary>Build a failure result.</summary>
+        public static RegionUpdateResult Fail(string error)
+            => new(false, error, null, false);
     }
 
     /// <summary>Outcome of <see cref="IColorThemeService.ExportUserRegionsToFile"/>.</summary>

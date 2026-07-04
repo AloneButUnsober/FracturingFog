@@ -35,6 +35,12 @@
       parity. Engine is the smallest superset that exposes MandelbrotCalculator.
     -->
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+    <!--
+      Region Editor (Animation Roadmap Sub-goal B) — Hosting ref added so the
+      RegionEditorServiceTests can drive HostColorThemeService.GetRegionForEdit
+      / UpdateRegionMetadata. Hosting is net10.0 and cross-platform-safe.
+    -->
+    <ProjectReference Include="..\Hosting\FracturingFog.Hosting.csproj" />
   </ItemGroup>
 
 </Project>
