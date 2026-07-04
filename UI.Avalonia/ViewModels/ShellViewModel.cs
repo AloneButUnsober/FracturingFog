@@ -486,6 +486,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
+        ShowRegionEditorCommand   = ReactiveCommand.Create(ShowRegionEditor);
         ShowColorGenEditorCommand = ReactiveCommand.Create(
             () => OpenColorGenEditorRequested?.Invoke(this, EventArgs.Empty));
         ShowFractalParamsCommand  = ReactiveCommand.Create(
@@ -1155,6 +1156,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _animationEditor, value);
     }
 
+    /// <summary>Animation Roadmap Sub-goal B. Lazily-constructed VM for the
+    /// Region Editor dialog; rebuilt per Show so it always targets the
+    /// currently-selected region.</summary>
+    private RegionEditorViewModel? _regionEditor;
+    public RegionEditorViewModel? RegionEditor
+    {
+        get => _regionEditor;
+        private set => this.RaiseAndSetIfChanged(ref _regionEditor, value);
+    }
+
     // ── Phase 3 dialogs ──────────────────────────────────────────────────
 
     private FFClientViewModel? _ffClient;
@@ -1234,6 +1245,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isAnimationEditorVisible;
         set => this.RaiseAndSetIfChanged(ref _isAnimationEditorVisible, value);
+    }
+
+    private bool _isRegionEditorVisible;
+    public bool IsRegionEditorVisible
+    {
+        get => _isRegionEditorVisible;
+        set => this.RaiseAndSetIfChanged(ref _isRegionEditorVisible, value);
     }
 
     private bool _isHelpVisible;
@@ -1428,6 +1446,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, bool> ShowFloatingMenuCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowRegionEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorGenEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
@@ -1774,6 +1793,46 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             AnimationEditor = vm;
         }
         IsAnimationEditorVisible = true;
+    }
+
+    /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the
+    /// currently-selected region. Metadata-only edit (geometry preserved);
+    /// built-in regions clone into a new user region on save. The VM is rebuilt
+    /// each call so it targets whatever region is selected now.</summary>
+    public void ShowRegionEditor()
+    {
+        string? name = FloatingMenu.SelectedRegion ?? Main.SelectedRegion;
+        // FloatingMenu placeholder / header rows start with "—" and aren't
+        // real regions — treat those as "nothing selected".
+        if (string.IsNullOrWhiteSpace(name) || name.StartsWith("—", StringComparison.Ordinal))
+        {
+            MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
+                "Edit Region", "Select a region to edit first.", MessageSeverity.Info));
+            return;
+        }
+
+        var model = _themeService.GetRegionForEdit(name);
+        if (model == null)
+        {
+            MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
+                "Edit Region", $"Region \"{name}\" could not be loaded.", MessageSeverity.Warning));
+            return;
+        }
+
+        var vm = new RegionEditorViewModel(_themeService, model);
+        vm.RegionSavedToLibrary += (_, savedName) =>
+        {
+            // Refresh the region combo (honours the active sort + type filter)
+            // and select the saved name so the toolbar reflects the edit /
+            // rename / clone immediately.
+            FloatingMenu.RefreshRegions();
+            FloatingMenu.SetRegionSilent(savedName);
+            Main.SetRegionName(savedName);
+        };
+        vm.CloseRequested   += (_, _)    => IsRegionEditorVisible = false;
+        vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
+        RegionEditor = vm;
+        IsRegionEditorVisible = true;
     }
 
     private void ShowFFClient()

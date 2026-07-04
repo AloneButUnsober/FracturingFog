@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
     private ColorThemeEditorView? _editorWin;
     private WatermarkEditorView? _watermarkEditorWin;
     private AnimationEditorView? _animationEditorWin;
+    private RegionEditorView? _regionEditorWin;
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
@@ -558,6 +559,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.AnimationEditor):
                 SyncAnimationEditor();
                 break;
+            case nameof(ShellViewModel.IsRegionEditorVisible):
+            case nameof(ShellViewModel.RegionEditor):
+                SyncRegionEditor();
+                break;
             case nameof(ShellViewModel.IsHelpVisible):
             case nameof(ShellViewModel.Help):
                 SyncHelp();
@@ -1066,6 +1071,35 @@ public sealed partial class MainWindow : Window
         else
         {
             _animationEditorWin?.Hide();
+        }
+    }
+
+    private void SyncRegionEditor()
+    {
+        if (_shell == null) return;
+        if (_shell.IsRegionEditorVisible && _shell.RegionEditor != null)
+        {
+            if (_regionEditorWin == null)
+            {
+                _regionEditorWin = new RegionEditorView { DataContext = _shell.RegionEditor };
+                _regionEditorWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsRegionEditorVisible = false;
+                };
+            }
+            else if (_regionEditorWin.DataContext != _shell.RegionEditor)
+            {
+                // Rebuilt per Show (targets the currently-selected region) —
+                // swap the DataContext so the open window retargets.
+                _regionEditorWin.DataContext = _shell.RegionEditor;
+            }
+            if (!_regionEditorWin.IsVisible) _regionEditorWin.Show(this);
+        }
+        else
+        {
+            _regionEditorWin?.Hide();
         }
     }
 
