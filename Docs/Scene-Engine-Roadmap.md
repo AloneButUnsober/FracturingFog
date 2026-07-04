@@ -522,6 +522,40 @@ work, which Scenes need anyway), rack-focus preset, exposure / tonemap /
 IBL-sky-rotation global tracks, audio-reactive scenes (deferred Animation-
 roadmap `D.4`).
 
+**Status — Shipped (bespoke transition visuals).** The transition trio S6/S7
+carried as crossfade fallbacks is now complete; the other S8 items remain open
+(see below).
+
+`SceneTransitions.ResolveVisual` no longer collapses LightSweep / ParamMorph to
+Crossfade — every authored kind is rendered as itself. Two pure cores land in
+Abstractions:
+
+- **LightSweep** — `SceneTransitions.LightSweepWeight(u, blend, feather)`: a
+  left→right soft-edged wipe. Per-column incoming weight sweeps from 0 (fully
+  outgoing) at blend 0 to 1 (fully incoming) at blend 1, monotonic in both args.
+  The offline renderer composites the frozen outgoing frame under this per-pixel
+  weight instead of a uniform alpha.
+- **ParamMorph** — `SceneParamMorph.Lerp(from, to, t)`: component-wise lerp over
+  every public read/write `double` on `FractalParameters` (the continuous shape
+  knobs), on top of a clone of the incoming shot for all discrete state. The
+  renderer renders the *incoming* shot with these morphed params across the
+  window (the shape itself morphs) rather than compositing two frames — guarded
+  to same-fractal-type shot pairs, degrading to a crossfade otherwise (the one
+  decision made at render time, from the resolved shot types).
+
+Tests: 6 in `SceneTransitionVisualsTests` (wipe endpoints / left-lead / blend
+monotonicity; morph endpoint lerp / discrete-state passthrough / endpoint
+non-mutation). Two S6/S7 tests that asserted the old crossfade fallback were
+flipped to assert the honoured kind. The renderer's per-pixel / per-param wiring
+is integration surface over the unchanged S7 render path. Full suite 514/514.
+
+**Still open (future polish):** the Bezier easing editor (Animation-roadmap
+`D.1` — the `CameraInterpolation.Bezier` maths already ship; only the per-key
+handle UI is missing), rack-focus preset, exposure / tonemap / IBL-rotation
+global tracks, audio-reactive scenes (`D.4`), and an Avalonia "Export Scene…"
+command over the S7 `SceneVideoRenderer` API. None block the core Scene
+authoring → preview → export loop, which is complete end to end (S0–S8 core).
+
 ---
 
 ## Risks & open questions

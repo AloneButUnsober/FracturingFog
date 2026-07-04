@@ -161,10 +161,34 @@ namespace FracturingFog.Export
                     ct.ThrowIfCancellationRequested();
                     Array.Clear(accum, 0, accum.Length);
 
+                    // ── Resolve the transition rendering mode for this frame ──
+                    // Crossfade / LightSweep composite a frozen outgoing frame;
+                    // ParamMorph instead renders the incoming shot with its
+                    // params interpolated from the outgoing shot's (same type
+                    // only — else it degrades to a crossfade).
+                    var visual = frame.ResolvedTransition;
+                    FractalParameters? morphBase = null;
+                    if (frame.CompositeTransition && visual == SceneTransitionKind.ParamMorph)
+                    {
+                        var inc = Get(resolved, frame.PrimaryOriginalIndex);
+                        var outg = Get(resolved, frame.OutgoingOriginalIndex);
+                        if (inc != null && outg != null && inc.RenderType == outg.RenderType)
+                            morphBase = SceneParamMorph.Lerp(outg.BaseParams, inc.BaseParams, frame.Blend);
+                        else
+                            visual = SceneTransitionKind.Crossfade; // nothing to morph
+                    }
+                    bool frozenComposite = frame.CompositeTransition
+                        && (visual == SceneTransitionKind.Crossfade || visual == SceneTransitionKind.LightSweep);
+
                     // ── Accumulation motion blur: weighted average of sub-frames ──
                     foreach (var s in frame.SubFrames)
                     {
-                        uint[] buf = RenderShotFrame(resolved, s.OriginalIndex, s.LocalTime, w, h, ct);
+                        // Under a ParamMorph, the incoming shot's sub-frames render
+                        // with the morphed base params for this frame's blend.
+                        FractalParameters? overrideBase =
+                            (morphBase != null && s.OriginalIndex == frame.PrimaryOriginalIndex)
+                                ? morphBase : null;
+                        uint[] buf = RenderShotFrame(resolved, s.OriginalIndex, s.LocalTime, w, h, ct, overrideBase);
                         float wt = (float)s.Weight;
                         for (int i = 0; i < n; i++)
                         {
@@ -179,15 +203,27 @@ namespace FracturingFog.Export
                         }
                     }
 
-                    // ── Frame-composited cross-fade ──
-                    if (frame.CompositeTransition)
+                    // ── Frame-composited transition (Crossfade uniform / LightSweep wipe) ──
+                    if (frozenComposite)
                     {
                         uint[] frozen = GetFrozen(resolved, frame.OutgoingOriginalIndex,
                                                   frame.OutgoingLocalTime, w, h, frozenCache, ct);
-                        float bl = (float)frame.Blend;   // 1 = incoming, 0 = outgoing
-                        float ibl = 1f - bl;
+                        bool sweep = visual == SceneTransitionKind.LightSweep;
+                        double blendC = frame.Blend;   // 1 = incoming, 0 = outgoing
                         for (int i = 0; i < n; i++)
                         {
+                            // Per-pixel incoming weight: uniform for a crossfade,
+                            // a swept soft edge for a light-sweep.
+                            float bl;
+                            if (sweep)
+                            {
+                                int x = i % w;
+                                double u = w > 1 ? (double)x / (w - 1) : 0.0;
+                                bl = (float)SceneTransitions.LightSweepWeight(u, blendC);
+                            }
+                            else bl = (float)blendC;
+                            float ibl = 1f - bl;
+
                             uint fp = frozen[i];
                             int fb = (int)(fp & 0xFF);
                             int fg = (int)((fp >> 8) & 0xFF);
@@ -244,14 +280,16 @@ namespace FracturingFog.Export
 
         private static uint[] RenderShotFrame(
             IReadOnlyDictionary<int, ResolvedShot> cache, int originalIndex,
-            double localTime, int w, int h, CancellationToken ct)
+            double localTime, int w, int h, CancellationToken ct,
+            FractalParameters? overrideBase = null)
         {
             if (!cache.TryGetValue(originalIndex, out var shot))
                 return BlackFrame(w, h);
 
             // Fresh params per sub-frame so the animation + camera pose at this
-            // local time don't leak into the next sub-frame.
-            var p = shot.BaseParams.Clone();
+            // local time don't leak into the next sub-frame. overrideBase carries
+            // a ParamMorph-interpolated baseline for this frame when present.
+            var p = (overrideBase ?? shot.BaseParams).Clone();
 
             // Param animation at this local time. Procedural animators integrate
             // phase linearly in dt, so a single Tick(localTime) lands at the same
@@ -324,6 +362,9 @@ namespace FracturingFog.Export
         }
 
         // ── Resolution ───────────────────────────────────────────────────────
+
+        private static ResolvedShot? Get(IReadOnlyDictionary<int, ResolvedShot> cache, int index)
+            => cache.TryGetValue(index, out var s) ? s : null;
 
         private static void Resolve(SceneData scene, int originalIndex,
                                     Dictionary<int, ResolvedShot> cache)

@@ -148,11 +148,13 @@ public sealed class SceneTimelineTests
     }
 
     [Fact]
-    public void ResolveVisual_falls_back_advanced_kinds_to_crossfade()
+    public void ResolveVisual_honours_every_authored_kind()
     {
+        // S8 — all four are rendered as authored (ParamMorph's same-type guard
+        // is a render-time decision, not a ResolveVisual fallback).
         Assert.Equal(SceneTransitionKind.Cut, SceneTransitions.ResolveVisual(SceneTransitionKind.Cut));
         Assert.Equal(SceneTransitionKind.Crossfade, SceneTransitions.ResolveVisual(SceneTransitionKind.Crossfade));
-        Assert.Equal(SceneTransitionKind.Crossfade, SceneTransitions.ResolveVisual(SceneTransitionKind.LightSweep));
-        Assert.Equal(SceneTransitionKind.Crossfade, SceneTransitions.ResolveVisual(SceneTransitionKind.ParamMorph));
+        Assert.Equal(SceneTransitionKind.LightSweep, SceneTransitions.ResolveVisual(SceneTransitionKind.LightSweep));
+        Assert.Equal(SceneTransitionKind.ParamMorph, SceneTransitions.ResolveVisual(SceneTransitionKind.ParamMorph));
     }
 }
