@@ -379,6 +379,20 @@ namespace FracturingFog.Models
         /// saved name and whether a clone was made.
         /// </summary>
         RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits);
+
+        /// <summary>
+        /// Region Editor Phase R3 — same as <see cref="UpdateRegionMetadata(RegionEditModel)"/>
+        /// but when <paramref name="recaptureGeometryFrom"/> is non-null the
+        /// saved region's geometry (Center / Zoom / Iterations / QD limbs /
+        /// per-engine source fields) is <b>re-snapped from the live view</b>
+        /// instead of preserved, letting the user retag metadata <i>and</i>
+        /// re-frame in one edit. When it is null the call is identical to the
+        /// metadata-only overload. The default implementation ignores the live
+        /// state (back-compat) so legacy implementations keep compiling; the
+        /// host implementation overrides.
+        /// </summary>
+        RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits, FractalViewState? recaptureGeometryFrom)
+            => UpdateRegionMetadata(edits);
     }
 
     /// <summary>

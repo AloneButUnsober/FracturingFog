@@ -64,7 +64,17 @@
                                    TextWrapping="Wrap" />
                         <TextBlock Foreground="#888888" FontSize="11"
                                    TextWrapping="Wrap"
-                                   Text="Geometry is preserved as saved. To re-frame, use Save Region from the live view instead." />
+                                   Text="Geometry is preserved as saved. Use Capture current view to re-frame it from the live view on save." />
+                        <Button Content="Capture current view"
+                                Command="{Binding CaptureCurrentViewCommand}"
+                                IsVisible="{Binding CanCaptureView}"
+                                HorizontalAlignment="Left"
+                                Background="#2A3A2A" Foreground="#DCDCDC"
+                                Padding="8,3" Margin="0,2,0,0" />
+                        <TextBlock Foreground="#8CC88C" FontSize="11"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding GeometryWillRecapture}"
+                                   Text="{Binding CaptureSummary}" />
                     </StackPanel>
                 </Border>
 
