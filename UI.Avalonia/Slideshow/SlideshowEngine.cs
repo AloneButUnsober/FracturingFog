@@ -37,12 +37,16 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         private readonly IColorThemeService _service;
         private SlideshowSettings _settings;
 
-        // RNG + region shuffle-bag. _rng is reseeded on each Start from
+        // RNG + region shuffle-bag. Both RNGs are reseeded on each Start from
         // SlideshowSettings.RandomSeed (0 = fresh entropy per run; non-zero =
-        // reproducible). The bag reads _rng through a lambda so a Start-time
-        // reseed takes effect without rebuilding the bag delegate. _regionBag
-        // draws every region once before repeating (no back-to-back repeats).
+        // reproducible). _regionRng is dedicated to the region bag so region
+        // ordering is reproducible independent of how many draws theme picking
+        // consumes (the solid-frame retry loop consumes a variable number).
+        // _rng drives theme + animation picks. Both read through lambdas so a
+        // Start-time reseed takes effect without rebuilding the bag delegate.
+        // _regionBag draws every region once before repeating (no back-to-back).
         private Random _rng = new();
+        private Random _regionRng = new();
         private readonly ShuffleBag<string> _regionBag;
 
         private CancellationTokenSource? _cts;
@@ -64,7 +68,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _settings = settings ?? new SlideshowSettings();
-            _regionBag = new ShuffleBag<string>(n => _rng.Next(n), StringComparer.Ordinal);
+            _regionBag = new ShuffleBag<string>(n => _regionRng.Next(n), StringComparer.Ordinal);
         }
 
         public bool IsRunning { get; private set; }
@@ -151,9 +155,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             _skipTheme = false;
 
             // Reseed per run so a fixed RandomSeed reproduces the same order
-            // from the top, and 0 draws fresh entropy. Ordering (region bag,
-            // theme + animation picks) all flow from this instance.
-            _rng = _settings.RandomSeed != 0 ? new Random(_settings.RandomSeed) : new Random();
+            // from the top, and 0 draws fresh entropy. The engine instance is
+            // reused across Start/Stop toggles, so also reset the bag's carried
+            // state — otherwise a second run draws from the previous run's
+            // leftover shuffle instead of a fresh seeded one.
+            int seed = _settings.RandomSeed;
+            _rng = seed != 0 ? new Random(seed) : new Random();
+            _regionRng = seed != 0 ? new Random(seed) : new Random();
+            _regionBag.Reset();
 
             _cts = new CancellationTokenSource();
             IsRunning = true;

@@ -38,6 +38,19 @@ namespace FracturingFog.Models
             _known = new HashSet<T>(_cmp);
         }
 
+        /// <summary>Clear all internal state (shuffle order, known membership,
+        /// last-drawn boundary marker). The next <see cref="Draw"/> rebuilds
+        /// from scratch — call this when a caller reuses one bag across
+        /// independent runs and wants a seeded run to reproduce from the top
+        /// (the slideshow engine resets on each Start).</summary>
+        public void Reset()
+        {
+            _order.Clear();
+            _known.Clear();
+            _hasLast = false;
+            _last = default!;
+        }
+
         /// <summary>Draw the next item from <paramref name="items"/>. Rebuilds
         /// (fresh shuffle) when the membership differs from the previous call.
         /// Returns <c>default</c> when the source is empty.</summary>
