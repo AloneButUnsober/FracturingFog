@@ -106,6 +106,9 @@
                               MinWidth="180"
                               ItemsSource="{Binding FloatingMenu.RegionNames}"
                               SelectedItem="{Binding FloatingMenu.SelectedRegion}" />
+                    <Button Classes="toolbar" Content="Edit"
+                            ToolTip.Tip="Edit the selected region's metadata (name, animation, curated themes)."
+                            Command="{Binding ShowRegionEditorCommand}" />
                     <TextBlock Text="Theme" Classes="label" Margin="8,0,0,0" />
                     <ComboBox x:Name="ToolbarThemeCombo"
                               Classes="toolbar"
