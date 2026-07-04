@@ -58,5 +58,10 @@ namespace FracturingFog.Abstractions.Assets
         /// <summary>Delete the named asset through the source's own remove path
         /// (which persists). Returns true when an asset was removed.</summary>
         bool Delete(string name);
+
+        /// <summary>Serialize the named asset to standalone JSON for the bulk
+        /// export bundle (A3). Returns null when the asset no longer exists or
+        /// can't be serialized.</summary>
+        string? ExportJson(string name);
     }
 }

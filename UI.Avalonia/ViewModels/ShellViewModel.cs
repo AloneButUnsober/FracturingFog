@@ -1874,8 +1874,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (AssetManager == null)
         {
             var vm = new AssetManagerViewModel(_assetSources);
-            vm.CloseRequested += (_, _) => IsAssetManagerVisible = false;
-            vm.OpenRequested  += (_, e) => EditAsset(e.Kind, e.Name);
+            vm.CloseRequested  += (_, _) => IsAssetManagerVisible = false;
+            vm.OpenRequested   += (_, e) => EditAsset(e.Kind, e.Name);
+            vm.ExportRequested += (_, e) => AssetBundleExportRequested?.Invoke(this, e);
             AssetManager = vm;
         }
         else
@@ -1940,6 +1941,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// editors + slideshow). The host (AvaloniaShellBootstrap) subscribes and
     /// opens the matching editor window.</summary>
     public event EventHandler<AssetHostEditorEventArgs>? AssetHostEditorRequested;
+
+    /// <summary>Raised with an assembled Asset Manager export bundle (A3). The
+    /// host shows a save picker and writes the zip bytes.</summary>
+    public event EventHandler<AssetExportEventArgs>? AssetBundleExportRequested;
 
     private void ShowFFClient()
     {

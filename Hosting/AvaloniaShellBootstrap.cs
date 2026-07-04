@@ -1658,6 +1658,37 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Asset Manager bulk export (A3) — the VM assembled the zip in
+            // memory; the host owns the save picker + file write.
+            shell.AssetBundleExportRequested += (_, e) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                            "Export Asset Bundle",
+                            e.SuggestedName,
+                            "Zip archive (*.zip)|*.zip|All files (*.*)|*");
+                        if (string.IsNullOrEmpty(path)) return;
+
+                        await System.IO.File.WriteAllBytesAsync(path, e.ZipBytes);
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Export Asset Bundle",
+                            $"Exported {e.Count} asset{(e.Count == 1 ? "" : "s")} to:\n{path}",
+                            expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset bundle export failed: {ex.Message}");
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Export Asset Bundle",
+                            "Export failed:\n" + ex.Message,
+                            expectsConfirmation: false);
+                    }
+                });
+            };
+
             // Recording finished — the engine has finalised the temp MP4 and/or
             // PNG sequence. On success, prompt for save destinations; on cancel
             // or fault, discard the temp artefacts. Fires on a background thread
