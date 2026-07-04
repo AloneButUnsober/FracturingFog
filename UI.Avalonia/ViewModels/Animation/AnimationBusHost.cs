@@ -1,6 +1,7 @@
 using System;
 using FracturingFog.Abstractions.Animation;
 using FracturingFog.Models;
+using FracturingFog.Render;
 
 namespace FracturingFog.UI.Avalonia.ViewModels.Animation;
 
@@ -66,6 +67,57 @@ public static class AnimationBusHost
         {
             _bus.RegisterDynamic(animator);
             if (animator.Cost == AnimatableParamCost.Moderate) includesRaymarched3D = true;
+        }
+
+        _bus.Ceiling = ResolveCeiling(includesRaymarched3D);
+        _bus.Refresh();
+    }
+
+    /// <summary>Scene Engine Roadmap Phase S6 — swap the dynamic animator set to
+    /// one scene shot: its param-animation (if any) plus its keyframed orbit
+    /// camera (if the shot carries a <see cref="SceneShot.Camera"/> and its
+    /// fractal type supports one). This is where the S3
+    /// <see cref="CameraTrackAnimator"/> — deferred at S3 with "bus registration
+    /// is S6" — finally registers on the bus, so scene-camera motion inherits the
+    /// same render-completion gate + animated-param ceiling as every other track.
+    /// <paramref name="target"/> is the live <see cref="FractalParameters"/> the
+    /// shot drives; <paramref name="shotAnimation"/> is the resolved
+    /// param-animation asset (null = none). No-op if the bus isn't initialised.</summary>
+    public static void LoadSceneShot(SceneShot shot, AnimationData? shotAnimation, FractalParameters target)
+    {
+        if (_bus == null) return;
+
+        _bus.ClearDynamic();
+
+        if (shot == null || target == null)
+        {
+            _bus.Refresh();
+            return;
+        }
+
+        bool includesRaymarched3D = false;
+
+        // Param-animation animators (same path as a region-attached animation).
+        if (shotAnimation != null)
+        {
+            foreach (var animator in shotAnimation.ToAnimators(target))
+            {
+                _bus.RegisterDynamic(animator);
+                if (animator.Cost == AnimatableParamCost.Moderate) includesRaymarched3D = true;
+            }
+        }
+
+        // Keyframed orbit camera (S3). Only for the 3D-camera types with keys.
+        if (shot.Camera != null
+            && shot.Camera.Keys.Count > 0
+            && CameraParamBinding.Supports(shot.FractalType))
+        {
+            var camera = new CameraTrackAnimator(shot.Camera, target, shot.FractalType)
+            {
+                Loop = true, // the shot loops its camera across its own window
+            };
+            _bus.RegisterDynamic(camera);
+            includesRaymarched3D = true; // raymarched 3D — drop first under load
         }
 
         _bus.Ceiling = ResolveCeiling(includesRaymarched3D);

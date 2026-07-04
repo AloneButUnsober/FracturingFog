@@ -81,6 +81,7 @@
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,8" Spacing="0">
             <Button Classes="action new"     Content="New"       Command="{Binding NewBlankCommand}" />
             <Button Classes="action revert"  Content="Revert"    Command="{Binding RevertCommand}" />
+            <Button Classes="action preview" Content="▶ Play"    Command="{Binding PlayCommand}" />
             <Button Classes="action stop"    Content="Stop"      Command="{Binding StopPreviewCommand}" />
             <Button Classes="action save"    Content="Save"      Command="{Binding SaveCommand}" />
             <Button Classes="action danger"  Content="Delete"    Command="{Binding DeleteCommand}" />

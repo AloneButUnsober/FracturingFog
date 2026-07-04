@@ -332,6 +332,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
         SaveCommand        = ReactiveCommand.CreateFromTask(SaveAsync);
         DeleteCommand      = ReactiveCommand.CreateFromTask(DeleteAsync);
         AddShotCommand     = ReactiveCommand.Create(AddShot);
+        PlayCommand        = ReactiveCommand.Create(Play);
         StopPreviewCommand = ReactiveCommand.Create(StopPreview);
         CloseCommand       = ReactiveCommand.Create(() =>
         {
@@ -442,6 +443,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> AddShotCommand { get; }
+    public ReactiveCommand<Unit, Unit> PlayCommand { get; }
     public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
@@ -453,9 +455,14 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public event EventHandler<string>? SceneDeletedFromLibrary;
 
     /// <summary>Preview a single shot: the shell applies the shot's region /
-    /// theme / animation to the live view. Camera-motion playback + shot
-    /// sequencing are S6.</summary>
+    /// theme / animation to the live view (static framing).</summary>
     public event EventHandler<SceneShot>? PreviewShotRequested;
+
+    /// <summary>Play the whole scene in realtime (S6): the shell walks the
+    /// timeline, sequencing shots on the live view with per-shot camera + param
+    /// motion on the animation bus.</summary>
+    public event EventHandler<SceneData>? PlaySceneRequested;
+
     public event EventHandler? StopPreviewRequested;
 
     public event EventHandler? CloseRequested;
@@ -562,6 +569,8 @@ public sealed class SceneEditorViewModel : ViewModelBase
         SelectedShot = row;
         PreviewShotRequested?.Invoke(this, row.ToShot());
     }
+
+    private void Play() => PlaySceneRequested?.Invoke(this, BuildData());
 
     private void StopPreview() => StopPreviewRequested?.Invoke(this, EventArgs.Empty);
 
