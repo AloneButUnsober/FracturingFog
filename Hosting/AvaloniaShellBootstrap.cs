@@ -431,7 +431,8 @@ namespace FracturingFog.Hosting
             try { AnimationLibrary.Instance.Load(); }      catch { }
 
             // ── View model tree ──────────────────────────────────────────
-            s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
+            s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService,
+                assetSources: FracturingFog.Assets.AssetSourceRegistry.All());
 
             // Wire the slideshow-record sink factory. ShellViewModel asks for
             // one when the active SlideshowConfig has RecordSlideshow=true;

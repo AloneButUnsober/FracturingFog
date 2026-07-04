@@ -48,6 +48,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private readonly IPaletteExtractionService? _paletteService;
     private readonly IHelpContentProvider _helpProvider;
 
+    /// <summary>Asset Manager sources (Sub-goal A). Injected by the host because
+    /// the IAssetSource adapters live in Engine, which UI.Avalonia doesn't
+    /// reference. Null/empty when the host wires no sources.</summary>
+    private readonly System.Collections.Generic.IReadOnlyList<FracturingFog.Abstractions.Assets.IAssetSource> _assetSources;
+
     /// <summary>True while the host window is in borderless multi-monitor
     /// span mode. Toggled by the FloatingMenu Span button.</summary>
     private bool _isSpanning;
@@ -102,13 +107,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         IFractalInputController input,
         IColorThemeService themeService,
         IHelpContentProvider helpProvider,
-        IPaletteExtractionService? paletteService = null)
+        IPaletteExtractionService? paletteService = null,
+        System.Collections.Generic.IReadOnlyList<FracturingFog.Abstractions.Assets.IAssetSource>? assetSources = null)
     {
         if (renderHost == null) throw new ArgumentNullException(nameof(renderHost));
         if (input == null) throw new ArgumentNullException(nameof(input));
         _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
         _helpProvider = helpProvider ?? throw new ArgumentNullException(nameof(helpProvider));
         _paletteService = paletteService;
+        _assetSources = assetSources ?? System.Array.Empty<FracturingFog.Abstractions.Assets.IAssetSource>();
 
         Main = new MainViewModel(renderHost, input);
 
@@ -487,6 +494,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
         ShowRegionEditorCommand   = ReactiveCommand.Create(ShowRegionEditor);
+        ShowAssetManagerCommand   = ReactiveCommand.Create(ShowAssetManager);
         ShowColorGenEditorCommand = ReactiveCommand.Create(
             () => OpenColorGenEditorRequested?.Invoke(this, EventArgs.Empty));
         ShowFractalParamsCommand  = ReactiveCommand.Create(
@@ -1166,6 +1174,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _regionEditor, value);
     }
 
+    /// <summary>Asset Manager dialog (Sub-goal A); built once on first Show.</summary>
+    private AssetManagerViewModel? _assetManager;
+    public AssetManagerViewModel? AssetManager
+    {
+        get => _assetManager;
+        private set => this.RaiseAndSetIfChanged(ref _assetManager, value);
+    }
+
     // ── Phase 3 dialogs ──────────────────────────────────────────────────
 
     private FFClientViewModel? _ffClient;
@@ -1252,6 +1268,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isRegionEditorVisible;
         set => this.RaiseAndSetIfChanged(ref _isRegionEditorVisible, value);
+    }
+
+    private bool _isAssetManagerVisible;
+    public bool IsAssetManagerVisible
+    {
+        get => _isAssetManagerVisible;
+        set => this.RaiseAndSetIfChanged(ref _isAssetManagerVisible, value);
     }
 
     private bool _isHelpVisible;
@@ -1447,6 +1470,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowRegionEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowAssetManagerCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorGenEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
@@ -1835,6 +1859,24 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
         RegionEditor = vm;
         IsRegionEditorVisible = true;
+    }
+
+    /// <summary>Animation Roadmap Sub-goal A — open the read-only Asset Manager
+    /// (phase A1). Built once; RefreshAssets on each Show so it reflects saves
+    /// made since it was first opened.</summary>
+    public void ShowAssetManager()
+    {
+        if (AssetManager == null)
+        {
+            var vm = new AssetManagerViewModel(_assetSources);
+            vm.CloseRequested += (_, _) => IsAssetManagerVisible = false;
+            AssetManager = vm;
+        }
+        else
+        {
+            AssetManager.RefreshAssets();
+        }
+        IsAssetManagerVisible = true;
     }
 
     private void ShowFFClient()
