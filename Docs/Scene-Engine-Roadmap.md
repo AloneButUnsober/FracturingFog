@@ -242,11 +242,28 @@ render pins the CPU path by default so exported MP4s are reproducible; a
 
 ### S1 — Resource governor
 
-See [The resource governor](#the-resource-governor-the-90-cap). Sampler +
-soft watermark (cache shedding) + adaptive knob feedback + Windows job-
-object hard backstop. Tests drive the governor with a fake resource sampler
-and assert it steps the tier down before the hard cap and recovers when
-pressure drops.
+**Status — Shipped (managed core).** `Abstractions/Render/ResourceGovernor.cs`:
+
+- `ResourceGovernor.Evaluate(sample, participatesInGovernor)` — pure,
+  deterministic control loop. Ratchets a `QualityScale` [floor..1] down when
+  CPU ≥ 85% soft target or memory ≥ 0.80 watermark, back up only after
+  `RecoverHoldTicks` sustained calm below the recover band (75% / 0.70). The
+  soft-target/recover gap is the anti-oscillation hysteresis band. `HardCapBreached`
+  flags the OS backstop at the 90% / 0.90 ceiling.
+- Offline (`participatesInGovernor == false`) freezes `QualityScale` (full
+  fidelity) but the memory cache-shed signal stays unconditional.
+- `ProcessResourceSampler` — cross-platform CPU% (process CPU-time delta ÷
+  wall × cores) + memory fraction (working set ÷ `TotalAvailableMemoryBytes`,
+  cgroup-aware).
+- `IResourceCapBackstop` + `NoOpResourceCapBackstop` — injection point for the
+  OS hard cap. **The Windows Job Object implementation is deferred to the host
+  project** — it P/Invokes and can kill the process, so it is not shipped as an
+  unverifiable default. The managed governor is the primary mechanism.
+
+9 tests in `Server.Tests/ResourceGovernorTests.cs` cover throttle-down,
+floor clamp, offline freeze, unconditional shed, breach flag, band hold,
+slow recovery, and reset. No periodic driver yet — S2 owns the
+sample→evaluate→apply-knobs loop.
 
 ### S2 — Hardware tiers
 
