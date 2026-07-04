@@ -575,11 +575,51 @@ acceleration into/out of every pose. 6 tests in `CameraTrackTests` (endpoint
 fixing, midpoint shaping, `Evaluate` honouring the starting key's ease with the
 default unchanged).
 
-**Still open (future polish):** a graphical Bezier-handle curve editor
-(beyond the per-key ease enum above), rack-focus preset, exposure / tonemap /
-IBL-rotation global tracks, audio-reactive scenes (`D.4`). None block the core
-Scene authoring → preview → export loop, which is complete end to end (S0–S8
-core).
+**Global tracks (scene-wide post / look) — Shipped.** `SceneData.GlobalTracks`
+(a `List<SceneGlobalTrack>`) keyframes scene-wide post scalars, sampled at
+GLOBAL scene time and applied on top of every shot — an exposure ramp, a bloom
+swell, a closing vignette across the whole timeline. Three pure pieces land in
+`Abstractions/Animation/SceneGlobalTrack.cs`:
+
+- `SceneGlobalTrack` / `SceneGlobalKey` — a keyframed scalar reusing the
+  S3/D.1 `CameraInterpolation` (Linear default — a look ramp wants no spline
+  overshoot) + `CameraEase` vocabulary, so authors get the same spline + per-key
+  easing they know from the camera track. `Evaluate(globalTime)` clamps outside
+  the key range and eases the segment fraction before interpolating.
+- `SceneGlobalTarget` + `SceneGlobalBinding` — the data-driven seam onto
+  `FractalParameters.Lighting` (one switch, mirroring `CameraParamBinding`).
+  Ships the continuous `LightingFxData` post knobs: `Exposure` (the headline),
+  `BloomStrength` / `BloomThreshold` / `Vignette` / `ChromaticAberration`.
+- `SceneGlobalTracks.Apply` / `SceneGlobalTrackAnimator` — the multi-track apply
+  (later track wins on a shared target) and the bus animator for realtime.
+
+Consumers: the **offline renderer** (`SceneVideoRenderer.RenderShotFrame`)
+applies the tracks at each sub-frame's global time, last, so the scene-wide look
+overrides the shot's own lighting; the **realtime** driver re-installs a
+`SceneGlobalTrackAnimator` per shot (the bus clears its dynamic set on each cut)
+seeded at the shot's global start, so the sweep continues mid-timeline across a
+cut instead of restarting. Cost is `Cheap` (post scalars) so the animated-param
+ceiling never sheds it ahead of a raymarch track. A built-in **"Exposure Ramp"**
+demo scene shows a Mandelbulb orbit fading up out of near-black. 18 tests in
+`SceneGlobalTrackTests` (evaluator clamp / interpolation / ease, binding
+round-trip per target, later-wins apply, animator, JSON enum-string round-trip,
+built-in sanity).
+
+Scope calls, deferred with rationale: **tone-map** is a discrete operator enum,
+not a keyframeable scalar — it stays a per-shot choice, not a track.
+**IBL-sky-rotation** has no field yet (the HDRI sampler reads the surface normal
+with no yaw offset); adding it means plumbing a rotation through all 8 CPU + 8
+GPU raymarchers — a Lighting-FX-roadmap phase — but the `SceneGlobalTarget` enum
++ binding are built so it slots in for free once the field lands. A dedicated
+Scene-Editor **global-track row** is deferred to the graphical-curve-editor
+follow-up; global tracks are authored today through the Asset Manager's
+JSON-editable Scene node (they round-trip as human-editable strings).
+
+**Still open (future polish):** a graphical Bezier-handle curve editor (beyond
+the per-key ease enum + the JSON global-track authoring above), rack-focus
+preset, IBL-sky-rotation track (needs the lighting field first), audio-reactive
+scenes (`D.4`). None block the core Scene authoring → preview → export loop,
+which is complete end to end (S0–S8 core).
 
 ---
 

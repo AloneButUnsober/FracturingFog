@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FracturingFog.Abstractions.Animation;
 using FracturingFog.Models;
 using FracturingFog.Render;
@@ -82,8 +83,14 @@ public static class AnimationBusHost
     /// same render-completion gate + animated-param ceiling as every other track.
     /// <paramref name="target"/> is the live <see cref="FractalParameters"/> the
     /// shot drives; <paramref name="shotAnimation"/> is the resolved
-    /// param-animation asset (null = none). No-op if the bus isn't initialised.</summary>
-    public static void LoadSceneShot(SceneShot shot, AnimationData? shotAnimation, FractalParameters target)
+    /// param-animation asset (null = none). No-op if the bus isn't initialised.
+    /// <para><paramref name="globalTracks"/> are the scene's S8 scene-wide
+    /// post/look tracks — re-installed on every shot (the bus clears its dynamic
+    /// set per cut) seeded at <paramref name="globalTimeOffset"/> (this shot's
+    /// global start time) so the sweep continues mid-timeline across a cut instead
+    /// of restarting.</para></summary>
+    public static void LoadSceneShot(SceneShot shot, AnimationData? shotAnimation, FractalParameters target,
+        IReadOnlyList<SceneGlobalTrack>? globalTracks = null, double globalTimeOffset = 0.0)
     {
         if (_bus == null) return;
 
@@ -118,6 +125,15 @@ public static class AnimationBusHost
             };
             _bus.RegisterDynamic(camera);
             includesRaymarched3D = true; // raymarched 3D — drop first under load
+        }
+
+        // Scene-wide post/look tracks (S8). Cheap (post-process scalars) — the
+        // ceiling never sheds them ahead of a raymarch track. Seeded at this
+        // shot's global start so global time is continuous across cuts.
+        if (globalTracks != null)
+        {
+            var g = new SceneGlobalTrackAnimator(globalTracks, target, globalTimeOffset);
+            if (g.HasWork) _bus.RegisterDynamic(g);
         }
 
         _bus.Ceiling = ResolveCeiling(includesRaymarched3D);

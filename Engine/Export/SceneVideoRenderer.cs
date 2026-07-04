@@ -148,6 +148,10 @@ namespace FracturingFog.Export
                 DateTime.Now.ToString("yyyyMMdd-HHmmss-fff"));
             Directory.CreateDirectory(pngFolder);
 
+            // Scene-wide post/look tracks (S8) — sampled at each sub-frame's
+            // GLOBAL time and applied on top of the shot's own params.
+            var globalTracks = scene.GlobalTracks;
+
             int n = w * h;
             var accum = new float[n * 3];     // weighted RGB accumulator
             var outBuf = new uint[n];
@@ -188,7 +192,8 @@ namespace FracturingFog.Export
                         FractalParameters? overrideBase =
                             (morphBase != null && s.OriginalIndex == frame.PrimaryOriginalIndex)
                                 ? morphBase : null;
-                        uint[] buf = RenderShotFrame(resolved, s.OriginalIndex, s.LocalTime, w, h, ct, overrideBase);
+                        uint[] buf = RenderShotFrame(resolved, s.OriginalIndex, s.LocalTime, w, h, ct,
+                            overrideBase, s.GlobalTime, globalTracks);
                         float wt = (float)s.Weight;
                         for (int i = 0; i < n; i++)
                         {
@@ -281,7 +286,9 @@ namespace FracturingFog.Export
         private static uint[] RenderShotFrame(
             IReadOnlyDictionary<int, ResolvedShot> cache, int originalIndex,
             double localTime, int w, int h, CancellationToken ct,
-            FractalParameters? overrideBase = null)
+            FractalParameters? overrideBase = null,
+            double globalTime = 0.0,
+            IReadOnlyList<SceneGlobalTrack>? globalTracks = null)
         {
             if (!cache.TryGetValue(originalIndex, out var shot))
                 return BlackFrame(w, h);
@@ -312,6 +319,12 @@ namespace FracturingFog.Export
                 if (camDur > 0) t -= global::System.Math.Floor(t / camDur) * camDur;
                 CameraParamBinding.Apply(p, shot.RenderType, shot.Camera.Evaluate(t));
             }
+
+            // Scene-wide post/look tracks (S8) at this sub-frame's global time —
+            // applied last so a scene exposure/bloom ramp overrides the shot's own
+            // lighting uniformly across the whole timeline. No-op when the scene
+            // has no global tracks (frozen-outgoing renders pass none).
+            SceneGlobalTracks.Apply(globalTracks, p, globalTime);
 
             var req = new PosterRequest
             {

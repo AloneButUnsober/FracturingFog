@@ -108,6 +108,13 @@ public sealed class SceneData
     /// <summary>The shots, in play order.</summary>
     public List<SceneShot> Shots { get; set; } = new();
 
+    /// <summary>Scene-wide keyframed post/look scalars (S8 "global tracks"),
+    /// sampled at GLOBAL scene time and applied on top of every shot — an
+    /// exposure ramp, a bloom swell, a closing vignette across the whole scene.
+    /// Empty = no scene-wide override, so the scene renders exactly as its shots
+    /// dictate. See <see cref="SceneGlobalTrack"/>.</summary>
+    public List<SceneGlobalTrack> GlobalTracks { get; set; } = new();
+
     /// <summary>Free-form tags for the Asset Manager / slideshow filter UI
     /// ("demo", "3D", "calm", …). Case-sensitive.</summary>
     public List<string> Tags { get; set; } = new();
