@@ -25,6 +25,7 @@ using FracturingFog;
 using FracturingFog.Abstractions.Animation;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.Rendering.Lighting;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -105,6 +106,9 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public const string RegionNone = "(default params)";
     public const string ThemeNone = "(region default)";
     public const string AnimationNone = "(none)";
+    /// <summary>Tone-map combo sentinel — inherit the region lighting's operator
+    /// rather than pin one on the shot.</summary>
+    public const string ToneMapInherit = "(region default)";
 
     private readonly Action _onChanged;
 
@@ -217,6 +221,27 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public IReadOnlyList<CameraInterpolation> InterpolationKinds { get; } =
         Enum.GetValues<CameraInterpolation>();
 
+    private static readonly IReadOnlyList<string> _toneMapOptions = BuildToneMapOptions();
+    /// <summary>Tone-map combo source — the inherit sentinel then every operator.
+    /// A shot pins its own HDR tone-map or inherits the region's (S8).</summary>
+    public IReadOnlyList<string> ToneMapOptions => _toneMapOptions;
+
+    private static IReadOnlyList<string> BuildToneMapOptions()
+    {
+        var list = new List<string>(5) { ToneMapInherit };
+        foreach (var op in Enum.GetValues<ToneMapOperator>()) list.Add(op.ToString());
+        return list;
+    }
+
+    private string _selectedToneMap = ToneMapInherit;
+    /// <summary>Selected tone-map operator name, or the inherit sentinel. Maps to
+    /// <see cref="SceneShot.ToneMap"/> (null when inheriting).</summary>
+    public string SelectedToneMap
+    {
+        get => _selectedToneMap;
+        set { this.RaiseAndSetIfChanged(ref _selectedToneMap, value); _onChanged(); }
+    }
+
     /// <summary>True when this shot's fractal type has an orbit camera to drive
     /// (the raymarch 3D types). Hides the camera row for 2D shots.</summary>
     public bool Supports3DCamera => CameraParamBinding.Supports(_fractalType);
@@ -266,6 +291,9 @@ public sealed class SceneShotRowViewModel : ReactiveObject
             AnimationName = string.Equals(_selectedAnimation, AnimationNone, StringComparison.Ordinal)
                 ? null : _selectedAnimation,
             FractalType = _fractalType,
+            ToneMap = string.Equals(_selectedToneMap, ToneMapInherit, StringComparison.Ordinal)
+                ? null
+                : Enum.Parse<ToneMapOperator>(_selectedToneMap),
             DurationSeconds = _durationSeconds,
             Transition = _transition,
             TransitionSeconds = _transitionSeconds,
@@ -291,6 +319,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         _selectedAnimation = string.IsNullOrEmpty(shot.AnimationName) ? AnimationNone
             : (AnimationNames.Contains(shot.AnimationName!) ? shot.AnimationName! : AnimationNone);
         _fractalType = shot.FractalType;
+        _selectedToneMap = shot.ToneMap.HasValue ? shot.ToneMap.Value.ToString() : ToneMapInherit;
         _durationSeconds = shot.DurationSeconds;
         _transition = shot.Transition;
         _transitionSeconds = shot.TransitionSeconds;
@@ -308,6 +337,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(SelectedAnimation));
         this.RaisePropertyChanged(nameof(FractalType));
         this.RaisePropertyChanged(nameof(Supports3DCamera));
+        this.RaisePropertyChanged(nameof(SelectedToneMap));
         this.RaisePropertyChanged(nameof(DurationSeconds));
         this.RaisePropertyChanged(nameof(Transition));
         this.RaisePropertyChanged(nameof(TransitionSeconds));
