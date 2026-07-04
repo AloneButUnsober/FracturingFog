@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Abstractions.Assets;
 using FracturingFog.Models;
 
@@ -39,6 +40,42 @@ namespace FracturingFog.Assets
             try { return JsonSerializer.Serialize(entry, Indented); }
             catch { return null; }
         }
+
+        // Parse one entry back from standalone JSON (bundle import). Null on
+        // blank / malformed input rather than throwing.
+        public static T? Parse<T>(string json) where T : class
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try { return JsonSerializer.Deserialize<T>(json); }
+            catch { return null; }
+        }
+
+        // Insert-or-replace one entry into a list-backed store by case-insensitive
+        // name, honouring the overwrite flag, then persist via <paramref name="save"/>.
+        // Preserves every field of the deserialized entry (the store's own
+        // SaveEquation helpers often carry only a subset), which matters for
+        // round-tripping flags like Promoted / Kind / chain.
+        public static AssetImportResult Upsert<T>(
+            System.Collections.Generic.IList<T> list, T entry, string name,
+            System.Func<T, string> nameOf, System.Action save, bool overwrite)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return AssetImportResult.Fail;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (nameOf(list[i]).Equals(name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, name);
+                    list[i] = entry;
+                    save();
+                    return new AssetImportResult(AssetImportStatus.Replaced, name);
+                }
+            }
+
+            list.Add(entry);
+            save();
+            return new AssetImportResult(AssetImportStatus.Added, name);
+        }
     }
 
     public sealed class RegionAssetSource : IAssetSource
@@ -57,6 +94,15 @@ namespace FracturingFog.Assets
         public string? ExportJson(string name) => AssetSizing.Json(
             FractalRegionLibrary.Instance.UserRegions
                 .FirstOrDefault(r => r.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var r = AssetSizing.Parse<FractalRegion>(json);
+            if (r == null || string.IsNullOrWhiteSpace(r.Name)) return AssetImportResult.Fail;
+            r.RegionType = RegionType.UserDefined; // imported regions are always user assets
+            var lib = FractalRegionLibrary.Instance;
+            return AssetSizing.Upsert(lib.UserRegions, r, r.Name, x => x.Name, lib.Save, overwrite);
+        }
     }
 
     public sealed class ColorThemeAssetSource : IAssetSource
@@ -75,6 +121,17 @@ namespace FracturingFog.Assets
         public string? ExportJson(string name) => AssetSizing.Json(
             UserColorThemeLibrary.Instance.Themes
                 .FirstOrDefault(t => t.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var t = AssetSizing.Parse<ColorThemeData>(json);
+            if (t == null || string.IsNullOrWhiteSpace(t.Name)) return AssetImportResult.Fail;
+            var lib = UserColorThemeLibrary.Instance;
+            bool exists = lib.Themes.Any(x => x.Name.Equals(t.Name, System.StringComparison.OrdinalIgnoreCase));
+            if (exists && !overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, t.Name);
+            lib.ReplaceOrAdd(t); // persists
+            return new AssetImportResult(exists ? AssetImportStatus.Replaced : AssetImportStatus.Added, t.Name);
+        }
     }
 
     public sealed class AnimationAssetSource : IAssetSource
@@ -91,6 +148,17 @@ namespace FracturingFog.Assets
         public bool Delete(string name) => AnimationLibrary.Instance.Remove(name);
 
         public string? ExportJson(string name) => AssetSizing.Json(AnimationLibrary.Instance.GetByName(name));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var a = AssetSizing.Parse<AnimationData>(json);
+            if (a == null || string.IsNullOrWhiteSpace(a.Name)) return AssetImportResult.Fail;
+            var lib = AnimationLibrary.Instance;
+            bool exists = lib.GetByName(a.Name) != null;
+            if (exists && !overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, a.Name);
+            lib.ReplaceOrAdd(a); // persists
+            return new AssetImportResult(exists ? AssetImportStatus.Replaced : AssetImportStatus.Added, a.Name);
+        }
     }
 
     public sealed class UserEquationAssetSource : IAssetSource
@@ -107,6 +175,14 @@ namespace FracturingFog.Assets
         public bool Delete(string name) => UserEquationStore.Instance.Remove(name);
 
         public string? ExportJson(string name) => AssetSizing.Json(UserEquationStore.Instance.GetByName(name));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var e = AssetSizing.Parse<UserEquationEntry>(json);
+            if (e == null) return AssetImportResult.Fail;
+            var store = UserEquationStore.Instance;
+            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name, store.Save, overwrite);
+        }
     }
 
     public sealed class SandboxEquationAssetSource : IAssetSource
@@ -123,6 +199,14 @@ namespace FracturingFog.Assets
         public bool Delete(string name) => SandboxEquationStore.Instance.Remove(name);
 
         public string? ExportJson(string name) => AssetSizing.Json(SandboxEquationStore.Instance.GetByName(name));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var e = AssetSizing.Parse<SandboxEquationEntry>(json);
+            if (e == null) return AssetImportResult.Fail;
+            var store = SandboxEquationStore.Instance;
+            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name, store.Save, overwrite);
+        }
     }
 
     public sealed class UserBulbAssetSource : IAssetSource
@@ -139,6 +223,14 @@ namespace FracturingFog.Assets
         public bool Delete(string name) => UserBulbStore.Instance.Remove(name);
 
         public string? ExportJson(string name) => AssetSizing.Json(UserBulbStore.Instance.GetByName(name));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var e = AssetSizing.Parse<UserBulbEntry>(json);
+            if (e == null) return AssetImportResult.Fail;
+            var store = UserBulbStore.Instance;
+            return AssetSizing.Upsert(store.Equations, e, e.Name, x => x.Name, store.Save, overwrite);
+        }
     }
 
     /// <summary>SlideshowConfigLibrary is a static file gateway, not a live
@@ -166,6 +258,17 @@ namespace FracturingFog.Assets
         public string? ExportJson(string name) => AssetSizing.Json(
             SlideshowConfigLibrary.Load().Configs
                 .FirstOrDefault(c => c.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var c = AssetSizing.Parse<SlideshowConfig>(json);
+            if (c == null || string.IsNullOrWhiteSpace(c.Name)) return AssetImportResult.Fail;
+            var file = SlideshowConfigLibrary.Load();
+            bool exists = file.Configs.Any(x => x.Name.Equals(c.Name, System.StringComparison.OrdinalIgnoreCase));
+            if (exists && !overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, c.Name);
+            SlideshowConfigLibrary.Upsert(file, c); // persists; also marks imported preset active
+            return new AssetImportResult(exists ? AssetImportStatus.Replaced : AssetImportStatus.Added, c.Name);
+        }
     }
 
     public sealed class WatermarkAssetSource : IAssetSource
@@ -182,5 +285,13 @@ namespace FracturingFog.Assets
         public bool Delete(string name) => UserWatermarkStore.Instance.Remove(name);
 
         public string? ExportJson(string name) => AssetSizing.Json(UserWatermarkStore.Instance.GetByName(name));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var w = AssetSizing.Parse<WatermarkDef>(json);
+            if (w == null) return AssetImportResult.Fail;
+            var store = UserWatermarkStore.Instance;
+            return AssetSizing.Upsert(store.Watermarks, w, w.Name, x => x.Name, store.Save, overwrite);
+        }
     }
 }

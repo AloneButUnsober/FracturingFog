@@ -43,4 +43,11 @@ public sealed partial class AssetManagerView : Window
             .ToList() ?? new System.Collections.Generic.List<AssetRowViewModel>();
         vm.ExportBundle(rows);
     }
+
+    // Bulk import (A3 import): the VM raises ImportRequested, which the shell
+    // bubbles to the host (open picker + overwrite prompt + file read + report).
+    private void OnImportBundle(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        (DataContext as AssetManagerViewModel)?.RequestImport();
+    }
 }

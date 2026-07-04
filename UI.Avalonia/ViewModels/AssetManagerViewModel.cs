@@ -160,6 +160,72 @@ public sealed class AssetManagerViewModel : ViewModelBase
             new AssetExportEventArgs(bytes, $"fracturingfog-assets-{DateTime.Now:yyyyMMdd-HHmmss}.zip", written));
     }
 
+    /// <summary>Ask the host to pick a bundle file to import (A3 import). The
+    /// host reads the bytes and calls back into <see cref="ImportBundle"/> — this
+    /// VM never touches file dialogs (same split as export).</summary>
+    public void RequestImport() => ImportRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Bulk import (A3 import) — read a zip bundle produced by
+    /// <see cref="ExportBundle"/> and route each <c>&lt;Kind&gt;/&lt;name&gt;.json</c>
+    /// entry back to its source. The folder segment picks the source; the entry's
+    /// own Name keys the store. Same-name collisions replace when
+    /// <paramref name="overwrite"/> is set, otherwise skip. Re-enumerates the
+    /// current list afterwards so imports show immediately.</summary>
+    public AssetImportSummary ImportBundle(byte[] zipBytes, bool overwrite)
+    {
+        var summary = new AssetImportSummary();
+        if (zipBytes == null || zipBytes.Length == 0) return summary;
+
+        try
+        {
+            using var ms = new MemoryStream(zipBytes, writable: false);
+            using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
+            foreach (var entry in zip.Entries)
+            {
+                // Directories / non-JSON payloads (entry.Name is blank for dir
+                // markers) aren't assets.
+                if (string.IsNullOrEmpty(entry.Name)) continue;
+                if (!entry.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (!TryKindFromPath(entry.FullName, out var kind))
+                {
+                    summary.Failed++;
+                    continue;
+                }
+                var src = SourceFor(kind);
+                if (src == null) { summary.Failed++; continue; }
+
+                string json;
+                using (var r = new StreamReader(entry.Open(), Encoding.UTF8))
+                    json = r.ReadToEnd();
+
+                var result = src.ImportJson(json, overwrite);
+                summary.Tally(result.Status);
+            }
+        }
+        catch (Exception)
+        {
+            // A malformed archive throws on open/read — report it as a bad bundle
+            // rather than crashing the manager.
+            summary.BadArchive = true;
+        }
+
+        RefreshAssets();
+        return summary;
+    }
+
+    // First path segment ("Region/Foo.json" → "Region") is the AssetKind name the
+    // export wrote. Case-insensitive so a hand-edited bundle still resolves.
+    private static bool TryKindFromPath(string fullName, out AssetKind kind)
+    {
+        kind = default;
+        int slash = fullName.IndexOf('/');
+        if (slash <= 0) slash = fullName.IndexOf('\\'); // tolerate back-slash separators
+        if (slash <= 0) return false;
+        string folder = fullName.Substring(0, slash);
+        return Enum.TryParse(folder, ignoreCase: true, out kind);
+    }
+
     private IAssetSource? SourceFor(AssetKind kind)
     {
         foreach (var s in _sources)
@@ -199,6 +265,49 @@ public sealed class AssetManagerViewModel : ViewModelBase
 
     /// <summary>Raised with the assembled zip bytes for the host to save (A3).</summary>
     public event EventHandler<AssetExportEventArgs>? ExportRequested;
+
+    /// <summary>Raised when the user clicks Import bundle — the host picks a zip,
+    /// reads the bytes, and calls <see cref="ImportBundle"/> (A3 import).</summary>
+    public event EventHandler? ImportRequested;
+}
+
+/// <summary>Tally of one bundle-import pass, shown back to the user (A3 import).</summary>
+public sealed class AssetImportSummary
+{
+    public int Added { get; set; }
+    public int Replaced { get; set; }
+    public int Skipped { get; set; }
+    public int Failed { get; set; }
+
+    /// <summary>The archive itself couldn't be opened/read (not a valid zip).</summary>
+    public bool BadArchive { get; set; }
+
+    public int Total => Added + Replaced + Skipped + Failed;
+
+    public void Tally(AssetImportStatus status)
+    {
+        switch (status)
+        {
+            case AssetImportStatus.Added:         Added++;    break;
+            case AssetImportStatus.Replaced:      Replaced++; break;
+            case AssetImportStatus.SkippedExists: Skipped++;  break;
+            default:                              Failed++;   break;
+        }
+    }
+
+    /// <summary>One-line human summary for the host's confirmation dialog.</summary>
+    public string Describe()
+    {
+        if (BadArchive) return "Import failed: the file is not a valid asset bundle.";
+        if (Total == 0) return "Nothing to import — the bundle held no assets.";
+
+        var parts = new System.Collections.Generic.List<string>(4);
+        if (Added > 0)    parts.Add($"{Added} added");
+        if (Replaced > 0) parts.Add($"{Replaced} replaced");
+        if (Skipped > 0)  parts.Add($"{Skipped} skipped (already exist)");
+        if (Failed > 0)   parts.Add($"{Failed} failed");
+        return "Import complete: " + string.Join(", ", parts) + ".";
+    }
 }
 
 /// <summary>Carries an Asset Manager row's kind + name to the shell's editor

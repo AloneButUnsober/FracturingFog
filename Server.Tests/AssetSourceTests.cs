@@ -97,4 +97,67 @@ public sealed class AssetSourceTests
 
         Assert.True(src.Delete(name));
     }
+
+    [Fact]
+    public void ImportJson_round_trips_export_and_preserves_fields()
+    {
+        const string name = "AM_Import_Equation";
+        var store = UserEquationStore.Instance;
+        store.Remove(name);
+        // Promoted=true is a field the store's SaveEquation() upsert does NOT
+        // carry — proves import preserves the whole entry, not just name+source.
+        store.SaveEquation(name, "return z*z*z + c;");
+        store.SetPromoted(name, true);
+
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.UserEquation);
+        string json = src.ExportJson(name)!;
+
+        // Wipe, then import the exported JSON back — should re-add.
+        Assert.True(src.Delete(name));
+        var added = src.ImportJson(json, overwrite: false);
+        Assert.Equal(AssetImportStatus.Added, added.Status);
+        Assert.Equal(name, added.Name);
+
+        var back = store.GetByName(name);
+        Assert.NotNull(back);
+        Assert.Equal("return z*z*z + c;", back!.Source);
+        Assert.True(back.Promoted); // full-fidelity round-trip
+
+        src.Delete(name);
+    }
+
+    [Fact]
+    public void ImportJson_skips_or_replaces_on_name_collision_by_flag()
+    {
+        const string name = "AM_Import_Collision";
+        var store = UserWatermarkStore.Instance;
+        store.Remove(name);
+        store.SaveWatermark(new WatermarkDef { Name = name, Text = "original" });
+
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.Watermark);
+
+        // A bundle payload carrying the same name but different content.
+        string incoming = JsonSerializer.Serialize(new WatermarkDef { Name = name, Text = "incoming" });
+
+        // overwrite:false leaves the existing asset untouched.
+        var skipped = src.ImportJson(incoming, overwrite: false);
+        Assert.Equal(AssetImportStatus.SkippedExists, skipped.Status);
+        Assert.Equal("original", store.GetByName(name)!.Text);
+
+        // overwrite:true replaces it.
+        var replaced = src.ImportJson(incoming, overwrite: true);
+        Assert.Equal(AssetImportStatus.Replaced, replaced.Status);
+        Assert.Equal("incoming", store.GetByName(name)!.Text);
+
+        store.Remove(name);
+    }
+
+    [Fact]
+    public void ImportJson_returns_failed_on_garbage_input()
+    {
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.UserEquation);
+
+        Assert.Equal(AssetImportStatus.Failed, src.ImportJson("not json at all", overwrite: true).Status);
+        Assert.Equal(AssetImportStatus.Failed, src.ImportJson("", overwrite: true).Status);
+    }
 }
