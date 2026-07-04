@@ -5,6 +5,7 @@ using FracturingFog;
 using FracturingFog.Abstractions.Animation;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.Rendering.Lighting;
 using Xunit;
 
 namespace FracturingFog.Server.Tests;
@@ -132,6 +133,54 @@ public sealed class SceneLibraryTests
 
         var dst = JsonSerializer.Deserialize<SceneData>(json, opts);
         Assert.Null(dst!.Shots[0].Camera);
+    }
+
+    // ── Per-shot tone-map override (S8) ──────────────────────────────────────
+
+    /// <summary>A set per-shot tone-map override round-trips as an enum string
+    /// and survives serialisation.</summary>
+    [Fact]
+    public void SceneShot_ToneMapOverride_RoundTrips_AsEnumString()
+    {
+        var src = new SceneData
+        {
+            Name = "Tonemapped",
+            Shots = new List<SceneShot>
+            {
+                new SceneShot
+                {
+                    FractalType = FractalType.Mandelbulb,
+                    ToneMap = ToneMapOperator.Aces,
+                },
+            },
+        };
+
+        var opts = SceneLibrary.BuildJsonOptions();
+        string json = JsonSerializer.Serialize(src, opts);
+        Assert.Contains("\"ToneMap\": \"Aces\"", json);
+        Assert.DoesNotContain("\"ToneMap\": 3", json);
+
+        var dst = JsonSerializer.Deserialize<SceneData>(json, opts);
+        Assert.Equal(ToneMapOperator.Aces, dst!.Shots[0].ToneMap);
+    }
+
+    /// <summary>A null tone-map (inherit the region's) must not serialise and
+    /// must round-trip back to null.</summary>
+    [Fact]
+    public void SceneShot_NullToneMap_IsOmitted_AndRoundTripsToNull()
+    {
+        var src = new SceneData
+        {
+            Name = "Inherit look",
+            Shots = new List<SceneShot> { new SceneShot { FractalType = FractalType.Mandelbrot } },
+        };
+
+        var opts = SceneLibrary.BuildJsonOptions();
+        string json = JsonSerializer.Serialize(src, opts);
+        Assert.DoesNotContain("\"ToneMap\"", json);
+
+        var dst = JsonSerializer.Deserialize<SceneData>(json, opts);
+        Assert.Null(dst!.Shots[0].ToneMap);
     }
 
     // ── Computed duration ────────────────────────────────────────────────────
