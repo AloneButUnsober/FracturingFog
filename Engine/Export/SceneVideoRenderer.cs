@@ -326,6 +326,15 @@ namespace FracturingFog.Export
             // has no global tracks (frozen-outgoing renders pass none).
             SceneGlobalTracks.Apply(globalTracks, p, globalTime);
 
+            // Per-shot tone-map override (S8). Applied last so it pins this shot's
+            // HDR tone-map regardless of the region lighting; null = inherit.
+            if (shot.ToneMap is { } tm)
+            {
+                var fx = p.Lighting;
+                fx.ToneMap = tm;
+                p.Lighting = fx;
+            }
+
             var req = new PosterRequest
             {
                 FractalType = shot.RenderType,
@@ -422,6 +431,7 @@ namespace FracturingFog.Export
                 BaseParams = p,
                 Animation = anim,
                 Camera = shot.Camera,
+                ToneMap = shot.ToneMap,
             };
         }
 
@@ -536,6 +546,7 @@ namespace FracturingFog.Export
             public FractalParameters BaseParams = null!;
             public AnimationData? Animation;
             public CameraTrack? Camera;
+            public Rendering.Lighting.ToneMapOperator? ToneMap;
         }
     }
 }

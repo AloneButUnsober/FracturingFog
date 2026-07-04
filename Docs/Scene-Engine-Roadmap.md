@@ -605,8 +605,21 @@ demo scene shows a Mandelbulb orbit fading up out of near-black. 18 tests in
 round-trip per target, later-wins apply, animator, JSON enum-string round-trip,
 built-in sanity).
 
-Scope calls, deferred with rationale: **tone-map** is a discrete operator enum,
-not a keyframeable scalar — it stays a per-shot choice, not a track.
+**Per-shot tone-map — Shipped.** `SceneShot.ToneMap` is a nullable
+`ToneMapOperator` (None / Reinhard / ReinhardExtended / ACES); null inherits the
+shot's region lighting, a value pins the shot's HDR tone-map. It is deliberately
+a per-shot discrete choice, **not** a keyframed global track — a tone-map
+operator is a look decision, not a continuous scalar, so it lives on the shot
+next to the region/theme picks rather than in `SceneGlobalTarget` (which carries
+the continuous exposure / bloom knobs). The offline renderer
+(`SceneVideoRenderer.RenderShotFrame`) applies it last, after the shot's region
+lighting + the scene global tracks, so it overrides regardless of the region's
+own operator; the Scene Editor exposes it as a per-shot combo and the realtime
+driver pins it on the live params at each shot cut. Null omits from scenes.json
+and round-trips as an enum string. 2 tests in `SceneLibraryTests`
+(enum-string round-trip, null-omission).
+
+Scope calls, deferred with rationale:
 **IBL-sky-rotation** has no field yet (the HDRI sampler reads the surface normal
 with no yaw offset); adding it means plumbing a rotation through all 8 CPU + 8
 GPU raymarchers — a Lighting-FX-roadmap phase — but the `SceneGlobalTarget` enum

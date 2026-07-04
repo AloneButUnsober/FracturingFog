@@ -17,6 +17,7 @@
 using System.Collections.Generic;
 using FracturingFog;
 using FracturingFog.Render;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Abstractions.Animation;
 
@@ -69,6 +70,15 @@ public sealed class SceneShot
     /// validated against <see cref="Render.CameraParamBinding"/> without first
     /// resolving the region.</summary>
     public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
+
+    /// <summary>Optional per-shot tone-map operator override (S8 polish). Null =
+    /// inherit whatever the shot's region lighting already carries; a value pins
+    /// this shot's HDR tone-map (None / Reinhard / ReinhardExtended / ACES).
+    /// Deliberately a per-shot discrete choice, not a keyframed global track —
+    /// a tone-map operator is a look decision, not a continuous scalar (see
+    /// <see cref="SceneGlobalTarget"/> which carries the continuous exposure /
+    /// bloom knobs instead).</summary>
+    public ToneMapOperator? ToneMap { get; set; }
 
     /// <summary>Optional keyframed orbit camera (S3). Only meaningful for the 3D
     /// raymarch types (<see cref="Render.CameraParamBinding.Supports"/>); null
