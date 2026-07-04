@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Linq;
+using FracturingFog.Abstractions;
 using FracturingFog.Hosting;
 using FracturingFog.Models;
 using FracturingFog.ViewState;
@@ -18,6 +20,7 @@ namespace FracturingFog.Server.Tests;
 ///   • a rename that collides with a different region is refused,
 ///   • keep/clear toggles for the embedded watermark are honoured.
 /// </summary>
+[Collection(FractalRegionLibraryCollection.Name)]
 public sealed class RegionEditorServiceTests
 {
     private static FractalRegion MakeUserRegion(string name) => new()
@@ -242,6 +245,41 @@ public sealed class RegionEditorServiceTests
             Assert.Equal(4242, saved.Iterations);
         }
         finally { lib.RemoveUserRegion(name); }
+    }
+
+    [Fact]
+    public void Save_IsAtomic_KeepsRollbackBackupAndNoTempLeftover()
+    {
+        var lib = FractalRegionLibrary.Instance;
+        // Runs under the test data-root redirect (TestDataRootIsolation), so
+        // this path points at a throwaway temp dir, never the real user file.
+        string file = AppDataPaths.Combine("regions.json");
+        string bak  = file + ".bak";
+        string tmp  = file + ".tmp";
+        string a = $"FF-RegEdit-Atomic-A-{Guid.NewGuid():N}";
+        string b = $"FF-RegEdit-Atomic-B-{Guid.NewGuid():N}";
+
+        try
+        {
+            // First save creates the file; a second save must swap atomically,
+            // moving the prior good copy aside to regions.json.bak.
+            Assert.True(lib.AddUserRegion(MakeUserRegion(a)));
+            Assert.True(lib.AddUserRegion(MakeUserRegion(b)));
+
+            Assert.True(File.Exists(file));
+            Assert.True(File.Exists(bak), "atomic swap should leave a .bak rollback copy");
+            Assert.False(File.Exists(tmp), "temp file must not linger after a successful swap");
+
+            // The rollback copy is the previous good state — before B existed.
+            string bakJson = File.ReadAllText(bak);
+            Assert.Contains(a, bakJson);
+            Assert.DoesNotContain(b, bakJson);
+        }
+        finally
+        {
+            lib.RemoveUserRegion(a);
+            lib.RemoveUserRegion(b);
+        }
     }
 
     [Fact]

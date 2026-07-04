@@ -4,6 +4,8 @@ using System.Runtime.CompilerServices;
 
 using FracturingFog.Abstractions;
 
+using Xunit;
+
 namespace FracturingFog.Server.Tests;
 
 /// <summary>
@@ -37,4 +39,18 @@ internal static class TestDataRootIsolation
             Guid.NewGuid().ToString("N"));
         AppDataPaths.SetProcessRootOverride(temp);
     }
+}
+
+/// <summary>
+/// Serializes every test class that writes the shared
+/// <c>FractalRegionLibrary.Instance</c> (a process-wide singleton persisting
+/// to one <c>regions.json</c>). Without this, classes run in parallel and
+/// concurrent <c>Save()</c> calls race on the same file — corrupting the
+/// atomic-swap backup assertions and each other's state. Members:
+/// <c>RegionEditorServiceTests</c>, <c>AnimationLibrarySaveLoopTests</c>.
+/// </summary>
+[CollectionDefinition(FractalRegionLibraryCollection.Name, DisableParallelization = true)]
+public sealed class FractalRegionLibraryCollection
+{
+    public const string Name = "FractalRegionLibrary";
 }

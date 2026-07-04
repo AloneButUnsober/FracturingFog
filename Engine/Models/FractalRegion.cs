@@ -920,11 +920,26 @@ namespace FracturingFog.Models
                 Directory.CreateDirectory(SettingsDir);
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 string json = JsonSerializer.Serialize(UserRegions, options);
-                File.WriteAllText(RegionsFile, json);
+
+                // Atomic write with one-level rollback. Serialize to a sibling
+                // temp file, then swap it into place: File.Replace moves the
+                // previous good regions.json aside to regions.json.bak and
+                // renames the temp in atomically, so a reader never sees a
+                // half-written file and the last-known-good copy survives one
+                // bad/empty save (regions.json got wiped to "[]" once — the
+                // .bak makes that recoverable in-place).
+                string tmp = RegionsFile + ".tmp";
+                File.WriteAllText(tmp, json);
+                if (File.Exists(RegionsFile))
+                    File.Replace(tmp, RegionsFile, RegionsFile + ".bak");
+                else
+                    File.Move(tmp, RegionsFile);
             }
             catch
             {
                 // Non-fatal — user loses saved regions but app continues.
+                // Best-effort cleanup of a stray temp file from a failed swap.
+                try { File.Delete(RegionsFile + ".tmp"); } catch { /* ignore */ }
             }
         }
 

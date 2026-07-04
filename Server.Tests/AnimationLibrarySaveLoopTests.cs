@@ -16,6 +16,7 @@ namespace FracturingFog.Server.Tests;
 /// and the FractalRegion+AnimationName attach contract the Save Region
 /// dialog writes.
 /// </summary>
+[Collection(FractalRegionLibraryCollection.Name)]
 public sealed class AnimationLibrarySaveLoopTests
 {
     private static AnimationData MakeTestAnimation(string name, double freq = 0.1) => new()
