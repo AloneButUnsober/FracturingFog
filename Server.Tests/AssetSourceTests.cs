@@ -20,6 +20,13 @@ namespace FracturingFog.Server.Tests;
 /// UI.Avalonia (not referenced here); ExportJson — the per-asset half of the A3
 /// bundle — is covered directly.
 /// </summary>
+/// <remarks>Joins the non-parallel <see cref="FractalRegionLibraryCollection"/>
+/// because the adapters mutate + Save() the process-wide region / animation /
+/// scene library singletons over one shared (redirected) data root. Without
+/// serialisation these race the other singleton-mutating classes (e.g.
+/// <see cref="SceneLibraryTests"/>) — the race surfaced intermittently as a
+/// null scene after a fresh ImportJson.</remarks>
+[Collection(FractalRegionLibraryCollection.Name)]
 public sealed class AssetSourceTests
 {
     [Fact]

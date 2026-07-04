@@ -467,6 +467,54 @@ pipeline. Accumulation motion blur (render N sub-frames per output frame at
 sub-tick camera offsets, average) — only viable in offline mode, large
 fidelity boost for camera motion.
 
+**Status — Shipped.**
+
+Pure core — `SceneRenderPlan` (Abstractions/Animation). Turns a `SceneData` +
+`SceneRenderSettings` (fps, motion-blur sub-frames, shutter fraction) into the
+exact list of output frames an encoder must emit, and — per frame — the
+motion-blur sub-frame sample times + weights and the optional cross-fade
+composite. It is the deferred consumer the S6 note promised ("the timeline
+already computes the blend factor for S7 to consume — no re-work, just a
+consumer"): each frame's composite reads `SceneTimeline`'s blend directly.
+Accumulation blur spreads N sub-samples across the open-shutter window at the
+frame's leading edge (uniform box filter, weights sum to 1); the frozen
+outgoing frame is the outgoing shot's final instant, mirroring the realtime
+freeze that keeps two shots from running live at once. Deterministic + pure +
+unit-tested; no render, no I/O.
+
+Offline renderer — `Engine/Export/SceneVideoRenderer`. Consumes the plan,
+resolves each shot once against the region / theme / animation libraries
+(self-contained — no live render host, so it is callable headless), and for
+each output frame renders every sub-frame via `PosterRenderer`'s offscreen
+calculator, applies the shot's param animation + keyframed orbit camera at that
+sub-frame's local time, weight-averages them (accumulation motion blur), and —
+inside a transition window — blends the frozen outgoing frame in by the plan's
+blend factor (**the frame-composited cross-fade S6 deferred here** — realtime
+cuts because compositing two live 3D raymarchers breaches the ~90% cap; offline
+renders sub-frames anyway, so the fade is free). One calculator is live at a
+time, so peak memory is a single frame's accumulators plus the pending PNG
+queue — inside the cap. Frames go through the cross-platform `PngSequenceWriter`
+→ `FfmpegEncoder` pipeline the batch video/slideshow paths already use; a
+missing ffmpeg keeps the recoverable PNG sequence rather than failing.
+
+Driver — headless `--batch --mode scene --scene NAME` (`BatchRenderer.RenderScene`),
+with `--motion-blur N` / `--shutter F` / `--fps` / `--encode` / `--width`
+/`--height` / `--out` / `--keep-frames`. Consistent with the existing
+video/slideshow batch modes; the Avalonia "Export Scene…" command is a thin
+follow-up over the same engine API.
+
+Tests: 12 in `SceneRenderPlanTests` (frame counting incl. partial-trailing +
+exact-multiple edges, sub-frame count / weights / ascending times / shutter
+window, sub-frame→shot mapping, cross-fade composite + rising blend + frozen
+outgoing frame, cut suppression, LightSweep/ParamMorph→crossfade fallback,
+empty scene, settings clamps). The renderer + batch driver are integration
+surface (not unit-covered) but reuse the battle-tested
+`BuildCaptureCalculator` / `PngSequenceWriter` / `FfmpegEncoder` primitives; an
+end-to-end smoke render of the built-in "Mandelbulb Orbit" scene produced the
+expected 40-frame sequence. While here, serialised `AssetSourceTests` +
+`SceneLibraryTests` into the non-parallel library-singleton collection to close
+a latent scenes.json race the new test class perturbed into view.
+
 ### S8 — Polish
 
 Bezier easing editor (this is the deferred Animation-roadmap `D.1` keyframe

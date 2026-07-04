@@ -8,7 +8,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog.Batch
 {
-    public enum BatchMode { Image, Video, Slideshow }
+    public enum BatchMode { Image, Video, Slideshow, Scene }
 
     /// <summary>
     /// Mirrors VideoDialog.LosslessEncodeChoice so the CL batch path offers
@@ -77,6 +77,17 @@ namespace FracturingFog.Batch
         /// batch slideshow cadence only; interactive slideshow honours the
         /// shell-level FocusRegion toggle.</summary>
         public bool MoreColors { get; set; }
+
+        // ── Scene mode (Scene Engine Roadmap S7) ──────────────────────────
+        /// <summary>Name of a saved SceneData in scenes.json to render offline.
+        /// Required in scene mode.</summary>
+        public string? SceneName { get; set; }
+        /// <summary>Accumulation motion-blur sub-frames per output frame (1 = off).
+        /// Higher = smoother camera/param-motion blur at N× render cost.</summary>
+        public int MotionBlurSubframes { get; set; } = 1;
+        /// <summary>Open-shutter fraction of the frame interval for motion blur
+        /// (0.5 ≈ a 180° shutter). Clamped to (0,1].</summary>
+        public double ShutterFraction { get; set; } = 0.5;
         /// <summary>When true, paint the watermark + program-name sub-line into
         /// every emitted frame across image / video / slideshow batch modes.
         /// Image mode already watermarks unconditionally for parity with the
@@ -133,13 +144,31 @@ namespace FracturingFog.Batch
                         if (string.Equals(mv, "image", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Image;
                         else if (string.Equals(mv, "video", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Video;
                         else if (string.Equals(mv, "slideshow", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Slideshow;
-                        else { error = $"Unknown --mode '{mv}'. Use image|video|slideshow."; return false; }
+                        else if (string.Equals(mv, "scene", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Scene;
+                        else { error = $"Unknown --mode '{mv}'. Use image|video|slideshow|scene."; return false; }
                         break;
 
                     case "--slideshow":
                         if (!Next(args, ref i, a, out string sname, out error)) return false;
                         opts.Mode = BatchMode.Slideshow;
                         opts.SlideshowConfigName = sname;
+                        break;
+
+                    case "--scene":
+                        if (!Next(args, ref i, a, out string scName, out error)) return false;
+                        opts.Mode = BatchMode.Scene;
+                        opts.SceneName = scName;
+                        break;
+
+                    case "--motion-blur":
+                    case "--subframes":
+                        if (!NextInt(args, ref i, a, out int mbv, out error)) return false;
+                        opts.MotionBlurSubframes = mbv;
+                        break;
+
+                    case "--shutter":
+                        if (!NextDouble(args, ref i, a, out double shv, out error)) return false;
+                        opts.ShutterFraction = shv;
                         break;
 
                     case "--encode":
@@ -398,9 +427,10 @@ namespace FracturingFog.Batch
                 return true;
             }
 
-            // Slideshow mode pulls its region/theme set from the named config —
-            // no region/coord requirement.
-            if (opts.Mode != BatchMode.Slideshow && string.IsNullOrWhiteSpace(opts.RegionName))
+            // Slideshow + scene modes pull their region/theme set from the named
+            // config / scene shots — no region/coord requirement.
+            if (opts.Mode != BatchMode.Slideshow && opts.Mode != BatchMode.Scene
+                && string.IsNullOrWhiteSpace(opts.RegionName))
             {
                 if (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null)
                 {
@@ -439,6 +469,18 @@ namespace FracturingFog.Batch
                     { error = "--fps must be 1..240."; return false; }
                 if (!opts.KeepFramesSpecified)
                     opts.KeepFrames = opts.Lossless == BatchLossless.None;
+            }
+
+            if (opts.Mode == BatchMode.Scene)
+            {
+                if (string.IsNullOrWhiteSpace(opts.SceneName))
+                    { error = "Scene mode requires --scene NAME."; return false; }
+                if (opts.VideoFps < 1 || opts.VideoFps > 240)
+                    { error = "--fps must be 1..240."; return false; }
+                if (opts.MotionBlurSubframes < 1 || opts.MotionBlurSubframes > 64)
+                    { error = "--motion-blur must be 1..64."; return false; }
+                if (opts.ShutterFraction <= 0.0 || opts.ShutterFraction > 1.0)
+                    { error = "--shutter must be in (0, 1]."; return false; }
             }
 
             return true;

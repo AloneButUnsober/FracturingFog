@@ -53,6 +53,13 @@ namespace FracturingFog.Batch
             // resolve names the user authored interactively in earlier runs.
             try { FracturingFog.Models.ColorPalette.LoadUserThemes(); } catch { }
             try { FractalRegionLibrary.Instance.Load(); } catch { }
+            // Scene mode also needs the scene + animation libraries so --scene
+            // names and shot-attached animations resolve.
+            if (opts.Mode == BatchMode.Scene)
+            {
+                try { FracturingFog.Models.AnimationLibrary.Instance.Load(); } catch { }
+                try { FracturingFog.Models.SceneLibrary.Instance.Load(); } catch { }
+            }
 
             try
             {
@@ -63,6 +70,7 @@ namespace FracturingFog.Batch
                     BatchMode.Image => BatchRenderer.RenderImage(opts),
                     BatchMode.Video => BatchRenderer.RenderVideo(opts),
                     BatchMode.Slideshow => BatchRenderer.RenderSlideshow(opts),
+                    BatchMode.Scene => BatchRenderer.RenderScene(opts),
                     _ => 2,
                 };
             }
@@ -151,6 +159,17 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              per-theme dwell). Synonym of the \"Slideshow: More");
             Console.WriteLine("                              Colors\" context-menu item.");
             Console.WriteLine("  --out PATH                  Output video file (extension implied by --encode).");
+            Console.WriteLine();
+            Console.WriteLine("Scene options (--mode scene):");
+            Console.WriteLine("  --scene NAME                Saved scene name in scenes.json (implies --mode scene).");
+            Console.WriteLine("  --fps N                     Output frame rate (default 30).");
+            Console.WriteLine("  --motion-blur N             Accumulation motion-blur sub-frames per output frame");
+            Console.WriteLine("                              (1 = off, default). Renders N sub-frames at sub-tick");
+            Console.WriteLine("                              camera/param times and averages them. Cost is N× per frame.");
+            Console.WriteLine("  --shutter F                 Open-shutter fraction 0<F<=1 (default 0.5 ≈ 180°).");
+            Console.WriteLine("  --encode TYPE               ffmpeg preset: h264hq (default) | h264 | ffv1.");
+            Console.WriteLine("  --width/--height/--out      Output size + container path (folder or file).");
+            Console.WriteLine("  --keep-frames               Keep the intermediate PNG sequence after encode.");
             Console.WriteLine();
             Console.WriteLine("Video options (--mode video):");
             Console.WriteLine("  --seconds VAL               Duration (default 20.0)");

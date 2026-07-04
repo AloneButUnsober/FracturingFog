@@ -723,6 +723,81 @@ namespace FracturingFog.Batch
             return 0;
         }
 
+        // ── Scene (Scene Engine Roadmap S7) ─────────────────────────────────
+        //
+        // Offline, frame-locked render of a saved SceneData to MP4 via the
+        // cross-platform SceneVideoRenderer (PNG sequence → ffmpeg). Adds
+        // accumulation motion blur (--motion-blur N) and frame-composited
+        // cross-fades the realtime S6 path deferred here. The scene + animation
+        // libraries are loaded by BatchEntry before dispatch.
+        public static int RenderScene(BatchOptions opts)
+        {
+            var scene = FracturingFog.Models.SceneLibrary.Instance.GetByName(opts.SceneName);
+            if (scene == null)
+            {
+                var names = FracturingFog.Models.SceneLibrary.Instance.Scenes
+                    .ConvertAll(s => s.Name);
+                Console.Error.WriteLine(
+                    $"Scene '{opts.SceneName}' not found in scenes.json. " +
+                    $"Available: {(names.Count == 0 ? "(none)" : string.Join(", ", names))}");
+                return 3;
+            }
+
+            var encodePreset = opts.SlideshowEncode switch
+            {
+                BatchLossless.LosslessH264Mp4 => FfmpegEncoder.Preset.LosslessH264Mp4,
+                BatchLossless.Ffv1Mkv         => FfmpegEncoder.Preset.Ffv1Mkv,
+                _                             => FfmpegEncoder.Preset.HighQualityH264Mp4,
+            };
+
+            var sceneOpts = new FracturingFog.Export.SceneVideoOptions
+            {
+                Width = opts.Width,
+                Height = opts.Height,
+                Encode = encodePreset,
+                OutputPath = opts.OutputPath,
+                KeepFrames = opts.KeepFrames,
+                Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
+                {
+                    Fps = opts.VideoFps,
+                    MotionBlurSubframes = opts.MotionBlurSubframes,
+                    ShutterFraction = opts.ShutterFraction,
+                },
+            };
+
+            int outW = opts.Width & ~1;
+            int outH = opts.Height & ~1;
+            Console.WriteLine($"Batch scene render");
+            Console.WriteLine($"  scene       : {scene.Name}  ({scene.Shots.Count} shots, {scene.TotalDurationSeconds:G4}s authored)");
+            Console.WriteLine($"  size        : {outW}x{outH}  fps: {opts.VideoFps}");
+            Console.WriteLine($"  motion blur : {opts.MotionBlurSubframes} subframe(s), shutter {opts.ShutterFraction:G3}");
+            Console.WriteLine($"  encode      : {encodePreset}");
+            Console.WriteLine($"  out         : {opts.OutputPath}");
+
+            if (!FfmpegEncoder.IsAvailable())
+                Console.WriteLine("  note        : ffmpeg not found — will keep the PNG sequence instead of encoding.");
+
+            var progress = new ConsoleProgress("Frames");
+            var result = FracturingFog.Export.SceneVideoRenderer.Render(
+                scene, sceneOpts,
+                (frac, line) => progress.Report(frac, line),
+                CancellationToken.None);
+            progress.Finish(result.Ok ? $"frames={result.FramesWritten}" : "incomplete");
+
+            if (result.Ok)
+            {
+                if (!string.IsNullOrEmpty(result.VideoPath))
+                    Console.WriteLine($"Scene saved: {result.VideoPath}");
+                else if (!string.IsNullOrEmpty(result.FrameFolder))
+                    Console.WriteLine($"PNG sequence kept at: {result.FrameFolder}");
+                return 0;
+            }
+
+            Console.Error.WriteLine(result.Message ?? "Scene render failed.");
+            // ffmpeg-missing left a recoverable PNG sequence — not a hard failure.
+            return string.IsNullOrEmpty(result.FrameFolder) ? 4 : 1;
+        }
+
         private static (double cx, double cy, double zoom, int iter,
                         FractalType frType, QualityPreset quality, string? regionName)
             ResolveRegion(BatchOptions opts)
