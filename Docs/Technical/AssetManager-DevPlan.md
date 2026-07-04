@@ -2,12 +2,11 @@
 
 > Companion pages: [Technical Index](_Index.md) · [Animation Roadmap](../Animation-Roadmap.md) (Sub-goal A) · [Region Editor Dev Plan](RegionEditor-DevPlan.md) (Sub-goal B) · [Regions Guide](../User/Regions-Guide.md)
 
-**Status: DEFERRED.** Tracking doc only — no code has shipped and none is
-in progress. This plan captures the design so future-us doesn't
-re-derive it. Region Editor ([Sub-goal B](RegionEditor-DevPlan.md)) is
-being built first; Asset Manager builds *on top of* it (Region rows in
-the Asset Manager route to the Region Editor as their detail-pane
-editor). Do not start this until Region Editor has shipped.
+**Status: SHIPPED (A0–A3).** All four phases have landed on
+`feature/cross-platform-full`. Region rows route to the Region Editor
+([Sub-goal B](RegionEditor-DevPlan.md)) as designed. The sections below are
+retained as the design record; see "Implementation notes" at the end for how
+the shipped code maps to this plan.
 
 Source of this design: [Animation Roadmap §Sub-goal A](../Animation-Roadmap.md).
 
@@ -116,3 +115,29 @@ existing libraries.
 - **Live refresh.** If an editor saves while the manager is open, the
   middle list must refresh. Reuse the existing `*SavedToLibrary` events
   each editor VM already raises.
+
+---
+
+## Implementation notes (as shipped)
+
+- **Interface split from the sketch.** `IAssetSource` (in
+  `Abstractions/Assets/IAssetSource.cs`) carries `Kind` / `DisplayName` /
+  `Enumerate()` / `Delete()` / `ExportJson()` — the data side only. The
+  sketch's `Open(string)` was intentionally left off: routing a row to its
+  editor is a UI concern (UI.Avalonia can't reference Engine where the editors
+  live), so it lives in the shell instead. `AssetDescriptor` matches the sketch;
+  `CreatedAt`/`ThumbnailBytes` are always null today, `SizeOnDisk` is a
+  serialized-byte approximation (stores pack many assets per JSON file).
+- **Adapters + registry** live in `Engine/Assets/` (three of the eight
+  singletons are Engine types). `AssetSourceRegistry.All()` is the roster; the
+  host injects it into `ShellViewModel` via a new optional ctor param.
+- **A1** — `AssetManagerViewModel` + `AssetManagerView` (modeless window,
+  opened from the render-surface context menu "Asset Manager…").
+- **A2** — `ShellViewModel.EditAsset` routes: Region/Theme/Animation/Watermark
+  to their shell-owned editors by name; SlideshowConfig marks the preset active
+  and raises `SlideshowSettingsRequested`; the three source editors bubble
+  `AssetHostEditorRequested` to `AvaloniaShellBootstrap` (host-owned windows).
+- **A3** — multi-select → in-memory zip of `<Type>/<name>.json`; the host owns
+  the save picker + write via `AssetBundleExportRequested`.
+- **Deferred / not done:** thumbnails; live `*SavedToLibrary` auto-refresh
+  (the manager re-enumerates on each open and via the Refresh button instead).
