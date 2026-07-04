@@ -27,6 +27,7 @@ Highlights (full menu on the index page):
 | [Regions Guide](User/Regions-Guide.md)                                               | Save, recall, and organise favourite views.                          |
 | [Capture Guide](User/Capture-Guide.md)                                               | Screenshots, posters, PNG sequences, MP4 video export.               |
 | [Slideshow + Audio-Reactive Guide](User/Slideshow-AudioReactive-Guide.md)            | Cycle regions + themes on the beat with live audio.                  |
+| [Scene Engine Guide](User/SceneEngine-UserGuide.md)                                  | Direct cinematic Scenes: timeline, flying camera, transitions, video.|
 | [Colour Theme Editor Guide](User/ColorThemeEditor-Guide.md)                          | Live palette editing with the floating editor.                       |
 | [ColorGen DSL Guide](User/ColorGen-UserGuide.md)                                     | One-line palettes in a tiny domain language.                         |
 | [CalcGen / User Equation Guide](User/CalcGen-UserGuide.md)                           | Author your own fractal formula in C# or DSL pseudo-code.            |
