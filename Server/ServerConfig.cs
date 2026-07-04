@@ -185,7 +185,7 @@ public sealed class ServerConfig
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             Converters = { new JsonStringEnumConverter() },
         });
-        File.WriteAllText(path, json);
+        AtomicFile.WriteAllText(path, json);
     }
 
 }

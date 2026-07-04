@@ -147,8 +147,8 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                File.WriteAllText(ThemesFile, themesJA.ToString());
-                File.WriteAllText(MergedSourceHashMarker, sourceHash);
+                AtomicFile.WriteAllText(ThemesFile, themesJA.ToString());
+                AtomicFile.WriteAllText(MergedSourceHashMarker, sourceHash);
             }
             catch
             {
@@ -213,7 +213,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 string json = JsonSerializer.Serialize(Themes, BuildJsonOptions());
-                File.WriteAllText(ThemesFile, json);
+                AtomicFile.WriteAllText(ThemesFile, json);
             }
             catch
             {

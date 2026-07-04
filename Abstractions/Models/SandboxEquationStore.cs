@@ -71,7 +71,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 string json = JsonSerializer.Serialize(Equations, BuildJsonOptions());
-                File.WriteAllText(EquationsFile, json);
+                AtomicFile.WriteAllText(EquationsFile, json);
             }
             catch
             {
