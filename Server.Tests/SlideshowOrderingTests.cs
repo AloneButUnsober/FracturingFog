@@ -67,6 +67,16 @@ public sealed class SlideshowOrderingTests
     }
 
     [Fact]
+    public void SlideshowConfigClone_PreservesRandomSeed()
+    {
+        // Regression: SlideshowConfig.Clone rebuilds Timing field-by-field and
+        // had dropped RandomSeed, so the dialog's Commit (Result = Clone) and
+        // Save persisted seed 0 no matter what the user set.
+        var cfg = new SlideshowConfig { Timing = new SlideshowSettings { RandomSeed = 5 } };
+        Assert.Equal(5, cfg.Clone().Timing.RandomSeed);
+    }
+
+    [Fact]
     public void ZeroSeed_VariesBetweenRuns()
     {
         // Two independent entropy-seeded runs over 40 draws of an 8-region
