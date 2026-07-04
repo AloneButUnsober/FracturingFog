@@ -1406,6 +1406,15 @@ public sealed partial class MainWindow : Window
 
         _menuWin?.Close();
         _editorWin?.Close();
+        // Editors whose Closing handler cancels + hides (guarded by
+        // _shuttingDown) — must be force-closed here too, else they linger
+        // in Avalonia's window collection and OnLastWindowClose never fires,
+        // leaving the process alive after the main window is gone (notably
+        // after playing a Scene, which requires the Scene Editor open).
+        _watermarkEditorWin?.Close();
+        _animationEditorWin?.Close();
+        _sceneEditorWin?.Close();
+        _regionEditorWin?.Close();
         _helpWin?.Close();
         _ffClientWin?.Close();
         _serverAdminWin?.Close();
