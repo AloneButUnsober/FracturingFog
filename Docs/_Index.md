@@ -73,6 +73,7 @@ shipped, and where the project is going.
 | [Lighting + FX Roadmap](Lighting-FX-Roadmap.md)                            | HDR DoF, bloom, GGX importance sampling, HDRI environments.             |
 | [Fractal Expansion Roadmap](Fractal-Expansion-Roadmap.md)                  | New families (KIFS, L-systems, Apollonian, Flame, Bicomplex, …).        |
 | [Animation Roadmap](Animation-Roadmap.md)                                  | Animated `FractalParameters`, Animation asset, Animation Slideshow.     |
+| [Scene Engine Roadmap](Scene-Engine-Roadmap.md)                            | Cinematic Scenes: timeline + camera paths, resource governor, HW tiers. |
 | [CalculatorGen Roadmap](Technical/CalculatorGen-Roadmap.md)                | Perturbation + SA + DD/QD/OD + cluster-rebase pipeline.                 |
 | [Documentation Plan](Documentation-Plan.md)                                | What is still being written and how to contribute.                      |
 | [Resources & Bibliography](Resources-Bibliography.md)                      | Citations for every formula, algorithm, and paper referenced in code.   |
