@@ -333,6 +333,37 @@ gate, non-camera-type rejection).
 Asset Manager as a new node type. Built-in demo scenes ship in-source (same
 pattern as built-in regions / animations).
 
+**Status — Shipped (data core).** Two files:
+
+- `Abstractions/Animation/SceneData.cs` — the Scene asset. `SceneData` is an
+  ordered list of `SceneShot` (mirrors `AnimationData`'s name / category / tags
+  shape so it slots into the Asset Manager identically). A `SceneShot` names its
+  assets by string (region / theme / animation — loose coupling like
+  `AnimationTrack`'s param name, so a Scene serialises without embedding its
+  assets and a renamed asset degrades to a resolve-time fallback), carries an
+  optional S3 `CameraTrack` (3D-only), a duration, and a `SceneTransitionKind`
+  (`Cut` / `Crossfade` / `LightSweep` / `ParamMorph`) with its own length.
+  `TotalDurationSeconds` is a computed (non-serialised) sum.
+- `Engine/Models/SceneLibrary.cs` — the singleton library, a line-for-line
+  mirror of `AnimationLibrary`: lazy singleton, `%APPDATA%\FracturingFog\
+  scenes.json`, indented enums-as-string JSON, non-fatal load/save,
+  `Add` / `ReplaceOrAdd` / `Remove` / `GetByName`, and built-in demo scenes
+  merged on first `Load()`. The built-ins are deliberately region-free
+  (`RegionName` empty → render the fractal type directly) so they can never
+  break from a renamed region: a 20 s Mandelbulb orbit and a two-shot
+  Mandelbulb→Mandelbox cross-fade, both driving the S3 camera track.
+
+8 tests in `Server.Tests/SceneLibraryTests.cs`: the `SceneData` / `SceneShot`
+JSON round-trip incl. a nested `CameraTrack`, enum-as-string persistence,
+null-camera omission + round-trip, the computed total-duration (sums positive
+shot durations, not serialised), and built-in sanity (≥1 shot, positive
+durations, cameras only on orbit-camera types, the Mandelbulb orbit seed sweeps
+a full turn through the S3 evaluator).
+
+The Asset Manager node type is UI (Avalonia) — wired alongside the S5 editor,
+consistent with the S0–S3 pattern of shipping the pure + tested core first and
+deferring the impure UI consumer.
+
 ### S5 — Scene editor
 
 `SceneEditorView.axaml`: horizontal timeline of shots, per-shot property
