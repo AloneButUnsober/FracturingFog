@@ -17,6 +17,7 @@ using System.Reactive;
 using System.Threading.Tasks;
 
 using FracturingFog.Models;
+using FracturingFog.ViewState;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -27,11 +28,21 @@ public sealed class RegionEditorViewModel : ViewModelBase
 
     private readonly IColorThemeService _service;
     private readonly RegionEditModel _model;
+    private readonly Func<FractalViewState?>? _liveViewProvider;
 
-    public RegionEditorViewModel(IColorThemeService service, RegionEditModel model)
+    /// <summary>Geometry pending a re-frame from the live view (Phase R3). Null
+    /// until the user hits "Capture current view"; passed to the service on
+    /// Save so the region's stored geometry is re-snapped.</summary>
+    private FractalViewState? _pendingRecapture;
+
+    public RegionEditorViewModel(
+        IColorThemeService service,
+        RegionEditModel model,
+        Func<FractalViewState?>? liveViewProvider = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         _model   = model   ?? throw new ArgumentNullException(nameof(model));
+        _liveViewProvider = liveViewProvider;
 
         // Animation dropdown: "(none)" sentinel first, then the library.
         AnimationNames = new ObservableCollection<string> { NoneSentinel };
@@ -72,6 +83,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
 
         SaveCommand  = ReactiveCommand.CreateFromTask(SaveAsync);
         CloseCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        CaptureCurrentViewCommand = ReactiveCommand.CreateFromTask(CaptureCurrentViewAsync);
     }
 
     // ── Read-only display ─────────────────────────────────────────────────
@@ -87,6 +99,29 @@ public sealed class RegionEditorViewModel : ViewModelBase
     /// is never editable here (the Region Editor edits metadata only); use the
     /// Save Region flow to recapture geometry from the live view.</summary>
     public string GeometrySummary { get; }
+
+    /// <summary>True when a live-view provider was wired — enables the Phase R3
+    /// "Capture current view" affordance. False when the editor is opened
+    /// without a live view (e.g. headless tests).</summary>
+    public bool CanCaptureView => _liveViewProvider != null;
+
+    private bool _geometryWillRecapture;
+    /// <summary>True after the user hits "Capture current view" — Save will
+    /// re-frame the region's stored geometry from the live view.</summary>
+    public bool GeometryWillRecapture
+    {
+        get => _geometryWillRecapture;
+        private set => this.RaiseAndSetIfChanged(ref _geometryWillRecapture, value);
+    }
+
+    private string _captureSummary = string.Empty;
+    /// <summary>One-line preview of the live geometry that will replace the
+    /// stored geometry on Save. Empty until a capture is armed.</summary>
+    public string CaptureSummary
+    {
+        get => _captureSummary;
+        private set => this.RaiseAndSetIfChanged(ref _captureSummary, value);
+    }
 
     /// <summary>True when the region carries a lighting override the user can
     /// choose to keep or clear.</summary>
@@ -161,6 +196,9 @@ public sealed class RegionEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
+    /// <summary>Phase R3 — arm a geometry re-frame from the live view.</summary>
+    public ReactiveCommand<Unit, Unit> CaptureCurrentViewCommand { get; }
+
     /// <summary>Fires after a successful save with the persisted region name
     /// (may be a rename or a fresh clone). The shell refreshes the region combo
     /// and reselects this name.</summary>
@@ -189,7 +227,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
         _model.KeepLightingOverride  = _keepLightingOverride;
         _model.KeepEmbeddedWatermark = _keepEmbeddedWatermark;
 
-        var result = _service.UpdateRegionMetadata(_model);
+        var result = _service.UpdateRegionMetadata(_model, _pendingRecapture);
         if (!result.Success)
         {
             await RaiseMessageAsync(new ThemeMessageEventArgs(
@@ -203,6 +241,25 @@ public sealed class RegionEditorViewModel : ViewModelBase
         await RaiseMessageAsync(new ThemeMessageEventArgs(
             "Edit Region", $"Region {verb} \"{result.SavedName}\".", MessageSeverity.Info));
         CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task CaptureCurrentViewAsync()
+    {
+        var s = _liveViewProvider?.Invoke();
+        if (s == null)
+        {
+            await RaiseMessageAsync(new ThemeMessageEventArgs(
+                "Capture current view", "No live view is available to capture.",
+                MessageSeverity.Info));
+            return;
+        }
+
+        _pendingRecapture = s;
+        GeometryWillRecapture = true;
+        CaptureSummary =
+            $"Will re-frame to live view on save — {s.FractalType}"
+            + $"   ·   center ({s.CenterX:0.############}, {s.CenterY:0.############})"
+            + $"   ·   zoom {s.Zoom:0.###}";
     }
 
     private List<string>? CollectCuratedThemes()

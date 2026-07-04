@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using FracturingFog.Hosting;
 using FracturingFog.Models;
+using FracturingFog.ViewState;
 using Xunit;
 
 namespace FracturingFog.Server.Tests;
@@ -199,6 +200,48 @@ public sealed class RegionEditorServiceTests
             lib.RemoveUserRegion(a);
             lib.RemoveUserRegion(b);
         }
+    }
+
+    [Fact]
+    public void UpdateRegionMetadata_RecaptureFromLiveView_ReframesGeometryKeepsMetadata()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-RegEdit-Recap-{Guid.NewGuid():N}";
+
+        try
+        {
+            Assert.True(lib.AddUserRegion(MakeUserRegion(name)));
+
+            var model = svc.GetRegionForEdit(name)!;
+            model.Description = "retagged while reframing";
+
+            // Live view sitting somewhere completely different from the stored
+            // geometry. Phase R3 "Capture current view" re-snaps geometry from
+            // this while still applying the edited metadata.
+            var live = new FractalViewState
+            {
+                CenterX = 0.360240443437614,
+                CenterY = -0.641313061064803,
+                Zoom = 987654.0,
+                PreferredIterations = 4242,
+                FractalType = FractalType.Mandelbrot,
+            };
+
+            var res = svc.UpdateRegionMetadata(model, live);
+            Assert.True(res.Success);
+            Assert.Equal(name, res.SavedName);
+
+            var saved = lib.FindByName(name)!;
+            // Metadata applied…
+            Assert.Equal("retagged while reframing", saved.Description);
+            // …geometry re-framed from the live view (NOT the stored 12345/1777).
+            Assert.Equal(0.360240443437614, saved.CenterX);
+            Assert.Equal(-0.641313061064803, saved.CenterY);
+            Assert.Equal(987654.0, saved.Zoom);
+            Assert.Equal(4242, saved.Iterations);
+        }
+        finally { lib.RemoveUserRegion(name); }
     }
 
     [Fact]

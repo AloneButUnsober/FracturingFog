@@ -509,10 +509,30 @@ namespace FracturingFog.Hosting
             if (existing != null && existing.IsBuiltIn) return false;
             if (existing != null) FractalRegionLibrary.Instance.UserRegions.Remove(existing);
 
+            var region = BuildGeometryFromLiveState(state);
+            region.Name = regionName;
+            region.Description = "";
+            region.EmbeddedWatermark = embeddedWatermark?.Clone();
+            region.AnimationName = string.IsNullOrWhiteSpace(animationName) ? null : animationName;
+
+            FractalRegionLibrary.Instance.UserRegions.Add(region);
+            FractalRegionLibrary.Instance.Save();
+            return true;
+        }
+
+        /// <summary>
+        /// Build a fresh user-defined region carrying only geometry, quality,
+        /// fractal type, and per-engine source identity captured from the
+        /// <b>live</b> <paramref name="state"/>. Metadata (Name, Description,
+        /// animation, curated themes, lighting/watermark) is left at defaults
+        /// for the caller to fill. Shared by <see cref="SaveCurrentAsRegion"/>
+        /// and the Region Editor's "Capture current view" (Phase R3).
+        /// </summary>
+        private static FractalRegion BuildGeometryFromLiveState(FractalViewState state)
+        {
             var p = state.FractalParameters;
-            var region = new FractalRegion
+            return new FractalRegion
             {
-                Name = regionName,
                 CenterX  = state.CenterX,  CenterXLo = state.CenterXLo,
                 CenterX2 = state.CenterX2, CenterX3  = state.CenterX3,
                 CenterY  = state.CenterY,  CenterYLo = state.CenterYLo,
@@ -548,13 +568,7 @@ namespace FracturingFog.Hosting
                 UserBulbCameraPhi      = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraPhi      ?? 0 : 0,
                 UserBulbLightTheta     = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightTheta     ?? 0 : 0,
                 UserBulbLightPhi       = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightPhi       ?? 0 : 0,
-                Description = "",
-                EmbeddedWatermark = embeddedWatermark?.Clone(),
-                AnimationName = string.IsNullOrWhiteSpace(animationName) ? null : animationName,
             };
-            FractalRegionLibrary.Instance.UserRegions.Add(region);
-            FractalRegionLibrary.Instance.Save();
-            return true;
         }
 
         /// <inheritdoc/>
@@ -602,6 +616,10 @@ namespace FracturingFog.Hosting
 
         /// <inheritdoc/>
         public RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits)
+            => UpdateRegionMetadata(edits, null);
+
+        /// <inheritdoc/>
+        public RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits, FractalViewState? recaptureGeometryFrom)
         {
             if (edits == null) return RegionUpdateResult.Fail("No edit data.");
 
@@ -627,11 +645,14 @@ namespace FracturingFog.Hosting
 
             bool cloned = source.IsBuiltIn;
 
-            // Preserve the source region's geometry + per-engine source fields.
-            // Metadata is applied fresh from the edit model below. Geometry is
-            // NEVER taken from the live view here — this path edits a saved
-            // region without moving the camera.
-            var region = CloneRegionGeometry(source);
+            // Geometry source: by default preserve the saved region's geometry
+            // + per-engine source fields (metadata-only edit, camera unmoved).
+            // Phase R3 "Capture current view" passes the live view state to
+            // re-snap geometry instead, so the user can retag metadata and
+            // re-frame in a single edit.
+            var region = recaptureGeometryFrom != null
+                ? BuildGeometryFromLiveState(recaptureGeometryFrom)
+                : CloneRegionGeometry(source);
             region.RegionType  = RegionType.UserDefined;
             region.Name        = newName;
             region.Description  = edits.Description ?? string.Empty;

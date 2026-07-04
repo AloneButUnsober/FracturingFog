@@ -2,8 +2,8 @@
 
 > Companion pages: [Technical Index](_Index.md) · [Animation Roadmap](../Animation-Roadmap.md) (Sub-goal B) · [Asset Manager Dev Plan](AssetManager-DevPlan.md) (Sub-goal A, deferred) · [Regions Guide](../User/Regions-Guide.md)
 
-**Status: MVP SHIPPED (R0–R2).** Phase R3 ("Capture current view") is an
-optional deferred nicety. Source design:
+**Status: SHIPPED (R0–R3).** All phases landed, including the R3
+"Capture current view" re-frame. Source design:
 [Animation Roadmap §Sub-goal B](../Animation-Roadmap.md). Sibling
 [Asset Manager](AssetManager-DevPlan.md) is deferred and will reuse this
 editor as its Region detail-pane.
@@ -100,12 +100,20 @@ is unit-testable headless.
 - Built-in selected → editor opens in clone mode (name cleared / suffixed,
   Save always creates a new user region).
 
-### Phase R3 — nicety: "Capture current view" (optional)
+### Phase R3 — "Capture current view"  ✅
 
 - Button in the editor that re-snaps geometry from the live
   `FractalViewState` (reuses the save-flow capture), so users can both
-  retag metadata *and* update the framing in one edit. Deferred until
-  R0–R2 land.
+  retag metadata *and* update the framing in one edit.
+- Service: `UpdateRegionMetadata(RegionEditModel, FractalViewState?)`
+  overload — when the live state is non-null the region geometry is built
+  from it (`BuildGeometryFromLiveState`, shared with `SaveCurrentAsRegion`)
+  instead of preserved via `CloneRegionGeometry`. Default interface method
+  delegates to the metadata-only overload for back-compat.
+- VM: optional `Func<FractalViewState?>` provider wired by the shell
+  (`() => Main.ViewState`); `CaptureCurrentViewCommand` arms a pending
+  re-frame and shows a green banner previewing the live center/zoom. Save
+  passes the pending state through.
 
 ---
 
@@ -117,9 +125,10 @@ are new. Built-ins stay immutable by construction (clone-on-edit).
 
 ## Open questions
 
-- **CuratedThemes editing UI.** Full multi-select against the theme
-  library, or a comma list for MVP? Lean: checklist against
-  `EnumerateThemeNames` in R1, but ship a simple list first if it bloats.
+- **CuratedThemes editing UI.** ~~Full multi-select vs comma list?~~
+  *Resolved (R1b):* checkable list against `EnumerateThemeNames` with a
+  live substring filter. Curated names no longer in the library are kept
+  (checked) so an edit never silently drops them.
 - **Rename ripple.** Regions are referenced by name from slideshow
   configs (`FilterFractalTypes` is by type, not name — low risk) and the
   toolbar's last-selected. Rename updates the combo; no back-references

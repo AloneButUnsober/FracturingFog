@@ -1819,7 +1819,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        var vm = new RegionEditorViewModel(_themeService, model);
+        // Live-view provider powers the editor's "Capture current view" (R3):
+        // re-snap the region's stored geometry from the current camera on save.
+        var vm = new RegionEditorViewModel(_themeService, model, () => Main.ViewState);
         vm.RegionSavedToLibrary += (_, savedName) =>
         {
             // Refresh the region combo (honours the active sort + type filter)
