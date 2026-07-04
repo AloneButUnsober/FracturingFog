@@ -2,9 +2,11 @@
 
 > Companion pages: [Technical Index](_Index.md) · [Animation Roadmap](../Animation-Roadmap.md) (Sub-goal B) · [Asset Manager Dev Plan](AssetManager-DevPlan.md) (Sub-goal A, deferred) · [Regions Guide](../User/Regions-Guide.md)
 
-**Status: IN PROGRESS.** Source design: [Animation Roadmap §Sub-goal B](../Animation-Roadmap.md).
-Sibling [Asset Manager](AssetManager-DevPlan.md) is deferred and will
-reuse this editor as its Region detail-pane.
+**Status: MVP SHIPPED (R0–R2).** Phase R3 ("Capture current view") is an
+optional deferred nicety. Source design:
+[Animation Roadmap §Sub-goal B](../Animation-Roadmap.md). Sibling
+[Asset Manager](AssetManager-DevPlan.md) is deferred and will reuse this
+editor as its Region detail-pane.
 
 ---
 
@@ -76,7 +78,7 @@ is unit-testable headless.
 - Tests in `Server.Tests`: preserve-geometry round-trip, rename,
   built-in clone-on-edit, name-collision refusal, animation attach/detach.
 
-### Phase R1 — editor VM + view
+### Phase R1 — editor VM + view  ✅
 
 - `RegionEditorViewModel` (UI.Avalonia/ViewModels) — binds the DTO,
   exposes animation-name + theme-name pick lists from the service, Save /
@@ -86,7 +88,7 @@ is unit-testable headless.
   mirroring `AnimationEditorView` chrome. Read-only geometry block;
   editable metadata rows; Save/Cancel.
 
-### Phase R2 — wire entry point
+### Phase R2 — wire entry point  ✅
 
 - Region "Edit" button on the toolbar (parallel to Theme Edit), enabled
   when a region is selected.
