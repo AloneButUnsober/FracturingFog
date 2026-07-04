@@ -1,0 +1,127 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.RegionEditorView"
+        x:DataType="vm:RegionEditorViewModel"
+        Title="Region Editor"
+        Width="560"
+        Height="520"
+        MinWidth="460"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#161616"
+        Foreground="#DCDCDC">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#C8C864" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#B4B4B4" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="BorderBrush" Value="#3A3A3A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="Button.action">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+        </Style>
+        <Style Selector="Button.save">  <Setter Property="Background" Value="#283C64" /> </Style>
+        <Style Selector="Button.close"> <Setter Property="Background" Value="#3A3A3A" /> </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="10">
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0"
+                   Text="{Binding HeaderText}"
+                   Foreground="#C8C864"
+                   FontSize="14"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Margin="0,0,0,8" />
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Orientation="Vertical">
+
+                <!-- Stored geometry (read-only) -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Stored geometry (read-only)" />
+                        <TextBlock Text="{Binding GeometrySummary}"
+                                   Foreground="#DCDCDC"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Foreground="#888888" FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Text="Geometry is preserved as saved. To re-frame, use Save Region from the live view instead." />
+                    </StackPanel>
+                </Border>
+
+                <!-- Identity -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Identity" />
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                            <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Name:" Margin="0,0,8,4" />
+                            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}" Margin="0,0,0,4" />
+
+                            <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Description:" Margin="0,0,8,0" />
+                            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Description}" />
+                        </Grid>
+                        <TextBlock Foreground="#C8C878" FontSize="11"
+                                   IsVisible="{Binding IsBuiltIn}"
+                                   TextWrapping="Wrap"
+                                   Text="This is a built-in region. Saving creates a new user-region copy; the built-in is left untouched." />
+                    </StackPanel>
+                </Border>
+
+                <!-- Attached assets -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Attached assets" />
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                            <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Animation:" Margin="0,0,8,4" />
+                            <ComboBox  Grid.Row="0" Grid.Column="1"
+                                       ItemsSource="{Binding AnimationNames}"
+                                       SelectedItem="{Binding SelectedAnimation}"
+                                       HorizontalAlignment="Stretch"
+                                       Margin="0,0,0,4" />
+
+                            <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Curated themes:" Margin="0,0,8,0" />
+                            <TextBox   Grid.Row="1" Grid.Column="1"
+                                       Text="{Binding CuratedThemesText}"
+                                       PlaceholderText="comma-separated theme names (blank = no preference)" />
+                        </Grid>
+                        <CheckBox Content="Keep lighting override"
+                                  IsChecked="{Binding KeepLightingOverride}"
+                                  IsVisible="{Binding HasLightingOverride}"
+                                  Foreground="#DCDCDC" />
+                        <CheckBox Content="Keep embedded watermark"
+                                  IsChecked="{Binding KeepEmbeddedWatermark}"
+                                  IsVisible="{Binding HasEmbeddedWatermark}"
+                                  Foreground="#DCDCDC" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Classes="action save"  Content="Save"  Command="{Binding SaveCommand}"  Width="100" />
+            <Button Classes="action close" Content="Close" Command="{Binding CloseCommand}" Width="100" />
+        </StackPanel>
+
+    </Grid>
+</Window>
