@@ -244,6 +244,7 @@ namespace FracturingFog.Models
                     ColorThemeFadeMs = Timing.ColorThemeFadeMs,
                     RegionFadeMs = Timing.RegionFadeMs,
                     FadeSteps = Timing.FadeSteps,
+                    RandomSeed = Timing.RandomSeed,
                     UseRegionWatermark = Timing.UseRegionWatermark,
                     RecordSlideshow = Timing.RecordSlideshow,
                     RecordEncodePreset = Timing.RecordEncodePreset,
