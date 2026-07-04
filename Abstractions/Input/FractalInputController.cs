@@ -522,10 +522,14 @@ namespace FracturingFog.Input
             // Suppression: pan/zoom keys ignored during a slideshow.
             if (InputSuppressed) return false;
 
-            bool isPanKey = e.Key is InputKey.A or InputKey.D or InputKey.Q or InputKey.E;
+            // Shift = precise/fine step. Allowed on pan keys (A/D/Q/E) and on the
+            // zoom / 3D-distance keys (W/S) so Shift+W and Shift+S give finer
+            // movement, matching Shift+A/Shift+D.
+            bool isMovementKey = e.Key is InputKey.A or InputKey.D or InputKey.Q or InputKey.E
+                                        or InputKey.W or InputKey.S;
             if ((e.Modifiers & InputModifiers.Control) != 0) return false;
             if ((e.Modifiers & InputModifiers.Alt) != 0) return false;
-            if ((e.Modifiers & InputModifiers.Shift) != 0 && !isPanKey) return false;
+            if ((e.Modifiers & InputModifiers.Shift) != 0 && !isMovementKey) return false;
 
             const double panPreciseFactor = 0.25;
 
@@ -551,11 +555,14 @@ namespace FracturingFog.Input
             {
                 const double zoomFactor = 1.25;
                 const double panFrac = 0.125;
-                double pan2D = (e.Modifiers & InputModifiers.Shift) != 0 ? panFrac * panPreciseFactor : panFrac;
+                bool shift2D = (e.Modifiers & InputModifiers.Shift) != 0;
+                double pan2D = shift2D ? panFrac * panPreciseFactor : panFrac;
+                // Fine zoom: shrink the 1.25 step toward 1.0 by panPreciseFactor.
+                double zoom2D = shift2D ? 1.0 + (zoomFactor - 1.0) * panPreciseFactor : zoomFactor;
                 switch (e.Key)
                 {
-                    case InputKey.W: CenterZoomBy(zoomFactor, e.ClientWidth, e.ClientHeight); return true;
-                    case InputKey.S: CenterZoomBy(1.0 / zoomFactor, e.ClientWidth, e.ClientHeight); return true;
+                    case InputKey.W: CenterZoomBy(zoom2D, e.ClientWidth, e.ClientHeight); return true;
+                    case InputKey.S: CenterZoomBy(1.0 / zoom2D, e.ClientWidth, e.ClientHeight); return true;
                     case InputKey.A: PanByPixels((int)(e.ClientWidth * pan2D), 0, e.ClientWidth, e.ClientHeight); return true;
                     case InputKey.D: PanByPixels(-(int)(e.ClientWidth * pan2D), 0, e.ClientWidth, e.ClientHeight); return true;
                     case InputKey.Q: PanByPixels(0, (int)(e.ClientHeight * pan2D), e.ClientWidth, e.ClientHeight); return true;
@@ -567,11 +574,13 @@ namespace FracturingFog.Input
             const double distStep = 0.25;
             const double rotStep = Math.PI / 36.0;
             const double pan3DFrac = 0.125;
-            double pan3D = (e.Modifiers & InputModifiers.Shift) != 0 ? pan3DFrac * panPreciseFactor : pan3DFrac;
+            bool shift3D = (e.Modifiers & InputModifiers.Shift) != 0;
+            double pan3D = shift3D ? pan3DFrac * panPreciseFactor : pan3DFrac;
+            double dist3D = shift3D ? distStep * panPreciseFactor : distStep;
             switch (e.Key)
             {
-                case InputKey.W: Adjust3DDistance(-distStep); return true;
-                case InputKey.S: Adjust3DDistance(distStep); return true;
+                case InputKey.W: Adjust3DDistance(-dist3D); return true;
+                case InputKey.S: Adjust3DDistance(dist3D); return true;
                 case InputKey.A: PanByPixels((int)(e.ClientWidth * pan3D), 0, e.ClientWidth, e.ClientHeight); return true;
                 case InputKey.D: PanByPixels(-(int)(e.ClientWidth * pan3D), 0, e.ClientWidth, e.ClientHeight); return true;
                 case InputKey.Q: PanByPixels(0, (int)(e.ClientHeight * pan3D), e.ClientWidth, e.ClientHeight); return true;
