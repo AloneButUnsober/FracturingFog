@@ -1,0 +1,262 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.SceneEditorView"
+        x:DataType="vm:SceneEditorViewModel"
+        Title="Scene Editor"
+        Width="900"
+        Height="760"
+        MinWidth="720"
+        MinHeight="580"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#161616"
+        Foreground="#DCDCDC">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#C8C864" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#B4B4B4" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="BorderBrush" Value="#3A3A3A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="Border.shotcard">
+            <Setter Property="BorderBrush" Value="#3A3A50" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Background" Value="#1B1B22" />
+        </Style>
+        <Style Selector="Border.keyrow">
+            <Setter Property="BorderBrush" Value="#2A2A2A" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style Selector="Button.action">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+        </Style>
+        <Style Selector="Button.new">     <Setter Property="Background" Value="#37374B" /> </Style>
+        <Style Selector="Button.revert">  <Setter Property="Background" Value="#503C1E" /> </Style>
+        <Style Selector="Button.save">    <Setter Property="Background" Value="#283C64" /> </Style>
+        <Style Selector="Button.danger">  <Setter Property="Background" Value="#502323" /> </Style>
+        <Style Selector="Button.preview"> <Setter Property="Background" Value="#1E5034" /> </Style>
+        <Style Selector="Button.stop">    <Setter Property="Background" Value="#5A4A1E" /> </Style>
+        <Style Selector="Button.close">   <Setter Property="Background" Value="#3A3A3A" /> </Style>
+        <Style Selector="Button.mini">
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="Margin" Value="0,0,3,0" />
+            <Setter Property="Background" Value="#2E2E38" />
+            <Setter Property="Foreground" Value="#DCDCDC" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
+
+        <!-- Title row -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12">
+            <TextBlock Text="{Binding TitleText}"
+                       Foreground="#C8C864" FontSize="14" FontWeight="Bold"
+                       VerticalAlignment="Center" />
+            <TextBlock Text="{Binding TotalDurationText}"
+                       Foreground="#8A8A8A" FontSize="12" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- Action row -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,8" Spacing="0">
+            <Button Classes="action new"     Content="New"       Command="{Binding NewBlankCommand}" />
+            <Button Classes="action revert"  Content="Revert"    Command="{Binding RevertCommand}" />
+            <Button Classes="action stop"    Content="Stop"      Command="{Binding StopPreviewCommand}" />
+            <Button Classes="action save"    Content="Save"      Command="{Binding SaveCommand}" />
+            <Button Classes="action danger"  Content="Delete"    Command="{Binding DeleteCommand}" />
+        </StackPanel>
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Orientation="Vertical">
+
+                <!-- Saved scene -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Saved scene" />
+                        <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0">
+                            <TextBlock Classes="label" Grid.Column="0" Text="Load:" Margin="0,0,8,0" />
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding SceneNames}"
+                                      SelectedItem="{Binding SelectedScene}"
+                                      HorizontalAlignment="Stretch" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Identity -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Identity" />
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                            <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Name:" Margin="0,0,8,4" />
+                            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}" Margin="0,0,0,4" />
+
+                            <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Description:" Margin="0,0,8,4" />
+                            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Description}" Margin="0,0,0,4" />
+
+                            <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Category:" Margin="0,0,8,4" />
+                            <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Category}" Margin="0,0,0,4" />
+
+                            <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Tags:" Margin="0,0,8,0" />
+                            <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Tags}"
+                                       PlaceholderText="comma-separated" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Shots -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="section" Grid.Column="0" Text="Shots" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="action new" Content="+ Add shot"
+                                    Command="{Binding AddShotCommand}" />
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding Shots}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SceneShotRowViewModel">
+                                    <Border Classes="shotcard">
+                                        <StackPanel Spacing="6">
+
+                                            <!-- Shot header -->
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBox Grid.Column="0" Text="{Binding Name}"
+                                                         Watermark="shot label"
+                                                         Margin="0,0,8,0" />
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                    <Button Classes="mini" Content="▲"  Command="{Binding MoveUpCommand}"   ToolTip.Tip="Move up" />
+                                                    <Button Classes="mini" Content="▼"  Command="{Binding MoveDownCommand}" ToolTip.Tip="Move down" />
+                                                    <Button Classes="action preview" Content="Preview" Command="{Binding PreviewCommand}" />
+                                                    <Button Classes="action danger"  Content="✕"       Command="{Binding RemoveCommand}" ToolTip.Tip="Remove shot" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- Shot fields -->
+                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto">
+                                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Region:" Margin="0,0,8,4" />
+                                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                                          ItemsSource="{Binding RegionNames}"
+                                                          SelectedItem="{Binding SelectedRegion}"
+                                                          HorizontalAlignment="Stretch" Margin="0,0,8,4" />
+
+                                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="2" Text="Fractal:" Margin="0,0,8,4" />
+                                                <ComboBox Grid.Row="0" Grid.Column="3"
+                                                          ItemsSource="{Binding FractalTypes}"
+                                                          SelectedItem="{Binding FractalType}"
+                                                          HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+
+                                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Theme:" Margin="0,0,8,4" />
+                                                <ComboBox Grid.Row="1" Grid.Column="1"
+                                                          ItemsSource="{Binding ThemeNames}"
+                                                          SelectedItem="{Binding SelectedTheme}"
+                                                          HorizontalAlignment="Stretch" Margin="0,0,8,4" />
+
+                                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="2" Text="Animation:" Margin="0,0,8,4" />
+                                                <ComboBox Grid.Row="1" Grid.Column="3"
+                                                          ItemsSource="{Binding AnimationNames}"
+                                                          SelectedItem="{Binding SelectedAnimation}"
+                                                          HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+
+                                                <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Duration (s):" Margin="0,0,8,0" />
+                                                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                                               Value="{Binding DurationSeconds}"
+                                                               Minimum="0" Maximum="3600" Increment="0.5"
+                                                               FormatString="0.###"
+                                                               HorizontalAlignment="Stretch" Margin="0,0,8,0" />
+
+                                                <StackPanel Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Classes="label" Text="Transition:" />
+                                                    <ComboBox ItemsSource="{Binding TransitionKinds}"
+                                                              SelectedItem="{Binding Transition}"
+                                                              MinWidth="120" />
+                                                    <TextBlock Classes="label" Text="over (s):" />
+                                                    <NumericUpDown Value="{Binding TransitionSeconds}"
+                                                                   Minimum="0" Maximum="30" Increment="0.25"
+                                                                   FormatString="0.##" MinWidth="90" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- Camera track (3D types only) -->
+                                            <Border BorderBrush="#2A2A38" BorderThickness="1" CornerRadius="2"
+                                                    Padding="6" IsVisible="{Binding Supports3DCamera}">
+                                                <StackPanel Spacing="4">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                                        <TextBlock Classes="label" Grid.Column="0" Text="Camera" Foreground="#8FA8C8" />
+                                                        <ComboBox Grid.Column="1"
+                                                                  ItemsSource="{Binding InterpolationKinds}"
+                                                                  SelectedItem="{Binding Interpolation}"
+                                                                  MinWidth="120" HorizontalAlignment="Left" Margin="8,0,0,0" />
+                                                        <Button Grid.Column="3" Classes="action new" Content="+ Key"
+                                                                Command="{Binding AddCameraKeyCommand}" />
+                                                    </Grid>
+
+                                                    <ItemsControl ItemsSource="{Binding CameraKeys}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:CameraKeyRowViewModel">
+                                                                <Border Classes="keyrow">
+                                                                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+                                                                        <TextBlock Classes="label" Grid.Column="0" Text="t" FontSize="10" Margin="0,0,4,0" />
+                                                                        <NumericUpDown Grid.Column="1" Value="{Binding Time}"
+                                                                                       Minimum="0" Increment="0.25" FormatString="0.###" MinWidth="90" Margin="0,0,8,0" />
+                                                                        <TextBlock Classes="label" Grid.Column="2" Text="dist" FontSize="10" Margin="0,0,4,0" />
+                                                                        <NumericUpDown Grid.Column="3" Value="{Binding Distance}"
+                                                                                       Increment="0.1" FormatString="0.###" MinWidth="90" Margin="0,0,8,0" />
+                                                                        <TextBlock Classes="label" Grid.Column="4" Text="θ" FontSize="10" Margin="0,0,4,0" />
+                                                                        <NumericUpDown Grid.Column="5" Value="{Binding Theta}"
+                                                                                       Increment="0.1" FormatString="0.###" MinWidth="90" Margin="0,0,8,0" />
+                                                                        <TextBlock Classes="label" Grid.Column="6" Text="φ" FontSize="10" Margin="0,0,4,0" />
+                                                                        <NumericUpDown Grid.Column="7" Value="{Binding Phi}"
+                                                                                       Increment="0.05" FormatString="0.###" MinWidth="90" Margin="0,0,8,0" />
+                                                                        <Button Grid.Column="9" Classes="mini" Content="✕"
+                                                                                Command="{Binding RemoveCommand}" ToolTip.Tip="Remove key" />
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <TextBlock FontSize="10" Foreground="#6E6E6E"
+                                                               Text="Distance / azimuth θ / elevation φ. Keys play across the shot duration; motion preview + sequencing land in playback (S6)." />
+                                                </StackPanel>
+                                            </Border>
+
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer close -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Classes="action close" Content="Close" Command="{Binding CloseCommand}" Width="100" />
+        </StackPanel>
+
+    </Grid>
+</Window>

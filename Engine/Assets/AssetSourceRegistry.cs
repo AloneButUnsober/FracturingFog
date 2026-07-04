@@ -23,6 +23,7 @@ namespace FracturingFog.Assets
             new UserBulbAssetSource(),
             new SlideshowConfigAssetSource(),
             new WatermarkAssetSource(),
+            new SceneAssetSource(),
         };
     }
 }

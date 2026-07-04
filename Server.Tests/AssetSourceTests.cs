@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Abstractions.Assets;
 using FracturingFog.Assets;
 using FracturingFog.Models;
@@ -22,18 +23,18 @@ namespace FracturingFog.Server.Tests;
 public sealed class AssetSourceTests
 {
     [Fact]
-    public void Registry_exposes_eight_sources_in_type_tree_order()
+    public void Registry_exposes_nine_sources_in_type_tree_order()
     {
         var sources = AssetSourceRegistry.All();
 
-        Assert.Equal(8, sources.Count);
+        Assert.Equal(9, sources.Count);
 
         // Order matches the AssetKind enum / left-pane type tree.
         var expected = new[]
         {
             AssetKind.Region, AssetKind.ColorTheme, AssetKind.Animation,
             AssetKind.UserEquation, AssetKind.SandboxEquation, AssetKind.UserBulb,
-            AssetKind.SlideshowConfig, AssetKind.Watermark,
+            AssetKind.SlideshowConfig, AssetKind.Watermark, AssetKind.Scene,
         };
         Assert.Equal(expected, sources.Select(s => s.Kind).ToArray());
 
@@ -159,5 +160,70 @@ public sealed class AssetSourceTests
 
         Assert.Equal(AssetImportStatus.Failed, src.ImportJson("not json at all", overwrite: true).Status);
         Assert.Equal(AssetImportStatus.Failed, src.ImportJson("", overwrite: true).Status);
+    }
+
+    // ── Scene source (S5) ────────────────────────────────────────────────────
+
+    /// <summary>The Scene node surfaces the built-in demos once the library is
+    /// loaded, and ExportJson emits the nested S3 camera track with enum-as-string
+    /// (not the plain shared options) so a hand-edited bundle round-trips.</summary>
+    [Fact]
+    public void Scene_source_enumerates_builtins_and_exports_camera_as_string_enums()
+    {
+        SceneLibrary.Instance.Load(); // seeds the built-in demos
+
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.Scene);
+
+        var row = src.Enumerate().SingleOrDefault(d => d.Name == "Mandelbulb Orbit");
+        Assert.NotNull(row);
+        Assert.Equal(AssetKind.Scene, row!.Kind);
+        Assert.True(row.SizeOnDisk > 0);
+
+        string? json = src.ExportJson("Mandelbulb Orbit");
+        Assert.False(string.IsNullOrWhiteSpace(json));
+        Assert.Contains("\"Cut\"", json!);      // SceneTransitionKind as a string name
+        Assert.Contains("\"Keys\"", json!);     // the nested CameraTrack survived
+        Assert.DoesNotContain("\"Transition\":0", json!);
+
+        Assert.Null(src.ExportJson("no-such-scene"));
+    }
+
+    /// <summary>ImportJson keys on the entry's own Name and honours the overwrite
+    /// flag, persisting through SceneLibrary — the round-trip preserves the
+    /// nested camera track.</summary>
+    [Fact]
+    public void Scene_source_import_round_trips_and_respects_overwrite()
+    {
+        const string name = "AM_Test_Scene";
+        var lib = SceneLibrary.Instance;
+        lib.Load();
+        lib.Remove(name); // clean slate
+
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.Scene);
+
+        var scene = new SceneData
+        {
+            Name = name,
+            Category = "User",
+            Shots = new List<SceneShot>
+            {
+                new SceneShot { FractalType = FractalType.Mandelbrot, DurationSeconds = 4.0 },
+            },
+        };
+        string json = JsonSerializer.Serialize(scene, SceneLibrary.BuildJsonOptions());
+
+        var added = src.ImportJson(json, overwrite: false);
+        Assert.Equal(AssetImportStatus.Added, added.Status);
+        Assert.Equal(name, added.Name);
+        Assert.Equal(4.0, lib.GetByName(name)!.Shots[0].DurationSeconds, precision: 9);
+
+        // Same name again with overwrite off → skipped, untouched.
+        Assert.Equal(AssetImportStatus.SkippedExists, src.ImportJson(json, overwrite: false).Status);
+
+        // overwrite on → replaced.
+        Assert.Equal(AssetImportStatus.Replaced, src.ImportJson(json, overwrite: true).Status);
+
+        Assert.True(src.Delete(name));
+        Assert.DoesNotContain(src.Enumerate(), d => d.Name == name);
     }
 }

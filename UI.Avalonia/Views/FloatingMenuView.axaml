@@ -317,6 +317,12 @@
                                 HorizontalAlignment="Stretch"
                                 Margin="0,4,0,0"
                                 ToolTip.Tip="Open the Animation Editor (Roadmap Phase 3c)" />
+                        <Button Classes="action help"
+                                Content="Edit Scene…"
+                                Command="{Binding EditSceneCommand}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,4,0,0"
+                                ToolTip.Tip="Open the Scene Editor (Scene Engine Roadmap S5)" />
                     </StackPanel>
                 </Border>
 
