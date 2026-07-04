@@ -147,7 +147,8 @@ Both the toolbar and status bar can be hidden via the Floating Menu (`Status` ch
 | `W / S` | Zoom in / out (centered) |
 | `A / D` | Pan left / right |
 | `Q / E` | Pan up / down |
-| `Shift+` pan key | Quarter-step |
+| `Shift+` pan key | Quarter-step pan |
+| `Shift+W / Shift+S` | Quarter-step zoom / 3-D distance (fine) |
 | Arrows (3D) | Orbit camera (↑↓ = phi, ←→ = theta) |
 | `PgUp / PgDn` | Light azimuth |
 | `Home / End` | Light elevation |

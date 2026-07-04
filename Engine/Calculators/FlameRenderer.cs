@@ -366,6 +366,107 @@ public sealed class FlameRenderer : IFractalCalculator
                 return;
             }
 
+            // Wave 5.11 — next 10 Apophysis stock variations.
+
+            case FlameVariation.Horseshoe:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                if (r < 1e-12) { ox = 0; oy = 0; return; }
+                ox = amount * (x - y) * (x + y) / r;
+                oy = amount * 2.0 * x * y / r;
+                return;
+            }
+
+            case FlameVariation.Spiral:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                if (r < 1e-12) { ox = 0; oy = 0; return; }
+                double theta = Math.Atan2(x, y);
+                ox = amount * (Math.Cos(theta) + Math.Sin(r)) / r;
+                oy = amount * (Math.Sin(theta) - Math.Cos(r)) / r;
+                return;
+            }
+
+            case FlameVariation.Hyperbolic:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                if (r < 1e-12) { ox = 0; oy = 0; return; }
+                double theta = Math.Atan2(x, y);
+                ox = amount * Math.Sin(theta) / r;
+                oy = amount * r * Math.Cos(theta);
+                return;
+            }
+
+            case FlameVariation.Diamond:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                double theta = Math.Atan2(x, y);
+                ox = amount * Math.Sin(theta) * Math.Cos(r);
+                oy = amount * Math.Cos(theta) * Math.Sin(r);
+                return;
+            }
+
+            case FlameVariation.Ex:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                double theta = Math.Atan2(x, y);
+                double p0 = Math.Sin(theta + r); double p03 = p0 * p0 * p0;
+                double p1 = Math.Cos(theta - r); double p13 = p1 * p1 * p1;
+                ox = amount * r * (p03 + p13);
+                oy = amount * r * (p03 - p13);
+                return;
+            }
+
+            case FlameVariation.Bent:
+            {
+                // Quadrant-piecewise scale. Apophysis bent stretches negative
+                // X by 2× and compresses negative Y by ½, leaving the +X+Y
+                // quadrant identity.
+                double rx = x < 0 ? 2.0 * x : x;
+                double ry = y < 0 ? 0.5 * y : y;
+                ox = amount * rx;
+                oy = amount * ry;
+                return;
+            }
+
+            case FlameVariation.Fisheye:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                double k = 2.0 * amount / (r + 1.0);
+                // Apophysis fisheye swaps (x, y) deliberately — bend-and-flip.
+                ox = k * y;
+                oy = k * x;
+                return;
+            }
+
+            case FlameVariation.Exponential:
+            {
+                double e = Math.Exp(x - 1.0);
+                double piY = Math.PI * y;
+                ox = amount * e * Math.Cos(piY);
+                oy = amount * e * Math.Sin(piY);
+                return;
+            }
+
+            case FlameVariation.Power:
+            {
+                double r = Math.Sqrt(x * x + y * y);
+                if (r < 1e-12) { ox = 0; oy = 0; return; }
+                double theta = Math.Atan2(x, y);
+                double rp = Math.Pow(r, Math.Sin(theta));
+                ox = amount * rp * Math.Cos(theta);
+                oy = amount * rp * Math.Sin(theta);
+                return;
+            }
+
+            case FlameVariation.Cosine:
+            {
+                double piX = Math.PI * x;
+                ox =  amount * Math.Cos(piX) * Math.Cosh(y);
+                oy = -amount * Math.Sin(piX) * Math.Sinh(y);
+                return;
+            }
+
             case FlameVariation.Linear:
             default:
                 ox = amount * x;

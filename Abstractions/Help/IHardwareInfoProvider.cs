@@ -29,5 +29,12 @@ namespace FracturingFog.Help
         /// <summary>Append max GPU feature level / API version. Caller
         /// already emitted the section header.</summary>
         void AppendGpuFeatureLevel(StringBuilder sb);
+
+        /// <summary>True when the machine has a discrete GPU (as opposed to an
+        /// integrated one). Feeds the Animation Roadmap Phase 6 animated-param
+        /// ceiling — a discrete GPU raises the 3D ceiling. Default returns
+        /// false (conservative — assume an iGPU) so non-Windows / non-D3D
+        /// providers need not implement it.</summary>
+        bool HasDiscreteGpu() => false;
     }
 }

@@ -352,34 +352,32 @@ namespace FracturingFog.Rendering
                 string gpuRow = hasGpu
                     ? $"  gpu  dis {snap.GpuDispatchMs,5:F1}  rb {snap.GpuReadbackMs,5:F1} ms"
                     : "";
-                string[] lines = hasGpu ? new[]
+                // Wave 0.6 — per-stage post-FX microbar rows. Built once and
+                // spliced into either variant below; empty when no stage has
+                // fired since the last Reset.
+                var stageLines = BuildStageLines(in snap);
+
+                var coreLines = new System.Collections.Generic.List<string>(16)
                 {
                     "PERF HUD",
                     $"frame  {snap.FrameMs,6:F1} ms  ({snap.Fps,5:F1} fps)",
                     $"  min  {snap.FrameMin,6:F1}    max  {snap.FrameMax,6:F1}",
                     $"calc   {snap.CalcMs,6:F1} ms  ({Pct(snap.CalcMs, snap.FrameMs)})",
-                    gpuRow,
-                    $"upload {snap.UploadMs,6:F1} ms  ({Pct(snap.UploadMs, snap.FrameMs)})",
-                    $"presnt {snap.PresentMs,6:F1} ms  ({Pct(snap.PresentMs, snap.FrameMs)})",
-                    $"GC g0 {snap.Gen0PerSec,5:F2}/s  g1 {snap.Gen1PerSec,5:F2}/s  g2 {snap.Gen2PerSec,5:F2}/s",
-                    $"samples {snap.SampleCount}",
-                    "",
-                    $"frame  {frameW}x{frameH}  iter {maxIter}  {precisionLabel}",
-                    hwSummary,
-                } : new[]
-                {
-                    "PERF HUD",
-                    $"frame  {snap.FrameMs,6:F1} ms  ({snap.Fps,5:F1} fps)",
-                    $"  min  {snap.FrameMin,6:F1}    max  {snap.FrameMax,6:F1}",
-                    $"calc   {snap.CalcMs,6:F1} ms  ({Pct(snap.CalcMs, snap.FrameMs)})",
-                    $"upload {snap.UploadMs,6:F1} ms  ({Pct(snap.UploadMs, snap.FrameMs)})",
-                    $"presnt {snap.PresentMs,6:F1} ms  ({Pct(snap.PresentMs, snap.FrameMs)})",
-                    $"GC g0 {snap.Gen0PerSec,5:F2}/s  g1 {snap.Gen1PerSec,5:F2}/s  g2 {snap.Gen2PerSec,5:F2}/s",
-                    $"samples {snap.SampleCount}",
-                    "",
-                    $"frame  {frameW}x{frameH}  iter {maxIter}  {precisionLabel}",
-                    hwSummary,
                 };
+                if (hasGpu) coreLines.Add(gpuRow);
+                coreLines.Add($"upload {snap.UploadMs,6:F1} ms  ({Pct(snap.UploadMs, snap.FrameMs)})");
+                coreLines.Add($"presnt {snap.PresentMs,6:F1} ms  ({Pct(snap.PresentMs, snap.FrameMs)})");
+                if (stageLines.Count > 0)
+                {
+                    coreLines.Add("post-fx:");
+                    coreLines.AddRange(stageLines);
+                }
+                coreLines.Add($"GC g0 {snap.Gen0PerSec,5:F2}/s  g1 {snap.Gen1PerSec,5:F2}/s  g2 {snap.Gen2PerSec,5:F2}/s");
+                coreLines.Add($"samples {snap.SampleCount}");
+                coreLines.Add("");
+                coreLines.Add($"frame  {frameW}x{frameH}  iter {maxIter}  {precisionLabel}");
+                coreLines.Add(hwSummary);
+                string[] lines = coreLines.ToArray();
 
                 float maxW = 0;
                 float lineH = LineHeight(_hudBody);
@@ -427,6 +425,34 @@ namespace FracturingFog.Rendering
                     ty += lineH;
                 }
             });
+        }
+
+        // Wave 0.6 — per-stage post-FX micro-rows. Skips stages that never
+        // fired (StageCounts[i] == 0). Each row: "  ssao   1.4 ms ▌▌▌▌▌▌"
+        // where the bar length is proportional to the stage's share of the
+        // sum of all active stages. Bar width capped at 12 cells so the HUD
+        // box doesn't widen on heavy frames.
+        private static System.Collections.Generic.List<string> BuildStageLines(in PerfSnapshot snap)
+        {
+            var lines = new System.Collections.Generic.List<string>(6);
+            if (snap.StageMs is null || snap.StageCounts is null) return lines;
+            double total = 0;
+            for (int i = 0; i < snap.StageMs.Length; i++)
+                if (snap.StageCounts[i] > 0) total += snap.StageMs[i];
+            if (total <= 0) return lines;
+
+            string[] names = { "ssao  ", "bloom ", "dof   ", "edge  ", "lens  ", "vol   " };
+            const int BAR_MAX = 12;
+            for (int i = 0; i < snap.StageMs.Length && i < names.Length; i++)
+            {
+                if (snap.StageCounts[i] == 0) continue;
+                double ms = snap.StageMs[i];
+                int barLen = (int)Math.Round(BAR_MAX * (ms / total));
+                if (barLen < 1 && ms > 0) barLen = 1;
+                string bar = new string('█', barLen).PadRight(BAR_MAX);
+                lines.Add($"  {names[i]}{ms,5:F1} ms {bar}");
+            }
+            return lines;
         }
 
         private static string Pct(double part, double whole)

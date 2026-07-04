@@ -139,15 +139,29 @@
             </TabItem>
 
             <TabItem Header="Mathematics">
-                <TabControl ItemsSource="{Binding MathSubTabs}">
+                <!-- Wave 5.4 — two-level grouping: outer TabControl over
+                     family groups, inner TabControl over each group's
+                     sub-tabs. Keeps the strip from wrapping past ~30 entries. -->
+                <TabControl ItemsSource="{Binding MathSubTabGroups}">
                     <TabControl.ItemTemplate>
-                        <DataTemplate DataType="h:HelpSubTab">
+                        <DataTemplate DataType="h:HelpSubTabGroup">
                             <TextBlock Text="{Binding Title}" />
                         </DataTemplate>
                     </TabControl.ItemTemplate>
                     <TabControl.ContentTemplate>
-                        <DataTemplate DataType="h:HelpSubTab">
-                            <TextBox Classes="helpBody" Text="{Binding Body}" />
+                        <DataTemplate DataType="h:HelpSubTabGroup">
+                            <TabControl TabStripPlacement="Left" ItemsSource="{Binding SubTabs}">
+                                <TabControl.ItemTemplate>
+                                    <DataTemplate DataType="h:HelpSubTab">
+                                        <TextBlock Text="{Binding Title}" />
+                                    </DataTemplate>
+                                </TabControl.ItemTemplate>
+                                <TabControl.ContentTemplate>
+                                    <DataTemplate DataType="h:HelpSubTab">
+                                        <TextBox Classes="helpBody" Text="{Binding Body}" />
+                                    </DataTemplate>
+                                </TabControl.ContentTemplate>
+                            </TabControl>
                         </DataTemplate>
                     </TabControl.ContentTemplate>
                 </TabControl>

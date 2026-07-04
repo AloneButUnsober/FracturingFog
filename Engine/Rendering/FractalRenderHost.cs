@@ -43,6 +43,18 @@ namespace FracturingFog.Rendering
         // Per-fractal-type calculators. MandelbrotCalculator is the canonical
         // primary; everything else is "alt" and selected by FractalType.
         private MandelbrotCalculator _calculator;
+
+        // Wave 2.5 — progressive rendering ¼ → ½ → full chain. Dedicated
+        // sidecar MandelbrotCalculator instances permanently sized to the
+        // matching downsample of the active surface. Used only when a
+        // Trigger(progressive: true) fires and only on the canonical
+        // Mandelbrot path (useAlt always falls through to a single full
+        // render). Resize() keeps them in step with the main calc; never
+        // disposed because MandelbrotCalculator owns no native handles.
+        // Memory cost at 1080p: ~5 MB (quarter) + ~20 MB (half) of pinned
+        // LOH on top of the main calc's ~80 MB.
+        private MandelbrotCalculator _previewCalcQuarter;
+        private MandelbrotCalculator _previewCalcHalf;
         private EscapeTimeCalculator _escapeCalculator;
         private IFSCalculator _ifsCalculator;
         private LSystemCalculator _lsystemCalculator;
@@ -95,16 +107,48 @@ namespace FracturingFog.Rendering
         // CPU compositor for grid + watermark. Reused across frames. Only
         // touched from the calculator continuation, which serialises with
         // every other consumer behind _d3dGate.
-        private readonly FractalOverlayCompositor _overlay = OperatingSystem.IsWindows()
-            ? new FractalOverlayCompositor()
-            : null!;
+        // S-X7.5 (2026-06-23) — overlay compositor is SkiaSharp cross-plat
+        // (FractalOverlayCompositor.cs Phase X.A / Slice A.4 port). Stale
+        // IsWindows guard from the GDI+ era dropped so Grid + Watermark +
+        // Perf HUD render on Linux too.
+        private readonly FractalOverlayCompositor _overlay = new FractalOverlayCompositor();
 
         // Cached previous frame — re-uploaded on the next trigger so the
         // user sees the stale (correct) image while the next one calculates,
         // instead of black flashes at High/Ultra quality.
+        //
+        // S-X9d note was wrong: progressive ¼ / ½ uploads go straight through
+        // _renderer.UpdateTexture without touching _lastUploadedBuffer, so it
+        // always holds the last FULL-RES finished frame (pre-pan content
+        // while/after a pan). _lastUploadedBuffer keeps those semantics —
+        // SnapshotFrame, SaveLastFrameToPng, RepaintWithSelectionBox all
+        // depend on it being the last full-res content.
         private uint[]? _lastUploadedBuffer;
         private int _lastUploadedWidth;
         private int _lastUploadedHeight;
+        // Same content as _lastUploadedBuffer for full-res frames, retained
+        // here for RepaintWithSelectionBox (needs the most recent pre-overlay
+        // full-res frame, not a panned-but-blurry preview).
+        private uint[]? _lastFullResBuffer;
+        private int _lastFullResWidth;
+        private int _lastFullResHeight;
+        // S-X9g (2026-06-27) — last buffer that was actually presented to the
+        // screen, at WHATEVER res. Updated by both the full-res upload path
+        // and the progressive ¼/½ preview upload path. The stale-frame
+        // re-upload that paints "something" while the next calc runs picks
+        // this so a pan-stop debounce doesn't paint pre-pan content over the
+        // panned preview the user just saw (= snap-back). UpdateTexture
+        // handles arbitrary dims; the fullscreen quad sampler stretches a
+        // ¼-res preview to back-buffer size so the position is right even
+        // if the resolution is blurry until the full-res calc lands.
+        private uint[]? _lastPresentedBuffer;
+        private int _lastPresentedWidth;
+        private int _lastPresentedHeight;
+        // Pinned scratch for the progressive ¼/½ preview snapshot above.
+        // Grown lazily — typical sizes are 480x270 (¼) and 960x540 (½) at
+        // 1080p, so ~0.5 MB / 2 MB respectively. Pinned (POH) so the GPU
+        // upload path doesn't need a per-frame GCHandle.Alloc.
+        private uint[]? _uploadPreviewPool;
         // Tracks the renderer's CURRENT back-buffer size (last value passed to
         // Resize). Survives _lastUploadedBuffer being nulled by Resize, so the
         // slideshow cold-start path can build a black source buffer at the right
@@ -173,6 +217,46 @@ namespace FracturingFog.Rendering
             new BlockingCollection<FrameJob>(boundedCapacity: 1);
         private Thread? _calcThread;
 
+        // Phase 18b — host animation clock.
+        // Wakes at ~30 FPS to advance LightingFxData.SceneTime and Trigger
+        // when any of (LightOrbitSpeed, CausticsAnimSpeed, VolumeNoiseSpeed)
+        // is non-zero. All three at defaults (== 0) → tick skips Trigger so
+        // renders stay bit-identical.
+        private System.Threading.Timer? _animTimer;
+        private long _animStartTicks;
+        // Re-entry guard: a frame can outrun the tick period at high res, so
+        // skip enqueueing another Trigger while one is still in flight.
+        private int _animTickBusy;
+        // Phase 18b fix — frame-in-flight gate. Set when the tick fires
+        // Trigger(), cleared when AnimationFrameUploaded marks completion.
+        // Without this gate, a slow 3D scene whose Calculate() exceeds 33 ms
+        // gets cancelled by every subsequent tick — calc never finishes,
+        // status bar stays "Calculating…" forever.
+        private int _animFrameInFlight;
+
+        // Wave 2.7 — TAA accumulator state.
+        //
+        // _taaSumR/G/B/A hold per-pixel channel sums across all samples
+        // (sample 0 = original ColorBuffer + any MSAA jitter, sample N>0 =
+        // additional Halton-jittered Calculate runs). _taaSampleCount is the
+        // number of samples folded in; the per-frame display value is
+        // sum/count rounded to byte. _taaFp* captures the view fingerprint
+        // (centre / zoom / iter cap / fractal type) we accumulated against —
+        // any change invalidates the accumulator. Touched only from the
+        // calc thread + the upload threadpool callback (which never overlap
+        // on a single FrameJob, so no lock is needed beyond visibility).
+        private long[]? _taaSumR;
+        private long[]? _taaSumG;
+        private long[]? _taaSumB;
+        private long[]? _taaSumA;
+        private int _taaSumPixels;
+        private int _taaSampleCount;
+        private double _taaFpCx, _taaFpCy, _taaFpZoom;
+        private int _taaFpIter;
+        private int _taaFpW, _taaFpH;
+        private FractalType _taaFpType;
+        private bool _taaValid;
+
         private readonly struct FrameJob
         {
             public readonly CancellationToken Token;
@@ -184,14 +268,27 @@ namespace FracturingFog.Rendering
             public readonly int StaleH;
             public readonly int CalcW;
             public readonly int CalcH;
+            // Wave 2.7 — TAA continuation marker. 0 = normal first frame
+            // (stale upload + Calculate + optional MSAA). >0 = jittered TAA
+            // sample N (skip stale-upload + MSAA; blend into the TAA
+            // accumulator and present the running average).
+            public readonly int TaaSampleIndex;
+            // Wave 2.5 — progressive downsample factor. 0 / 1 = final
+            // full-resolution stage (existing path). 2 = half. 4 = quarter.
+            // When non-final the calc runs on a sidecar preview calc; the
+            // upload tail schedules the next stage (4 → 2 → 0).
+            public readonly int ProgressiveStage;
 
             public FrameJob(CancellationToken token, MandelbrotCalculator calc,
                 IFractalCalculator? altCalc, Stopwatch sw,
-                uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH)
+                uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH,
+                int taaSampleIndex = 0, int progressiveStage = 0)
             {
                 Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
                 StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
                 CalcW = calcW; CalcH = calcH;
+                TaaSampleIndex = taaSampleIndex;
+                ProgressiveStage = progressiveStage;
             }
         }
 
@@ -214,7 +311,20 @@ namespace FracturingFog.Rendering
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
 
+            // Wave 0.6: route per-stage post-FX timings into _perfStats. Idempotent
+            // — multiple FractalRenderHost instances would overwrite the publisher
+            // but the host is owned by a single shell, so a second host means the
+            // first one has already been disposed.
+            FracturingFog.Rendering.Lighting.StagePerf.Publisher = _perfStats.RecordStage;
+
             _calculator = new MandelbrotCalculator(w, h);
+            // Wave 2.5 — progressive sidecars at ¼ and ½ resolution. Min
+            // 64×64 to keep BLA / SA prelude math well-behaved at very small
+            // window sizes.
+            int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
+            int hw = Math.Max(64, w / 2); int hh = Math.Max(64, h / 2);
+            _previewCalcQuarter = new MandelbrotCalculator(qw, qh);
+            _previewCalcHalf    = new MandelbrotCalculator(hw, hh);
             _escapeCalculator = new EscapeTimeCalculator(w, h);
             _ifsCalculator = new IFSCalculator(w, h);
             _lsystemCalculator = new LSystemCalculator(w, h);
@@ -293,6 +403,20 @@ namespace FracturingFog.Rendering
                 Name = "FractalCalc",
             };
             _calcThread.Start();
+
+            // Phase 18b — start the 30 FPS animation tick. Period and dueTime
+            // both 33 ms. The tick is a no-op until the user dials up one of
+            // the animation speeds, so the wake cost is a handful of CPU µs
+            // per frame on an idle scene.
+            _animTimer = new System.Threading.Timer(
+                AnimationTick, state: null, dueTime: 33, period: 33);
+
+            // Phase 18b fix — clear the frame-in-flight gate when each
+            // upload completes (success or cancellation, both fire this
+            // event). Frees the next animation tick to enqueue another
+            // frame instead of being silently skipped.
+            AnimationFrameUploaded += (_, _) =>
+                System.Threading.Interlocked.Exchange(ref _animFrameInFlight, 0);
         }
 
         public FractalViewState ViewState { get; }
@@ -301,6 +425,7 @@ namespace FracturingFog.Rendering
         public event EventHandler? AnimationFrameUploaded;
         public event EventHandler<string>? StatusRequested;
         public event EventHandler? ColorMapChanged;
+        public event EventHandler? RenderCancelled;
 
         // ── Overlay state (CPU-composited into the BGRA buffer) ──────────
         //
@@ -340,6 +465,24 @@ namespace FracturingFog.Rendering
         /// engine-specific knobs that have not yet been lifted into the
         /// view-state contract.</summary>
         public MandelbrotCalculator Mandelbrot => _calculator;
+
+        public bool MandelbrotDisableAcceleration
+        {
+            get => _calculator.DisableAcceleration;
+            set => _calculator.DisableAcceleration = value;
+        }
+
+        public bool MandelbrotDisableSeriesApproximation
+        {
+            get => _calculator.DisableSeriesApproximation;
+            set => _calculator.DisableSeriesApproximation = value;
+        }
+
+        public bool MandelbrotDisableDdBla
+        {
+            get => _calculator.DisableDdBla;
+            set => _calculator.DisableDdBla = value;
+        }
 
         // T3.1: GPU compute kernel constructed lazily on the first Use
         // request when a factory is installed. Null on non-D3D11 backends or
@@ -622,6 +765,13 @@ namespace FracturingFog.Rendering
                 _calculator.MaxIterations = ViewState.LockedIterations;
             else if (maxIters > 0)
                 _calculator.MaxIterations = maxIters;
+            else if (ViewState.PreferredIterations > 0)
+                // Region-supplied iter override (cleared on first user pan/zoom).
+                // Without this the live render falls back to Quality.ComputeIterations
+                // and drops to a lower iter count than the cross-fade source used,
+                // causing visible detail loss the moment the post-commit Trigger
+                // present overwrites the faded-in offscreen buffer.
+                _calculator.MaxIterations = ViewState.PreferredIterations;
             else
                 _calculator.MaxIterations = ViewState.Quality.ComputeIterations(ViewState.Zoom);
 
@@ -675,6 +825,12 @@ namespace FracturingFog.Rendering
         public void Trigger(bool progressive = false)
         {
             if (_disposed) return;
+
+            // Phase 18b fix — mark a frame as in flight so the animation tick
+            // doesn't cancel this Trigger 33 ms later. AnimationFrameUploaded
+            // clears the flag once the upload completes (cancelled frames
+            // count too — see RunFrameJobUpload).
+            System.Threading.Interlocked.Exchange(ref _animFrameInFlight, 1);
 
             // Finding A fix: fire status BEFORE any blocking work so the user
             // sees "Calculating…" immediately on click. Previously this fired
@@ -767,18 +923,46 @@ namespace FracturingFog.Rendering
             // threadpool so the UI thread doesn't block on a 5-15 ms GPU
             // upload before Calculate even starts — Finding A render-start
             // lag fix).
-            uint[]? staleBuf = _lastUploadedBuffer;
-            int staleW = _lastUploadedWidth;
-            int staleH = _lastUploadedHeight;
+            //
+            // S-X9g (2026-06-27) — pick _lastPresentedBuffer (whatever res it
+            // is) so a pan-stop debounce Trigger paints the most recent thing
+            // the user saw (= the panned ¼/½ progressive preview) rather than
+            // the pre-pan full-res frame. The previous dim-equality gate
+            // forced a fall back to pre-pan content and produced a visible
+            // snap-back. UpdateTexture handles arbitrary dims (the fullscreen
+            // quad sampler stretches).
             int calcW = _calculator.Width;
             int calcH = _calculator.Height;
+            uint[]? staleBuf;
+            int staleW, staleH;
+            if (_lastPresentedBuffer != null)
+            {
+                staleBuf = _lastPresentedBuffer;
+                staleW = _lastPresentedWidth;
+                staleH = _lastPresentedHeight;
+            }
+            else
+            {
+                staleBuf = null;
+                staleW = staleH = 0;
+            }
+
+            // Wave 2.5 — progressive only on the canonical Mandelbrot path
+            // and only when the dynamic alt slot is empty. Alt calcs run a
+            // single full render as before. Tiny windows (W*H < 256 px) skip
+            // progressive too — overhead exceeds the win.
+            int progressiveStage = (progressive && !useAlt && _dynamicAltCalculator == null
+                                     && calcW * calcH >= 256 * 256)
+                ? 4
+                : 0;
 
             // T2.4: enqueue onto the dedicated calc thread (latest-only).
             // Drain any queued-but-unstarted job first so a burst of Triggers
             // (wheel zoom, key-repeat) collapses to the freshest job before
             // the calc thread can pick a stale one up.
             var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
-                staleBuf, staleW, staleH, calcW, calcH);
+                staleBuf, staleW, staleH, calcW, calcH,
+                taaSampleIndex: 0, progressiveStage: progressiveStage);
             while (_calcQueue.TryTake(out _)) { }
             try { _calcQueue.Add(job); }
             catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
@@ -813,12 +997,97 @@ namespace FracturingFog.Rendering
             var altCalc = job.AltCalc;
             bool useAlt = altCalc != null;
 
+            // Wave 2.5 — progressive preview stage. Run Calculate on a
+            // sidecar quarter / half calc, upload its smaller buffer (the D3D
+            // renderer's full-screen triangle stretches via the texture
+            // sampler), then hand off to RunFrameJobUpload tail which will
+            // schedule the next stage. Skips TAA / MSAA / SSAO / CDF rebuild
+            // / FrameCompleted — those apply only to the final full-res
+            // frame.
+            if (job.ProgressiveStage >= 2 && !useAlt)
+            {
+                long pCalcStart = Stopwatch.GetTimestamp();
+                MandelbrotCalculator preview = job.ProgressiveStage >= 4
+                    ? _previewCalcQuarter
+                    : _previewCalcHalf;
+                MirrorMandelbrotState(calc, preview);
+                try { preview.Calculate(token); }
+                catch (OperationCanceledException)
+                {
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+                long pCalcEnd = Stopwatch.GetTimestamp();
+                if (ShowPerfHud)
+                    _perfStats.RecordCalc((pCalcEnd - pCalcStart) * 1000.0 / Stopwatch.Frequency);
+
+                if (token.IsCancellationRequested)
+                {
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+
+                long pMs = job.Sw.ElapsedMilliseconds;
+                ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
+                    new UploadCtx(this, job, pMs), preferLocal: false);
+                return;
+            }
+
+            // Wave 2.7 — TAA continuation frame. Skips stale-upload, MSAA,
+            // SSAO recompute, CDF rebuild. Runs one jittered Calculate, blends
+            // the result into the running TAA sum, writes the averaged colour
+            // back into calc.ColorBuffer, and hands off to the standard upload
+            // path so brightness/contrast + grid/watermark composite still
+            // applies. The accumulator was already seeded by the initial
+            // (TaaSampleIndex == 0) frame.
+            if (job.TaaSampleIndex > 0 && !useAlt)
+            {
+                long taaCalcStart = Stopwatch.GetTimestamp();
+                bool ok = false;
+                try
+                {
+                    ok = RunOneTaaSample(calc, job.TaaSampleIndex, token);
+                }
+                catch (OperationCanceledException) { ok = false; }
+                long taaCalcEnd = Stopwatch.GetTimestamp();
+
+                if (ShowPerfHud)
+                    _perfStats.RecordCalc((taaCalcEnd - taaCalcStart) * 1000.0 / Stopwatch.Frequency);
+
+                if (!ok || token.IsCancellationRequested)
+                {
+                    // Cancelled or fingerprint changed mid-step — drop this
+                    // frame quietly (the next user-initiated Trigger will
+                    // present a fresh image). Still fire AnimationFrameUploaded
+                    // so any in-flight gate doesn't get stuck.
+                    // S-X8 (2026-06-27) — also raise RenderCancelled so the
+                    // status bar's "Calculating…" set by Trigger gets cleared
+                    // instead of lingering until the next user action.
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    RenderCancelled?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+
+                long taaMs = job.Sw.ElapsedMilliseconds;
+                ThreadPool.UnsafeQueueUserWorkItem(s_uploadCallback,
+                    new UploadCtx(this, job, taaMs), preferLocal: false);
+                return;
+            }
+
             // Stale-frame re-upload so the screen shows a correct (if
             // old) image while the next frame computes. Serialised
             // against the calc-completion upload via _d3dGate, so the
             // new frame in the continuation always paints over the
             // stale here (never the reverse).
-            if (job.StaleBuf != null && job.StaleW == job.CalcW && job.StaleH == job.CalcH)
+            //
+            // S-X9g (2026-06-27) — dim-equality gate dropped. UpdateTexture
+            // accepts any (w,h) and the fullscreen quad sampler stretches.
+            // Letting a ¼-res progressive preview upload here (when that's
+            // the most recent thing the user saw) keeps the displayed
+            // POSITION correct through a pan-stop debounce; pre-fix the gate
+            // skipped the preview because StaleW != CalcW, and the fallback
+            // to the pre-pan full-res frame produced the visible snap-back.
+            if (job.StaleBuf != null)
             {
                 lock (_uploadGate)
                 {
@@ -835,9 +1104,63 @@ namespace FracturingFog.Rendering
             {
                 if (useAlt) altCalc!.Calculate(token);
                 else calc.Calculate(token);
+
+                // Wave 2.6 — sub-pixel MSAA via Calculate() re-runs at jittered
+                // centre coords. Canonical Mandelbrot path goes through the
+                // typed helper (carries the QD/DD/OD limb state). Alt calcs
+                // route through the IFractalCalculator-shaped helper when the
+                // family honours centre+zoom — gates out IFS/LSystem/Plasma/
+                // Flame/DLA/Apollonian/StrangeAttractor whose Calculate()
+                // ignores those fields and would just re-roll noise.
+                // Pixel scale: 3.5/max(W,H)/Zoom mirrors generator template.
+                if (!useAlt)
+                {
+                    int aaSamples = calc.Quality?.AaSamples ?? 1;
+                    if (aaSamples > 1 && !token.IsCancellationRequested)
+                        RunMsaaAccumulateMandelbrot(calc, aaSamples, token);
+                }
+                else if (altCalc!.SupportsZoomPan)
+                {
+                    int aaSamples = altCalc.Quality?.AaSamples ?? 1;
+                    if (aaSamples > 1 && !token.IsCancellationRequested)
+                        RunMsaaAccumulateAlt(altCalc, aaSamples, token);
+                }
+
+                // Wave 2.7 — seed the TAA accumulator from this frame's
+                // finished (possibly MSAA-averaged) ColorBuffer. Captures the
+                // view fingerprint so the upload tail can decide whether to
+                // queue continuation samples.
+                if (!useAlt && !token.IsCancellationRequested)
+                    SeedTaaAccumulator(calc);
+                else if (useAlt)
+                    InvalidateTaa();
             }
             catch (OperationCanceledException) { }
             long calcEnd = Stopwatch.GetTimestamp();
+
+            // Phase 8b — 2D SSAO on the canonical Mandelbrot path. Synthesises
+            // depth from the smooth iteration count. Default SsaoSamples=0 keeps
+            // pre-Phase-8b output bit-identical. 3D raymarchers run their own
+            // SSAO inside Calculate() and aren't touched here.
+            if (!useAlt && !token.IsCancellationRequested)
+            {
+                var fxParams = ViewState?.FractalParameters;
+                if (fxParams != null && fxParams.Lighting.SsaoSamples > 0)
+                {
+                    try
+                    {
+                        var fxLocal = fxParams.Lighting;
+                        FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplySsao2D(
+                            calc.ColorBuffer,
+                            calc.SmoothBuffer,
+                            calc.IterationBuffer,
+                            calc.MaxIterations,
+                            calc.Width, calc.Height,
+                            in fxLocal);
+                    }
+                    catch { /* SSAO best-effort — never fail the frame. */ }
+                }
+            }
             if (ShowPerfHud)
             {
                 _perfStats.RecordCalc((calcEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
@@ -862,6 +1185,357 @@ namespace FracturingFog.Rendering
                 new UploadCtx(this, job, ms), preferLocal: false);
         }
 
+        // Wave 2.6 — MSAA helper. Runs N total samples on a √N×√N jitter grid
+        // around the original centre coords; first sample (already in
+        // calc.ColorBuffer when this is called) is reused as the (0,0)-jitter
+        // entry. Each subsequent Calculate() shifts CenterX/CenterY by a
+        // sub-pixel offset, then we accumulate channel sums and write the
+        // averaged colour back. Restores Center on exit.
+        //
+        // Format: ColorBuffer is uint with packed BGRA (matches IColorMap.Map's
+        // output everywhere; the renderer's UpdateTexture also expects BGRA).
+        // The byte extraction below is endian-safe because we touch the same
+        // uint on both sides — we never reinterpret the byte order.
+        private static void RunMsaaAccumulateMandelbrot(
+            MandelbrotCalculator calc, int aaSamples, CancellationToken token)
+        {
+            int side = (int)Math.Round(Math.Sqrt(aaSamples));
+            if (side * side != aaSamples) return; // only square grids
+            int pixels = calc.Width * calc.Height;
+            uint[] color = calc.ColorBuffer;
+            if (color.Length < pixels) return;
+
+            var sumR = new int[pixels];
+            var sumG = new int[pixels];
+            var sumB = new int[pixels];
+            var sumA = new int[pixels];
+
+            // Accumulate the already-computed sample 0 (centre).
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = color[i];
+                sumB[i] +=  (int)(c        & 0xFF);
+                sumG[i] +=  (int)((c >> 8)  & 0xFF);
+                sumR[i] +=  (int)((c >> 16) & 0xFF);
+                sumA[i] +=  (int)((c >> 24) & 0xFF);
+            }
+
+            // Pixel scale matches generated calculators: 3.5/max(W,H)/Zoom.
+            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+            double origCx = calc.CenterX;
+            double origCy = calc.CenterY;
+
+            int count = 1; // sample 0 already counted
+            for (int sy = 0; sy < side; sy++)
+            {
+                double jy = (sy + 0.5) / side - 0.5; // ∈ [-0.5, 0.5)
+                for (int sx = 0; sx < side; sx++)
+                {
+                    if (sx == side / 2 && sy == side / 2) continue; // centre already done
+                    if (token.IsCancellationRequested) goto WriteBack;
+
+                    double jx = (sx + 0.5) / side - 0.5;
+                    calc.CenterX = origCx + jx * scale;
+                    calc.CenterY = origCy + jy * scale;
+                    try { calc.Calculate(token); }
+                    catch (OperationCanceledException) { goto WriteBack; }
+
+                    var buf = calc.ColorBuffer;
+                    for (int i = 0; i < pixels; i++)
+                    {
+                        uint c = buf[i];
+                        sumB[i] += (int)(c        & 0xFF);
+                        sumG[i] += (int)((c >> 8)  & 0xFF);
+                        sumR[i] += (int)((c >> 16) & 0xFF);
+                        sumA[i] += (int)((c >> 24) & 0xFF);
+                    }
+                    count++;
+                }
+            }
+        WriteBack:
+            calc.CenterX = origCx;
+            calc.CenterY = origCy;
+            if (count <= 0) return;
+            int half = count / 2;
+            var outBuf = calc.ColorBuffer;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint b = (uint)((sumB[i] + half) / count) & 0xFF;
+                uint g = (uint)((sumG[i] + half) / count) & 0xFF;
+                uint r = (uint)((sumR[i] + half) / count) & 0xFF;
+                uint a = (uint)((sumA[i] + half) / count) & 0xFF;
+                outBuf[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
+
+        // Wave 2.6 alt-calc broadening — IFractalCalculator-shaped twin of
+        // RunMsaaAccumulateMandelbrot for the user-equation hot-load path
+        // and other escape-time alt calcs (Newton/Nova/Halley/Secant/Magnet/
+        // Glynn/Spider/Phoenix) and 3D raymarchers (Mandelbulb/UserBulb/
+        // Mandelbox/KIFS/Quaternion*/Bicomplex/Kleinian). Identical maths;
+        // only the calc shape differs because MandelbrotCalculator is the
+        // concrete legacy path (still carries QD/DD/OD limb fields), not an
+        // IFractalCalculator. Sub-pixel jitter on (CenterX, CenterY) at the
+        // standard pixel-size heuristic; weighted-mean BGRA channels written
+        // back into ColorBuffer. Caller gates SupportsZoomPan so families
+        // whose Calculate() ignores centre+zoom (IFS/LSystem/Plasma/Flame/
+        // DLA/Apollonian/StrangeAttractor) never reach here.
+        private static void RunMsaaAccumulateAlt(
+            IFractalCalculator calc, int aaSamples, CancellationToken token)
+        {
+            int side = (int)Math.Round(Math.Sqrt(aaSamples));
+            if (side * side != aaSamples) return;
+            int pixels = calc.Width * calc.Height;
+            uint[] color = calc.ColorBuffer;
+            if (color.Length < pixels) return;
+
+            var sumR = new int[pixels];
+            var sumG = new int[pixels];
+            var sumB = new int[pixels];
+            var sumA = new int[pixels];
+
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = color[i];
+                sumB[i] +=  (int)(c        & 0xFF);
+                sumG[i] +=  (int)((c >> 8)  & 0xFF);
+                sumR[i] +=  (int)((c >> 16) & 0xFF);
+                sumA[i] +=  (int)((c >> 24) & 0xFF);
+            }
+
+            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+            double origCx = calc.CenterX;
+            double origCy = calc.CenterY;
+
+            int count = 1;
+            for (int sy = 0; sy < side; sy++)
+            {
+                double jy = (sy + 0.5) / side - 0.5;
+                for (int sx = 0; sx < side; sx++)
+                {
+                    if (sx == side / 2 && sy == side / 2) continue;
+                    if (token.IsCancellationRequested) goto WriteBack;
+
+                    double jx = (sx + 0.5) / side - 0.5;
+                    calc.CenterX = origCx + jx * scale;
+                    calc.CenterY = origCy + jy * scale;
+                    try { calc.Calculate(token); }
+                    catch (OperationCanceledException) { goto WriteBack; }
+
+                    var buf = calc.ColorBuffer;
+                    for (int i = 0; i < pixels; i++)
+                    {
+                        uint c = buf[i];
+                        sumB[i] += (int)(c        & 0xFF);
+                        sumG[i] += (int)((c >> 8)  & 0xFF);
+                        sumR[i] += (int)((c >> 16) & 0xFF);
+                        sumA[i] += (int)((c >> 24) & 0xFF);
+                    }
+                    count++;
+                }
+            }
+        WriteBack:
+            calc.CenterX = origCx;
+            calc.CenterY = origCy;
+            if (count <= 0) return;
+            int half = count / 2;
+            var outBuf = calc.ColorBuffer;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint b = (uint)((sumB[i] + half) / count) & 0xFF;
+                uint g = (uint)((sumG[i] + half) / count) & 0xFF;
+                uint r = (uint)((sumR[i] + half) / count) & 0xFF;
+                uint a = (uint)((sumA[i] + half) / count) & 0xFF;
+                outBuf[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
+
+        // Wave 2.7 — TAA helpers.
+        //
+        // Seed: reset the sum arrays to the current ColorBuffer contents
+        // (which may already be MSAA-averaged) and stamp the fingerprint.
+        // Blend: jitter Calculate, add into sums, write average back into
+        // ColorBuffer. Invalidate: drop the accumulator (called on Resize,
+        // useAlt, or fingerprint mismatch).
+        private void SeedTaaAccumulator(MandelbrotCalculator calc)
+        {
+            int taaMax = calc.Quality?.TaaMaxSamples ?? 1;
+            if (taaMax <= 1) { InvalidateTaa(); return; }
+
+            int pixels = calc.Width * calc.Height;
+            var color = calc.ColorBuffer;
+            if (color.Length < pixels) { InvalidateTaa(); return; }
+
+            if (_taaSumR == null || _taaSumPixels != pixels)
+            {
+                _taaSumR = new long[pixels];
+                _taaSumG = new long[pixels];
+                _taaSumB = new long[pixels];
+                _taaSumA = new long[pixels];
+                _taaSumPixels = pixels;
+            }
+
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = color[i];
+                _taaSumB![i] =  (long)(c        & 0xFF);
+                _taaSumG![i] =  (long)((c >> 8)  & 0xFF);
+                _taaSumR![i] =  (long)((c >> 16) & 0xFF);
+                _taaSumA![i] =  (long)((c >> 24) & 0xFF);
+            }
+            _taaSampleCount = 1;
+            _taaFpCx = calc.CenterX;
+            _taaFpCy = calc.CenterY;
+            _taaFpZoom = calc.Zoom;
+            _taaFpIter = calc.MaxIterations;
+            _taaFpW = calc.Width;
+            _taaFpH = calc.Height;
+            _taaFpType = ViewState.FractalType;
+            _taaValid = true;
+        }
+
+        private void InvalidateTaa()
+        {
+            _taaValid = false;
+            _taaSampleCount = 0;
+            // Keep sum arrays around for reuse — they'll be re-zeroed on the
+            // next SeedTaaAccumulator.
+        }
+
+        private bool TaaFingerprintMatches(MandelbrotCalculator calc)
+        {
+            return _taaValid
+                && _taaFpCx == calc.CenterX
+                && _taaFpCy == calc.CenterY
+                && _taaFpZoom == calc.Zoom
+                && _taaFpIter == calc.MaxIterations
+                && _taaFpW == calc.Width
+                && _taaFpH == calc.Height
+                && _taaFpType == ViewState.FractalType;
+        }
+
+        // Halton(idx, base) radical-inverse — quasi-random in [0, 1).
+        // Used for sub-pixel jitter that distributes far better than a
+        // grid would across an arbitrary sample count.
+        private static double Halton(int index, int b)
+        {
+            double f = 1.0, r = 0.0;
+            int i = index;
+            while (i > 0)
+            {
+                f /= b;
+                r += f * (i % b);
+                i /= b;
+            }
+            return r;
+        }
+
+        private bool RunOneTaaSample(MandelbrotCalculator calc, int sampleIndex, CancellationToken token)
+        {
+            if (!TaaFingerprintMatches(calc)) return false;
+            int pixels = calc.Width * calc.Height;
+            if (_taaSumR == null || _taaSumPixels != pixels) return false;
+
+            double jx = Halton(sampleIndex + 2, 2) - 0.5;
+            double jy = Halton(sampleIndex + 2, 3) - 0.5;
+            double scale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+
+            double origCx = calc.CenterX;
+            double origCy = calc.CenterY;
+            calc.CenterX = origCx + jx * scale;
+            calc.CenterY = origCy + jy * scale;
+            try { calc.Calculate(token); }
+            catch (OperationCanceledException)
+            {
+                calc.CenterX = origCx; calc.CenterY = origCy;
+                return false;
+            }
+            calc.CenterX = origCx;
+            calc.CenterY = origCy;
+            if (token.IsCancellationRequested) return false;
+
+            var buf = calc.ColorBuffer;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint c = buf[i];
+                _taaSumB![i] += (long)(c        & 0xFF);
+                _taaSumG![i] += (long)((c >> 8)  & 0xFF);
+                _taaSumR![i] += (long)((c >> 16) & 0xFF);
+                _taaSumA![i] += (long)((c >> 24) & 0xFF);
+            }
+            _taaSampleCount++;
+
+            int count = _taaSampleCount;
+            long half = count / 2;
+            for (int i = 0; i < pixels; i++)
+            {
+                uint b = (uint)((_taaSumB![i] + half) / count) & 0xFF;
+                uint g = (uint)((_taaSumG![i] + half) / count) & 0xFF;
+                uint r = (uint)((_taaSumR![i] + half) / count) & 0xFF;
+                uint a = (uint)((_taaSumA![i] + half) / count) & 0xFF;
+                buf[i] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
+            return true;
+        }
+
+        // Wave 2.7 — called at the tail of the upload step. If TAA is enabled,
+        // view is still stable, and we haven't hit the cap, enqueue the next
+        // jittered sample so the image keeps refining while the camera idles.
+        // Any user Trigger cancels the token (which the calc thread checks) and
+        // mutates the calc state (which invalidates the fingerprint), so we
+        // don't need explicit cooperation to stop.
+        private void TryScheduleNextTaaSample(in FrameJob job)
+        {
+            if (job.AltCalc != null) return;
+            if (job.Token.IsCancellationRequested) return;
+            var calc = job.Calc;
+            int taaMax = calc.Quality?.TaaMaxSamples ?? 1;
+            if (taaMax <= 1) return;
+            if (!TaaFingerprintMatches(calc)) return;
+            if (_taaSampleCount >= taaMax) return;
+
+            var nextJob = new FrameJob(
+                job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
+                staleBuf: null, staleW: 0, staleH: 0,
+                calcW: calc.Width, calcH: calc.Height,
+                taaSampleIndex: _taaSampleCount);
+            try { _calcQueue.Add(nextJob); }
+            catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
+            catch (ArgumentException)
+            {
+                // Bounded(1) full — drain stale entry then re-enqueue. A user
+                // Trigger between the drain and add would just supersede us
+                // with a fresh frame, which is desired.
+                while (_calcQueue.TryTake(out _)) { }
+                try { _calcQueue.Add(nextJob); }
+                catch { /* shutdown race */ }
+            }
+        }
+
+        // Wave 2.5 — copy view-relevant Mandelbrot state from the main calc
+        // onto a sidecar preview calc. Buffer dims stay at the preview calc's
+        // (smaller) size — the calc thread temporarily inherits the centre /
+        // zoom / iter / quality / colour map / acceleration flags so the
+        // pixel scale and ref orbit reproduce the main view at downsample.
+        private static void MirrorMandelbrotState(MandelbrotCalculator src, MandelbrotCalculator dst)
+        {
+            dst.CenterX   = src.CenterX;   dst.CenterXLo = src.CenterXLo;
+            dst.CenterX2  = src.CenterX2;  dst.CenterX3  = src.CenterX3;
+            dst.CenterX4  = src.CenterX4;  dst.CenterX5  = src.CenterX5;
+            dst.CenterX6  = src.CenterX6;  dst.CenterX7  = src.CenterX7;
+            dst.CenterY   = src.CenterY;   dst.CenterYLo = src.CenterYLo;
+            dst.CenterY2  = src.CenterY2;  dst.CenterY3  = src.CenterY3;
+            dst.CenterY4  = src.CenterY4;  dst.CenterY5  = src.CenterY5;
+            dst.CenterY6  = src.CenterY6;  dst.CenterY7  = src.CenterY7;
+            dst.Zoom = src.Zoom;
+            dst.MaxIterations = src.MaxIterations;
+            dst.Quality = src.Quality;
+            dst.ColorMap = src.ColorMap;
+            dst.DisableAcceleration = src.DisableAcceleration;
+            dst.DisableSeriesApproximation = src.DisableSeriesApproximation;
+            dst.DisableDdBla = src.DisableDdBla;
+        }
+
         private void RunFrameJobUpload(FrameJob job, long ms)
         {
             var token = job.Token;
@@ -869,13 +1543,84 @@ namespace FracturingFog.Rendering
             var altCalc = job.AltCalc;
             bool useAlt = altCalc != null;
 
+            // Wave 2.5 — progressive preview upload. The sidecar's
+            // ColorBuffer is at preview-calc dims; the renderer's
+            // EnsureTexture recreates the texture at those dims, and the
+            // full-screen quad sampler scales it to the back buffer. No
+            // overlay composite, no TAA, no FrameCompleted, no perf-HUD
+            // frame timing (still records calc ms above). After upload,
+            // enqueue the next stage (4 → 2 → 0 final).
+            if (job.ProgressiveStage >= 2 && !useAlt)
+            {
+                if (token.IsCancellationRequested || _disposed)
+                {
+                    // S-X8 (2026-06-27) — progressive intermediate cancelled
+                    // before the final stage queued. Status bar would stay
+                    // "Calculating…" until next user input; raise
+                    // RenderCancelled so the consumer clears it now.
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    RenderCancelled?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+                MandelbrotCalculator preview = job.ProgressiveStage >= 4
+                    ? _previewCalcQuarter
+                    : _previewCalcHalf;
+                lock (_uploadGate)
+                {
+                    lock (_d3dGate)
+                    {
+                        _renderer.UpdateTexture(preview.ColorBuffer, preview.Width, preview.Height);
+                        _renderer.Render();
+                    }
+
+                    // S-X9g (2026-06-27) — snapshot the preview buffer into
+                    // _lastPresentedBuffer so the next stale-upload (e.g.
+                    // pan-stop debounce Trigger) re-paints the panned preview
+                    // instead of the pre-pan full-res frame held in
+                    // _lastUploadedBuffer. Pinned scratch pool grows lazily.
+                    int pw = preview.Width;
+                    int ph = preview.Height;
+                    int pn = pw * ph;
+                    if (pn > 0 && preview.ColorBuffer != null && preview.ColorBuffer.Length >= pn)
+                    {
+                        if (_uploadPreviewPool == null || _uploadPreviewPool.Length < pn)
+                            _uploadPreviewPool = GC.AllocateUninitializedArray<uint>(pn, pinned: true);
+                        Array.Copy(preview.ColorBuffer, _uploadPreviewPool, pn);
+                        _lastPresentedBuffer = _uploadPreviewPool;
+                        _lastPresentedWidth = pw;
+                        _lastPresentedHeight = ph;
+                    }
+                }
+                AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+
+                int nextStage = job.ProgressiveStage >= 4 ? 2 : 0;
+                var nextJob = new FrameJob(
+                    job.Token, calc, altCalc: null, sw: job.Sw,
+                    staleBuf: null, staleW: 0, staleH: 0,
+                    calcW: job.CalcW, calcH: job.CalcH,
+                    taaSampleIndex: 0, progressiveStage: nextStage);
+                try { _calcQueue.Add(nextJob); }
+                catch (InvalidOperationException) { /* shutdown */ }
+                catch (ArgumentException)
+                {
+                    while (_calcQueue.TryTake(out _)) { }
+                    try { _calcQueue.Add(nextJob); } catch { }
+                }
+                return;
+            }
+
             {
                 if (token.IsCancellationRequested)
                 {
                     // Cancelled render still counts as "done" for animation
                     // gating — otherwise a mid-animation cancel would leave
                     // the gate stuck.
+                    // S-X8 (2026-06-27) — raise RenderCancelled so the status
+                    // bar consumer drops the "Calculating…" set at Trigger
+                    // entry. Without this, a cancelled deep-Extreme frame
+                    // leaves the status string stuck indefinitely.
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
                 }
                 if (_disposed) return;
@@ -939,13 +1684,31 @@ namespace FracturingFog.Rendering
                 double curCy = useAlt ? altCalc!.CenterY : calc.CenterY;
                 double curZoom = useAlt ? altCalc!.Zoom : calc.Zoom;
 
-                FrameCompleted?.Invoke(this, new RenderFrameInfo(
-                    curCx, curCy, curZoom, curIter, ms, curW, curH,
-                    hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+                // S-X8 (2026-06-27) — only the initial sample (TaaSampleIndex
+                // == 0) updates the status bar via FrameCompleted. TAA
+                // continuation samples carry a cumulative job.Sw elapsed
+                // that climbs with every refinement pass, so firing per
+                // sample makes the status-bar ms oscillate up and down as
+                // overlapping continuations cancel and restart. PerfHud +
+                // AnimationFrameUploaded still fire each sample so HUD +
+                // animation gating stay accurate.
+                if (job.TaaSampleIndex == 0)
+                {
+                    FrameCompleted?.Invoke(this, new RenderFrameInfo(
+                        curCx, curCy, curZoom, curIter, ms, curW, curH,
+                        hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+                }
 
                 if (ShowPerfHud) _perfStats.RecordFrame(ms);
 
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+
+                // Wave 2.7 — once the user-visible frame is up, queue the next
+                // TAA continuation if the view is still settled. Bounded(1)
+                // queue means a fresh Trigger from input simply replaces our
+                // continuation before it runs. Skipped for alt calcs (TAA
+                // currently restricted to the canonical Mandelbrot path).
+                if (!useAlt) TryScheduleNextTaaSample(in job);
             }
         }
 
@@ -957,10 +1720,26 @@ namespace FracturingFog.Rendering
             int w = Math.Max(1, width);
             int h = Math.Max(1, height);
             _lastUploadedBuffer = null;
+            // S-X9d — kill stale full-res snapshot on resize too; old buffer
+            // is sized for old dims and would fail the stale-upload size gate.
+            _lastFullResBuffer = null;
+            _lastFullResWidth = 0;
+            _lastFullResHeight = 0;
+            // S-X9g — the presented-buffer tracker and its scratch pool are
+            // both sized for old dims too. Drop them so the next progressive
+            // upload alloc-grows fresh.
+            _lastPresentedBuffer = null;
+            _lastPresentedWidth = 0;
+            _lastPresentedHeight = 0;
+            _uploadPreviewPool = null;
             _currentTargetWidth = w;
             _currentTargetHeight = h;
             // Buffer dimensions changing → old CDF is sized for old buffers.
             InvalidateAdaptiveCdf();
+            // Wave 2.7 — sum arrays sized for old buffers too.
+            InvalidateTaa();
+            _taaSumR = null; _taaSumG = null; _taaSumB = null; _taaSumA = null;
+            _taaSumPixels = 0;
 
             lock (_d3dGate)
             {
@@ -970,6 +1749,11 @@ namespace FracturingFog.Rendering
                 _renderer.Render();
             }
             _calculator.Resize(w, h);
+            // Wave 2.5 — keep progressive sidecars in sync with main surface.
+            int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
+            int hw = Math.Max(64, w / 2); int hh = Math.Max(64, h / 2);
+            _previewCalcQuarter.Resize(qw, qh);
+            _previewCalcHalf.Resize(hw, hh);
             _escapeCalculator.Resize(w, h);
             _ifsCalculator.Resize(w, h);
             _lsystemCalculator.Resize(w, h);
@@ -1032,7 +1816,40 @@ namespace FracturingFog.Rendering
                 _selectionBox = null;
             else
                 _selectionBox = (x.Value, y.Value, w.Value, h.Value);
-            RepaintWithPostFx();
+            // S-X9e (2026-06-27) — composite over the last-known-good frame,
+            // not over calc.ColorBuffer. At deep zoom the active calc holds
+            // a partial buffer (mid-render rows / cancelled state); reading
+            // it for the selection-box repaint stamped partial-render
+            // artifacts that compounded as the user dragged. Prefer the
+            // cached full-res snapshot; fall back to RepaintWithPostFx when
+            // we don't have one yet (first-frame edge case).
+            RepaintWithSelectionBox();
+        }
+
+        private void RepaintWithSelectionBox()
+        {
+            uint[]? srcBuf;
+            int srcW, srcH;
+            lock (_uploadGate)
+            {
+                if (_lastFullResBuffer != null
+                    && _lastFullResWidth == _currentTargetWidth
+                    && _lastFullResHeight == _currentTargetHeight)
+                {
+                    srcBuf = _lastFullResBuffer;
+                    srcW = _lastFullResWidth;
+                    srcH = _lastFullResHeight;
+                }
+                else
+                {
+                    srcBuf = null;
+                    srcW = srcH = 0;
+                }
+            }
+            if (srcBuf != null)
+                UploadProcessedBuffer(srcBuf, srcW, srcH);
+            else
+                RepaintWithPostFx();
         }
 
         /// <summary>
@@ -1221,6 +2038,21 @@ namespace FracturingFog.Rendering
             {
                 _calculator.ApplyBandDitherRecolor(0.0);
             }
+
+            // Wave 3.7 — bake Adaptive HE into the recolor target so the
+            // slideshow cross-fade interpolates between two HE-applied
+            // buffers (snapshot source has HE; without this the target was
+            // pre-HE and the fade ended in a pre-HE state that the post-
+            // fade `RepaintWithPostFx` then snapped onto, producing the
+            // visible "HE pops on" jump at fade end). Mirrors the calc-
+            // completion HE step at the top of UploadCompletedFrame.
+            if (ViewState.HistogramEq > 0
+                && _calculator.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMaxIter))
+            {
+                _calculator.ApplyHistogramEqualizationWithCdf(
+                    cdf!, bins, srcMaxIter, ViewState.HistogramEq / 100.0);
+            }
+
             var src = _calculator.ColorBuffer;
             int mn = w * h;
             var copy = new uint[mn];
@@ -1433,10 +2265,45 @@ namespace FracturingFog.Rendering
         /// followed by an upload to the renderer. Grid + watermark overlays
         /// are intentionally omitted in this host — they will be drawn by
         /// the Avalonia shell with Avalonia.Media in step F.</summary>
+        // S-X9 (2026-06-27) — leak diagnostic. Set FF_LEAK_DEBUG=1 to log
+        // managed-heap + working-set deltas per upload frame so we can tell
+        // whether the user-reported climb is .NET-side (managed bytes climb,
+        // chase allocations) or native-side (WS climbs but managed stays
+        // flat, chase Mesa / Avalonia / Skia). Logs every N frames to keep
+        // output legible; N defaults to 30 (≈1 s at 30 FPS) but overridable
+        // via FF_LEAK_DEBUG_EVERY=<n>.
+        //
+        // S-X9b (2026-06-27) — first probe revealed two issues:
+        //   1. Baseline at f=0 fired during the ctor's 1×1 dummy Render()
+        //      before the 20-calc pool warms, making the +812 MB Linux delta
+        //      mostly warm-up artifact (20 calcs × 1280×733 × ~40 B/px ≈
+        //      750 MB). Skip baseline until the first frame at real surface
+        //      dims (W > 64 && H > 64).
+        //   2. GC.GetTotalMemory(forceFullCollection: false) reports the
+        //      live heap including not-yet-collected gen-0 garbage, so what
+        //      looks like a leak may be transient churn the GC just hasn't
+        //      reaped yet. FF_LEAK_DEBUG_FORCEGC=1 adds a forced full-
+        //      collection sample so retained-vs-transient is separable. Off
+        //      by default — forcing gen-2 blocks every worker thread for tens
+        //      of ms and skews the workload.
+        private static readonly bool s_leakDiag =
+            string.Equals(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG"), "1", StringComparison.Ordinal);
+        private static readonly int s_leakDiagEvery =
+            int.TryParse(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG_EVERY"), out var __n) && __n > 0 ? __n : 30;
+        private static readonly bool s_leakDiagForceGc =
+            string.Equals(Environment.GetEnvironmentVariable("FF_LEAK_DEBUG_FORCEGC"), "1", StringComparison.Ordinal);
+        private long _leakDiagFrame;
+        private long _leakDiagBaselineManagedBytes;
+        private long _leakDiagBaselineRetainedBytes;
+        private long _leakDiagBaselineWorkingSet;
+        private int _leakDiagBaselineGen0, _leakDiagBaselineGen1, _leakDiagBaselineGen2;
+        private bool _leakDiagBaselineTaken;
+
         private void UploadProcessedBuffer(uint[] src, int w, int h)
         {
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
+            if (s_leakDiag) LeakDiagSample(w, h);
             lock (_uploadGate)
             {
 
@@ -1529,7 +2396,8 @@ namespace FracturingFog.Rendering
             // overlay survives every backend (Windows HWND swap-chain
             // included, where Avalonia.Media overlays are occluded). Only
             // runs when at least one toggle is on.
-            if ((ShowGrid || ShowWatermark || _selectionBox.HasValue) && OperatingSystem.IsWindows())
+            // S-X7.5 (2026-06-23) — IsWindows gate dropped; compositor is Skia.
+            if (ShowGrid || ShowWatermark || _selectionBox.HasValue)
             {
                 try
                 {
@@ -1549,7 +2417,8 @@ namespace FracturingFog.Rendering
             // Perf HUD: composited last so it sits above grid + watermark.
             // Standalone of those toggles — user wants timings even on a
             // bare frame. Sampled phase data from _perfStats.
-            if (ShowPerfHud && OperatingSystem.IsWindows())
+            // S-X7.5 (2026-06-23) — IsWindows gate dropped; HUD is Skia too.
+            if (ShowPerfHud)
             {
                 try
                 {
@@ -1599,7 +2468,95 @@ namespace FracturingFog.Rendering
             _lastUploadedBuffer = dst;
             _lastUploadedWidth = w;
             _lastUploadedHeight = h;
+            // S-X9g (2026-06-27) — full-res upload is also "what's on screen
+            // right now"; mirror into the presented-buffer tracker so the
+            // next stale-upload pulls from the freshest content. Cheap —
+            // same pointer, no copy.
+            _lastPresentedBuffer = dst;
+            _lastPresentedWidth = w;
+            _lastPresentedHeight = h;
+
+            // S-X9d (2026-06-27) — keep a separate full-res snapshot for the
+            // stale-upload fallback. Updated only when this frame matches the
+            // current target dims so progressive ¼/½ previews don't clobber
+            // it. Source is _lastPreOverlayBuffer (= dst before grid/water/
+            // selection-box composite) so SetSelectionBox can repaint over
+            // it without double-stamping the overlay. Allocated lazily and
+            // grown like the other pinned pools. Skip if no pre-overlay
+            // snapshot was taken (recording mode suppresses it).
+            if (w == _currentTargetWidth && h == _currentTargetHeight
+                && _lastPreOverlayBuffer != null)
+            {
+                if (_lastFullResBuffer == null || _lastFullResBuffer.Length < n)
+                    _lastFullResBuffer = GC.AllocateUninitializedArray<uint>(n, pinned: true);
+                Array.Copy(_lastPreOverlayBuffer, _lastFullResBuffer, n);
+                _lastFullResWidth = w;
+                _lastFullResHeight = h;
+            }
             } // _uploadGate
+        }
+
+        // S-X9 (2026-06-27) — see UploadProcessedBuffer for activation gate.
+        // Reports managed-heap bytes, working set, and per-generation GC
+        // collection counts. First sample at a real surface (W,H > 64) is
+        // the baseline; subsequent logs print delta-from-baseline.
+        //
+        // S-X9b (2026-06-27) — baseline gating + forced-GC option.
+        //   * Skip the ctor's 1×1 dummy frame so warm-up isn't counted as
+        //     leak.
+        //   * FF_LEAK_DEBUG_FORCEGC=1 runs a blocking Gen-2 collect so
+        //     "retained" reflects only objects the GC can't reclaim.
+        //     Compare retained-Δ vs managed-Δ to separate transient churn
+        //     from real leaks. Off by default — forcing gen-2 blocks every
+        //     thread for tens of ms.
+        private void LeakDiagSample(int w, int h)
+        {
+            if (!_leakDiagBaselineTaken && (w < 65 || h < 65)) return;
+
+            long frame = System.Threading.Interlocked.Increment(ref _leakDiagFrame) - 1;
+            // S-X9f (2026-06-27) — also log the first 5 frames after baseline
+            // unconditionally. One-shot user actions (region jump from combo,
+            // theme pick) produce just 1-4 uploads; if those land between
+            // modulo hits at the default EVERY=30 the diag drops them silently
+            // and the user reports "no log lines fired" for what looked like a
+            // bypass bug. Burst window guarantees those single triggers show
+            // up in the log.
+            if (_leakDiagBaselineTaken && frame >= 6 && (frame % s_leakDiagEvery) != 0) return;
+
+            long managed = GC.GetTotalMemory(forceFullCollection: false);
+            long retained = s_leakDiagForceGc
+                ? GC.GetTotalMemory(forceFullCollection: true)
+                : managed;
+            int g0 = GC.CollectionCount(0);
+            int g1 = GC.CollectionCount(1);
+            int g2 = GC.CollectionCount(2);
+            long ws;
+            try { ws = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64; }
+            catch { ws = -1; }
+
+            if (!_leakDiagBaselineTaken)
+            {
+                _leakDiagBaselineTaken = true;
+                _leakDiagBaselineManagedBytes = managed;
+                _leakDiagBaselineRetainedBytes = retained;
+                _leakDiagBaselineWorkingSet = ws;
+                _leakDiagBaselineGen0 = g0;
+                _leakDiagBaselineGen1 = g1;
+                _leakDiagBaselineGen2 = g2;
+                Console.Error.WriteLine(
+                    s_leakDiagForceGc
+                        ? $"[FF_LEAK] baseline f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB retained={retained / (1024 * 1024)}MB ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB g0={g0} g1={g1} g2={g2}"
+                        : $"[FF_LEAK] baseline f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB g0={g0} g1={g1} g2={g2}");
+                return;
+            }
+
+            long dManaged = managed - _leakDiagBaselineManagedBytes;
+            long dRetained = retained - _leakDiagBaselineRetainedBytes;
+            long dWs = ws < 0 ? 0 : ws - _leakDiagBaselineWorkingSet;
+            Console.Error.WriteLine(
+                s_leakDiagForceGc
+                    ? $"[FF_LEAK] f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB (Δ{dManaged / (1024 * 1024):+#;-#;0}) retained={retained / (1024 * 1024)}MB (Δ{dRetained / (1024 * 1024):+#;-#;0}) ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB (Δ{dWs / (1024 * 1024):+#;-#;0}) g0={g0 - _leakDiagBaselineGen0} g1={g1 - _leakDiagBaselineGen1} g2={g2 - _leakDiagBaselineGen2}"
+                    : $"[FF_LEAK] f={frame} {w}x{h} managed={managed / (1024 * 1024)}MB (Δ{dManaged / (1024 * 1024):+#;-#;0}) ws={(ws < 0 ? -1 : ws / (1024 * 1024))}MB (Δ{dWs / (1024 * 1024):+#;-#;0}) g0={g0 - _leakDiagBaselineGen0} g1={g1 - _leakDiagBaselineGen1} g2={g2 - _leakDiagBaselineGen2}");
         }
 
         /// <summary>
@@ -1625,36 +2582,72 @@ namespace FracturingFog.Rendering
 
             int i = start;
             int simdEnd = end - vecLen;
-            for (; i <= simdEnd; i += vecLen)
+
+            // T3.3 — non-temporal stores when dst[start] is 32-byte aligned.
+            // Each step writes 32 bytes (8 uints) so alignment is preserved
+            // across the loop. The post-FX buffer is consumed by GPU upload
+            // immediately — no CPU re-read — so bypassing the cache saves
+            // L2 eviction pressure on 4K renders. One-time check up front
+            // keeps the branch out of the hot loop.
+            bool useNonTemp;
+            unsafe
             {
-                var packed = Vector256.LoadUnsafe(ref src[i]);
+                useNonTemp = (((nint)System.Runtime.CompilerServices.Unsafe.AsPointer(ref dst[start])) & 31) == 0;
+            }
 
-                // Extract per-channel byte values into Vector256<int>.
-                var bI = (packed & maskFF).AsInt32();
-                var gI = ((packed >> 8)  & maskFF).AsInt32();
-                var rI = ((packed >> 16) & maskFF).AsInt32();
-
-                var b = Vector256.ConvertToSingle(bI);
-                var g = Vector256.ConvertToSingle(gI);
-                var r = Vector256.ConvertToSingle(rI);
-
-                // (v - 127.5) * contrast + 127.5 + brightness255
-                b = (b - halfV) * contrastV + halfV + brightnessV;
-                g = (g - halfV) * contrastV + halfV + brightnessV;
-                r = (r - halfV) * contrastV + halfV + brightnessV;
-
-                // Clamp to [0, 255].
-                b = Vector256.Max(zeroF, Vector256.Min(max255F, b));
-                g = Vector256.Max(zeroF, Vector256.Min(max255F, g));
-                r = Vector256.Max(zeroF, Vector256.Min(max255F, r));
-
-                // Back to uint and pack into 0xFFRRGGBB layout.
-                var bU = Vector256.ConvertToInt32(b).AsUInt32();
-                var gU = Vector256.ConvertToInt32(g).AsUInt32() << 8;
-                var rU = Vector256.ConvertToInt32(r).AsUInt32() << 16;
-                var result = alpha | rU | gU | bU;
-
-                result.StoreUnsafe(ref dst[i]);
+            if (useNonTemp)
+            {
+                unsafe
+                {
+                    fixed (uint* pDst = &dst[0])
+                    {
+                        for (; i <= simdEnd; i += vecLen)
+                        {
+                            var packed = Vector256.LoadUnsafe(ref src[i]);
+                            var bI = (packed & maskFF).AsInt32();
+                            var gI = ((packed >> 8)  & maskFF).AsInt32();
+                            var rI = ((packed >> 16) & maskFF).AsInt32();
+                            var b = Vector256.ConvertToSingle(bI);
+                            var g = Vector256.ConvertToSingle(gI);
+                            var r = Vector256.ConvertToSingle(rI);
+                            b = (b - halfV) * contrastV + halfV + brightnessV;
+                            g = (g - halfV) * contrastV + halfV + brightnessV;
+                            r = (r - halfV) * contrastV + halfV + brightnessV;
+                            b = Vector256.Max(zeroF, Vector256.Min(max255F, b));
+                            g = Vector256.Max(zeroF, Vector256.Min(max255F, g));
+                            r = Vector256.Max(zeroF, Vector256.Min(max255F, r));
+                            var bU = Vector256.ConvertToInt32(b).AsUInt32();
+                            var gU = Vector256.ConvertToInt32(g).AsUInt32() << 8;
+                            var rU = Vector256.ConvertToInt32(r).AsUInt32() << 16;
+                            var result = alpha | rU | gU | bU;
+                            result.StoreAlignedNonTemporal(pDst + i);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (; i <= simdEnd; i += vecLen)
+                {
+                    var packed = Vector256.LoadUnsafe(ref src[i]);
+                    var bI = (packed & maskFF).AsInt32();
+                    var gI = ((packed >> 8)  & maskFF).AsInt32();
+                    var rI = ((packed >> 16) & maskFF).AsInt32();
+                    var b = Vector256.ConvertToSingle(bI);
+                    var g = Vector256.ConvertToSingle(gI);
+                    var r = Vector256.ConvertToSingle(rI);
+                    b = (b - halfV) * contrastV + halfV + brightnessV;
+                    g = (g - halfV) * contrastV + halfV + brightnessV;
+                    r = (r - halfV) * contrastV + halfV + brightnessV;
+                    b = Vector256.Max(zeroF, Vector256.Min(max255F, b));
+                    g = Vector256.Max(zeroF, Vector256.Min(max255F, g));
+                    r = Vector256.Max(zeroF, Vector256.Min(max255F, r));
+                    var bU = Vector256.ConvertToInt32(b).AsUInt32();
+                    var gU = Vector256.ConvertToInt32(g).AsUInt32() << 8;
+                    var rU = Vector256.ConvertToInt32(r).AsUInt32() << 16;
+                    var result = alpha | rU | gU | bU;
+                    result.StoreUnsafe(ref dst[i]);
+                }
             }
             return i;
         }
@@ -1707,6 +2700,10 @@ namespace FracturingFog.Rendering
             _lastUploadedBuffer = bgra;
             _lastUploadedWidth = width;
             _lastUploadedHeight = height;
+            // S-X9g — external present is also "current screen content".
+            _lastPresentedBuffer = bgra;
+            _lastPresentedWidth = width;
+            _lastPresentedHeight = height;
         }
 
         /// <summary>
@@ -1715,13 +2712,17 @@ namespace FracturingFog.Rendering
         /// (region/theme + program-name sub-line) regardless of the on-screen
         /// <see cref="ShowWatermark"/> toggle — parity with the legacy
         /// WinForms screenshot flow in ImageCapture.cs. No-op when no frame
-        /// has been rendered yet. Windows only — depends on System.Drawing.
+        /// has been rendered yet. Cross-platform via SkiaSharp in
+        /// ImageExport.SavePixelsToFile (Phase X.A / Slice A.7).
         /// </summary>
         public void SaveLastFrameToPng(string path)
         {
             if (_disposed) return;
             if (string.IsNullOrEmpty(path)) return;
-            if (!OperatingSystem.IsWindows()) return;
+            // S-X7.4 (2026-06-23) — IsWindows gate dropped. The underlying
+            // ImageExport.SavePixelsToFile is SkiaSharp end-to-end; the old
+            // gate dates from before that migration when this method called
+            // System.Drawing-bound encoder paths.
 
             // Prefer the pre-overlay snapshot so a fresh watermark renders at
             // file resolution instead of double-stamping the buffer's already-
@@ -1763,10 +2764,85 @@ namespace FracturingFog.Rendering
                 wm);
         }
 
+        // Phase 18b — animation tick callback. Polls the active Lighting
+        // struct for any non-zero animation speed; if none, returns without
+        // touching ViewState (idle scene stays bit-identical to a stopped
+        // clock). Otherwise advances SceneTime to "seconds since the first
+        // tick that found a non-zero speed" and kicks a Trigger.
+        //
+        // SceneTime injection happens *on the timer thread* via a copy-out
+        // / mutate / copy-in dance because Lighting is exposed as an
+        // auto-property of a value type — a direct field write would be
+        // discarded by the compiler. The mutation is a single struct
+        // assignment; one tick can race a calculator's own snapshot read
+        // and produce 1/30 s of phase mismatch, but the value is a smooth
+        // double so the artifact is below perception threshold.
+        private void AnimationTick(object? state)
+        {
+            if (_disposed) return;
+            if (System.Threading.Interlocked.Exchange(ref _animTickBusy, 1) != 0) return;
+            try
+            {
+                var p = ViewState.FractalParameters;
+                if (p == null) return;
+                var l = p.Lighting;
+                bool anySpeed =
+                    Math.Abs(l.LightOrbitSpeed)   > 1e-9 ||
+                    Math.Abs(l.CausticsAnimSpeed) > 1e-9 ||
+                    Math.Abs(l.VolumeNoiseSpeed)  > 1e-9;
+                if (!anySpeed)
+                {
+                    // Reset clock so the next time speed becomes non-zero we
+                    // re-anchor at "now" rather than carrying an ancient base.
+                    _animStartTicks = 0;
+                    return;
+                }
+
+                // Phase 18b fix — anchor the scene clock the moment speed becomes
+                // non-zero, regardless of whether this tick will proceed to
+                // Trigger. Without this, _animStartTicks was set only when the
+                // gate cleared, so the first animated render snapshotted
+                // SceneTime=0 → identical pixels to the user's initial frame →
+                // looked like "no animation". By the time the gate clears the
+                // clock has already advanced through the in-flight render.
+                long now = Stopwatch.GetTimestamp();
+                if (_animStartTicks == 0) _animStartTicks = now;
+
+                // Phase 18b fix — gate on the previous frame having completed.
+                // Trigger() sets _animFrameInFlight; AnimationFrameUploaded
+                // clears it. Skip if a frame (user-initiated OR animation-tick
+                // initiated) is still running. Without this gate, a slow 3D
+                // scene whose Calculate exceeds the 33 ms tick period gets
+                // cancelled by every subsequent tick — the user sees the
+                // status bar stuck on "Calculating…".
+                if (System.Threading.Volatile.Read(ref _animFrameInFlight) != 0)
+                    return;
+
+                double sceneTime = (now - _animStartTicks) / (double)Stopwatch.Frequency;
+                l.SceneTime = sceneTime;
+                p.Lighting = l;
+
+                Trigger();
+            }
+            catch
+            {
+                // Animation tick must never tear down the host. Swallow and
+                // wait for the next period.
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _animTickBusy, 0);
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
+            // Phase 18b — stop the animation timer first so no more Triggers
+            // fire while the rest of the pipeline is being torn down.
+            try { _animTimer?.Dispose(); } catch { }
+            _animTimer = null;
             // Tear down any running video / slideshow first so its background
             // loop stops touching the calculator + renderer before disposal.
             lock (_videoLock) _videoCts?.Cancel();

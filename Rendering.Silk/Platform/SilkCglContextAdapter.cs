@@ -144,6 +144,14 @@ public sealed class SilkCglContextAdapter : INativeContext, IDisposable
         objc_msgSend_void(_context, _selMakeCurrent);
     }
 
+    // S-X6 (2026-06-23) — release ctx from calling thread; see SilkWin32 sibling.
+    public void ReleaseCurrent()
+    {
+        if (_disposed) return;
+        // [NSOpenGLContext clearCurrentContext] — class method on NSOpenGLContext.
+        objc_msgSend_void(_nsOpenGLCtxCls, _selClearCurrent);
+    }
+
     public void SwapBuffers()
     {
         if (_disposed) return;

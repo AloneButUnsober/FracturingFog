@@ -33,7 +33,11 @@ using FracturingFog.Models;
 
 namespace FracturingFog.Hosting
 {
-    internal static class FfmpegSetupDialog
+    // Wave 1.C1 — flipped internal → public when the file moved into the
+    // cross-platform FracturingFog.Hosting assembly; both shell hosts
+    // (FracturingFog WinExe + FracturingFog.App) consume it across the
+    // assembly boundary.
+    public static class FfmpegSetupDialog
     {
         public enum Result
         {

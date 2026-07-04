@@ -85,19 +85,35 @@ public sealed class SkiaCpuRenderer : IFractalRenderer
             // the caller's array would prevent the calculator from swapping
             // frames in place; the per-frame copy is the same as the
             // glTexSubImage2D upload Silk performs and stays off the GPU.
-            _ownBuffer = new uint[width * height];
-            Array.Copy(colorBuffer, _ownBuffer, _ownBuffer.Length);
-            _pinHandle = GCHandle.Alloc(_ownBuffer, GCHandleType.Pinned);
-
-            var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
-            _bitmap = new SKBitmap();
-            if (!_bitmap.InstallPixels(info, _pinHandle.AddrOfPinnedObject(),
-                                       info.RowBytes, releaseProc: null, context: null))
+            // S-X8 (2026-06-27) — atomically build pinned handle + bitmap.
+            // Without the try/catch the InstallPixels failure path left
+            // _pinHandle allocated + _ownBuffer rooted, leaking one resize
+            // worth of LOH each time the InstallPixels rejection repeated.
+            var owned = new uint[width * height];
+            Array.Copy(colorBuffer, owned, owned.Length);
+            var handle = GCHandle.Alloc(owned, GCHandleType.Pinned);
+            SKBitmap? bmp = null;
+            try
             {
-                throw new InvalidOperationException("SKBitmap.InstallPixels failed for pinned BGRA buffer.");
+                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                bmp = new SKBitmap();
+                if (!bmp.InstallPixels(info, handle.AddrOfPinnedObject(),
+                                       info.RowBytes, releaseProc: null, context: null))
+                {
+                    throw new InvalidOperationException("SKBitmap.InstallPixels failed for pinned BGRA buffer.");
+                }
             }
-            _width  = width;
-            _height = height;
+            catch
+            {
+                try { bmp?.Dispose(); } catch { }
+                try { handle.Free(); } catch { }
+                throw;
+            }
+            _ownBuffer = owned;
+            _pinHandle = handle;
+            _bitmap    = bmp;
+            _width     = width;
+            _height    = height;
         }
         else
         {

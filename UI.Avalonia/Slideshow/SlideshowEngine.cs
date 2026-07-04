@@ -22,9 +22,11 @@ using System.Threading.Tasks;
 
 using Avalonia.Threading;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Audio;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.UI.Avalonia.ViewModels.Animation;
 
 namespace FracturingFog.UI.Avalonia.Slideshow
 {
@@ -34,7 +36,18 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         private readonly IFractalRenderHost _host;
         private readonly IColorThemeService _service;
         private SlideshowSettings _settings;
-        private readonly Random _rng = new();
+
+        // RNG + region shuffle-bag. Both RNGs are reseeded on each Start from
+        // SlideshowSettings.RandomSeed (0 = fresh entropy per run; non-zero =
+        // reproducible). _regionRng is dedicated to the region bag so region
+        // ordering is reproducible independent of how many draws theme picking
+        // consumes (the solid-frame retry loop consumes a variable number).
+        // _rng drives theme + animation picks. Both read through lambdas so a
+        // Start-time reseed takes effect without rebuilding the bag delegate.
+        // _regionBag draws every region once before repeating (no back-to-back).
+        private Random _rng = new();
+        private Random _regionRng = new();
+        private readonly ShuffleBag<string> _regionBag;
 
         private CancellationTokenSource? _cts;
         private volatile bool _paused;
@@ -55,6 +68,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _service = service ?? throw new ArgumentNullException(nameof(service));
             _settings = settings ?? new SlideshowSettings();
+            _regionBag = new ShuffleBag<string>(n => _regionRng.Next(n), StringComparer.Ordinal);
         }
 
         public bool IsRunning { get; private set; }
@@ -139,6 +153,17 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             _paused = false;
             _skipRegion = false;
             _skipTheme = false;
+
+            // Reseed per run so a fixed RandomSeed reproduces the same order
+            // from the top, and 0 draws fresh entropy. The engine instance is
+            // reused across Start/Stop toggles, so also reset the bag's carried
+            // state — otherwise a second run draws from the previous run's
+            // leftover shuffle instead of a fresh seeded one.
+            int seed = _settings.RandomSeed;
+            _rng = seed != 0 ? new Random(seed) : new Random();
+            _regionRng = seed != 0 ? new Random(seed) : new Random();
+            _regionBag.Reset();
+
             _cts = new CancellationTokenSource();
             IsRunning = true;
             var token = _cts.Token;
@@ -172,11 +197,18 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 int regionStepMs = Math.Max(8, Math.Max(50, _settings.RegionFadeMs) / fadeSteps);
                 int themeStepMs = Math.Max(8, Math.Max(50, _settings.ColorThemeFadeMs) / fadeSteps);
 
-                int lastRegion = -1;
                 string? heldRegion = null;
 
                 while (!ct.IsCancellationRequested)
                 {
+                    // Re-enumerate every region pick so a region saved (or
+                    // deleted) mid-slideshow joins (or leaves) the pool without
+                    // an app restart. Cheap in-memory library read. Keep the
+                    // previous pool if the fresh read comes back empty (e.g. a
+                    // transient filter mismatch) so the loop never starves.
+                    var fresh = ApplyRegionFilter(_service.EnumerateSlideshowRegionNames());
+                    if (fresh != null && fresh.Count > 0) regions = fresh;
+
                     string regionName;
                     if (LockRegion && heldRegion != null)
                     {
@@ -184,17 +216,23 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     }
                     else
                     {
-                        int ri;
-                        do { ri = _rng.Next(regions.Count); }
-                        while (regions.Count > 1 && ri == lastRegion);
-                        lastRegion = ri;
-                        regionName = regions[ri];
+                        // Draw-without-replacement: every region shows once per
+                        // cycle before any repeat, no back-to-back repeats. The
+                        // bag rebuilds itself when `regions` membership changes
+                        // (live pool refresh above).
+                        regionName = _regionBag.Draw(regions);
                         heldRegion = regionName;
                     }
 
                     double zoom = _service.GetRegionZoom(regionName);
                     var themes = ApplyThemeFilter(_service.EnumerateThemeNamesForZoom(zoom));
                     int lastTheme = -1;
+
+                    // Animation Roadmap Phase 4 — pick the leg's animation once
+                    // per region (reused across the region's theme sub-legs).
+                    // Null when Type != Animation or no library animation is
+                    // compatible → the leg plays static (unchanged behaviour).
+                    var legAnimation = ResolveLegAnimation(regionName);
 
                     // Matches legacy Slideshow.cs cadence:
                     //   FocusRegion=true  (Region Focus) → 3 themes/region;
@@ -230,14 +268,47 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
                         int themesPerRegionNow = FocusRegion ? 3 : 8;
                         int legMs = Math.Max(800, totalRegionMs / Math.Max(1, themesPerRegionNow));
-                        using var legSweepCts = StartAdaptiveSweep(legMs, ct);
+                        var sweep = StartAdaptiveSweep(legMs, ct);
+
+                        // Start the leg's animation on the shared bus AFTER the
+                        // cross-fade committed, so the bus's live renders don't
+                        // race the fade's snapshot/present. Stopped in finally
+                        // (below) before the next transition for the same reason.
+                        await StartLegAnimationAsync(legAnimation, ct);
 
                         // themeMs is recomputed each WaitAsync tick so a
                         // FocusRegion toggle mid-theme shortens (or extends)
                         // the visible duration immediately.
-                        if (await WaitAsync(
-                            () => Math.Max(800, totalRegionMs / Math.Max(1, FocusRegion ? 3 : 8)),
-                            ct)) break; // skip-region
+                        bool skipRegion;
+                        try
+                        {
+                            skipRegion = await WaitAsync(
+                                () => Math.Max(800, totalRegionMs / Math.Max(1, FocusRegion ? 3 : 8)),
+                                ct);
+                        }
+                        finally
+                        {
+                            // Stop the leg animation before tearing down the
+                            // sweep so the next transition's snapshot is a
+                            // static frame (no bus render mid-fade).
+                            await StopLegAnimationAsync(legAnimation);
+                            // CTS.Dispose alone does NOT cancel the token —
+                            // must explicitly Cancel + await the sweep Task
+                            // or each leg leaks a Task.Run that keeps writing
+                            // to AdaptiveValueSink. N legs = N racing tasks =
+                            // slider jitter + Stop() can't reach them
+                            // (linked CTS already disposed, parent-cancel
+                            // callback unregistered).
+                            try { sweep.Cts.Cancel(); } catch { /* already disposed */ }
+                            try { await sweep.Task.ConfigureAwait(false); }
+                            catch (OperationCanceledException) { /* expected */ }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine($"[SlideshowEngine] sweep task failed: {ex.Message}");
+                            }
+                            sweep.Cts.Dispose();
+                        }
+                        if (skipRegion) break;
                         if (ct.IsCancellationRequested) break;
                         t++;
                     }
@@ -252,6 +323,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             {
                 await OnUiAsync(() =>
                 {
+                    // Animation Roadmap Phase 4 — drop any leg animators still
+                    // registered so the bus doesn't keep ticking after Stop.
+                    var bus = AnimationBusHost.Bus;
+                    if (bus != null) { bus.ClearDynamic(); bus.Refresh(); }
                     IsRunning = false;
                     Stopped?.Invoke(this, EventArgs.Empty);
                     return 0;
@@ -354,6 +429,79 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 if (themeName == null) return null;
             }
             return themeName;
+        }
+
+        // ── Animation leg (Animation Roadmap Phase 4) ─────────────────────
+        //
+        // Resolve the animation for a region leg via the pure AnimationLegPicker
+        // (region's attached animation, or a random type-compatible library
+        // animation), then drive it on the shared AnimationBusHost during the
+        // leg's hold. Returns null when Type != Animation or no animation
+        // qualifies — the caller then plays a static leg.
+
+        private AnimationData? ResolveLegAnimation(string regionName)
+        {
+            // Animation type always animates. Image (this engine also drives
+            // the Image slideshow) opts in via EnableAnimations (Phase 5).
+            // Video is a separate engine (FractalRenderHost.Video).
+            bool animate = Config?.Type == SlideshowType.Animation
+                || (Config?.EnableAnimations ?? false);
+            if (!animate) return null;
+
+            var names = _service.EnumerateAnimationNames();
+            if (names == null || names.Count == 0) return null;
+
+            var candidates = new List<AnimationLegPicker.Candidate>(names.Count);
+            foreach (var n in names)
+            {
+                var data = _service.GetAnimation(n);
+                if (data == null) continue;
+                candidates.Add(new AnimationLegPicker.Candidate(
+                    data.Name, data.TargetFractalTypes, data.Tags));
+            }
+            if (candidates.Count == 0) return null;
+
+            string? chosen = AnimationLegPicker.Pick(
+                candidates,
+                _service.GetRegionFractalTypeName(regionName),
+                _service.GetRegionAnimationName(regionName),
+                Config?.RandomizeAnimationsByFractalType ?? false,
+                Config?.IncludedAnimations,
+                Config?.FilterAnimations,
+                _rng.Next);
+
+            if (string.IsNullOrEmpty(chosen))
+            {
+                StatusChanged?.Invoke(this,
+                    $"Slideshow: no animation compatible with {regionName} — static leg");
+                return null;
+            }
+            return _service.GetAnimation(chosen);
+        }
+
+        private Task StartLegAnimationAsync(AnimationData? animation, CancellationToken ct)
+        {
+            if (animation == null) return Task.CompletedTask;
+            return OnUiAsync(() =>
+            {
+                AnimationBusHost.LoadRegionAnimation(
+                    animation, _host.ViewState.FractalParameters);
+                return 0;
+            }, ct);
+        }
+
+        private Task StopLegAnimationAsync(AnimationData? animation)
+        {
+            if (animation == null) return Task.CompletedTask;
+            // Use CancellationToken.None so the stop always runs even when the
+            // leg's token was cancelled (Stop pressed) — otherwise the bus
+            // keeps ticking against stale params after the slideshow ends.
+            return OnUiAsync(() =>
+            {
+                var bus = AnimationBusHost.Bus;
+                if (bus != null) { bus.ClearDynamic(); bus.Refresh(); }
+                return 0;
+            }, CancellationToken.None);
         }
 
         /// <summary>Region change: offscreen-render incoming, cross-fade, commit live.</summary>
@@ -588,20 +736,22 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         // Drives the FloatingMenu Adaptive slider over the lifetime of a leg
         // per <see cref="SlideshowConfig.AdaptiveSweep"/>. The shell wires
         // <see cref="AdaptiveValueSink"/> to <c>FloatingMenu.Adaptive</c>.
-        // Returns a CTS that the caller should dispose to abort the sweep
-        // when the leg ends early (skip / stop).
+        // Returns the linked CTS plus the running Task — caller MUST Cancel
+        // the CTS and await the Task before disposing, otherwise the sweep
+        // leaks (CTS.Dispose does not cancel) and successive legs accumulate
+        // racing tasks all writing to the slider.
         //
         // Audio-reactive mode (Config.AudioReactive=true + BeatSource set):
         //   • Cycle duration = BeatFraction × beatPeriodMs (recomputed each
         //     tick so BPM drift updates live; falls back to legMs when BPM
         //     is still 0).
         //   • Loop is forced true for the slideshow's lifetime — user spec.
-        private CancellationTokenSource StartAdaptiveSweep(int legMs, CancellationToken parentCt)
+        private (CancellationTokenSource Cts, Task Task) StartAdaptiveSweep(int legMs, CancellationToken parentCt)
         {
             var legCts = CancellationTokenSource.CreateLinkedTokenSource(parentCt);
             var cfg = Config?.AdaptiveSweep;
             if (cfg == null || !cfg.Enabled || AdaptiveValueSink == null || legMs <= 0)
-                return legCts;
+                return (legCts, Task.CompletedTask);
 
             int start = Math.Clamp(cfg.Start, 0, 100);
             int end = Math.Clamp(cfg.End, 0, 100);
@@ -612,7 +762,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             var sink = AdaptiveValueSink;
             var ct = legCts.Token;
 
-            _ = Task.Run(async () =>
+            var task = Task.Run(async () =>
             {
                 const int tickMs = 50;
                 int elapsed = 0;
@@ -642,7 +792,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 }
             }, ct);
 
-            return legCts;
+            return (legCts, task);
         }
 
         // Resolve full-sweep cycle duration. Audio-reactive: beatFrac × beatPeriod

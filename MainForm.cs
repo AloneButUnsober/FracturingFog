@@ -330,7 +330,7 @@ public sealed partial class MainForm : Form
     public MainForm()
     {
         Icon = new Icon(@".\Resources\FracturingFog.ico");
-        Text = $"{_programName} v{_programVersion} - {RendererFactory.ProbeDescription()}";
+        Text = $"{_programName} v{_programVersion} - {WindowsDxRendererFactory.ProbeDescription()}";
         ClientSize = new Size(1169, 728);
         MinimumSize = new Size(480, 270);
         BackColor = Color.Black;
@@ -895,7 +895,7 @@ public sealed partial class MainForm : Form
             //MARGINS margins = new MARGINS { cxLeftWidth = 0, cxRightWidth = 0, cyTopHeight = 30, cyBottomHeight = -1 };
             //_ = DwmExtendFrameIntoClientArea(Handle, ref margins);
 
-            _renderer = RendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
+            _renderer = WindowsDxRendererFactory.Create(_renderPanel.Handle, w, h, _forceD3D11);
             _calculator = new MandelbrotCalculator(w, h);
             _escapeCalculator = new EscapeTimeCalculator(w, h);
             _ifsCalculator = new IFSCalculator(w, h);

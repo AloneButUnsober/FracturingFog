@@ -6,7 +6,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class HsvPalette : IColorMap, IVectorColorMap
+    public class HsvPalette : IColorMap, IVectorColorMap, IGpuHlslPalette
     {
         public static string Name => "Hsv";
 
@@ -117,5 +117,38 @@ namespace FracturingFog.Models
             g = Vector128.ConditionalSelect(mask, sg, g);
             b = Vector128.ConditionalSelect(mask, sb, b);
         }
+
+        // ── GPU HLSL palette (Wave 3.6) ──────────────────────────────────────
+        //
+        // Mirrors Map() bit-for-shader: hue = frac(smooth*0.02), saturation =
+        // 1 (hard-coded so cg_fromHsv collapses to the per-sector cases below),
+        // baseValue = 0 for in-set / 1 for escaped, lightness = 1 - min(dist*
+        // 0.08, 1), value = baseValue * lightness. With saturation = 1 the
+        // sector colours simplify to (v,t,p)/(q,v,p)/(p,v,t)/(p,q,v)/(t,p,v)/
+        // (v,p,q) where p = v*(1-s) = 0, q = v*(1-f), t = v*f.
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    float hue = in_smooth * 0.02;
+    hue = hue - floor(hue);
+    float lightness = 1.0 - min(in_dist * 0.08, 1.0);
+    float v = (in_isInSet > 0.5) ? 0.0 : lightness;
+    float hh = hue * 6.0;
+    int isec = (int)floor(hh);
+    float f = hh - floor(hh);
+    float q = v * (1.0 - f);
+    float t = v * f;
+    int seg = isec - 6 * (isec / 6);
+    float3 rgb;
+    if      (seg == 0) rgb = float3(v, t, 0.0);
+    else if (seg == 1) rgb = float3(q, v, 0.0);
+    else if (seg == 2) rgb = float3(0.0, v, t);
+    else if (seg == 3) rgb = float3(0.0, q, v);
+    else if (seg == 4) rgb = float3(t, 0.0, v);
+    else               rgb = float3(v, 0.0, q);
+    return rgb;
+";
+
+        public string PaletteId => "HsvPalette/v1";
     }
 }

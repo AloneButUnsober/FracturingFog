@@ -1,0 +1,179 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        mc:Ignorable="d"
+        x:Class="FracturingFog.UI.Avalonia.Views.WorkerDetailView"
+        x:DataType="vm:WorkerDetailViewModel"
+        Title="FracturingFog — Worker Detail"
+        Width="640" Height="640"
+        MinWidth="480" MinHeight="540"
+        Background="#171717">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#DDD" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Background" Value="#1B1B1B" />
+            <Setter Property="BorderBrush" Value="#2E2E2E" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#2E6BC8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="12,5" />
+        </Style>
+        <Style Selector="Button.danger">
+            <Setter Property="Background" Value="#8C2E2E" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="12,5" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+
+        <!-- ── Header: identity + status badge + refresh ───────────────── -->
+        <Border Grid.Row="0" Classes="group">
+            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Worker ID" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding WorkerId}"
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="8,0,0,0" />
+                <Button    Grid.Row="0" Grid.Column="2" Classes="primary" Content="Refresh"
+                           Command="{Binding RefreshCommand}" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Name" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding WorkerName}" Margin="8,4,0,0" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Status" Margin="0,4,0,0" />
+                <Border    Grid.Row="2" Grid.Column="1" Margin="8,4,0,0" Padding="6,2"
+                           Background="{Binding StatusBackgroundHex}"
+                           HorizontalAlignment="Left">
+                    <TextBlock Classes="value" Text="{Binding StatusBadge}" FontWeight="Bold"
+                               Foreground="#222" />
+                </Border>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Classes="value"
+                           Text="{Binding LastError}" Foreground="#FFCC00"
+                           Margin="0,4,0,0"
+                           IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </Grid>
+        </Border>
+
+        <!-- ── Capabilities + telemetry ────────────────────────────────── -->
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <Border Classes="group">
+                    <StackPanel Spacing="4">
+                        <TextBlock Classes="section" Text="Capabilities" />
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="OS" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding OsPlatform}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="CPU" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding CpuModel}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Logical cores" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding LogicalCores}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Total RAM" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding TotalRam}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="GPUs" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="4" Grid.Column="1" Classes="value" Text="{Binding Gpus}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Fractal types" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="5" Grid.Column="1" Classes="value" Text="{Binding SupportedFractalTypes}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Max tiles concurrent" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="6" Grid.Column="1" Classes="value" Text="{Binding MaxConcurrentTiles}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Classes="label" Text="Preferred tile pixels" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="7" Grid.Column="1" Classes="value" Text="{Binding PreferredTilePixels}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="8" Grid.Column="0" Classes="label" Text="Engine build SHA" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="8" Grid.Column="1" Classes="value" Text="{Binding EngineBuildSha}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="9" Grid.Column="0" Classes="label" Text="Protocol version" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="9" Grid.Column="1" Classes="value" Text="{Binding ProtocolVersion}" Margin="0,4,0,0" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="group">
+                    <StackPanel Spacing="4">
+                        <TextBlock Classes="section" Text="Live telemetry" />
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Registered at" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Classes="value" Text="{Binding RegisteredAtLocal}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Heartbeat age" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Classes="value" Text="{Binding HeartbeatAge}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Tiles in flight" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding TilesInFlight}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="CPU" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Classes="value" Text="{Binding CpuPercentText}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Free RAM" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="4" Grid.Column="1" Classes="value" Text="{Binding FreeRam}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="EMA ms/kilopixel" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="5" Grid.Column="1" Classes="value" Text="{Binding EmaMsPerKilopixel}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Tile samples" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="6" Grid.Column="1" Classes="value" Text="{Binding TileSamples}" Margin="0,4,0,0" />
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Classes="label" Text="Last note" Margin="0,4,0,0" />
+                            <TextBlock Grid.Row="7" Grid.Column="1" Classes="value" Text="{Binding LastNote}" Margin="0,4,0,0"
+                                       IsVisible="{Binding LastNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="Actions" />
+                        <TextBlock Foreground="#7E7E7E" FontSize="11" TextWrapping="Wrap"
+                                   Text="Quiesce drains the worker (no new tiles assigned). Resume clears the drain. Kill removes the worker from the registry — its next heartbeat will be refused with unknown-worker and the worker process tears down." />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Classes="primary" Content="Quiesce"
+                                    Command="{Binding QuiesceCommand}" />
+                            <Button Classes="primary" Content="Resume"
+                                    Command="{Binding ResumeCommand}" />
+                            <Button Classes="danger"  Content="Kill"
+                                    Command="{Binding KillCommand}" />
+                        </StackPanel>
+                        <TextBlock Classes="value" Text="{Binding ActionStatus}"
+                                   Foreground="#FFCC00" Margin="0,4,0,0"
+                                   IsVisible="{Binding ActionStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── Footer ──────────────────────────────────────────────────── -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="6">
+            <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -446,6 +446,19 @@ public sealed class UserBulbViewModel : ViewModelBase
     private double _animSpeed = 1.0;
     public double AnimSpeed { get => _animSpeed; set => this.RaiseAndSetIfChanged(ref _animSpeed, Math.Clamp(value, -10.0, 10.0)); }
 
+    private double _animLoopSeconds;
+    /// <summary>
+    /// Loop length in seconds (in raw t-units, before AnimSpeed scaling).
+    /// 0 = no loop (t accumulates without wrap). Positive values cause
+    /// AnimationTick to wrap t into [0, LoopSeconds) — useful for periodic
+    /// animations driven from sin(t)/cos(t) DSL expressions.
+    /// </summary>
+    public double AnimLoopSeconds
+    {
+        get => _animLoopSeconds;
+        set => this.RaiseAndSetIfChanged(ref _animLoopSeconds, Math.Clamp(value, 0.0, 600.0));
+    }
+
     private double _animTime;
     public double AnimTime
     {
@@ -477,8 +490,14 @@ public sealed class UserBulbViewModel : ViewModelBase
     public void AnimationTick(double dtSeconds)
     {
         if (!_isPlaying) return;
+        double next = _params.UserBulbTime + _animSpeed * dtSeconds;
+        if (_animLoopSeconds > 0.0)
+        {
+            double L = _animLoopSeconds;
+            next -= L * Math.Floor(next / L);
+        }
         _suppressRender = true;
-        AnimTime = _params.UserBulbTime + _animSpeed * dtSeconds;
+        AnimTime = next;
         _suppressRender = false;
         if (_renderInFlight) return;
         _renderInFlight = true;
@@ -673,13 +692,21 @@ public sealed class UserBulbViewModel : ViewModelBase
         var args = new OpenFileEventArgs("Import .fbulb", "FracturingFog bulb|*.fbulb;*.json|All files|*.*");
         OpenFilePromptRequested?.Invoke(this, args);
         if (string.IsNullOrEmpty(args.Path)) return;
-        var entry = UserBulbStore.Instance.ImportEntry(args.Path!);
-        if (entry is null)
+        var snapshot = UserBulbStore.Instance.ImportSnapshot(args.Path!);
+        if (snapshot?.Entry is null)
         {
             MessageRequested?.Invoke(this, "Import failed (invalid file).");
             return;
         }
-        RefreshSavedList(entry.Name);
+
+        // Apply snapshot knobs to _params before loading the entry — the
+        // load path triggers a recompile and we want the imported axis /
+        // Julia / camera state in effect on first render.
+        ApplySnapshotToParams(snapshot);
+        SyncMirrorFromParams();
+
+        RefreshSavedList(snapshot.Entry.Name);
+        LoadEquationByName(snapshot.Entry.Name);
     }
 
     private void OnExport()
@@ -689,11 +716,205 @@ public sealed class UserBulbViewModel : ViewModelBase
             MessageRequested?.Invoke(this, "Select a saved equation to export.");
             return;
         }
+        var entry = UserBulbStore.Instance.GetByName(_selectedSavedName!);
+        if (entry is null)
+        {
+            MessageRequested?.Invoke(this, "Export failed.");
+            return;
+        }
         var args = new SaveFileEventArgs("Export .fbulb", "FracturingFog bulb|*.fbulb", $"{_selectedSavedName}.fbulb");
         SaveFilePromptRequested?.Invoke(this, args);
         if (string.IsNullOrEmpty(args.Path)) return;
-        if (!UserBulbStore.Instance.ExportEntry(_selectedSavedName!, args.Path!))
+        var snapshot = BuildSnapshotFromParams(entry);
+        if (!UserBulbStore.Instance.ExportSnapshot(snapshot, args.Path!))
             MessageRequested?.Invoke(this, "Export failed.");
+    }
+
+    private UserBulbSnapshot BuildSnapshotFromParams(UserBulbEntry entry) => new()
+    {
+        Version          = UserBulbSnapshot.CurrentVersion,
+        Entry            = entry,
+        AxisMode         = _params.UserBulbAxisMode,
+        Compiler         = _params.UserBulbCompiler,
+        DEMode           = _params.UserBulbDEMode,
+        Backend          = _params.UserBulbBackend,
+        QuatSliceW       = _params.UserBulbQuatSliceW,
+        JuliaMode        = _params.UserBulbJuliaMode,
+        JuliaCX          = _params.UserBulbJuliaCX,
+        JuliaCY          = _params.UserBulbJuliaCY,
+        JuliaCZ          = _params.UserBulbJuliaCZ,
+        JuliaCW          = _params.UserBulbJuliaCW,
+        CameraDistance   = _params.UserBulbCameraDistance,
+        CameraTheta      = _params.UserBulbCameraTheta,
+        CameraPhi        = _params.UserBulbCameraPhi,
+        LightTheta       = _params.UserBulbLightTheta,
+        LightPhi         = _params.UserBulbLightPhi,
+        Light1Intensity  = _params.UserBulbLight1Intensity,
+        Light2Intensity  = _params.UserBulbLight2Intensity,
+        Light3Intensity  = _params.UserBulbLight3Intensity,
+        AOSamples        = _params.UserBulbAOSamples,
+        FogDensity       = _params.UserBulbFogDensity,
+        ColorDriver      = _params.UserBulbColorDriver,
+        OrbitTrapX       = _params.UserBulbOrbitTrapX,
+        OrbitTrapY       = _params.UserBulbOrbitTrapY,
+        OrbitTrapZ       = _params.UserBulbOrbitTrapZ,
+        IterComponentAxis = _params.UserBulbIterComponentAxis,
+        Iterations       = _params.UserBulbIterations,
+        MaxSteps         = _params.UserBulbMaxSteps,
+        Epsilon          = _params.UserBulbEpsilon,
+        Bailout          = _params.UserBulbBailout,
+        JacobianH        = _params.UserBulbJacobianH,
+        CullRadius       = _params.UserBulbCullRadius,
+        FovDegrees       = _params.UserBulbFovDegrees,
+        ClipPlaneEnabled = _params.UserBulbClipPlaneEnabled,
+        SuperSample      = _params.UserBulbSuperSample,
+        Time             = _params.UserBulbTime,
+        Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
+    };
+
+    private void ApplySnapshotToParams(UserBulbSnapshot s)
+    {
+        if (s.AxisMode is { } axisMode)          _params.UserBulbAxisMode = axisMode;
+        if (s.Compiler is { } compiler)          _params.UserBulbCompiler = compiler;
+        if (s.DEMode is { } deMode)              _params.UserBulbDEMode = deMode;
+        if (s.Backend is { } backend)            _params.UserBulbBackend = backend;
+        if (s.QuatSliceW is { } qsw)             _params.UserBulbQuatSliceW = qsw;
+        if (s.JuliaMode is { } jm)               _params.UserBulbJuliaMode = jm;
+        if (s.JuliaCX is { } jcx)                _params.UserBulbJuliaCX = jcx;
+        if (s.JuliaCY is { } jcy)                _params.UserBulbJuliaCY = jcy;
+        if (s.JuliaCZ is { } jcz)                _params.UserBulbJuliaCZ = jcz;
+        if (s.JuliaCW is { } jcw)                _params.UserBulbJuliaCW = jcw;
+        if (s.CameraDistance is { } cd)          _params.UserBulbCameraDistance = cd;
+        if (s.CameraTheta is { } ct)             _params.UserBulbCameraTheta = ct;
+        if (s.CameraPhi is { } cp)               _params.UserBulbCameraPhi = cp;
+        if (s.LightTheta is { } lt)              _params.UserBulbLightTheta = lt;
+        if (s.LightPhi is { } lp)                _params.UserBulbLightPhi = lp;
+        if (s.Light1Intensity is { } l1)         _params.UserBulbLight1Intensity = l1;
+        if (s.Light2Intensity is { } l2)         _params.UserBulbLight2Intensity = l2;
+        if (s.Light3Intensity is { } l3)         _params.UserBulbLight3Intensity = l3;
+        if (s.AOSamples is { } ao)               _params.UserBulbAOSamples = ao;
+        if (s.FogDensity is { } fd)              _params.UserBulbFogDensity = fd;
+        if (s.ColorDriver is { } cdrv)           _params.UserBulbColorDriver = cdrv;
+        if (s.OrbitTrapX is { } tx)              _params.UserBulbOrbitTrapX = tx;
+        if (s.OrbitTrapY is { } ty)              _params.UserBulbOrbitTrapY = ty;
+        if (s.OrbitTrapZ is { } tz)              _params.UserBulbOrbitTrapZ = tz;
+        if (s.IterComponentAxis is { } ica)      _params.UserBulbIterComponentAxis = ica;
+        if (s.Iterations is { } iters)           _params.UserBulbIterations = iters;
+        if (s.MaxSteps is { } ms)                _params.UserBulbMaxSteps = ms;
+        if (s.Epsilon is { } eps)                _params.UserBulbEpsilon = eps;
+        if (s.Bailout is { } bo)                 _params.UserBulbBailout = bo;
+        if (s.JacobianH is { } jh)               _params.UserBulbJacobianH = jh;
+        if (s.CullRadius is { } cr)              _params.UserBulbCullRadius = cr;
+        if (s.FovDegrees is { } fov)             _params.UserBulbFovDegrees = fov;
+        if (s.ClipPlaneEnabled is { } cpe)       _params.UserBulbClipPlaneEnabled = cpe;
+        if (s.SuperSample is { } ss)             _params.UserBulbSuperSample = ss;
+        if (s.Time is { } t)                     _params.UserBulbTime = t;
+
+        if (s.Params is { Count: > 0 } srcParams)
+        {
+            _params.UserBulbParams.Clear();
+            foreach (var p in srcParams) _params.UserBulbParams.Add(p.Clone());
+        }
+    }
+
+    /// <summary>
+    /// Re-pulls every mirrored property from <see cref="_params"/> and raises
+    /// PropertyChanged on each. Used after an Import lands new state — the
+    /// individual property setters are bypassed (we wrote straight into
+    /// _params), so the view needs an explicit kick. <c>_suppressRender</c>
+    /// stays true throughout so no render fires per property — the caller
+    /// triggers a single compile/render after the bulk update.
+    /// </summary>
+    private void SyncMirrorFromParams()
+    {
+        _suppressRender = true;
+        try
+        {
+            _camDistance     = _params.UserBulbCameraDistance;
+            _camThetaDeg     = RadToDeg(_params.UserBulbCameraTheta);
+            _camPhiDeg       = RadToDeg(_params.UserBulbCameraPhi);
+            _lightThetaDeg   = RadToDeg(_params.UserBulbLightTheta);
+            _lightPhiDeg     = RadToDeg(_params.UserBulbLightPhi);
+
+            _iterations   = _params.UserBulbIterations;
+            _maxSteps     = _params.UserBulbMaxSteps;
+            _epsilon      = _params.UserBulbEpsilon;
+            _bailout      = _params.UserBulbBailout;
+            _jacobianH    = _params.UserBulbJacobianH;
+            _cullRadius   = _params.UserBulbCullRadius;
+            _deModeIndex  = (int)_params.UserBulbDEMode;
+            _backendIndex = (int)_params.UserBulbBackend;
+            _compilerIndex = (int)_params.UserBulbCompiler;
+            _axisModeIndex = (int)_params.UserBulbAxisMode;
+            _quatSliceW   = _params.UserBulbQuatSliceW;
+
+            _juliaMode = _params.UserBulbJuliaMode;
+            _juliaCX = _params.UserBulbJuliaCX;
+            _juliaCY = _params.UserBulbJuliaCY;
+            _juliaCZ = _params.UserBulbJuliaCZ;
+            _juliaCW = _params.UserBulbJuliaCW;
+
+            _colorDriverIndex = (int)_params.UserBulbColorDriver;
+            _trapX = _params.UserBulbOrbitTrapX;
+            _trapY = _params.UserBulbOrbitTrapY;
+            _trapZ = _params.UserBulbOrbitTrapZ;
+            _iterAxis = Math.Clamp(_params.UserBulbIterComponentAxis, 0, 2);
+
+            _light1 = _params.UserBulbLight1Intensity;
+            _light2 = _params.UserBulbLight2Intensity;
+            _light3 = _params.UserBulbLight3Intensity;
+            _aoSamples = _params.UserBulbAOSamples;
+            _fogDensity = _params.UserBulbFogDensity;
+
+            _fovDegrees = _params.UserBulbFovDegrees;
+            _clipPlane  = _params.UserBulbClipPlaneEnabled;
+            _ssIndex = _params.UserBulbSuperSample switch { 4 => 2, 2 => 1, _ => 0 };
+
+            _animTime = _params.UserBulbTime;
+
+            Params.Clear();
+            foreach (var p in _params.UserBulbParams) Params.Add(p);
+        }
+        finally { _suppressRender = false; }
+
+        this.RaisePropertyChanged(nameof(CamDistance));
+        this.RaisePropertyChanged(nameof(CamThetaDeg));
+        this.RaisePropertyChanged(nameof(CamPhiDeg));
+        this.RaisePropertyChanged(nameof(LightThetaDeg));
+        this.RaisePropertyChanged(nameof(LightPhiDeg));
+        this.RaisePropertyChanged(nameof(Iterations));
+        this.RaisePropertyChanged(nameof(MaxSteps));
+        this.RaisePropertyChanged(nameof(Epsilon));
+        this.RaisePropertyChanged(nameof(Bailout));
+        this.RaisePropertyChanged(nameof(JacobianH));
+        this.RaisePropertyChanged(nameof(CullRadius));
+        this.RaisePropertyChanged(nameof(DEModeIndex));
+        this.RaisePropertyChanged(nameof(BackendIndex));
+        this.RaisePropertyChanged(nameof(CompilerIndex));
+        this.RaisePropertyChanged(nameof(IsSandbox));
+        this.RaisePropertyChanged(nameof(AxisModeIndex));
+        this.RaisePropertyChanged(nameof(QuatEnabled));
+        this.RaisePropertyChanged(nameof(HintText));
+        this.RaisePropertyChanged(nameof(QuatSliceW));
+        this.RaisePropertyChanged(nameof(JuliaMode));
+        this.RaisePropertyChanged(nameof(JuliaCX));
+        this.RaisePropertyChanged(nameof(JuliaCY));
+        this.RaisePropertyChanged(nameof(JuliaCZ));
+        this.RaisePropertyChanged(nameof(JuliaCW));
+        this.RaisePropertyChanged(nameof(ColorDriverIndex));
+        this.RaisePropertyChanged(nameof(TrapX));
+        this.RaisePropertyChanged(nameof(TrapY));
+        this.RaisePropertyChanged(nameof(TrapZ));
+        this.RaisePropertyChanged(nameof(IterAxis));
+        this.RaisePropertyChanged(nameof(Light1));
+        this.RaisePropertyChanged(nameof(Light2));
+        this.RaisePropertyChanged(nameof(Light3));
+        this.RaisePropertyChanged(nameof(AOSamples));
+        this.RaisePropertyChanged(nameof(FogDensity));
+        this.RaisePropertyChanged(nameof(FovDegrees));
+        this.RaisePropertyChanged(nameof(ClipPlane));
+        this.RaisePropertyChanged(nameof(SSIndex));
+        this.RaisePropertyChanged(nameof(AnimTime));
     }
 
     private void OnResetCamera()
@@ -808,7 +1029,7 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     private void OnExportMesh()
     {
-        var pathArgs = new SaveFileEventArgs("Export bulb mesh", "OBJ mesh|*.obj", "bulb.obj");
+        var pathArgs = new SaveFileEventArgs("Export bulb mesh", "OBJ (smooth)|*.obj|STL (binary)|*.stl", "bulb.obj");
         SaveFilePromptRequested?.Invoke(this, pathArgs);
         if (string.IsNullOrEmpty(pathArgs.Path)) return;
 

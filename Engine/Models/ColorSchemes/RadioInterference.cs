@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class RedAndBlack : IColorMap
+    public class RedAndBlack : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Radio Interference Original";
 
@@ -33,6 +33,17 @@ namespace FracturingFog.Models
 
             return Fractals.HsvToRgb(hue, saturation, value);
         }
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    float hue = cg_mods(in_smooth * 8.0, 360.0);
+    float t = min(in_smooth / max(in_maxIter, 1.0), 1.0);
+    float value = saturate(1.0 - pow(t, 0.2));
+    return cg_hsv_to_rgb(hue, 0.85, value);
+";
+
+        public string PaletteId => "RedAndBlack/v1";
     }
 }
 //using FracturingFog.Interefaces;

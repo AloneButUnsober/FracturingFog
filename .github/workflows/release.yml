@@ -33,21 +33,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # S-X3 (2026-06-23) — `tfm` per RID. FracturingFog.App multi-targets
+        # net10.0;net10.0-windows so the Win leg can ProjectReference
+        # FracturingFog.Win directly. CrossTargeting Publish refuses without
+        # an explicit -f (NETSDK1129) so each leg pins its TFM here.
         include:
           - os: windows-latest
             rid: win-x64
+            tfm: net10.0-windows
             packager: zip
           - os: ubuntu-latest
             rid: linux-x64
+            tfm: net10.0
             packager: appimage
           - os: ubuntu-latest
             rid: linux-arm64
+            tfm: net10.0
             packager: appimage
           - os: macos-latest
             rid: osx-arm64
+            tfm: net10.0
             packager: macapp
           - os: macos-latest
             rid: osx-x64
+            tfm: net10.0
             packager: macapp
 
     runs-on: ${{ matrix.os }}
@@ -71,7 +80,7 @@ jobs:
           echo "Tag $TAG → version $VERSION"
 
       - name: Publish FracturingFog.App
-        run: dotnet publish FracturingFog.App/FracturingFog.App.csproj -c Release -p:PublishProfile=${{ matrix.rid }} -p:Version=${{ steps.version.outputs.version }}
+        run: dotnet publish FracturingFog.App/FracturingFog.App.csproj -c Release -f ${{ matrix.tfm }} -p:PublishProfile=${{ matrix.rid }} -p:Version=${{ steps.version.outputs.version }}
 
       # ── Packaging (per-OS) ──────────────────────────────────────────────
 

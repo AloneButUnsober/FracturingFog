@@ -47,6 +47,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalculatorGen.Lib", "Calcul
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ColorGen.Lib", "ColorGen.Lib\ColorGen.Lib.csproj", "{107A42D0-493D-4BA6-9B55-76C8FE52EEFC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CalculatorGen.SourceGen", "CalculatorGen.SourceGen\CalculatorGen.SourceGen.csproj", "{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -437,6 +439,24 @@ Global
 		{107A42D0-493D-4BA6-9B55-76C8FE52EEFC}.Release|x64.Build.0 = Release|Any CPU
 		{107A42D0-493D-4BA6-9B55-76C8FE52EEFC}.Release|x86.ActiveCfg = Release|Any CPU
 		{107A42D0-493D-4BA6-9B55-76C8FE52EEFC}.Release|x86.Build.0 = Release|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Debug|x64.Build.0 = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Debug|x86.Build.0 = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Publish|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Publish|Any CPU.Build.0 = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Publish|x64.ActiveCfg = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Publish|x64.Build.0 = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Publish|x86.ActiveCfg = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Publish|x86.Build.0 = Debug|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Release|x64.ActiveCfg = Release|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Release|x64.Build.0 = Release|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Release|x86.ActiveCfg = Release|Any CPU
+		{6F6C0856-FE15-4B8E-A6DE-EC68DF9744CA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

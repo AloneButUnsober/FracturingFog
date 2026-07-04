@@ -12,7 +12,7 @@ namespace FracturingFog.Models
     /// Soft dusk palette — three offset sine waves across R/G/B create
     /// smooth, ever-shifting blue→purple→violet→indigo bands.
     /// </summary>
-    public class TwilightCyclicMap : IColorMap
+    public class TwilightCyclicMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Twilight Cyclic";
 
@@ -54,5 +54,19 @@ namespace FracturingFog.Models
 
             return ColorUtils.PackArgbF(r, g, b);
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float s = in_smooth;
+    float r = 0.10 + 0.25 * (0.5 + 0.5 * sin(s * 0.0190 + 0.0));
+    float g = 0.05 + 0.30 * (0.5 + 0.5 * sin(s * 0.0110 + 1.0472));
+    float b = 0.40 + 0.60 * (0.5 + 0.5 * sin(s * 0.0260 + 2.0944));
+    float glow = 1.0 + 0.3 * exp(-in_dist * 0.15);
+    return saturate(float3(r, g, b) * glow);
+";
+
+        public string PaletteId => "TwilightCyclicMap/v1";
     }
 }

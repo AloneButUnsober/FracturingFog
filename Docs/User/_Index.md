@@ -6,7 +6,8 @@ zoom in trillions of times, paint them with hundreds of colour themes, record vi
 slideshows with music.
 
 This page is the entry point for end-user documentation. If you are a developer or contributor, head
-instead to the [Technical Index](../Technical/_Index.md).
+instead to the [Technical Index](../Technical/_Index.md). For a top-level router that bridges both
+audiences plus the project-wide roadmaps, see [Docs Index](../_Index.md).
 
 ---
 
@@ -43,6 +44,7 @@ as your imagination wants to take you.
 | Explore Mandelbulb-style 3-D fractals                    | [User Bulb 3D Guide](UserBulb-Guide.md)                        |
 | Render on a powerful workstation, drive from a laptop    | [Client / Server Guide](ClientServer-UserGuide.md)             |
 | Configure the local render server                        | [Server Admin Guide](ServerAdmin-Guide.md)                     |
+| Stand up a multi-machine render cluster                  | [Distributed Rendering Guide](Distributed-UserGuide.md)        |
 | Memorise the keyboard shortcuts                          | [Keyboard Shortcuts](Keyboard-Shortcuts.md)                    |
 
 ---

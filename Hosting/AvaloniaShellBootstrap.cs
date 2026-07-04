@@ -56,15 +56,18 @@ namespace FracturingFog.Hosting
     /// <see cref="OnSurfaceReady"/> the first time its native GPU surface
     /// is available; everything else flows from there.
     /// </summary>
+    // S-X1 (2026-06-23) — IBootstrapHooks.NativeInputBridge + IBootstrapHooks.ColorSampleBridge contracts
+    // live in Hosting/BootstrapHookContracts.cs so FracturingFog.Win can
+    // implement them against a Hosting ProjectReference.
+
     public static class AvaloniaShellBootstrap
     {
-        // ── Win32 plumbing for Inspect click → screen pixel conversion ───────
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct POINT { public int X; public int Y; }
+        // Win-only service hooks live on BootstrapHooks (Hosting.dll) so
+        // FracturingFog.Win can write them through a Hosting ProjectReference.
 
-        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-        private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+        // Read-only accessors for the Win-only installer + diagnostics.
+        public static IGpuSurface? CurrentSurface => s_surface;
+        public static ShellViewModel? CurrentShell => s_shell;
 
         private static IFractalRenderer? s_renderer;
         private static FractalRenderHost? s_renderHost;
@@ -125,12 +128,43 @@ namespace FracturingFog.Hosting
         {
             RendererFactory.NonWin32Backend = TryCreateSilkRenderer;
 
+            // S-X7.2 (2026-06-23) — Linux native input bridge. Avalonia's
+            // NativeControlHost child X11 subwindow swallows pointer events
+            // before the XAML InputSponge can see them (same cause as the
+            // Win+DX swap-chain HWND case). X11InputBridge XSelectInputs on
+            // the foreign XID and forwards to IFractalInputController.
+            // Windows installs its own NativeMouseForwarder via
+            // FracturingFog.Win.WindowsBootstrap; on Linux we wire the X11
+            // bridge here so the bootstrap installs whichever is present.
+            if (OperatingSystem.IsLinux() && BootstrapHooks.NativeInputBridge == null)
+                BootstrapHooks.NativeInputBridge = new X11InputBridge();
+
+            // S-X8 (2026-06-27) — Linux desktop pixel sampler. Was unwired
+            // (BootstrapHooks.ColorSampleBridge null on Linux) so the Color
+            // Theme Editor's per-stop Sample button silently no-op'd.
+            // X11ColorSampleBridge XGrabPointers root with a crosshair cursor
+            // and samples the next button-press via XGetImage. Windows hosts
+            // install WindowsColorSampleBridge ahead of this in
+            // WindowsBootstrap.Install.
+            if (OperatingSystem.IsLinux() && BootstrapHooks.ColorSampleBridge == null)
+                BootstrapHooks.ColorSampleBridge = new X11ColorSampleBridge();
+
             // Phase X.5 / Slice 5.2 — register Help → Hardware tab probes.
             // The callables read live state each time the user opens the
             // help window so they reflect the audio backend / ILGPU device
             // list at that moment, not at boot.
             HostHelpContentProvider.IlgpuDeviceProbe = ProbeIlgpuDevices;
             HostHelpContentProvider.AudioBackendProbe = ProbeAudioBackend;
+
+            // Phase 16b / EXR — wire the UI-layer HDRI probe to the Engine's
+            // HdriRegistry. Lets the Avalonia file picker eagerly pre-warm a
+            // pick and surface load failures (unsupported EXR compression,
+            // missing file, etc.) without UI taking a project reference on
+            // the Engine. The TryLoadFromFile out-param is discarded — we
+            // only need the success bool for status reporting; the registry
+            // caches the image internally.
+            FracturingFog.Rendering.Lighting.HdriProbe.TryLoad =
+                path => FracturingFog.Rendering.Lighting.HdriRegistry.TryLoadFromFile(path, out _);
         }
 
         private static string? ProbeIlgpuDevices()
@@ -172,7 +206,7 @@ namespace FracturingFog.Hosting
                     {
                         var ctx = SilkGLXContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     case GpuSurfaceKind.Win32Hwnd:
                     {
@@ -181,7 +215,7 @@ namespace FracturingFog.Hosting
                         // Windows runs short-circuit before this hook fires.
                         var ctx = SilkWin32ContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     case GpuSurfaceKind.CoreAnimationMetalLayer:
                     {
@@ -192,7 +226,7 @@ namespace FracturingFog.Hosting
                         // SilkGLRenderer's 3.3 GLSL shaders compile against.
                         var ctx = SilkCglContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     case GpuSurfaceKind.WaylandSurface:
                     {
@@ -202,7 +236,7 @@ namespace FracturingFog.Hosting
                         // to surface its internal display pointer.
                         var ctx = SilkEglContextAdapter.CreateFor(surface);
                         return SilkRendererFactory.Create(
-                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers);
+                            ctx.Gl, surface, ctx.MakeCurrent, ctx.SwapBuffers, ctx.ReleaseCurrent);
                     }
                     default:
                         Console.Error.WriteLine(
@@ -234,6 +268,26 @@ namespace FracturingFog.Hosting
             int w = Math.Max(1, surface.PixelWidth);
             int h = Math.Max(1, surface.PixelHeight);
 
+            // Wave 2.3 — warm-load any user-persisted calculators
+            // (%LOCALAPPDATA%/FracturingFog/UserCalculators/*.cs) before the
+            // first UserEquation editor open so Compile & Load is a cache
+            // hit on the equations the user previously saved.
+            try
+            {
+                var persisted = FracturingFog.CalculatorGen.CalculatorGenHotLoad.LoadAllPersisted();
+                foreach (var entry in persisted)
+                {
+                    if (entry.CalculatorType != null)
+                        Console.WriteLine($"[Persist] warm-loaded {entry.ClassName} ← {entry.SourcePath}");
+                    else
+                        Console.Error.WriteLine($"[Persist] skip {entry.ClassName}: {entry.Error}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Persist] scan failed: {ex.Message}");
+            }
+
             // ── Engines ──────────────────────────────────────────────────
             var viewState = new FractalViewState();
             var initialMap = ColorPalette.GetPaletteByName("HSV");
@@ -244,31 +298,25 @@ namespace FracturingFog.Hosting
             // handles; the host knows the live renderer and can downcast.
             // Non-D3D11 renderers (Silk GL, Skia CPU) return null so
             // UseGpuCompute stays off silently.
-            s_renderHost.GpuKernelFactory = (renderer, gate) =>
-            {
-                if (renderer is FracturingFog.DirectXRenderer dx
-                    && dx.TryGetD3D11(out var dev, out var ctx))
-                {
-                    return new FracturingFog.Rendering.MandelbrotGpuKernel(dev, ctx, gate);
-                }
-                return null;
-            };
+            //
+            // S-X1 carve: WindowsBootstrap.Install populates BootstrapHooks.GpuKernelFactoryHook
+            // with the DirectXRenderer downcast + MandelbrotGpuKernel construct.
+            // On Linux/macOS the hook is null so UseGpuCompute stays off.
+            if (BootstrapHooks.GpuKernelFactoryHook != null)
+                s_renderHost.GpuKernelFactory = BootstrapHooks.GpuKernelFactoryHook;
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
-            //   * Windows: try Media Foundation Mp4Writer first (zero deps,
-            //     built into Windows 8+). Fall through to ffmpeg if MF init
+            //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer
+            //     via BootstrapHooks.NativeVideoWriterFactoryHook. Returns null when MF init
             //     fails (driver edge case, locked-down Server SKU).
-            //   * Linux/macOS: probe ffmpeg via FfmpegEncoder.FindFfmpeg and
-            //     return an FfmpegVideoWriter when present; null otherwise.
-            // VideoWriterFactory's null return propagates to the UI which
-            // surfaces "ffmpeg required" via the existing IsEnabledForUser
-            // gating + FfmpegSetupDialog rescan flow (Slice 2.5).
+            //   * Linux/macOS: hook is null. Falls through to ffmpeg.
+            //   * Either path: ffmpeg fallback when the native writer rejects.
+            // null return propagates to the UI which surfaces "ffmpeg required"
+            // via the existing IsEnabledForUser gating + FfmpegSetupDialog rescan
+            // flow (Slice 2.5).
             s_renderHost.VideoWriterFactory = (path, w, h) =>
             {
-                if (OperatingSystem.IsWindows())
-                {
-                    try { return new FracturingFog.Mp4Writer(path, w, h); }
-                    catch { /* MF init failed, fall through to ffmpeg */ }
-                }
+                var native = BootstrapHooks.NativeVideoWriterFactoryHook?.Invoke(path, w, h);
+                if (native != null) return native;
                 if (FracturingFog.FfmpegEncoder.IsAvailable())
                 {
                     try
@@ -286,47 +334,51 @@ namespace FracturingFog.Hosting
             s_input = new FractalInputController(viewState);
 
             // The swap-chain HWND composites on top of all Avalonia content, so
-            // the XAML InputSponge never receives a pointer event. Subclass the
-            // native window and forward its mouse messages into the controller.
+            // the XAML InputSponge never receives a pointer event. The native
+            // bridge (Windows: subclass via NativeMouseForwarder) forwards its
+            // mouse messages into the controller.
             // (Runs on the UI thread — OnSurfaceReady fires from the native
             // control's CreateNativeControlCore.)
-            NativeMouseForwarder.Attach(surface.Handle, s_input);
-            // Bridge native HWND right-click release to the Avalonia shell so
-            // MainWindow can open its context menu (Avalonia's own
-            // ContextRequested never fires — WM_RBUTTONUP is swallowed by the
-            // subclass above so Windows never raises WM_CONTEXTMENU).
-            NativeMouseForwarder.ContextMenuRequested = wasDrag =>
+            //
+            // S-X1 carve: on Linux/macOS BootstrapHooks.NativeInputBridge is null. Avalonia
+            // PointerPressed events already bubble through MainWindow's
+            // InputSponge because the GL/Skia render path doesn't composite a
+            // separate native HWND on top of the XAML tree.
+            if (BootstrapHooks.NativeInputBridge != null)
             {
-                try { FracturingFog.UI.Avalonia.AvaloniaShell.ContextMenuRequested?.Invoke(wasDrag); }
-                catch { /* swallow — must not crash the native subclass */ }
-            };
-            // Bridge "mouse-down on render surface" to the shell so it can
-            // pull keyboard focus back onto the InputSponge. Otherwise a
-            // toolbar ComboBox keeps logical focus after the click and
-            // swallows R/M/T/V via its type-ahead. Posted onto the UI
-            // dispatcher so the Focus() call doesn't run inside the Win32
-            // message handler.
-            NativeMouseForwarder.FocusRequested = () =>
-            {
-                try
+                var bridge = BootstrapHooks.NativeInputBridge;
+                bridge.Attach(surface.Handle, s_input);
+                // Bridge native right-click release to the Avalonia shell so
+                // MainWindow can open its context menu (Avalonia's own
+                // ContextRequested never fires — WM_RBUTTONUP is swallowed by
+                // the subclass so Windows never raises WM_CONTEXTMENU).
+                bridge.ContextMenuRequested = wasDrag =>
                 {
-                    Dispatcher.UIThread.Post(() =>
+                    try { FracturingFog.UI.Avalonia.AvaloniaShell.ContextMenuRequested?.Invoke(wasDrag); }
+                    catch { /* swallow — must not crash the native subclass */ }
+                };
+                // Bridge "mouse-down on render surface" to the shell so it can
+                // pull keyboard focus back onto the InputSponge.
+                bridge.FocusRequested = () =>
+                {
+                    try
                     {
-                        try { FracturingFog.UI.Avalonia.AvaloniaShell.RenderSurfaceFocusRequested?.Invoke(); }
-                        catch { /* swallow */ }
-                    });
-                }
-                catch { /* swallow — must not crash the native subclass */ }
-            };
-            // Bridge "left-button down on render surface" to the Toy-Mode
-            // window-drag hook. When inactive the lambda returns false and
-            // the click falls through to the normal Inspect / pan path; when
-            // active MainWindow's hook kicks off an OS window move.
-            NativeMouseForwarder.LeftDragWindowHook = () =>
-            {
-                try { return FracturingFog.UI.Avalonia.AvaloniaShell.LeftDragWindowHook?.Invoke() ?? false; }
-                catch { return false; }
-            };
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            try { FracturingFog.UI.Avalonia.AvaloniaShell.RenderSurfaceFocusRequested?.Invoke(); }
+                            catch { /* swallow */ }
+                        });
+                    }
+                    catch { /* swallow */ }
+                };
+                // Bridge "left-button down on render surface" to the Toy-Mode
+                // window-drag hook.
+                bridge.LeftDragWindowHook = () =>
+                {
+                    try { return FracturingFog.UI.Avalonia.AvaloniaShell.LeftDragWindowHook?.Invoke() ?? false; }
+                    catch { return false; }
+                };
+            }
 
             // ── Services ─────────────────────────────────────────────────
             // Theme service holds a reference to the render host so its
@@ -337,12 +389,19 @@ namespace FracturingFog.Hosting
             // / ReloadThemes flows.
             s_themeService = new HostColorThemeService(s_renderHost);
             var themeService = s_themeService;
-            // Phase X.0 / Slice 0.3b — pass the Windows D3D11 hardware probe
-            // so the Hardware tab can enumerate DXGI adapters + report the
-            // D3D11 feature level. Cross-platform App will install a different
-            // probe (or none) depending on the active backend.
-            var helpProvider = new HostHelpContentProvider(
-                new FracturingFog.Rendering.WindowsD3D11HardwareInfoProvider());
+            // Phase X.0 / Slice 0.3b — Hardware tab probe. Windows installs
+            // WindowsD3D11BootstrapHooks.HardwareInfoProvider via the bootstrap hook so the
+            // tab enumerates DXGI adapters + reports the D3D11 feature level.
+            // Linux/macOS leave BootstrapHooks.HardwareInfoProvider null; the help content
+            // provider falls back to platform-neutral text.
+            var helpProvider = new HostHelpContentProvider(BootstrapHooks.HardwareInfoProvider);
+
+            // Animation Roadmap Phase 6 — feed the real discrete-GPU signal into
+            // the animated-param ceiling. Windows installs the DXGI-backed probe;
+            // elsewhere the hook stays null and Detect() assumes an iGPU.
+            if (BootstrapHooks.HardwareInfoProvider is { } hwInfo)
+                FracturingFog.Abstractions.Animation.HardwareProfile.DiscreteGpuProbe
+                    = hwInfo.HasDiscreteGpu;
 
             // Stamp program name + version onto the render host so the watermark
             // overlay (FractalOverlayCompositor) renders "Fracturing Fog v0.6.1
@@ -365,9 +424,15 @@ namespace FracturingFog.Hosting
             try { SandboxEquationStore.Instance.Load(); }  catch { }
             try { UserBulbStore.Instance.Load(); }         catch { }
             try { UserWatermarkStore.Instance.Load(); }    catch { }
+            // Animation Roadmap P2/P4 — without this the library stays empty at
+            // runtime, so the editor's Load dropdown, the Save-Region animation
+            // combo, and the Animation slideshow's picker all see zero
+            // animations (built-in seed included).
+            try { AnimationLibrary.Instance.Load(); }      catch { }
 
             // ── View model tree ──────────────────────────────────────────
-            s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService);
+            s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService,
+                assetSources: FracturingFog.Assets.AssetSourceRegistry.All());
 
             // Wire the slideshow-record sink factory. ShellViewModel asks for
             // one when the active SlideshowConfig has RecordSlideshow=true;
@@ -730,26 +795,45 @@ namespace FracturingFog.Hosting
 
             shell.SampleColorRequested += (_, args) =>
             {
-                if (FracturingFog.Views.Editors.DesktopEyedropper.IsActive)
+                // S-X1 carve: desktop pixel sampler is Win-only (low-level
+                // mouse hook + GDI+ CopyFromScreen). When the bridge is null
+                // (Linux/macOS) the request completes immediately without
+                // picking — UI shows the prior swatch unchanged.
+                var bridge = BootstrapHooks.ColorSampleBridge;
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] SampleColorRequested fired. bridge={(bridge?.GetType().Name ?? "null")} IsActive={(bridge?.IsActive.ToString() ?? "n/a")}");
+                Console.Error.Flush();
+                if (bridge == null || bridge.IsActive)
                 {
+                    Console.Error.WriteLine("[AvaloniaShellBootstrap] Sample short-circuit: bridge null or already active.");
+                    Console.Error.Flush();
                     args.Completion.TrySetResult(true);
                     return;
                 }
                 try
                 {
-                    FracturingFog.Views.Editors.DesktopEyedropper.Begin(
+                    Console.Error.WriteLine("[AvaloniaShellBootstrap] Calling bridge.Begin().");
+                    Console.Error.Flush();
+                    bridge.Begin(
                         picked =>
                         {
+                            Console.Error.WriteLine($"[AvaloniaShellBootstrap] bridge picked RGB=({picked.R},{picked.G},{picked.B})");
+                            Console.Error.Flush();
                             args.PickedR = picked.R;
                             args.PickedG = picked.G;
                             args.PickedB = picked.B;
                             args.Completion.TrySetResult(true);
                         },
-                        () => args.Completion.TrySetResult(true));
+                        () =>
+                        {
+                            Console.Error.WriteLine("[AvaloniaShellBootstrap] bridge cancelled.");
+                            Console.Error.Flush();
+                            args.Completion.TrySetResult(true);
+                        });
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Sample failed: {ex.Message}");
+                    Console.Error.Flush();
                     args.Completion.TrySetResult(true);
                 }
             };
@@ -760,35 +844,35 @@ namespace FracturingFog.Hosting
             // starting a pan. Hook stays installed for the program lifetime
             // and is a no-op when no editor is open or Inspect is unchecked.
             //
-            // Phase X.3 / Slice 3.1: `OperatingSystem.IsWindows()` guard so the
-            // CA1416 analyzer can prove `ClientToScreen` is unreachable on
-            // non-Win hosts. NativeMouseForwarder only attaches on Windows
-            // (early-out at NativeMouseForwarder.Attach) so the hook itself
-            // never fires off-Windows in practice — the guard makes the
-            // contract explicit for cross-platform Hosting readers.
-            FracturingFog.Hosting.NativeMouseForwarder.InspectClickHook = (clientX, clientY) =>
+            // S-X1 carve: pixel sampling (Win32 ClientToScreen + screen GetPixel)
+            // lives behind BootstrapHooks.NativeInputBridge.TrySampleClient. The shell-state
+            // routing logic stays here.
+            if (BootstrapHooks.NativeInputBridge != null)
             {
-                if (!OperatingSystem.IsWindows()) return false;
-                var editor = s_shell?.ColorThemeEditor;
-                if (editor == null || !editor.AnyInspectActive) return false;
-                if (s_surface == null) return false;
-                var pt = new POINT { X = clientX, Y = clientY };
-                if (!ClientToScreen(s_surface.Handle, ref pt)) return false;
-                var c = FracturingFog.Views.Editors.DesktopEyedropper.SamplePixel(pt.X, pt.Y);
-                bool routeTo3D = editor.Inspect3DActive;
-                bool routeToBand = editor.InspectBandActive;
-                global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                var bridge = BootstrapHooks.NativeInputBridge;
+                bridge.InspectClickHook = (clientX, clientY) =>
                 {
-                    try
+                    var editor = s_shell?.ColorThemeEditor;
+                    if (editor == null || !editor.AnyInspectActive) return false;
+                    if (s_surface == null) return false;
+                    if (!bridge.TrySampleClient(s_surface.Handle, clientX, clientY,
+                                                 out byte r, out byte g, out byte b))
+                        return false;
+                    bool routeTo3D = editor.Inspect3DActive;
+                    bool routeToBand = editor.InspectBandActive;
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                     {
-                        if (routeToBand) editor.HandleInspectBandColor(c.R, c.G, c.B);
-                        else if (routeTo3D) editor.HandleInspect3DColor(c.R, c.G, c.B);
-                        else editor.HandleInspectColor(c.R, c.G, c.B);
-                    }
-                    catch { }
-                });
-                return true;
-            };
+                        try
+                        {
+                            if (routeToBand) editor.HandleInspectBandColor(r, g, b);
+                            else if (routeTo3D) editor.HandleInspect3DColor(r, g, b);
+                            else editor.HandleInspectColor(r, g, b);
+                        }
+                        catch { }
+                    });
+                    return true;
+                };
+            }
 
             // From-image flow: editor wants the host to extract a palette
             // from a chosen image. Opens ImagePaletteView modally on the UI
@@ -930,9 +1014,11 @@ namespace FracturingFog.Hosting
                         shell.Main.UseCustomWatermark
                         && shell.Main.ActiveCustomWatermark != null;
 
+                    var animationNames = ((IColorThemeService)s_themeService!).EnumerateAnimationNames();
                     var prompt = await AvaloniaDialogs.PromptForSaveRegionAsync(
                         "Save Region", "Region name:", BuildRegionNameDefault(shell),
-                        customWatermarkAvailable);
+                        customWatermarkAvailable,
+                        animationNames);
 
                     if (prompt is { } picked && !string.IsNullOrWhiteSpace(picked.Name) && s_renderHost != null)
                     {
@@ -940,7 +1026,7 @@ namespace FracturingFog.Hosting
                             ? shell.Main.ActiveCustomWatermark
                             : null;
                         bool ok = ((IColorThemeService)s_themeService!)
-                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded);
+                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded, picked.AnimationName);
                         if (ok)
                         {
                             // RefreshRegions honours the menu's active sort +
@@ -1009,6 +1095,107 @@ namespace FracturingFog.Hosting
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Screenshot failed: {ex.Message}");
+                }
+            };
+
+            // Wallpaper screenshot — render an offscreen image sized to the
+            // union of every connected monitor's pixel bounds, regardless of
+            // the current window state. Sidesteps the GNOME/Wayland limitation
+            // where Span mode (borderless Topmost) cannot overlay the shell's
+            // top bar + dock across multiple monitors: by going through
+            // PosterRenderer we never touch the window chrome at all and the
+            // output matches what Span+Screenshot produces on Windows.
+            shell.WallpaperScreenshotRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+
+                    var win = AvaloniaDialogs.ActiveMainWindow;
+                    var screens = win?.Screens;
+                    if (screens == null || screens.All.Count == 0)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper",
+                            "Could not enumerate monitors for the wallpaper render.",
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    // Virtual-screen union (mirrors EnterSpanMode math). Screen
+                    // bounds are in physical pixels — exactly what we want for
+                    // the wallpaper render dimensions.
+                    int minX = int.MaxValue, minY = int.MaxValue;
+                    int maxX = int.MinValue, maxY = int.MinValue;
+                    foreach (var s in screens.All)
+                    {
+                        var b = s.Bounds;
+                        if (b.X < minX) minX = b.X;
+                        if (b.Y < minY) minY = b.Y;
+                        if (b.X + b.Width  > maxX) maxX = b.X + b.Width;
+                        if (b.Y + b.Height > maxY) maxY = b.Y + b.Height;
+                    }
+                    int wpW = maxX - minX;
+                    int wpH = maxY - minY;
+                    if (wpW <= 0 || wpH <= 0)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper",
+                            "Computed wallpaper dimensions are invalid.",
+                            expectsConfirmation: false);
+                        return;
+                    }
+
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Save Wallpaper Screenshot",
+                        suggestedName: BuildSuggestedFileName(
+                            "png", imageWidth: wpW, imageHeight: wpH, isSpanning: true),
+                        filter: "PNG image (*.png)|*.png|TIFF image (*.tiff;*.tif)|*.tiff;*.tif|BMP image (*.bmp)|*.bmp");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                    var format = ext switch
+                    {
+                        ".bmp" => FracturingFog.Imaging.ImageFileFormat.Bmp,
+                        ".tif" or ".tiff" => FracturingFog.Imaging.ImageFileFormat.Tiff,
+                        _ => FracturingFog.Imaging.ImageFileFormat.Png,
+                    };
+
+                    // Re-use the Poster watermark plumbing so wallpaper output
+                    // honours the current region/theme watermark + the custom
+                    // override toggle, matching what Poster does.
+                    string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
+                        ? s_renderHost.RegionName!
+                        : "Fracturing Fog";
+                    if (!string.IsNullOrEmpty(s_renderHost.ThemeName))
+                        watermark += " - " + s_renderHost.ThemeName;
+                    string subText = $"Fracturing Fog {DateTime.Now.Year}";
+
+                    var customWm = shell.Main.UseCustomWatermark
+                        ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
+                        : null;
+
+                    var req = s_renderHost.CreatePosterRequest(
+                        wpW, wpH, rotate: false,
+                        path, format, watermark, subText, customWm);
+
+                    try
+                    {
+                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None));
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper Saved",
+                            $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
+                            expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Wallpaper", $"Render failed:\n{ex.Message}", expectsConfirmation: false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Wallpaper failed: {ex.Message}");
                 }
             };
 
@@ -1082,6 +1269,18 @@ namespace FracturingFog.Hosting
                 await HandleSlideshowRecordingReadyAsync(args);
             };
 
+            // General application settings — pops the Avalonia AppSettings
+            // dialog (animated-param ceiling override today). Persists on OK
+            // and invalidates the animation bus's cached ceiling.
+            shell.AppSettingsRequested += async (_, _) =>
+            {
+                try { await AvaloniaDialogs.ShowAppSettingsAsync(null); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] AppSettings failed: {ex.Message}");
+                }
+            };
+
             // Slideshow settings — load persisted settings, pop the dialog,
             // write back on OK. The Avalonia shell doesn't run the slideshow
             // engine yet (legacy Slideshow.cs stays intact per scope), but the
@@ -1092,6 +1291,7 @@ namespace FracturingFog.Hosting
                 {
                     var file = SlideshowConfigLibrary.Load();
                     var themeNames = s_themeService?.EnumerateThemeNames();
+                    var animationNames = s_themeService?.EnumerateAnimationNames();
                     var regionNames = FractalRegionLibrary.Instance
                         .AllSlideshowRegions
                         .Select(r => r.Name)
@@ -1112,7 +1312,8 @@ namespace FracturingFog.Hosting
                         audioReactive: initialAudioReactive,
                         regionNames: regionNames,
                         themeNames: themeNames,
-                        capturePostFxCallback: captureCallback);
+                        capturePostFxCallback: captureCallback,
+                        animationNames: animationNames);
                     if (chosen != null)
                     {
                         // No persistence on dialog close — the Save button is the
@@ -1124,7 +1325,11 @@ namespace FracturingFog.Hosting
                         // passing the working config in-memory.
                         if (chosen.Value.StartRequested)
                         {
-                            if (chosen.Value.Config.Type == SlideshowType.Image)
+                            // Image AND Animation both run on the CPU cross-fade
+                            // cycler (SlideshowEngine) — Animation just drives the
+                            // shared ParameterAnimationBus during each leg. Only
+                            // Video routes to the zoom engine.
+                            if (chosen.Value.Config.Type != SlideshowType.Video)
                             {
                                 // Stop any running video slideshow before kicking
                                 // the image engine — the two share the render host.
@@ -1422,6 +1627,108 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Asset Manager (Sub-goal A / A2) — the shell routes the three
+            // source-editor asset types here because their editor windows are
+            // host-owned and edit live params. Open the matching editor, then
+            // select the saved entry so the picked asset loads into it.
+            shell.AssetHostEditorRequested += (_, e) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+                    var p = s_renderHost.ViewState.FractalParameters;
+                    switch (e.Kind)
+                    {
+                        case global::FracturingFog.Abstractions.Assets.AssetKind.UserEquation:
+                            OpenUserEquationEditor(p);
+                            if (s_userEqWin?.DataContext is UserEquationViewModel ueVm)
+                                ueVm.SelectedSavedName = e.Name;
+                            break;
+                        case global::FracturingFog.Abstractions.Assets.AssetKind.SandboxEquation:
+                            OpenSandboxEditor(p);
+                            if (s_sandboxWin?.DataContext is SandboxViewModel sbVm)
+                                sbVm.SelectedSavedName = e.Name;
+                            break;
+                        case global::FracturingFog.Abstractions.Assets.AssetKind.UserBulb:
+                            OpenUserBulbEditor(p);
+                            if (s_userBulbWin?.DataContext is UserBulbViewModel ubVm)
+                                ubVm.SelectedSavedName = e.Name;
+                            break;
+                    }
+                });
+            };
+
+            // Asset Manager bulk export (A3) — the VM assembled the zip in
+            // memory; the host owns the save picker + file write.
+            shell.AssetBundleExportRequested += (_, e) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                            "Export Asset Bundle",
+                            e.SuggestedName,
+                            "Zip archive (*.zip)|*.zip|All files (*.*)|*");
+                        if (string.IsNullOrEmpty(path)) return;
+
+                        await System.IO.File.WriteAllBytesAsync(path, e.ZipBytes);
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Export Asset Bundle",
+                            $"Exported {e.Count} asset{(e.Count == 1 ? "" : "s")} to:\n{path}",
+                            expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset bundle export failed: {ex.Message}");
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Export Asset Bundle",
+                            "Export failed:\n" + ex.Message,
+                            expectsConfirmation: false);
+                    }
+                });
+            };
+
+            // Asset Manager bulk import (A3 import) — the host owns the open
+            // picker + overwrite prompt + file read; the VM owns the zip parse and
+            // per-source routing (shell.ImportAssetBundle forwards to it).
+            shell.AssetBundleImportRequested += (_, __) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                            "Import Asset Bundle",
+                            "Zip archive (*.zip)|*.zip|All files (*.*)|*");
+                        if (string.IsNullOrEmpty(path)) return;
+
+                        // Ask once, up front, how same-name collisions resolve.
+                        var choice = await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle",
+                            "Overwrite assets that already exist?\n\n" +
+                            "Yes — replace matching saved assets with the bundle's.\n" +
+                            "No — keep your existing assets and skip those names.",
+                            expectsConfirmation: true);
+                        bool overwrite = choice == AvaloniaDialogs.MessageResult.Yes;
+
+                        byte[] bytes = await System.IO.File.ReadAllBytesAsync(path);
+                        var summary = shell.ImportAssetBundle(bytes, overwrite);
+
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle", summary.Describe(), expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset bundle import failed: {ex.Message}");
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle",
+                            "Import failed:\n" + ex.Message,
+                            expectsConfirmation: false);
+                    }
+                });
+            };
+
             // Recording finished — the engine has finalised the temp MP4 and/or
             // PNG sequence. On success, prompt for save destinations; on cancel
             // or fault, discard the temp artefacts. Fires on a background thread
@@ -1462,7 +1769,15 @@ namespace FracturingFog.Hosting
             var vm = new UserEquationViewModel(p);
             vm.CompileRequested += () =>
             {
-                var (ok, error) = s_renderHost!.CompileUserEquation(p.UserEquationSource ?? "return z*z + c;");
+                // Reclaim the live Roslyn path. A prior "Compile & Load" installs
+                // a _dynamicAltCalculator that permanently overrides the
+                // UserEquation slot, so live edits would recompile
+                // _userEquationCalculator into a calculator the host no longer
+                // selects — the editor looks dead (no render change) until app
+                // close. Typing raw C# means the user wants the live path back;
+                // drop the hot-load override so this compile is what renders.
+                s_renderHost!.SetDynamicAltCalculator(null);
+                var (ok, error) = s_renderHost.CompileUserEquation(p.UserEquationSource ?? "return z*z + c;");
                 vm.ShowError(error);
                 if (ok) s_renderHost.Trigger();
             };
@@ -1490,6 +1805,143 @@ namespace FracturingFog.Hosting
                 catch (Exception ex)
                 {
                     return $"Hot-load failed: {ex.GetType().Name}: {ex.Message}";
+                }
+            };
+
+            // Wave 2.8 — Cookbook picker. Opens the picker as a modeless child
+            // of the editor (matches the rest of the editor surface — modeless
+            // so the equation editor stays interactive). The VM applies the
+            // entry from its Accepted callback; cancel is a no-op.
+            vm.CookbookRequested += () =>
+            {
+                var cookbookVm = new CookbookViewModel();
+                cookbookVm.Accepted += entry => vm.ApplyCookbookEntry(entry);
+                var cookbookWin = new CookbookView { DataContext = cookbookVm };
+                if (s_userEqWin != null) cookbookWin.Show(s_userEqWin);
+                else ShowEditor(cookbookWin);
+            };
+            vm.CookbookCentreRequested += (cx, cy, zoom) =>
+            {
+                if (s_renderHost == null) return;
+                s_renderHost.ViewState.CenterX = cx;
+                s_renderHost.ViewState.CenterY = cy;
+                s_renderHost.ViewState.Zoom = zoom;
+                s_renderHost.Trigger();
+            };
+
+            // Wave 2.9 — Equation morph. Opens the morph dialog modeless. The
+            // dialog's per-frame loop calls RenderAndSaveRequested which:
+            //   (a) hot-compiles the synth DSL via CalcGenHotLoad
+            //   (b) installs it as the dynamic alt calculator
+            //   (c) Trigger()s a render and awaits AnimationFrameUploaded
+            //   (d) saves the resulting BGRA buffer to PNG.
+            // Per-frame Roslyn compile is slow but acceptable for offline use.
+            vm.MorphRequested += () =>
+            {
+                var morphVm = new EquationMorphViewModel();
+                morphVm.RenderAndSaveRequested += async (synth, outPath, ct) =>
+                {
+                    if (s_renderHost == null) return "Render host not initialised.";
+                    try
+                    {
+                        var compiled = FracturingFog.CalculatorGen.CalculatorGenHotLoad
+                            .TryCompileAndLoad(synth, "Morph");
+                        if (!compiled.Ok) return compiled.Error ?? "Compile failed.";
+                        int w = s_renderHost.Mandelbrot.Width;
+                        int h = s_renderHost.Mandelbrot.Height;
+                        var calc = (FracturingFog.Interefaces.IFractalCalculator?)
+                            Activator.CreateInstance(compiled.CalculatorType!, w, h);
+                        if (calc == null) return "Activator returned null.";
+
+                        var tcs = new TaskCompletionSource();
+                        EventHandler? handler = null;
+                        handler = (_, _) =>
+                        {
+                            s_renderHost!.AnimationFrameUploaded -= handler;
+                            tcs.TrySetResult();
+                        };
+                        s_renderHost.AnimationFrameUploaded += handler;
+                        s_renderHost.SetDynamicAltCalculator(calc);
+                        // SetDynamicAltCalculator already fires Trigger; no extra call needed.
+
+                        var timeout = Task.Delay(30_000, ct);
+                        // Stay on UI sync ctx — VM resumes after await and
+                        // mutates reactive props which Avalonia bindings
+                        // require to be touched on the dispatcher.
+                        var done = await Task.WhenAny(tcs.Task, timeout);
+                        if (done == timeout)
+                        {
+                            s_renderHost.AnimationFrameUploaded -= handler;
+                            return "Frame timed out (30 s).";
+                        }
+                        if (ct.IsCancellationRequested) return null;
+
+                        s_renderHost.SaveLastFrameToPng(outPath);
+                        return null;
+                    }
+                    catch (Exception ex)
+                    {
+                        return $"{ex.GetType().Name}: {ex.Message}";
+                    }
+                };
+                morphVm.BrowseFolderRequested += current =>
+                {
+                    string? picked = null;
+                    var task = AvaloniaDialogs.PickFolderAsync("Choose morph output directory");
+                    // PickFolderAsync runs the picker on the UI thread; this lambda
+                    // runs from a Reactive command on the UI thread too. .Wait is
+                    // safe here because AvaloniaDialogs marshals onto the dispatcher
+                    // continuation pool, not the calling sync ctx.
+                    try { picked = task.GetAwaiter().GetResult(); }
+                    catch { picked = null; }
+                    return picked;
+                };
+
+                // Defer ALC unloads while morph is active — per-frame compile
+                // would otherwise unload the previous context while the host
+                // still references the calc instance via _dynamicAltCalculator,
+                // racing with AnimationTick / queued render jobs and crashing
+                // the process. Flush on close once we've cleared the alt slot.
+                FracturingFog.CalculatorGen.CalculatorGenHotLoad.KeepContexts = true;
+
+                var morphWin = new EquationMorphView { DataContext = morphVm };
+                morphWin.Closed += (_, _) =>
+                {
+                    try { s_renderHost?.SetDynamicAltCalculator(null); }
+                    catch { }
+                    FracturingFog.CalculatorGen.CalculatorGenHotLoad.KeepContexts = false;
+                    // Defer flush a beat so any in-flight render finishes
+                    // reading the just-cleared alt slot before we unload
+                    // its assembly.
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        try { FracturingFog.CalculatorGen.CalculatorGenHotLoad.FlushKeptContexts(); }
+                        catch { }
+                    }, DispatcherPriority.Background);
+                };
+                if (s_userEqWin != null) morphWin.Show(s_userEqWin);
+                else ShowEditor(morphWin);
+            };
+
+            // Wave 2.3 — Persist + Hot-Load.
+            vm.HotLoadAndPersistRequested += (eq, baseName) =>
+            {
+                try
+                {
+                    var result = FracturingFog.CalculatorGen.CalculatorGenHotLoad
+                        .PersistAndLoad(eq, baseName);
+                    if (!result.Ok) return (result.Error, result.SourcePath);
+                    int w = s_renderHost!.Mandelbrot.Width;
+                    int h = s_renderHost.Mandelbrot.Height;
+                    var calc = (FracturingFog.Interefaces.IFractalCalculator?)
+                        Activator.CreateInstance(result.CalculatorType!, w, h);
+                    if (calc == null) return ("Activator returned null.", result.SourcePath);
+                    s_renderHost.SetDynamicAltCalculator(calc);
+                    return (null, result.SourcePath);
+                }
+                catch (Exception ex)
+                {
+                    return ($"Persist + Hot-load failed: {ex.GetType().Name}: {ex.Message}", (string?)null);
                 }
             };
 
@@ -1571,7 +2023,7 @@ namespace FracturingFog.Hosting
                 if (s_renderHost == null) return;
                 try
                 {
-                    int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportObjVoxelSurface(
+                    int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                         e.Path,
                         (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z),
                         s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0,
@@ -1746,108 +2198,28 @@ namespace FracturingFog.Hosting
         // dialogs already available here (this is a WinExe with UseWindowsForms):
         // they run their own modal message loop and return synchronously.
 
+        // S-X1b — sync dialog helpers delegate to BootstrapHooks.SyncDialogs.
+        // Windows installs a WinForms-backed implementation (runs its own
+        // modal message loop synchronously, no Avalonia dispatcher recursion).
+        // Cross-platform: hook stays null and the helpers no-op (return
+        // null/false) so the editors don't deadlock the dispatcher. Async
+        // dialog parity for cross-plat editors lands in a later slice when
+        // the VM events themselves move to async patterns.
+
         private static string? PromptName(string title, string prompt, string defaultValue)
-        {
-            // Sync prompt for the source-editor VMs (Func<string,string?>).
-            // Use a Windows Forms modal — visual styles are enabled at startup
-            // so it renders with the system theme (no VB6 InputBox legacy
-            // look), and its own message loop runs without recursing the
-            // Avalonia dispatcher (the earlier RunJobs-spin approach
-            // crashed on Cancel/X). Centred on the active Avalonia window
-            // so the dialog appears over the editor that requested it.
-            using var dlg = new System.Windows.Forms.Form
-            {
-                Text = string.IsNullOrEmpty(title) ? "Enter Name" : title,
-                FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
-                StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
-                MaximizeBox = false,
-                MinimizeBox = false,
-                ShowInTaskbar = false,
-                ClientSize = new System.Drawing.Size(420, 124),
-                AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi,
-            };
-
-            var lbl = new System.Windows.Forms.Label
-            {
-                Text = prompt ?? "Enter a name:",
-                Location = new System.Drawing.Point(12, 12),
-                Size = new System.Drawing.Size(396, 24),
-                AutoEllipsis = true,
-            };
-            var box = new System.Windows.Forms.TextBox
-            {
-                Text = defaultValue ?? string.Empty,
-                Location = new System.Drawing.Point(12, 40),
-                Size = new System.Drawing.Size(396, 24),
-                Anchor = System.Windows.Forms.AnchorStyles.Left
-                       | System.Windows.Forms.AnchorStyles.Right
-                       | System.Windows.Forms.AnchorStyles.Top,
-            };
-            var ok = new System.Windows.Forms.Button
-            {
-                Text = "OK",
-                DialogResult = System.Windows.Forms.DialogResult.OK,
-                Location = new System.Drawing.Point(252, 80),
-                Size = new System.Drawing.Size(76, 28),
-            };
-            var cancel = new System.Windows.Forms.Button
-            {
-                Text = "Cancel",
-                DialogResult = System.Windows.Forms.DialogResult.Cancel,
-                Location = new System.Drawing.Point(332, 80),
-                Size = new System.Drawing.Size(76, 28),
-            };
-
-            dlg.Controls.Add(lbl);
-            dlg.Controls.Add(box);
-            dlg.Controls.Add(ok);
-            dlg.Controls.Add(cancel);
-            dlg.AcceptButton = ok;
-            dlg.CancelButton = cancel;
-            dlg.Shown += (_, _) => { box.SelectAll(); box.Focus(); };
-
-            var result = dlg.ShowDialog();
-            if (result != System.Windows.Forms.DialogResult.OK) return null;
-            string r = box.Text;
-            return string.IsNullOrWhiteSpace(r) ? null : r;
-        }
+            => BootstrapHooks.SyncDialogs?.PromptName(title, prompt, defaultValue);
 
         private static bool ConfirmYesNo(string message, string title)
-            => System.Windows.Forms.MessageBox.Show(
-                   message, title,
-                   System.Windows.Forms.MessageBoxButtons.YesNo,
-                   System.Windows.Forms.MessageBoxIcon.Question)
-               == System.Windows.Forms.DialogResult.Yes;
+            => BootstrapHooks.SyncDialogs?.ConfirmYesNo(message, title) ?? false;
 
         private static void ShowInfo(string title, string body, bool isError)
-            => System.Windows.Forms.MessageBox.Show(
-                   body, title,
-                   System.Windows.Forms.MessageBoxButtons.OK,
-                   isError ? System.Windows.Forms.MessageBoxIcon.Error
-                           : System.Windows.Forms.MessageBoxIcon.Information);
+            => BootstrapHooks.SyncDialogs?.ShowInfo(title, body, isError);
 
         private static string? PickOpenSync(string title, string filter)
-        {
-            using var d = new System.Windows.Forms.OpenFileDialog
-            {
-                Title = string.IsNullOrEmpty(title) ? "Open" : title,
-                Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-                CheckFileExists = true,
-            };
-            return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-        }
+            => BootstrapHooks.SyncDialogs?.PickOpenSync(title, filter);
 
         private static string? PickSaveSync(string title, string filter, string defaultName)
-        {
-            using var d = new System.Windows.Forms.SaveFileDialog
-            {
-                Title = string.IsNullOrEmpty(title) ? "Save" : title,
-                Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-                FileName = defaultName ?? string.Empty,
-                OverwritePrompt = true,
-            };
-            return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-        }
+            => BootstrapHooks.SyncDialogs?.PickSaveSync(title, filter, defaultName);
 
         // ── FFmpeg startup prompt ────────────────────────────────────────────
         //
@@ -2438,7 +2810,7 @@ namespace FracturingFog.Hosting
         {
             lock (s_gate)
             {
-                try { NativeMouseForwarder.Detach(); } catch { /* ignore */ }
+                try { BootstrapHooks.NativeInputBridge?.Detach(); } catch { /* ignore */ }
                 try { s_userBulbAnimTimer?.Stop(); } catch { /* ignore */ }
                 s_userBulbAnimTimer = null;
                 try { s_userEqWin?.Close(); }   catch { /* ignore */ } s_userEqWin = null;
@@ -2514,25 +2886,7 @@ namespace FracturingFog.Hosting
         /// options on Linux / macOS.
         /// </summary>
         public static AudioBackendCapabilities AudioCapabilities
-            => s_audioDriver?.Capabilities ?? DetectAudioCapabilities();
-
-        /// <summary>
-        /// Probe capabilities without constructing the driver. Returns the same
-        /// flags <see cref="CreateAudioBackend"/> would produce — used by the
-        /// settings dialog opened before the first slideshow start.
-        /// </summary>
-        private static AudioBackendCapabilities DetectAudioCapabilities()
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                return AudioBackendCapabilities.SystemLoopback
-                     | AudioBackendCapabilities.Microphone
-                     | AudioBackendCapabilities.FilePlayback
-                     | AudioBackendCapabilities.SynthPlayback;
-            }
-            return AudioBackendCapabilities.FilePlayback
-                 | AudioBackendCapabilities.SynthPlayback;
-        }
+            => s_audioDriver?.Capabilities ?? AudioCapabilityProbe.Detect();
 
         private static IAudioCaptureBackend CreateAudioBackend()
         {

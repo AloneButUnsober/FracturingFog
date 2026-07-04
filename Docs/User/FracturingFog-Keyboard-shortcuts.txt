@@ -23,11 +23,15 @@ D       Pan right
 Q       Pan up
 E       Pan down
 Shift   Hold with any pan key for a quarter-step nudge
+Shift+W Zoom in, quarter-step (fine)
+Shift+S Zoom out, quarter-step (fine)
 
 3-D NAVIGATION (Mandelbulb, User Bulb 3D)
 -----------------------------------------
 W       Camera closer (distance -)
 S       Camera farther (distance +)
+Shift+W Camera closer, quarter-step (fine)
+Shift+S Camera farther, quarter-step (fine)
 A D Q E Pan in screen space
 Arrow Up    Tilt camera up (phi +)
 Arrow Down  Tilt camera down (phi -)

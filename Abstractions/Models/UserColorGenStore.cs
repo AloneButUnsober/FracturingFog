@@ -60,7 +60,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 string json = JsonSerializer.Serialize(Entries, BuildJsonOptions());
-                File.WriteAllText(EntriesFile, json);
+                AtomicFile.WriteAllText(EntriesFile, json);
             }
             catch { /* non-fatal */ }
         }

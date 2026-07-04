@@ -13,6 +13,8 @@
 
 using System.Collections.Generic;
 
+using FracturingFog.Abstractions.Animation;
+using FracturingFog.Rendering.Lighting;
 using FracturingFog.ViewState;
 
 namespace FracturingFog.Models
@@ -29,6 +31,13 @@ namespace FracturingFog.Models
         All,
         /// <summary>Filtered to a single palette kind (see kindFilter), alpha.</summary>
         ByKind,
+        /// <summary>Filtered to themes whose required calculator data the active
+        /// fractal type supplies — see <c>ColorPalette.IsCompatible</c>. The
+        /// compat fractal type is passed alongside in the new
+        /// <c>compatFor</c> overload of <see cref="IColorThemeService.EnumerateThemeNames(ThemeSortMode,string?,bool,FractalType?)"/>.
+        /// Falls back to the unfiltered grouped list when no compat type is
+        /// supplied so callers never see an empty combo.</summary>
+        ByFractalCompat,
     }
 
     /// <summary>Sort/filter mode for a region combo. Mirrors the WinForms
@@ -72,6 +81,22 @@ namespace FracturingFog.Models
         /// is true only themes openable in the editor are listed.
         /// </summary>
         IReadOnlyList<string> EnumerateThemeNames(ThemeSortMode mode, string? kindFilter, bool editableOnly);
+
+        /// <summary>
+        /// Compatibility-aware overload. Same semantics as the 3-arg call, but
+        /// when <paramref name="mode"/> is
+        /// <see cref="ThemeSortMode.ByFractalCompat"/>, the list is filtered to
+        /// themes whose required calculator data the
+        /// <paramref name="compatFor"/> fractal supplies (e.g. orbit-trap
+        /// themes are dropped when compatFor is not Mandelbrot). When
+        /// <paramref name="compatFor"/> is null, the call delegates to the
+        /// 3-arg overload (back-compat — same result as Default mode).
+        /// Default implementation ignores the compat hint so legacy
+        /// implementations keep compiling; the host implementation overrides.
+        /// </summary>
+        IReadOnlyList<string> EnumerateThemeNames(
+            ThemeSortMode mode, string? kindFilter, bool editableOnly, FractalType? compatFor)
+            => EnumerateThemeNames(mode, kindFilter, editableOnly);
 
         /// <summary>Display names of every palette kind, in enum order. Used to
         /// build the per-kind entries of the theme combo's right-click sort
@@ -127,12 +152,49 @@ namespace FracturingFog.Models
         bool ApplyTheme(string themeName);
 
         /// <summary>
+        /// Look up the bundled Lighting &amp; FX preset attached to the named
+        /// theme. Returns <c>true</c> + the materialised <see cref="LightingFxData"/>
+        /// when the theme exists, lives in the user library (built-in C# themes
+        /// don't carry presets), and has a non-null <c>LightingPreset</c>.
+        /// Returns <c>false</c> on any miss — the caller should leave its
+        /// active lighting block untouched. Phase 24.
+        /// </summary>
+        bool TryGetThemeLightingPreset(string themeName, out LightingFxData lighting);
+
+        /// <summary>
+        /// Persist <paramref name="lighting"/> as the bundled Lighting &amp; FX
+        /// preset on the named user theme. Returns <c>true</c> when the theme
+        /// is in the user library (built-in C# themes are not editable — the
+        /// caller should surface a friendly "save as a user theme first"
+        /// message in that case). Phase 9b/24b — preset author UI hook.
+        /// </summary>
+        bool SaveLightingPresetToTheme(string themeName, in LightingFxData lighting);
+
+        /// <summary>
+        /// Clear the bundled Lighting &amp; FX preset on the named user
+        /// theme. Returns <c>true</c> when a preset was present + removed.
+        /// Phase 9b/24b — companion to <see cref="SaveLightingPresetToTheme"/>.
+        /// </summary>
+        bool ClearLightingPresetOnTheme(string themeName);
+
+        /// <summary>
+        /// Look up the per-region Lighting &amp; FX override attached to the
+        /// named region. Returns <c>true</c> + the materialised
+        /// <see cref="LightingFxData"/> when the region exists and has a
+        /// non-null <c>LightingOverride</c>. Returns <c>false</c> on any
+        /// miss — the caller should leave its active lighting block alone.
+        /// Phase 10b — pairs with <see cref="ApplyRegion"/>: the caller decides
+        /// when (and whether) to honour the override based on its lock state.
+        /// </summary>
+        bool TryGetRegionLightingOverride(string regionName, out LightingFxData lighting);
+
+        /// <summary>
         /// Persist the current view state as a new user region under the given
         /// name. Returns true on success. Implementations write through to the
         /// host's region library (built-in regions are never overwritten —
         /// the host should pop a friendly error and bail in that case).
         /// </summary>
-        bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null);
+        bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null);
 
         /// <summary>Look up the watermark embedded into a saved region, if any.
         /// Returns null when the region doesn't exist or has no embedded
@@ -140,6 +202,35 @@ namespace FracturingFog.Models
         /// MainViewModel.RegionEmbeddedWatermark so the precedence resolver
         /// picks it up on the next render.</summary>
         WatermarkDef? GetRegionEmbeddedWatermark(string regionName);
+
+        /// <summary>Animation Roadmap Phase 3 — name of the AnimationData
+        /// asset attached to the named region, or null when the region
+        /// doesn't exist or carries no animation. Looked up on every
+        /// region-recall so the shell can populate the shared animation
+        /// bus.</summary>
+        string? GetRegionAnimationName(string regionName);
+
+        /// <summary>Animation Roadmap Phase 3 — fetch a saved animation
+        /// asset by name. Returns null when the library has no entry by
+        /// that name. Used by the shared animation bus host to resolve a
+        /// region's attached animation into runtime animators.</summary>
+        AnimationData? GetAnimation(string animationName);
+
+        /// <summary>Animation Roadmap Phase 3c — display names of every
+        /// animation in the library (built-in seed + user). Used by the
+        /// Save Region dialog's Animation dropdown and the Animation
+        /// Editor's Load combo.</summary>
+        IReadOnlyList<string> EnumerateAnimationNames();
+
+        /// <summary>Animation Roadmap Phase 3c — true if an animation with
+        /// this name already exists (case-insensitive). Used by the editor
+        /// to confirm overwrite before <see cref="SaveAnimation"/>.</summary>
+        bool AnimationExistsInLibrary(string animationName);
+
+        /// <summary>Animation Roadmap Phase 3c — persist the given asset to
+        /// the user library. Replaces by case-insensitive name. Returns
+        /// true on success.</summary>
+        bool SaveAnimation(AnimationData animation);
 
         /// <summary>
         /// Remove the named region from the user library. Returns true if a
@@ -265,6 +356,124 @@ namespace FracturingFog.Models
         /// but the inline payload is harmless when the name also resolves.
         /// </summary>
         string? SerializeRegionJsonByName(string regionName);
+
+        /// <summary>
+        /// Region Editor (Animation Roadmap Sub-goal B) — snapshot a saved
+        /// (or built-in) region's editable metadata plus a read-only echo of
+        /// its stored geometry into a <see cref="RegionEditModel"/>. Returns
+        /// null when no region resolves by that name. Built-in regions return
+        /// with <see cref="RegionEditModel.IsBuiltIn"/> set so the editor
+        /// opens in clone-on-save mode.
+        /// </summary>
+        RegionEditModel? GetRegionForEdit(string regionName);
+
+        /// <summary>
+        /// Region Editor (Animation Roadmap Sub-goal B) — write the edited
+        /// metadata back onto the existing user region identified by
+        /// <see cref="RegionEditModel.OriginalName"/>, <b>preserving that
+        /// region's stored geometry</b> (Center / Zoom / Iterations / QD
+        /// limbs / per-engine source fields). When the original is a built-in,
+        /// a new user-region clone is created instead (the built-in is left
+        /// untouched). Refuses a rename that would collide with a
+        /// <i>different</i> existing region. The result carries the final
+        /// saved name and whether a clone was made.
+        /// </summary>
+        RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits);
+
+        /// <summary>
+        /// Region Editor Phase R3 — same as <see cref="UpdateRegionMetadata(RegionEditModel)"/>
+        /// but when <paramref name="recaptureGeometryFrom"/> is non-null the
+        /// saved region's geometry (Center / Zoom / Iterations / QD limbs /
+        /// per-engine source fields) is <b>re-snapped from the live view</b>
+        /// instead of preserved, letting the user retag metadata <i>and</i>
+        /// re-frame in one edit. When it is null the call is identical to the
+        /// metadata-only overload. The default implementation ignores the live
+        /// state (back-compat) so legacy implementations keep compiling; the
+        /// host implementation overrides.
+        /// </summary>
+        RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits, FractalViewState? recaptureGeometryFrom)
+            => UpdateRegionMetadata(edits);
+    }
+
+    /// <summary>
+    /// Region Editor (Animation Roadmap Sub-goal B) — UI-neutral snapshot of a
+    /// region's <i>editable</i> metadata plus a read-only echo of its stored
+    /// geometry. Mutable because the editor VM binds two-way to it; only the
+    /// metadata fields are written back by
+    /// <see cref="IColorThemeService.UpdateRegionMetadata"/> — the geometry
+    /// echo is display-only and never persisted from here.
+    /// </summary>
+    public sealed class RegionEditModel
+    {
+        /// <summary>Name of the saved region being edited — the lookup key.
+        /// Stays fixed across the edit even if <see cref="Name"/> changes
+        /// (that's how a rename is expressed).</summary>
+        public string OriginalName { get; set; } = string.Empty;
+
+        /// <summary>True when the source is a code-defined built-in. Editing a
+        /// built-in never mutates it; the update clones into a new user region.</summary>
+        public bool IsBuiltIn { get; set; }
+
+        // ── Editable metadata ────────────────────────────────────────────
+        /// <summary>New display name (== <see cref="OriginalName"/> unless renamed).</summary>
+        public string Name { get; set; } = string.Empty;
+        /// <summary>One-line tooltip description.</summary>
+        public string Description { get; set; } = string.Empty;
+        /// <summary>Attached animation asset name, or null for none.</summary>
+        public string? AnimationName { get; set; }
+        /// <summary>Curated colour-theme whitelist, or null for "no opinion".</summary>
+        public List<string>? CuratedThemes { get; set; }
+        /// <summary>Keep the region's existing lighting override on save.
+        /// Only meaningful when <see cref="HasLightingOverride"/>; false = clear it.</summary>
+        public bool KeepLightingOverride { get; set; } = true;
+        /// <summary>Keep the region's existing embedded watermark on save.
+        /// Only meaningful when <see cref="HasEmbeddedWatermark"/>; false = clear it.</summary>
+        public bool KeepEmbeddedWatermark { get; set; } = true;
+
+        // ── Read-only geometry echo (display only; never written back) ────
+        /// <summary>Serialized fractal-type name (e.g. "Mandelbrot").</summary>
+        public string FractalTypeName { get; set; } = string.Empty;
+        /// <summary>Real part of the stored view centre.</summary>
+        public double CenterX { get; set; }
+        /// <summary>Imaginary part of the stored view centre.</summary>
+        public double CenterY { get; set; }
+        /// <summary>Stored zoom factor.</summary>
+        public double Zoom { get; set; }
+        /// <summary>Stored iteration cap.</summary>
+        public int Iterations { get; set; }
+        /// <summary>True when the region currently carries a lighting override.</summary>
+        public bool HasLightingOverride { get; set; }
+        /// <summary>True when the region currently carries an embedded watermark.</summary>
+        public bool HasEmbeddedWatermark { get; set; }
+    }
+
+    /// <summary>Outcome of <see cref="IColorThemeService.UpdateRegionMetadata"/>.</summary>
+    public readonly struct RegionUpdateResult
+    {
+        private RegionUpdateResult(bool success, string? error, string? savedName, bool cloned)
+        {
+            Success = success;
+            ErrorMessage = error;
+            SavedName = savedName;
+            Cloned = cloned;
+        }
+
+        /// <summary>True when the region was written.</summary>
+        public bool Success { get; }
+        /// <summary>Friendly failure reason; null on success.</summary>
+        public string? ErrorMessage { get; }
+        /// <summary>Final persisted name (may differ from the original on rename,
+        /// or be a fresh clone name when a built-in was edited).</summary>
+        public string? SavedName { get; }
+        /// <summary>True when a built-in was cloned into a new user region.</summary>
+        public bool Cloned { get; }
+
+        /// <summary>Build a success result.</summary>
+        public static RegionUpdateResult Ok(string savedName, bool cloned)
+            => new(true, null, savedName, cloned);
+        /// <summary>Build a failure result.</summary>
+        public static RegionUpdateResult Fail(string error)
+            => new(false, error, null, false);
     }
 
     /// <summary>Outcome of <see cref="IColorThemeService.ExportUserRegionsToFile"/>.</summary>

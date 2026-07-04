@@ -27,6 +27,11 @@
     -->
     <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
     <BaseOutputPath>bin\</BaseOutputPath>
+    <!--
+      S-X7.11 (2026-06-23) — unsafe required for AssemblyExtensions.TryGetRawMetadata
+      single-file bundle reads in CalculatorGenHotLoad.GatherReferences.
+    -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

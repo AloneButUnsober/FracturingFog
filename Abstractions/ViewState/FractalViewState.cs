@@ -43,12 +43,23 @@ namespace FracturingFog.ViewState
         /// <summary>Lo₃ limb of CX (used when zoom &gt; QD threshold).</summary>
         public double CenterX3 { get; set; }
 
+        /// <summary>Lo₄..Lo₇ limbs of CX (used when zoom &gt; OD threshold).
+        /// Wave 2.11 — octuple-double centre supports zoom past 1e50.</summary>
+        public double CenterX4 { get; set; }
+        public double CenterX5 { get; set; }
+        public double CenterX6 { get; set; }
+        public double CenterX7 { get; set; }
+
         /// <summary>Hi limb of CY.</summary>
         public double CenterY { get; set; }
 
         public double CenterYLo { get; set; }
         public double CenterY2 { get; set; }
         public double CenterY3 { get; set; }
+        public double CenterY4 { get; set; }
+        public double CenterY5 { get; set; }
+        public double CenterY6 { get; set; }
+        public double CenterY7 { get; set; }
 
         // ── Zoom + quality ────────────────────────────────────────────────────
 
@@ -60,6 +71,13 @@ namespace FracturingFog.ViewState
 
         /// <summary>Zoom threshold above which centre math promotes to QD.</summary>
         public const double QDZoomThreshold = 1e25;
+
+        /// <summary>Zoom threshold above which centre math promotes to OD
+        /// (8-limb, ~124 digits). Wave 2.11. Engaged just below QD's wall
+        /// at 5×10⁵⁸ so a single zoom step doesn't fall into the precision
+        /// floor. Verified by `OctupleDoubleTests.RefOrbit_ModerateZoom_*`.
+        /// </summary>
+        public const double ODZoomThreshold = 1e50;
 
         public const double DefaultCenterX = -0.5;
         public const double DefaultCenterY = 0.0;
@@ -80,6 +98,17 @@ namespace FracturingFog.ViewState
 
         /// <summary>Iter count to hold when <see cref="IterLocked"/> is true.</summary>
         public int LockedIterations { get; set; }
+
+        /// <summary>Region-supplied iter override. > 0 = use this value in
+        /// place of <see cref="Models.QualityPreset.ComputeIterations"/> when
+        /// no lock + no explicit per-call arg overrides. Set by
+        /// <c>HostColorThemeService.ApplyRegion</c> from
+        /// <c>FractalRegion.Iterations</c>; cleared on any zoom/pan input so
+        /// the saved value only governs the first render after a region jump.
+        /// Mirrors legacy <c>MainForm.ApplyRegion</c> which wrote
+        /// <c>region.Iterations</c> directly into <c>_calculator.MaxIterations</c>
+        /// when not iter-locked.</summary>
+        public int PreferredIterations { get; set; }
 
         // ── Post-process ──────────────────────────────────────────────────────
 
@@ -102,10 +131,13 @@ namespace FracturingFog.ViewState
         public void ResetView()
         {
             CenterX = DefaultCenterX; CenterXLo = 0; CenterX2 = 0; CenterX3 = 0;
+            CenterX4 = 0; CenterX5 = 0; CenterX6 = 0; CenterX7 = 0;
             CenterY = DefaultCenterY; CenterYLo = 0; CenterY2 = 0; CenterY3 = 0;
+            CenterY4 = 0; CenterY5 = 0; CenterY6 = 0; CenterY7 = 0;
             Zoom = DefaultZoom;
             IterLocked = false;
             LockedIterations = 0;
+            PreferredIterations = 0;
         }
 
         /// <summary>
@@ -168,14 +200,21 @@ namespace FracturingFog.ViewState
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;
+            CenterX4 = CenterX5 = CenterX6 = CenterX7 = 0;
             CenterYLo = CenterY2 = CenterY3 = 0;
+            CenterY4 = CenterY5 = CenterY6 = CenterY7 = 0;
             IterLocked = false;
             LockedIterations = 0;
+            PreferredIterations = 0;
         }
+
+        /// <summary>True when the active <see cref="Zoom"/> requires OD math
+        /// (8-limb, ~124 digits). Wave 2.11.</summary>
+        public bool RequiresOD => Zoom > ODZoomThreshold;
 
         /// <summary>True when the active <see cref="Zoom"/> requires QD math
         /// to keep pan/zoom anchoring stable.</summary>
-        public bool RequiresQD => Zoom > QDZoomThreshold;
+        public bool RequiresQD => Zoom > QDZoomThreshold && !RequiresOD;
 
         /// <summary>True when the active <see cref="Zoom"/> requires DD math
         /// (but QD is not yet needed).</summary>

@@ -37,6 +37,7 @@ using FracturingFog.Input;
 using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.UI.Avalonia.Slideshow;
+using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -46,6 +47,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private readonly IColorThemeService _themeService;
     private readonly IPaletteExtractionService? _paletteService;
     private readonly IHelpContentProvider _helpProvider;
+
+    /// <summary>Asset Manager sources (Sub-goal A). Injected by the host because
+    /// the IAssetSource adapters live in Engine, which UI.Avalonia doesn't
+    /// reference. Null/empty when the host wires no sources.</summary>
+    private readonly System.Collections.Generic.IReadOnlyList<FracturingFog.Abstractions.Assets.IAssetSource> _assetSources;
 
     /// <summary>True while the host window is in borderless multi-monitor
     /// span mode. Toggled by the FloatingMenu Span button.</summary>
@@ -101,20 +107,35 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         IFractalInputController input,
         IColorThemeService themeService,
         IHelpContentProvider helpProvider,
-        IPaletteExtractionService? paletteService = null)
+        IPaletteExtractionService? paletteService = null,
+        System.Collections.Generic.IReadOnlyList<FracturingFog.Abstractions.Assets.IAssetSource>? assetSources = null)
     {
         if (renderHost == null) throw new ArgumentNullException(nameof(renderHost));
         if (input == null) throw new ArgumentNullException(nameof(input));
         _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
         _helpProvider = helpProvider ?? throw new ArgumentNullException(nameof(helpProvider));
         _paletteService = paletteService;
+        _assetSources = assetSources ?? System.Array.Empty<FracturingFog.Abstractions.Assets.IAssetSource>();
 
         Main = new MainViewModel(renderHost, input);
+
+        // Animation Roadmap Phase 3b — app-scoped animation bus for
+        // region-attached animations. Initialised once; the JumpToRegion path
+        // below populates its dynamic animator set per recall. Render-completion
+        // released on every FrameCompleted from the host, so the gate fires
+        // regardless of which UI surface kicked the render.
+        AnimationBusHost.Initialize(() => renderHost.Trigger());
+        renderHost.FrameCompleted += (_, _) =>
+            AnimationBusHost.Bus?.NotifyRenderCompleted();
         FloatingMenu = new FloatingMenuViewModel();
         // Hand the menu the theme service so its Region / Theme combos can
         // group + sort + right-click-filter themselves (parity with the
         // WinForms combos). AttachThemeService performs the initial fill.
         FloatingMenu.AttachThemeService(_themeService);
+        // Seed the menu's compat-fractal-type mirror so the
+        // "Compatible with {type}" menu entry shows the right name at startup
+        // and ByFractalCompat (if selected later) filters against the live type.
+        FloatingMenu.SetCompatFractalType(Main.SelectedFractalType);
         // Quality combo lives on FloatingMenu but its presets come from
         // QualityPreset.All — the same list MainViewModel already exposes.
         FloatingMenu.SetQualities(QualityPreset.All.Select(q => q.Name));
@@ -131,6 +152,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // user saw no view change and the symptom looked like flaky bindings.
         FloatingMenu.RegionComboChanged += (_, name) => JumpToRegion(name);
         FloatingMenu.EditWatermarkClick += (_, _) => ShowWatermarkEditor();
+        FloatingMenu.EditAnimationClick += (_, _) => ShowAnimationEditor();
         FloatingMenu.WatermarkChanged += (_, name) => Main.SelectedCustomWatermarkName = name;
         FloatingMenu.UseCustomWatermarkChanged += (_, v) => Main.UseCustomWatermark = v;
         FloatingMenu.OverrideRegionWatermarkChanged += (_, v) => Main.OverrideRegionWatermark = v;
@@ -141,6 +163,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (string.IsNullOrEmpty(name)) return;
             _themeService.ApplyTheme(name);
             // ApplyTheme already calls RepaintWithPostFx; nothing else needed.
+
+            // Phase 24 — bundled Lighting & FX preset. When the active theme
+            // carries a non-null LightingPreset and the user hasn't locked
+            // their lighting, snap FractalParameters.Lighting to the bundle
+            // and kick a recompute (lighting affects shading, not just the
+            // post-FX pass that ApplyTheme already retriggered).
+            if (!Main.LightingLocked
+                && _themeService.TryGetThemeLightingPreset(name, out var preset))
+            {
+                Main.ViewState.FractalParameters.Lighting = preset;
+                // Wave 4.3 — preset-apply bypasses the VM EnvironmentName
+                // setter, so kick the HDRI preload here too.
+                if (!string.IsNullOrWhiteSpace(preset.EnvironmentName))
+                    FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(preset.EnvironmentName);
+                Main.RenderHost.Trigger();
+            }
         };
         FloatingMenu.ResetClick        += (_, _) => Main.ResetViewCommand.Execute().Subscribe();
         FloatingMenu.HelpClick         += (_, _) => ShowHelp();
@@ -150,6 +188,37 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.BrightnessSlide   += (_, v) => Main.Brightness = v;
         FloatingMenu.ContrastSlide     += (_, v) => Main.Contrast = v;
         FloatingMenu.AdaptiveSlide     += (_, v) => Main.Adaptive = v;
+        // Phase 24 — mirror the lighting-lock checkbox into MainViewModel so
+        // the theme-change handler below can consult it. Phase 24b extends
+        // the same pattern to Brightness / Contrast / Adaptive — previously
+        // the FloatingMenu state never reached Main and the checkboxes were
+        // dead UI.
+        FloatingMenu.LightingLockedChanged += (_, v) => Main.LightingLocked = v;
+        FloatingMenu.BrightnessLockedChanged += (_, v) => Main.BrightnessLocked = v;
+        FloatingMenu.ContrastLockedChanged += (_, v) => Main.ContrastLocked = v;
+        FloatingMenu.AdaptiveLockedChanged += (_, v) => Main.AdaptiveLocked = v;
+
+        // Phase 9b/24b — "Save Lighting → Theme" snapshots the active
+        // FractalParameters.Lighting block as the selected user theme's
+        // bundled LightingPreset. Built-in / algorithmic themes are not in
+        // the user library and the service returns false on those —
+        // surface a friendly status hint in that case so the user knows
+        // the click registered. The selected theme name is whichever entry
+        // is currently in the FloatingMenu combo (mirrored by ColorThemeChanged).
+        FloatingMenu.SaveLightingToThemeClick += (_, themeName) =>
+        {
+            if (string.IsNullOrWhiteSpace(themeName)
+                || themeName.StartsWith("—", StringComparison.Ordinal))
+            {
+                Main.SetStatus("Pick a user theme first.");
+                return;
+            }
+            var lighting = Main.ViewState.FractalParameters.Lighting;
+            bool ok = _themeService.SaveLightingPresetToTheme(themeName, in lighting);
+            Main.SetStatus(ok
+                ? $"Lighting saved to theme: {themeName}"
+                : $"Cannot save lighting to '{themeName}' — built-in or unknown theme.");
+        };
 
         // ── Newly-wired controls (#53) ───────────────────────────────────
         // Close menu — flip the visibility flag the MainWindow binds to.
@@ -161,6 +230,24 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // Grid checkbox in the menu mirrors the toolbar toggle.
         FloatingMenu.GridToggled       += (_, v) => Main.ShowGrid = v;
+        FloatingMenu.BypassAccelerationToggled += (_, v) =>
+        {
+            Main.RenderHost.MandelbrotDisableAcceleration = v;
+            RebuildWindowTitle();
+            Main.RenderHost.Trigger();
+        };
+        FloatingMenu.BypassSeriesApproximationToggled += (_, v) =>
+        {
+            Main.RenderHost.MandelbrotDisableSeriesApproximation = v;
+            RebuildWindowTitle();
+            Main.RenderHost.Trigger();
+        };
+        FloatingMenu.BypassDdBlaToggled += (_, v) =>
+        {
+            Main.RenderHost.MandelbrotDisableDdBla = v;
+            RebuildWindowTitle();
+            Main.RenderHost.Trigger();
+        };
 
         // Status-bar visibility flag the MainWindow status row binds to.
         FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;
@@ -225,6 +312,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (ev.PropertyName == nameof(MainViewModel.SelectedFractalType)
              || ev.PropertyName == nameof(MainViewModel.SelectedFractalEntry))
                 RecordNavChange();
+            // Push the active fractal type into the FloatingMenu so a
+            // ByFractalCompat theme combo re-filters as the user switches
+            // fractal type.
+            if (ev.PropertyName == nameof(MainViewModel.SelectedFractalType))
+                FloatingMenu.SetCompatFractalType(Main.SelectedFractalType);
             // Mirror watermark master toggle so the menu checkbox stays in
             // sync with the auto-enable from MainViewModel.UseCustomWatermark
             // and with right-click toggles outside the menu.
@@ -254,6 +346,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Screenshot — host saves the most-recent BGRA buffer to disk.
         FloatingMenu.ScreenshotClick   += (_, _) => ScreenshotRequested?.Invoke(this, EventArgs.Empty);
 
+        // Wallpaper — host renders an offscreen image sized to the union of
+        // every connected monitor's pixel bounds, regardless of the current
+        // window state. Works around the GNOME/Wayland limitation where Span
+        // mode cannot overlay the shell's top bar + dock across monitors.
+        FloatingMenu.WallpaperClick    += (_, _) => WallpaperScreenshotRequested?.Invoke(this, EventArgs.Empty);
+
         // Export / Import user regions — host pops a file picker then asks
         // IColorThemeService to serialize / merge. After an import the host
         // refreshes the region combo so new entries show without a restart.
@@ -269,6 +367,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Slideshow settings — host pops the ported Avalonia dialog seeded
         // from the persisted SlideshowSettings, then writes back on OK.
         FloatingMenu.SlideshowSettingsClick += (_, _) => SlideshowSettingsRequested?.Invoke(this, EventArgs.Empty);
+
+        // General application settings — host pops the Avalonia AppSettings
+        // dialog seeded from persisted AnimationSettings, saves on OK.
+        FloatingMenu.AppSettingsClick += (_, _) => AppSettingsRequested?.Invoke(this, EventArgs.Empty);
 
         // Export / Import / Delete user colour themes — same shape as the
         // region IO above. Export/Import bubble to a file picker on the host;
@@ -369,8 +471,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // a deep-zoom region without losing precision.
             var s = Main.ViewState;
             FloatingMenu.UpdateCoords(
-                FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3),
-                FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3),
+                FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+                            s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
+                FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+                            s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
                 info.Iterations.ToString(CultureInfo.InvariantCulture),
                 FloatingMenu.ActiveCoordField);
@@ -389,6 +493,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
+        ShowRegionEditorCommand   = ReactiveCommand.Create(ShowRegionEditor);
+        ShowAssetManagerCommand   = ReactiveCommand.Create(ShowAssetManager);
         ShowColorGenEditorCommand = ReactiveCommand.Create(
             () => OpenColorGenEditorRequested?.Invoke(this, EventArgs.Empty));
         ShowFractalParamsCommand  = ReactiveCommand.Create(
@@ -465,9 +571,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     private static string FormatCoords(FracturingFog.ViewState.FractalViewState s)
     {
+        // Emit full multi-limb centre in the same pipe form the menu textbox
+        // already accepts on paste. Past zoom ~1e15 the Hi limb alone is
+        // below pixel scale, so emitting only Hi would collapse adjacent
+        // pixels to identical coords on round-trip → user-visible block
+        // pixelation when pasting the copied value back. Pipe form keeps
+        // every DD/QD/OD limb intact through clipboard.
         return string.Format(CultureInfo.InvariantCulture,
-            "CX = {0:G12}\nCY = {1:G12}\nZoom = {2:G6}",
-            s.CenterX, s.CenterY, s.Zoom);
+            "CX = {0}\nCY = {1}\nZoom = {2:G6}",
+            FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+                        s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
+            FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+                        s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
+            s.Zoom);
     }
 
     /// <summary>Mirror the view across the real axis: negate all four CY
@@ -547,13 +663,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Context-menu + Floating Menu "Slideshow" buttons run an unnamed
-        // ad-hoc session: built-in defaults, independent of whatever is
-        // saved as the active preset (which the user may have renamed,
-        // deleted, or never saved). The Slideshow Settings dialog's own
-        // Start button still honours the user's explicit preset choice via
-        // StartSlideshowFromConfig.
-        StartSlideshowWithConfig(new SlideshowConfig());
+        // Context-menu + Floating Menu "Slideshow" buttons honour the user's
+        // active saved preset — RecordSlideshow, AdaptiveSweep, AudioReactive,
+        // filters etc. were unreachable when this path constructed a fresh
+        // default config. Falls back to defaults when the library load fails
+        // (corrupt JSON / first run) so the toggle still works.
+        SlideshowConfig active;
+        try { active = SlideshowConfigLibrary.GetActive(SlideshowConfigLibrary.Load()); }
+        catch { active = new SlideshowConfig(); }
+        StartSlideshowWithConfig(active);
     }
 
     /// <summary>Start the image slideshow from an explicit in-memory
@@ -581,6 +699,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             _slideshow.Stopped += (_, _) =>
             {
                 IsSlideshowVcrVisible = false;
+                FloatingMenu.SlideshowButtonText = "Slideshow";
                 this.RaisePropertyChanged(nameof(IsSlideshowRunning));
                 FinalizeSlideshowRecording();
                 // Detach beat source + tell the host to spin down its
@@ -692,6 +811,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;
+        FloatingMenu.SlideshowButtonText = "Stop";
         _slideshow.Start();
         this.RaisePropertyChanged(nameof(IsSlideshowRunning));
     }
@@ -821,17 +941,25 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // limbs exactly. At deep zoom that drifts the centre by a visible
         // fraction of a pixel on Go.
         if (FloatingMenu.CX != FloatingMenu.LastPushedCX
-            && TryParseLimbs(FloatingMenu.CX, out double cxHi, out double cxLo, out double cxL2, out double cxL3))
+            && TryParseLimbs(FloatingMenu.CX,
+                out double cxHi, out double cxLo, out double cxL2, out double cxL3,
+                out double cxL4, out double cxL5, out double cxL6, out double cxL7))
         {
             Main.ViewState.CenterX = cxHi;
             Main.ViewState.CenterXLo = cxLo; Main.ViewState.CenterX2 = cxL2; Main.ViewState.CenterX3 = cxL3;
+            Main.ViewState.CenterX4 = cxL4; Main.ViewState.CenterX5 = cxL5;
+            Main.ViewState.CenterX6 = cxL6; Main.ViewState.CenterX7 = cxL7;
             changed = true;
         }
         if (FloatingMenu.CY != FloatingMenu.LastPushedCY
-            && TryParseLimbs(FloatingMenu.CY, out double cyHi, out double cyLo, out double cyL2, out double cyL3))
+            && TryParseLimbs(FloatingMenu.CY,
+                out double cyHi, out double cyLo, out double cyL2, out double cyL3,
+                out double cyL4, out double cyL5, out double cyL6, out double cyL7))
         {
             Main.ViewState.CenterY = cyHi;
             Main.ViewState.CenterYLo = cyLo; Main.ViewState.CenterY2 = cyL2; Main.ViewState.CenterY3 = cyL3;
+            Main.ViewState.CenterY4 = cyL4; Main.ViewState.CenterY5 = cyL5;
+            Main.ViewState.CenterY6 = cyL6; Main.ViewState.CenterY7 = cyL7;
             changed = true;
         }
         if (FloatingMenu.Zoom != FloatingMenu.LastPushedZoom
@@ -868,35 +996,44 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     // limit that bounds the pipe-format paste path. Falls back to the limb
     // string when any limb is outside decimal range (e.g. denormals beyond
     // ±7.9e28) so we never lose information silently.
-    private static string FormatLimbs(double hi, double lo, double l2, double l3)
+    private static string FormatLimbs(double hi, double lo, double l2, double l3,
+                                       double l4 = 0.0, double l5 = 0.0,
+                                       double l6 = 0.0, double l7 = 0.0)
     {
         // Pick the highest non-zero limb so the format never carries trailing
         // zero limbs (avoids surfacing meaningless precision for shallow zooms).
+        // Wave 2.11 — OD limbs 4..7 join the same scan; the format scales
+        // automatically when zoom > 1e50 once the pan-zoom path populates them.
         int n = 1;
-        if (l3 != 0.0) n = 4;
+        if (l7 != 0.0) n = 8;
+        else if (l6 != 0.0) n = 7;
+        else if (l5 != 0.0) n = 6;
+        else if (l4 != 0.0) n = 5;
+        else if (l3 != 0.0) n = 4;
         else if (l2 != 0.0) n = 3;
         else if (lo != 0.0) n = 2;
 
-        // Any-extra-limb path (n >= 2): the Lo (and L2/L3) limbs carry
+        // Any-extra-limb path (n >= 2): the Lo (and L2..L7) limbs carry
         // precision past decimal's ~29-digit cap. DD pair is ~31 digits,
-        // QD chain is ~62 digits; either case loses bottom limb data
-        // through the G29 sum + textbox round-trip and collapses the
-        // centre to ~29 digits permanently on the next Go. Emit pipe-
-        // delimited limbs whenever any low limb is non-zero so every
-        // limb survives the display + parse.
+        // QD chain is ~62 digits, OD chain is ~124 digits; any case loses
+        // bottom limb data through the G29 sum + textbox round-trip and
+        // collapses the centre to ~29 digits permanently on the next Go.
+        // Emit pipe-delimited limbs whenever any low limb is non-zero so
+        // every limb survives the display + parse.
         //
         // Pipe form is uglier than a single decimal string but is the
         // only honest representation of multi-limb precision in a UI
         // textbox. Shallow (n=1) coords keep the readable decimal form.
         if (n >= 2)
         {
-            string hp = hi.ToString("G17", CultureInfo.InvariantCulture);
-            string p1p = lo.ToString("G17", CultureInfo.InvariantCulture);
-            if (n == 2) return $"{hp}|{p1p}";
-            string p2p = l2.ToString("G17", CultureInfo.InvariantCulture);
-            if (n == 3) return $"{hp}|{p1p}|{p2p}";
-            string p3p = l3.ToString("G17", CultureInfo.InvariantCulture);
-            return $"{hp}|{p1p}|{p2p}|{p3p}";
+            var limbs = new double[] { hi, lo, l2, l3, l4, l5, l6, l7 };
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < n; i++)
+            {
+                if (i > 0) sb.Append('|');
+                sb.Append(limbs[i].ToString("G17", CultureInfo.InvariantCulture));
+            }
+            return sb.ToString();
         }
 
         try
@@ -934,18 +1071,28 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     //      capture whatever precision is still in the decimal residual.
     // Missing limbs default to zero. Returns true when at least Hi parsed.
     private static bool TryParseLimbs(string? s, out double hi, out double lo, out double l2, out double l3)
+        => TryParseLimbs(s, out hi, out lo, out l2, out l3, out _, out _, out _, out _);
+
+    private static bool TryParseLimbs(string? s,
+        out double hi, out double lo, out double l2, out double l3,
+        out double l4, out double l5, out double l6, out double l7)
     {
-        hi = lo = l2 = l3 = 0.0;
+        hi = lo = l2 = l3 = l4 = l5 = l6 = l7 = 0.0;
         if (string.IsNullOrWhiteSpace(s)) return false;
         var parts = s.Split('|');
         if (parts.Length > 1)
         {
             // Pipe-delimited (legacy) — each segment is a plain double.
+            // Wave 2.11 — accept up to 8 limbs for OD precision past zoom 1e50.
             if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out hi))
                 return false;
             if (parts.Length > 1) double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lo);
             if (parts.Length > 2) double.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l2);
             if (parts.Length > 3) double.TryParse(parts[3].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l3);
+            if (parts.Length > 4) double.TryParse(parts[4].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l4);
+            if (parts.Length > 5) double.TryParse(parts[5].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l5);
+            if (parts.Length > 6) double.TryParse(parts[6].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l6);
+            if (parts.Length > 7) double.TryParse(parts[7].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l7);
             return true;
         }
 
@@ -1008,6 +1155,33 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _watermarkEditor, value);
     }
 
+    /// <summary>Animation Roadmap Phase 3c. Lazily-constructed VM for the
+    /// Animation Editor dialog; null until the first ShowAnimationEditor call.</summary>
+    private AnimationEditorViewModel? _animationEditor;
+    public AnimationEditorViewModel? AnimationEditor
+    {
+        get => _animationEditor;
+        private set => this.RaiseAndSetIfChanged(ref _animationEditor, value);
+    }
+
+    /// <summary>Animation Roadmap Sub-goal B. Lazily-constructed VM for the
+    /// Region Editor dialog; rebuilt per Show so it always targets the
+    /// currently-selected region.</summary>
+    private RegionEditorViewModel? _regionEditor;
+    public RegionEditorViewModel? RegionEditor
+    {
+        get => _regionEditor;
+        private set => this.RaiseAndSetIfChanged(ref _regionEditor, value);
+    }
+
+    /// <summary>Asset Manager dialog (Sub-goal A); built once on first Show.</summary>
+    private AssetManagerViewModel? _assetManager;
+    public AssetManagerViewModel? AssetManager
+    {
+        get => _assetManager;
+        private set => this.RaiseAndSetIfChanged(ref _assetManager, value);
+    }
+
     // ── Phase 3 dialogs ──────────────────────────────────────────────────
 
     private FFClientViewModel? _ffClient;
@@ -1022,6 +1196,41 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _serverAdmin;
         private set => this.RaiseAndSetIfChanged(ref _serverAdmin, value);
+    }
+
+    private ClusterDashboardViewModel? _clusterDashboard;
+    public ClusterDashboardViewModel? ClusterDashboard
+    {
+        get => _clusterDashboard;
+        private set => this.RaiseAndSetIfChanged(ref _clusterDashboard, value);
+    }
+
+    private JobListViewModel? _jobList;
+    public JobListViewModel? JobList
+    {
+        get => _jobList;
+        private set => this.RaiseAndSetIfChanged(ref _jobList, value);
+    }
+
+    private JobDetailViewModel? _jobDetail;
+    public JobDetailViewModel? JobDetail
+    {
+        get => _jobDetail;
+        private set => this.RaiseAndSetIfChanged(ref _jobDetail, value);
+    }
+
+    private WorkerDetailViewModel? _workerDetail;
+    public WorkerDetailViewModel? WorkerDetail
+    {
+        get => _workerDetail;
+        private set => this.RaiseAndSetIfChanged(ref _workerDetail, value);
+    }
+
+    private MasterConfigViewModel? _masterConfig;
+    public MasterConfigViewModel? MasterConfig
+    {
+        get => _masterConfig;
+        private set => this.RaiseAndSetIfChanged(ref _masterConfig, value);
     }
 
     // ── Window visibility flags (bound to Window.IsVisible) ──────────────
@@ -1045,6 +1254,27 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isWatermarkEditorVisible;
         set => this.RaiseAndSetIfChanged(ref _isWatermarkEditorVisible, value);
+    }
+
+    private bool _isAnimationEditorVisible;
+    public bool IsAnimationEditorVisible
+    {
+        get => _isAnimationEditorVisible;
+        set => this.RaiseAndSetIfChanged(ref _isAnimationEditorVisible, value);
+    }
+
+    private bool _isRegionEditorVisible;
+    public bool IsRegionEditorVisible
+    {
+        get => _isRegionEditorVisible;
+        set => this.RaiseAndSetIfChanged(ref _isRegionEditorVisible, value);
+    }
+
+    private bool _isAssetManagerVisible;
+    public bool IsAssetManagerVisible
+    {
+        get => _isAssetManagerVisible;
+        set => this.RaiseAndSetIfChanged(ref _isAssetManagerVisible, value);
     }
 
     private bool _isHelpVisible;
@@ -1086,6 +1316,41 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isServerAdminVisible, value);
     }
 
+    private bool _isClusterDashboardVisible;
+    public bool IsClusterDashboardVisible
+    {
+        get => _isClusterDashboardVisible;
+        set => this.RaiseAndSetIfChanged(ref _isClusterDashboardVisible, value);
+    }
+
+    private bool _isJobListVisible;
+    public bool IsJobListVisible
+    {
+        get => _isJobListVisible;
+        set => this.RaiseAndSetIfChanged(ref _isJobListVisible, value);
+    }
+
+    private bool _isJobDetailVisible;
+    public bool IsJobDetailVisible
+    {
+        get => _isJobDetailVisible;
+        set => this.RaiseAndSetIfChanged(ref _isJobDetailVisible, value);
+    }
+
+    private bool _isWorkerDetailVisible;
+    public bool IsWorkerDetailVisible
+    {
+        get => _isWorkerDetailVisible;
+        set => this.RaiseAndSetIfChanged(ref _isWorkerDetailVisible, value);
+    }
+
+    private bool _isMasterConfigVisible;
+    public bool IsMasterConfigVisible
+    {
+        get => _isMasterConfigVisible;
+        set => this.RaiseAndSetIfChanged(ref _isMasterConfigVisible, value);
+    }
+
     // ── Window title (program name + version + renderer description) ────
     // Mirrors legacy MainForm: "{ProgramName} v{ProgramVersion} — {renderer}".
     // Bootstrap sets ProgramName/ProgramVersion from HostHelpContentProvider
@@ -1124,8 +1389,38 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         string ver = string.IsNullOrEmpty(_programVersion) ? "" : $" v{_programVersion}";
         string ren = string.IsNullOrEmpty(_rendererDescription) ? "" : $"  —  {_rendererDescription}";
-        WindowTitle = $"{_programName}{ver}{ren}";
+        string diag = BuildDiagnosticSuffix();
+        WindowTitle = $"{_programName}{ver}{ren}{diag}";
     }
+
+    private string BuildDiagnosticSuffix()
+    {
+        var sb = new System.Text.StringBuilder();
+        if (Main.RenderHost.MandelbrotDisableAcceleration) sb.Append("  [ACCEL OFF]");
+        if (Main.RenderHost.MandelbrotDisableSeriesApproximation) sb.Append("  [SA OFF]");
+        if (Main.RenderHost.MandelbrotDisableDdBla) sb.Append("  [DD-BLA OFF]");
+        return sb.ToString();
+    }
+
+    /// <summary>Toggle BLA + SA bypass on the legacy MandelbrotCalculator HP
+    /// path. Used to isolate deep-zoom precision regressions. Title gains a
+    /// <c>[ACCEL OFF]</c> suffix when on. Retriggers the current frame.
+    /// Drives the menu checkbox; menu event handler does the actual flag +
+    /// trigger so both paths stay in lockstep.</summary>
+    public void ToggleMandelbrotAcceleration()
+        => FloatingMenu.BypassAcceleration = !FloatingMenu.BypassAcceleration;
+
+    /// <summary>Toggle SA prelude bypass on the legacy MandelbrotCalculator HP
+    /// path (BLA still applies). Used to isolate SA-induced artefacts vs BLA
+    /// errors. Title gains a <c>[SA OFF]</c> suffix when on.</summary>
+    public void ToggleMandelbrotSeriesApproximation()
+        => FloatingMenu.BypassSeriesApproximation = !FloatingMenu.BypassSeriesApproximation;
+
+    /// <summary>Toggle DD-precision BLA bypass — when on, the legacy single-
+    /// precision BLA table runs (pre-Wave-2.10 behaviour). Title gains a
+    /// <c>[DD-BLA OFF]</c> suffix while on.</summary>
+    public void ToggleMandelbrotDdBla()
+        => FloatingMenu.BypassDdBla = !FloatingMenu.BypassDdBla;
 
     // ── Local server indicator (status bar dot) ──────────────────────────
 
@@ -1174,6 +1469,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, bool> ShowFloatingMenuCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowRegionEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowAssetManagerCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorGenEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
@@ -1348,6 +1645,33 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // value future saves (poster / region) will actually use.
             Main.SetQualitySilent(Main.ViewState.Quality);
             FloatingMenu.SetQualitySilent(Main.SelectedQuality?.Name);
+            // Phase 10b — per-region LightingOverride. Same precedence as the
+            // theme preset (Phase 24): honour LightingLocked, then apply.
+            // The override "wins" the race against the theme preset because
+            // it runs after the region jump — themes follow region jumps in
+            // most user flows, and a region's lighting tuning is more
+            // specific than a theme's. Bit-identical when LightingOverride
+            // is null on the region (the common case).
+            if (!Main.LightingLocked
+                && _themeService.TryGetRegionLightingOverride(name, out var lightOverride))
+            {
+                Main.ViewState.FractalParameters.Lighting = lightOverride;
+                // Wave 4.3 — preset-apply bypasses the VM EnvironmentName
+                // setter, so kick the HDRI preload here too.
+                if (!string.IsNullOrWhiteSpace(lightOverride.EnvironmentName))
+                    FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(lightOverride.EnvironmentName);
+            }
+            // Animation Roadmap Phase 3b — region's attached animation, if
+            // any. Wipes the prior dynamic animator set even when this region
+            // has no animation attached (silent transition off). Bus starts
+            // its dispatcher timer on Refresh inside LoadRegionAnimation.
+            var attachedAnimName = _themeService.GetRegionAnimationName(name);
+            var attachedAnim = string.IsNullOrEmpty(attachedAnimName)
+                ? null
+                : _themeService.GetAnimation(attachedAnimName);
+            AnimationBusHost.LoadRegionAnimation(
+                attachedAnim,
+                Main.ViewState.FractalParameters);
             Main.RenderHost.Trigger();
         }
     }
@@ -1366,7 +1690,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // the menu combo so the toolbar reflects it.
             vm.RegionRequested        += (_, name) => { JumpToRegion(name); FloatingMenu.SetRegionSilent(name); };
             vm.EditorThemeSelected    += (_, name) => Main.SetThemeName(name);
-            vm.ThemeSavedToLibrary    += (_, _)    => RefreshThemeListsFromService();
+            vm.ThemeSavedToLibrary    += (_, _)    => { RefreshThemeListsFromService(); RefreshAssetManagerIfVisible(); };
             vm.HelpRequested          += (_, _)    => ShowHelp();
             // Preview pipe-through: ColorThemeEditor produces a ColorThemeDef,
             // the host translates it into an IColorMap on its IColorThemeService
@@ -1455,12 +1779,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
                 FloatingMenu.SetWatermarkSilent(name);
                 Main.SelectedCustomWatermarkName = name;
+                RefreshAssetManagerIfVisible();
             };
             vm.WatermarkDeletedFromLibrary += (_, name) =>
             {
                 FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
                 if (string.Equals(Main.SelectedCustomWatermarkName, name, StringComparison.OrdinalIgnoreCase))
                     Main.SelectedCustomWatermarkName = null;
+                RefreshAssetManagerIfVisible();
             };
             vm.HelpRequested += (_, _) => ShowHelp();
             vm.CloseRequested += (_, _) => IsWatermarkEditorVisible = false;
@@ -1469,6 +1795,182 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         }
         IsWatermarkEditorVisible = true;
     }
+
+    /// <summary>Animation Roadmap Phase 3c — open the Animation Editor.
+    /// Modeless, lives alongside the existing editors. The preview target is
+    /// the live FractalParameters record so Live Preview / Preview push
+    /// onto the same params the renderer reads.</summary>
+    public void ShowAnimationEditor()
+    {
+        if (AnimationEditor == null)
+        {
+            var vm = new AnimationEditorViewModel(
+                _themeService,
+                Main.ViewState.FractalParameters);
+            vm.AnimationSavedToLibrary += (_, _) =>
+            {
+                // No FloatingMenu animation dropdown today — the Save Region
+                // dialog picks up the new entry on its next open via
+                // EnumerateAnimationNames(). Hook stays here for the future
+                // SlideshowSettings animation filter UI.
+                RefreshAssetManagerIfVisible();
+            };
+            vm.CloseRequested += (_, _) => IsAnimationEditorVisible = false;
+            vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
+            AnimationEditor = vm;
+        }
+        IsAnimationEditorVisible = true;
+    }
+
+    /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the
+    /// currently-selected region. Metadata-only edit (geometry preserved);
+    /// built-in regions clone into a new user region on save. The VM is rebuilt
+    /// each call so it targets whatever region is selected now.</summary>
+    public void ShowRegionEditor() => ShowRegionEditor(null);
+
+    /// <summary>Open the Region Editor for an explicit region name. Null falls
+    /// back to the toolbar / menu selection (the render-surface "Edit Region…"
+    /// path). The Asset Manager (A2) passes the row's name directly.</summary>
+    public void ShowRegionEditor(string? targetName)
+    {
+        string? name = targetName ?? FloatingMenu.SelectedRegion ?? Main.SelectedRegion;
+        // FloatingMenu placeholder / header rows start with "—" and aren't
+        // real regions — treat those as "nothing selected".
+        if (string.IsNullOrWhiteSpace(name) || name.StartsWith("—", StringComparison.Ordinal))
+        {
+            MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
+                "Edit Region", "Select a region to edit first.", MessageSeverity.Info));
+            return;
+        }
+
+        var model = _themeService.GetRegionForEdit(name);
+        if (model == null)
+        {
+            MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
+                "Edit Region", $"Region \"{name}\" could not be loaded.", MessageSeverity.Warning));
+            return;
+        }
+
+        // Live-view provider powers the editor's "Capture current view" (R3):
+        // re-snap the region's stored geometry from the current camera on save.
+        var vm = new RegionEditorViewModel(_themeService, model, () => Main.ViewState);
+        vm.RegionSavedToLibrary += (_, savedName) =>
+        {
+            // Refresh the region combo (honours the active sort + type filter)
+            // and select the saved name so the toolbar reflects the edit /
+            // rename / clone immediately.
+            FloatingMenu.RefreshRegions();
+            FloatingMenu.SetRegionSilent(savedName);
+            Main.SetRegionName(savedName);
+            RefreshAssetManagerIfVisible();
+        };
+        vm.CloseRequested   += (_, _)    => IsRegionEditorVisible = false;
+        vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
+        RegionEditor = vm;
+        IsRegionEditorVisible = true;
+    }
+
+    /// <summary>Animation Roadmap Sub-goal A — open the read-only Asset Manager
+    /// (phase A1). Built once; RefreshAssets on each Show so it reflects saves
+    /// made since it was first opened.</summary>
+    public void ShowAssetManager()
+    {
+        if (AssetManager == null)
+        {
+            var vm = new AssetManagerViewModel(_assetSources);
+            vm.CloseRequested  += (_, _) => IsAssetManagerVisible = false;
+            vm.OpenRequested   += (_, e) => EditAsset(e.Kind, e.Name);
+            vm.ExportRequested += (_, e) => AssetBundleExportRequested?.Invoke(this, e);
+            vm.ImportRequested += (_, _) => AssetBundleImportRequested?.Invoke(this, EventArgs.Empty);
+            AssetManager = vm;
+        }
+        else
+        {
+            AssetManager.RefreshAssets();
+        }
+        IsAssetManagerVisible = true;
+    }
+
+    /// <summary>Asset Manager A2 — route a row to the type's own editor. Four
+    /// types have shell-owned modeless editors that accept a name and are
+    /// retargeted here directly (Region / Colour theme / Animation / Watermark).
+    /// The source editors (User equation / Sandbox / UserBulb) and Slideshow
+    /// configs are opened by the host — UI.Avalonia can't reach those open
+    /// paths — via <see cref="AssetHostEditorRequested"/>.</summary>
+    private void EditAsset(FracturingFog.Abstractions.Assets.AssetKind kind, string name)
+    {
+        switch (kind)
+        {
+            case FracturingFog.Abstractions.Assets.AssetKind.Region:
+                ShowRegionEditor(name);
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.ColorTheme:
+                ShowColorThemeEditor();
+                if (ColorThemeEditor != null) ColorThemeEditor.SelectedTheme = name;
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.Animation:
+                ShowAnimationEditor();
+                if (AnimationEditor != null) AnimationEditor.SelectedAnimation = name;
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.Watermark:
+                ShowWatermarkEditor();
+                if (WatermarkEditor != null) WatermarkEditor.SelectedWatermark = name;
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.SlideshowConfig:
+                // Make the clicked preset active so the Slideshow Settings
+                // dialog (host-owned, opened via the shared event) opens on it.
+                try
+                {
+                    var file = FracturingFog.Models.SlideshowConfigLibrary.Load();
+                    file.ActiveName = name;
+                    FracturingFog.Models.SlideshowConfigLibrary.Save(file);
+                }
+                catch { /* non-fatal — dialog just opens on the prior active */ }
+                SlideshowSettingsRequested?.Invoke(this, EventArgs.Empty);
+                break;
+
+            default:
+                // Source editors (UserEquation / SandboxEquation / UserBulb) edit
+                // live params in host-owned windows UI.Avalonia can't reach.
+                AssetHostEditorRequested?.Invoke(this,
+                    new AssetHostEditorEventArgs(kind, name));
+                break;
+        }
+    }
+
+    /// <summary>Live refresh (Asset Manager deferred item): when an editor saves
+    /// or deletes while the manager is open, re-enumerate the middle list so the
+    /// change shows without a manual Refresh. No-op when the manager is hidden —
+    /// the next Show re-enumerates anyway.</summary>
+    private void RefreshAssetManagerIfVisible()
+    {
+        if (IsAssetManagerVisible) AssetManager?.RefreshAssets();
+    }
+
+    /// <summary>Raised for asset types whose editors the host owns (source
+    /// editors + slideshow). The host (AvaloniaShellBootstrap) subscribes and
+    /// opens the matching editor window.</summary>
+    public event EventHandler<AssetHostEditorEventArgs>? AssetHostEditorRequested;
+
+    /// <summary>Raised with an assembled Asset Manager export bundle (A3). The
+    /// host shows a save picker and writes the zip bytes.</summary>
+    public event EventHandler<AssetExportEventArgs>? AssetBundleExportRequested;
+
+    /// <summary>Raised when the Asset Manager wants to import a bundle (A3). The
+    /// host shows an open picker + overwrite prompt, reads the bytes, and calls
+    /// <see cref="ImportAssetBundle"/> back with the result.</summary>
+    public event EventHandler? AssetBundleImportRequested;
+
+    /// <summary>Host entry point for bundle import: hands the read bytes to the
+    /// live Asset Manager VM (which owns the source roster + the zip parse) and
+    /// returns the per-entry tally for the host to report. No-op tally when the
+    /// manager isn't open.</summary>
+    public AssetImportSummary ImportAssetBundle(byte[] zipBytes, bool overwrite)
+        => AssetManager?.ImportBundle(zipBytes, overwrite) ?? new AssetImportSummary();
 
     private void ShowFFClient()
     {
@@ -1483,8 +1985,94 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private void ShowServerAdmin()
     {
         if (ServerAdmin == null)
+        {
             ServerAdmin = new ServerAdminViewModel();
+            // SAVM exposes a "Cluster Dashboard…" button; bounce that through
+            // the shell so MainWindow's SyncClusterDashboard handles the
+            // window lifecycle on the same visibility-flag pattern as the
+            // other floating windows.
+            ServerAdmin.OpenClusterDashboardRequested += (_, _) => ShowClusterDashboard();
+            // D-5e — sibling launcher for the live cluster-knob editor.
+            ServerAdmin.OpenMasterConfigRequested     += (_, _) => ShowMasterConfig();
+        }
         IsServerAdminVisible = true;
+    }
+
+    private void ShowMasterConfig()
+    {
+        if (MasterConfig == null)
+        {
+            MasterConfig = new MasterConfigViewModel();
+            MasterConfig.CloseRequested += (_, _) => IsMasterConfigVisible = false;
+        }
+        IsMasterConfigVisible = true;
+    }
+
+    private void ShowClusterDashboard()
+    {
+        if (ClusterDashboard == null)
+        {
+            ClusterDashboard = new ClusterDashboardViewModel();
+            ClusterDashboard.CloseRequested      += (_, _)       => IsClusterDashboardVisible = false;
+            // D-5c — dashboard surfaces two drill-in points: "All Jobs"
+            // opens the full paginated list, and per-row "Detail" opens
+            // the tile-map view scoped to one jobId. Both route through
+            // the shell so MainWindow's SyncJobList / SyncJobDetail
+            // handles the window lifecycle on the same flag pattern.
+            ClusterDashboard.OpenJobListRequested  += (_, _)        => ShowJobList();
+            ClusterDashboard.OpenJobDetailRequested += (_, jobId)   => ShowJobDetail(jobId);
+            // D-5d — per-worker drill-in from the workers grid Open button.
+            ClusterDashboard.OpenWorkerDetailRequested += (_, workerId) => ShowWorkerDetail(workerId);
+        }
+        IsClusterDashboardVisible = true;
+    }
+
+    private void ShowWorkerDetail(string workerId)
+    {
+        if (string.IsNullOrEmpty(workerId)) return;
+        if (WorkerDetail == null)
+        {
+            WorkerDetail = new WorkerDetailViewModel(workerId);
+            WorkerDetail.CloseRequested += (_, _) => IsWorkerDetailVisible = false;
+        }
+        else
+        {
+            // Single-instance window like JobDetailView: swap target id; the
+            // setter clears live state + immediate-polls so the operator sees
+            // fresh data without waiting for the 5 s timer.
+            WorkerDetail.WorkerId = workerId;
+        }
+        IsWorkerDetailVisible = true;
+    }
+
+    private void ShowJobList()
+    {
+        if (JobList == null)
+        {
+            JobList = new JobListViewModel();
+            JobList.CloseRequested          += (_, _)     => IsJobListVisible = false;
+            // Same drill-in path from the list view as from the dashboard.
+            JobList.OpenJobDetailRequested  += (_, jobId) => ShowJobDetail(jobId);
+        }
+        IsJobListVisible = true;
+    }
+
+    private void ShowJobDetail(string jobId)
+    {
+        if (string.IsNullOrEmpty(jobId)) return;
+        if (JobDetail == null)
+        {
+            JobDetail = new JobDetailViewModel(jobId);
+            JobDetail.CloseRequested += (_, _) => IsJobDetailVisible = false;
+        }
+        else
+        {
+            // Single-instance window: swap target jobId. The setter clears
+            // tile/worker collections + kicks an immediate poll so the
+            // operator sees fresh data without waiting for the 2 s timer.
+            JobDetail.JobId = jobId;
+        }
+        IsJobDetailVisible = true;
     }
 
     private void ShowHelp()
@@ -1577,6 +2165,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// SaveFilePicker and writes the BGRA buffer.</summary>
     public event EventHandler? ScreenshotRequested;
 
+    /// <summary>Render a wallpaper-sized image at the virtual-screen union of
+    /// every connected monitor, regardless of the current window state. Host
+    /// reads the screen bounds off the active Window, then runs
+    /// <c>PosterRenderer</c> offscreen at the computed dimensions. Use this on
+    /// Linux/GNOME where Span mode cannot overlay the shell's top bar + dock.</summary>
+    public event EventHandler? WallpaperScreenshotRequested;
+
     /// <summary>Export user-defined regions to a JSON bundle. Host pops a
     /// SaveFilePicker then calls IColorThemeService.ExportUserRegionsToFile.</summary>
     public event EventHandler? ExportRegionsRequested;
@@ -1589,6 +2184,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Open the slideshow-settings dialog. Host seeds it from the
     /// persisted SlideshowSettings and writes back on OK.</summary>
     public event EventHandler? SlideshowSettingsRequested;
+
+    /// <summary>Open the general application-settings dialog. Host seeds it
+    /// from the persisted AnimationSettings and writes back on OK.</summary>
+    public event EventHandler? AppSettingsRequested;
 
     /// <summary>Export user-defined colour themes to a JSON file. Host pops a
     /// SaveFilePicker then calls IColorThemeService.ExportUserThemesToFile.</summary>
@@ -1683,6 +2282,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             UseRegionWatermark = config.Timing.UseRegionWatermark,
             ThemeFadeEnabled = v.ThemeFadeEnabled,
             ThemesPerLeg = v.ThemesPerLeg,
+            EnableAnimations = config.EnableAnimations,
+            IncludedAnimations = config.IncludedAnimations,
+            FilterAnimations = config.FilterAnimations,
+            RandomizeAnimationsByFractalType = config.RandomizeAnimationsByFractalType,
         };
 
         _video.VideoSweepConfig = config.AdaptiveSweep;

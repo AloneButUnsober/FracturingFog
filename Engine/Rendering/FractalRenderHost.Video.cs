@@ -35,6 +35,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -59,6 +60,22 @@ namespace FracturingFog.Rendering
 
         private const double VideoSlideshowSeconds = 30.0;
         private const int VideoSlideshowPauseMs = 7_000;
+
+        // ── Per-leg animation (Animation Roadmap Phase 5) ─────────────────
+        // Opt-in via VideoZoomRequest.EnableAnimations. Each slideshow leg
+        // resolves an animation (region-attached or a random type-compatible
+        // library animation), materialises it against ViewState.FractalParameters,
+        // and ticks it once per frame before Calculate. Empty list ⇒ no
+        // animation on the leg and the video path runs exactly as before.
+        // TAA reprojection + the leg-locked histogram CDF are disabled while
+        // an animation is active because both assume only pan/zoom moves
+        // between frames — animating a per-type param invalidates that.
+        private bool _videoAnimEnabled;
+        private IReadOnlyList<string>? _videoAnimIncluded;
+        private IReadOnlyList<string>? _videoAnimFilter;
+        private bool _videoAnimRandomize;
+        private readonly List<IParameterAnimator> _videoLegAnimators = new();
+        private long _videoAnimLastTicks;
 
         // Fraction of total duration spent panning (rest is the zoom phase).
         private const double VideoPanFraction = 0.05;
@@ -245,12 +262,21 @@ namespace FracturingFog.Rendering
                 targetCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
                 targetZoom = FractalViewState.DefaultZoom;
 
-                _videoQuality = QualityPreset.Standard;
+                // Natural-for-zoom is a floor; authored region preset wins
+                // when richer. Without this, a region authored at Ultra with
+                // a zoom in the High range plays back at High and loses the
+                // detail the standalone view shows.
+                QualityPreset natural = QualityPreset.Standard;
                 foreach (var p in QualityPreset.All)
                 {
                     if (p.Tier == QualityTier.Extreme) continue;
-                    if (p.ZoomMax >= startZoom) { _videoQuality = p; break; }
+                    if (p.ZoomMax >= startZoom) { natural = p; break; }
                 }
+                QualityPreset authored = string.IsNullOrEmpty(request.TargetQualityPresetName)
+                    ? natural
+                    : QualityPreset.FromName(request.TargetQualityPresetName);
+                if (authored.Tier == QualityTier.Extreme) authored = natural;
+                _videoQuality = authored.Tier > natural.Tier ? authored : natural;
             }
             else
             {
@@ -263,7 +289,25 @@ namespace FracturingFog.Rendering
                 _videoQuality = QualityPreset.Standard;
             }
 
-            _videoTargetIterations = request.TargetIterations;
+            // Honour the authored region iter count as a floor. When the dialog
+            // was driven from raw coords (no region pick), fall back to the
+            // calculator's current MaxIterations so a reverse zoom from a
+            // hand-tuned deep view doesn't drop iterations below what the
+            // user is already seeing on screen.
+            int reqIters = request.TargetIterations;
+            if (reqIters <= 0 && request.IsReverse && _calculator != null)
+                reqIters = _calculator.MaxIterations;
+            _videoTargetIterations = reqIters;
+
+            // Same fallback for the authored Quality preset.
+            if (request.IsReverse
+                && string.IsNullOrEmpty(request.TargetQualityPresetName)
+                && _calculator?.Quality != null
+                && _calculator.Quality.Tier > _videoQuality.Tier
+                && _calculator.Quality.Tier != QualityTier.Extreme)
+            {
+                _videoQuality = _calculator.Quality;
+            }
 
             // Update the watermark's TopText to the picked region so the
             // recorded / on-screen overlay reflects the zoom destination
@@ -381,6 +425,13 @@ namespace FracturingFog.Rendering
             _bandStatsValid = false;
             _calculator.PerRowMaxIter = null;
 
+            // Phase 5 animation config — captured for the per-leg picker.
+            _videoAnimEnabled = request.EnableAnimations;
+            _videoAnimIncluded = request.IncludedAnimations;
+            _videoAnimFilter = request.FilterAnimations;
+            _videoAnimRandomize = request.RandomizeAnimationsByFractalType;
+            _videoLegAnimators.Clear();
+
             _videoSlideshowRunning = true;
             string mode = reverse ? "reverse " : "";
             RaiseStatus(constantRate
@@ -405,6 +456,7 @@ namespace FracturingFog.Rendering
                     // global-MaxIterations path.
                     _calculator.PerRowMaxIter = null;
                     _bandStatsValid = false;
+                    _videoLegAnimators.Clear();
                     if (t.IsFaulted)
                         RaiseStatus($"Video slideshow error: {t.Exception?.InnerException?.Message}");
                     else
@@ -836,6 +888,11 @@ namespace FracturingFog.Rendering
             ApplyVideoFrameState(cx, cy, zoom);
             if (ct.IsCancellationRequested) { _videoLastFrameMs = frameSw.Elapsed.TotalMilliseconds; return; }
 
+            // Phase 5: advance the leg's animation AFTER the zoom-leg view
+            // state so animation param mutations win on any (rare) conflict,
+            // and BEFORE Calculate so the fresh params are what gets rendered.
+            TickVideoLegAnimators();
+
             // Non-Mandelbrot fractals: dispatch to the alt calculator and upload
             // its buffer directly. Histogram-eq / TAA / dither read from the
             // Mandelbrot ColorBuffer and have no equivalent here, so they skip.
@@ -885,6 +942,9 @@ namespace FracturingFog.Rendering
             if (eq > 0)
             {
                 double strength = eq / 100.0;
+                // Animated legs mutate params every frame → the histogram
+                // shifts, so the leg-locked CDF must rebuild each frame.
+                if (_videoLegAnimators.Count > 0) _videoLegCdfStale = true;
                 EnsureVideoLegCdf();
                 if (_videoLegCdf != null)
                 {
@@ -910,7 +970,11 @@ namespace FracturingFog.Rendering
             }
 
             // Temporal reprojection blend (skipped on frame 0 of a leg).
-            BlendWithPrevFrameInPlace();
+            // Also skipped for animated legs: reprojection maps by complex
+            // coordinate and assumes only pan/zoom moved, so animating a
+            // per-type param would ghost the previous frame's geometry.
+            if (_videoLegAnimators.Count == 0)
+                BlendWithPrevFrameInPlace();
 
             UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
             CaptureVideoFrame();
@@ -1336,22 +1400,25 @@ namespace FracturingFog.Rendering
             }
             else
             {
-                int it = _videoQuality.ComputeIterations(clampedZoom);
-                if (_videoTargetIterations > it) it = _videoTargetIterations;
+                int formula = _videoQuality.ComputeIterations(clampedZoom);
                 // Finding C: apply adaptive cap (set by RenderVideoFrame from
-                // prior-frame elapsed). Min floor of 64 so the image never
-                // collapses to all-in-set even when the cap clamps hard.
-                // For Global mode this is the per-frame scalar multiplier;
-                // for PerTile it sets the upper-bound MaxIterations the
-                // per-row cap array is computed against.
+                // prior-frame elapsed) ONLY to the formula-derived count.
+                // The authored region iter floor (_videoTargetIterations) is
+                // then taken as a hard lower bound — otherwise a 0.40 cap
+                // shrinks the floor too, so deep frames render with 40% of
+                // the iter budget the region was authored for and the start
+                // of a reverse zoom (or the end of a forward zoom) collapses
+                // into in-set black.
                 if (VideoAdaptiveIterEnabled
                     && IterCapMode != FracturingFog.Models.VideoIterCapMode.Off
                     && _videoIterCap < VideoIterCapMax)
                 {
-                    int capped = (int)(it * _videoIterCap);
+                    int capped = (int)(formula * _videoIterCap);
                     if (capped < 64) capped = 64;
-                    it = capped;
+                    formula = capped;
                 }
+                int it = formula;
+                if (_videoTargetIterations > it) it = _videoTargetIterations;
                 _calculator.MaxIterations = it;
                 // Phase 2: PerTile mode builds a per-row cap array from
                 // prior-frame band stats. SP path honours it directly; HP
@@ -1542,12 +1609,19 @@ namespace FracturingFog.Rendering
                     ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
                     ViewState.Zoom = tz;
 
-                    _videoQuality = QualityPreset.Standard;
+                    // Natural-for-zoom acts as a floor; authored region preset
+                    // wins when richer so the played-back leg matches the
+                    // standalone region view (a region authored at Ultra with
+                    // a zoom in the High range otherwise downgrades).
+                    QualityPreset natural = QualityPreset.Standard;
                     foreach (var p in QualityPreset.All)
                     {
                         if (p.Tier == QualityTier.Extreme) continue;
-                        if (p.ZoomMax >= tz) { _videoQuality = p; break; }
+                        if (p.ZoomMax >= tz) { natural = p; break; }
                     }
+                    QualityPreset authored = region.QualityPreset ?? natural;
+                    if (authored.Tier == QualityTier.Extreme) authored = natural;
+                    _videoQuality = authored.Tier > natural.Tier ? authored : natural;
                 }
                 else
                 {
@@ -1588,6 +1662,10 @@ namespace FracturingFog.Rendering
                 // program/version sub-line.
                 RegionName = region.Name;
                 ThemeName = theme;
+
+                // Phase 5 — resolve + materialise this leg's animation (no-op
+                // when EnableAnimations is off or nothing is compatible).
+                BuildVideoLegAnimators(svc, region);
 
                 // Build the in-leg theme-fade schedule from the user's
                 // ThemeFadeEnabled checkbox + ThemesPerLeg setting. Schedule
@@ -1692,6 +1770,107 @@ namespace FracturingFog.Rendering
                     // leg cancel — fall through to next iteration
                 }
             }
+        }
+
+        // ── Per-leg animation helpers (Animation Roadmap Phase 5) ─────────
+        //
+        // Resolve the leg's animation via the pure AnimationLegPicker (shared
+        // with the image SlideshowEngine), materialise it against the live
+        // FractalParameters, and tick it once per RenderVideoFrame. The video
+        // slideshow pool is Mandelbrot-only, so in practice only animations
+        // whose TargetFractalTypes include Mandelbrot resolve here; everything
+        // else falls back to a static (un-animated) leg. No-op unless the run
+        // opted in via VideoZoomRequest.EnableAnimations.
+        private void BuildVideoLegAnimators(IColorThemeService svc, FractalRegion region)
+        {
+            _videoLegAnimators.Clear();
+            if (!_videoAnimEnabled || svc == null || region == null) return;
+
+            var names = svc.EnumerateAnimationNames();
+            if (names == null || names.Count == 0) return;
+
+            var candidates = new List<AnimationLegPicker.Candidate>(names.Count);
+            foreach (var n in names)
+            {
+                var d = svc.GetAnimation(n);
+                if (d == null) continue;
+                candidates.Add(new AnimationLegPicker.Candidate(d.Name, d.TargetFractalTypes, d.Tags));
+            }
+            if (candidates.Count == 0) return;
+
+            string? chosen = AnimationLegPicker.Pick(
+                candidates,
+                region.FractalType.ToString(),
+                svc.GetRegionAnimationName(region.Name),
+                _videoAnimRandomize,
+                _videoAnimIncluded,
+                _videoAnimFilter,
+                _videoRng.Next);
+            if (string.IsNullOrEmpty(chosen)) return;
+
+            var data = svc.GetAnimation(chosen);
+            if (data == null) return;
+
+            foreach (var a in data.ToAnimators(ViewState.FractalParameters))
+                _videoLegAnimators.Add(a);
+
+            ApplyVideoLegCeiling();
+
+            if (_videoLegAnimators.Count > 0)
+            {
+                _videoAnimLastTicks = Stopwatch.GetTimestamp();
+                RaiseStatus($"Video slideshow: animating {region.Name} with \"{chosen}\"");
+            }
+        }
+
+        // Enforce the animated-param ceiling on the video leg. Unlike the
+        // bus (which drops per-frame), the video leg set is fixed for the
+        // leg's duration, so we prune the dropped animators once here rather
+        // than skipping them each frame.
+        private void ApplyVideoLegCeiling()
+        {
+            if (_videoLegAnimators.Count == 0) return;
+
+            bool includesRaymarched3D = false;
+            var costs = new List<AnimatableParamCost>(_videoLegAnimators.Count);
+            foreach (var a in _videoLegAnimators)
+            {
+                costs.Add(a.Cost);
+                if (a.Cost == AnimatableParamCost.Moderate) includesRaymarched3D = true;
+            }
+
+            int overrideCeiling = 0;
+            try { overrideCeiling = AnimationSettingsStore.Load().AnimatedParamCeilingOverride; }
+            catch { overrideCeiling = 0; }
+            int ceiling = overrideCeiling > 0
+                ? overrideCeiling
+                : AnimatedParamCeilingPolicy.DefaultCeiling(
+                    HardwareProfile.Detect(), includesRaymarched3D);
+
+            if (ceiling <= 0 || _videoLegAnimators.Count <= ceiling) return;
+
+            var keep = AnimatedParamCeilingPolicy.SelectActive(costs, ceiling);
+            var survivors = new List<IParameterAnimator>(ceiling);
+            for (int i = 0; i < _videoLegAnimators.Count; i++)
+                if (keep[i]) survivors.Add(_videoLegAnimators[i]);
+            _videoLegAnimators.Clear();
+            _videoLegAnimators.AddRange(survivors);
+        }
+
+        // Advance every leg animator by the wall-clock delta since the prior
+        // tick. Clamps a large dt (post-stall) so params can't jump. Runs on
+        // the video loop thread — same thread that reads FractalParameters in
+        // the following Calculate, so no cross-thread synchronisation needed.
+        private void TickVideoLegAnimators()
+        {
+            if (_videoLegAnimators.Count == 0) return;
+            long now = Stopwatch.GetTimestamp();
+            double dt = (now - _videoAnimLastTicks) / (double)Stopwatch.Frequency;
+            _videoAnimLastTicks = now;
+            if (dt <= 0.0) return;
+            if (dt > 0.25) dt = 0.25;
+            for (int i = 0; i < _videoLegAnimators.Count; i++)
+                _videoLegAnimators[i].Tick(dt);
         }
 
         // Per-pixel CPU dissolve from from→to over steps, presenting each.

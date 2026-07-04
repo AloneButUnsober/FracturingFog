@@ -28,7 +28,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
+using FracturingFog.Rendering;
+using FracturingFog.Rendering.Lighting;
 using FracturingFog.Models;
 
 namespace FracturingFog;
@@ -38,6 +41,12 @@ public sealed class KleinianCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // P7b — lazily-constructed GPU calculator. See MandelbulbCalculator for contract.
+    private KleinianGpuCalculator? _gpu;
+
+    /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -63,8 +72,14 @@ public sealed class KleinianCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         int deIter   = Math.Max(2, FractalParameters.KleinianIterations);
         int maxSteps = Math.Max(16, FractalParameters.KleinianMaxSteps);
@@ -104,6 +119,15 @@ public sealed class KleinianCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
+        // Phase 20b — true per-eye camera offset along the right basis.
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camPX += right[0] * eyeOffset;
+            camPY += right[1] * eyeOffset;
+            camPZ += right[2] * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         double fovBase = Math.Tan(0.5 * Math.PI / 3.0);
         double zoomLensFactor = rawCamDist >= camDistFloor
@@ -119,7 +143,65 @@ public sealed class KleinianCalculator : IFractalCalculator
             Math.Cos(FractalParameters.KleinianLightPhi),
             Math.Sin(FractalParameters.KleinianLightPhi) * Math.Sin(FractalParameters.KleinianLightTheta));
 
+        // Phase 1c — Lighting struct is authoritative for Light1/2/3.
+        var fx = FractalParameters.Lighting;
+        var deStruct = new De(cx, cy, cz, r, deIter);
+
+        // Hoisted for shared use by GPU dispatch + CPU path.
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
+
+        // P7b — opt-in GPU raymarch path (cheap-palette shading). Fixed
+        // 4-sphere preset matches the CPU centres array. See
+        // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes)
+        {
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camPX, CamY = camPY, CamZ = camPZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+            };
+            var kp = new KleinianGpuParams
+            {
+                C0X = cx[0], C0Y = cy[0], C0Z = cz[0],
+                C1X = cx[1], C1Y = cy[1], C1Z = cz[1],
+                C2X = cx[2], C2Y = cy[2], C2Z = cz[2],
+                C3X = cx[3], C3Y = cy[3], C3Z = cz[3],
+                Radius = r,
+                DEIter = deIter,
+                SceneRadius = sceneRadius,
+            };
+            var sp = GpuShadingParams.Build(in fx);
+            _gpu ??= new KleinianGpuCalculator();
+            if (_gpu.Render(renderBuffer, rp, sp, kp)) return;
+        }
+
+        // Phase 4 — G-buffer for SSAO post-pass.
+        float[]? depthBuf = null;
+        float[]? normalBuf = null;
+        if (fx.SsaoSamples > 0)
+        {
+            depthBuf = new float[width * height];
+            normalBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearGBuffer(depthBuf, normalBuf);
+        }
+        // Phase 7 — HDR buffer for tonemap/bloom.
+        float[]? hdrBuf = null;
+        bool wantPost = fx.ToneMap != ToneMapOperator.None || fx.BloomStrength > 0;
+        if (wantPost)
+        {
+            hdrBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearHdrBuffer(hdrBuf);
+        }
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -150,7 +232,14 @@ public sealed class KleinianCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { ColorBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit)
+                {
+                    // Ray-miss → sky backdrop when toggle on; InSetColor off (see MandelbulbCalculator).
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
+                    continue;
+                }
 
                 double h = eps * 2;
                 double n0 = KleinianDE(px + h, py, pz, cx, cy, cz, r, deIter)
@@ -161,19 +250,34 @@ public sealed class KleinianCalculator : IFractalCalculator
                           - KleinianDE(px, py, pz - h, cx, cy, cz, r, deIter);
                 var nrm = Normalize3(n0, n1, n2);
 
-                double diffuse = Math.Max(0.0, nrm[0] * light[0] + nrm[1] * light[1] + nrm[2] * light[2]);
-                double ambient = 0.15;
-                double shade = ambient + diffuse * (1.0 - ambient);
-
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
                              + (float)(tTotal * 0.5);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
-                byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);
-                byte G = (byte)Math.Clamp(((baseColor >> 8) & 0xFF) * shade, 0, 255);
-                byte B = (byte)Math.Clamp((baseColor & 0xFF) * shade, 0, 255);
-                ColorBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+
+                // Phase 2 — shading via shared pipeline.
+                var inputs = new ShadingInputs(
+                    px, py, pz, nrm[0], nrm[1], nrm[2],
+                    rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
+                renderBuffer[idx] = ShadingPipeline.Shade<De>(
+                    in inputs, baseColor, in fx, in deStruct, true,
+                    idx, depthBuf, normalBuf, hdrBuf);
             }
         });
+
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
+        if (hdrBuf is not null)
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>
@@ -183,6 +287,20 @@ public sealed class KleinianCalculator : IFractalCalculator
     /// derivative magnitude. DE = signed nearest-sphere distance / accumulated
     /// scale.
     /// </summary>
+    /// <summary>P3 — concrete DE struct. Holds references to the sphere
+    /// centre arrays + tangent radius; iter loop runs inside KleinianDE.</summary>
+    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    {
+        private readonly double[] _cx, _cy, _cz;
+        private readonly double _r;
+        private readonly int _iter;
+        public De(double[] cx, double[] cy, double[] cz, double r, int iter)
+        { _cx = cx; _cy = cy; _cz = cz; _r = r; _iter = iter; }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public double Evaluate(double x, double y, double z)
+            => KleinianDE(x, y, z, _cx, _cy, _cz, _r, _iter);
+    }
+
     private static double KleinianDE(
         double px, double py, double pz,
         double[] cx, double[] cy, double[] cz, double r,

@@ -48,6 +48,14 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
         ApplyCommand   = ReactiveCommand.Create(Apply);
         RefreshCommand = ReactiveCommand.CreateFromTask(PollOnceAsync);
         CloseCommand   = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
+        OpenClusterDashboardCommand = ReactiveCommand.Create(
+            () => OpenClusterDashboardRequested?.Invoke(this, EventArgs.Empty));
+        // D-5e — sibling launcher for the cluster-knob editor (max jobs,
+        // artifact retention, tile target). Same routing shape as
+        // OpenClusterDashboard: shell flips a visibility flag, MainWindow
+        // owns the window lifecycle.
+        OpenMasterConfigCommand = ReactiveCommand.Create(
+            () => OpenMasterConfigRequested?.Invoke(this, EventArgs.Empty));
         BrowseCertsDirCommand = ReactiveCommand.Create(() => BrowseFolderRequested?.Invoke(this,
             ("certsDir", (Action<string>)(p => CertsDir = p))));
         BrowseLogDirCommand   = ReactiveCommand.Create(() => BrowseFolderRequested?.Invoke(this,
@@ -301,11 +309,21 @@ public sealed class ServerAdminViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ApplyCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenClusterDashboardCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenMasterConfigCommand { get; }
     public ReactiveCommand<Unit, Unit> BrowseCertsDirCommand { get; }
     public ReactiveCommand<Unit, Unit> BrowseLogDirCommand { get; }
     public ReactiveCommand<Unit, Unit> BrowseWorkDirCommand { get; }
 
     public event EventHandler? CloseRequested;
+    /// <summary>Raised when the operator hits "Cluster Dashboard…". The shell
+    /// flips its dashboard visibility flag in response — the SAVM itself
+    /// owns no knowledge of the cluster view, mirroring how Help and other
+    /// sibling windows are routed.</summary>
+    public event EventHandler? OpenClusterDashboardRequested;
+    /// <summary>D-5e — raised when the operator hits "Master Config…". Shell
+    /// flips IsMasterConfigVisible; MainWindow drives the window lifecycle.</summary>
+    public event EventHandler? OpenMasterConfigRequested;
     public event EventHandler<(string kind, Action<string> assign)>? BrowseFolderRequested;
 
     public void Dispose()

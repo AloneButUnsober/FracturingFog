@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FracturingFog.Tools.VisualRegression</RootNamespace>
+    <AssemblyName>FracturingFog.VisualRegression</AssemblyName>
+    <!--
+      Not part of the main solution build. Run from the repo root via
+      dotnet run with `record` or `verify` verbs. See Program.cs for usage.
+
+      Exit code 0 on full match, 1 on any mismatch or render failure.
+
+      Each case shells out the main app's batch image path, so the tool
+      itself has no engine references and stays buildable on any RID
+      regardless of which calculators are wired.
+    -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

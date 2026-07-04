@@ -59,7 +59,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 string json = JsonSerializer.Serialize(Watermarks, BuildJsonOptions());
-                File.WriteAllText(WatermarksFile, json);
+                AtomicFile.WriteAllText(WatermarksFile, json);
             }
             catch
             {

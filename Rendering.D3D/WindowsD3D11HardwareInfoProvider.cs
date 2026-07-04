@@ -42,6 +42,40 @@ namespace FracturingFog.Rendering
             }
         }
 
+        // Discrete GPUs report a large slab of dedicated (on-board) VRAM;
+        // integrated GPUs carve a small aperture out of system RAM and lean on
+        // SharedSystemMemory instead. 512 MB of dedicated VRAM cleanly
+        // separates every discrete card from the iGPU aperture (typically
+        // 128 MB or less) without a per-vendor allow-list.
+        private const ulong DiscreteVramThresholdBytes = 512UL * 1024 * 1024;
+
+        public bool HasDiscreteGpu()
+        {
+            try
+            {
+                using var factory = Vortice.DXGI.DXGI.CreateDXGIFactory1<Vortice.DXGI.IDXGIFactory1>();
+                uint idx = 0;
+                bool discrete = false;
+                while (factory.EnumAdapters1(idx, out var adapter).Success)
+                {
+                    var desc = adapter.Description1;
+                    // Skip the Microsoft Basic Render Driver / WARP software
+                    // adapter — it reports VRAM but is not real hardware.
+                    bool software = (desc.Flags & Vortice.DXGI.AdapterFlags.Software) != 0;
+                    if (!software && (ulong)desc.DedicatedVideoMemory >= DiscreteVramThresholdBytes)
+                        discrete = true;
+                    adapter.Dispose();
+                    idx++;
+                }
+                return discrete;
+            }
+            catch
+            {
+                // Conservative fallback — assume iGPU so the ceiling stays tight.
+                return false;
+            }
+        }
+
         public void AppendGpuFeatureLevel(StringBuilder sb)
         {
             try

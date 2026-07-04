@@ -90,6 +90,27 @@ namespace FracturingFog.Abstractions
             lock (_gate) { _cachedRoot = normalized; }
         }
 
+        /// <summary>
+        /// Redirect the active data root for <b>this process only</b>, without
+        /// writing the persistent anchor file. Unlike <see cref="SetRoot"/>
+        /// this leaves the real <see cref="DefaultRoot"/> (and any user anchor)
+        /// completely untouched, so it can never leak into a normal app run.
+        ///
+        /// Intended for test hosts, which must point every store (regions,
+        /// themes, animations, …) at a throwaway directory so a stray
+        /// <c>Save()</c> can't overwrite the user's real
+        /// <c>%APPDATA%\FracturingFog</c> data. Call before the first
+        /// <see cref="Root"/> access so nothing resolves the default first.
+        /// </summary>
+        public static void SetProcessRootOverride(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                throw new ArgumentException("Root path must not be blank.", nameof(root));
+            string normalized = Path.GetFullPath(root);
+            Directory.CreateDirectory(normalized);
+            lock (_gate) { _cachedRoot = normalized; }
+        }
+
         /// <summary>Remove the override and revert to <see cref="DefaultRoot"/>.
         /// Does not delete or move user data — only erases the anchor.</summary>
         public static void ClearOverride()

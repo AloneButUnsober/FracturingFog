@@ -1,7 +1,8 @@
 # Fracturing Fog — Technical Documentation
 
 This is the contributor / developer entry point. For end-user docs, see the
-[User Index](../User/_Index.md).
+[User Index](../User/_Index.md). For a top-level router that bridges both audiences plus
+the project-wide roadmaps, see [Docs Index](../_Index.md).
 
 Fracturing Fog is a Windows-first, cross-platform-foundation Avalonia application that wraps a
 DirectX 11/12 render surface, a SIMD + double-double + quad-double maths pipeline, an ILGPU GPU
@@ -40,6 +41,9 @@ system. The codebase is a single .NET 10 solution.
 | Tracking the GPU JIT / perturbation roadmap                | [Performance Development Plan](Performance-DevelopmentPlan.md) |
 | Porting away from Direct3D                                 | [Cross-Platform Roadmap](CrossPlatform-Roadmap.md) and [Implementation Plan](CrossPlatform-ImplementationPlan.md) |
 | Extending the 3-D Mandelbulb / User Bulb engine            | [User Bulb 3D Development Plan](UserBulb3D-DevelopmentPlan.md) and [Sandbox](UserBulbSandbox-DevPlan.md) |
+| Building the Region Editor (Animation Roadmap Sub-goal B)   | [Region Editor Dev Plan](RegionEditor-DevPlan.md) |
+| Building the cross-asset Asset Manager (Sub-goal A, deferred) | [Asset Manager Dev Plan](AssetManager-DevPlan.md) |
+| Building the distributed master/worker rendering cluster   | [Distributed Rendering Development Plan](DistributedRendering-DevelopmentPlan.md) — phase notes: [D-1](D-1-Session-Notes.md), [D-2](D-2-Session-Notes.md) |
 | Maintaining the docs themselves                            | [Documentation Plan](../Documentation-Plan.md)              |
 | Citing the maths behind a piece of code                    | [Resources & Bibliography](../Resources-Bibliography.md)    |
 

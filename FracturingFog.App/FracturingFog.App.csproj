@@ -14,7 +14,16 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      S-X3 (2026-06-23) — multi-targeted. Cross-plat legs (linux-x64,
+      linux-arm64, osx-arm64, osx-x64) publish from the net10.0 TFM; the
+      Windows leg publishes from net10.0-windows so it can ProjectReference
+      FracturingFog.Win directly and call WindowsBootstrap.Install without
+      reflection. Two output trees on Windows; the cross-plat legs ignore the
+      net10.0-windows TFM entirely (it carries Windows-flavoured BCL surface
+      that doesn't load on Linux).
+    -->
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -28,6 +37,33 @@
     <AssemblyName>FracturingFog.App</AssemblyName>
   </PropertyGroup>
 
+  <!--
+    S-X6 (2026-06-23) — Windows manifest. Without supportedOS Id (Win10),
+    Avalonia's Win32NativeControlHost.DumbWindow ctor throws "Unable to
+    create child window for native control host. Application manifest with
+    supported OS list might be required." → GpuSurfaceControl never produces
+    a surface → renderer never wired → window draws nothing → black. Same
+    failure mode the legacy WinExe avoided by shipping app.manifest. Cross-
+    plat TFM (net10.0) ignores the manifest.
+  -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!--
+    S-X3 (2026-06-23) — Windows-only ProjectReferences. FracturingFog.Win
+    (net10.0-windows) owns WindowsBootstrap.Install which writes the
+    Windows-only hook surface onto AvaloniaShellBootstrap (HardwareInfoProvider,
+    GpuKernelFactoryHook, NativeVideoWriterFactoryHook, NativeInputBridge).
+    Cross-plat TFM (net10.0) leaves these unwired and the bootstrap takes its
+    no-op fallbacks. The Win leg's ColorSampleBridge + SyncDialogs still live
+    on the legacy WinExe (UseWindowsForms=true closure) — moving them into
+    FracturingFog.Win is a later slice.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <ProjectReference Include="..\FracturingFog.Win\FracturingFog.Win.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
@@ -40,6 +76,44 @@
       AvaloniaShellBootstrap.CreateAudioBackend on Windows hosts.
     -->
     <ProjectReference Include="..\Audio\FracturingFog.Audio.csproj" />
+    <!--
+      S-X2 (2026-06-23) — Rendering.Silk powers the cross-plat OpenGL backend
+      and the silk-smoke entry point. Cross-plat net10.0; safe everywhere.
+    -->
+    <ProjectReference Include="..\Rendering.Silk\FracturingFog.Rendering.Silk.csproj" />
+
+    <!--
+      S-X7.1b (2026-06-23) — headless JSON-RPC server now cross-plat. HostFractalRenderEngine
+      and ServerEntry are source-linked below; the protocol + transport ship
+      from FracturingFog.Server.
+    -->
+    <ProjectReference Include="..\Server\FracturingFog.Server.csproj" />
+
+    <!--
+      D-2b (2026-06-27) — cluster mode needs the IClusterImageCodec
+      Skia impl in ServerHost/SkiaClusterImageCodec.cs. Rendering.Skia
+      already targets cross-plat net10.0 and pulls SkiaSharp transitively,
+      so adding it here is zero-cost vs. carving a new package ref.
+    -->
+    <ProjectReference Include="..\Rendering.Skia\FracturingFog.Rendering.Skia.csproj" />
+  </ItemGroup>
+
+  <!--
+    S-X7.1b (2026-06-23) — server entry + render engine sources linked from
+    ServerHost/. Lives in the legacy WinExe project root which globs them via
+    root *.cs; linking is lower-friction than carving a new project for two
+    files. HostFractalRenderEngine routes through BootstrapHooks.NativeVideoWriterFactoryHook
+    + ImageExport (SkiaSharp) so it has zero Win-only deps now.
+    D-2b — added ClusterEntry, SkiaClusterImageCodec, ClusterParitySelfTest.
+  -->
+  <ItemGroup>
+    <Compile Include="..\ServerHost\ServerEntry.cs" Link="ServerEntry.cs" />
+    <Compile Include="..\ServerHost\HostFractalRenderEngine.cs" Link="HostFractalRenderEngine.cs" />
+    <Compile Include="..\ServerHost\ClusterEntry.cs" Link="ClusterEntry.cs" />
+    <Compile Include="..\ServerHost\SkiaClusterImageCodec.cs" Link="SkiaClusterImageCodec.cs" />
+    <Compile Include="..\ServerHost\ClusterParitySelfTest.cs" Link="ClusterParitySelfTest.cs" />
+    <Compile Include="..\ServerHost\ClusterScaleSelfTest.cs" Link="ClusterScaleSelfTest.cs" />
+    <Compile Include="..\ServerHost\ClusterVideoParitySelfTest.cs" Link="ClusterVideoParitySelfTest.cs" />
   </ItemGroup>
 
   <!--

@@ -44,11 +44,25 @@ public static class UserBulbSandboxEmitter
     /// constants and Hamilton multiply ride the inline operators directly,
     /// runtime-exponent <c>qpow</c> routes through <c>QuatGpuOps.Pow</c>.</summary>
     public static SbxEmitResult Emit(Sbx3Node? root, IReadOnlyList<string> paramNames, bool quatMode, bool gpuTarget)
+        => Emit(root, paramNames, quatMode, gpuTarget, extraSlots: null);
+
+    /// <summary>Chain-aware overload. <paramref name="extraSlots"/> maps
+    /// prior-step output slot indices to a (local C# identifier, value kind)
+    /// pair. Used by Sandbox-chain GPU compile: each step's emitted body
+    /// references prior step outputs by the local name the kernel source
+    /// declared for them. Slot kinds are seeded into the emitter scope so
+    /// member access (.X/.Y/.Z) on a prior-step name infers correctly.</summary>
+    public static SbxEmitResult Emit(
+        Sbx3Node? root,
+        IReadOnlyList<string> paramNames,
+        bool quatMode,
+        bool gpuTarget,
+        IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? extraSlots)
     {
         if (root == null) return new(false, "Empty AST.", null, SbxEmitKind.Real);
         try
         {
-            var ctx = new EmitCtx(paramNames, quatMode, gpuTarget);
+            var ctx = new EmitCtx(paramNames, quatMode, gpuTarget, extraSlots);
             var sb = new StringBuilder();
             var kind = ctx.Emit(root, sb);
             return new(true, null, sb.ToString(), kind);
@@ -75,12 +89,24 @@ public static class UserBulbSandboxEmitter
         /// is fine for the small expression trees produced from real-world
         /// Sandbox sources and avoids a delegate dispatch on the hot path.</summary>
         private readonly Dictionary<int, string> _letSubs = new();
+        /// <summary>Prior-step output slot → (local C# identifier, value kind).
+        /// Chain compile populates this so step bodies referencing prior step
+        /// outputs by name resolve to the local declared in the emitted Step.</summary>
+        private readonly IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? _extraSlots;
 
         public EmitCtx(IReadOnlyList<string> paramNames, bool quatMode, bool gpuTarget = false)
+            : this(paramNames, quatMode, gpuTarget, extraSlots: null) { }
+
+        public EmitCtx(
+            IReadOnlyList<string> paramNames,
+            bool quatMode,
+            bool gpuTarget,
+            IReadOnlyDictionary<int, (string Name, SbxEmitKind Kind)>? extraSlots)
         {
             _paramNames = paramNames;
             _quat = quatMode;
             _gpu = gpuTarget;
+            _extraSlots = extraSlots;
             _slotKinds[SandboxBulbExpression.SlotZ] = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
             _slotKinds[SandboxBulbExpression.SlotC] = quatMode ? SbxEmitKind.Quat : SbxEmitKind.Vec;
             _slotKinds[SandboxBulbExpression.SlotN] = SbxEmitKind.Real;
@@ -90,6 +116,10 @@ public static class UserBulbSandboxEmitter
                 _slotKinds[SandboxBulbExpression.ReservedSlots + i] = SbxEmitKind.Real;
             // `t` is always last in the extras the parser receives.
             _slotKinds[SandboxBulbExpression.ReservedSlots + paramNames.Count] = SbxEmitKind.Real;
+            // Seed prior-step output slot kinds so member access on a chain
+            // output (foo.x) infers correctly.
+            if (extraSlots != null)
+                foreach (var kv in extraSlots) _slotKinds[kv.Key] = kv.Value.Kind;
         }
 
         public SbxEmitKind Emit(Sbx3Node node, StringBuilder sb) => node switch
@@ -143,9 +173,15 @@ public static class UserBulbSandboxEmitter
             int extraIdx = s.Slot - SandboxBulbExpression.ReservedSlots;
             if (extraIdx < 0) throw new NotSupportedException($"Emit: bad slot {s.Slot}");
             if (extraIdx < _paramNames.Count) { sb.Append(_paramNames[extraIdx]); return SbxEmitKind.Real; }
-            // `t` slot — comes after all params.
-            sb.Append('t');
-            return SbxEmitKind.Real;
+            // `t` slot — comes immediately after named params.
+            if (extraIdx == _paramNames.Count) { sb.Append('t'); return SbxEmitKind.Real; }
+            // Beyond t — chain prior-step outputs (only in chain compile).
+            if (_extraSlots != null && _extraSlots.TryGetValue(s.Slot, out var es))
+            {
+                sb.Append(es.Name);
+                return es.Kind;
+            }
+            throw new NotSupportedException($"Emit: unbound slot {s.Slot}");
         }
 
         private SbxEmitKind EmitMember(Sbx3Member m, StringBuilder sb)

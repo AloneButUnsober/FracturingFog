@@ -1,0 +1,144 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        mc:Ignorable="d"
+        x:Class="FracturingFog.UI.Avalonia.Views.MasterConfigView"
+        x:DataType="vm:MasterConfigViewModel"
+        Title="FracturingFog — Master Config"
+        Width="540" Height="600"
+        MinWidth="460" MinHeight="420"
+        Background="#171717">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="Foreground" Value="#DDD" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,8,0,4" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="Foreground" Value="#7E7E7E" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.value">
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+        </Style>
+        <Style Selector="Border.group">
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Background" Value="#1B1B1B" />
+            <Setter Property="BorderBrush" Value="#2E2E2E" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#2E6BC8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Padding" Value="12,5" />
+        </Style>
+    </Window.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="12">
+
+            <Border Classes="group">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="section" Text="Master" />
+                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Host" />
+                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Host, Mode=TwoWay}" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Port" Margin="0,4,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding Port}" Minimum="1" Maximum="65535" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="State" Margin="0,4,0,0" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Classes="value" Text="{Binding Status}" Margin="0,4,0,0" />
+                    </Grid>
+                    <TextBlock Classes="value" Foreground="#FFCC00"
+                               Text="{Binding LastError}" TextWrapping="Wrap"
+                               IsVisible="{Binding LastError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Cluster Limits" />
+                    <TextBlock Classes="hint"
+                               Text="Live-tunable on the running master. Apply sends cluster.config.set; the master clamps tile pixels into TilePlanner's accepted range and reports the post-apply values." />
+
+                    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Max concurrent jobs" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Value="{Binding ClusterMaxJobs}"
+                                       Minimum="0" Maximum="10000"
+                                       ToolTip.Tip="0 = unlimited. Submit beyond this returns 'queue-full'." />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Artifact retention (minutes)" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Value="{Binding ClusterArtifactRetentionMinutes}"
+                                       Minimum="0" Maximum="100000" Margin="0,6,0,0"
+                                       ToolTip.Tip="Terminal jobs (ready/failed/cancelled) older than this are evicted from the master's on-disk job store. 0 = never evict." />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Tile target (pixels)" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                       Value="{Binding ClusterTileTargetPixels}"
+                                       Minimum="0" Maximum="8192" Margin="0,6,0,0"
+                                       ToolTip.Tip="Default per-tile pixel side used by TilePlanner when the client gives no hint and the registry has no learned EMA. 0 = use built-in default (512). Server clamps positive values to [64, 8192]." />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- D-6c2 (#125) — per-role rate-limiter knobs wired up by D-6c1. -->
+            <Border Classes="group">
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="section" Text="Per-Role Rate Limits" />
+                    <TextBlock Classes="hint"
+                               Text="Live-tunable token-bucket limits. perMinute=0 disables; burst clamps to >=1. In-flight per-key buckets keep their accrued tokens across an Apply." />
+
+                    <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Client call / minute (per IP)" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Value="{Binding ClientCallPerMinute}"
+                                       Minimum="0" Maximum="600000"
+                                       ToolTip.Tip="Per-IP cap on dispatched client-role JSON-RPC calls inside an authenticated session. 0 disables. Default 600 = 10/sec sustained." />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Client call burst" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Value="{Binding ClientCallBurst}"
+                                       Minimum="1" Maximum="100000" Margin="0,6,0,0"
+                                       ToolTip.Tip="Burst allowance for the client-call limiter. Server floor: 1. Default 30." />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Worker tile.next / minute" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                       Value="{Binding WorkerTileNextPerMinute}"
+                                       Minimum="0" Maximum="600000" Margin="0,6,0,0"
+                                       ToolTip.Tip="Per-thumbprint cap on worker tile.next long-poll calls. Other worker methods (heartbeat, deliver, register, error) bypass this gate. 0 disables. Default 600 = 10/sec." />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Worker tile.next burst" Margin="0,6,0,0" />
+                        <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                       Value="{Binding WorkerTileNextBurst}"
+                                       Minimum="1" Maximum="100000" Margin="0,6,0,0"
+                                       ToolTip.Tip="Burst allowance for the worker tile.next limiter. Server floor: 1. Default 30 — covers reconnect/replay storms after a worker resume." />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Content="?"
+                        Width="32" Height="28" Padding="0"
+                        Click="OnHelpClick"
+                        ToolTip.Tip="Open the Distributed Rendering user guide at the Master Config section." />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+                    <Button Classes="primary" Content="Load"  Command="{Binding LoadCommand}" />
+                    <Button Classes="primary" Content="Apply" Command="{Binding ApplyCommand}" />
+                    <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

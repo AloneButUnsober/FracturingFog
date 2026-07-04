@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
+using FracturingFog.Rendering.Lighting;
+
 namespace FracturingFog.Models
 {
     /// <summary>
@@ -69,6 +71,15 @@ namespace FracturingFog.Models
         /// editing. Compile / Generate buttons route by this value.
         /// </summary>
         public int UserEquationActiveTab { get; set; } = 0;
+
+        /// <summary>
+        /// When true, the UserEquation calculator skips its parallel-perturbation
+        /// Jacobian trajectory (2× delegate calls per iteration) and emits zero
+        /// surface normals at escape. 3D Phong themes degrade to flat lighting,
+        /// but throughput roughly doubles for expensive equations. Default false
+        /// preserves the full-fidelity Hubbard-Douady gradient path.
+        /// </summary>
+        public bool UserEquationSkipJacobian { get; set; } = false;
 
         /// <summary>
         /// Source for the Sandbox fractal — a restricted expression DSL parsed by
@@ -354,6 +365,9 @@ namespace FracturingFog.Models
         /// to a 3D extrusion of the standard 2D Mandelbrot; non-zero values
         /// expose the zero-divisor seam slabs unique to the tessarine algebra.</summary>
         public double BicomplexSliceW { get; set; } = 0.0;
+        /// <summary>Wave 5.14 — which 4D axis takes the slice constant. Default
+        /// K (legacy behaviour: pixel walks (1, i, j), constant rides on k).</summary>
+        public BicomplexSliceAxis BicomplexSliceAxis { get; set; } = BicomplexSliceAxis.K;
         /// <summary>DE inner iteration count. Default 11.</summary>
         public int BicomplexIterations { get; set; } = 11;
         /// <summary>|t|² escape threshold. 16 = canonical Hart bailout.</summary>
@@ -456,9 +470,25 @@ namespace FracturingFog.Models
         public double UserBulbClipPlaneNZ { get; set; } = 0.0;
         public double UserBulbClipPlaneD { get; set; } = 0.0;
         public int UserBulbSuperSample { get; set; } = 1; // 1, 2, 4
+
+        /// <summary>P2 — per-raymarcher low-res interactive preview scale factor.
+        /// 0.5 = render at half-res, upscale nearest. 1.0 = legacy full-res (no
+        /// preview path). Range clamped at [0.25, 1.0] by callers. Each
+        /// raymarcher checks its own <c>LowResPreview</c> flag before honouring
+        /// this knob — flag off = bit-identical legacy regardless of value.</summary>
+        public double LowResPreviewScale { get; set; } = 0.5;
+
         /// <summary>Optional chain of named-output steps. When non-empty, replaces
         /// UserBulbSource. Final z = last step's return value.</summary>
         public List<UserBulbChainStep> UserBulbChain { get; set; } = new();
+
+        /// <summary>
+        /// Shared lighting + post-FX parameters consumed by every 3D raymarcher.
+        /// Replaces per-fractal duplicates (Bulb*Light*, UserBulb*Light*, etc.)
+        /// going forward. Defaults reproduce the pre-Phase-1 single-light look
+        /// so renders are pixel-identical until a calculator opts in.
+        /// </summary>
+        public LightingFxData Lighting { get; set; } = LightingFxData.CreateDefault();
 
         public FractalParameters Clone()
         {
@@ -477,6 +507,7 @@ namespace FracturingFog.Models
                 UserEquationRotationDegrees = UserEquationRotationDegrees,
                 UserEquationDslSource = UserEquationDslSource,
                 UserEquationActiveTab = UserEquationActiveTab,
+                UserEquationSkipJacobian = UserEquationSkipJacobian,
                 SandboxSource = SandboxSource,
                 SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,
@@ -572,6 +603,7 @@ namespace FracturingFog.Models
                 KleinianLightTheta = KleinianLightTheta,
                 KleinianLightPhi = KleinianLightPhi,
                 BicomplexSliceW = BicomplexSliceW,
+                BicomplexSliceAxis = BicomplexSliceAxis,
                 BicomplexIterations = BicomplexIterations,
                 BicomplexBailout = BicomplexBailout,
                 BicomplexCameraDistance = BicomplexCameraDistance,
@@ -647,7 +679,9 @@ namespace FracturingFog.Models
                 UserBulbClipPlaneNZ = UserBulbClipPlaneNZ,
                 UserBulbClipPlaneD = UserBulbClipPlaneD,
                 UserBulbSuperSample = UserBulbSuperSample,
-                UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone())
+                LowResPreviewScale = LowResPreviewScale,
+                UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone()),
+                Lighting = Lighting // struct value-copy; EnvironmentName is string (immutable)
             };
         }
     }
@@ -680,6 +714,30 @@ namespace FracturingFog.Models
         /// <summary>v13 — julia. r = √(x²+y²); θ = atan2(x,y); φ = θ/2 + nπ;
         /// f = √r · (cos φ, sin φ).</summary>
         Julia = 13,
+
+        // Wave 5.11 — next 10 Apophysis stock variations.
+
+        /// <summary>v4 — horseshoe. f = (1/r) · (x² − y², 2 x y).</summary>
+        Horseshoe = 4,
+        /// <summary>v9 — spiral. f = (cos θ + sin r, sin θ − cos r) / r.</summary>
+        Spiral = 9,
+        /// <summary>v10 — hyperbolic. f = (sin θ / r, r · cos θ).</summary>
+        Hyperbolic = 10,
+        /// <summary>v11 — diamond. f = (sin θ · cos r, cos θ · sin r).</summary>
+        Diamond = 11,
+        /// <summary>v12 — ex. p = sin³(θ+r); q = cos³(θ−r);
+        /// f = r · (p + q, p − q).</summary>
+        Ex = 12,
+        /// <summary>v14 — bent. Quadrant-dependent piecewise scale.</summary>
+        Bent = 14,
+        /// <summary>v16 — fisheye. f = (2 / (r+1)) · (y, x).</summary>
+        Fisheye = 16,
+        /// <summary>v18 — exponential. f = e^(x−1) · (cos(π y), sin(π y)).</summary>
+        Exponential = 18,
+        /// <summary>v19 — power. f = r^sin(θ) · (cos θ, sin θ).</summary>
+        Power = 19,
+        /// <summary>v20 — cosine. f = (cos(π x) · cosh y, −sin(π x) · sinh y).</summary>
+        Cosine = 20,
     }
 
     /// <summary>
@@ -714,6 +772,39 @@ namespace FracturingFog.Models
         /// <summary>Sierpinski tetrahedron fold — 3 vertex reflections +
         /// scale-2 from (1,1,1). Produces the tetra gasket.</summary>
         Sierpinski,
+        /// <summary>Octahedron fold — Menger's sort-3 without the
+        /// corner-mirror Z-fold. Yields the octahedral gasket dual
+        /// of the Sierpinski tetra. Scale 2 default.</summary>
+        Octahedron,
+        /// <summary>Dodecahedron fold — three φ-based plane mirrors
+        /// (Knighty). Produces icosahedral / pentagonal symmetry.</summary>
+        Dodecahedron,
+        /// <summary>Mandelbox-style box-fold at ±1 + per-iter Y-axis
+        /// rotation (~7.5°) + scale. Produces a Mandelbox-flavoured
+        /// twisted-cube limit set inside the fixed-dr KIFS scheme.</summary>
+        MandelboxRot,
+    }
+
+    /// <summary>
+    /// Bicomplex Mandelbrot 4D slice-axis selector. The pixel maps (x, y, z)
+    /// onto three of the four algebra basis vectors (1, i, j, k); the fourth
+    /// takes <see cref="FractalParameters.BicomplexSliceW"/>. Bicomplex
+    /// algebra is commutative, so the resulting iteration math has a clean
+    /// dependence on which axis routes the constant.
+    /// </summary>
+    public enum BicomplexSliceAxis
+    {
+        /// <summary>k-axis (default — visually similar to quat Mandelbrot
+        /// on the (i,j) slice, with zero-divisor seam slabs when sliceW != 0).</summary>
+        K = 0,
+        /// <summary>j-axis (slice constant rides on the imaginary-j slot,
+        /// pixel walks (1, i, k) — exposes the k²=+1 split direction).</summary>
+        J = 1,
+        /// <summary>i-axis (slice constant rides on i, pixel walks (1, j, k)).</summary>
+        I = 2,
+        /// <summary>Real axis (constant rides on the scalar slot — exposes the
+        /// 3D (i, j, k) imaginary-only slice).</summary>
+        R = 3,
     }
 
     public enum UserBulbDEModeKind

@@ -26,7 +26,8 @@ Every keyboard binding in the Fracturing Fog Avalonia shell.
 | `D` | Pan right |
 | `Q` | Pan up |
 | `E` | Pan down |
-| `Shift +` pan key | Quarter-step (precise nudge) |
+| `Shift + W` / `Shift + S` | Quarter-step zoom in / out (fine) |
+| `Shift +` pan key | Quarter-step pan (precise nudge) |
 
 ---
 
@@ -36,6 +37,7 @@ Every keyboard binding in the Fracturing Fog Avalonia shell.
 |---|---|
 | `W` | Move camera closer (distance −) |
 | `S` | Move camera farther (distance +) |
+| `Shift + W` / `Shift + S` | Quarter-step camera distance (fine) |
 | `A` | Pan left (screen-space) |
 | `D` | Pan right |
 | `Q` | Pan up |
@@ -157,7 +159,8 @@ The selected sort persists until changed (per-shell, not on disk).
 | Action | Combo |
 |---|---|
 | Lock current region in slideshow | `Shift` + click Slideshow button |
-| Quarter-step pan / zoom | `Shift` + pan key |
+| Quarter-step pan | `Shift` + pan key |
+| Quarter-step zoom / 3-D distance | `Shift + W` / `Shift + S` |
 | Custom — TODO | (none reserved) |
 
 ---

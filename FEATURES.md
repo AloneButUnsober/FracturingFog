@@ -39,7 +39,7 @@
 
 ## 1. Overview
 
-Fracturing Fog is a cross-platform desktop application for exploring the Mandelbrot set and 20+ other fractal families in real time, from a wide view of the entire set all the way down to zooms past **10⁵⁸** — well beyond the resolving power of standard double-precision arithmetic. It combines a hardware-accelerated renderer (DirectX on Windows, Silk.NET OpenGL on Linux + macOS, SkiaSharp CPU fallback everywhere), SIMD-vectorized CPU math, extended-precision arithmetic (double-double and quad-double), perturbation theory with series approximation + bilinear approximation (BLA), and a Roslyn-compiled user-equation engine + an algorithmic color-palette DSL.
+Fracturing Fog is a cross-platform desktop application for exploring the Mandelbrot set and ~38 other fractal families in real time, from a wide view of the entire set all the way down to zooms past **10⁵⁸** — well beyond the resolving power of standard double-precision arithmetic. It combines a hardware-accelerated renderer (DirectX on Windows, Silk.NET OpenGL on Linux + macOS, SkiaSharp CPU fallback everywhere), SIMD-vectorized CPU math, extended-precision arithmetic (double-double and quad-double), perturbation theory with series approximation + bilinear approximation (BLA), and a Roslyn-compiled user-equation engine + an algorithmic color-palette DSL.
 
 The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.App` ships on Windows, Linux, and macOS; the legacy WinForms shell stays as a Windows-only fallback during the migration tail. See the platform-support matrix in §1.1 for what lights up per OS.
 
@@ -49,7 +49,7 @@ The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.Ap
 |---|---|
 | Real-time interactivity | Pan, zoom, color-cycle with smooth feedback |
 | Extreme zoom depth | Quad-double precision out to ~5 × 10⁵⁸ |
-| 20+ fractal families | Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Buddhabrot, IFS, L-System, Strange Attractor, Mandelbulb (3D), Mandelbox (3D), KIFS (3D), User Equation, Sandbox, User Bulb (3D), Tear Drop, Magnet 1/2, Glynn, Logistic, Halley, Secant, Spider, + CalcGen Generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship) |
+| ~38 fractal families | 2D escape-time: Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Nova, Tear Drop, Magnet 1/2, Glynn, Halley, Secant, Spider. Histogram / orbit-replay: Buddhabrot, Nebulabrot, Anti-Buddhabrot, Anti-Nebulabrot, Logistic bifurcation. Procedural / stochastic: IFS, L-System, Strange Attractor, Plasma, Flame, Apollonian gasket, DLA. 3D raymarchers: Mandelbulb, Mandelbox, KIFS, Quaternion Julia, Quaternion Mandelbrot, Bicomplex Mandelbrot, Kleinian. Authoring: User Equation, Sandbox, User Bulb (3D). Plus CalcGen-generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship). |
 | 200+ color themes | Built-in palettes plus JSON-imported user themes plus algorithmic ColorGen DSL |
 | Full theme editor | Live-preview parameter tweaking with save/export + From-Image kmeans extractor |
 | Capture suite | PNG, multi-tile poster, MP4 video (built-in + ffmpeg lossless), PNG sequence |
@@ -346,7 +346,7 @@ The top toolbar of the Avalonia MainWindow surfaces the most-used controls:
 
 | Control | Purpose |
 |---|---|
-| **Type combo** | Active fractal family. 17 built-ins + `— Registered —` divider + promoted user equations |
+| **Type combo** | Active fractal family. ~38 built-ins + `— Registered —` divider + promoted user equations |
 | **Quality combo** | Draft / Standard / High / Ultra / Extreme |
 | **Region combo** | Built-in tour + user regions. Right-click for sort menu |
 | **Theme combo** | Active color map. Right-click for sort menu |
@@ -653,7 +653,7 @@ Press the Help button (or the corresponding floating-menu entry) to open the **F
 | **Authoring** | Sub-tabs: CalcGen / ColorGen |
 | **Batch / CLI** | Headless CLI reference |
 | **Client / Server** | Sub-tabs: Walkthrough / Server Admin |
-| **Mathematics** | 18 sub-tabs covering every fractal family (Overview / Mandelbrot / Julia / Burning Ship / Tricorn / Multibrot / Phoenix / Newton / Nova / Buddhabrot / IFS / L-System / Attractor / Mandelbulb / User Equation / User Bulb 3D / Sandbox / Mandelbrot Z² Generated) |
+| **Mathematics** | ~34 sub-tabs covering every fractal family — escape-time (Mandelbrot / Julia / Burning Ship / Tricorn / Multibrot / Phoenix / Newton / Nova / Tear Drop / Magnet 1/2 / Glynn / Halley / Secant / Spider), histogram (Buddhabrot / Anti-Buddhabrot / Logistic), procedural (IFS / L-System / Strange Attractor / Plasma / Flame / Apollonian / DLA), 3D (Mandelbulb / Mandelbox / KIFS / Quaternion Julia/Mandelbrot / Bicomplex / Kleinian), authoring (User Equation / Sandbox / User Bulb), and the generated Mandelbrot Z² CalcGen demo |
 | **Bio** | Benoit Mandelbrot biography |
 | **Architecture** | Module-by-module overview for contributors |
 

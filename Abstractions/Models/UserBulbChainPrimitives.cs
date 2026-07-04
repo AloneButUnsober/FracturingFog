@@ -45,6 +45,10 @@ namespace FracturingFog.Models
         public const string IdSierpinski = "sierp";
         /// <summary>Identifier used by the "Mandelbulb power" primitive.</summary>
         public const string IdBulbPow = "bulb";
+        /// <summary>Identifier used by the Kaleidoscopic-IFS rotation primitive.</summary>
+        public const string IdKifsRot = "kifsrot";
+        /// <summary>Identifier used by the Kaleidoscopic-IFS scale primitive.</summary>
+        public const string IdKifsScale = "kifsscale";
 
         private static readonly UserBulbChainPrimitive[] _all =
         {
@@ -151,6 +155,31 @@ namespace FracturingFog.Models
                     OutputName = IdBulbPow,
                     Source = "// Contract Menger output so bulb-pow stays under bailout.\n" +
                              "return Vec3.Pow(" + IdMenger + " * 0.3, 8.0) + c;",
+                },
+            };
+        }
+
+        /// <summary>
+        /// Worked-example chain: Sierpinski fold → axis rotation → scale + offset.
+        /// Matches the Kaleidoscopic-IFS step popularised by Knighty / Syntopia
+        /// (fold three reflections, rotate, scale-2 with translation offset).
+        /// </summary>
+        public static List<UserBulbChainStep> KaleidoscopicIfsChain()
+        {
+            return new List<UserBulbChainStep>
+            {
+                new() { OutputName = IdSierpinski, Source = GetById(IdSierpinski)!.Source },
+                new()
+                {
+                    OutputName = IdKifsRot,
+                    Source = "// Per-iter rotation breaks symmetry — try 0.3..1.2 rad.\n" +
+                             "return Vec3.Rot(" + IdSierpinski + ", new Vec3(0, 1, 0), 0.5);",
+                },
+                new()
+                {
+                    OutputName = IdKifsScale,
+                    Source = "// Scale-2 + translation offset. Try c instead of (1,1,1) for parameter drift.\n" +
+                             "return " + IdKifsRot + " * 2.0 - new Vec3(1, 1, 1);",
                 },
             };
         }
