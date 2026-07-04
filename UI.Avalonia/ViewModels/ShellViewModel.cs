@@ -1855,6 +1855,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.SceneSavedToLibrary   += (_, _) => RefreshAssetManagerIfVisible();
             vm.SceneDeletedFromLibrary += (_, _) => RefreshAssetManagerIfVisible();
             vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
+            vm.PlaySceneRequested    += (_, scene) => PlayScene(scene);
             vm.StopPreviewRequested  += (_, _) => StopScenePreview();
             vm.CloseRequested        += (_, _) => IsSceneEditorVisible = false;
             vm.MessageRequested      += (_, args) => MessageRequested?.Invoke(this, args);
@@ -1887,10 +1888,118 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         AnimationBusHost.LoadRegionAnimation(anim, Main.ViewState.FractalParameters);
     }
 
-    /// <summary>Stop any scene-preview param animation (companion to
-    /// <see cref="PreviewSceneShot"/>).</summary>
+    /// <summary>Stop any scene-preview param animation + scene playback
+    /// (companion to <see cref="PreviewSceneShot"/> / <see cref="PlayScene"/>).</summary>
     private void StopScenePreview()
-        => AnimationBusHost.LoadRegionAnimation(null, Main.ViewState.FractalParameters);
+    {
+        StopScene();
+        AnimationBusHost.LoadRegionAnimation(null, Main.ViewState.FractalParameters);
+    }
+
+    // ── Scene playback (S6) ──────────────────────────────────────────────────
+    // Realtime, cut-sequenced playback: a dispatcher clock walks the S6
+    // SceneTimeline; on each shot boundary the shot is applied to the live view
+    // and its camera + param motion is loaded onto the shared animation bus,
+    // which advances it under the same render-completion gate + ceiling as every
+    // other track. Cross-fade / light-sweep / param-morph *compositing* between
+    // shots (blend two rendered frames) is the offline frame-locked path's job
+    // (S7) — running two 3D raymarchers live would breach the resource cap — so
+    // realtime playback cuts between shots. The timeline already supplies the
+    // blend factor for S7 to consume.
+
+    private DispatcherTimer? _sceneTimer;
+    private FracturingFog.Abstractions.Animation.SceneTimeline? _sceneTimeline;
+    private FracturingFog.Abstractions.Animation.SceneData? _scenePlaying;
+    private double _sceneClock;
+    private int _sceneCurrentEntry = -1;
+    private DateTime _sceneLastTick;
+
+    /// <summary>Start realtime playback of <paramref name="scene"/> on the live
+    /// view. Loops at the end. A no-op (with a friendly message) for a scene
+    /// with no playable shots.</summary>
+    public void PlayScene(FracturingFog.Abstractions.Animation.SceneData scene)
+    {
+        if (scene == null) return;
+        var timeline = FracturingFog.Abstractions.Animation.SceneTimeline.Build(scene);
+        if (timeline.IsEmpty)
+        {
+            MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
+                "Play Scene", "This scene has no shots with a positive duration to play.",
+                MessageSeverity.Warning));
+            return;
+        }
+
+        StopScene();
+        _scenePlaying = scene;
+        _sceneTimeline = timeline;
+        _sceneClock = 0;
+        _sceneCurrentEntry = -1;
+        _sceneLastTick = DateTime.UtcNow;
+
+        // Apply the opening shot immediately so playback starts on-frame.
+        ApplySceneSample(timeline.Sample(0));
+
+        _sceneTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(50), DispatcherPriority.Background, OnSceneTick);
+        _sceneTimer.Start();
+    }
+
+    /// <summary>Stop scene playback and clear its bus animators. Safe to call
+    /// when nothing is playing.</summary>
+    public void StopScene()
+    {
+        _sceneTimer?.Stop();
+        _sceneTimer = null;
+        _sceneTimeline = null;
+        _scenePlaying = null;
+        _sceneCurrentEntry = -1;
+    }
+
+    private void OnSceneTick(object? sender, EventArgs e)
+    {
+        var tl = _sceneTimeline;
+        if (tl == null || tl.IsEmpty) { StopScene(); return; }
+
+        var now = DateTime.UtcNow;
+        double dt = (now - _sceneLastTick).TotalSeconds;
+        _sceneLastTick = now;
+        if (dt <= 0) return;
+        if (dt > 0.25) dt = 0.25; // guard against a stalled dispatcher jump
+
+        _sceneClock += dt;
+        if (tl.TotalDuration > 0) _sceneClock %= tl.TotalDuration; // loop
+
+        ApplySceneSample(tl.Sample(_sceneClock));
+    }
+
+    /// <summary>Apply a timeline sample: when the active shot changes, jump the
+    /// live view to it and (re)load its camera + param animation onto the bus.
+    /// Intra-shot motion is driven by the bus, not here.</summary>
+    private void ApplySceneSample(FracturingFog.Abstractions.Animation.SceneSample sample)
+    {
+        if (sample.CurrentEntry == _sceneCurrentEntry) return; // same shot — bus drives it
+        _sceneCurrentEntry = sample.CurrentEntry;
+
+        var scene = _scenePlaying;
+        if (scene == null || sample.OriginalIndex < 0 || sample.OriginalIndex >= scene.Shots.Count) return;
+        var shot = scene.Shots[sample.OriginalIndex];
+
+        if (!string.IsNullOrEmpty(shot.RegionName))
+        {
+            JumpToRegion(shot.RegionName);
+            FloatingMenu.SetRegionSilent(shot.RegionName);
+        }
+        if (!string.IsNullOrEmpty(shot.ThemeName))
+        {
+            Main.SetThemeName(shot.ThemeName);
+            FloatingMenu.SetThemeSilent(shot.ThemeName);
+        }
+
+        var anim = string.IsNullOrEmpty(shot.AnimationName)
+            ? null
+            : _themeService.GetAnimation(shot.AnimationName!);
+        AnimationBusHost.LoadSceneShot(shot, anim, Main.ViewState.FractalParameters);
+    }
 
     /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the
     /// currently-selected region. Metadata-only edit (geometry preserved);

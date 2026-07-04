@@ -420,6 +420,46 @@ drive per-shot param + camera motion through the animation bus. Transitions
 extend the existing crossfade with scene-appropriate kinds (cut, crossfade,
 light-sweep, param-morph).
 
+**Status — Shipped (realtime playback).** A **Play** button in the Scene Editor
+runs the scene live on the main view.
+
+Pure core — `SceneTimeline` (`Abstractions/Animation/SceneTimeline.cs`). Builds a
+deterministic back-to-back schedule from a `SceneData` (drops non-positive-
+duration shots, keeps the original shot index), exposes `TotalDuration`, and
+`Sample(t)` answers "which shot, how far in, and are we inside its opening
+transition window (with what blend 0→1 against the outgoing shot)". First shot
+and `Cut` shots get a zero-length window; `TransitionSeconds` clamps to the
+shot's own duration. `SceneTransitions.ResolveVisual` maps the authored kind to
+what the current build renders — `Cut`/`Crossfade` honoured, `LightSweep`/
+`ParamMorph` fall back to crossfade (bespoke visuals are S8), and the authored
+kind stays on disk so scenes upgrade for free later.
+
+Camera on the bus — `AnimationBusHost.LoadSceneShot(shot, shotAnimation, target)`
+registers the shot's param-animation animators **and** its keyframed orbit
+camera as a `CameraTrackAnimator`. **This is the deferred S3 consumer** ("bus
+registration is S6"): scene-camera motion now inherits the bus's render-
+completion gate + animated-param ceiling (camera counts as raymarched-3D, so it
+sheds first under load), honouring the resource cap.
+
+Realtime driver — `ShellViewModel.PlayScene` / `StopScene`. A 50 ms dispatcher
+clock walks the timeline and, on each shot boundary, jumps the live view to the
+shot (region + theme) and (re)loads its camera + param motion onto the bus;
+intra-shot motion is the bus's job. Loops at the end. Entry point: the editor's
+**Play**; **Stop** / editor close halts it.
+
+Deliberate scope call — realtime playback **cuts** between shots. Cross-fade /
+light-sweep / param-morph *compositing* (blending two rendered frames) needs
+both sides rendered at once; for two live 3D raymarchers that breaches the
+~90 % CPU/mem cap, so frame-composited transitions belong to the **offline
+frame-locked path (S7)**, which renders sub-frames anyway. The timeline already
+computes the blend factor for S7 to consume — no re-work, just a consumer.
+
+Tests: 9 in `SceneTimelineTests` (sequencing, zero-duration skip + original-index
+mapping, first/cut window suppression, transition-length clamp, mid-shot vs
+in-transition sampling + blend, out-of-range clamp, empty timeline, visual
+fallback). The bus registration + dispatcher driver are UI (not referenced by
+`Server.Tests`); `CameraTrackAnimator` itself is covered by its S3 tests.
+
 ### S7 — Offline render + motion blur
 
 Frame-locked render of a Scene to MP4 via `Export/Mp4Writer` + the ffmpeg
