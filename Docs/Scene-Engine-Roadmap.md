@@ -218,6 +218,15 @@ polish.
 
 ### S0 — Two render modes
 
+**Status — Shipped.** `Abstractions/Render/RenderMode.cs`: `RenderMode` enum
++ `RenderModePolicy` record (`Realtime` / `Offline` / `OfflineFastGpu`)
+carrying frame-time budget, deterministic-CPU pin, and governor
+participation; `ResolveUseGpuRender()` is the single gate keeping
+deterministic exports off the float GPU path; `RenderModeScope` is the
+thread-affine ambient current policy (nesting + restore-on-dispose,
+defaults to `Realtime`). Ships behind current behaviour — no consumer yet
+(S1/S2/S7). 8 tests in `Server.Tests/RenderModeScopeTests.cs`.
+
 Formalise the realtime-vs-offline split. Realtime path stays the current
 interactive renderer, now under governor control. Offline path renders each
 frame to completion into a buffer, ignoring wall-clock — this is mostly a
