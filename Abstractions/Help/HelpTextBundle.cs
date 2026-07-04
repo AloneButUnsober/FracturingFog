@@ -84,9 +84,11 @@ view-state, color pipeline, and capture suite.
     A / D   Pan left / right.
     Q / E   Pan up / down.
     Shift   Hold with a pan key for a precise quarter-step.
+            Shift+W / Shift+S give quarter-step (fine) zoom.
 
   3-D (Mandelbulb / User Bulb 3D)
     W / S   Move the camera closer / farther.
+            Shift+W / Shift+S = quarter-step (fine) distance.
     A D Q E Pan in screen space.
     Arrows  Orbit the camera (↑↓ = phi, ←→ = theta).
     PgUp / PgDn   Rotate the key-light azimuth.
