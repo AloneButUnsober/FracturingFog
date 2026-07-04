@@ -43,8 +43,13 @@ public sealed class CameraKeyRowViewModel : ReactiveObject
         _distance = key.State.Distance;
         _theta = key.State.Theta;
         _phi = key.State.Phi;
+        _ease = key.Ease;
         RemoveCommand = ReactiveCommand.Create(() => onRemove(this));
     }
+
+    private static readonly IReadOnlyList<CameraEase> _easeKinds = Enum.GetValues<CameraEase>();
+    /// <summary>The per-key ease options (D.1), for the key row's combo.</summary>
+    public IReadOnlyList<CameraEase> EaseKinds => _easeKinds;
 
     private double _time;
     public double Time
@@ -74,9 +79,17 @@ public sealed class CameraKeyRowViewModel : ReactiveObject
         set { this.RaiseAndSetIfChanged(ref _phi, value); _onChanged(); }
     }
 
+    private CameraEase _ease;
+    /// <summary>Time easing for the segment starting at this key (D.1).</summary>
+    public CameraEase Ease
+    {
+        get => _ease;
+        set { this.RaiseAndSetIfChanged(ref _ease, value); _onChanged(); }
+    }
+
     public ReactiveCommand<Unit, Unit> RemoveCommand { get; }
 
-    public CameraKey ToKey() => new(_time, new CameraState(_distance, _theta, _phi));
+    public CameraKey ToKey() => new(_time, new CameraState(_distance, _theta, _phi)) { Ease = _ease };
 }
 
 /// <summary>One shot row in the editor's shots list. Carries the shot's

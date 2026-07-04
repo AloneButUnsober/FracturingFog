@@ -57,6 +57,27 @@ namespace FracturingFog.Render
         Bezier,
     }
 
+    /// <summary>Per-key time easing (S8 / Animation-roadmap D.1). Reparametrises
+    /// the normalised segment parameter of the segment that <em>starts</em> at a
+    /// key, so an author can control how the camera accelerates out of / into
+    /// each pose — without a full Bezier-handle curve editor. Orthogonal to
+    /// <see cref="CameraInterpolation"/> (which picks the spatial path shape):
+    /// the ease reparametrises the segment fraction before the interpolation
+    /// basis reads it, so the two compose.</summary>
+    public enum CameraEase
+    {
+        /// <summary>No reparam — constant time flow across the segment (default;
+        /// bit-identical to pre-D.1 behaviour).</summary>
+        None,
+        /// <summary>Accelerate out of the key (slow start): <c>u²</c>.</summary>
+        EaseIn,
+        /// <summary>Decelerate into the next key (fast start): <c>1-(1-u)²</c>.</summary>
+        EaseOut,
+        /// <summary>Ease both ends (smoothstep): <c>u²(3-2u)</c> — settles to a
+        /// stop at both poses.</summary>
+        EaseInOut,
+    }
+
     /// <summary>One camera keyframe: a <see cref="CameraState"/> at a point in
     /// time (seconds from the track's start).</summary>
     public sealed class CameraKey
@@ -68,6 +89,10 @@ namespace FracturingFog.Render
         /// <summary>The pose at <see cref="Time"/>.</summary>
         public CameraState State { get; set; }
 
+        /// <summary>Time easing applied across the segment that starts at this
+        /// key (D.1). Default <see cref="CameraEase.None"/>.</summary>
+        public CameraEase Ease { get; set; } = CameraEase.None;
+
         public CameraKey() { }
 
         public CameraKey(double time, CameraState state)
@@ -78,6 +103,22 @@ namespace FracturingFog.Render
 
         public CameraKey(double time, double distance, double theta, double phi)
             : this(time, new CameraState(distance, theta, phi)) { }
+
+        /// <summary>Reparametrise <paramref name="u"/> ∈ [0,1] per <paramref name="ease"/>.
+        /// Endpoints are fixed (0→0, 1→1) so keys are always passed through
+        /// exactly; only the traversal speed between them changes.</summary>
+        public static double ApplyEase(CameraEase ease, double u)
+        {
+            if (u <= 0) return 0;
+            if (u >= 1) return 1;
+            return ease switch
+            {
+                CameraEase.EaseIn    => u * u,
+                CameraEase.EaseOut   => 1.0 - (1.0 - u) * (1.0 - u),
+                CameraEase.EaseInOut => u * u * (3.0 - 2.0 * u),
+                _                    => u,
+            };
+        }
     }
 
     /// <summary>
@@ -135,6 +176,10 @@ namespace FracturingFog.Render
             double t1 = Keys[i + 1].Time;
             double span = t1 - t0;
             double u = span > 0 ? (time - t0) / span : 0.0; // coincident keys → step
+
+            // Per-key time easing (D.1): reparametrise the segment fraction using
+            // the starting key's ease before the spatial basis reads it.
+            u = CameraKey.ApplyEase(Keys[i].Ease, u);
 
             CameraState p1 = Keys[i].State;
             CameraState p2 = Keys[i + 1].State;
