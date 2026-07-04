@@ -94,9 +94,10 @@ Each existing singleton gets a thin one-file adapter implementing
 | A0    | `IAssetSource` + `AssetDescriptor` + adapters (no UI)       | low  | half-day   |
 | A1    | Read-only three-pane view (list + detail, no editing)       | low  | 1 day      |
 | A2    | Edit routing — detail pane opens each type's own editor     | low  | 1 day      |
-| A3    | Bulk ops — multi-select → export-as-bundle (zip of JSON)    | low  | half-day   |
+| A3    | Bulk ops — export-as-bundle + import-bundle (zip of JSON)   | low  | half-day   |
 
-A2 depends on Region Editor for the Region row route. A3 is optional.
+A2 depends on Region Editor for the Region row route. A3 is optional; export and
+import ship together (import is the inverse of the same zip format).
 
 ## Risk
 
@@ -137,8 +138,20 @@ existing libraries.
   to their shell-owned editors by name; SlideshowConfig marks the preset active
   and raises `SlideshowSettingsRequested`; the three source editors bubble
   `AssetHostEditorRequested` to `AvaloniaShellBootstrap` (host-owned windows).
-- **A3** — multi-select → in-memory zip of `<Type>/<name>.json`; the host owns
-  the save picker + write via `AssetBundleExportRequested`.
+- **A3 export** — multi-select → in-memory zip of `<Type>/<name>.json`; the host
+  owns the save picker + write via `AssetBundleExportRequested`.
+- **A3 import** — the inverse. "Import bundle…" (footer) → `RequestImport()` →
+  `AssetBundleImportRequested` to the host, which shows an open picker + a single
+  overwrite Yes/No prompt, reads the bytes, and calls back
+  `ShellViewModel.ImportAssetBundle(bytes, overwrite)` → `AssetManagerViewModel.
+  ImportBundle`. The VM parses the zip, maps each entry's first path segment to an
+  `AssetKind`, and routes the JSON to that source's new `IAssetSource.ImportJson
+  (json, overwrite)`. Each entry's own stored Name (not the bundle filename) keys
+  the store; same-name collisions replace or skip per the flag. Per-entry outcome
+  (`AssetImportStatus`: Added / Replaced / SkippedExists / Failed) is tallied into
+  an `AssetImportSummary` the host shows back. Full-fidelity round-trip — import
+  deserializes the whole entry, so flags the stores' own `SaveEquation` helpers
+  drop (Promoted / Kind / bulb chain) survive.
 - **Live refresh — DONE.** The four shell-owned editors (Region / Colour theme /
   Animation / Watermark) call `ShellViewModel.RefreshAssetManagerIfVisible()`
   from their `*SavedToLibrary` / delete handlers, so a save/delete while the

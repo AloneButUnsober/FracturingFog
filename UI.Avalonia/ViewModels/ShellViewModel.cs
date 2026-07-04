@@ -1881,6 +1881,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.CloseRequested  += (_, _) => IsAssetManagerVisible = false;
             vm.OpenRequested   += (_, e) => EditAsset(e.Kind, e.Name);
             vm.ExportRequested += (_, e) => AssetBundleExportRequested?.Invoke(this, e);
+            vm.ImportRequested += (_, _) => AssetBundleImportRequested?.Invoke(this, EventArgs.Empty);
             AssetManager = vm;
         }
         else
@@ -1958,6 +1959,18 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Raised with an assembled Asset Manager export bundle (A3). The
     /// host shows a save picker and writes the zip bytes.</summary>
     public event EventHandler<AssetExportEventArgs>? AssetBundleExportRequested;
+
+    /// <summary>Raised when the Asset Manager wants to import a bundle (A3). The
+    /// host shows an open picker + overwrite prompt, reads the bytes, and calls
+    /// <see cref="ImportAssetBundle"/> back with the result.</summary>
+    public event EventHandler? AssetBundleImportRequested;
+
+    /// <summary>Host entry point for bundle import: hands the read bytes to the
+    /// live Asset Manager VM (which owns the source roster + the zip parse) and
+    /// returns the per-entry tally for the host to report. No-op tally when the
+    /// manager isn't open.</summary>
+    public AssetImportSummary ImportAssetBundle(byte[] zipBytes, bool overwrite)
+        => AssetManager?.ImportBundle(zipBytes, overwrite) ?? new AssetImportSummary();
 
     private void ShowFFClient()
     {

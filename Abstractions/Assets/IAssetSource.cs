@@ -41,6 +41,26 @@ namespace FracturingFog.Abstractions.Assets
         long SizeOnDisk,
         byte[]? ThumbnailBytes);
 
+    /// <summary>Outcome of importing one asset entry from a bundle (A3 import).</summary>
+    public enum AssetImportStatus
+    {
+        /// <summary>JSON was blank / unparseable / carried no name.</summary>
+        Failed = 0,
+        /// <summary>New asset added.</summary>
+        Added = 1,
+        /// <summary>Existing same-name asset overwritten (import ran with overwrite).</summary>
+        Replaced = 2,
+        /// <summary>Same-name asset already existed and overwrite was off — left untouched.</summary>
+        SkippedExists = 3,
+    }
+
+    /// <summary>Per-entry import result: the outcome plus the asset name (when known,
+    /// for the summary the UI shows).</summary>
+    public readonly record struct AssetImportResult(AssetImportStatus Status, string? Name)
+    {
+        public static readonly AssetImportResult Fail = new(AssetImportStatus.Failed, null);
+    }
+
     /// <summary>Thin adapter over one library singleton. Most singletons already
     /// enumerate by name, so adapters are trivial wrappers.</summary>
     public interface IAssetSource
@@ -63,5 +83,12 @@ namespace FracturingFog.Abstractions.Assets
         /// export bundle (A3). Returns null when the asset no longer exists or
         /// can't be serialized.</summary>
         string? ExportJson(string name);
+
+        /// <summary>Import one asset from standalone JSON (the inverse of
+        /// <see cref="ExportJson"/>, for the A3 bundle import). The entry's own
+        /// Name (not the bundle filename) keys the store. When an asset of that
+        /// name already exists, <paramref name="overwrite"/> decides between
+        /// replace and skip. Persists through the store's own save path.</summary>
+        AssetImportResult ImportJson(string json, bool overwrite);
     }
 }

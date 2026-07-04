@@ -1689,6 +1689,46 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Asset Manager bulk import (A3 import) — the host owns the open
+            // picker + overwrite prompt + file read; the VM owns the zip parse and
+            // per-source routing (shell.ImportAssetBundle forwards to it).
+            shell.AssetBundleImportRequested += (_, __) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                            "Import Asset Bundle",
+                            "Zip archive (*.zip)|*.zip|All files (*.*)|*");
+                        if (string.IsNullOrEmpty(path)) return;
+
+                        // Ask once, up front, how same-name collisions resolve.
+                        var choice = await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle",
+                            "Overwrite assets that already exist?\n\n" +
+                            "Yes — replace matching saved assets with the bundle's.\n" +
+                            "No — keep your existing assets and skip those names.",
+                            expectsConfirmation: true);
+                        bool overwrite = choice == AvaloniaDialogs.MessageResult.Yes;
+
+                        byte[] bytes = await System.IO.File.ReadAllBytesAsync(path);
+                        var summary = shell.ImportAssetBundle(bytes, overwrite);
+
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle", summary.Describe(), expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset bundle import failed: {ex.Message}");
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle",
+                            "Import failed:\n" + ex.Message,
+                            expectsConfirmation: false);
+                    }
+                });
+            };
+
             // Recording finished — the engine has finalised the temp MP4 and/or
             // PNG sequence. On success, prompt for save destinations; on cancel
             // or fault, discard the temp artefacts. Fires on a background thread
