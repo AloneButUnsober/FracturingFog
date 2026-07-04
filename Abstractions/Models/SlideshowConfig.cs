@@ -13,6 +13,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace FracturingFog.Models
@@ -229,68 +230,36 @@ namespace FracturingFog.Models
         /// Null otherwise so the JSON stays tidy.</summary>
         public VideoSettingsConfig? Video { get; set; }
 
+        // Clone via a JSON round-trip rather than member-wise copy. A
+        // hand-rolled clone silently dropped any newly-added field (RandomSeed
+        // did exactly that until this was fixed), because the copy list has to
+        // be kept in lockstep with the properties by hand. Serializing to the
+        // same JSON shape the config persists in guarantees every persisted
+        // property is carried, so new fields can't vanish on save/cancel.
+        private static readonly JsonSerializerOptions CloneOpts = new();
+
         /// <summary>Deep clone — used by the VM working copy and by save/cancel
         /// round-trips so an in-flight edit never mutates the on-disk config.</summary>
         public SlideshowConfig Clone()
         {
-            return new SlideshowConfig
-            {
-                Name = Name,
-                Type = Type,
-                Timing = new SlideshowSettings
-                {
-                    UseExtremeRegions = Timing.UseExtremeRegions,
-                    TotalDisplayMsPerRegion = Timing.TotalDisplayMsPerRegion,
-                    ColorThemeFadeMs = Timing.ColorThemeFadeMs,
-                    RegionFadeMs = Timing.RegionFadeMs,
-                    FadeSteps = Timing.FadeSteps,
-                    RandomSeed = Timing.RandomSeed,
-                    UseRegionWatermark = Timing.UseRegionWatermark,
-                    RecordSlideshow = Timing.RecordSlideshow,
-                    RecordEncodePreset = Timing.RecordEncodePreset,
-                },
-                AudioReactive = AudioReactive,
-                IncludedRegions = new List<string>(IncludedRegions ?? new()),
-                IncludedColorThemes = new List<string>(IncludedColorThemes ?? new()),
-                FilterFractalTypes = new List<string>(FilterFractalTypes ?? new()),
-                FilterQualityPresets = new List<string>(FilterQualityPresets ?? new()),
-                IncludedAnimations = new List<string>(IncludedAnimations ?? new()),
-                FilterAnimations = new List<string>(FilterAnimations ?? new()),
-                RandomizeAnimationsByFractalType = RandomizeAnimationsByFractalType,
-                EnableAnimations = EnableAnimations,
-                AdaptiveSweep = new AdaptiveSweepConfig
-                {
-                    Enabled = AdaptiveSweep.Enabled,
-                    Start = AdaptiveSweep.Start,
-                    End = AdaptiveSweep.End,
-                    Mode = AdaptiveSweep.Mode,
-                    Loop = AdaptiveSweep.Loop,
-                    BeatFraction = AdaptiveSweep.BeatFraction,
-                },
-                PostFx = new PostFxConfig
-                {
-                    Enabled = PostFx.Enabled,
-                    Values = new Dictionary<string, double>(PostFx.Values ?? new()),
-                },
-                Video = Video == null ? null : new VideoSettingsConfig
-                {
-                    SpeedPreset = Video.SpeedPreset,
-                    CustomSeconds = Video.CustomSeconds,
-                    SecondsPerLeg = Video.SecondsPerLeg,
-                    PauseBetweenMs = Video.PauseBetweenMs,
-                    ConstantRate = Video.ConstantRate,
-                    Reverse = Video.Reverse,
-                    SaveVideo = Video.SaveVideo,
-                    SaveLossless = Video.SaveLossless,
-                    LosslessEncode = Video.LosslessEncode,
-                    TaaSmoothing = Video.TaaSmoothing,
-                    BandDither = Video.BandDither,
-                    BandDitherStrength = Video.BandDitherStrength,
-                    ThemeFadeEnabled = Video.ThemeFadeEnabled,
-                    ThemesPerLeg = Video.ThemesPerLeg,
-                    Extras = new Dictionary<string, string>(Video.Extras ?? new()),
-                },
-            };
+            var clone = JsonSerializer.Deserialize<SlideshowConfig>(
+                            JsonSerializer.Serialize(this, CloneOpts), CloneOpts)
+                        ?? new SlideshowConfig();
+
+            // Normalise nullable collections / sub-blocks to non-null (parity
+            // with the old member-wise clone) so consumers enumerate without
+            // null guards. Data is already copied above; this is null-safety
+            // only, not a per-field maintenance list.
+            clone.Timing ??= new();
+            clone.IncludedRegions ??= new();
+            clone.IncludedColorThemes ??= new();
+            clone.FilterFractalTypes ??= new();
+            clone.FilterQualityPresets ??= new();
+            clone.IncludedAnimations ??= new();
+            clone.FilterAnimations ??= new();
+            clone.AdaptiveSweep ??= new();
+            clone.PostFx ??= new();
+            return clone;
         }
 
         /// <summary>Factory: build a default config from the legacy
