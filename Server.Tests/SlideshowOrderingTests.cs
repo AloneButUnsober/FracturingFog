@@ -31,10 +31,39 @@ public sealed class SlideshowOrderingTests
         return seq;
     }
 
+    // Reproduces the engine reusing ONE bag across Start/Stop toggles: the
+    // engine reseeds the region RNG and resets the bag on each Start.
+    private static List<string> RunOnReusedBag(ShuffleBag<string> bag, Ref<Random> regionRng, int randomSeed, int draws)
+    {
+        regionRng.Value = randomSeed != 0 ? new Random(randomSeed) : new Random();
+        bag.Reset();
+        var seq = new List<string>(draws);
+        for (int i = 0; i < draws; i++) seq.Add(bag.Draw(Pool));
+        return seq;
+    }
+
+    private sealed class Ref<T> { public T Value = default!; }
+
     [Fact]
     public void FixedSeed_ReplaysIdenticalRegionOrder()
     {
         Assert.Equal(Run(42, 40), Run(42, 40));
+    }
+
+    [Fact]
+    public void ReusedBag_FixedSeed_ReplaysIdenticalOrder_AfterPartialRun()
+    {
+        // Mirrors the reported bug: the engine reuses one bag instance across
+        // runs. Run 1 stops mid-cycle (7 draws of an 8-region pool), leaving
+        // leftover shuffle state; Run 2 with the same seed must still start
+        // identically because Start resets the bag + reseeds the region RNG.
+        var regionRng = new Ref<Random>();
+        var bag = new ShuffleBag<string>(n => regionRng.Value.Next(n), StringComparer.Ordinal);
+
+        var first = RunOnReusedBag(bag, regionRng, randomSeed: 5, draws: 7);   // partial
+        var second = RunOnReusedBag(bag, regionRng, randomSeed: 5, draws: 40);
+
+        Assert.Equal(first, second.Take(first.Count));
     }
 
     [Fact]
