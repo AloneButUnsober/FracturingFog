@@ -43,6 +43,7 @@ system. The codebase is a single .NET 10 solution.
 | Extending the 3-D Mandelbulb / User Bulb engine            | [User Bulb 3D Development Plan](UserBulb3D-DevelopmentPlan.md) and [Sandbox](UserBulbSandbox-DevPlan.md) |
 | Building the Region Editor (Animation Roadmap Sub-goal B)   | [Region Editor Dev Plan](RegionEditor-DevPlan.md) |
 | Building the cross-asset Asset Manager (Sub-goal A, deferred) | [Asset Manager Dev Plan](AssetManager-DevPlan.md) |
+| Working on cinematic Scenes — camera track, timeline, offline render | [Scene Engine Architecture](SceneEngine-Architecture.md) |
 | Building the distributed master/worker rendering cluster   | [Distributed Rendering Development Plan](DistributedRendering-DevelopmentPlan.md) — phase notes: [D-1](D-1-Session-Notes.md), [D-2](D-2-Session-Notes.md) |
 | Maintaining the docs themselves                            | [Documentation Plan](../Documentation-Plan.md)              |
 | Citing the maths behind a piece of code                    | [Resources & Bibliography](../Resources-Bibliography.md)    |
