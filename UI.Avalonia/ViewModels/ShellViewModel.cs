@@ -153,6 +153,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.RegionComboChanged += (_, name) => JumpToRegion(name);
         FloatingMenu.EditWatermarkClick += (_, _) => ShowWatermarkEditor();
         FloatingMenu.EditAnimationClick += (_, _) => ShowAnimationEditor();
+        FloatingMenu.EditSceneClick += (_, _) => ShowSceneEditor();
         FloatingMenu.WatermarkChanged += (_, name) => Main.SelectedCustomWatermarkName = name;
         FloatingMenu.UseCustomWatermarkChanged += (_, v) => Main.UseCustomWatermark = v;
         FloatingMenu.OverrideRegionWatermarkChanged += (_, v) => Main.OverrideRegionWatermark = v;
@@ -495,6 +496,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
         ShowRegionEditorCommand   = ReactiveCommand.Create(ShowRegionEditor);
         ShowAssetManagerCommand   = ReactiveCommand.Create(ShowAssetManager);
+        ShowSceneEditorCommand    = ReactiveCommand.Create(() => ShowSceneEditor());
         ShowColorGenEditorCommand = ReactiveCommand.Create(
             () => OpenColorGenEditorRequested?.Invoke(this, EventArgs.Empty));
         ShowFractalParamsCommand  = ReactiveCommand.Create(
@@ -1174,6 +1176,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _regionEditor, value);
     }
 
+    /// <summary>Scene Engine Roadmap Phase S5. Lazily-constructed VM for the
+    /// Scene Editor dialog; null until the first ShowSceneEditor call.</summary>
+    private SceneEditorViewModel? _sceneEditor;
+    public SceneEditorViewModel? SceneEditor
+    {
+        get => _sceneEditor;
+        private set => this.RaiseAndSetIfChanged(ref _sceneEditor, value);
+    }
+
     /// <summary>Asset Manager dialog (Sub-goal A); built once on first Show.</summary>
     private AssetManagerViewModel? _assetManager;
     public AssetManagerViewModel? AssetManager
@@ -1261,6 +1272,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isAnimationEditorVisible;
         set => this.RaiseAndSetIfChanged(ref _isAnimationEditorVisible, value);
+    }
+
+    private bool _isSceneEditorVisible;
+    public bool IsSceneEditorVisible
+    {
+        get => _isSceneEditorVisible;
+        set => this.RaiseAndSetIfChanged(ref _isSceneEditorVisible, value);
     }
 
     private bool _isRegionEditorVisible;
@@ -1471,6 +1489,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowRegionEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowAssetManagerCommand { get; }
+    /// <summary>Scene Engine Roadmap Phase S5 — opens the Scene Editor.</summary>
+    public ReactiveCommand<Unit, Unit> ShowSceneEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorGenEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
@@ -1822,6 +1842,56 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         IsAnimationEditorVisible = true;
     }
 
+    /// <summary>Scene Engine Roadmap Phase S5 — open the Scene Editor. Built once
+    /// (retargeted by name via <paramref name="initialSceneName"/> on later
+    /// opens). Preview applies a single shot's region / theme / animation to the
+    /// live view; sequenced multi-shot playback with camera motion + transitions
+    /// is S6.</summary>
+    public void ShowSceneEditor(string? initialSceneName = null)
+    {
+        if (SceneEditor == null)
+        {
+            var vm = new SceneEditorViewModel(_themeService);
+            vm.SceneSavedToLibrary   += (_, _) => RefreshAssetManagerIfVisible();
+            vm.SceneDeletedFromLibrary += (_, _) => RefreshAssetManagerIfVisible();
+            vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
+            vm.StopPreviewRequested  += (_, _) => StopScenePreview();
+            vm.CloseRequested        += (_, _) => IsSceneEditorVisible = false;
+            vm.MessageRequested      += (_, args) => MessageRequested?.Invoke(this, args);
+            SceneEditor = vm;
+        }
+        if (!string.IsNullOrEmpty(initialSceneName)) SceneEditor.SelectedScene = initialSceneName;
+        IsSceneEditorVisible = true;
+    }
+
+    /// <summary>Apply one scene shot to the live view for the editor's per-shot
+    /// Preview: jump to its region (if any), set its theme override (if any), and
+    /// push its param-animation onto the shared bus (if any). A static framing
+    /// preview — the keyframed camera plays only under S6 scene playback.</summary>
+    private void PreviewSceneShot(FracturingFog.Abstractions.Animation.SceneShot shot)
+    {
+        if (shot == null) return;
+        if (!string.IsNullOrEmpty(shot.RegionName))
+        {
+            JumpToRegion(shot.RegionName);
+            FloatingMenu.SetRegionSilent(shot.RegionName);
+        }
+        if (!string.IsNullOrEmpty(shot.ThemeName))
+        {
+            Main.SetThemeName(shot.ThemeName);
+            FloatingMenu.SetThemeSilent(shot.ThemeName);
+        }
+        var anim = string.IsNullOrEmpty(shot.AnimationName)
+            ? null
+            : _themeService.GetAnimation(shot.AnimationName!);
+        AnimationBusHost.LoadRegionAnimation(anim, Main.ViewState.FractalParameters);
+    }
+
+    /// <summary>Stop any scene-preview param animation (companion to
+    /// <see cref="PreviewSceneShot"/>).</summary>
+    private void StopScenePreview()
+        => AnimationBusHost.LoadRegionAnimation(null, Main.ViewState.FractalParameters);
+
     /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the
     /// currently-selected region. Metadata-only edit (geometry preserved);
     /// built-in regions clone into a new user region on save. The VM is rebuilt
@@ -1918,6 +1988,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             case FracturingFog.Abstractions.Assets.AssetKind.Watermark:
                 ShowWatermarkEditor();
                 if (WatermarkEditor != null) WatermarkEditor.SelectedWatermark = name;
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.Scene:
+                ShowSceneEditor(name);
                 break;
 
             case FracturingFog.Abstractions.Assets.AssetKind.SlideshowConfig:

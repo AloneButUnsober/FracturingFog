@@ -371,6 +371,48 @@ panel (region / theme / animation / lighting-preset pickers reuse existing
 dialogs), camera keyframe row with add/drag/delete, live preview button
 that plays the scene in realtime mode.
 
+**Status — Shipped.** The Scene Editor plus the deferred S4 Asset Manager node
+landed together, following the same VM-through-`IColorThemeService` seam the
+Animation Editor uses (UI.Avalonia never references Engine, where `SceneLibrary`
+lives).
+
+Deferred S4 item — **Asset Manager node** (`AssetKind.Scene`):
+`SceneAssetSource` (`Engine/Assets/AssetSources.cs`) wraps `SceneLibrary`,
+registered ninth in `AssetSourceRegistry`. Unlike the shared `AssetSizing`
+helpers it serialises through `SceneLibrary.BuildJsonOptions()` so the nested S3
+`CameraTrack` and the `SceneTransitionKind` enums round-trip as human-editable
+strings. `AvaloniaShellBootstrap` warms `SceneLibrary.Instance.Load()` at
+startup so the node + editor combo see the built-in demos on first open.
+
+Persistence seam — five members added to `IColorThemeService`
+(`EnumerateSceneNames` / `GetScene` / `SceneExistsInLibrary` / `SaveScene` /
+`DeleteScene`), inert default impls (Abstractions can't reach Engine) overridden
+in `HostColorThemeService` against `SceneLibrary`.
+
+Editor — `SceneEditorViewModel` + `SceneEditorView.axaml`. Load / New / Revert /
+Save / Delete over the scene library; an ordered shots list (`SceneShotRowViewModel`)
+with add / remove / reorder; per-shot region/theme/animation/fractal-type/
+duration/transition pickers (reusing the service's existing enumerations); a
+camera-keyframe sub-list (`CameraKeyRowViewModel`) with add / edit / delete of
+numeric `t / distance / θ / φ` keys plus an interpolation picker, shown only for
+the 3D-camera types (`CameraParamBinding.Supports`). Per-shot **Preview** routes
+through the shell to apply that shot's region + theme + param-animation to the
+live view; the entry points are the Asset Manager (click a Scene row) and the
+floating menu's **Edit Scene…** button.
+
+Scope cuts (deliberate, deferred with rationale): keyframe **pixel-drag** and the
+horizontal **filmstrip scrub bar** move to S8 (which already owns the Bezier /
+per-key handle editor) — S5 ships the data-complete numeric editor. **Sequenced
+multi-shot playback** with camera motion + transition blends is S6; S5 Preview is
+a single-shot static-framing preview only, so S6 stays the phase that first
+drives `CameraTrackAnimator` on the bus.
+
+Tests: `AssetSourceTests` grows to cover the ninth (Scene) source — registry
+count 8→9, built-in enumeration, enum-as-string camera export, and the
+import round-trip with overwrite/skip. The 8 S4 `SceneLibraryTests` still pass.
+The editor VM/view are UI (not referenced by `Server.Tests`), untested here per
+the same convention as `AnimationEditorViewModel`.
+
 ### S6 — Scene playback
 
 Drive shot sequencing through `SlideshowEngine`'s cross-fade machinery;

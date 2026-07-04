@@ -70,6 +70,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
         EditWatermarkCommand    = MakeCmd(() => EditWatermarkClick?.Invoke(this, EventArgs.Empty));
         EditAnimationCommand    = MakeCmd(() => EditAnimationClick?.Invoke(this, EventArgs.Empty));
+        EditSceneCommand        = MakeCmd(() => EditSceneClick?.Invoke(this, EventArgs.Empty));
         FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
         AppDataLocationCommand  = MakeCmd(() => AppDataLocationClick?.Invoke(this, EventArgs.Empty));
     }
@@ -888,6 +889,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> EditWatermarkCommand { get; }
     /// <summary>Animation Roadmap Phase 3c — opens the Animation Editor.</summary>
     public ReactiveCommand<Unit, Unit> EditAnimationCommand { get; }
+    /// <summary>Scene Engine Roadmap Phase S5 — opens the Scene Editor.</summary>
+    public ReactiveCommand<Unit, Unit> EditSceneCommand { get; }
     public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
     public ReactiveCommand<Unit, Unit> AppDataLocationCommand { get; }
 
@@ -936,6 +939,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// <summary>Animation Roadmap Phase 3c — user clicked "Edit Animation…"
     /// in the menu. Shell opens the Animation Editor dialog.</summary>
     public event EventHandler? EditAnimationClick;
+    /// <summary>Scene Engine Roadmap Phase S5 — user clicked "Edit Scene…"
+    /// in the menu. Shell opens the Scene Editor dialog.</summary>
+    public event EventHandler? EditSceneClick;
     public event EventHandler? FfmpegSetupClick;
     public event EventHandler? AppDataLocationClick;
 

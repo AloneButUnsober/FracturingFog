@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
     private ColorThemeEditorView? _editorWin;
     private WatermarkEditorView? _watermarkEditorWin;
     private AnimationEditorView? _animationEditorWin;
+    private SceneEditorView? _sceneEditorWin;
     private RegionEditorView? _regionEditorWin;
     private AssetManagerView? _assetManagerWin;
     private FloatingHelpView? _helpWin;
@@ -561,6 +562,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.AnimationEditor):
                 SyncAnimationEditor();
                 break;
+            case nameof(ShellViewModel.IsSceneEditorVisible):
+            case nameof(ShellViewModel.SceneEditor):
+                SyncSceneEditor();
+                break;
             case nameof(ShellViewModel.IsRegionEditorVisible):
             case nameof(ShellViewModel.RegionEditor):
                 SyncRegionEditor();
@@ -1077,6 +1082,33 @@ public sealed partial class MainWindow : Window
         else
         {
             _animationEditorWin?.Hide();
+        }
+    }
+
+    private void SyncSceneEditor()
+    {
+        if (_shell == null) return;
+        if (_shell.IsSceneEditorVisible && _shell.SceneEditor != null)
+        {
+            if (_sceneEditorWin == null)
+            {
+                _sceneEditorWin = new SceneEditorView { DataContext = _shell.SceneEditor };
+                _sceneEditorWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsSceneEditorVisible = false;
+                };
+            }
+            else if (_sceneEditorWin.DataContext != _shell.SceneEditor)
+            {
+                _sceneEditorWin.DataContext = _shell.SceneEditor;
+            }
+            if (!_sceneEditorWin.IsVisible) _sceneEditorWin.Show(this);
+        }
+        else
+        {
+            _sceneEditorWin?.Hide();
         }
     }
 

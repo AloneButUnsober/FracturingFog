@@ -498,6 +498,45 @@ namespace FracturingFog.Hosting
             return AnimationLibrary.Instance.ReplaceOrAdd(animation);
         }
 
+        // ── Scene Engine Roadmap Phase S5 — Scene persistence (SceneLibrary) ──
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateSceneNames()
+        {
+            var lib = SceneLibrary.Instance;
+            var list = new List<string>(lib.Scenes.Count);
+            foreach (var s in lib.Scenes) list.Add(s.Name);
+            return list;
+        }
+
+        /// <inheritdoc/>
+        public FracturingFog.Abstractions.Animation.SceneData? GetScene(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName)) return null;
+            return SceneLibrary.Instance.GetByName(sceneName);
+        }
+
+        /// <inheritdoc/>
+        public bool SceneExistsInLibrary(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName)) return false;
+            return SceneLibrary.Instance.GetByName(sceneName) != null;
+        }
+
+        /// <inheritdoc/>
+        public bool SaveScene(FracturingFog.Abstractions.Animation.SceneData scene)
+        {
+            if (scene == null || string.IsNullOrWhiteSpace(scene.Name)) return false;
+            return SceneLibrary.Instance.ReplaceOrAdd(scene);
+        }
+
+        /// <inheritdoc/>
+        public bool DeleteScene(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName)) return false;
+            return SceneLibrary.Instance.Remove(sceneName);
+        }
+
         public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null)
         {
             if (string.IsNullOrWhiteSpace(regionName) || state == null) return false;

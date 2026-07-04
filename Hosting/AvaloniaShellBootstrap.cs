@@ -429,6 +429,10 @@ namespace FracturingFog.Hosting
             // combo, and the Animation slideshow's picker all see zero
             // animations (built-in seed included).
             try { AnimationLibrary.Instance.Load(); }      catch { }
+            // Scene Engine Roadmap S5 — warm the scene library so the Asset
+            // Manager's Scenes node and the Scene Editor's Load combo see the
+            // built-in demos + any saved scenes on first open.
+            try { SceneLibrary.Instance.Load(); }          catch { }
 
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService,
