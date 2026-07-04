@@ -664,6 +664,12 @@ which is complete end to end (S0–S8 core).
 
 ## Companion pages
 
+- [Scene Engine User Guide](User/SceneEngine-UserGuide.md) — the end-user
+  guide: authoring, camera, transitions, export.
+- [Scene Engine Architecture](Technical/SceneEngine-Architecture.md) — the
+  developer reference for the shipped S0–S8 stack.
+- [Example Scenes](Examples/Scenes/_Index.md) — four importable demo Scenes,
+  one per feature.
 - [Animation Roadmap](Animation-Roadmap.md) — param animation the camera
   track and scene playback build on.
 - [Lighting + FX Roadmap](Lighting-FX-Roadmap.md) — the shipped 3D fidelity
