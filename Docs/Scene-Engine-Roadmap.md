@@ -549,11 +549,22 @@ non-mutation). Two S6/S7 tests that asserted the old crossfade fallback were
 flipped to assert the honoured kind. The renderer's per-pixel / per-param wiring
 is integration surface over the unchanged S7 render path. Full suite 514/514.
 
+**Avalonia "Export Scene…" — Shipped.** The Scene Editor now has an **⤓ Export…**
+button + an "Export (offline render)" knob group (width / height / fps /
+motion-blur sub-frames / encode). It raises `ExportSceneRequested`
+(`SceneExportEventArgs`, an Engine-free DTO); the host
+(`AvaloniaShellBootstrap`) picks the output path, maps the knobs onto
+`SceneVideoOptions`, and runs `SceneVideoRenderer.Render` on a background thread
+(one calculator live at a time → inside the cap), then reports the result —
+keeping UI.Avalonia free of the Engine, per the SaveFileRequested /
+MessageRequested host-fulfilled pattern. ffmpeg missing → the recoverable PNG
+sequence is kept and the user is told. The GUI export loop is now complete
+(previously headless `--batch --mode scene` only).
+
 **Still open (future polish):** the Bezier easing editor (Animation-roadmap
 `D.1` — the `CameraInterpolation.Bezier` maths already ship; only the per-key
 handle UI is missing), rack-focus preset, exposure / tonemap / IBL-rotation
-global tracks, audio-reactive scenes (`D.4`), and an Avalonia "Export Scene…"
-command over the S7 `SceneVideoRenderer` API. None block the core Scene
+global tracks, audio-reactive scenes (`D.4`). None block the core Scene
 authoring → preview → export loop, which is complete end to end (S0–S8 core).
 
 ---

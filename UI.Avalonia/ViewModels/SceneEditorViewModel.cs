@@ -333,6 +333,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
         DeleteCommand      = ReactiveCommand.CreateFromTask(DeleteAsync);
         AddShotCommand     = ReactiveCommand.Create(AddShot);
         PlayCommand        = ReactiveCommand.Create(Play);
+        ExportCommand      = ReactiveCommand.CreateFromTask(ExportAsync);
         StopPreviewCommand = ReactiveCommand.Create(StopPreview);
         CloseCommand       = ReactiveCommand.Create(() =>
         {
@@ -369,6 +370,31 @@ public sealed class SceneEditorViewModel : ViewModelBase
     private readonly List<string> _animationNames;
     public IReadOnlyList<FractalType> AvailableFractalTypes { get; }
     public IReadOnlyList<SceneTransitionKind> TransitionKinds { get; }
+
+    // ── Export (offline render, S8 polish) ─────────────────────────────────────
+    // Tunable export knobs surfaced as fields (matches the "expose tunables"
+    // preference); the host maps them onto the Engine's SceneVideoRenderer.
+    public IReadOnlyList<string> EncodeOptions { get; } = new[]
+    {
+        "H.264 — high quality (MP4)",
+        "H.264 — lossless (MP4)",
+        "FFV1 — lossless (MKV)",
+    };
+
+    private int _exportWidth = 1920;
+    public int ExportWidth { get => _exportWidth; set => this.RaiseAndSetIfChanged(ref _exportWidth, value); }
+
+    private int _exportHeight = 1080;
+    public int ExportHeight { get => _exportHeight; set => this.RaiseAndSetIfChanged(ref _exportHeight, value); }
+
+    private int _exportFps = 30;
+    public int ExportFps { get => _exportFps; set => this.RaiseAndSetIfChanged(ref _exportFps, value); }
+
+    private int _exportMotionBlur = 1;
+    public int ExportMotionBlur { get => _exportMotionBlur; set => this.RaiseAndSetIfChanged(ref _exportMotionBlur, value); }
+
+    private string _selectedEncode = "H.264 — high quality (MP4)";
+    public string SelectedEncode { get => _selectedEncode; set => this.RaiseAndSetIfChanged(ref _selectedEncode, value); }
 
     // ── Load selection ─────────────────────────────────────────────────────────
 
@@ -444,6 +470,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> AddShotCommand { get; }
     public ReactiveCommand<Unit, Unit> PlayCommand { get; }
+    public ReactiveCommand<Unit, Unit> ExportCommand { get; }
     public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
@@ -462,6 +489,11 @@ public sealed class SceneEditorViewModel : ViewModelBase
     /// timeline, sequencing shots on the live view with per-shot camera + param
     /// motion on the animation bus.</summary>
     public event EventHandler<SceneData>? PlaySceneRequested;
+
+    /// <summary>Export the whole scene to a video file offline (S8 polish): the
+    /// host picks an output path and runs the Engine's frame-locked
+    /// SceneVideoRenderer (motion blur + composited transitions).</summary>
+    public event EventHandler<SceneExportEventArgs>? ExportSceneRequested;
 
     public event EventHandler? StopPreviewRequested;
 
@@ -571,6 +603,50 @@ public sealed class SceneEditorViewModel : ViewModelBase
     }
 
     private void Play() => PlaySceneRequested?.Invoke(this, BuildData());
+
+    /// <summary>Build the scene + export settings and hand off to the host, then
+    /// await its Completion so the command stays "running" (button disabled)
+    /// while the offline render + encode proceed.</summary>
+    private async Task ExportAsync()
+    {
+        var scene = BuildData();
+        if (scene.Shots.Count == 0 || scene.TotalDurationSeconds <= 0)
+        {
+            MessageRequested?.Invoke(this, new ThemeMessageEventArgs(
+                "Export Scene",
+                "This scene has no shots with a positive duration to render.",
+                MessageSeverity.Warning));
+            return;
+        }
+        if (ExportSceneRequested == null) return;
+
+        // Clamp the tunables to the Engine's accepted ranges.
+        int w = Math.Clamp(ExportWidth, 16, 16384) & ~1;
+        int h = Math.Clamp(ExportHeight, 16, 16384) & ~1;
+        int fps = Math.Clamp(ExportFps, 1, 240);
+        int mb = Math.Clamp(ExportMotionBlur, 1, 64);
+
+        var settings = new SceneExportSettings
+        {
+            Width = w,
+            Height = h,
+            Fps = fps,
+            MotionBlurSubframes = mb,
+            ShutterFraction = 0.5,
+            Encode = MapEncode(SelectedEncode),
+        };
+
+        var args = new SceneExportEventArgs(scene, settings);
+        ExportSceneRequested.Invoke(this, args);
+        await args.Completion.Task;
+    }
+
+    private static SceneExportEncode MapEncode(string label) => label switch
+    {
+        "H.264 — lossless (MP4)" => SceneExportEncode.LosslessH264,
+        "FFV1 — lossless (MKV)"  => SceneExportEncode.Ffv1,
+        _                        => SceneExportEncode.HighQualityH264,
+    };
 
     private void StopPreview() => StopPreviewRequested?.Invoke(this, EventArgs.Empty);
 

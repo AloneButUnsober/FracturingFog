@@ -1856,6 +1856,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.SceneDeletedFromLibrary += (_, _) => RefreshAssetManagerIfVisible();
             vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
             vm.PlaySceneRequested    += (_, scene) => PlayScene(scene);
+            vm.ExportSceneRequested  += (_, args) => ExportSceneRequested?.Invoke(this, args);
             vm.StopPreviewRequested  += (_, _) => StopScenePreview();
             vm.CloseRequested        += (_, _) => IsSceneEditorVisible = false;
             vm.MessageRequested      += (_, args) => MessageRequested?.Invoke(this, args);
@@ -2299,6 +2300,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Editor wants to save a file (JSON theme export or C# class).
     /// Host pops a SaveFileDialog and writes the content.</summary>
     public event EventHandler<ThemeSaveFileEventArgs>? SaveFileRequested;
+
+    /// <summary>Scene Engine Roadmap S8 polish — the Scene Editor asks the host
+    /// to render + encode a scene offline (the host picks the output path and
+    /// drives the Engine's SceneVideoRenderer).</summary>
+    public event EventHandler<SceneExportEventArgs>? ExportSceneRequested;
 
     /// <summary>Editor or other child VM wants to show a MessageBox.</summary>
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;

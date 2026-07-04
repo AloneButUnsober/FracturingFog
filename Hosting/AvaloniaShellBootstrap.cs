@@ -703,6 +703,75 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // ── Export Scene… (Scene Engine S8 polish) ───────────────────
+            //
+            // The Scene Editor can't touch the Engine's SceneVideoRenderer
+            // (UI.Avalonia stays Engine-free), so it hands the built SceneData +
+            // export knobs here. Pick an output path, run the frame-locked
+            // offline render on a background thread (one calculator live at a
+            // time -> inside the ~90% cap), then report the outcome. ffmpeg
+            // missing -> the render keeps a recoverable PNG sequence.
+            shell.ExportSceneRequested += async (_, args) =>
+            {
+                try
+                {
+                    var s = args.Settings;
+                    var preset = s.Encode switch
+                    {
+                        SceneExportEncode.LosslessH264 => FracturingFog.FfmpegEncoder.Preset.LosslessH264Mp4,
+                        SceneExportEncode.Ffv1         => FracturingFog.FfmpegEncoder.Preset.Ffv1Mkv,
+                        _                              => FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4,
+                    };
+                    string ext = FracturingFog.FfmpegEncoder.DefaultExtensionFor(preset);
+                    string filter = ext == "mkv"
+                        ? "Matroska Video (*.mkv)|*.mkv"
+                        : "MP4 Video (*.mp4)|*.mp4";
+                    string suggested = SanitizeFileStem(args.Scene.Name) + "." + ext;
+
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync("Export Scene", suggested, filter);
+                    if (string.IsNullOrEmpty(path)) return; // cancelled
+
+                    if (!FracturingFog.FfmpegEncoder.IsAvailable())
+                        await AvaloniaDialogs.ShowMessageAsync("Export Scene",
+                            "ffmpeg was not found, so the video can't be encoded. The rendered PNG frame " +
+                            "sequence will be kept instead — you can encode it later.", false);
+
+                    var opts = new FracturingFog.Export.SceneVideoOptions
+                    {
+                        Width = s.Width,
+                        Height = s.Height,
+                        Encode = preset,
+                        OutputPath = path,
+                        Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
+                        {
+                            Fps = s.Fps,
+                            MotionBlurSubframes = s.MotionBlurSubframes,
+                            ShutterFraction = s.ShutterFraction,
+                        },
+                    };
+
+                    var result = await Task.Run(() =>
+                        FracturingFog.Export.SceneVideoRenderer.Render(args.Scene, opts));
+
+                    string msg = result.Ok
+                        ? (!string.IsNullOrEmpty(result.VideoPath)
+                            ? $"Scene exported ({result.FramesWritten} frames):\n{result.VideoPath}"
+                            : $"Frames rendered ({result.FramesWritten}):\n{result.FrameFolder}")
+                        : (result.Message ?? "Scene export failed.");
+                    await AvaloniaDialogs.ShowMessageAsync("Export Scene", msg, false);
+                }
+                catch (Exception ex)
+                {
+                    try { await AvaloniaDialogs.ShowMessageAsync("Export Scene", "Export failed: " + ex.Message, false); }
+                    catch { /* dialog itself failed — logged below */ }
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Scene export failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
             // ── Palette import / export / eyedropper ─────────────────────
             //
             // Editor sends ThemeImportPaletteEventArgs. Host pops an
@@ -2721,6 +2790,24 @@ namespace FracturingFog.Hosting
         //     _i{Iterations}_{W}x{H}[_wallpaper|_poster[_portrait]].{ext}
         // Spaces and characters invalid on Windows or Linux pathnames are
         // stripped. Region / theme tokens are omitted when empty.
+        /// <summary>Strip filesystem-invalid characters (and spaces) from a name
+        /// so it can seed a save-dialog filename. Falls back to a generic stem
+        /// when nothing usable remains.</summary>
+        private static string SanitizeFileStem(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "Scene";
+            var invalid = System.IO.Path.GetInvalidFileNameChars();
+            var sb = new System.Text.StringBuilder(name!.Length);
+            foreach (char c in name)
+            {
+                if (c == ' ') { sb.Append('_'); continue; }
+                if (Array.IndexOf(invalid, c) >= 0 || c < 0x20) continue;
+                sb.Append(c);
+            }
+            string s = sb.ToString().Trim('_');
+            return s.Length == 0 ? "Scene" : s;
+        }
+
         private static string BuildSuggestedFileName(
             string defaultExt,
             int? imageWidth = null,
