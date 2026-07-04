@@ -1823,9 +1823,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// currently-selected region. Metadata-only edit (geometry preserved);
     /// built-in regions clone into a new user region on save. The VM is rebuilt
     /// each call so it targets whatever region is selected now.</summary>
-    public void ShowRegionEditor()
+    public void ShowRegionEditor() => ShowRegionEditor(null);
+
+    /// <summary>Open the Region Editor for an explicit region name. Null falls
+    /// back to the toolbar / menu selection (the render-surface "Edit Region…"
+    /// path). The Asset Manager (A2) passes the row's name directly.</summary>
+    public void ShowRegionEditor(string? targetName)
     {
-        string? name = FloatingMenu.SelectedRegion ?? Main.SelectedRegion;
+        string? name = targetName ?? FloatingMenu.SelectedRegion ?? Main.SelectedRegion;
         // FloatingMenu placeholder / header rows start with "—" and aren't
         // real regions — treat those as "nothing selected".
         if (string.IsNullOrWhiteSpace(name) || name.StartsWith("—", StringComparison.Ordinal))
@@ -1870,6 +1875,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             var vm = new AssetManagerViewModel(_assetSources);
             vm.CloseRequested += (_, _) => IsAssetManagerVisible = false;
+            vm.OpenRequested  += (_, e) => EditAsset(e.Kind, e.Name);
             AssetManager = vm;
         }
         else
@@ -1878,6 +1884,62 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         }
         IsAssetManagerVisible = true;
     }
+
+    /// <summary>Asset Manager A2 — route a row to the type's own editor. Four
+    /// types have shell-owned modeless editors that accept a name and are
+    /// retargeted here directly (Region / Colour theme / Animation / Watermark).
+    /// The source editors (User equation / Sandbox / UserBulb) and Slideshow
+    /// configs are opened by the host — UI.Avalonia can't reach those open
+    /// paths — via <see cref="AssetHostEditorRequested"/>.</summary>
+    private void EditAsset(FracturingFog.Abstractions.Assets.AssetKind kind, string name)
+    {
+        switch (kind)
+        {
+            case FracturingFog.Abstractions.Assets.AssetKind.Region:
+                ShowRegionEditor(name);
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.ColorTheme:
+                ShowColorThemeEditor();
+                if (ColorThemeEditor != null) ColorThemeEditor.SelectedTheme = name;
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.Animation:
+                ShowAnimationEditor();
+                if (AnimationEditor != null) AnimationEditor.SelectedAnimation = name;
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.Watermark:
+                ShowWatermarkEditor();
+                if (WatermarkEditor != null) WatermarkEditor.SelectedWatermark = name;
+                break;
+
+            case FracturingFog.Abstractions.Assets.AssetKind.SlideshowConfig:
+                // Make the clicked preset active so the Slideshow Settings
+                // dialog (host-owned, opened via the shared event) opens on it.
+                try
+                {
+                    var file = FracturingFog.Models.SlideshowConfigLibrary.Load();
+                    file.ActiveName = name;
+                    FracturingFog.Models.SlideshowConfigLibrary.Save(file);
+                }
+                catch { /* non-fatal — dialog just opens on the prior active */ }
+                SlideshowSettingsRequested?.Invoke(this, EventArgs.Empty);
+                break;
+
+            default:
+                // Source editors (UserEquation / SandboxEquation / UserBulb) edit
+                // live params in host-owned windows UI.Avalonia can't reach.
+                AssetHostEditorRequested?.Invoke(this,
+                    new AssetHostEditorEventArgs(kind, name));
+                break;
+        }
+    }
+
+    /// <summary>Raised for asset types whose editors the host owns (source
+    /// editors + slideshow). The host (AvaloniaShellBootstrap) subscribes and
+    /// opens the matching editor window.</summary>
+    public event EventHandler<AssetHostEditorEventArgs>? AssetHostEditorRequested;
 
     private void ShowFFClient()
     {
