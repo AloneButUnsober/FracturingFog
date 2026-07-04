@@ -1,7 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 
 using FracturingFog.UI.Avalonia.Input;
+using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
@@ -17,5 +19,12 @@ public sealed partial class AssetManagerView : Window
     {
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
+    }
+
+    // Double-clicking a row routes it to its type's editor (A2), same as the
+    // detail-pane "Edit in editor…" button.
+    private void OnAssetDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        (DataContext as AssetManagerViewModel)?.RaiseOpen();
     }
 }

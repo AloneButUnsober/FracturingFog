@@ -1627,6 +1627,37 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Asset Manager (Sub-goal A / A2) — the shell routes the three
+            // source-editor asset types here because their editor windows are
+            // host-owned and edit live params. Open the matching editor, then
+            // select the saved entry so the picked asset loads into it.
+            shell.AssetHostEditorRequested += (_, e) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+                    var p = s_renderHost.ViewState.FractalParameters;
+                    switch (e.Kind)
+                    {
+                        case global::FracturingFog.Abstractions.Assets.AssetKind.UserEquation:
+                            OpenUserEquationEditor(p);
+                            if (s_userEqWin?.DataContext is UserEquationViewModel ueVm)
+                                ueVm.SelectedSavedName = e.Name;
+                            break;
+                        case global::FracturingFog.Abstractions.Assets.AssetKind.SandboxEquation:
+                            OpenSandboxEditor(p);
+                            if (s_sandboxWin?.DataContext is SandboxViewModel sbVm)
+                                sbVm.SelectedSavedName = e.Name;
+                            break;
+                        case global::FracturingFog.Abstractions.Assets.AssetKind.UserBulb:
+                            OpenUserBulbEditor(p);
+                            if (s_userBulbWin?.DataContext is UserBulbViewModel ubVm)
+                                ubVm.SelectedSavedName = e.Name;
+                            break;
+                    }
+                });
+            };
+
             // Recording finished — the engine has finalised the temp MP4 and/or
             // PNG sequence. On success, prompt for save destinations; on cancel
             // or fault, discard the temp artefacts. Fires on a background thread

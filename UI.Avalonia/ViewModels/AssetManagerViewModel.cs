@@ -38,6 +38,7 @@ public sealed class AssetManagerViewModel : ViewModelBase
 
         CloseCommand   = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
         RefreshCommand = ReactiveCommand.Create(RefreshAssets);
+        EditCommand    = ReactiveCommand.Create(RaiseOpen);
 
         // Default to the first type so the view opens on content, not blank.
         if (Types.Count > 0) SelectedType = Types[0];
@@ -109,9 +110,52 @@ public sealed class AssetManagerViewModel : ViewModelBase
 
     public ReactiveCommand<Unit, Unit> CloseCommand   { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Unit> EditCommand    { get; }
+
+    /// <summary>Ask the shell to open the selected asset in its own editor
+    /// (A2 routing). No-op when nothing is selected.</summary>
+    public void RaiseOpen()
+    {
+        var row = SelectedAsset;
+        if (row == null) return;
+        OpenRequested?.Invoke(this, new AssetOpenEventArgs(row.Descriptor.Kind, row.Descriptor.Name));
+    }
 
     /// <summary>Raised by the Close button; the shell hides the window.</summary>
     public event EventHandler? CloseRequested;
+
+    /// <summary>Raised when the user edits a row (Edit button / double-click).
+    /// The shell routes the kind+name to the type's own editor.</summary>
+    public event EventHandler<AssetOpenEventArgs>? OpenRequested;
+}
+
+/// <summary>Carries an Asset Manager row's kind + name to the shell's editor
+/// router (A2).</summary>
+public sealed class AssetOpenEventArgs : EventArgs
+{
+    public AssetOpenEventArgs(AssetKind kind, string name)
+    {
+        Kind = kind;
+        Name = name;
+    }
+
+    public AssetKind Kind { get; }
+    public string Name { get; }
+}
+
+/// <summary>Carries a host-owned editor request (source editors + slideshow
+/// configs) from the shell to AvaloniaShellBootstrap, which owns those open
+/// paths (A2).</summary>
+public sealed class AssetHostEditorEventArgs : EventArgs
+{
+    public AssetHostEditorEventArgs(AssetKind kind, string name)
+    {
+        Kind = kind;
+        Name = name;
+    }
+
+    public AssetKind Kind { get; }
+    public string Name { get; }
 }
 
 /// <summary>Left-pane type-tree node — a thin display wrapper over one source.</summary>
