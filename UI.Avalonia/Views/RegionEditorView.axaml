@@ -90,19 +90,36 @@
                 <Border Classes="group">
                     <StackPanel Spacing="6">
                         <TextBlock Classes="section" Text="Attached assets" />
-                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" Margin="0,4,0,0">
                             <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Animation:" Margin="0,0,8,4" />
                             <ComboBox  Grid.Row="0" Grid.Column="1"
                                        ItemsSource="{Binding AnimationNames}"
                                        SelectedItem="{Binding SelectedAnimation}"
                                        HorizontalAlignment="Stretch"
                                        Margin="0,0,0,4" />
-
-                            <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Curated themes:" Margin="0,0,8,0" />
-                            <TextBox   Grid.Row="1" Grid.Column="1"
-                                       Text="{Binding CuratedThemesText}"
-                                       PlaceholderText="comma-separated theme names (blank = no preference)" />
                         </Grid>
+
+                        <TextBlock Classes="label" Text="Curated themes:" />
+                        <TextBlock Foreground="#888888" FontSize="11" TextWrapping="Wrap"
+                                   Text="Check the themes this region prefers. None checked = no preference (falls back to the compat-filtered pool)." />
+                        <TextBox Text="{Binding CuratedFilter}"
+                                 PlaceholderText="filter themes…"
+                                 Margin="0,0,0,4" />
+                        <Border BorderBrush="#3A3A3A" BorderThickness="1" CornerRadius="3" MaxHeight="150">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding CuratedThemes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:CuratedThemeOption">
+                                            <CheckBox Content="{Binding Name}"
+                                                      IsChecked="{Binding IsSelected}"
+                                                      IsVisible="{Binding IsVisible}"
+                                                      Foreground="#DCDCDC"
+                                                      Padding="4,0" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
                         <CheckBox Content="Keep lighting override"
                                   IsChecked="{Binding KeepLightingOverride}"
                                   IsVisible="{Binding HasLightingOverride}"
