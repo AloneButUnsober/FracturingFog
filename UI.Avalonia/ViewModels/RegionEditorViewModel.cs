@@ -40,9 +40,20 @@ public sealed class RegionEditorViewModel : ViewModelBase
         _description = model.Description ?? string.Empty;
         _keepLightingOverride  = model.KeepLightingOverride;
         _keepEmbeddedWatermark = model.KeepEmbeddedWatermark;
-        _curatedThemesText = model.CuratedThemes != null
-            ? string.Join(", ", model.CuratedThemes)
-            : string.Empty;
+
+        // Curated-theme whitelist as a checkable list against the theme
+        // library. Any curated name no longer present in the library is kept
+        // (checked) so an edit never silently drops it.
+        CuratedThemes = new ObservableCollection<CuratedThemeOption>();
+        var selected = new HashSet<string>(
+            model.CuratedThemes ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in _service.EnumerateThemeNames())
+            if (seen.Add(t))
+                CuratedThemes.Add(new CuratedThemeOption(t, selected.Contains(t)));
+        foreach (var t in selected)
+            if (seen.Add(t))
+                CuratedThemes.Add(new CuratedThemeOption(t, true)); // orphaned curated name
 
         _selectedAnimation = !string.IsNullOrWhiteSpace(model.AnimationName)
             && AnimationNames.Contains(model.AnimationName)
@@ -111,13 +122,24 @@ public sealed class RegionEditorViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _selectedAnimation, value);
     }
 
-    private string _curatedThemesText;
-    /// <summary>Comma-separated curated theme names. Empty = "no opinion"
+    /// <summary>Checkable curated-theme whitelist. None checked = "no opinion"
     /// (region falls back to the compat-filtered theme pool).</summary>
-    public string CuratedThemesText
+    public ObservableCollection<CuratedThemeOption> CuratedThemes { get; }
+
+    private string _curatedFilter = string.Empty;
+    /// <summary>Live substring filter over the curated-theme checklist. Hides
+    /// non-matching rows without disturbing their checked state.</summary>
+    public string CuratedFilter
     {
-        get => _curatedThemesText;
-        set => this.RaiseAndSetIfChanged(ref _curatedThemesText, value);
+        get => _curatedFilter;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _curatedFilter, value);
+            var f = value?.Trim() ?? string.Empty;
+            foreach (var o in CuratedThemes)
+                o.IsVisible = f.Length == 0
+                    || o.Name.Contains(f, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private bool _keepLightingOverride;
@@ -163,7 +185,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
         _model.AnimationName = string.Equals(_selectedAnimation, NoneSentinel, StringComparison.Ordinal)
             ? null
             : _selectedAnimation;
-        _model.CuratedThemes = ParseCuratedThemes(_curatedThemesText);
+        _model.CuratedThemes = CollectCuratedThemes();
         _model.KeepLightingOverride  = _keepLightingOverride;
         _model.KeepEmbeddedWatermark = _keepEmbeddedWatermark;
 
@@ -183,16 +205,9 @@ public sealed class RegionEditorViewModel : ViewModelBase
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private static List<string>? ParseCuratedThemes(string text)
+    private List<string>? CollectCuratedThemes()
     {
-        if (string.IsNullOrWhiteSpace(text)) return null;
-        var list = new List<string>();
-        foreach (var part in text.Split(',', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var name = part.Trim();
-            if (name.Length > 0 && !list.Contains(name, StringComparer.OrdinalIgnoreCase))
-                list.Add(name);
-        }
+        var list = CuratedThemes.Where(o => o.IsSelected).Select(o => o.Name).ToList();
         return list.Count > 0 ? list : null;
     }
 
@@ -202,5 +217,35 @@ public sealed class RegionEditorViewModel : ViewModelBase
         handler?.Invoke(this, args);
         if (handler == null) args.Completion.TrySetResult(true);
         return args.Completion.Task;
+    }
+}
+
+/// <summary>One checkable row in the Region Editor's curated-theme whitelist.</summary>
+public sealed class CuratedThemeOption : ReactiveObject
+{
+    public CuratedThemeOption(string name, bool isSelected)
+    {
+        Name = name;
+        _isSelected = isSelected;
+    }
+
+    /// <summary>Theme display name.</summary>
+    public string Name { get; }
+
+    private bool _isSelected;
+    /// <summary>True when this theme is in the region's curated whitelist.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => this.RaiseAndSetIfChanged(ref _isSelected, value);
+    }
+
+    private bool _isVisible = true;
+    /// <summary>False when hidden by the checklist filter (checked state is
+    /// preserved regardless).</summary>
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set => this.RaiseAndSetIfChanged(ref _isVisible, value);
     }
 }
