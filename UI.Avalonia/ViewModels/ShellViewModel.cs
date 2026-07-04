@@ -1999,7 +1999,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         var anim = string.IsNullOrEmpty(shot.AnimationName)
             ? null
             : _themeService.GetAnimation(shot.AnimationName!);
-        AnimationBusHost.LoadSceneShot(shot, anim, Main.ViewState.FractalParameters);
+
+        // This shot's exact global start — seeds the S8 global-track sweep so it
+        // continues mid-timeline across the cut instead of restarting.
+        double shotStart = 0.0;
+        var tl = _sceneTimeline;
+        if (tl != null && sample.CurrentEntry >= 0 && sample.CurrentEntry < tl.Entries.Count)
+            shotStart = tl.Entries[sample.CurrentEntry].StartTime;
+
+        AnimationBusHost.LoadSceneShot(shot, anim, Main.ViewState.FractalParameters,
+            scene.GlobalTracks, shotStart);
     }
 
     /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the

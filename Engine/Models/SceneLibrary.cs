@@ -254,6 +254,44 @@ namespace FracturingFog.Models
                     },
                 },
             };
+
+            // A Mandelbulb orbit that fades up out of near-black and settles to a
+            // neutral exposure — the built-in demonstration of an S8 scene-wide
+            // global track (exposure) riding over the shot's own look.
+            yield return new SceneData
+            {
+                Name = "Exposure Ramp",
+                Category = "Built-in",
+                Description = "A Mandelbulb orbit whose scene-wide exposure ramps up " +
+                              "out of near-black and settles — the built-in demonstration " +
+                              "of a global (scene-wide) post track.",
+                Tags = new List<string> { "demo", "3D", "global-track" },
+                Shots = new List<SceneShot>
+                {
+                    new SceneShot
+                    {
+                        Name = "Rise",
+                        FractalType = FracturingFog.FractalType.Mandelbulb,
+                        DurationSeconds = 16.0,
+                        Transition = SceneTransitionKind.Cut,
+                        Camera = OrbitTrack(distance: 2.6, turns: 1, seconds: 16.0, phi: 0.32),
+                    },
+                },
+                GlobalTracks = new List<SceneGlobalTrack>
+                {
+                    new SceneGlobalTrack
+                    {
+                        Target = SceneGlobalTarget.Exposure,
+                        Interpolation = CameraInterpolation.Linear,
+                        Keys =
+                        {
+                            new SceneGlobalKey(0.0, 0.15, CameraEase.EaseInOut),
+                            new SceneGlobalKey(6.0, 1.0),
+                            new SceneGlobalKey(16.0, 1.0),
+                        },
+                    },
+                },
+            };
         }
 
         /// <summary>A closed orbit: azimuth (theta) sweeps <paramref name="turns"/>
