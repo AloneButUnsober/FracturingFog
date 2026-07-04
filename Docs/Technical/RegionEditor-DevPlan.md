@@ -99,6 +99,9 @@ is unit-testable headless.
   like `_animationEditorWin`.
 - Built-in selected → editor opens in clone mode (name cleared / suffixed,
   Save always creates a new user region).
+- Entry points: toolbar "Edit" button **and** a right-click "Edit region…"
+  context-menu item on the toolbar region combo (both fire
+  `ShowRegionEditorCommand`).
 
 ### Phase R3 — "Capture current view"  ✅
 
