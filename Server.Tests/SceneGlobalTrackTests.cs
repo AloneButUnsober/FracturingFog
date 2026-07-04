@@ -269,7 +269,7 @@ public sealed class SceneGlobalTrackTests
     // ── Built-in demo ────────────────────────────────────────────────────────
 
     [Fact]
-    public void BuiltIn_ExposureRamp_HasGlobalExposureTrack_ThatRises()
+    public void BuiltIn_ExposureRamp_HasGlobalExposureTrack_ThatBreathes()
     {
         var lib = SceneLibrary.Instance;
         lib.Load();
@@ -279,10 +279,15 @@ public sealed class SceneGlobalTrackTests
         var track = Assert.Single(scene!.GlobalTracks);
         Assert.Equal(SceneGlobalTarget.Exposure, track.Target);
 
+        double duration = scene.Shots[0].DurationSeconds;
         double start = track.Evaluate(0.0);
-        double settled = track.Evaluate(scene.Shots[0].DurationSeconds);
+        double mid = track.Evaluate(duration * 0.5);
+        double end = track.Evaluate(duration);
+
+        // Breathes: dark opening → bright over-exposed peak mid-clip → back to
+        // near-black, so the whole clip visibly differs from "Mandelbulb Orbit".
         Assert.True(start < 0.3, $"expected a dark opening, got {start}");
-        Assert.Equal(1.0, settled, precision: 6); // settles to neutral
-        Assert.True(settled > start);
+        Assert.True(mid > 1.0, $"expected a bright peak mid-clip, got {mid}");
+        Assert.True(end < 0.3, $"expected a dark close, got {end}");
     }
 }
