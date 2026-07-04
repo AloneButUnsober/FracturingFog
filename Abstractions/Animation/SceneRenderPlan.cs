@@ -143,9 +143,12 @@ public readonly struct SceneRenderFrame
     public double Blend { get; }
 
     /// <summary>The transition kind actually rendered (post
-    /// <see cref="SceneTransitions.ResolveVisual"/>): Crossfade for every
-    /// composited frame today. <see cref="SceneTransitionKind.Cut"/> when the
-    /// frame does not composite.</summary>
+    /// <see cref="SceneTransitions.ResolveVisual"/>): Crossfade / LightSweep /
+    /// ParamMorph for a composited frame (S8 honours each as authored),
+    /// <see cref="SceneTransitionKind.Cut"/> when the frame does not composite.
+    /// (ParamMorph may still fall back to a crossfade at render time when the
+    /// two shots are different fractal types — a decision the renderer makes
+    /// from the resolved shot types, not the plan.)</summary>
     public SceneTransitionKind ResolvedTransition { get; }
 }
 

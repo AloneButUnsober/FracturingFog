@@ -159,8 +159,10 @@ public sealed class SceneRenderPlanTests
     }
 
     [Fact]
-    public void LightSweep_and_ParamMorph_fall_back_to_crossfade_composite()
+    public void LightSweep_and_ParamMorph_composite_with_their_own_kind()
     {
+        // S8 — the plan carries the authored kind through; the renderer maps
+        // ParamMorph→crossfade only on a type mismatch (not the plan's job).
         foreach (var kind in new[] { SceneTransitionKind.LightSweep, SceneTransitionKind.ParamMorph })
         {
             var plan = SceneRenderPlan.Build(
@@ -169,7 +171,7 @@ public sealed class SceneRenderPlanTests
 
             var inWindow = plan.Frames[45]; // center ~4.55s, inside [4,6)
             Assert.True(inWindow.CompositeTransition);
-            Assert.Equal(SceneTransitionKind.Crossfade, inWindow.ResolvedTransition);
+            Assert.Equal(kind, inWindow.ResolvedTransition);
         }
     }
 

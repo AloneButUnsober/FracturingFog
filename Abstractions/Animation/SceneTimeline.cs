@@ -194,20 +194,46 @@ public sealed class SceneTimeline
 }
 
 /// <summary>Maps an authored transition kind to the concrete blend the current
-/// build can actually render. Cut and Crossfade are honoured directly;
-/// LightSweep and ParamMorph resolve to Crossfade until their bespoke visuals
-/// land (the light-sweep wipe / param interpolation are S8 polish). Keeping the
-/// authored kind on disk means those scenes upgrade automatically once the
-/// visuals ship — no re-authoring.</summary>
+/// build can render, and supplies the pure per-pixel weight the bespoke
+/// visuals need. As of S8 every authored kind is honoured directly:
+/// <list type="bullet">
+/// <item>Cut — no composite (realtime + offline both hard-cut).</item>
+/// <item>Crossfade — uniform alpha blend across the frame.</item>
+/// <item>LightSweep — a directional (left→right) wipe; see
+///   <see cref="LightSweepWeight"/>.</item>
+/// <item>ParamMorph — the offline renderer interpolates the shots' fractal
+///   params (<see cref="SceneParamMorph"/>) instead of compositing two frames;
+///   it falls back to Crossfade at render time when the two shots are different
+///   fractal types (nothing to morph).</item>
+/// </list>
+/// Only the ParamMorph type-mismatch fallback is decided at render time (it
+/// needs the resolved shot types); everything else is honoured as authored.</summary>
 public static class SceneTransitions
 {
+    /// <summary>Default soft-edge band width for the <see cref="LightSweepWeight"/>
+    /// wipe, as a fraction of frame width. A wider feather = a softer sweep.</summary>
+    public const double DefaultLightSweepFeather = 0.35;
+
     public static SceneTransitionKind ResolveVisual(SceneTransitionKind authored) => authored switch
     {
         SceneTransitionKind.Cut => SceneTransitionKind.Cut,
         SceneTransitionKind.Crossfade => SceneTransitionKind.Crossfade,
-        // Not yet implemented as distinct composites — fall back to a crossfade.
-        SceneTransitionKind.LightSweep => SceneTransitionKind.Crossfade,
-        SceneTransitionKind.ParamMorph => SceneTransitionKind.Crossfade,
+        SceneTransitionKind.LightSweep => SceneTransitionKind.LightSweep,
+        SceneTransitionKind.ParamMorph => SceneTransitionKind.ParamMorph,
         _ => SceneTransitionKind.Crossfade,
     };
+
+    /// <summary>Incoming-shot weight for a left→right light-sweep wipe at
+    /// horizontal position <paramref name="u"/> (0 = left edge, 1 = right edge)
+    /// and transition progress <paramref name="blend"/> (0 = fully outgoing,
+    /// 1 = fully incoming). A soft edge of width <paramref name="feather"/>
+    /// sweeps across the frame as blend rises, so at blend 0 every column is 0
+    /// and at blend 1 every column is 1. Pure + monotonic in both args.</summary>
+    public static double LightSweepWeight(double u, double blend, double feather = DefaultLightSweepFeather)
+    {
+        if (feather <= 0) feather = 1e-6;
+        // Edge advances from off-frame-left to off-frame-right as blend: 0→1.
+        double w = (blend * (1.0 + feather) - u) / feather;
+        return w < 0 ? 0 : (w > 1 ? 1 : w);
+    }
 }
