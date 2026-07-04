@@ -1,0 +1,55 @@
+[
+  {
+    "Name": "Example — Transition Showcase",
+    "Category": "Example",
+    "Description": "Three shots that show off the transition kinds. Shot 1 (Mandelbulb) cuts in. Shot 2 (Mandelbox) arrives on a 2 s left-to-right Light-sweep wipe. Shot 3 (Mandelbulb again) arrives on a 1.5 s Cross-fade. IMPORTANT: realtime Play hard-cuts between all three — the wipe and fade only render when you EXPORT the scene to video. Each shot orbits its fractal so there is motion under the transitions.",
+    "Tags": [ "example", "3D", "transitions" ],
+    "Shots": [
+      {
+        "Name": "Bulb (cut in)",
+        "RegionName": "",
+        "FractalType": "Mandelbulb",
+        "DurationSeconds": 8.0,
+        "Transition": "Cut",
+        "TransitionSeconds": 1.0,
+        "Camera": {
+          "Interpolation": "CatmullRom",
+          "Keys": [
+            { "Time": 0.0, "State": { "Distance": 2.6, "Theta": 0.0,  "Phi": 0.4 }, "Ease": "None" },
+            { "Time": 8.0, "State": { "Distance": 2.6, "Theta": 2.09, "Phi": 0.7 }, "Ease": "None" }
+          ]
+        }
+      },
+      {
+        "Name": "Box (light-sweep)",
+        "RegionName": "",
+        "FractalType": "Mandelbox",
+        "DurationSeconds": 8.0,
+        "Transition": "LightSweep",
+        "TransitionSeconds": 2.0,
+        "Camera": {
+          "Interpolation": "CatmullRom",
+          "Keys": [
+            { "Time": 0.0, "State": { "Distance": 8.0, "Theta": 0.0,  "Phi": 0.3 }, "Ease": "None" },
+            { "Time": 8.0, "State": { "Distance": 7.0, "Theta": 2.09, "Phi": 0.6 }, "Ease": "None" }
+          ]
+        }
+      },
+      {
+        "Name": "Bulb (cross-fade)",
+        "RegionName": "",
+        "FractalType": "Mandelbulb",
+        "DurationSeconds": 8.0,
+        "Transition": "Crossfade",
+        "TransitionSeconds": 1.5,
+        "Camera": {
+          "Interpolation": "CatmullRom",
+          "Keys": [
+            { "Time": 0.0, "State": { "Distance": 2.4, "Theta": 0.0,  "Phi": 0.5 }, "Ease": "None" },
+            { "Time": 8.0, "State": { "Distance": 2.8, "Theta": 2.09, "Phi": 0.35 }, "Ease": "None" }
+          ]
+        }
+      }
+    ]
+  }
+]

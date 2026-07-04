@@ -1,0 +1,25 @@
+[
+  {
+    "Name": "Example — Push-In (Ease)",
+    "Category": "Example",
+    "Description": "A slow dolly-in on a still Mandelbulb. The camera holds a fixed elevation and barely turns, but pushes from distance 3.4 to 1.7 with Ease In-Out keys, so the move starts gently, accelerates, and settles to a stop. Demonstrates per-key easing plus a dolly (distance) move. Export it to add motion blur.",
+    "Tags": [ "example", "3D", "ease", "dolly" ],
+    "Shots": [
+      {
+        "Name": "Push In",
+        "RegionName": "",
+        "FractalType": "Mandelbulb",
+        "DurationSeconds": 12.0,
+        "Transition": "Cut",
+        "TransitionSeconds": 1.0,
+        "Camera": {
+          "Interpolation": "Linear",
+          "Keys": [
+            { "Time": 0.0,  "State": { "Distance": 3.4, "Theta": 0.0,  "Phi": 0.5 }, "Ease": "EaseInOut" },
+            { "Time": 12.0, "State": { "Distance": 1.7, "Theta": 0.6,  "Phi": 0.6 }, "Ease": "None" }
+          ]
+        }
+      }
+    ]
+  }
+]

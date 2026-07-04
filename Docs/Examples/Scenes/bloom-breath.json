@@ -1,0 +1,46 @@
+[
+  {
+    "Name": "Example — Bloom Breath",
+    "Category": "Example",
+    "Description": "A single Mandelbulb orbit with TWO scene-wide global tracks riding on top of it. A Bloom-strength track swells the glow up to a bright peak halfway through and back down; a Vignette track stays open, then closes the frame edges down over the final few seconds. Global tracks are sampled at global scene time and applied on top of every shot. Both tracks are visible in realtime Play and in export.",
+    "Tags": [ "example", "3D", "global-track", "bloom" ],
+    "Shots": [
+      {
+        "Name": "Orbit",
+        "RegionName": "",
+        "FractalType": "Mandelbulb",
+        "DurationSeconds": 18.0,
+        "Transition": "Cut",
+        "TransitionSeconds": 1.0,
+        "Camera": {
+          "Interpolation": "CatmullRom",
+          "Keys": [
+            { "Time": 0.0,  "State": { "Distance": 2.6, "Theta": 0.0,  "Phi": 0.35 }, "Ease": "None" },
+            { "Time": 9.0,  "State": { "Distance": 2.3, "Theta": 3.14, "Phi": 0.9  }, "Ease": "None" },
+            { "Time": 18.0, "State": { "Distance": 2.6, "Theta": 6.28, "Phi": 0.35 }, "Ease": "None" }
+          ]
+        }
+      }
+    ],
+    "GlobalTracks": [
+      {
+        "Target": "BloomStrength",
+        "Interpolation": "Linear",
+        "Keys": [
+          { "Time": 0.0,  "Value": 0.15, "Ease": "EaseInOut" },
+          { "Time": 9.0,  "Value": 0.85, "Ease": "EaseInOut" },
+          { "Time": 18.0, "Value": 0.15, "Ease": "EaseInOut" }
+        ]
+      },
+      {
+        "Target": "Vignette",
+        "Interpolation": "Linear",
+        "Keys": [
+          { "Time": 0.0,  "Value": 0.0, "Ease": "None" },
+          { "Time": 13.0, "Value": 0.0, "Ease": "EaseIn" },
+          { "Time": 18.0, "Value": 0.7, "Ease": "None" }
+        ]
+      }
+    ]
+  }
+]
