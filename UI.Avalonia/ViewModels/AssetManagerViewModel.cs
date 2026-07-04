@@ -13,7 +13,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using System.Reactive;
+using System.Text;
 
 using FracturingFog.Abstractions.Assets;
 using ReactiveUI;
@@ -121,12 +125,80 @@ public sealed class AssetManagerViewModel : ViewModelBase
         OpenRequested?.Invoke(this, new AssetOpenEventArgs(row.Descriptor.Kind, row.Descriptor.Name));
     }
 
+    /// <summary>Bulk export (A3) — bundle the given rows' JSON into a zip and
+    /// raise <see cref="ExportRequested"/> for the host to write. Rows are the
+    /// middle-list's current multi-selection, passed from the view. No-op when
+    /// empty or when nothing serializes.</summary>
+    public void ExportBundle(IReadOnlyList<AssetRowViewModel> rows)
+    {
+        if (rows == null || rows.Count == 0) return;
+
+        byte[] bytes;
+        int written = 0;
+        using (var ms = new MemoryStream())
+        {
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var row in rows)
+                {
+                    var src = SourceFor(row.Descriptor.Kind);
+                    string? json = src?.ExportJson(row.Descriptor.Name);
+                    if (json == null) continue;
+
+                    var entry = zip.CreateEntry(EntryPath(row.Descriptor, used), CompressionLevel.Optimal);
+                    using var w = new StreamWriter(entry.Open(), new UTF8Encoding(false));
+                    w.Write(json);
+                    written++;
+                }
+            }
+            bytes = ms.ToArray();
+        }
+
+        if (written == 0) return;
+        ExportRequested?.Invoke(this,
+            new AssetExportEventArgs(bytes, $"fracturingfog-assets-{DateTime.Now:yyyyMMdd-HHmmss}.zip", written));
+    }
+
+    private IAssetSource? SourceFor(AssetKind kind)
+    {
+        foreach (var s in _sources)
+            if (s.Kind == kind) return s;
+        return null;
+    }
+
+    // "<Type>/<sanitized name>.json", de-duplicated so two assets that sanitize
+    // to the same filename don't collide inside the archive.
+    private static string EntryPath(AssetDescriptor d, HashSet<string> used)
+    {
+        string safe = Sanitize(d.Name);
+        string baseP = $"{d.Kind}/{safe}";
+        string path = baseP + ".json";
+        int n = 1;
+        while (!used.Add(path))
+            path = $"{baseP} ({n++}).json";
+        return path;
+    }
+
+    private static string Sanitize(string name)
+    {
+        var sb = new StringBuilder(name.Length);
+        var invalid = Path.GetInvalidFileNameChars();
+        foreach (char c in name)
+            sb.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+        string result = sb.ToString().Trim();
+        return result.Length == 0 ? "asset" : result;
+    }
+
     /// <summary>Raised by the Close button; the shell hides the window.</summary>
     public event EventHandler? CloseRequested;
 
     /// <summary>Raised when the user edits a row (Edit button / double-click).
     /// The shell routes the kind+name to the type's own editor.</summary>
     public event EventHandler<AssetOpenEventArgs>? OpenRequested;
+
+    /// <summary>Raised with the assembled zip bytes for the host to save (A3).</summary>
+    public event EventHandler<AssetExportEventArgs>? ExportRequested;
 }
 
 /// <summary>Carries an Asset Manager row's kind + name to the shell's editor
@@ -141,6 +213,23 @@ public sealed class AssetOpenEventArgs : EventArgs
 
     public AssetKind Kind { get; }
     public string Name { get; }
+}
+
+/// <summary>Carries an assembled export bundle (zip bytes + suggested filename +
+/// asset count) from the Asset Manager to the host, which shows the save picker
+/// and writes the file (A3).</summary>
+public sealed class AssetExportEventArgs : EventArgs
+{
+    public AssetExportEventArgs(byte[] zipBytes, string suggestedName, int count)
+    {
+        ZipBytes = zipBytes;
+        SuggestedName = suggestedName;
+        Count = count;
+    }
+
+    public byte[] ZipBytes { get; }
+    public string SuggestedName { get; }
+    public int Count { get; }
 }
 
 /// <summary>Carries a host-owned editor request (source editors + slideshow

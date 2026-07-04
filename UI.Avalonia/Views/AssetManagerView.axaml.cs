@@ -1,3 +1,5 @@
+using System.Linq;
+
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
@@ -26,5 +28,19 @@ public sealed partial class AssetManagerView : Window
     private void OnAssetDoubleTapped(object? sender, TappedEventArgs e)
     {
         (DataContext as AssetManagerViewModel)?.RaiseOpen();
+    }
+
+    // Bulk export (A3): gather the middle list's multi-selection and hand it to
+    // the VM, which builds the zip and raises ExportRequested for the host.
+    private void OnExportBundle(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is not AssetManagerViewModel vm) return;
+        var list = this.FindControl<ListBox>("AssetsList");
+        if (list == null) return;
+
+        var rows = list.SelectedItems?
+            .OfType<AssetRowViewModel>()
+            .ToList() ?? new System.Collections.Generic.List<AssetRowViewModel>();
+        vm.ExportBundle(rows);
     }
 }

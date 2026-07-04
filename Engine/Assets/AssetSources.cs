@@ -10,6 +10,7 @@
 // types, and Engine already references Abstractions where the other five live.
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using FracturingFog.Abstractions.Assets;
@@ -20,6 +21,8 @@ namespace FracturingFog.Assets
     /// <summary>Shared helpers for the adapters.</summary>
     internal static class AssetSizing
     {
+        private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+
         // Approximate per-asset "size on disk": the stores pack many assets
         // into one JSON file, so there is no per-asset file to stat. Serialized
         // byte length of the single entry is the closest cheap proxy.
@@ -27,6 +30,14 @@ namespace FracturingFog.Assets
         {
             try { return Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(entry)); }
             catch { return 0; }
+        }
+
+        // Standalone indented JSON for one entry (bulk-export bundle, A3).
+        public static string? Json<T>(T? entry) where T : class
+        {
+            if (entry == null) return null;
+            try { return JsonSerializer.Serialize(entry, Indented); }
+            catch { return null; }
         }
     }
 
@@ -42,6 +53,10 @@ namespace FracturingFog.Assets
         }
 
         public bool Delete(string name) => FractalRegionLibrary.Instance.RemoveUserRegion(name);
+
+        public string? ExportJson(string name) => AssetSizing.Json(
+            FractalRegionLibrary.Instance.UserRegions
+                .FirstOrDefault(r => r.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)));
     }
 
     public sealed class ColorThemeAssetSource : IAssetSource
@@ -56,6 +71,10 @@ namespace FracturingFog.Assets
         }
 
         public bool Delete(string name) => UserColorThemeLibrary.Instance.Remove(name);
+
+        public string? ExportJson(string name) => AssetSizing.Json(
+            UserColorThemeLibrary.Instance.Themes
+                .FirstOrDefault(t => t.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)));
     }
 
     public sealed class AnimationAssetSource : IAssetSource
@@ -70,6 +89,8 @@ namespace FracturingFog.Assets
         }
 
         public bool Delete(string name) => AnimationLibrary.Instance.Remove(name);
+
+        public string? ExportJson(string name) => AssetSizing.Json(AnimationLibrary.Instance.GetByName(name));
     }
 
     public sealed class UserEquationAssetSource : IAssetSource
@@ -84,6 +105,8 @@ namespace FracturingFog.Assets
         }
 
         public bool Delete(string name) => UserEquationStore.Instance.Remove(name);
+
+        public string? ExportJson(string name) => AssetSizing.Json(UserEquationStore.Instance.GetByName(name));
     }
 
     public sealed class SandboxEquationAssetSource : IAssetSource
@@ -98,6 +121,8 @@ namespace FracturingFog.Assets
         }
 
         public bool Delete(string name) => SandboxEquationStore.Instance.Remove(name);
+
+        public string? ExportJson(string name) => AssetSizing.Json(SandboxEquationStore.Instance.GetByName(name));
     }
 
     public sealed class UserBulbAssetSource : IAssetSource
@@ -112,6 +137,8 @@ namespace FracturingFog.Assets
         }
 
         public bool Delete(string name) => UserBulbStore.Instance.Remove(name);
+
+        public string? ExportJson(string name) => AssetSizing.Json(UserBulbStore.Instance.GetByName(name));
     }
 
     /// <summary>SlideshowConfigLibrary is a static file gateway, not a live
@@ -135,6 +162,10 @@ namespace FracturingFog.Assets
             var file = SlideshowConfigLibrary.Load();
             return SlideshowConfigLibrary.Delete(file, name);
         }
+
+        public string? ExportJson(string name) => AssetSizing.Json(
+            SlideshowConfigLibrary.Load().Configs
+                .FirstOrDefault(c => c.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)));
     }
 
     public sealed class WatermarkAssetSource : IAssetSource
@@ -149,5 +180,7 @@ namespace FracturingFog.Assets
         }
 
         public bool Delete(string name) => UserWatermarkStore.Instance.Remove(name);
+
+        public string? ExportJson(string name) => AssetSizing.Json(UserWatermarkStore.Instance.GetByName(name));
     }
 }
