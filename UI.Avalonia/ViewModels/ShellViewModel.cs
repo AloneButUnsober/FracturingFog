@@ -1878,6 +1878,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             JumpToRegion(shot.RegionName);
             FloatingMenu.SetRegionSilent(shot.RegionName);
         }
+        else if (Main.SelectedFractalType != shot.FractalType)
+        {
+            // Region-free shot: switch the live view to the shot's fractal type
+            // so Preview shows the right set (see ApplySceneSample).
+            Main.SelectedFractalType = shot.FractalType;
+        }
         if (!string.IsNullOrEmpty(shot.ThemeName))
         {
             Main.SetThemeName(shot.ThemeName);
@@ -1989,6 +1995,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             JumpToRegion(shot.RegionName);
             FloatingMenu.SetRegionSilent(shot.RegionName);
+        }
+        else
+        {
+            // Region-free shot (built-in scenes): the shot names a bare fractal
+            // type. Switch the live view to it — otherwise playback stays on
+            // whatever type the toolbar last showed and the shot's camera drives
+            // the wrong set (e.g. the "Box" shot never appears until the user
+            // hand-picks Mandelbox). The full setter snaps a fractal-appropriate
+            // default framing; the shot's camera track then takes over on the bus.
+            if (Main.SelectedFractalType != shot.FractalType)
+                Main.SelectedFractalType = shot.FractalType;
         }
         if (!string.IsNullOrEmpty(shot.ThemeName))
         {

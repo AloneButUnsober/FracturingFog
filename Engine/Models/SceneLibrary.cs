@@ -208,8 +208,11 @@ namespace FracturingFog.Models
             {
                 Name = "Mandelbulb Orbit",
                 Category = "Built-in",
-                Description = "A calm 360° orbit around the Mandelbulb — the built-in " +
-                              "demonstration of the keyframed scene camera.",
+                Description = "The camera flies one calm 360° circle around a still " +
+                              "Mandelbulb (the bulb does not spin), rising up over the top " +
+                              "and pushing in at the far side so the move reads as a real " +
+                              "fly-around — the built-in demonstration of the keyframed " +
+                              "scene camera.",
                 Tags = new List<string> { "demo", "3D", "calm" },
                 Shots = new List<SceneShot>
                 {
@@ -230,8 +233,11 @@ namespace FracturingFog.Models
             {
                 Name = "Bulb → Box",
                 Category = "Built-in",
-                Description = "Mandelbulb orbit cross-fading into a Mandelbox orbit — " +
-                              "the built-in demonstration of multi-shot scene sequencing.",
+                Description = "The camera orbits a Mandelbulb, then a Mandelbox — the " +
+                              "built-in demonstration of multi-shot scene sequencing. The " +
+                              "authored 2 s cross-fade renders in an exported video; realtime " +
+                              "playback hard-cuts between the shots (two live 3D raymarchers " +
+                              "at once would breach the resource cap).",
                 Tags = new List<string> { "demo", "3D" },
                 Shots = new List<SceneShot>
                 {
@@ -262,9 +268,11 @@ namespace FracturingFog.Models
             {
                 Name = "Exposure Ramp",
                 Category = "Built-in",
-                Description = "A Mandelbulb orbit whose scene-wide exposure ramps up " +
-                              "out of near-black and settles — the built-in demonstration " +
-                              "of a global (scene-wide) post track.",
+                Description = "The same camera orbit as \"Mandelbulb Orbit\", but a scene-wide " +
+                              "exposure track breathes the whole clip: it rises out of " +
+                              "near-black, over-exposes to a bright bloom, then falls back " +
+                              "toward black — the built-in demonstration of a global " +
+                              "(scene-wide) post track riding over a shot's own look.",
                 Tags = new List<string> { "demo", "3D", "global-track" },
                 Shots = new List<SceneShot>
                 {
@@ -285,30 +293,51 @@ namespace FracturingFog.Models
                         Interpolation = CameraInterpolation.Linear,
                         Keys =
                         {
-                            new SceneGlobalKey(0.0, 0.15, CameraEase.EaseInOut),
-                            new SceneGlobalKey(6.0, 1.0),
-                            new SceneGlobalKey(16.0, 1.0),
+                            new SceneGlobalKey(0.0, 0.12, CameraEase.EaseInOut),
+                            new SceneGlobalKey(5.0, 1.6, CameraEase.EaseInOut),
+                            new SceneGlobalKey(11.0, 1.6, CameraEase.EaseInOut),
+                            new SceneGlobalKey(16.0, 0.12, CameraEase.EaseInOut),
                         },
                     },
                 },
             };
         }
 
-        /// <summary>A closed orbit: azimuth (theta) sweeps <paramref name="turns"/>
-        /// full turns over <paramref name="seconds"/> at fixed distance and
-        /// elevation. Keys at start / quarter / half / three-quarter / end so
-        /// the spline follows a clean circle.</summary>
+        /// <summary>A closed fly-around orbit: azimuth (theta) sweeps
+        /// <paramref name="turns"/> full turns over <paramref name="seconds"/>,
+        /// while the camera also rides UP over the top and back down (elevation)
+        /// and pushes in slightly (dolly) once per turn.
+        /// <para>Why not a bare azimuth sweep at fixed elevation? A pure azimuth
+        /// orbit of a centred, roughly-symmetric fractal — camera always aimed at
+        /// the origin — is visually indistinguishable from the object spinning in
+        /// place: there is no other geometry in frame and no vertical/depth cue,
+        /// so the eye reads it as an in-place tumble, not a camera move. Layering
+        /// an elevation swing (see the top, then the side) and a gentle dolly (the
+        /// bulb looms) adds the parallax that reads unmistakably as flying the
+        /// camera around a solid object. <paramref name="phi"/> is the elevation
+        /// the orbit starts + ends at; the swing only ever increases it, so it
+        /// stays a valid polar angle (never crosses the pole).</para>
+        /// Keys every eighth of the orbit so the spline follows the layered
+        /// motion cleanly.</summary>
         private static CameraTrack OrbitTrack(double distance, int turns, double seconds, double phi)
         {
             const double twoPi = 2.0 * global::System.Math.PI;
             var track = new CameraTrack { Interpolation = CameraInterpolation.CatmullRom };
-            const int steps = 4;
+
+            // Elevation swing (radians) and dolly depth (fraction of distance)
+            // layered on the azimuth sweep. Both ride a 1-cos curve: 0 at the
+            // ends (so the loop is seamless) and maximal at the half-orbit.
+            const double elevSwing = 0.7; // ~40° up-and-over
+            const double dolly = 0.18;    // push in ~18% at the far side
+            const int steps = 8;
             for (int i = 0; i <= steps; i++)
             {
                 double frac = (double)i / steps;
-                track.Add(new CameraKey(
-                    frac * seconds,
-                    new CameraState(distance, frac * turns * twoPi, phi)));
+                double ride = 0.5 * (1.0 - global::System.Math.Cos(frac * twoPi)); // 0→1→0
+                double theta = frac * turns * twoPi;
+                double phiI = phi + elevSwing * ride;
+                double distI = distance * (1.0 - dolly * ride);
+                track.Add(new CameraKey(frac * seconds, new CameraState(distI, theta, phiI)));
             }
             return track;
         }
