@@ -40,6 +40,7 @@ public sealed partial class MainWindow : Window
     private WatermarkEditorView? _watermarkEditorWin;
     private AnimationEditorView? _animationEditorWin;
     private RegionEditorView? _regionEditorWin;
+    private AssetManagerView? _assetManagerWin;
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
@@ -262,6 +263,7 @@ public sealed partial class MainWindow : Window
         AddItem(menu, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
         AddItem(menu, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
         AddItem(menu, "ColorGen Editor…",   () => shell.ShowColorGenEditorCommand.Execute().Subscribe());
+        AddItem(menu, "Asset Manager…",     () => shell.ShowAssetManagerCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
@@ -562,6 +564,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsRegionEditorVisible):
             case nameof(ShellViewModel.RegionEditor):
                 SyncRegionEditor();
+                break;
+            case nameof(ShellViewModel.IsAssetManagerVisible):
+            case nameof(ShellViewModel.AssetManager):
+                SyncAssetManager();
                 break;
             case nameof(ShellViewModel.IsHelpVisible):
             case nameof(ShellViewModel.Help):
@@ -1103,6 +1109,33 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncAssetManager()
+    {
+        if (_shell == null) return;
+        if (_shell.IsAssetManagerVisible && _shell.AssetManager != null)
+        {
+            if (_assetManagerWin == null)
+            {
+                _assetManagerWin = new AssetManagerView { DataContext = _shell.AssetManager };
+                _assetManagerWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsAssetManagerVisible = false;
+                };
+            }
+            else if (_assetManagerWin.DataContext != _shell.AssetManager)
+            {
+                _assetManagerWin.DataContext = _shell.AssetManager;
+            }
+            if (!_assetManagerWin.IsVisible) _assetManagerWin.Show(this);
+        }
+        else
+        {
+            _assetManagerWin?.Hide();
+        }
+    }
+
     private void SyncHelp()
     {
         if (_shell == null) return;
@@ -1351,6 +1384,7 @@ public sealed partial class MainWindow : Window
         _masterConfigWin?.Close();
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
+        _assetManagerWin?.Close();
 
         DetachShell();
     }
