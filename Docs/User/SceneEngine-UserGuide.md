@@ -32,7 +32,7 @@ You author and preview a Scene inside the app in real time, then export it to an
 MP4 (or a folder of PNG frames) at whatever quality your machine can manage,
 taking as long as it needs.
 
-![Placeholder: the Scene Editor with a two-shot timeline and a camera keyframe row.](../Images/_placeholders/scene-editor.png)
+![The Scene Editor with a two-shot timeline and a camera keyframe row.](../Images/dialogs/scene-editor.png)
 
 > [!NOTE]
 > Scenes reference your existing assets *by name* — they do not copy them. A
