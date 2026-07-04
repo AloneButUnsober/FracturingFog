@@ -561,11 +561,25 @@ MessageRequested host-fulfilled pattern. ffmpeg missing → the recoverable PNG
 sequence is kept and the user is told. The GUI export loop is now complete
 (previously headless `--batch --mode scene` only).
 
-**Still open (future polish):** the Bezier easing editor (Animation-roadmap
-`D.1` — the `CameraInterpolation.Bezier` maths already ship; only the per-key
-handle UI is missing), rack-focus preset, exposure / tonemap / IBL-rotation
-global tracks, audio-reactive scenes (`D.4`). None block the core Scene
-authoring → preview → export loop, which is complete end to end (S0–S8 core).
+**Per-key camera easing (D.1) — Shipped.** Each `CameraKey` now carries a
+`CameraEase` (None / EaseIn / EaseOut / EaseInOut) that reparametrises the
+normalised parameter of the segment starting at that key
+(`CameraKey.ApplyEase`), applied in `CameraTrack.Evaluate` before the spatial
+interpolation basis reads it — so easing composes with Linear / CatmullRom /
+Bezier path shapes and keys are always passed through exactly. The Scene
+Editor's camera-key rows gained an "ease" combo; the enum round-trips as a
+string through `SceneLibrary.BuildJsonOptions`. This is the pragmatic,
+per-key-granular slice of the D.1 "easing editor" — a full graphical
+Bezier-handle curve widget is a heavier follow-up, but authors now control
+acceleration into/out of every pose. 6 tests in `CameraTrackTests` (endpoint
+fixing, midpoint shaping, `Evaluate` honouring the starting key's ease with the
+default unchanged).
+
+**Still open (future polish):** a graphical Bezier-handle curve editor
+(beyond the per-key ease enum above), rack-focus preset, exposure / tonemap /
+IBL-rotation global tracks, audio-reactive scenes (`D.4`). None block the core
+Scene authoring → preview → export loop, which is complete end to end (S0–S8
+core).
 
 ---
 

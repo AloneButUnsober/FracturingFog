@@ -56,6 +56,56 @@ public sealed class CameraTrackTests
         Assert.Equal(4.0, t.Evaluate(50).Distance, precision: 9); // above last
     }
 
+    // ── Per-key easing (D.1) ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(CameraEase.None)]
+    [InlineData(CameraEase.EaseIn)]
+    [InlineData(CameraEase.EaseOut)]
+    [InlineData(CameraEase.EaseInOut)]
+    public void ApplyEase_FixesEndpoints(CameraEase ease)
+    {
+        Assert.Equal(0.0, CameraKey.ApplyEase(ease, 0.0), precision: 9);
+        Assert.Equal(1.0, CameraKey.ApplyEase(ease, 1.0), precision: 9);
+        // Out-of-range clamps to the endpoints.
+        Assert.Equal(0.0, CameraKey.ApplyEase(ease, -0.5), precision: 9);
+        Assert.Equal(1.0, CameraKey.ApplyEase(ease, 1.5), precision: 9);
+    }
+
+    [Fact]
+    public void ApplyEase_ShapesTheMidpoint()
+    {
+        // EaseIn (u²) starts slow → below the linear 0.5 at the midpoint;
+        // EaseOut is its mirror → above; EaseInOut passes through 0.5.
+        Assert.Equal(0.25, CameraKey.ApplyEase(CameraEase.EaseIn, 0.5), precision: 9);
+        Assert.Equal(0.75, CameraKey.ApplyEase(CameraEase.EaseOut, 0.5), precision: 9);
+        Assert.Equal(0.5,  CameraKey.ApplyEase(CameraEase.EaseInOut, 0.5), precision: 9);
+        Assert.Equal(0.5,  CameraKey.ApplyEase(CameraEase.None, 0.5), precision: 9);
+    }
+
+    [Fact]
+    public void Evaluate_HonoursTheStartingKeysEase()
+    {
+        // Linear spatial path 2→4 over [0,10]; the start key eases-in, so the
+        // pose at the time-midpoint lags the un-eased linear value (3.0).
+        var eased = Track(CameraInterpolation.Linear,
+            new CameraKey(0.0, 2.0, 0.0, 0.0) { Ease = CameraEase.EaseIn },
+            new CameraKey(10.0, 4.0, 0.0, 0.0));
+        // u=0.5 → eased 0.25 → distance = 2 + 0.25*(4-2) = 2.5.
+        Assert.Equal(2.5, eased.Evaluate(5.0).Distance, precision: 9);
+
+        // The default (None) is the plain linear midpoint 3.0 — unchanged from
+        // pre-D.1 behaviour.
+        var plain = Track(CameraInterpolation.Linear,
+            new CameraKey(0.0, 2.0, 0.0, 0.0),
+            new CameraKey(10.0, 4.0, 0.0, 0.0));
+        Assert.Equal(3.0, plain.Evaluate(5.0).Distance, precision: 9);
+
+        // Keys are always passed through exactly regardless of ease.
+        Assert.Equal(2.0, eased.Evaluate(0.0).Distance, precision: 9);
+        Assert.Equal(4.0, eased.Evaluate(10.0).Distance, precision: 9);
+    }
+
     [Fact]
     public void Duration_IsLastKeyTime()
     {

@@ -249,7 +249,7 @@
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate x:DataType="vm:CameraKeyRowViewModel">
                                                                 <Border Classes="keyrow">
-                                                                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+                                                                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
                                                                         <TextBlock Classes="label" Grid.Column="0" Text="t" FontSize="10" Margin="0,0,4,0" />
                                                                         <NumericUpDown Grid.Column="1" Value="{Binding Time}"
                                                                                        Minimum="0" Increment="0.25" FormatString="0.###" MinWidth="90" Margin="0,0,8,0" />
@@ -262,7 +262,11 @@
                                                                         <TextBlock Classes="label" Grid.Column="6" Text="φ" FontSize="10" Margin="0,0,4,0" />
                                                                         <NumericUpDown Grid.Column="7" Value="{Binding Phi}"
                                                                                        Increment="0.05" FormatString="0.###" MinWidth="90" Margin="0,0,8,0" />
-                                                                        <Button Grid.Column="9" Classes="mini" Content="✕"
+                                                                        <TextBlock Classes="label" Grid.Column="8" Text="ease" FontSize="10" Margin="0,0,4,0" />
+                                                                        <ComboBox Grid.Column="9" ItemsSource="{Binding EaseKinds}"
+                                                                                  SelectedItem="{Binding Ease}" MinWidth="104" Margin="0,0,8,0"
+                                                                                  ToolTip.Tip="Time easing across the segment starting at this key" />
+                                                                        <Button Grid.Column="11" Classes="mini" Content="✕"
                                                                                 Command="{Binding RemoveCommand}" ToolTip.Tip="Remove key" />
                                                                     </Grid>
                                                                 </Border>
