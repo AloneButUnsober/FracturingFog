@@ -1690,7 +1690,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // the menu combo so the toolbar reflects it.
             vm.RegionRequested        += (_, name) => { JumpToRegion(name); FloatingMenu.SetRegionSilent(name); };
             vm.EditorThemeSelected    += (_, name) => Main.SetThemeName(name);
-            vm.ThemeSavedToLibrary    += (_, _)    => RefreshThemeListsFromService();
+            vm.ThemeSavedToLibrary    += (_, _)    => { RefreshThemeListsFromService(); RefreshAssetManagerIfVisible(); };
             vm.HelpRequested          += (_, _)    => ShowHelp();
             // Preview pipe-through: ColorThemeEditor produces a ColorThemeDef,
             // the host translates it into an IColorMap on its IColorThemeService
@@ -1779,12 +1779,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
                 FloatingMenu.SetWatermarkSilent(name);
                 Main.SelectedCustomWatermarkName = name;
+                RefreshAssetManagerIfVisible();
             };
             vm.WatermarkDeletedFromLibrary += (_, name) =>
             {
                 FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
                 if (string.Equals(Main.SelectedCustomWatermarkName, name, StringComparison.OrdinalIgnoreCase))
                     Main.SelectedCustomWatermarkName = null;
+                RefreshAssetManagerIfVisible();
             };
             vm.HelpRequested += (_, _) => ShowHelp();
             vm.CloseRequested += (_, _) => IsWatermarkEditorVisible = false;
@@ -1811,6 +1813,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 // dialog picks up the new entry on its next open via
                 // EnumerateAnimationNames(). Hook stays here for the future
                 // SlideshowSettings animation filter UI.
+                RefreshAssetManagerIfVisible();
             };
             vm.CloseRequested += (_, _) => IsAnimationEditorVisible = false;
             vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
@@ -1859,6 +1862,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             FloatingMenu.RefreshRegions();
             FloatingMenu.SetRegionSilent(savedName);
             Main.SetRegionName(savedName);
+            RefreshAssetManagerIfVisible();
         };
         vm.CloseRequested   += (_, _)    => IsRegionEditorVisible = false;
         vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
@@ -1935,6 +1939,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                     new AssetHostEditorEventArgs(kind, name));
                 break;
         }
+    }
+
+    /// <summary>Live refresh (Asset Manager deferred item): when an editor saves
+    /// or deletes while the manager is open, re-enumerate the middle list so the
+    /// change shows without a manual Refresh. No-op when the manager is hidden —
+    /// the next Show re-enumerates anyway.</summary>
+    private void RefreshAssetManagerIfVisible()
+    {
+        if (IsAssetManagerVisible) AssetManager?.RefreshAssets();
     }
 
     /// <summary>Raised for asset types whose editors the host owns (source

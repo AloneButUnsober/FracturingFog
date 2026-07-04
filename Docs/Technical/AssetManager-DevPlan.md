@@ -139,5 +139,18 @@ existing libraries.
   `AssetHostEditorRequested` to `AvaloniaShellBootstrap` (host-owned windows).
 - **A3** — multi-select → in-memory zip of `<Type>/<name>.json`; the host owns
   the save picker + write via `AssetBundleExportRequested`.
-- **Deferred / not done:** thumbnails; live `*SavedToLibrary` auto-refresh
-  (the manager re-enumerates on each open and via the Refresh button instead).
+- **Live refresh — DONE.** The four shell-owned editors (Region / Colour theme /
+  Animation / Watermark) call `ShellViewModel.RefreshAssetManagerIfVisible()`
+  from their `*SavedToLibrary` / delete handlers, so a save/delete while the
+  manager is open re-enumerates the middle list immediately. The host-owned
+  source editors + slideshow still rely on open-time re-enumeration + the
+  Refresh button (no shell save event to hook).
+- **Thumbnails — still deferred (rendering feature, not a quick follow-up).**
+  Every asset type's real preview needs either a fractal render through the host
+  pipeline (regions/animations/equations/bulbs — "a render per asset", the cost
+  the plan flagged) or has no meaningful image (equation/sandbox sources are
+  text). Colour themes are the only cheap-ish case and even those route their
+  preview through the render host today, not a self-contained gradient raster.
+  Recommended path when picked up: async host-render into `ThumbnailBytes`
+  populated after enumeration (so it never blocks the list), with theme swatches
+  as a rasterized-gradient special case; add an image column to the middle list.
