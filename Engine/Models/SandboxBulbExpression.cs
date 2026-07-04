@@ -76,6 +76,32 @@ namespace FracturingFog.Models
     /// interpreter + AST.</summary>
     public enum SbxKind : byte { Real, Vec, Quat }
 
+    // Wave 4.4 — packed binary opcode resolved at parse time. Interpreter
+    // hot path switches on this enum (jump table) rather than `string Op`
+    // (chained string compares per call). String op retained on the AST
+    // node for emitter + analytic-DE pattern matchers.
+    internal enum SbxBinOp : byte
+    {
+        Add, Sub, Mul, Div, Pow,
+        Lt, Gt, Le, Ge, Eq, Ne,
+        And, Or,
+    }
+
+    // Wave 4.4 — packed function id resolved at parse time. Same rationale
+    // as SbxBinOp.
+    internal enum SbxFuncId : byte
+    {
+        // 3-arg
+        Vec, Rot, SphereFold, SMin, Clamp,
+        // 4-arg
+        QVec,
+        // 2-arg
+        QMul, QPow, Dot, Cross, Triplex, BoxFold, Mod, Pow2, Min, Max,
+        // 1-arg
+        QConj, Length, Normalize, AbsX, AbsY, AbsZ, Floor, Sign,
+        Sin, Cos, Tan, Sinh, Cosh, Tanh, Exp, Log, Sqrt, Abs,
+    }
+
     /// <summary>Tagged value: scalar real, 3-vector, or quaternion. W is
     /// only read when Kind = Quat. Name retained for back-compat — Vec3-only
     /// callers see Real+Vec semantics identical to the pre-Quat shape.</summary>
@@ -235,29 +261,53 @@ namespace FracturingFog.Models
     public sealed class Sbx3Binary : Sbx3Node
     {
         public readonly string Op;
+        internal readonly SbxBinOp OpKind;
         public readonly Sbx3Node A, B;
-        public Sbx3Binary(string op, Sbx3Node a, Sbx3Node b) { Op = op; A = a; B = b; }
+        public Sbx3Binary(string op, Sbx3Node a, Sbx3Node b)
+        { Op = op; OpKind = ResolveOp(op); A = a; B = b; }
+
+        private static SbxBinOp ResolveOp(string op) => op switch
+        {
+            "+"  => SbxBinOp.Add,
+            "-"  => SbxBinOp.Sub,
+            "*"  => SbxBinOp.Mul,
+            "/"  => SbxBinOp.Div,
+            "^"  => SbxBinOp.Pow,
+            "<"  => SbxBinOp.Lt,
+            ">"  => SbxBinOp.Gt,
+            "<=" => SbxBinOp.Le,
+            ">=" => SbxBinOp.Ge,
+            "==" => SbxBinOp.Eq,
+            "!=" => SbxBinOp.Ne,
+            "&&" => SbxBinOp.And,
+            "||" => SbxBinOp.Or,
+            _    => throw new InvalidOperationException("Unknown op " + op),
+        };
+
         public override SbxVal3 Eval(SbxVal3[] env)
         {
-            if (Op == "&&") return SbxVal3.R(A.Eval(env).AsBool() && B.Eval(env).AsBool() ? 1.0 : 0.0);
-            if (Op == "||") return SbxVal3.R(A.Eval(env).AsBool() || B.Eval(env).AsBool() ? 1.0 : 0.0);
+            // Short-circuit ops handled before eager arg eval.
+            if (OpKind == SbxBinOp.And)
+                return SbxVal3.R(A.Eval(env).AsBool() && B.Eval(env).AsBool() ? 1.0 : 0.0);
+            if (OpKind == SbxBinOp.Or)
+                return SbxVal3.R(A.Eval(env).AsBool() || B.Eval(env).AsBool() ? 1.0 : 0.0);
 
             var a = A.Eval(env);
             var b = B.Eval(env);
-            return Op switch
+            return OpKind switch
             {
-                "+"  => SbxVal3.Add(a, b),
-                "-"  => SbxVal3.Sub(a, b),
-                "*"  => SbxVal3.Mul(a, b),
-                "/"  => SbxVal3.Div(a, b),
-                "^"  => SbxVal3.Pow(a, b),
-                "<"  => SbxVal3.R(a.AsReal() <  b.AsReal() ? 1.0 : 0.0),
-                ">"  => SbxVal3.R(a.AsReal() >  b.AsReal() ? 1.0 : 0.0),
-                "<=" => SbxVal3.R(a.AsReal() <= b.AsReal() ? 1.0 : 0.0),
-                ">=" => SbxVal3.R(a.AsReal() >= b.AsReal() ? 1.0 : 0.0),
-                "==" => SbxVal3.R(a.AsReal() == b.AsReal() ? 1.0 : 0.0),
-                "!=" => SbxVal3.R(a.AsReal() != b.AsReal() ? 1.0 : 0.0),
-                _    => throw new InvalidOperationException("Unknown op " + Op)
+                SbxBinOp.Add => SbxVal3.Add(a, b),
+                SbxBinOp.Sub => SbxVal3.Sub(a, b),
+                SbxBinOp.Mul => SbxVal3.Mul(a, b),
+                SbxBinOp.Div => SbxVal3.Div(a, b),
+                SbxBinOp.Pow => SbxVal3.Pow(a, b),
+                SbxBinOp.Lt  => SbxVal3.R(a.AsReal() <  b.AsReal() ? 1.0 : 0.0),
+                SbxBinOp.Gt  => SbxVal3.R(a.AsReal() >  b.AsReal() ? 1.0 : 0.0),
+                SbxBinOp.Le  => SbxVal3.R(a.AsReal() <= b.AsReal() ? 1.0 : 0.0),
+                SbxBinOp.Ge  => SbxVal3.R(a.AsReal() >= b.AsReal() ? 1.0 : 0.0),
+                SbxBinOp.Eq  => SbxVal3.R(a.AsReal() == b.AsReal() ? 1.0 : 0.0),
+                SbxBinOp.Ne  => SbxVal3.R(a.AsReal() != b.AsReal() ? 1.0 : 0.0),
+                _            => throw new InvalidOperationException("Unknown op " + Op),
             };
         }
     }
@@ -293,21 +343,62 @@ namespace FracturingFog.Models
     public sealed class Sbx3Call : Sbx3Node
     {
         public readonly string Name;
+        internal readonly SbxFuncId Func;
         public readonly Sbx3Node[] Args;
-        public Sbx3Call(string name, Sbx3Node[] args) { Name = name; Args = args; }
+        public Sbx3Call(string name, Sbx3Node[] args)
+        { Name = name; Func = ResolveFunc(name); Args = args; }
+
+        internal static SbxFuncId ResolveFunc(string name) => name switch
+        {
+            "vec"        => SbxFuncId.Vec,
+            "rot"        => SbxFuncId.Rot,
+            "spherefold" => SbxFuncId.SphereFold,
+            "smin"       => SbxFuncId.SMin,
+            "clamp"      => SbxFuncId.Clamp,
+            "qvec"       => SbxFuncId.QVec,
+            "qmul"       => SbxFuncId.QMul,
+            "qpow"       => SbxFuncId.QPow,
+            "dot"        => SbxFuncId.Dot,
+            "cross"      => SbxFuncId.Cross,
+            "triplex"    => SbxFuncId.Triplex,
+            "boxfold"    => SbxFuncId.BoxFold,
+            "mod"        => SbxFuncId.Mod,
+            "pow"        => SbxFuncId.Pow2,
+            "min"        => SbxFuncId.Min,
+            "max"        => SbxFuncId.Max,
+            "qconj"      => SbxFuncId.QConj,
+            "length"     => SbxFuncId.Length,
+            "normalize"  => SbxFuncId.Normalize,
+            "absx"       => SbxFuncId.AbsX,
+            "absy"       => SbxFuncId.AbsY,
+            "absz"       => SbxFuncId.AbsZ,
+            "floor"      => SbxFuncId.Floor,
+            "sign"       => SbxFuncId.Sign,
+            "sin"        => SbxFuncId.Sin,
+            "cos"        => SbxFuncId.Cos,
+            "tan"        => SbxFuncId.Tan,
+            "sinh"       => SbxFuncId.Sinh,
+            "cosh"       => SbxFuncId.Cosh,
+            "tanh"       => SbxFuncId.Tanh,
+            "exp"        => SbxFuncId.Exp,
+            "log"        => SbxFuncId.Log,
+            "sqrt"       => SbxFuncId.Sqrt,
+            "abs"        => SbxFuncId.Abs,
+            _ => throw new InvalidOperationException("Unknown function " + name),
+        };
 
         public override SbxVal3 Eval(SbxVal3[] env)
         {
-            switch (Name)
+            switch (Func)
             {
-                case "vec":
+                case SbxFuncId.Vec:
                 {
                     var a = Args[0].Eval(env);
                     var b = Args[1].Eval(env);
                     var c = Args[2].Eval(env);
                     return SbxVal3.V(a.AsReal(), b.AsReal(), c.AsReal());
                 }
-                case "qvec":
+                case SbxFuncId.QVec:
                 {
                     var qx = Args[0].Eval(env).AsReal();
                     var qy = Args[1].Eval(env).AsReal();
@@ -315,65 +406,65 @@ namespace FracturingFog.Models
                     var qw = Args[3].Eval(env).AsReal();
                     return SbxVal3.Q(qw, qx, qy, qz);
                 }
-                case "qmul":   return SbxVal3.Q(Args[0].Eval(env).AsQuat() * Args[1].Eval(env).AsQuat());
-                case "qconj":  return SbxVal3.Q(Args[0].Eval(env).AsQuat().Conjugate());
-                case "qpow":
+                case SbxFuncId.QMul:   return SbxVal3.Q(Args[0].Eval(env).AsQuat() * Args[1].Eval(env).AsQuat());
+                case SbxFuncId.QConj:  return SbxVal3.Q(Args[0].Eval(env).AsQuat().Conjugate());
+                case SbxFuncId.QPow:
                 {
                     var qa = Args[0].Eval(env);
                     var qb = Args[1].Eval(env);
                     return SbxVal3.Pow(qa.IsQuat ? qa : SbxVal3.Q(qa.AsQuat()), qb);
                 }
-                case "length":   return SbxVal3.R(Args[0].Eval(env).AsVec().Length);
-                case "dot":      return SbxVal3.R(Vec3.Dot(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec()));
-                case "cross":    return SbxVal3.V(Vec3.Cross(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec()));
-                case "normalize":return SbxVal3.V(Args[0].Eval(env).AsVec().Normalized());
-                case "triplex":  return SbxVal3.V(Vec3.Pow(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
-                case "rot":      return SbxVal3.V(Vec3.Rot(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec(), Args[2].Eval(env).AsReal()));
-                case "boxfold":  return SbxVal3.V(Vec3.BoxFold(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
-                case "spherefold":
+                case SbxFuncId.Length:   return SbxVal3.R(Args[0].Eval(env).AsVec().Length);
+                case SbxFuncId.Dot:      return SbxVal3.R(Vec3.Dot(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec()));
+                case SbxFuncId.Cross:    return SbxVal3.V(Vec3.Cross(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec()));
+                case SbxFuncId.Normalize:return SbxVal3.V(Args[0].Eval(env).AsVec().Normalized());
+                case SbxFuncId.Triplex:  return SbxVal3.V(Vec3.Pow(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
+                case SbxFuncId.Rot:      return SbxVal3.V(Vec3.Rot(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec(), Args[2].Eval(env).AsReal()));
+                case SbxFuncId.BoxFold:  return SbxVal3.V(Vec3.BoxFold(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
+                case SbxFuncId.SphereFold:
                 {
                     var v = Args[0].Eval(env).AsVec();
                     return SbxVal3.V(Vec3.SphereFold(v, Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
                 }
-                case "absx":     return SbxVal3.V(Vec3.AbsX(Args[0].Eval(env).AsVec()));
-                case "absy":     return SbxVal3.V(Vec3.AbsY(Args[0].Eval(env).AsVec()));
-                case "absz":     return SbxVal3.V(Vec3.AbsZ(Args[0].Eval(env).AsVec()));
-                case "mod":      return SbxVal3.V(Vec3.Mod(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
-                case "smin":
+                case SbxFuncId.AbsX:     return SbxVal3.V(Vec3.AbsX(Args[0].Eval(env).AsVec()));
+                case SbxFuncId.AbsY:     return SbxVal3.V(Vec3.AbsY(Args[0].Eval(env).AsVec()));
+                case SbxFuncId.AbsZ:     return SbxVal3.V(Vec3.AbsZ(Args[0].Eval(env).AsVec()));
+                case SbxFuncId.Mod:      return SbxVal3.V(Vec3.Mod(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
+                case SbxFuncId.SMin:
                     return SbxVal3.R(Vec3.SMin(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
-                case "pow":
+                case SbxFuncId.Pow2:
                 {
                     var pa = Args[0].Eval(env);
                     var pb = Args[1].Eval(env);
                     return SbxVal3.Pow(pa, pb);
                 }
-                case "floor":    return SbxVal3.R(Math.Floor(Args[0].Eval(env).AsReal()));
-                case "sign":     return SbxVal3.R(Math.Sign(Args[0].Eval(env).AsReal()));
-                case "min":      return SbxVal3.R(Math.Min(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
-                case "max":      return SbxVal3.R(Math.Max(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
-                case "clamp":    return SbxVal3.R(Math.Clamp(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
+                case SbxFuncId.Floor:    return SbxVal3.R(Math.Floor(Args[0].Eval(env).AsReal()));
+                case SbxFuncId.Sign:     return SbxVal3.R(Math.Sign(Args[0].Eval(env).AsReal()));
+                case SbxFuncId.Min:      return SbxVal3.R(Math.Min(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
+                case SbxFuncId.Max:      return SbxVal3.R(Math.Max(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
+                case SbxFuncId.Clamp:    return SbxVal3.R(Math.Clamp(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
             }
 
             // Single-arg scalar/componentwise math.
             var x = Args[0].Eval(env);
-            return Name switch
+            return Func switch
             {
                 // Transcendentals: defined elementwise on Real/Vec only.
                 // Per-component on Quat is geometrically meaningless (treats
                 // the quaternion as a 4-tuple, not as a rotation/algebra
                 // element), so reject explicitly.
-                "sin"  => ApplyScalar(x, Math.Sin,  "sin"),
-                "cos"  => ApplyScalar(x, Math.Cos,  "cos"),
-                "tan"  => ApplyScalar(x, Math.Tan,  "tan"),
-                "sinh" => ApplyScalar(x, Math.Sinh, "sinh"),
-                "cosh" => ApplyScalar(x, Math.Cosh, "cosh"),
-                "tanh" => ApplyScalar(x, Math.Tanh, "tanh"),
-                "exp"  => ApplyScalar(x, Math.Exp,  "exp"),
-                "log"  => ApplyScalar(x, Math.Log,  "log"),
-                "sqrt" => ApplyScalar(x, Math.Sqrt, "sqrt"),
+                SbxFuncId.Sin  => ApplyScalar(x, Math.Sin,  "sin"),
+                SbxFuncId.Cos  => ApplyScalar(x, Math.Cos,  "cos"),
+                SbxFuncId.Tan  => ApplyScalar(x, Math.Tan,  "tan"),
+                SbxFuncId.Sinh => ApplyScalar(x, Math.Sinh, "sinh"),
+                SbxFuncId.Cosh => ApplyScalar(x, Math.Cosh, "cosh"),
+                SbxFuncId.Tanh => ApplyScalar(x, Math.Tanh, "tanh"),
+                SbxFuncId.Exp  => ApplyScalar(x, Math.Exp,  "exp"),
+                SbxFuncId.Log  => ApplyScalar(x, Math.Log,  "log"),
+                SbxFuncId.Sqrt => ApplyScalar(x, Math.Sqrt, "sqrt"),
                 // abs is well-defined componentwise on Quat (per-axis fold).
-                "abs"  => ApplyAll(x, Math.Abs),
-                _ => throw new InvalidOperationException("Unknown function " + Name)
+                SbxFuncId.Abs  => ApplyAll(x, Math.Abs),
+                _ => throw new InvalidOperationException("Unknown function " + Name),
             };
         }
 

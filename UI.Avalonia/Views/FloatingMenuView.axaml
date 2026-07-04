@@ -84,14 +84,15 @@
                 <Border Classes="group">
                     <StackPanel Spacing="6">
                         <TextBlock Classes="section" Text="View" />
-                        <UniformGrid Columns="4" Margin="0,4,0,0">
+                        <UniformGrid Columns="5" Margin="0,4,0,0">
                             <Button Classes="action neutral" Content="Reset"  Command="{Binding ResetCommand}"      ToolTip.Tip="Reset view to default center and zoom" Margin="0,0,4,4" />
                             <Button Classes="action neutral" Content="{Binding SpanButtonText}" Command="{Binding SpanCommand}" ToolTip.Tip="Span across all monitors" Margin="0,0,4,4" />
+                            <Button Classes="action neutral" Content="Wall"   Command="{Binding WallpaperCommand}"  ToolTip.Tip="Render a wallpaper-sized image at the virtual-screen union of every monitor, regardless of window position or size. Use this on Linux/GNOME where Span mode cannot overlay the top bar + dock." Margin="0,0,4,4" />
                             <Button Classes="action neutral" Content="Image"  Command="{Binding ScreenshotCommand}" ToolTip.Tip="High-resolution screenshot" Margin="0,0,4,4" />
                             <Button Classes="action neutral" Content="Poster" Command="{Binding PosterCommand}"     ToolTip.Tip="Print-ready poster image" Margin="0,0,0,4" />
                         </UniformGrid>
                         <UniformGrid Columns="3">
-                            <Button Classes="action slideshow" Content="Slideshow"     Command="{Binding SlideshowCommand}"     ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />
+                            <Button Classes="action slideshow" Content="{Binding SlideshowButtonText}" Command="{Binding SlideshowCommand}"     ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />
                             <Button Classes="action video"     Content="{Binding VideoButtonText}" Command="{Binding VideoCommand}" ToolTip.Tip="Animated zoom" Margin="0,0,4,0" />
                             <Button Classes="action danger"    Content="Close Program" Command="{Binding CloseProgramCommand}"  ToolTip.Tip="Exit Fracturing Fog" />
                         </UniformGrid>
@@ -156,6 +157,23 @@
                             <Button Classes="action go" Content="Flip Y" Command="{Binding FlipCommand}"       Margin="0,0,4,0" />
                             <Button Classes="action go" Content="Copy"   Command="{Binding CopyCoordsCommand}" ToolTip.Tip="Copy CX/CY/Zoom/Iter to clipboard" />
                         </UniformGrid>
+                        <StackPanel Orientation="Horizontal" Spacing="14" Margin="80,8,0,0">
+                            <CheckBox Content="Bypass BLA+SA"
+                                      IsChecked="{Binding BypassAcceleration}"
+                                      Foreground="#FFCC00"
+                                      FontWeight="Bold"
+                                      ToolTip.Tip="Diagnostic: bypass BLA + SA on HP path (Ctrl+Shift+A)" />
+                            <CheckBox Content="Bypass SA"
+                                      IsChecked="{Binding BypassSeriesApproximation}"
+                                      Foreground="#FFCC00"
+                                      FontWeight="Bold"
+                                      ToolTip.Tip="Diagnostic: bypass SA prelude only (Ctrl+Shift+S)" />
+                            <CheckBox Content="Bypass DD-BLA"
+                                      IsChecked="{Binding BypassDdBla}"
+                                      Foreground="#FFCC00"
+                                      FontWeight="Bold"
+                                      ToolTip.Tip="Diagnostic: force legacy single-precision BLA (pre-Wave-2.10). Ctrl+Shift+D" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -180,6 +198,12 @@
                                 HorizontalAlignment="Stretch"
                                 Margin="0,4,0,0"
                                 ToolTip.Tip="Open the Color Theme Editor" />
+                        <Button Classes="action neutral"
+                                Content="Save Lighting → Theme"
+                                Command="{Binding SaveLightingToThemeCommand}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,4,0,0"
+                                ToolTip.Tip="Snapshot the active Lighting &amp; FX block as the selected user theme's bundled preset. Only works for user themes (built-in themes are read-only)." />
                     </StackPanel>
                 </Border>
 
@@ -187,7 +211,7 @@
                 <Border Classes="group">
                     <StackPanel Spacing="4">
                         <TextBlock Classes="section" Text="Post-FX" />
-                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding BrightnessLabel}" Margin="0,0,6,4" />
                             <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" 
                                        TickFrequency="25" Margin="0,0,6,4"
@@ -206,6 +230,10 @@
                                        IsEnabled="{Binding AdaptiveEnabled}"
                                        ToolTip.Tip="Adaptive contrast (histogram equalization, 0 = off, 100 = full)" />
                             <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding AdaptiveLocked}" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Lock adaptive — ignore theme defaults" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0"
+                                       ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
+                            <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
                         </Grid>
                         <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="0,6,0,0">
                             <Button Grid.Column="0"
@@ -283,6 +311,12 @@
                                 HorizontalAlignment="Stretch"
                                 Margin="0,4,0,0"
                                 ToolTip.Tip="Open the Watermark Editor" />
+                        <Button Classes="action help"
+                                Content="Edit Animation…"
+                                Command="{Binding EditAnimationCommand}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,4,0,0"
+                                ToolTip.Tip="Open the Animation Editor (Roadmap Phase 3c)" />
                     </StackPanel>
                 </Border>
 
@@ -293,6 +327,14 @@
                         HorizontalAlignment="Stretch"
                         Margin="0,0,0,8"
                         ToolTip.Tip="Configure slideshow timing + audio-reactive options" />
+
+                <!-- App Settings shortcut -->
+                <Button Classes="action slideshow"
+                        Content="App Settings…"
+                        Command="{Binding AppSettingsCommand}"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,0,0,8"
+                        ToolTip.Tip="Application settings (animated-param ceiling)" />
 
                 <!-- FFmpeg install / update launcher -->
                 <Button Classes="action video"

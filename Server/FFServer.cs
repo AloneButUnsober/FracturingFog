@@ -15,6 +15,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Server.Cluster;
 using FracturingFog.Server.Guard;
 using FracturingFog.Server.Logging;
 using FracturingFog.Server.Protocol;
@@ -29,6 +30,12 @@ public sealed class FFServer
     public Metrics Metrics { get; } = new();
     public RequestLimits Limits { get; init; } = RequestLimits.Default;
 
+    /// <summary>Optional cluster-mode hook. When non-null, the
+    /// FFServer routes worker.* and cluster.* methods through this
+    /// coordinator (role-gated). Null = legacy single-server behaviour
+    /// — render.image / render.video only.</summary>
+    public IClusterCoordinator? Coordinator { get; init; }
+
     /// <summary>Maximum quiet time between requests on an authenticated
     /// session before the server closes the socket.</summary>
     public TimeSpan IdleReadTimeout { get; init; } = TimeSpan.FromMinutes(5);
@@ -40,6 +47,7 @@ public sealed class FFServer
     private readonly X509RevocationMode _revocationMode;
     private readonly SemaphoreSlim _queueGate;
     private readonly EndpointRateLimiter _rateLimiter;
+    private readonly RoleAwareRateLimiter _roleLimiter;
 
     /// <summary>Outer cap on accepted-but-still-open TCP connections,
     /// including ones still in the TLS handshake. Bounds memory + thread
@@ -59,6 +67,24 @@ public sealed class FFServer
         _queueGate = new SemaphoreSlim(Math.Max(1, config.QueueDepth));
         _connectionGate = new SemaphoreSlim(Math.Max(1, config.MaxConcurrentConnections));
         _rateLimiter = new EndpointRateLimiter(config.RateLimitPerMinute, config.RateLimitBurst);
+        _roleLimiter = new RoleAwareRateLimiter(
+            clientPerMinute:         config.ClientCallPerMinute,
+            clientBurst:             config.ClientCallBurst,
+            workerTileNextPerMinute: config.WorkerTileNextPerMinute,
+            workerTileNextBurst:     config.WorkerTileNextBurst);
+    }
+
+    /// <summary>D-6c1 — swap the per-role rate-limit knobs at runtime.
+    /// Wired from ClusterEntry into <see cref="ClusterCoordinator.ApplyRoleLimiterChange"/>
+    /// so cluster.config.set applies without bouncing the master. Per-key
+    /// bucket state (in-flight tokens) is preserved across the swap.</summary>
+    public void ReconfigureRoleLimiter(
+        int clientPerMinute, int clientBurst,
+        int workerTileNextPerMinute, int workerTileNextBurst)
+    {
+        _roleLimiter.Reconfigure(
+            clientPerMinute, clientBurst,
+            workerTileNextPerMinute, workerTileNextBurst);
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -158,6 +184,7 @@ public sealed class FFServer
             // would silently null out the audit thumbprint. Wrap so the
             // session log always records who authenticated.
             string? clientThumb = null;
+            CertRole clientRole = CertRole.Client;
             if (ssl.RemoteCertificate != null)
             {
                 try
@@ -165,15 +192,31 @@ public sealed class FFServer
                     using var c2 = ssl.RemoteCertificate as X509Certificate2
                         ?? new X509Certificate2(ssl.RemoteCertificate);
                     clientThumb = c2.Thumbprint;
+                    // Parse the role OU once at handshake-completion so
+                    // every subsequent dispatch sees the same answer and
+                    // a misissued cert is refused at the first method
+                    // call rather than partway through a render.
+                    try { clientRole = CertRoleParser.FromCertificate(c2); }
+                    catch (InvalidOperationException ex)
+                    {
+                        // Unknown role suffix — close the session before
+                        // any method runs. Client sees an EndOfStream;
+                        // operator sees the reason in the session log.
+                        sessLog = SessionLogger.Open(
+                            Config.LogDir ?? ServerConfig.DefaultLogDir(),
+                            remoteStr, clientThumb);
+                        sessLog.Err($"cert role refused: {ex.Message}");
+                        return;
+                    }
                 }
-                catch { /* leave null */ }
+                catch { /* leave null + Client */ }
             }
             sessLog = SessionLogger.Open(
                 Config.LogDir ?? ServerConfig.DefaultLogDir(),
                 remoteStr,
                 clientThumb);
 
-            sessLog.Info($"session opened, tls={ssl.SslProtocol}, cipher={ssl.NegotiatedCipherSuite}");
+            sessLog.Info($"session opened, tls={ssl.SslProtocol}, cipher={ssl.NegotiatedCipherSuite}, role={clientRole}");
 
             while (!ct.IsCancellationRequested)
             {
@@ -199,7 +242,8 @@ public sealed class FFServer
                 }
                 if (env is null) break;
 
-                await DispatchAsync(env, ssl, sessLog, ct).ConfigureAwait(false);
+                await DispatchAsync(env, ssl, sessLog, clientRole, clientThumb ?? "",
+                    remote?.Address?.ToString() ?? "(unknown)", ct).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -214,12 +258,29 @@ public sealed class FFServer
         }
     }
 
-    private async Task DispatchAsync(MessageEnvelope env, SslStream ssl, SessionLogger log, CancellationToken ct)
+    private async Task DispatchAsync(MessageEnvelope env, SslStream ssl, SessionLogger log,
+        CertRole role, string thumbprint, string remoteIp, CancellationToken ct)
     {
         if (env.Kind != "request" || string.IsNullOrEmpty(env.Method))
         {
             await ReplyErrorAsync(ssl, env.Id, "bad-request", "envelope kind/method missing", ct).ConfigureAwait(false);
             return;
+        }
+
+        // D-6c — per-method per-role rate gate. server.status (cheap, used
+        // by liveness probes) bypasses the gate so a probe loop cannot lock
+        // itself out. Worker tile.next + client RPCs flow through.
+        if (!string.Equals(env.Method, "server.status", StringComparison.Ordinal))
+        {
+            string limiterKey = role == CertRole.Worker ? thumbprint : remoteIp;
+            if (_roleLimiter.TryAccept(role, limiterKey, env.Method!) == RoleLimiterDecision.RefusedRate)
+            {
+                log.Warn($"rate-limited: role={role} method='{env.Method}' key={limiterKey}");
+                Metrics.RecordFailure("rate-limited", $"role={role} method={env.Method}");
+                await ReplyErrorAsync(ssl, env.Id, "rate-limited",
+                    $"rate limit exceeded for role={role} method='{env.Method}'", ct).ConfigureAwait(false);
+                return;
+            }
         }
 
         switch (env.Method)
@@ -234,9 +295,94 @@ public sealed class FFServer
                 break;
 
             default:
+                if (Coordinator != null && IsClusterMethod(env.Method!))
+                {
+                    await DispatchClusterAsync(env, ssl, log, role, thumbprint, ct).ConfigureAwait(false);
+                    break;
+                }
                 await ReplyErrorAsync(ssl, env.Id, "bad-request",
                     $"unknown method '{env.Method}'", ct).ConfigureAwait(false);
                 break;
+        }
+    }
+
+    private static bool IsClusterMethod(string method)
+        => method.StartsWith("worker.", System.StringComparison.Ordinal)
+        || method.StartsWith("cluster.", System.StringComparison.Ordinal)
+        || method.StartsWith("tile.", System.StringComparison.Ordinal)
+        || method.StartsWith("job.", System.StringComparison.Ordinal);
+
+    private async Task DispatchClusterAsync(MessageEnvelope env, SslStream ssl, SessionLogger log,
+        CertRole role, string thumbprint, CancellationToken ct)
+    {
+        string method = env.Method!;
+
+        // Role gate. The coordinator never sees a method it should refuse
+        // — keeps role policy in one place and saves the coordinator from
+        // re-implementing the check per method.
+        bool ok = method switch
+        {
+            _ when method.StartsWith("worker.", System.StringComparison.Ordinal) => role == CertRole.Worker,
+            _ when method.StartsWith("tile.",   System.StringComparison.Ordinal) => role == CertRole.Worker,
+            _ when method.StartsWith("cluster.", System.StringComparison.Ordinal) => role == CertRole.Admin,
+            _ when method.StartsWith("job.",     System.StringComparison.Ordinal) => role is CertRole.Client or CertRole.Admin,
+            _ => false,
+        };
+        if (!ok)
+        {
+            log.Warn($"cluster method '{method}' refused for role={role}");
+            await ReplyErrorAsync(ssl, env.Id, "forbidden-role",
+                $"method '{method}' not permitted for role={role}", ct).ConfigureAwait(false);
+            return;
+        }
+
+        ClusterDispatchOutcome outcome;
+        try
+        {
+            outcome = await Coordinator!.HandleAsync(
+                method, env.Params, role, thumbprint, ct, env.Binary).ConfigureAwait(false);
+        }
+        catch (System.OperationCanceledException)
+        {
+            // session shutdown — swallow; the outer finally closes the socket
+            return;
+        }
+        catch (System.Exception ex)
+        {
+            log.Err($"cluster method '{method}' threw: {ex.GetType().Name}: {ex.Message}");
+            await ReplyErrorAsync(ssl, env.Id, "internal",
+                $"{ex.GetType().Name}: {ex.Message}", ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (!outcome.Handled)
+        {
+            await ReplyErrorAsync(ssl, env.Id, "bad-request",
+                $"unknown method '{method}'", ct).ConfigureAwait(false);
+            return;
+        }
+        if (outcome.ErrorCode != null)
+        {
+            await ReplyErrorAsync(ssl, env.Id, outcome.ErrorCode, outcome.ErrorMessage ?? "", ct).ConfigureAwait(false);
+            return;
+        }
+        await ReplyResultAsync(ssl, env.Id, outcome.Result ?? new { }, ct).ConfigureAwait(false);
+
+        // Streaming follow-up (e.g. job.fetch): coordinator hands us a
+        // file path + chunk count, FFServer streams the bytes using the
+        // same chunked path as render.image/video so client-side
+        // reassembly logic is shared.
+        if (!string.IsNullOrEmpty(outcome.StreamFilePath) && outcome.StreamChunkCount > 0)
+        {
+            try
+            {
+                await StreamArtifactChunksAsync(ssl, env.Id, outcome.StreamFilePath!,
+                    outcome.StreamChunkCount, log, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                log.Err($"cluster stream '{method}' failed mid-stream: {ex.GetType().Name}: {ex.Message}");
+            }
         }
     }
 

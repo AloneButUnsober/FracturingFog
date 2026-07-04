@@ -12,7 +12,7 @@ namespace FracturingFog.Models
     /// Solar wind / coronal plasma — purple→electric blue→cyan→white corona
     /// with a distance-driven edge flare.
     /// </summary>
-    public class SolarWindMap : IColorMap
+    public class SolarWindMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Solar Wind";
 
@@ -48,5 +48,22 @@ namespace FracturingFog.Models
                 System.Math.Clamp(g, 0f, 1f),
                 System.Math.Clamp(b, 0f, 1f));
         }
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float t = in_smooth * 0.023;
+    float tfrac = t - floor(t);
+    float hue = 0.75 - 0.28 * tfrac;
+    float sat = saturate(0.80 + 0.20 * sin(in_smooth * 0.06));
+    float t17 = t * 1.7;
+    float val = saturate(0.25 + 0.75 * (t17 - floor(t17)));
+    float3 base_rgb = cg_hsv_to_rgb(hue, sat, val);
+    float corona = exp(-in_dist * 0.22);
+    return saturate(base_rgb + corona * float3(0.70, 0.80, 1.00));
+";
+
+        public string PaletteId => "SolarWindMap/v1";
     }
 }

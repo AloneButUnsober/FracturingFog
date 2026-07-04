@@ -37,6 +37,18 @@ namespace FracturingFog.Imaging
         public double CenterY2 { get; init; }
         public double CenterY3 { get; init; }
 
+        // D-6b2 — OD limbs of the centre. Engaged only when the
+        // Mandelbrot calculator runs the OD reference-orbit path (zoom
+        // > 1e50). DD / QD renders leave them 0.
+        public double CenterX4 { get; init; }
+        public double CenterX5 { get; init; }
+        public double CenterX6 { get; init; }
+        public double CenterX7 { get; init; }
+        public double CenterY4 { get; init; }
+        public double CenterY5 { get; init; }
+        public double CenterY6 { get; init; }
+        public double CenterY7 { get; init; }
+
         public double Zoom { get; init; }
         public int MaxIterations { get; init; }
         public FractalType FractalType { get; init; }
@@ -70,6 +82,35 @@ namespace FracturingFog.Imaging
         /// drivers read this to scale the image to physical inches without
         /// the user having to type a size at print time.</summary>
         public float Dpi { get; init; }
+
+        // ── D-6b — sub-rect rendering for cluster tile workers ─────────────
+        // When non-zero, the worker renders only a sub-rect of a larger
+        // image and derives per-pixel dc from the FULL image's centre +
+        // dims, so every tile of the same image shares the master-shipped
+        // reference orbit. Zero = legacy single-render / per-tile-centre.
+
+        public int ImageWidth     { get; init; }
+        public int ImageHeight    { get; init; }
+        public int SubRectOffsetX { get; init; }
+        public int SubRectOffsetY { get; init; }
+
+        /// <summary>D-6b — master-computed DD reference orbit. When non-null
+        /// (and the centre + maxIter match), the calculator's
+        /// ComputeReferenceOrbit step short-circuits and the per-tile
+        /// recompute is skipped. <c>null</c> = legacy compute-per-tile.</summary>
+        public MandelbrotCalculator.OrbitDD? SeededOrbit { get; init; }
+
+        /// <summary>D-6b2 — QD-precision shared reference orbit (zoom &gt;
+        /// 1e25). Set by the host when the master ships a QD-limbs blob.
+        /// At most one of SeededOrbit / SeededOrbitQD / SeededOrbitOD is
+        /// non-null per render; the calculator's centerSame check
+        /// enforces zero limbs for whichever isn't shipped.</summary>
+        public MandelbrotCalculator.OrbitQD? SeededOrbitQD { get; init; }
+
+        /// <summary>D-6b2 — OD-precision shared reference orbit (zoom &gt;
+        /// 1e50). Same single-active-orbit constraint as
+        /// <see cref="SeededOrbitQD"/>.</summary>
+        public MandelbrotCalculator.OrbitOD? SeededOrbitOD { get; init; }
     }
 
     /// <summary>Outcome of a poster render — the on-disk pixel dimensions
@@ -117,22 +158,57 @@ namespace FracturingFog.Imaging
             }
             else
             {
-                // Mandelbrot path — preserve the full quad-precision centre.
+                // Mandelbrot path — preserve the full octuple-precision centre
+                // (DD/QD/OD limbs as supplied; unused limbs stay 0).
                 var calc = new MandelbrotCalculator(req.Width, req.Height)
                 {
                     CenterX = req.CenterX,
                     CenterXLo = req.CenterXLo,
                     CenterX2 = req.CenterX2,
                     CenterX3 = req.CenterX3,
+                    CenterX4 = req.CenterX4,
+                    CenterX5 = req.CenterX5,
+                    CenterX6 = req.CenterX6,
+                    CenterX7 = req.CenterX7,
                     CenterY = req.CenterY,
                     CenterYLo = req.CenterYLo,
                     CenterY2 = req.CenterY2,
                     CenterY3 = req.CenterY3,
+                    CenterY4 = req.CenterY4,
+                    CenterY5 = req.CenterY5,
+                    CenterY6 = req.CenterY6,
+                    CenterY7 = req.CenterY7,
                     Zoom = req.Zoom,
                     MaxIterations = req.MaxIterations,
                     ColorMap = req.ColorMap,
                     Quality = req.Quality,
+                    // D-6b — sub-rect + seeded orbit for cluster tile workers.
+                    // All four properties default to 0 (= legacy full-image render);
+                    // any non-zero value engages the sub-rect dc geometry.
+                    ImageWidth     = req.ImageWidth,
+                    ImageHeight    = req.ImageHeight,
+                    SubRectOffsetX = req.SubRectOffsetX,
+                    SubRectOffsetY = req.SubRectOffsetY,
                 };
+                if (req.SeededOrbit != null)
+                {
+                    // Pre-fill the calculator's ref-orbit cache so its
+                    // internal ComputeReferenceOrbit hits the centre-cache
+                    // short-circuit. Mismatched centre / insufficient cap
+                    // is detected by the calculator and falls back to
+                    // per-tile compute — no silent stale-orbit reuse.
+                    calc.SeedReferenceOrbitDD(req.SeededOrbit);
+                }
+                else if (req.SeededOrbitQD != null)
+                {
+                    // D-6b2 — QD orbit path (zoom > 1e25).
+                    calc.SeedReferenceOrbitQD(req.SeededOrbitQD);
+                }
+                else if (req.SeededOrbitOD != null)
+                {
+                    // D-6b2 — OD orbit path (zoom > 1e50).
+                    calc.SeedReferenceOrbitOD(req.SeededOrbitOD);
+                }
                 calc.Calculate(token);
                 token.ThrowIfCancellationRequested();
                 buffer = calc.ColorBuffer;

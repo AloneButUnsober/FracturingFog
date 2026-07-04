@@ -1,10 +1,16 @@
 # Fracturing Fog
 
+![Fractal families](https://img.shields.io/badge/fractal%20families-~38-blue)
+![Color themes](https://img.shields.io/badge/color%20themes-200%2B-purple)
+![Platforms](https://img.shields.io/badge/platforms-Win%20%7C%20Linux%20%7C%20macOS-green)
+![.NET](https://img.shields.io/badge/.NET-10-512BD4)
+
 Real-time high-precision Mandelbrot explorer with audio-reactive
 slideshow, palette tools, and cross-platform support on Windows, Linux,
 and macOS.
 
 * Full feature tour: [FEATURES.md](FEATURES.md)
+* Documentation landing page: [Docs/_Index.md](Docs/_Index.md)
 * Per-OS install + caveats: [Docs/User/CrossPlatform-UserGuide.md](Docs/User/CrossPlatform-UserGuide.md)
 * Avalonia shell tour: [Docs/User/Avalonia-UserGuide.md](Docs/User/Avalonia-UserGuide.md)
 * Keyboard shortcuts: [Docs/User/Keyboard-Shortcuts.md](Docs/User/Keyboard-Shortcuts.md)

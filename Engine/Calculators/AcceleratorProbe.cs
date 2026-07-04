@@ -92,4 +92,90 @@ public static class AcceleratorProbe
             return false;
         }
     }
+
+    // Phase X.5 / Slice 5.1 — per-RID device-kind smoke.
+    //
+    // Asserts:
+    //   * ILGPU constructs without throwing.
+    //   * At least one CPU device is exposed (the cross-platform fallback).
+    //   * CPU accelerator JIT-creates and disposes cleanly.
+    //   * Per-RID expectation: on osx-arm64 / linux-arm64, no CUDA device
+    //     is enumerated (would indicate a packaging bug — CUDA on Linux
+    //     ARM only ships on Jetson, never on Apple Silicon).
+    //
+    // Returns ok + a one-screen report suitable for CI logs and --self-test
+    // output files. Used by both the WinExe (`--ilgpu-probe`) and the new
+    // FracturingFog.App entry (`--ilgpu-probe`) so the same assertion lands
+    // on every RID the release workflow ships.
+    public static bool RunSmoke(out string report)
+    {
+        var sb = new StringBuilder();
+        bool ok = true;
+
+        string rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
+        sb.Append("RID: ").AppendLine(rid);
+        sb.Append("OS:  ").AppendLine(System.Runtime.InteropServices.RuntimeInformation.OSDescription);
+        sb.Append("Arch: ").AppendLine(System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString());
+        sb.AppendLine();
+        sb.AppendLine(DescribeDevices());
+        sb.AppendLine();
+
+        bool sawCpu = false;
+        bool sawCuda = false;
+        try
+        {
+            using var ctx = Context.Create(b => b.Default());
+            foreach (var d in ctx.Devices)
+            {
+                if (d.AcceleratorType == AcceleratorType.CPU) sawCpu = true;
+                if (d.AcceleratorType == AcceleratorType.Cuda) sawCuda = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.Append("ILGPU context failed: ").AppendLine(ex.Message);
+            report = sb.ToString();
+            return false;
+        }
+
+        if (!sawCpu)
+        {
+            sb.AppendLine("FAIL: no CPU device exposed.");
+            ok = false;
+        }
+        else
+        {
+            sb.AppendLine("PASS: CPU device exposed.");
+        }
+
+        if (!TryCreateCpuAccelerator(out string err))
+        {
+            sb.Append("FAIL: CPU accelerator create: ").AppendLine(err);
+            ok = false;
+        }
+        else
+        {
+            sb.AppendLine("PASS: CPU accelerator constructed + disposed.");
+        }
+
+        bool isArmMac = OperatingSystem.IsMacOS() &&
+            System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
+                System.Runtime.InteropServices.Architecture.Arm64;
+        bool isArmLinux = OperatingSystem.IsLinux() &&
+            System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
+                System.Runtime.InteropServices.Architecture.Arm64;
+        if ((isArmMac || isArmLinux) && sawCuda)
+        {
+            sb.AppendLine("FAIL: CUDA device on ARM host — packaging or driver bug.");
+            ok = false;
+        }
+        else if (isArmMac || isArmLinux)
+        {
+            sb.AppendLine("PASS: no CUDA device on ARM host (expected).");
+        }
+
+        sb.Append("Result: ").AppendLine(ok ? "OK" : "FAIL");
+        report = sb.ToString();
+        return ok;
+    }
 }

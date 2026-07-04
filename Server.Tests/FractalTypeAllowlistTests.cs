@@ -1,3 +1,4 @@
+using System.Linq;
 using FracturingFog;
 using FracturingFog.Server.Guard;
 using Xunit;
@@ -26,6 +27,9 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.Newton)]
     [InlineData(FractalType.Nova)]
     [InlineData(FractalType.BuddhaBrot)]
+    [InlineData(FractalType.Nebulabrot)]
+    [InlineData(FractalType.AntiBuddhabrot)]
+    [InlineData(FractalType.AntiNebulabrot)]
     [InlineData(FractalType.IFS)]
     [InlineData(FractalType.LSystem)]
     [InlineData(FractalType.StrangeAttractor)]
@@ -43,7 +47,14 @@ public sealed class FractalTypeAllowlistTests
     [InlineData(FractalType.QuaternionJulia)]
     [InlineData(FractalType.QuaternionMandelbrot)]
     [InlineData(FractalType.Plasma)]
+    [InlineData(FractalType.Flame)]
     [InlineData(FractalType.Apollonian)]
+    [InlineData(FractalType.GeneratedMandelbrotZ2)]
+    [InlineData(FractalType.GeneratedMandelbrotZ3)]
+    [InlineData(FractalType.GeneratedMandelbrotZ4)]
+    [InlineData(FractalType.GeneratedMandelbrotZ5)]
+    [InlineData(FractalType.GeneratedTricorn)]
+    [InlineData(FractalType.GeneratedBurningShip)]
     [InlineData(FractalType.Kleinian)]
     [InlineData(FractalType.BicomplexMandelbrot)]
     [InlineData(FractalType.Dla)]
@@ -64,9 +75,45 @@ public sealed class FractalTypeAllowlistTests
         Assert.Equal(allowed, ok);
     }
 
-    [Fact]
-    public void NameOverload_RejectsUnknownName()
+    [Theory]
+    [InlineData("notafractal")]
+    [InlineData("")]
+    [InlineData("Mandelbrot42")]
+    [InlineData("Mandel brot")]
+    [InlineData("../etc/passwd")]
+    public void NameOverload_RejectsUnknownName(string name)
     {
-        Assert.False(FractalTypeAllowlist.IsAllowed("notafractal", out _));
+        Assert.False(FractalTypeAllowlist.IsAllowed(name, out _));
+    }
+
+    // Regression guard: only the three user-code types should ever sit in
+    // the blocked set. If a future change accidentally blocks a built-in
+    // (e.g. by adding a built-in name to the HashSet), this test fires.
+    [Fact]
+    public void BlockedSet_ContainsOnlyUserCodeTypes()
+    {
+        var expected = new[]
+        {
+            FractalType.UserEquation,
+            FractalType.Sandbox,
+            FractalType.UserBulb,
+        };
+        Assert.Equal(expected.Length, FractalTypeAllowlist.BlockedTypes.Count);
+        foreach (var t in expected)
+            Assert.Contains(t, FractalTypeAllowlist.BlockedTypes);
+    }
+
+    // Coverage assertion: every FractalType enum value is either explicitly
+    // allowed or explicitly blocked — nothing falls through into an
+    // undefined classification.
+    [Fact]
+    public void EveryEnumValue_IsExplicitlyClassified()
+    {
+        foreach (FractalType t in System.Enum.GetValues(typeof(FractalType)))
+        {
+            bool allowed = FractalTypeAllowlist.IsAllowed(t);
+            bool blocked = FractalTypeAllowlist.BlockedTypes.Contains(t);
+            Assert.True(allowed ^ blocked, $"{t}: allowed={allowed} blocked={blocked}");
+        }
     }
 }

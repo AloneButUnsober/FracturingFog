@@ -41,13 +41,16 @@ between bigger features.
 
 ## Phase D-2 — Quality + perf wins (medium)
 
-7. **Per-pixel rebase** — DONE (cluster-rebase MVP; see Known
+7. **Per-pixel rebase** — DONE through Wave 6 closeout (Item 7 MVP +
+   guards A/B/C + multi-cluster D + cross-frame cache E; see Known
    issues entry below for the implementation summary). When pixels
-   glitch the perturbation path, the renderer now collects them and
-   rebuilds ONE shared reference orbit at the cluster centroid
-   instead of falling each pixel to HP-direct. Multi-cluster spatial
-   partitioning is a follow-up that helps when several distinct
-   mini-Julias appear in the same frame far apart.
+   glitch the perturbation path, the renderer collects them and
+   spatial-partitions into independent clusters via grid bucketing +
+   8-connectivity flood-fill; each cluster builds its own rebase
+   reference orbit at its centroid, cached cross-frame so pan/zoom-
+   only updates reuse warm orbits. Three early-exit guards (zoom &gt;
+   1e25, bbox density ≥ 2%, sample-probe ≥ 50% hits) kill bad-fit
+   clusters before per-pixel commit.
 8. **Higher SA orders (3 → 16+)** — current SA tracks A, B, C only.
    Each extra order extends the valid skip range exponentially. Legacy
    uses ~64. Lifting to 16 captures most of the win.
@@ -138,11 +141,18 @@ between bigger features.
 
 ## Phase D-7 — Architecture (large)
 
-29. **Roslyn source generator** — replace the CLI + library API with a
-    compile-time source generator. Mark a class with an attribute
-    carrying the equation; the generator emits the implementation at
-    project compile time. Drops the manual `dotnet run --project
-    CalculatorGen` step and the `Calculators/Generated/` directory.
+29. **Roslyn source generator** ✅ Shipped 2026-06-22 (Wave 2.13). Compile-time
+    `IIncrementalGenerator` in `CalculatorGen.SourceGen/` consumes
+    `[assembly: GeneratedCalculator(equation, name, IncludeSelfTest?, Bailout?)]`
+    declarations and emits one calculator per attribute instance via
+    `context.AddSource`. Stock calcs migrated to a 10-line registry at
+    `Engine/Calculators/Generated/GeneratedCalculatorAttributes.cs`; the
+    20 hand-checked-in `*Calculator.cs` + `*CalculatorSelfTest.cs` files
+    (~33 K lines) replaced by `.g.cs` outputs in `obj/`. Legacy
+    `dotnet run -p CalculatorGen` CLI + `CalculatorGenApi.TryCompileAndLoad`
+    hot-load path unchanged — only the *checked-in* generated tree is
+    eliminated. See Wave 2.13 status log entry in
+    `Docs/Open-Work-Plan.md` for the slice breakdown.
 
 ---
 
@@ -437,6 +447,72 @@ flips priority.
       smooth-count-only via `IColorMap` defaults). Tests: 36/36 PASS,
       `--gentest MandelbrotZ2` 0 diff.
 
+- [~] **27.** GPU reference orbit — SCAFFOLD shipped 2026-06-22 (Wave 2.12,
+      Hi-only kernel; QD body deferred). Files:
+      `Engine/Calculators/Gpu/GpuQD.cs` — ILGPU-friendly QD math primitive
+      port (mirror of `Abstractions/Math/QuadDouble.cs`). Uses Dekker's
+      split-based `TwoProduct` instead of `Math.FusedMultiplyAdd` —
+      ILGPU 1.5.3 doesn't intercept the BCL FMA intrinsic and JIT throws
+      "An internal compiler error has been detected" otherwise. Verified
+      compiles; not yet invoked by a kernel.
+      `Engine/Calculators/Gpu/MandelbrotRefOrbitGpu.cs` — single-thread
+      sequential ref-orbit kernel + host shim. Packs 8 limbs/iter into a
+      `RefOrbitSlot` struct so the typed kernel loader stays at 4 generic
+      params (8 parallel `ArrayView<double>` blew past the loader's
+      practical ceiling; kernel JIT failed identically to the FMA case).
+      Private CUDA-preferred accelerator (`TryAcquireFp64`) bypasses the
+      shared `GpuAcceleratorHost`: that singleton's
+      `GetPreferredDevice(preferCPU:false)` on this dev box returns
+      Intel UHD OpenCL, which has no FP64 support → "Float64 (double)
+      type is not supported on this device". Walks devices CUDA → CPU
+      (no cheap pre-flight FP64 probe for arbitrary OpenCL — skip).
+      `Engine/Calculators/MandelbrotCalculator.cs` — `UseGpuReferenceOrbit`
+      static toggle (default off). `CalculateHighPrecision`'s QD branch
+      routes through `TryComputeReferenceOrbitQDGpu`, which mirrors the
+      centre-cache short-circuit in `ComputeReferenceOrbitQD`, runs the
+      GPU compute, updates the `_refZr / _refZrLo / _refZrX2 / _refZrX3`
+      orbit arrays + cache fields. Silent fallback to CPU on any GPU
+      failure (init / JIT / copy); failure reason logged via
+      `Debug.WriteLine`. Default off keeps the HP path bit-identical to
+      pre-2.12.
+      `Program.cs` — `--gpurefprobe` three-way bench at 1e15 + 1e30
+      saprobe coords: CPU-QD (truth), CPU-Hi (Hi-only baseline matching
+      kernel math), GPU-Hi (kernel output). Reports ms + Δ(GPU-Hi vs
+      CPU-Hi) — expected at FP64 round-off; Δ(GPU-Hi vs CPU-QD) — chaos-
+      amplified, expected large until QD kernel slice lands. Writes
+      `gpurefprobe.out`.
+      Smoke on dev hardware (CUDA GeForce GT 710, FP64 1/24-rate):
+      kernel JITs (~490 ms first call, cached after); second call
+      1.54 ms vs CPU-QD 0.54 ms. Δ(GPU-Hi vs CPU-Hi)=346 — CUDA's
+      FMA-fused mul-add diverges from x86's two-step mul+add at the
+      ULP, chaos-amplified across 282 iters. Not a bug — IEEE-FP64
+      semantics differ between backends. Build clean (0 errors);
+      140/140 server tests pass with toggle off.
+      **Remaining slices** (separate WIP):
+       1. **QD body in the kernel** — currently iterates Hi-only doubles.
+          Swap to `GpuQDMath.{Mul,Square,Add,Sub,MulD}` calls. Blocker:
+          ILGPU 1.5.3 trips on `Renorm5` / `ThreeSum` deep
+          `(s, e1, e2) = ThreeSum(...)` deconstruction cascades during
+          IR inlining. Two options: (a) rewrite `GpuQDMath` primitives
+          to use mutable struct outputs instead of value tuples (large
+          mechanical port — primitives + every algebra op); (b) bump
+          ILGPU to 2.x (different IR pipeline; needs full GPU-kernel
+          regression sweep against the 7 existing GPU calcs).
+       2. **Perf-win on modern CUDA** — GT 710's 1/24-rate FP64 will
+          never beat CPU on a sequential dep chain. Re-bench on a
+          consumer-grade FP64 card (Quadro / RTX A-series) to size
+          the actual offload win and decide whether to auto-enable
+          the toggle when the GPU path measures faster at first call.
+       3. **Multi-orbit batch kernel** — true parallelism win lands
+          when Wave 6 (multi-cluster glitch rebase) needs N candidate
+          orbits per frame. Same kernel, `Index1D` becomes the orbit
+          index, output ArrayView grows to N × maxIter slots. Lets the
+          GPU bury its launch + JIT cost across hundreds of orbits.
+       4. **OD ref-orbit GPU port** — follow-on once QD kernel lands;
+          mirror `ComputeReferenceOrbitOD` for zoom > 1e50. ILGPU 1.5.3
+          tuple-chain blocker likely worse with 8-limb math; ties to
+          the same struct-output rewrite or ILGPU upgrade.
+
 ### Known issues (separate tasks)
 
 - **Pan/keyboard input fails at zoom ≥ ~1e24** — UI input layer
@@ -567,32 +643,36 @@ flips priority.
   (gentest's centres don't trigger HP-direct so the DD4 path
   isn't exercised there).
 
-- [x] **Cluster rebase on perturbation glitch (Item 7)** — IMPLEMENTED.
-  Glitched pixels deferred during the main perturbation pass into a
-  `ConcurrentBag<(int x, int y)>`. After Parallel.For completes, the
-  cluster-rebase pass kicks in: computes the centroid of all glitched
-  pixels in c-offset space, builds a single shared QD reference orbit
-  at that centroid (via `BuildRebaseRefOrbitQd` — same QD body as the
-  primary build, no BLA / no SA / no cache), and runs perturbation
-  for each glitched pixel against the rebase orbit
-  (`TryIterateRebasePixel`). Pixels that glitch again or whose rebase
-  orbit exhausts before escape fall to per-pixel HP-direct as the
-  final backstop (`HpDirectGlitchPixel`). Below
-  `MinClusterSizeForRebase = 32` pixels, the rebase build's QD
-  iteration cost outweighs per-pixel savings — drop straight to
-  HP-direct (the pre-rebase behaviour).
-  Properties: `UseClusterRebase` (default true),
-  `MinClusterSizeForRebase` (default 32). Both scalar tail and
-  AVX-512 SIMD lane defer to the same bag.
-  Trade-offs: MVP uses ONE cluster centroid for ALL glitches —
-  multi-cluster spatial partitioning is a follow-up that helps when
-  several distinct mini-Julias appear in the same frame far apart
-  (current behaviour: stragglers from non-centroid clusters fall
-  to HP-direct, so correctness is preserved; perf win is reduced).
-  Cost: one QD orbit build (~10-50 ms at maxIt=10000) per frame
-  where the cluster threshold is met. Win: 5-20× speedup on
-  mini-Julia clusters vs per-pixel HP-direct (per-glitch cost
-  drops from ~500 µs DD-direct to ~50 µs perturbation iter).
+- [x] **Cluster rebase on perturbation glitch (Item 7)** — IMPLEMENTED
+  through Wave 6 closeout (MVP + guards A/B/C + multi-cluster D +
+  cross-frame cache E). Glitched pixels deferred during the main
+  perturbation pass into a `ConcurrentBag<(int x, int y)>`. After
+  Parallel.For completes, `ProcessClusterRebase` spatial-partitions
+  the bag into clusters via a 16×16-cell occupancy grid + 8-conn
+  BFS flood-fill on occupied cells. Each cluster runs through
+  `ProcessSingleCluster`: zoom gate (skip below 1e25 — DD-direct
+  cheaper than rebase build there), bbox-cohesion guard (skip
+  long-thin tendrils with density &lt; 2%), centroid build of a
+  shared QD reference orbit via `BuildRebaseRefOrbitQd` (no BLA /
+  no SA), cross-frame cache lookup (4-slot LRU via
+  `TryGetCachedRebaseOrbit` / `InsertCachedRebaseOrbit` keyed by
+  centroid within `scale·16` tolerance + maxIt), sample-probe of
+  the first 8 pixels (commit only when ≥ 50% land), then parallel
+  `TryIterateRebasePixel` over the remainder. Pixels that glitch
+  again or whose rebase orbit exhausts fall to per-pixel HP-direct
+  (`HpDirectGlitchPixel`). Below `MinClusterSizeForRebase = 32`
+  pixels per cluster, HP-direct straight away.
+  Properties: `UseClusterRebase` (default true since Wave 6 — AVX-2
+  perturbation lane parity reached, multi-cluster + cache reduce
+  wasted-work to acceptable), `MinClusterSizeForRebase` (default 32).
+  Both scalar tail and AVX-2 + AVX-512 SIMD lanes defer to the
+  same bag.
+  Cost: one QD orbit build (~10-50 ms at maxIt=10000) per cluster
+  per frame (cached cross-frame), zero for cached hits. Win: 5-20×
+  speedup on mini-Julia clusters vs per-pixel HP-direct (per-glitch
+  cost drops from ~500 µs DD-direct to ~50 µs perturbation iter).
+  Scattered mini-Julias each get their own rebase orbit instead of
+  one centroid orbit that fits none of them.
   `--calcgen-test` 90/90 PASS; `--gentest MandelbrotZ2` 0-diff
   (gentest's interior centres produce no glitches so the rebase
   path doesn't engage on its sample grid).

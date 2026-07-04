@@ -63,6 +63,7 @@
       <Files Include="Stage\**" Directory="INSTALLFOLDER" />
       <ComponentRef Id="StartMenuShortcut" />
       <ComponentRef Id="StartMenuShortcutLegacy" />
+      <ComponentRef Id="StartMenuShortcutSilk" />
       <ComponentRef Id="StartMenuShortcutPaletteBuilder" />
       <ComponentRef Id="DesktopShortcut" />
     </Feature>
@@ -100,17 +101,17 @@
                        KeyPath="yes" />
       </Component>
 
-      <Component Id="StartMenuShortcutLegacy" Guid="71F06E9E-824E-4C22-AFF6-C539D5BDF754">
-        <Shortcut Id="StartMenuShortcutLegacyFile"
+      <Component Id="StartMenuShortcutSilk" Guid="901AB559-E399-4B53-BD8A-C3659D1799AD">
+        <Shortcut Id="StartMenuShortcutSilkFile"
                   Name="Fracturing Fog - Silk"
-                  Description="Mandelbrot Explorer (WinForms UI)"
+                  Description="Mandelbrot Explorer (Silk Renderer)"
                   Target="[INSTALLFOLDER]FracturingFog.exe"
                   Arguments="--renderer silk"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="AppIcon.ico" />
         <RegistryValue Root="HKCU"
                        Key="Software\AloneButUnsober\FracturingFog"
-                       Name="StartMenuShortcutLegacy"
+                       Name="StartMenuShortcutSilk"
                        Type="integer"
                        Value="1"
                        KeyPath="yes" />

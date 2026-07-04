@@ -166,10 +166,17 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
             case FractalType.Tricorn:
                 DispatchByColorMapSimd(new TricornKernel(), ct);
                 break;
-            // Transcendental / two-step memory — stay scalar.
+            // Multibrot d ∈ {3,4,5}: SIMD via direct complex multiplication.
+            // d ≥ 6: polar fallback (atan2 + pow + cos + sin), scalar.
             case FractalType.Multibrot:
-                DispatchByColorMap(new MultibrotKernel(FractalParameters.MultibrotExponent), ct);
+            {
+                var mk = new MultibrotKernel(FractalParameters.MultibrotExponent);
+                if (mk.SimdSupported)
+                    DispatchByColorMapSimd(mk, ct);
+                else
+                    DispatchByColorMap(mk, ct);
                 break;
+            }
             case FractalType.Phoenix:
                 CalculatePhoenix(new PhoenixKernel(FractalParameters.PhoenixP.Real, FractalParameters.PhoenixP.Imaginary), ct);
                 break;
@@ -617,9 +624,26 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
     // ── Phoenix (separate path — two-step memory, no IFractalKernel.Step) ──
 
+    /// <summary>Phoenix-specific deep-zoom perturbation threshold.
+    /// EscapeTimeCalculator is otherwise SP-only; Phoenix is the
+    /// exception because D-3.16 ships a scalar perturbation tier here.
+    /// Below this zoom the plain SP path runs (cheaper, no ref-orbit
+    /// build). Above it, a double-precision reference orbit is computed
+    /// once and per-pixel δ + δ_prev recurrence runs against it.
+    /// 1e10 is conservative — pixel offsets ε ~ scale ~ 3.5e-13 / 1e10
+    /// have ~3 decimal digits of headroom in double, plenty for the
+    /// linear δ-step to be pixel-distinct.</summary>
+    private const double PhoenixPerturbZoomThreshold = 1.0e10;
+
     private void CalculatePhoenix<TMap>(PhoenixKernel kernel, TMap colorMap, CancellationToken ct = default)
         where TMap : IColorMap
     {
+        if (Zoom >= PhoenixPerturbZoomThreshold)
+        {
+            CalculatePhoenixPerturb(kernel, colorMap, ct);
+            return;
+        }
+
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
         int[]? perRow = PerRowMaxIter;
@@ -645,18 +669,20 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
                 int idx = rowBase + x;
 
                 double zr = 0, zi = 0, prevZr = 0, prevZi = 0;
+                // D-3.16 — Phoenix proper DE. dz/dc + dprev/dc carried alongside
+                // (z, prev_z). Recurrence: D_{n+1} = 2·z·D + 1 + p·Dp.
+                double dr = 0, di = 0, dprev_r = 0, dprev_i = 0;
                 int iter;
                 for (iter = 0; iter < rowMaxIt; iter++)
                 {
                     if (zr * zr + zi * zi >= bailout2) break;
-                    kernel.StepWithPrev(ref zr, ref zi, ref prevZr, ref prevZi, cx, cy);
+                    kernel.StepWithPrevDeriv(
+                        ref zr, ref zi, ref prevZr, ref prevZi,
+                        ref dr, ref di, ref dprev_r, ref dprev_i,
+                        cx, cy);
                 }
                 IterationBuffer[idx] = iter;
-                // Phoenix doesn't carry a derivative. Pass (0,0) so FillAuxAndColor's
-                // dMag < 1e-10 branch zeros distance + normal — themes that scale by
-                // distance (HSV value, WarpedHSV edge glow) would otherwise blacken
-                // every escaped pixel because |dz/dc|=1 yields dist = mag·log(mag).
-                FillAuxAndColor(idx, iter, maxIt, zr, zi, 0, 0, colorMap);
+                FillAuxAndColor(idx, iter, maxIt, zr, zi, dr, di, colorMap);
             }
             // Phase 2.1 in-set rewrite.
             if (rowMaxIt < maxIt)
@@ -672,6 +698,151 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
 
     private void CalculatePhoenix(PhoenixKernel kernel, CancellationToken ct)
         => CalculatePhoenix(kernel, ColorMap, ct);
+
+    // ── Phoenix perturbation tier (D-3.16, scalar) ──
+    //
+    // Reference orbit at view centre (plain double precision). Per-pixel
+    // δ + δ_prev recurrence built from the symbolic expansion:
+    //
+    //   z = Z + δ,  c = C + ε,  p constant.
+    //   z_{n+1} = z² + c + p·z_{n-1}
+    //   δ_{n+1} = (Z+δ)² + (C+ε) + p·(Zp + δp) − Z² − C − p·Zp
+    //           = 2·Z·δ + δ² + ε + p · δ_prev
+    //   δ_prev_new ← δ_old
+    //
+    // Glitch fallback: when |Z+δ|² exceeds bailout we stop. When the
+    // reference orbit escapes at iter k, every per-pixel iter past k
+    // falls back to direct iteration (rare for non-trivial views).
+    //
+    // Derivative: tracked per-pixel via StepWithPrevDeriv on the
+    // reconstructed (z, prev_z) = (Z+δ, Zp+δp) state — works at SP-only
+    // depth (≲1e15) without DD/QD chains.
+    private void CalculatePhoenixPerturb<TMap>(PhoenixKernel kernel, TMap colorMap, CancellationToken ct = default)
+        where TMap : IColorMap
+    {
+        double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        int maxIt = MaxIterations;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+        double centerX = CenterX;
+        double centerY = CenterY;
+        int width = Width;
+        int height = Height;
+        double bailout2 = kernel.BailoutRadius2;
+        double pR = kernel.PR;
+        double pI = kernel.PI;
+
+        // Build reference orbit at frame centre. Two arrays for Z, two more
+        // for Zprev to feed the p·Zprev term. We carry refZr/refZi only
+        // and read refZr[n-1] for Zprev (n≥1; iter 0 prev = 0).
+        double[] refZr = new double[maxIt + 1];
+        double[] refZi = new double[maxIt + 1];
+        int refLen = maxIt;
+        {
+            double Zr = 0, Zi = 0, Pr = 0, Pi = 0;
+            for (int n = 0; n < maxIt; n++)
+            {
+                refZr[n] = Zr;
+                refZi[n] = Zi;
+                if (Zr * Zr + Zi * Zi >= bailout2) { refLen = n; break; }
+                double pPR = pR * Pr - pI * Pi;
+                double pPI = pR * Pi + pI * Pr;
+                double newZr = Zr * Zr - Zi * Zi + centerX + pPR;
+                double newZi = 2.0 * Zr * Zi + centerY + pPI;
+                Pr = Zr; Pi = Zi;
+                Zr = newZr; Zi = newZi;
+            }
+            if (refLen == maxIt)
+            {
+                refZr[maxIt] = Zr;
+                refZi[maxIt] = Zi;
+            }
+        }
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
+            double epsI = (y - height * 0.5) * scale;
+            int rowBase = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                double epsR = (x - width * 0.5) * scale;
+                int idx = rowBase + x;
+
+                // δ, δ_prev start at 0; per-pixel ε = pixel offset in c-space.
+                double dR = 0, dI = 0, dPrevR = 0, dPrevI = 0;
+                // True (z, prev_z) reconstructed each step as (Z + δ, Zp + δp);
+                // carry derivative against true state for DE coloring.
+                double dr = 0, di = 0, dprev_r = 0, dprev_i = 0;
+                int iter;
+                int cap = Math.Min(rowMaxIt, refLen);
+                for (iter = 0; iter < cap; iter++)
+                {
+                    double Zr = refZr[iter];
+                    double Zi = refZi[iter];
+                    double zr = Zr + dR;
+                    double zi = Zi + dI;
+                    if (zr * zr + zi * zi >= bailout2) break;
+
+                    // Derivative recurrence on true z. Z_prev = refZr[iter-1] + dPrevR
+                    // (for iter=0: Z_prev=0, δ_prev=0).
+                    double prevZr = iter == 0 ? 0.0 : refZr[iter - 1] + dPrevR;
+                    double prevZi = iter == 0 ? 0.0 : refZi[iter - 1] + dPrevI;
+                    kernel.StepWithPrevDeriv(
+                        ref zr, ref zi, ref prevZr, ref prevZi,
+                        ref dr, ref di, ref dprev_r, ref dprev_i,
+                        centerX + epsR, centerY + epsI);
+                    // StepWithPrevDeriv now holds z_{n+1} = (Z+δ)_{n+1}.
+                    // Reconstruct next δ from next true z and next ref:
+                    double nextZr = iter + 1 <= refLen ? refZr[iter + 1] : zr;
+                    double nextZi = iter + 1 <= refLen ? refZi[iter + 1] : zi;
+                    // Rotate δ_prev ← δ (after using current δ to step).
+                    dPrevR = dR;
+                    dPrevI = dI;
+                    dR = zr - nextZr;
+                    dI = zi - nextZi;
+                }
+
+                // Past-ref-orbit-end fallback: iterate true z directly.
+                if (iter == cap && cap < rowMaxIt)
+                {
+                    double zr = refLen <= maxIt ? refZr[refLen] + dR : dR;
+                    double zi = refLen <= maxIt ? refZi[refLen] + dI : dI;
+                    double prevZr = refLen >= 1 ? refZr[refLen - 1] + dPrevR : dPrevR;
+                    double prevZi = refLen >= 1 ? refZi[refLen - 1] + dPrevI : dPrevI;
+                    for (; iter < rowMaxIt; iter++)
+                    {
+                        if (zr * zr + zi * zi >= bailout2) break;
+                        kernel.StepWithPrevDeriv(
+                            ref zr, ref zi, ref prevZr, ref prevZi,
+                            ref dr, ref di, ref dprev_r, ref dprev_i,
+                            centerX + epsR, centerY + epsI);
+                    }
+                    IterationBuffer[idx] = iter;
+                    FillAuxAndColor(idx, iter, maxIt, zr, zi, dr, di, colorMap);
+                }
+                else
+                {
+                    double finalZr = iter <= refLen ? refZr[iter] + dR : dR;
+                    double finalZi = iter <= refLen ? refZi[iter] + dI : dI;
+                    IterationBuffer[idx] = iter;
+                    FillAuxAndColor(idx, iter, maxIt, finalZr, finalZi, dr, di, colorMap);
+                }
+            }
+            if (rowMaxIt < maxIt)
+            {
+                for (int xx = 0; xx < width; xx++)
+                {
+                    if (IterationBuffer[rowBase + xx] >= rowMaxIt)
+                        IterationBuffer[rowBase + xx] = maxIt;
+                }
+            }
+        });
+    }
 
     // ── Spider (separate path — c mutates per iteration) ────────────────────
 

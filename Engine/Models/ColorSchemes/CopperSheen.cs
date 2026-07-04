@@ -12,7 +12,7 @@ namespace FracturingFog.Models
     /// Metallic copper sheen — cycling power-curve RGB channels with a
     /// distance-based specular highlight.  Vivid at any zoom depth.
     /// </summary>
-    public class CopperSheenMap : IColorMap
+    public class CopperSheenMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Copper Sheen";
 
@@ -51,5 +51,27 @@ namespace FracturingFog.Models
 
             return ColorUtils.PackArgbF(r, g, b);
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float traw = in_smooth * 0.020;
+    float t = traw - floor(traw);
+    float r = saturate(pow(t * 1.25, 0.60));
+    float g = saturate(pow(t * 0.78, 0.80));
+    float b = saturate(pow(t * 0.40, 1.20));
+    float band = 0.5 + 0.5 * sin(in_smooth * 0.09 + 0.5);
+    r = saturate(r * (0.72 + 0.28 * band));
+    g = saturate(g * (0.68 + 0.32 * band));
+    b = saturate(b * (0.80 + 0.20 * band));
+    float spec = 0.50 * exp(-in_dist * 0.20);
+    r = saturate(r + spec);
+    g = saturate(g + spec * 0.55);
+    b = saturate(b + spec * 0.10);
+    return float3(r, g, b);
+";
+
+        public string PaletteId => "CopperSheenMap/v1";
     }
 }

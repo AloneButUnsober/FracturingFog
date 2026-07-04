@@ -39,13 +39,18 @@ void main()
 }
 ";
 
+    // S-X6 (2026-06-23) — .bgra swizzle. Upload path packs CPU buffer as
+    // GL_RGBA + GL_UNSIGNED_BYTE because GL_BGRA is deprecated in 3.3 core
+    // (NVIDIA's strict core context rejects it with GL_INVALID_OPERATION).
+    // Source layout from MandelbrotCalculator is BGRA bytes per uint, so
+    // stored texel R = source B, B = source R; swizzle here restores order.
     private const string FragmentShaderBody = @"
 in vec2 vUv;
 uniform sampler2D uTex;
 out vec4 fColor;
 void main()
 {
-    fColor = texture(uTex, vUv);
+    fColor = texture(uTex, vUv).bgra;
 }
 ";
 
@@ -54,6 +59,13 @@ void main()
     private readonly GL _gl;
     private readonly Action _makeCurrent;
     private readonly Action _swap;
+    // S-X6 (2026-06-23) — releases ctx from the calling thread. WGL/GLX/EGL
+    // require ctx be unbound on the prior owner thread before another thread
+    // can acquire it; without this, calc-thread UpdateTexture/Render fail
+    // silently with GL_INVALID_OPERATION because ctx is still pinned to the
+    // UI ctor thread. Adapters supply real impls; null = no-op (single-thread
+    // hosts pay no cost).
+    private readonly Action _releaseCurrent;
 
     private uint _vao;
     private uint _program;
@@ -64,6 +76,13 @@ void main()
     private int _texWidth;
     private int _texHeight;
     private bool _disposed;
+
+    // S-X6 diag — set FF_GL_DEBUG=1 to print GL errors + first-frame stats.
+    // Default off so production builds stay silent.
+    private static readonly bool s_diag =
+        string.Equals(Environment.GetEnvironmentVariable("FF_GL_DEBUG"), "1", StringComparison.Ordinal);
+    private int _uploadCount;
+    private int _renderCount;
 
     public string RendererDescription { get; }
 
@@ -79,7 +98,8 @@ void main()
     public bool VSync { get; set; } = true;
 
     public SilkGLRenderer(GL gl, int width, int height,
-                         Action makeCurrent, Action swap)
+                         Action makeCurrent, Action swap,
+                         Action? releaseCurrent = null)
     {
         ArgumentNullException.ThrowIfNull(gl);
         ArgumentNullException.ThrowIfNull(makeCurrent);
@@ -88,6 +108,7 @@ void main()
         _gl = gl;
         _makeCurrent = makeCurrent;
         _swap = swap;
+        _releaseCurrent = releaseCurrent ?? (() => { });
         _width = System.Math.Max(1, width);
         _height = System.Math.Max(1, height);
 
@@ -99,8 +120,28 @@ void main()
         RendererDescription = $"OpenGL ({renderer.Trim()} — {vendor.Trim()} — {version.Trim()})";
 
         CreateGeometry();
+        CheckGlError("after CreateGeometry");
         CreateProgram();
+        CheckGlError("after CreateProgram");
         CreateTextureObject();
+        CheckGlError("after CreateTextureObject");
+
+        if (s_diag)
+        {
+            Console.Error.WriteLine($"[SilkGL] init {_width}x{_height} vao={_vao} program={_program} tex={_tex}");
+            Console.Error.WriteLine($"[SilkGL] {RendererDescription}");
+        }
+
+        // S-X6 — drop ctx from ctor thread so calc thread can wglMakeCurrent.
+        _releaseCurrent();
+    }
+
+    private void CheckGlError(string stage)
+    {
+        if (!s_diag) return;
+        GLEnum err;
+        while ((err = _gl.GetError()) != GLEnum.NoError)
+            Console.Error.WriteLine($"[SilkGL] GL error 0x{(int)err:X4} ({err}) — {stage}");
     }
 
     private string SafeGetString(StringName name)
@@ -204,48 +245,99 @@ void main()
             throw new ArgumentException("colorBuffer too small for given dimensions", nameof(colorBuffer));
 
         _makeCurrent();
+        try
+        {
         _gl.BindTexture(TextureTarget.Texture2D, _tex);
+
+        // S-X8 (2026-06-27) — explicit unpack state. Mesa drivers under
+        // memory pressure leave UNPACK_ROW_LENGTH at a non-zero stride from
+        // an earlier client call, which the next TexSubImage2D reads as
+        // padded → horizontal banding. UNPACK_ALIGNMENT=4 is the default
+        // but pin it too so no upstream driver fiddle can flip it to 1/2.
+        _gl.PixelStore(PixelStoreParameter.UnpackRowLength, 0);
+        _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 4);
 
         // Source layout from MandelbrotCalculator is BGRA per uint (little
         // endian byte order: B, G, R, A). GL_BGRA + GL_UNSIGNED_INT_8_8_8_8_REV
         // (= PixelType.UnsignedInt8888Rev) consumes the packed uint correctly
         // on little-endian platforms — same trick the DX backend relies on via
         // Format.B8G8R8A8_UNorm.
+        // S-X6 (2026-06-23) — GL_RGBA + GL_UNSIGNED_BYTE. GL_BGRA is not in
+        // the 3.3 core profile spec; NVIDIA's strict core context returns
+        // GL_INVALID_OPERATION and leaves the texture empty (→ all-black
+        // window). Mesa accepts BGRA but the cross-plat baseline must be
+        // core-conformant. The .bgra swizzle in FragmentShaderBody undoes
+        // the channel re-order so MandelbrotCalculator's BGRA byte layout
+        // renders with correct colours.
         fixed (uint* p = colorBuffer)
         {
             if (width != _texWidth || height != _texHeight)
             {
                 _gl.TexImage2D(TextureTarget.Texture2D, 0,
                     (int)InternalFormat.Rgba8, (uint)width, (uint)height, 0,
-                    PixelFormat.Bgra, PixelType.UnsignedInt8888Rev, p);
+                    PixelFormat.Rgba, PixelType.UnsignedByte, p);
                 _texWidth = width;
                 _texHeight = height;
+                CheckGlError($"TexImage2D {width}x{height}");
             }
             else
             {
                 _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0,
                     (uint)width, (uint)height,
-                    PixelFormat.Bgra, PixelType.UnsignedInt8888Rev, p);
+                    PixelFormat.Rgba, PixelType.UnsignedByte, p);
+                CheckGlError($"TexSubImage2D {width}x{height}");
             }
         }
+
+        if (s_diag && _uploadCount < 3)
+        {
+            uint pix0 = colorBuffer[0];
+            uint pixMid = colorBuffer[(width * height) / 2];
+            Console.Error.WriteLine($"[SilkGL] upload #{_uploadCount} {width}x{height} pix0=0x{pix0:X8} pixMid=0x{pixMid:X8}");
+        }
+        _uploadCount++;
+        }
+        finally { _releaseCurrent(); }
     }
 
     public void Render()
     {
         if (_disposed) return;
         _makeCurrent();
+        try
+        {
+            _gl.Viewport(0, 0, (uint)_width, (uint)_height);
+            _gl.ClearColor(0f, 0f, 0f, 1f);
+            _gl.Clear((uint)ClearBufferMask.ColorBufferBit);
 
-        _gl.Viewport(0, 0, (uint)_width, (uint)_height);
-        _gl.ClearColor(0f, 0f, 0f, 1f);
-        _gl.Clear((uint)ClearBufferMask.ColorBufferBit);
+            _gl.UseProgram(_program);
+            _gl.BindVertexArray(_vao);
+            _gl.ActiveTexture(TextureUnit.Texture0);
+            _gl.BindTexture(TextureTarget.Texture2D, _tex);
+            _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            CheckGlError($"DrawArrays render #{_renderCount}");
 
-        _gl.UseProgram(_program);
-        _gl.BindVertexArray(_vao);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _tex);
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            // S-X8 (2026-06-27) — force GPU sync before swap on Linux/X11.
+            // glXSwapBuffers is non-blocking with most Mesa drivers; if the
+            // calc thread queues a new UpdateTexture before the previous
+            // swap-buffers actually composites, the X server delays the
+            // present until next user input forces an implicit sync (the
+            // "right-click reveals image" symptom). glFinish is heavyweight
+            // (CPU stalls until GPU drained) but the alternative — silent
+            // presents stalled behind in-flight commands — is worse. Skip
+            // on Windows where the Silk path is rare + DXGI present already
+            // syncs.
+            if (OperatingSystem.IsLinux())
+                _gl.Finish();
 
-        _swap();
+            _swap();
+            CheckGlError($"swap render #{_renderCount}");
+
+            if (s_diag && _renderCount < 3)
+                Console.Error.WriteLine($"[SilkGL] render #{_renderCount} viewport={_width}x{_height} tex={_texWidth}x{_texHeight}");
+            _renderCount++;
+        }
+        finally { _releaseCurrent(); }
     }
 
     public void Resize(int width, int height)

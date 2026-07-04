@@ -41,6 +41,17 @@ public sealed class RenderRequestDto
     [JsonPropertyName("centerY2")]  public double CenterY2  { get; set; }
     [JsonPropertyName("centerY3")]  public double CenterY3  { get; set; }
 
+    // D-6b2 — OD limbs of the centre (used at zoom > 1e50 for the
+    // shared-reference-orbit OD path). DD / QD renders leave them 0.
+    [JsonPropertyName("centerX4")] public double CenterX4 { get; set; }
+    [JsonPropertyName("centerX5")] public double CenterX5 { get; set; }
+    [JsonPropertyName("centerX6")] public double CenterX6 { get; set; }
+    [JsonPropertyName("centerX7")] public double CenterX7 { get; set; }
+    [JsonPropertyName("centerY4")] public double CenterY4 { get; set; }
+    [JsonPropertyName("centerY5")] public double CenterY5 { get; set; }
+    [JsonPropertyName("centerY6")] public double CenterY6 { get; set; }
+    [JsonPropertyName("centerY7")] public double CenterY7 { get; set; }
+
     [JsonPropertyName("themeName")]   public string ThemeName   { get; set; } = "HSV";
     [JsonPropertyName("qualityName")] public string QualityName { get; set; } = "Standard";
 
@@ -131,4 +142,55 @@ public sealed class RenderRequestDto
     /// client override even when <see cref="UseClientWatermark"/> is true.</summary>
     [JsonPropertyName("clientWatermarkJson")]
     public string? ClientWatermarkJson { get; set; }
+
+    /// <summary>D-2b — cluster tile renders set this so the engine emits
+    /// raw fractal pixels with no watermark / sub-text / region branding
+    /// composited. The master adds the single watermark once on the
+    /// merged artifact (D-3+). Single-server renders leave it false so
+    /// existing decoration behaviour is unchanged.</summary>
+    [JsonPropertyName("suppressDecorations")]
+    public bool SuppressDecorations { get; set; }
+
+    // ── D-6b — shared reference-orbit for tile rendering ────────────────────
+    //
+    // When the master ships a precomputed Mandelbrot reference orbit for a
+    // deep-zoom job (zoom > perturbation threshold), every tile carries the
+    // same orbit blob plus subrect framing. The tile renders with CenterX/Y
+    // = the IMAGE centre (== ref-orbit centre) and Width/Height = the tile
+    // pixel dims (the subrect output). ImageWidth/Height + SubRectOffsetX/Y
+    // tell the engine to derive per-pixel dc from the IMAGE coordinate
+    // system instead of the tile-local one, so all tiles share the orbit
+    // computed once on the master. Single-server renders and low-zoom
+    // tiles leave these zero — existing geometry unchanged.
+
+    /// <summary>D-6b — full image pixel width when this render is a subrect
+    /// of a larger image. 0 = subrect mode inactive; the engine uses
+    /// Width/Height for both buffer dims and dc geometry.</summary>
+    [JsonPropertyName("imageWidth")]
+    public int ImageWidth { get; set; }
+
+    /// <summary>D-6b — full image pixel height; see <see cref="ImageWidth"/>.</summary>
+    [JsonPropertyName("imageHeight")]
+    public int ImageHeight { get; set; }
+
+    /// <summary>D-6b — pixel offset of this render's top-left within the
+    /// full image. 0 when subrect mode inactive.</summary>
+    [JsonPropertyName("subRectOffsetX")]
+    public int SubRectOffsetX { get; set; }
+
+    [JsonPropertyName("subRectOffsetY")]
+    public int SubRectOffsetY { get; set; }
+
+    /// <summary>D-6b — base64-encoded reference-orbit blob (see
+    /// <c>ReferenceOrbitBlobCodec</c>). Null/empty = none; the engine
+    /// computes the orbit per-tile as in legacy behaviour.</summary>
+    [JsonPropertyName("refOrbitBlobBase64")]
+    public string? RefOrbitBlobBase64 { get; set; }
+
+    /// <summary>D-6b — maxIter the master used to compute the shipped
+    /// orbit. The engine accepts the seeded orbit only when its own
+    /// MaxIterations ≤ this cap (else it recomputes to honour the higher
+    /// cap).</summary>
+    [JsonPropertyName("refOrbitMaxIter")]
+    public int RefOrbitMaxIter { get; set; }
 }

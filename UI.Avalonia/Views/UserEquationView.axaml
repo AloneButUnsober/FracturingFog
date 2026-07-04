@@ -4,10 +4,10 @@
         x:Class="FracturingFog.UI.Avalonia.Views.UserEquationView"
         x:DataType="vm:UserEquationViewModel"
         Title="User Equation"
-        Width="640"
-        Height="540"
+        Width="700"
+        Height="680"
         MinWidth="460"
-        MinHeight="400"
+        MinHeight="480"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="#282828"
@@ -27,7 +27,7 @@
         Tab 1  DSL            — bare CalcGen DSL (validate-on-type, no live render)
       Save/Compile/Generate route by the currently active tab via the VM.
     -->
-    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto">
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
 
         <!-- Row 0: saved equations row -->
         <Grid Grid.Row="0"
@@ -51,30 +51,48 @@
                     Padding="14,4" />
         </Grid>
 
-        <!-- Row 1: promote toggle + Compile & Load + Generate via CalcGen + Equation Guide + CalcGen Help -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+        <!-- Row 1: promote toggle + Cookbook + Morph + Compile & Load + Compile + Save + Generate via CalcGen + Equation Guide + CalcGen Help -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
             <CheckBox Grid.Column="0"
                       Content="Promote to fractal list"
                       IsChecked="{Binding Promote, Mode=TwoWay}"
                       IsEnabled="{Binding PromoteEnabled}" />
             <Button Grid.Column="1"
+                    Content="Cookbook…"
+                    Command="{Binding OpenCookbookCommand}"
+                    ToolTip.Tip="Pick a curated equation from the cookbook. Replaces the DSL editor and re-centres the view."
+                    Margin="0,0,6,0"
+                    Padding="10,4" />
+            <Button Grid.Column="2"
+                    Content="Morph…"
+                    Command="{Binding OpenMorphCommand}"
+                    ToolTip.Tip="Render an N-frame PNG sequence morphing between two equations (1-t)·A + t·B."
+                    Margin="0,0,6,0"
+                    Padding="10,4" />
+            <Button Grid.Column="3"
                     Content="Compile &amp; Load"
                     Command="{Binding HotLoadViaCalcGenCommand}"
                     ToolTip.Tip="Generate, Roslyn-compile, and load the active tab's equation as a hot calculator. No rebuild required — replaces the active calc immediately."
                     Margin="0,0,6,0"
                     Padding="14,4" />
-            <Button Grid.Column="2"
+            <Button Grid.Column="4"
+                    Content="Compile + Save"
+                    Command="{Binding HotLoadAndPersistCommand}"
+                    ToolTip.Tip="Same as Compile &amp; Load, but also writes the generated source under %LOCALAPPDATA%/FracturingFog/UserCalculators/. The calculator is re-loaded automatically on next launch."
+                    Margin="0,0,6,0"
+                    Padding="14,4" />
+            <Button Grid.Column="5"
                     Content="Generate via CalcGen"
                     Command="{Binding GenerateViaCalcGenCommand}"
                     ToolTip.Tip="Run the active tab's equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
                     Padding="14,4" />
-            <Button Grid.Column="3"
+            <Button Grid.Column="6"
                     Content="Equation Guide"
                     Command="{Binding OpenEquationGuideCommand}"
                     ToolTip.Tip="Open the Fractal Equation Design Guide — how equations work, what to change for which result, extensive worked examples across every CalcGen-supported family."
                     Margin="6,0,0,0"
                     Padding="10,4" />
-            <Button Grid.Column="4"
+            <Button Grid.Column="7"
                     Content="CalcGen Help"
                     Command="{Binding OpenCalcGenHelpCommand}"
                     ToolTip.Tip="Open the CalcGen User Guide — grammar, operators, examples, gating rules."
@@ -94,6 +112,12 @@
             <Button Grid.Column="2" Content="+90°" Command="{Binding RotPlus90Command}"  Margin="6,0,0,0" Padding="8,4" />
             <Button Grid.Column="3" Content="-90°" Command="{Binding RotMinus90Command}" Margin="4,0,0,0" Padding="8,4" />
             <Button Grid.Column="4" Content="Reset" Command="{Binding RotResetCommand}"  Margin="4,0,0,0" Padding="8,4" />
+            <CheckBox Grid.Column="5"
+                      Content="Skip Jacobian (≈2× faster, flat 3D)"
+                      IsChecked="{Binding SkipJacobian, Mode=TwoWay}"
+                      ToolTip.Tip="Drop the parallel-perturbation trajectory used to compute Hubbard–Douady surface normals. Doubles throughput on slow equations at the cost of flat 3D Phong shading."
+                      Margin="12,0,0,0"
+                      VerticalAlignment="Center" />
         </Grid>
 
         <!-- Row 3: tab control (fills) -->
@@ -198,8 +222,46 @@
 
         </TabControl>
 
-        <!-- Row 4: status / error + Apply Fix button (Ctrl+.) -->
-        <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+        <!-- Row 4: Live equation preview (Wave 2.4 / D-6.24) — collapsible.
+             Updates after every successful CalcGen parse. AST + dz/dc come
+             straight from AstDifferentiator; SA / Perturbation / DE / Flags
+             mirror the gates CalcGen emits into the generated calculator,
+             so what the user sees here is exactly what will be compiled. -->
+        <Expander Grid.Row="4"
+                  Header="Live preview (AST / dz/dc / SA / Perturbation / DE)"
+                  IsExpanded="True"
+                  IsVisible="{Binding HasPreview}"
+                  Margin="0,8,0,0"
+                  Background="#1C1C1C"
+                  Foreground="#B4B4B4">
+            <Grid ColumnDefinitions="Auto,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  Margin="6,4,6,6">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="AST: "       Foreground="#909090" Margin="0,0,8,2" />
+                <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding PreviewAstText}"  FontFamily="Consolas, monospace" Foreground="#DCDCDC" TextWrapping="Wrap" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="dz/dc: "      Foreground="#909090" Margin="0,0,8,2" />
+                <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PreviewDpDcText}" FontFamily="Consolas, monospace" Foreground="#DCDCDC" TextWrapping="Wrap" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="dz/dz: "      Foreground="#909090" Margin="0,0,8,2" />
+                <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PreviewDpDzText}" FontFamily="Consolas, monospace" Foreground="#DCDCDC" TextWrapping="Wrap" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="SA: "           Foreground="#909090" Margin="0,4,8,2" />
+                <SelectableTextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PreviewSaText}"      FontFamily="Consolas, monospace" Foreground="#DCDCDC" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Perturbation: " Foreground="#909090" Margin="0,0,8,2" />
+                <SelectableTextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PreviewPerturbText}" FontFamily="Consolas, monospace" Foreground="#DCDCDC" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="DE / normals: " Foreground="#909090" Margin="0,0,8,2" />
+                <SelectableTextBlock Grid.Row="5" Grid.Column="1" Text="{Binding PreviewDeText}"      FontFamily="Consolas, monospace" Foreground="#DCDCDC" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Flags: "        Foreground="#909090" Margin="0,0,8,0" />
+                <SelectableTextBlock Grid.Row="6" Grid.Column="1" Text="{Binding PreviewFlagsText}"   FontFamily="Consolas, monospace" Foreground="#DCDCDC" />
+            </Grid>
+        </Expander>
+
+        <!-- Row 5: status / error + Apply Fix button (Ctrl+.) -->
+        <Grid Grid.Row="5" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
             <TextBlock Grid.Column="0"
                        Text="{Binding StatusText}"
                        FontFamily="Consolas, monospace"

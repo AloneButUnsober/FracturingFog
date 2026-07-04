@@ -1,0 +1,652 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.LightingFxDialog"
+        x:DataType="vm:FractalParamsViewModel"
+        Title="Lighting &amp; FX"
+        Width="520"
+        Height="720"
+        MinWidth="440"
+        MinHeight="400"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#282828"
+        Foreground="White">
+
+    <!--
+      Bound to the SAME FractalParamsViewModel as FractalParamsView (the params
+      view passes its DataContext through when opening this dialog). Bindings
+      mirror the legacy Lighting & FX expander block that used to live inline
+      in FractalParamsView.axaml. Numeric knobs with bounded ranges render as
+      sliders + a right-aligned value readout; unbounded or precision-sensitive
+      knobs (paths, hex, low-increment numerics) stay as NumericUpDown / TextBox.
+
+      Speed-driven effects (light orbit, caustics, cloud-noise drift) get a
+      Start/Stop toggle next to the speed input. Toggle stashes the live speed
+      on Stop and restores it on Start so the user can pause animation without
+      losing their preferred rate.
+    -->
+
+    <Window.Styles>
+        <!-- Compact slider for value-readout rows. -->
+        <Style Selector="Slider.knob">
+            <Setter Property="Margin" Value="0,2,0,2" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="MinHeight" Value="24" />
+        </Style>
+        <Style Selector="TextBlock.knobValue">
+            <Setter Property="Width" Value="52" />
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Foreground" Value="#C8C8C8" />
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="14" RowDefinitions="*,Auto">
+
+        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="4">
+
+                <TextBlock Text="Lighting &amp; FX"
+                           FontWeight="Bold"
+                           Foreground="#FFCC00"
+                           Margin="0,0,0,4" />
+
+                <!-- Lights -->
+                <Expander Header="Lights" IsExpanded="True">
+                    <Grid ColumnDefinitions="160,*"
+                          RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="L1 θ (azim):" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                                       Value="{Binding Light1Theta, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="L1 φ (elev):" VerticalAlignment="Center" />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.01" Maximum="3.13"
+                                    Value="{Binding Light1Phi, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Light1Phi, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="L1 intensity:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="4"
+                                    Value="{Binding Light1Intensity, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Light1Intensity, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="L2 θ (azim):" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                       Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                                       Value="{Binding Light2Theta, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="L2 φ (elev):" VerticalAlignment="Center" />
+                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.01" Maximum="3.13"
+                                    Value="{Binding Light2Phi, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Light2Phi, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="L2 intensity:" VerticalAlignment="Center"
+                                   ToolTip.Tip="0 = light off. Fill light. Default off so legacy single-light look stays unchanged." />
+                        <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="4"
+                                    Value="{Binding Light2Intensity, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Light2Intensity, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="L3 θ (azim):" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="6" Grid.Column="1"
+                                       Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                                       Value="{Binding Light3Theta, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="L3 φ (elev):" VerticalAlignment="Center" />
+                        <Grid Grid.Row="7" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.01" Maximum="3.13"
+                                    Value="{Binding Light3Phi, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Light3Phi, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="L3 intensity:" VerticalAlignment="Center"
+                                   ToolTip.Tip="0 = light off. Rim/back light." />
+                        <Grid Grid.Row="8" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="4"
+                                    Value="{Binding Light3Intensity, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Light3Intensity, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Ambient:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Flat floor brightness. Legacy 0.15. Higher = brighter shadows / less contrast." />
+                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding AmbientStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding AmbientStrength, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="10" Grid.Column="0" Text="Orbit speed (rad/s):" VerticalAlignment="Center"
+                                   ToolTip.Tip="Animates L1 around world Y. 0 = static. Start/Stop pauses without losing the rate." />
+                        <Grid Grid.Row="10" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <NumericUpDown Grid.Column="0"
+                                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                                           Value="{Binding LightOrbitSpeed, Mode=TwoWay}" />
+                            <Button Grid.Column="1"
+                                    Content="{Binding LightOrbitToggleLabel}"
+                                    Command="{Binding ToggleLightOrbitCommand}"
+                                    MinWidth="62" Margin="6,0,0,0" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="11" Grid.Column="0" Text="Caustics speed:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Caustic-pattern phase rate. 0 = static. Start/Stop pauses without losing the rate." />
+                        <Grid Grid.Row="11" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <NumericUpDown Grid.Column="0"
+                                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                                           Value="{Binding CausticsAnimSpeed, Mode=TwoWay}" />
+                            <Button Grid.Column="1"
+                                    Content="{Binding CausticsToggleLabel}"
+                                    Command="{Binding ToggleCausticsCommand}"
+                                    MinWidth="62" Margin="6,0,0,0" />
+                        </Grid>
+                    </Grid>
+                </Expander>
+
+                <!-- Ambient Occlusion -->
+                <Expander Header="Ambient Occlusion">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="DE-AO samples:" VerticalAlignment="Center"
+                                   ToolTip.Tip="DE-cone AO (micro-crease detail). 0 = off. 4–8 typical; each sample = one DE eval." />
+                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="16"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding AoSamples, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding AoSamples}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="DE-AO strength:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding AoStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding AoStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="SSAO samples:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Screen-space AO (macro neighbor occlusion). Hemisphere sample count. 0 = off. 8–16 typical." />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding SsaoSamples, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding SsaoSamples}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="SSAO radius:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Hemisphere radius in world units. Smaller = crevice detail; larger = soft global shadow." />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.001" Maximum="4"
+                                    Value="{Binding SsaoRadius, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding SsaoRadius, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="SSAO strength:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding SsaoStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding SsaoStrength, StringFormat='F2'}" />
+                        </Grid>
+                    </Grid>
+                </Expander>
+
+                <!-- Shadow -->
+                <Expander Header="Shadow">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Shadow steps:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Soft-shadow DE-march count per light. 0 = no shadows. 24–32 typical." />
+                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding ShadowSteps, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding ShadowSteps}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Softness k:" VerticalAlignment="Center"
+                                   ToolTip.Tip="IQ soft-shadow sharpness. Higher = harder edge. 0 = pure hard shadow." />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
+                                    Value="{Binding ShadowSoftK, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding ShadowSoftK, StringFormat='F1'}" />
+                        </Grid>
+                    </Grid>
+                </Expander>
+
+                <!-- Fog / Volumetric -->
+                <Expander Header="Fog / Volumetric">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Fog density:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Beer–Lambert exponential. 0 = no fog. Scales by ray distance." />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Minimum="0" Maximum="2" Increment="0.005" FormatString="F4"
+                                       Value="{Binding FogDensity, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Height falloff:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Density scaled by exp(-coef * y). 0 = uniform; higher = fog hugs ground." />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="4"
+                                    Value="{Binding FogHeightFalloff, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding FogHeightFalloff, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Volume steps:" VerticalAlignment="Center"
+                                   ToolTip.Tip="In-scatter raymarch step count (light shafts). 0 = exp fog only. Cost = steps × shadow per sample." />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding VolumeSteps, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding VolumeSteps}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Volume noise:" VerticalAlignment="Center"
+                                   ToolTip.Tip="FBM cloud modulation [0,1]. 0 = uniform medium; 1 = cloud-like." />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding VolumeNoiseAmount, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding VolumeNoiseAmount, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Noise scale:" VerticalAlignment="Center"
+                                   ToolTip.Tip="FBM frequency. Higher = finer cloud detail. Default 1.0." />
+                        <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                       Minimum="0.01" Maximum="100" Increment="0.1" FormatString="F2"
+                                       Value="{Binding VolumeNoiseScale, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Noise speed:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Cloud drift along (1, 0.3, 0.7). 0 = static. Start/Stop pauses without losing the rate." />
+                        <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <NumericUpDown Grid.Column="0"
+                                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                                           Value="{Binding VolumeNoiseSpeed, Mode=TwoWay}" />
+                            <Button Grid.Column="1"
+                                    Content="{Binding VolumeNoiseToggleLabel}"
+                                    Command="{Binding ToggleVolumeNoiseCommand}"
+                                    MinWidth="62" Margin="6,0,0,0" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Noise octaves:" VerticalAlignment="Center"
+                                   ToolTip.Tip="FBM octaves [1..6]. More = finer cloud detail. Default 3 matches Phase 22." />
+                        <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="6"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding VolumeNoiseOctaves, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding VolumeNoiseOctaves}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Self-shadow:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Cloud self-shadow strength [0..4]. 0 = off. Produces god-ray banding inside dense clouds." />
+                        <Grid Grid.Row="7" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="4"
+                                    Value="{Binding VolumeSelfShadow, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding VolumeSelfShadow, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Self-shadow steps:" VerticalAlignment="Center"
+                                   ToolTip.Tip="FBM samples per volume step along light direction [0..16]. Higher = smoother, costlier." />
+                        <Grid Grid.Row="8" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="16"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding VolumeSelfShadowSteps, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding VolumeSelfShadowSteps}" />
+                        </Grid>
+                    </Grid>
+                </Expander>
+
+                <!-- Material -->
+                <Expander Header="Material">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Roughness:" VerticalAlignment="Center"
+                                   ToolTip.Tip="GGX roughness. 0 = mirror, 1 = lambert." />
+                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding Roughness, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Roughness, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Metallic:" VerticalAlignment="Center"
+                                   ToolTip.Tip="0 = dielectric (white spec), 1 = metal (albedo-tinted, no diffuse)." />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding Metallic, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Metallic, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Specular:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="4"
+                                    Value="{Binding SpecularStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding SpecularStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Sub-surface:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Translucency. Back-lit lobe via dot(-L,V) * exp(-distInside * k)." />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding SubSurfaceStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding SubSurfaceStrength, StringFormat='F2'}" />
+                        </Grid>
+                    </Grid>
+                </Expander>
+
+                <!-- Sky / Environment -->
+                <Expander Header="Sky / Environment">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Sky mode:" VerticalAlignment="Center" />
+                        <ComboBox  Grid.Row="0" Grid.Column="1"
+                                   ItemsSource="{Binding SkyModes}"
+                                   SelectedItem="{Binding SkyMode, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="HDRI preset / file:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Built-in preset name (Studio/Sunset/Overcast/Void) OR absolute path to a .hdr / .pic / .exr file. Browse… picks a file." />
+                        <Grid Grid.Row="1" Grid.Column="1" Margin="0,2"
+                              ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                            <TextBox Grid.Row="0" Grid.Column="0"
+                                     Text="{Binding EnvironmentName, Mode=TwoWay}" />
+                            <Button Grid.Row="0" Grid.Column="1" Content="Browse…" Margin="4,0,0,0"
+                                    Click="OnBrowseHdriClick"
+                                    ToolTip.Tip="Pick a .hdr / .pic / .exr file. Eagerly loads + caches so missing files surface a status message immediately." />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                       x:Name="HdriStatus" Margin="0,2,0,0" FontSize="11" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="IBL strength:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding IblStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding IblStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Show backdrop:" VerticalAlignment="Center"
+                                   ToolTip.Tip="On: HDRI / gradient sky renders behind the fractal. Off: ray-miss pixels stay at the colormap's InSetColor — IBL still contributes to surface lighting but the photographic backdrop is hidden." />
+                        <CheckBox Grid.Row="3" Grid.Column="1"
+                                  IsChecked="{Binding ShowSkyBackdrop, Mode=TwoWay}" Margin="0,2" />
+                    </Grid>
+                </Expander>
+
+                <!-- Tone Map / Bloom / Lens -->
+                <Expander Header="Tone Map / Bloom / Lens">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Tone map:" VerticalAlignment="Center" />
+                        <ComboBox  Grid.Row="0" Grid.Column="1"
+                                   ItemsSource="{Binding ToneMapOperators}"
+                                   SelectedItem="{Binding ToneMap, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Exposure:" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Minimum="0.0625" Maximum="16" Increment="0.05" FormatString="F2"
+                                       Value="{Binding Exposure, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Bloom threshold:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="20"
+                                    Value="{Binding BloomThreshold, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding BloomThreshold, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Bloom strength:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding BloomStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding BloomStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Chromatic ab.:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Radial RGB channel offset (pixels). 0 = off." />
+                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="16"
+                                    Value="{Binding ChromaticAberration, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding ChromaticAberration, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Lens distortion:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Barrel (positive) / pincushion (negative). 0 = none." />
+                        <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="-0.5" Maximum="0.5"
+                                    Value="{Binding LensDistortion, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding LensDistortion, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Vignette:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Corner falloff [0..1]. 0 = uniform. Applied after lens warp." />
+                        <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding Vignette, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Vignette, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Tangential p1:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Brown decentring p1 (X coefficient). Simulates lens shift." />
+                        <NumericUpDown Grid.Row="7" Grid.Column="1"
+                                       Minimum="-0.1" Maximum="0.1" Increment="0.005" FormatString="F4"
+                                       Value="{Binding LensTangentialX, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Tangential p2:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Brown decentring p2 (Y coefficient). Simulates lens shift." />
+                        <NumericUpDown Grid.Row="8" Grid.Column="1"
+                                       Minimum="-0.1" Maximum="0.1" Increment="0.005" FormatString="F4"
+                                       Value="{Binding LensTangentialY, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Anamorphic squeeze:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Vertical-to-horizontal aspect ratio [0.25..4]. 1 = isotropic. >1 = scope/wide look." />
+                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.25" Maximum="4"
+                                    Value="{Binding AnamorphicSqueeze, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding AnamorphicSqueeze, StringFormat='F2'}" />
+                        </Grid>
+                    </Grid>
+                </Expander>
+
+                <!-- Reflection / Edge / Stereo / DoF -->
+                <Expander Header="Reflection / Edge / Stereo / DoF">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Reflection:" VerticalAlignment="Center"
+                                   ToolTip.Tip="N-bounce DE-march along reflect(V,N). 0 = off." />
+                        <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding ReflectionStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding ReflectionStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Reflection steps:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding ReflectionSteps, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding ReflectionSteps}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Bounces:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Recursive reflection chain depth (Phase 16b). 1 = single bounce (legacy). Up to 6 for chrome / hall-of-mirrors. Linear cost per bounce." />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="6"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding MaxBounces, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding MaxBounces}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Edge contour:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Sobel-on-normal ink overlay. 0 = off." />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding EdgeStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding EdgeStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Edge threshold:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Sobel magnitude below which no ink is drawn (0..2.83). Default 0.4." />
+                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="2.83"
+                                    Value="{Binding EdgeThreshold, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding EdgeThreshold, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Edge kernel:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Sobel = fast, isotropic-ish. FreiChen = 9-tap edge subspace, more uniform on diagonals." />
+                        <ComboBox Grid.Row="5" Grid.Column="1"
+                                  ItemsSource="{Binding EdgeKernels}"
+                                  SelectedItem="{Binding EdgeKernel, Mode=TwoWay}"
+                                  Margin="0,2" />
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Edge color (BGRA hex):" VerticalAlignment="Center"
+                                   ToolTip.Tip="Ink color in AARRGGBB hex (FF000000 = opaque black, FFFFCC00 = colorblind-safe yellow)." />
+                        <TextBox Grid.Row="6" Grid.Column="1"
+                                 Text="{Binding EdgeColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 Margin="0,2" />
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Stereo mode:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (Phase 20b — 2x cost, real parallax on close objects)." />
+                        <ComboBox Grid.Row="7" Grid.Column="1"
+                                  ItemsSource="{Binding StereoModes}"
+                                  SelectedItem="{Binding StereoMode, Mode=TwoWay}"
+                                  Margin="0,2" />
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Stereo eye sep:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Side-by-side stereo IPD in world units. 0 = mono. Doubles output width." />
+                        <NumericUpDown Grid.Row="8" Grid.Column="1"
+                                       Minimum="0" Maximum="0.25" Increment="0.005" FormatString="F4"
+                                       Value="{Binding StereoEyeSeparation, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Stereo FOV°:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Per-eye horizontal field-of-view in degrees. Default 60°. Used only when eye-sep > 0." />
+                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="20" Maximum="120"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding StereoFovDegrees, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding StereoFovDegrees, StringFormat='F1'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="10" Grid.Column="0" Text="DoF aperture:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Hex bokeh radius (world units). 0 = pinhole." />
+                        <Grid Grid.Row="10" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="0.5"
+                                    Value="{Binding DofAperture, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding DofAperture, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="11" Grid.Column="0" Text="DoF focus dist:" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="11" Grid.Column="1"
+                                       Minimum="0.1" Maximum="100" Increment="0.1" FormatString="F2"
+                                       Value="{Binding DofFocusDistance, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="12" Grid.Column="0" Text="DoF samples:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="12" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="32"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding DofSamples, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding DofSamples}" />
+                        </Grid>
+                    </Grid>
+                </Expander>
+
+                <!-- Triplanar Material -->
+                <Expander Header="Triplanar Material">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Pattern:" VerticalAlignment="Center"
+                                   ToolTip.Tip="World-space projected pattern blended with the calculator's albedo. None = off." />
+                        <ComboBox Grid.Row="0" Grid.Column="1"
+                                  ItemsSource="{Binding TriplanarKinds}"
+                                  SelectedItem="{Binding TriplanarKind, Mode=TwoWay}"
+                                  Margin="0,2" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Scale:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Pattern frequency. Higher = finer detail." />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Minimum="0.01" Maximum="100" Increment="0.1" FormatString="F2"
+                                       Value="{Binding TriplanarScale, Mode=TwoWay}" Margin="0,2" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Strength:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Blend weight against base albedo. 0 = bypass, 1 = full pattern." />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding TriplanarStrength, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding TriplanarStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Tint (BGRA hex):" VerticalAlignment="Center"
+                                   ToolTip.Tip="AARRGGBB tint hex multiplied with the pattern. FFFFFFFF = no tint. Examples: FFFFCC00 = colorblind-safe yellow." />
+                        <TextBox Grid.Row="3" Grid.Column="1"
+                                 Text="{Binding TriplanarTintHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 Margin="0,2" />
+                    </Grid>
+                </Expander>
+
+                <!-- Debug HUD -->
+                <Expander Header="Debug HUD">
+                    <StackPanel Spacing="4" Margin="6,4,0,4">
+                        <CheckBox Content="Light-direction compass"
+                                  IsChecked="{Binding DebugHudCompass, Mode=TwoWay}"
+                                  ToolTip.Tip="Top-right compass showing L1/L2/L3 azimuth + elevation. Pure visual, no text." />
+                        <CheckBox Content="Parameter bars"
+                                  IsChecked="{Binding DebugHudBars, Mode=TwoWay}"
+                                  ToolTip.Tip="Bottom-left bars: Ambient / AO / Fog / Reflection / Caustics." />
+                        <CheckBox Content="Scene-time clock"
+                                  IsChecked="{Binding DebugHudClock, Mode=TwoWay}"
+                                  ToolTip.Tip="Top-left rotating dial that visualises SceneTime advance." />
+                    </StackPanel>
+                </Expander>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Close button -->
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,12,0,0">
+            <Button Content="Close"
+                    Click="OnCloseClick"
+                    IsCancel="True"
+                    Padding="18,6"
+                    Background="#464646"
+                    Foreground="White" />
+        </StackPanel>
+    </Grid>
+</Window>

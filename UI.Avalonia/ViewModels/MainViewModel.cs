@@ -104,8 +104,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _renderHost.SetSelectionBox(null, null, null, null);
         };
         _renderHost.FrameCompleted += OnFrameCompleted;
-        _renderHost.StatusRequested += (_, txt) => StatusText = txt;
+        _renderHost.StatusRequested += OnRenderHostStatusRequested;
         _renderHost.ColorMapChanged += OnRenderHostColorMapChanged;
+        _renderHost.RenderCancelled += OnRenderCancelled;
         _overlayContrastLuma = _renderHost.OverlayContrastLuma;
 
         _panStopDebounce = new System.Threading.Timer(_ =>
@@ -500,6 +501,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private bool _adaptiveLocked;
     public bool AdaptiveLocked { get => _adaptiveLocked; set => this.RaiseAndSetIfChanged(ref _adaptiveLocked, value); }
 
+    private bool _lightingLocked;
+    /// <summary>When true, theme selection does NOT overwrite
+    /// <c>FractalParameters.Lighting</c> from the theme's bundled
+    /// <see cref="LightingFxPresetData"/>. Default false = honour theme presets.
+    /// Phase 24.</summary>
+    public bool LightingLocked { get => _lightingLocked; set => this.RaiseAndSetIfChanged(ref _lightingLocked, value); }
+
     // ── Overlay toggles ───────────────────────────────────────────────────
 
     private bool _showGrid;
@@ -834,8 +842,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 }
                 break;
             case RenderHint.Fast:
+                // Wave 2.5 — progressive ¼ → ½ → full chain. Each pan / wheel
+                // step cancels the in-flight chain and restarts at ¼ res so
+                // the user sees feedback within ~one calc of the quarter-res
+                // sidecar (~1/16 of full-res cost). The chain self-escalates
+                // to a full-quality final stage when input stops; the
+                // pan-stop debounce below is kept as a backstop for callers
+                // that emit a single Fast without a follow-up Full.
                 _renderHintFastInFlight = true;
-                _renderHost.TriggerFast();
+                _renderHost.Trigger(progressive: true);
                 _panStopDebounce.Change(PanStopDebounceMs, System.Threading.Timeout.Infinite);
                 break;
         }
@@ -844,6 +859,64 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private void OnRenderHostColorMapChanged(object? sender, EventArgs e)
     {
         OverlayContrastLuma = _renderHost.OverlayContrastLuma;
+    }
+
+    private RenderFrameInfo? _lastFrameInfo;
+
+    // S-X9c (2026-06-27) — minimum-visible hold for "Calculating…".
+    // Shallow renders complete in <20 ms so OnFrameCompleted overwrites
+    // the busy string before the next display refresh — user reports
+    // never seeing "Calculating…" at all and being unsure whether the
+    // app responded to their input. Hold the busy string for at least
+    // MinBusyVisibleMs before letting FrameCompleted overwrite it; if
+    // the calc finishes faster, queue the frame-info string and apply
+    // it on a UI-thread timer when the hold expires. RenderCancelled
+    // takes the same path so cancelled fast calcs still show the busy
+    // hint briefly.
+    private const int MinBusyVisibleMs = 250;
+    private readonly System.Diagnostics.Stopwatch _busyClock = new();
+    private bool _busyActive;
+    private string? _pendingStatusText;
+    private System.Threading.Timer? _busyReleaseTimer;
+
+    private void OnRenderHostStatusRequested(object? sender, string text)
+    {
+        // Render host raises this exactly once per Trigger with
+        // "Calculating…". Mark busy, start the clock, push to the bar.
+        _busyActive = true;
+        _busyClock.Restart();
+        _pendingStatusText = null;
+        StatusText = text;
+    }
+
+    private void ApplyOrDeferStatusText(string text)
+    {
+        if (!_busyActive)
+        {
+            StatusText = text;
+            return;
+        }
+        long elapsed = _busyClock.ElapsedMilliseconds;
+        if (elapsed >= MinBusyVisibleMs)
+        {
+            _busyActive = false;
+            _busyClock.Stop();
+            StatusText = text;
+            _pendingStatusText = null;
+            return;
+        }
+        _pendingStatusText = text;
+        int remaining = MinBusyVisibleMs - (int)elapsed;
+        _busyReleaseTimer ??= new System.Threading.Timer(_ =>
+        {
+            string? queued = _pendingStatusText;
+            if (queued == null) return;
+            _pendingStatusText = null;
+            _busyActive = false;
+            _busyClock.Stop();
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusText = queued);
+        }, null, System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        _busyReleaseTimer.Change(remaining, System.Threading.Timeout.Infinite);
     }
 
     private void OnFrameCompleted(object? sender, RenderFrameInfo info)
@@ -857,20 +930,42 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             ? $"[{info.PrecisionLabel}]"
             : (info.HighPrecisionActive ? "[DD]" : "[SP]");
         string typeTag = $"[{info.FractalType}]";
-        StatusText =
+        string text =
             $"{typeTag}  cx={info.CenterX:G12}  cy={info.CenterY:G12}  " +
             $"zoom={info.Zoom:G6}  iter={info.Iterations}  " +
             $"{precTag}  [{info.ElapsedMs} ms  {info.Width}×{info.Height}]" +
             (info.IterLocked ? "  [ITER LOCKED]" : "");
+        _lastFrameInfo = info;
+        ApplyOrDeferStatusText(text);
+    }
+
+    // S-X8 (2026-06-27) — RenderHost cancelled the in-flight calc (rapid
+    // pan/zoom, deep-Extreme TAA tick beat the prior frame). Without this
+    // handler the "Calculating…" string Trigger pushed stays on screen
+    // forever. Replay the last good FrameInfo when available so the bar
+    // returns to its prior render's geometry; fall back to a blank if no
+    // frame has landed yet.
+    private void OnRenderCancelled(object? sender, EventArgs e)
+    {
+        var info = _lastFrameInfo;
+        if (info == null)
+        {
+            ApplyOrDeferStatusText(string.Empty);
+            return;
+        }
+        OnFrameCompleted(this, info.Value);
     }
 
     public void Dispose()
     {
         _input.ViewChanged -= OnInputViewChanged;
         _renderHost.FrameCompleted -= OnFrameCompleted;
+        _renderHost.StatusRequested -= OnRenderHostStatusRequested;
         _renderHost.ColorMapChanged -= OnRenderHostColorMapChanged;
+        _renderHost.RenderCancelled -= OnRenderCancelled;
         _panStopDebounce.Dispose();
         _adaptiveRepaintDebounce.Dispose();
         _fullCoalesceTimer.Dispose();
+        _busyReleaseTimer?.Dispose();
     }
 }

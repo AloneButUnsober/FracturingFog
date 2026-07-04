@@ -27,6 +27,13 @@
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+    <!--
+      S-X1 carve (2026-06-23) — WindowsBootstrap.cs installs Windows-only
+      hooks onto AvaloniaShellBootstrap (Hosting) and constructs DirectXRenderer
+      kernels + Mp4Writer + WindowsD3D11HardwareInfoProvider (Rendering.D3D).
+    -->
+    <ProjectReference Include="..\Hosting\FracturingFog.Hosting.csproj" />
+    <ProjectReference Include="..\Rendering.D3D\FracturingFog.Rendering.D3D.csproj" />
   </ItemGroup>
 
   <ItemGroup>

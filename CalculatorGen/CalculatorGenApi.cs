@@ -26,6 +26,33 @@ public readonly record struct GenerateResult(
     public bool Ok => Error is null;
 }
 
+/// <summary>
+/// Lightweight projection of CalcGen's analysis pass for live-preview UIs.
+/// Carries the parsed AST in printable form, the symbolic ∂/∂z and ∂/∂c,
+/// and every feature flag the generator gates emitters on. No file I/O,
+/// no template rendering — safe to call on every keystroke (post-debounce).
+/// </summary>
+public readonly record struct PreviewResult(
+    string AstText,
+    string DpDzText,
+    string DpDcText,
+    int SaFastDegree,
+    int SaGenericDegree,
+    bool SaEnabled,
+    bool SupportsPerturbation,
+    bool SupportsDe,
+    bool HasPrev,
+    bool HasIter,
+    bool HasConj,
+    bool HasFolded,
+    bool HasDiv,
+    bool HasTrans,
+    bool HasCond,
+    string? Error)
+{
+    public bool Ok => Error is null;
+}
+
 public static class CalculatorGenApi
 {
     /// <summary>
@@ -248,13 +275,18 @@ public static class CalculatorGenApi
         // `Sr1 = SrNew1; …` still need the new-value locals declared
         // for the file to compile. Emit zero stubs in the disabled
         // case so the JIT discards them along with everything else.
+        // Wave 2.1 — SA order bumped 8 → 16. Must match the const SaOrders
+        // declared in the template (Calculator.template.cs) and the manual
+        // unroll sites that read Sr/Si/SrNew across the SA build + per-pixel
+        // evaluation loops.
+        const int SaOrderTarget = 16;
         string saRecurrenceBody;
         if (saFast)
-            saRecurrenceBody = SaRecurrenceEmitter.Emit(saDegreeFast, indent: "                ");
+            saRecurrenceBody = SaRecurrenceEmitter.Emit(saDegreeFast, indent: "                ", order: SaOrderTarget);
         else if (saGeneric)
-            saRecurrenceBody = SaRecurrenceEmitter.EmitGeneric(saPolyZ!, saDegreeGeneric, indent: "                ");
+            saRecurrenceBody = SaRecurrenceEmitter.EmitGeneric(saPolyZ!, saDegreeGeneric, indent: "                ", order: SaOrderTarget);
         else
-            saRecurrenceBody = SaRecurrenceEmitter.EmitDisabledStub(indent: "                ");
+            saRecurrenceBody = SaRecurrenceEmitter.EmitDisabledStub(indent: "                ", order: SaOrderTarget);
 
         string template = LoadTemplate("Calculator.template.cs");
         string rendered = template
@@ -361,6 +393,80 @@ public static class CalculatorGenApi
         }
 
         return new GenerateResult(name, rendered, selfTestRendered, null);
+    }
+
+    /// <summary>
+    /// Parse <paramref name="equation"/> and return its AST + symbolic
+    /// derivatives + the generator's feature flags. No code emission.
+    /// Used by the UserEquation dialog's live-preview panel (Wave 2.4
+    /// D-6.24) so the user sees `dz/dc`, SA gating, and DE/perturbation
+    /// availability as they type. Parse failures populate Error and
+    /// leave every other field at its default.
+    /// </summary>
+    public static PreviewResult Preview(string equation)
+    {
+        if (string.IsNullOrWhiteSpace(equation))
+            return new PreviewResult { Error = "Equation is empty." };
+
+        AstNode root;
+        try
+        {
+            root = EquationParser.Parse(equation);
+        }
+        catch (Exception ex)
+        {
+            return new PreviewResult { Error = $"Parse error: {ex.Message}" };
+        }
+
+        var dpdz = AstDifferentiator.DpDz(root);
+        var dpdc = AstDifferentiator.DpDc(root);
+
+        bool hasConj   = AstHelpers.Contains<Conj>(root);
+        bool hasFolded = AstHelpers.Contains<Folded>(root);
+        bool hasDiv    = AstHelpers.Contains<Div>(root);
+        bool hasTrans  = AstHelpers.Contains<Sin>(root)
+                      || AstHelpers.Contains<Cos>(root)
+                      || AstHelpers.Contains<Exp>(root)
+                      || AstHelpers.Contains<Log>(root)
+                      || AstHelpers.Contains<Arg>(root)
+                      || AstHelpers.Contains<Atan2>(root)
+                      || AstHelpers.Contains<Min>(root)
+                      || AstHelpers.Contains<Max>(root)
+                      || AstHelpers.Contains<Mod>(root);
+        bool hasArg    = AstHelpers.Contains<Arg>(root)
+                      || AstHelpers.Contains<Atan2>(root)
+                      || AstHelpers.Contains<Min>(root)
+                      || AstHelpers.Contains<Max>(root)
+                      || AstHelpers.Contains<Mod>(root);
+        bool hasCond  = AstHelpers.Contains<If>(root);
+        bool hasPrev  = AstHelpers.Contains<PrevRef>(root);
+        bool hasIter  = AstHelpers.Contains<IterRef>(root);
+        bool supportsDe = !(hasConj || hasFolded || hasPrev || hasArg || hasIter);
+        bool supportsPerturbation = !(hasConj || hasFolded || hasDiv || hasTrans || hasCond || hasPrev || hasIter);
+
+        int saFast = supportsPerturbation ? AstSaDetector.DetectZdPlusC(root) : 0;
+        (AstNode? saPolyZ, int saGeneric) = supportsPerturbation
+            ? AstSaDetector.DetectPolyInZPlusC(root) : (null, 0);
+        bool saFastOn = saFast >= 2;
+        bool saGenOn = !saFastOn && saPolyZ != null && saGeneric >= 2;
+
+        return new PreviewResult(
+            AstText: AstPrinter.Print(root),
+            DpDzText: AstPrinter.Print(dpdz),
+            DpDcText: AstPrinter.Print(dpdc),
+            SaFastDegree: saFastOn ? saFast : 0,
+            SaGenericDegree: saGenOn ? saGeneric : 0,
+            SaEnabled: saFastOn || saGenOn,
+            SupportsPerturbation: supportsPerturbation,
+            SupportsDe: supportsDe,
+            HasPrev: hasPrev,
+            HasIter: hasIter,
+            HasConj: hasConj,
+            HasFolded: hasFolded,
+            HasDiv: hasDiv,
+            HasTrans: hasTrans,
+            HasCond: hasCond,
+            Error: null);
     }
 
     private static string LoadTemplate(string fileName)

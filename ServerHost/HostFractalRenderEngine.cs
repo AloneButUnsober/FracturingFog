@@ -6,16 +6,17 @@
 
 using System;
 using System.Diagnostics;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Hosting;
 using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Server;
+using FracturingFog.Server.Cluster;
 using FracturingFog.Server.Guard;
 using FracturingFog.Server.Protocol;
 
@@ -275,6 +276,105 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                           && req.PosterInchesH is double pih0 && pih0 > 0;
         float dpiStamp = posterMode ? req.PosterDpi!.Value : 0f;
 
+        // D-6b — when the master attached a precomputed reference orbit
+        // blob to a tile render, decode it once here and forward to the
+        // calculator via PosterRequest.SeededOrbit. Decode failures fall
+        // back to per-tile compute (logged warning) — never abort the
+        // render, because a partial degradation beats a hard failure for
+        // an opt-in perf path.
+        MandelbrotCalculator.OrbitDD? seededOrbit   = null;
+        MandelbrotCalculator.OrbitQD? seededOrbitQD = null;
+        MandelbrotCalculator.OrbitOD? seededOrbitOD = null;
+        if (!string.IsNullOrEmpty(req.RefOrbitBlobBase64) && ftype == FractalType.Mandelbrot)
+        {
+            try
+            {
+                byte[] blob = Convert.FromBase64String(req.RefOrbitBlobBase64!);
+                var decoded = ReferenceOrbitBlobCodec.Decode(blob);
+                // Accept the seed only when the calculator's centre Hi/Lo
+                // + cap match what the master used. Higher limbs (QD X2/X3,
+                // OD X4..X7) are derived from the same request fields the
+                // master used; the calculator's centerSame check still
+                // guards against any silent stale-orbit reuse.
+                bool centreOk = decoded.CentreX   == cx
+                             && decoded.CentreXLo == cxLo
+                             && decoded.CentreY   == cy
+                             && decoded.CentreYLo == cyLo;
+                bool capOk = iter <= decoded.MaxIter;
+                if (centreOk && capOk)
+                {
+                    switch (decoded.Limbs)
+                    {
+                        case ReferenceOrbitBlobCodec.LimbsDD:
+                            seededOrbit = new MandelbrotCalculator.OrbitDD
+                            {
+                                CentreX   = decoded.CentreX,
+                                CentreXLo = decoded.CentreXLo,
+                                CentreY   = decoded.CentreY,
+                                CentreYLo = decoded.CentreYLo,
+                                MaxIter   = decoded.MaxIter,
+                                RefLen    = decoded.RefLen,
+                                Escaped   = decoded.Escaped,
+                                Zr        = decoded.RefZr,
+                                Zi        = decoded.RefZi,
+                                ZrLo      = decoded.RefZrLo,
+                                ZiLo      = decoded.RefZiLo,
+                            };
+                            break;
+                        case ReferenceOrbitBlobCodec.LimbsQD:
+                            seededOrbitQD = new MandelbrotCalculator.OrbitQD
+                            {
+                                CentreX   = decoded.CentreX,  CentreXLo = decoded.CentreXLo,
+                                CentreX2  = decoded.CentreX2, CentreX3  = decoded.CentreX3,
+                                CentreY   = decoded.CentreY,  CentreYLo = decoded.CentreYLo,
+                                CentreY2  = decoded.CentreY2, CentreY3  = decoded.CentreY3,
+                                MaxIter   = decoded.MaxIter,
+                                RefLen    = decoded.RefLen,
+                                Escaped   = decoded.Escaped,
+                                Zr   = decoded.RefZr,   Zi   = decoded.RefZi,
+                                ZrLo = decoded.RefZrLo, ZiLo = decoded.RefZiLo,
+                                ZrX2 = decoded.RefZrX2, ZiX2 = decoded.RefZiX2,
+                                ZrX3 = decoded.RefZrX3, ZiX3 = decoded.RefZiX3,
+                            };
+                            break;
+                        case ReferenceOrbitBlobCodec.LimbsOD:
+                            seededOrbitOD = new MandelbrotCalculator.OrbitOD
+                            {
+                                CentreX   = decoded.CentreX,  CentreXLo = decoded.CentreXLo,
+                                CentreX2  = decoded.CentreX2, CentreX3  = decoded.CentreX3,
+                                CentreX4  = decoded.CentreX4, CentreX5  = decoded.CentreX5,
+                                CentreX6  = decoded.CentreX6, CentreX7  = decoded.CentreX7,
+                                CentreY   = decoded.CentreY,  CentreYLo = decoded.CentreYLo,
+                                CentreY2  = decoded.CentreY2, CentreY3  = decoded.CentreY3,
+                                CentreY4  = decoded.CentreY4, CentreY5  = decoded.CentreY5,
+                                CentreY6  = decoded.CentreY6, CentreY7  = decoded.CentreY7,
+                                MaxIter   = decoded.MaxIter,
+                                RefLen    = decoded.RefLen,
+                                Escaped   = decoded.Escaped,
+                                Zr   = decoded.RefZr,   Zi   = decoded.RefZi,
+                                ZrLo = decoded.RefZrLo, ZiLo = decoded.RefZiLo,
+                                ZrX2 = decoded.RefZrX2, ZiX2 = decoded.RefZiX2,
+                                ZrX3 = decoded.RefZrX3, ZiX3 = decoded.RefZiX3,
+                                ZrX4 = decoded.RefZrX4, ZiX4 = decoded.RefZiX4,
+                                ZrX5 = decoded.RefZrX5, ZiX5 = decoded.RefZiX5,
+                                ZrX6 = decoded.RefZrX6, ZiX6 = decoded.RefZiX6,
+                                ZrX7 = decoded.RefZrX7, ZiX7 = decoded.RefZiX7,
+                            };
+                            break;
+                    }
+                    log.Info($"seeded ref orbit: limbs={decoded.Limbs} refLen={decoded.RefLen} maxIter={decoded.MaxIter} escaped={decoded.Escaped}");
+                }
+                else
+                {
+                    log.Warn($"ref orbit blob rejected: centreOk={centreOk} capOk={capOk} (orbitMaxIter={decoded.MaxIter} vs reqIter={iter})");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Warn($"ref orbit blob decode failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
         var poster = new PosterRequest
         {
             FractalType = ftype,
@@ -284,10 +384,20 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             CenterXLo = cxLo,
             CenterX2 = cx2,
             CenterX3 = cx3,
+            // D-6b2 — OD limbs from the request (zero outside the OD
+            // cluster path so legacy single-server renders are unchanged).
+            CenterX4 = req.CenterX4,
+            CenterX5 = req.CenterX5,
+            CenterX6 = req.CenterX6,
+            CenterX7 = req.CenterX7,
             CenterY = cy,
             CenterYLo = cyLo,
             CenterY2 = cy2,
             CenterY3 = cy3,
+            CenterY4 = req.CenterY4,
+            CenterY5 = req.CenterY5,
+            CenterY6 = req.CenterY6,
+            CenterY7 = req.CenterY7,
             Zoom = zoom,
             MaxIterations = iter,
             ColorMap = theme,
@@ -296,10 +406,19 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             Rotate = posterMode && req.PosterPortrait,
             Path = outPath,
             Format = FracturingFog.Imaging.ImageFileFormat.Png,
-            Watermark = region?.Name ?? "",
-            SubText = "Fracturing Fog server render",
+            Watermark = req.SuppressDecorations ? "" : (region?.Name ?? ""),
+            SubText = req.SuppressDecorations ? "" : "Fracturing Fog server render",
             Dpi = dpiStamp,
-            CustomWatermark = ResolveServerWatermark(req, region, log),
+            CustomWatermark = req.SuppressDecorations ? null : ResolveServerWatermark(req, region, log),
+            // D-6b — sub-rect geometry + seeded orbit forwarded to the
+            // calculator. All zero / null for legacy single-server renders.
+            ImageWidth     = req.ImageWidth,
+            ImageHeight    = req.ImageHeight,
+            SubRectOffsetX = req.SubRectOffsetX,
+            SubRectOffsetY = req.SubRectOffsetY,
+            SeededOrbit    = seededOrbit,
+            SeededOrbitQD  = seededOrbitQD,
+            SeededOrbitOD  = seededOrbitOD,
         };
 
         // CPU-bound rasterization runs on a thread-pool worker. The outer
@@ -372,18 +491,26 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         Directory.CreateDirectory(pngFolder);
         bool keepFrames = req.KeepFrames ?? (losslessPreset == null);
 
-        Mp4Writer? mp4 = null;
+        // S-X7.1b (2026-06-23) — go through BootstrapHooks.NativeVideoWriterFactoryHook
+        // instead of constructing Mp4Writer directly. On Windows the hook is
+        // wired to Media Foundation via FracturingFog.Win.WindowsBootstrap;
+        // on Linux/macOS it stays null and we fall through to the ffmpeg PNG-
+        // sequence encode so the server still produces an .mp4 without a
+        // Windows-only dep. The IVideoWriter abstraction means this file no
+        // longer references Mp4Writer (or Rendering.D3D) at all, so it can
+        // compile into the cross-plat FracturingFog.App.
+        IVideoWriter? mp4 = null;
         if (losslessPreset == null)
         {
-            // Client asked for video mode. A silent fallback to "PNG
-            // sequence only" leaves the documented .mp4 path empty —
-            // client reads it and hits FileNotFound. Surface the real
-            // reason now so the user sees something actionable.
-            try { mp4 = new Mp4Writer(finalVideoPath, outW, outH, req.VideoFps, 1); }
-            catch (Exception ex)
+            mp4 = BootstrapHooks.NativeVideoWriterFactoryHook?.Invoke(finalVideoPath, outW, outH);
+            if (mp4 == null)
             {
-                throw new ServerProtocolException("render-failed",
-                    $"Mp4Writer init failed: {ex.Message}. Use --lossless h264 to force ffmpeg encode instead.");
+                if (!FfmpegEncoder.IsAvailable())
+                    throw new ServerProtocolException("ffmpeg-missing",
+                        "No native Mp4Writer (non-Windows host) and ffmpeg not on PATH; " +
+                        "install ffmpeg or run --lossless h264.");
+                losslessPreset = FfmpegEncoder.Preset.HighQualityH264Mp4;
+                log.Info("native Mp4Writer unavailable → ffmpeg HighQualityH264Mp4");
             }
         }
 
@@ -397,7 +524,7 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
         // so the awaiting caller (FFServer dispatch) does not block its
         // own context. ffmpeg encode is launched as a child process and
         // is awaited natively below — no more GetAwaiter().GetResult().
-        Mp4Writer? mp4Local = mp4;
+        IVideoWriter? mp4Local = mp4;
         int framesWritten = await Task.Run(() =>
         {
             int written = 0;
@@ -432,8 +559,12 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
                     }
 
                     string framePath = Path.Combine(pngFolder, $"frame_{f + 1:D6}.png");
-                    ImageExportGdi.SavePixelsToFile(
-                        buffer, outW, outH, framePath, ImageFormat.Png,
+                    // S-X7.1b (2026-06-23) — cross-plat Skia PNG via ImageExport.
+                    // ImageExportGdi lives in FracturingFog.Win and is Win-only;
+                    // ImageExport.SavePixelsToFile is the Skia path used everywhere
+                    // else (FractalRenderHost.SaveLastFrameToPng etc.).
+                    ImageExport.SavePixelsToFile(
+                        buffer, outW, outH, framePath, ImageFileFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
                     written++;

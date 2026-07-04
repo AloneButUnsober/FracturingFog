@@ -21,8 +21,14 @@ public static class CertSelfSignedHelper
 {
     public const string DefaultServerCnDnsName = "fracturingfog-server";
     public const string DefaultClientCnDnsName = "fracturingfog-client";
+    public const string DefaultWorkerCnDnsName = "fracturingfog-worker";
+    public const string DefaultAdminCnDnsName  = "fracturingfog-admin";
 
     public sealed record GeneratedBundle(string CaPath, string ServerPath, string ClientPath);
+
+    public sealed record GeneratedClusterBundle(
+        string CaPath, string MasterPath,
+        string WorkerPath, string ClientPath, string AdminPath);
 
     /// <summary>
     /// Returns paths to ca.pfx / server.pfx / client.pfx under <paramref name="dir"/>,
@@ -99,6 +105,84 @@ public static class CertSelfSignedHelper
         AtomicWrite(clientPath, clientBytes);
 
         return new GeneratedBundle(caPath, serverPath, clientPath);
+    }
+
+    /// <summary>
+    /// D-2b: returns paths to ca.pfx / master.pfx / worker.pfx / client.pfx /
+    /// admin.pfx under <paramref name="dir"/>, generating them if missing.
+    /// Worker, client, and admin leaf certs carry an OU=role-{worker|client|admin}
+    /// so the master's <see cref="CertRoleParser"/> routes their RPC calls
+    /// per the role policy in FFServer.DispatchClusterAsync. Atomic across
+    /// the five files — if any is missing the whole bundle is regenerated.
+    /// </summary>
+    public static GeneratedClusterBundle EnsureClusterBundle(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        TryRestrictDirectoryToOwner(dir);
+
+        string caPath     = Path.Combine(dir, "ca.pfx");
+        string masterPath = Path.Combine(dir, "master.pfx");
+        string workerPath = Path.Combine(dir, "worker.pfx");
+        string clientPath = Path.Combine(dir, "cluster-client.pfx");
+        string adminPath  = Path.Combine(dir, "admin.pfx");
+
+        if (File.Exists(caPath) && File.Exists(masterPath) && File.Exists(workerPath)
+            && File.Exists(clientPath) && File.Exists(adminPath))
+            return new GeneratedClusterBundle(caPath, masterPath, workerPath, clientPath, adminPath);
+
+        TryDelete(caPath); TryDelete(masterPath); TryDelete(workerPath);
+        TryDelete(clientPath); TryDelete(adminPath);
+
+        DateTimeOffset notBefore = DateTimeOffset.UtcNow.AddDays(-1);
+        DateTimeOffset notAfter  = DateTimeOffset.UtcNow.AddYears(10);
+
+        using var caKey = RSA.Create(3072);
+        var caReq = new CertificateRequest(
+            "CN=fracturingfog-cluster-ca", caKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        caReq.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        caReq.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.DigitalSignature,
+            critical: true));
+        caReq.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(caReq.PublicKey, false));
+        using var caCert = caReq.CreateSelfSigned(notBefore, notAfter);
+
+        using var masterKey = RSA.Create(3072);
+        using var masterCert = SignLeaf(
+            "CN=" + DefaultServerCnDnsName,
+            DefaultServerCnDnsName, isServerAuth: true,
+            masterKey, caCert, notBefore, notAfter);
+
+        using var workerKey = RSA.Create(3072);
+        using var workerCert = SignLeaf(
+            $"CN={DefaultWorkerCnDnsName}, OU=role-worker",
+            DefaultWorkerCnDnsName, isServerAuth: false,
+            workerKey, caCert, notBefore, notAfter);
+
+        using var clientKey = RSA.Create(3072);
+        using var clientCert = SignLeaf(
+            $"CN={DefaultClientCnDnsName}, OU=role-client",
+            DefaultClientCnDnsName, isServerAuth: false,
+            clientKey, caCert, notBefore, notAfter);
+
+        using var adminKey = RSA.Create(3072);
+        using var adminCert = SignLeaf(
+            $"CN={DefaultAdminCnDnsName}, OU=role-admin",
+            DefaultAdminCnDnsName, isServerAuth: false,
+            adminKey, caCert, notBefore, notAfter);
+
+        byte[] caBytes     = caCert.Export(X509ContentType.Pfx);
+        byte[] masterBytes = masterCert.Export(X509ContentType.Pfx);
+        byte[] workerBytes = workerCert.Export(X509ContentType.Pfx);
+        byte[] clientBytes = clientCert.Export(X509ContentType.Pfx);
+        byte[] adminBytes  = adminCert.Export(X509ContentType.Pfx);
+
+        AtomicWrite(caPath,     caBytes);
+        AtomicWrite(masterPath, masterBytes);
+        AtomicWrite(workerPath, workerBytes);
+        AtomicWrite(clientPath, clientBytes);
+        AtomicWrite(adminPath,  adminBytes);
+
+        return new GeneratedClusterBundle(caPath, masterPath, workerPath, clientPath, adminPath);
     }
 
     private static void AtomicWrite(string path, byte[] bytes)

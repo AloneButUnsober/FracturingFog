@@ -49,13 +49,25 @@ using System;
 
 namespace FracturingFog.Models
 {
-    public class PaintedReversed : IColorMap
+    public class PaintedReversed : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Painted Reversed";
 
         public ColorPaletteType Type { get; } = ColorPaletteType.Algorithmic;
 
         public int MaxIterations { get; set; } = 1000;
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    float h0 = in_smooth * 0.05;
+    float hue = h0 - floor(h0);
+    float baseV = (in_isInSet > 0.5) ? -0.01 : 1.0;
+    float lightness = 1.35 - min(in_dist * 0.04, 1.0);
+    return cg_hsv_to_rgb(hue, 0.9, baseV * lightness);
+";
+
+        public string PaletteId => "PaintedReversed/v1";
 
         public int Map(float smooth, float distance, int iterations)
         {

@@ -79,6 +79,11 @@ public sealed class UserEquationViewModel : ViewModelBase
         RotResetCommand = ReactiveCommand.Create(() => SetRotation(0.0));
         GenerateViaCalcGenCommand = ReactiveCommand.Create(OnGenerateViaCalcGen);
         HotLoadViaCalcGenCommand = ReactiveCommand.Create(OnHotLoadViaCalcGen);
+        // Wave 2.3 — Persist + Hot-Load: writes generated source under
+        // %LOCALAPPDATA%/FracturingFog/UserCalculators/, then hot-loads it.
+        // Host scans the dir at startup so persisted calculators survive
+        // a restart with no rebuild.
+        HotLoadAndPersistCommand = ReactiveCommand.Create(OnHotLoadAndPersist);
         ApplyFixCommand = ReactiveCommand.Create(OnApplyFix,
             this.WhenAnyValue(x => x.SuggestedFix).Select(f => !string.IsNullOrEmpty(f)));
         // Docs were re-rooted under User/ + Technical/ — see Docs/Documentation-Plan.md.
@@ -93,10 +98,33 @@ public sealed class UserEquationViewModel : ViewModelBase
         OpenEquationGuideCommand = ReactiveCommand.Create(() =>
             HelpRequested?.Invoke("Technical/FractalEquation-DesignGuide.md", null,
                                   "Fractal Equation Design Guide"));
+        OpenCookbookCommand = ReactiveCommand.Create(OnOpenCookbook);
+        OpenMorphCommand = ReactiveCommand.Create(OnOpenMorph);
 
         _params.UserEquationSource = _source;
         _params.UserEquationDslSource = _dslSource;
         _params.UserEquationActiveTab = _activeTabIndex;
+
+        // Seed the live-preview panel from current source so the user sees
+        // AST + dz/dc + flags as soon as the dialog opens, without waiting
+        // 1.8 s for the typing debounce. UE tab pipes through the C#→DSL
+        // preprocessor first; failures stay silent (debounce path will
+        // surface the parse error in the status bar).
+        SeedPreviewFromCurrentTab();
+    }
+
+    private void SeedPreviewFromCurrentTab()
+    {
+        try
+        {
+            string raw = _activeTabIndex == 1 ? (_dslSource ?? string.Empty) : (_source ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            string equation = _activeTabIndex == 1
+                ? raw.Trim()
+                : EquationPreprocessor.Preprocess(raw, out PreprocessDiagnostic? _);
+            if (!string.IsNullOrWhiteSpace(equation)) UpdatePreview(equation);
+        }
+        catch { /* preview is best-effort */ }
     }
 
     // ── Validation (Tab 0 only) ──
@@ -285,6 +313,79 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Skip Jacobian (Phase 11b) ──
+    public bool SkipJacobian
+    {
+        get => _params.UserEquationSkipJacobian;
+        set
+        {
+            if (_params.UserEquationSkipJacobian == value) return;
+            _params.UserEquationSkipJacobian = value;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
+    // ── Live preview (Wave 2.4 / D-6.24) ───────────────────────────────
+    //
+    // After every successful parse on either tab we re-run CalcGen's
+    // Preview pass — same AST + feature-flag logic the generator uses —
+    // and project the result into observable properties bound by the
+    // Expander in UserEquationView.axaml. When parsing fails the panel
+    // freezes on the last good result so the user can still see what
+    // the previous valid equation produced; PreviewError surfaces the
+    // current state in red separately if desired.
+    private string _previewAstText = string.Empty;
+    private string _previewDpDzText = string.Empty;
+    private string _previewDpDcText = string.Empty;
+    private string _previewSaText = "off";
+    private string _previewPerturbText = "off";
+    private string _previewDeText = "off";
+    private string _previewFlagsText = string.Empty;
+    private bool _hasPreview;
+
+    public string PreviewAstText { get => _previewAstText; private set => this.RaiseAndSetIfChanged(ref _previewAstText, value); }
+    public string PreviewDpDzText { get => _previewDpDzText; private set => this.RaiseAndSetIfChanged(ref _previewDpDzText, value); }
+    public string PreviewDpDcText { get => _previewDpDcText; private set => this.RaiseAndSetIfChanged(ref _previewDpDcText, value); }
+    public string PreviewSaText { get => _previewSaText; private set => this.RaiseAndSetIfChanged(ref _previewSaText, value); }
+    public string PreviewPerturbText { get => _previewPerturbText; private set => this.RaiseAndSetIfChanged(ref _previewPerturbText, value); }
+    public string PreviewDeText { get => _previewDeText; private set => this.RaiseAndSetIfChanged(ref _previewDeText, value); }
+    public string PreviewFlagsText { get => _previewFlagsText; private set => this.RaiseAndSetIfChanged(ref _previewFlagsText, value); }
+    public bool HasPreview { get => _hasPreview; private set => this.RaiseAndSetIfChanged(ref _hasPreview, value); }
+
+    // Run CalcGen's analysis pass and project flags into the preview pane.
+    // Caller passes the post-preprocess DSL string (UE tab pipes its C#
+    // body through EquationPreprocessor before getting here). Silent on
+    // parse failure — leaves the last valid preview frozen so transient
+    // typing errors don't blank the panel.
+    private void UpdatePreview(string equation)
+    {
+        if (string.IsNullOrWhiteSpace(equation)) return;
+        var p = CalculatorGenApi.Preview(equation);
+        if (!p.Ok) return;
+        PreviewAstText = p.AstText;
+        PreviewDpDzText = p.DpDzText;
+        PreviewDpDcText = p.DpDcText;
+        PreviewSaText = p.SaFastDegree >= 2
+            ? $"on (fast, z^{p.SaFastDegree}+c)"
+            : p.SaGenericDegree >= 2
+                ? $"on (generic, degree {p.SaGenericDegree})"
+                : "off";
+        PreviewPerturbText = p.SupportsPerturbation ? "on" : "off";
+        PreviewDeText = p.SupportsDe ? "on" : "off";
+
+        var flags = new System.Collections.Generic.List<string>();
+        if (p.HasPrev)   flags.Add("prev");
+        if (p.HasIter)   flags.Add("iter");
+        if (p.HasConj)   flags.Add("conj");
+        if (p.HasFolded) flags.Add("fold");
+        if (p.HasDiv)    flags.Add("div");
+        if (p.HasTrans)  flags.Add("trans");
+        if (p.HasCond)   flags.Add("if");
+        PreviewFlagsText = flags.Count == 0 ? "(plain polynomial)" : string.Join(", ", flags);
+        HasPreview = true;
+    }
+
     // ── Error / status ──
     private string _statusText = string.Empty;
     public string StatusText { get => _statusText; private set => this.RaiseAndSetIfChanged(ref _statusText, value); }
@@ -299,11 +400,16 @@ public sealed class UserEquationViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> RotResetCommand { get; }
     public ReactiveCommand<Unit, Unit> GenerateViaCalcGenCommand { get; }
     public ReactiveCommand<Unit, Unit> HotLoadViaCalcGenCommand { get; }
+    public ReactiveCommand<Unit, Unit> HotLoadAndPersistCommand { get; }
     public ReactiveCommand<Unit, Unit> ApplyFixCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenUserEquationHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenDslHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenCalcGenHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenEquationGuideCommand { get; }
+    /// <summary>Wave 2.8 — open the equation cookbook dialog.</summary>
+    public ReactiveCommand<Unit, Unit> OpenCookbookCommand { get; private set; } = null!;
+    /// <summary>Wave 2.9 — open the equation morph dialog.</summary>
+    public ReactiveCommand<Unit, Unit> OpenMorphCommand { get; private set; } = null!;
 
     /// <summary>Host opens an in-app help viewer. Args: (docId, anchor, title).
     /// docId is a filename inside the embedded Docs/ resource folder.
@@ -328,6 +434,40 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// the result onto the render pipeline. Args: (equation, className).
     /// Return value: null on success, error message on failure.</summary>
     public event Func<string, string, string?>? HotLoadRequested;
+
+    /// <summary>Host persists + compiles + loads the equation. Args: (equation, className).
+    /// Return value: (error, savedPath). error == null → success; savedPath
+    /// is the on-disk source path even on compile failure so the editor can
+    /// surface where the .cs landed.</summary>
+    public event Func<string, string, (string? error, string? savedPath)>? HotLoadAndPersistRequested;
+
+    /// <summary>Wave 2.8 — host opens the cookbook picker dialog (modeless).
+    /// The dialog calls back into <see cref="ApplyCookbookEntry"/> on accept;
+    /// cancel is a no-op.</summary>
+    public event Action? CookbookRequested;
+
+    /// <summary>Wave 2.9 — host opens the equation-morph dialog (modeless).
+    /// Dialog owns its own render loop via its own RenderAndSaveRequested
+    /// delegate; this VM just kicks the window open.</summary>
+    public event Action? MorphRequested;
+
+    /// <summary>Wave 2.8 — host applies (centre X, centre Y, zoom) from the
+    /// accepted cookbook entry to the active view. Editor source is mutated
+    /// directly via DslSource so the existing tab-switch + validate path
+    /// handles the visual update.</summary>
+    public event Action<double, double, double>? CookbookCentreRequested;
+
+    /// <summary>Wave 2.8 — host calls this on accept (from the cookbook
+    /// dialog). Replaces DSL editor source, snaps to the DSL tab, and asks
+    /// the host to re-centre.</summary>
+    public void ApplyCookbookEntry(CookbookEntry entry)
+    {
+        DslSource = entry.DslSource;
+        ActiveTabIndex = 1;
+        CookbookCentreRequested?.Invoke(entry.CenterX, entry.CenterY, entry.Zoom);
+        StatusText = $"Loaded \"{entry.Name}\" from cookbook.";
+        StatusIsError = false;
+    }
 
     /// <summary>Force an immediate compile (cancel pending debounce).
     /// Only meaningful on the User Equation tab — DSL tab does not feed
@@ -431,6 +571,7 @@ public sealed class UserEquationViewModel : ViewModelBase
                 StatusIsError = false;
             }
             ClearErrorSpan();
+            UpdatePreview(equation);
         }
         catch (Exception ex)
         {
@@ -472,6 +613,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             StatusText = "✓ DSL parses";
             StatusIsError = false;
             ClearErrorSpan();
+            UpdatePreview(raw);
         }
         catch (Exception ex)
         {
@@ -579,6 +721,22 @@ public sealed class UserEquationViewModel : ViewModelBase
         RefreshSavedList(entry.Name);
     }
 
+    // ── Cookbook (Wave 2.8 / D-6.23) ─────────────────────────────────────
+    // Opens the picker dialog modeless. The dialog calls
+    // <see cref="ApplyCookbookEntry"/> on accept; cancel is a no-op.
+    private void OnOpenCookbook()
+    {
+        CookbookRequested?.Invoke();
+    }
+
+    // ── Morph (Wave 2.9 / D-6.25) ────────────────────────────────────────
+    // Opens the morph dialog modeless. Dialog handles its own loop —
+    // VM just routes the open request.
+    private void OnOpenMorph()
+    {
+        MorphRequested?.Invoke();
+    }
+
     // ── CalcGen pipeline ─────────────────────────────────────────────────
     //
     // Both Generate and HotLoad route by the currently active tab:
@@ -638,6 +796,31 @@ public sealed class UserEquationViewModel : ViewModelBase
         else
         {
             ShowError(err);
+        }
+    }
+
+    private void OnHotLoadAndPersist()
+    {
+        if (!TryGetCalcGenSource(out string equation, out string baseName)) return;
+
+        var handler = HotLoadAndPersistRequested;
+        if (handler == null)
+        {
+            ShowError("Persist + Hot-load not wired by host.");
+            return;
+        }
+
+        var (err, savedPath) = handler.Invoke(equation, baseName);
+        if (err == null)
+        {
+            StatusText = savedPath == null
+                ? $"✓ Hot-loaded {baseName}Calculator (no path)"
+                : $"✓ Hot-loaded + saved → {savedPath}";
+            StatusIsError = false;
+        }
+        else
+        {
+            ShowError(savedPath == null ? err : $"{err}\n(source saved to {savedPath})");
         }
     }
 

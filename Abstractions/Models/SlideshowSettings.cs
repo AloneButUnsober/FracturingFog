@@ -43,5 +43,12 @@ namespace FracturingFog.Models
         /// recorded slideshow: "HighQualityH264Mp4" | "LosslessH264Mp4" |
         /// "Ffv1Mkv". Default = HighQualityH264Mp4 (CRF 18, yuv420p).</summary>
         public string RecordEncodePreset { get; set; } = "HighQualityH264Mp4";
+
+        /// <summary>Optional fixed RNG seed for reproducible slideshow ordering
+        /// — the same region/theme/animation sequence every run, for demos or
+        /// recordings. <c>0</c> (default) draws a fresh high-entropy seed each
+        /// run so ordering varies. The engine cycles regions via a shuffle-bag
+        /// (every region shown once before any repeat) seeded from this.</summary>
+        public int RandomSeed { get; set; }
     }
 }

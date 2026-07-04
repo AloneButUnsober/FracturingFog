@@ -41,6 +41,31 @@ public sealed class ServerConfig
     /// values close attacker SYN floods faster.</summary>
     [JsonPropertyName("rateLimitBurst")]     public int RateLimitBurst     { get; set; } = 10;
 
+    /// <summary>D-6c — per-IP per-minute cap on dispatched client-role JSON-RPC
+    /// calls inside an authenticated session. Layered on top of the per-IP
+    /// TCP-accept limiter (<see cref="RateLimitPerMinute"/>) which only sees
+    /// connection establishment. 0 disables. Default 600 = sustained 10
+    /// calls/sec per IP (room for 1 Hz status polling + occasional fetch).</summary>
+    [JsonPropertyName("clientCallPerMinute")] public int ClientCallPerMinute { get; set; } = 600;
+
+    /// <summary>D-6c — burst allowance for the client-call limiter. Larger
+    /// values tolerate UI reconnect storms; smaller values catch a buggy
+    /// client that loops on job.status faster.</summary>
+    [JsonPropertyName("clientCallBurst")]     public int ClientCallBurst     { get; set; } = 30;
+
+    /// <summary>D-6c — per-thumbprint per-minute cap on worker tile.next
+    /// long-poll calls. Defends the dispatcher against a runaway worker
+    /// spinning the long-poll. Other worker methods (heartbeat, deliver,
+    /// register, error) bypass this gate. 0 disables. Default 600 = 10/sec
+    /// — well above the steady-state tile.next cadence (1 call per
+    /// TileNextHold ≈ 30 s) but tight enough to catch a stuck loop.</summary>
+    [JsonPropertyName("workerTileNextPerMinute")] public int WorkerTileNextPerMinute { get; set; } = 600;
+
+    /// <summary>D-6c — burst allowance for the worker tile.next limiter.
+    /// Default 30 covers normal reconnect/replay storms after a worker
+    /// resume.</summary>
+    [JsonPropertyName("workerTileNextBurst")]     public int WorkerTileNextBurst     { get; set; } = 30;
+
     /// <summary>When true, restrict TLS to v1.3 only. Default false to
     /// keep older clients compatible. Set true for hardened deployments —
     /// TLS 1.2 retains a number of deprecated ciphersuites + RSA key
@@ -80,6 +105,30 @@ public sealed class ServerConfig
 
     [JsonPropertyName("logDir")]          public string? LogDir         { get; set; }
     [JsonPropertyName("workDir")]         public string? WorkDir        { get; set; }
+
+    // ── Cluster (D-5e) ───────────────────────────────────────────────────
+    // Apply to running master only via cluster.config.set; --master picks
+    // them up at startup. Defaults match the dev plan §6.12 / §9 D-6 guidance.
+
+    /// <summary>Cap on concurrent non-terminal cluster jobs. 0 = unlimited.
+    /// Submit beyond this returns "queue-full". Defends against a flood of
+    /// poster jobs exhausting master disk + merge-buffer RAM.</summary>
+    [JsonPropertyName("clusterMaxJobs")]
+    public int ClusterMaxJobs { get; set; } = 0;
+
+    /// <summary>How long terminal cluster jobs (ready/failed/cancelled) stay
+    /// on disk before <see cref="FracturingFog.Server.Cluster.JobStore.EvictExpired"/>
+    /// removes them. 0 = never evict. Default 60 minutes per the dev plan.</summary>
+    [JsonPropertyName("clusterArtifactRetentionMinutes")]
+    public int ClusterArtifactRetentionMinutes { get; set; } = 60;
+
+    /// <summary>Default per-tile pixel side used by <c>TilePlanner.PlanImage</c>
+    /// when the client supplies no <c>tilePixelsHint</c> and the registry has
+    /// no learned EMA / worker hints. 0 = use <c>TilePlanner.DefaultTilePixels</c>
+    /// (512). Larger = fewer tiles + less merge overhead; smaller = better
+    /// straggler tolerance.</summary>
+    [JsonPropertyName("clusterTileTargetPixels")]
+    public int ClusterTileTargetPixels { get; set; } = 0;
 
     /// <summary>How the server resolves the watermark on a render job.
     /// "Default" preserves today's behaviour (region/theme + auto contrast).
@@ -136,7 +185,7 @@ public sealed class ServerConfig
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             Converters = { new JsonStringEnumConverter() },
         });
-        File.WriteAllText(path, json);
+        AtomicFile.WriteAllText(path, json);
     }
 
 }

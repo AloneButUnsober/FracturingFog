@@ -8,12 +8,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Numerics;
+using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
@@ -26,6 +28,29 @@ public sealed class UserEquationCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // ── Phase 11 — surface normals via numerical Jacobian ──────────────────
+    //
+    // Mandelbrot's typed kernel computes ∂z/∂c analytically (dz' = 2z·dz + 1
+    // for z² + c). User-supplied equations have no closed-form derivative
+    // available, so we run a parallel-perturbation trajectory per pixel:
+    // base (z, c) + perturbed (zP, c + h). At escape, dz/dc ≈ (zP − z) / h.
+    // Cost: 2× delegate calls per iteration vs the analytic path.
+    //
+    // Analytic functions are conformal so a single Re-axis perturbation is
+    // enough — Cauchy-Riemann gives dz/dIm(c) = i · dz/dRe(c). Hubbard-Douady
+    // escape-potential gradient then yields (nx, ny) routed to the
+    // five-parameter ColorMap.Map overload. 2D themes ignore them; 3D Phong
+    // themes light the user equation's escape surface for free.
+
+    /// <summary>X component of the escape-potential gradient at escape, in
+    /// [-1, 1]. 0 for in-set pixels. Consumed by 3D Phong themes via the
+    /// five-parameter ColorMap.Map overload.</summary>
+    public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>Y component of the escape-potential gradient. See
+    /// <see cref="NormalXBuffer"/>.</summary>
+    public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -67,6 +92,11 @@ public sealed class UserEquationCalculator : IFractalCalculator
 
     private Func<Complex, Complex, int, Complex>? _compiled;
     private string _compiledSource = string.Empty;
+    // Keeps the assembly backing _compiled alive. Collectible so a superseded
+    // compile can be GC-unloaded once no delegate references it (the render
+    // loop snapshots `fn = _compiled` into a local, so an in-flight render
+    // pins the old context until it finishes — no mid-call unload).
+    private AssemblyLoadContext? _lastContext;
 
     public UserEquationCalculator(int width, int height) => Resize(width, height);
 
@@ -74,7 +104,10 @@ public sealed class UserEquationCalculator : IFractalCalculator
     {
         Width = width;
         Height = height;
-        ColorBuffer = new uint[width * height];
+        int n = width * height;
+        ColorBuffer = new uint[n];
+        NormalXBuffer = new float[n];
+        NormalYBuffer = new float[n];
     }
 
     /// <summary>
@@ -94,24 +127,52 @@ public sealed class UserEquationCalculator : IFractalCalculator
 
         try
         {
+            // Full CSharpCompilation, NOT the CSharpScript scripting API.
+            // Scripting auto-references the return-type + globals assemblies
+            // via Assembly.Location, which is "" under single-file self-
+            // contained publish (Linux default) — it throws "Can't create a
+            // metadata reference to an assembly without location" no matter
+            // what references we hand it, because that broken ref is one the
+            // engine adds itself. Compiling a real class to an in-memory
+            // assembly (like CalculatorGenHotLoad) sidesteps it entirely and
+            // takes references from RoslynRefs' TPA/in-bundle resolver.
             string code = WrapUserSource(source);
-            var options = ScriptOptions.Default
-                .AddReferences(typeof(Complex).Assembly, typeof(object).Assembly, typeof(Math).Assembly)
-                .AddImports("System", "System.Numerics", "System.Math");
+            var syntaxTree = CSharpSyntaxTree.ParseText(code);
+            var compilation = CSharpCompilation.Create(
+                assemblyName: $"UserEq_{Environment.TickCount}_{Guid.NewGuid():N}",
+                syntaxTrees: new[] { syntaxTree },
+                references: FracturingFog.Calculators.RoslynRefs.GatherAllTpaRefs(),
+                options: new CSharpCompilationOptions(
+                    OutputKind.DynamicallyLinkedLibrary,
+                    optimizationLevel: OptimizationLevel.Release));
 
-            var script = CSharpScript.Create<Func<Complex, Complex, int, Complex>>(code, options);
-            var compilation = script.Compile();
-            if (compilation.Length > 0)
+            using var ms = new MemoryStream();
+            var emit = compilation.Emit(ms);
+            if (!emit.Success)
             {
                 var sb = new System.Text.StringBuilder();
-                foreach (var diag in compilation)
-                    sb.AppendLine(diag.ToString());
+                foreach (var diag in emit.Diagnostics)
+                    if (diag.Severity == DiagnosticSeverity.Error)
+                        sb.AppendLine(diag.ToString());
                 LastError = sb.ToString();
                 _compiled = null;
                 return;
             }
-            var result = script.RunAsync().GetAwaiter().GetResult();
-            _compiled = result.ReturnValue;
+
+            ms.Seek(0, SeekOrigin.Begin);
+            var ctx = new AssemblyLoadContext($"UserEq_{Environment.TickCount}", isCollectible: true);
+            var asm = ctx.LoadFromStream(ms);
+            var type = asm.GetType("FracturingFog.UserEq.Generated.__UserEq");
+            var del = type?.GetMethod("Get")?.Invoke(null, null)
+                          as Func<Complex, Complex, int, Complex>;
+            if (del == null)
+            {
+                LastError = "Compile succeeded but Step delegate was not found.";
+                _compiled = null;
+                return;
+            }
+            _compiled = del;
+            _lastContext = ctx;   // pin the backing assembly for the live delegate
             _compiledSource = source;
             LastError = string.Empty;
         }
@@ -124,16 +185,30 @@ public sealed class UserEquationCalculator : IFractalCalculator
 
     private static string WrapUserSource(string body)
     {
-        // The script's "return value" is itself a Func — i.e. the script body
-        // is a single Func<...> expression. Wrap with a local Step method
-        // and return a delegate pointing to it.
+        // Emit a real compilation unit: a static Step method holding the user
+        // body, plus a Get() factory returning it as the delegate the render
+        // loop calls. `using static System.Math` re-exports Sin/Cos/Exp/... as
+        // bare calls (matches the old scripting AddImports("System.Math")); the
+        // System.Numerics import brings Complex + its static members.
         string wrappedBody = body.Contains("return") ? body : $"return {body};";
         return $@"
-Complex __Step(Complex z, Complex c, int n)
+using System;
+using System.Numerics;
+using static System.Math;
+
+namespace FracturingFog.UserEq.Generated
 {{
-    {wrappedBody}
+    public static class __UserEq
+    {{
+        public static Complex Step(Complex z, Complex c, int n)
+        {{
+            {wrappedBody}
+        }}
+
+        public static Func<Complex, Complex, int, Complex> Get()
+            => (Func<Complex, Complex, int, Complex>)Step;
+    }}
 }}
-return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => __Step(z, c, n));
 ";
     }
 
@@ -186,6 +261,10 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
         double rot = FractalParameters.UserEquationRotationDegrees * Math.PI / 180.0;
         double cosA = Math.Cos(rot);
         double sinA = Math.Sin(rot);
+        bool skipJacobian = FractalParameters.UserEquationSkipJacobian;
+
+        // P5: gate orbit sampling once per render. Non-orbit themes pay nothing.
+        var orbitMap = ColorMap as IOrbitAwareColorMap;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -222,25 +301,78 @@ return (Func<Complex, Complex, int, Complex>)((Complex z, Complex c, int n) => _
                     cy = centerY + dx * sinA + dyCos;
                 }
                 var c = new Complex(cx, cy);
+                const double h = 1e-6;
+                var cP = new Complex(cx + h, cy);
                 var z = Complex.Zero;
+                var zP = Complex.Zero;
+                OrbitAccumulator acc = default;
+                if (orbitMap != null) orbitMap.InitOrbit(out acc);
                 int iter;
-                for (iter = 0; iter < maxIt; iter++)
+                if (skipJacobian)
                 {
-                    double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
-                    if (r2 >= bailout2) break;
-                    try { z = fn(z, c, iter); }
-                    catch { iter = maxIt; break; }
+                    // Skip parallel-perturbation trajectory — halves delegate
+                    // call cost. 3D Phong themes degrade to flat lighting
+                    // because surface normals come out zero, but 2D themes
+                    // are unaffected.
+                    for (iter = 0; iter < maxIt; iter++)
+                    {
+                        double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
+                        if (r2 >= bailout2) break;
+                        if (orbitMap != null && iter > 0)
+                            orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
+                        try { z = fn(z, c, iter); }
+                        catch { iter = maxIt; break; }
+                    }
+                }
+                else
+                {
+                    for (iter = 0; iter < maxIt; iter++)
+                    {
+                        double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
+                        if (r2 >= bailout2) break;
+                        if (orbitMap != null && iter > 0)
+                            orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
+                        try { z = fn(z, c, iter); zP = fn(zP, cP, iter); }
+                        catch { iter = maxIt; break; }
+                    }
                 }
                 int idx = rowBase + x;
                 if (iter >= maxIt)
                 {
                     ColorBuffer[idx] = ColorMap.InSetColor;
+                    NormalXBuffer[idx] = 0f;
+                    NormalYBuffer[idx] = 0f;
                 }
                 else
                 {
                     double mag = Math.Sqrt(z.Real * z.Real + z.Imaginary * z.Imaginary);
                     float smooth = (float)(iter + 1.0 - Math.Log2(Math.Max(1e-10, Math.Log2(Math.Max(mag, 1.0 + 1e-10)))));
-                    ColorBuffer[idx] = (uint)ColorMap.Map(smooth, 0f, maxIt);
+
+                    float nx, ny;
+                    if (skipJacobian)
+                    {
+                        nx = 0f;
+                        ny = 0f;
+                    }
+                    else
+                    {
+                        // Hubbard-Douady normal: u = Re(conj(z) · dz/dc),
+                        // v = -Im(conj(z) · dz/dc). dz/dc ≈ (zP − z) / h
+                        // (Cauchy-Riemann gives the Im column for free on analytic fn).
+                        double dzdcR = (zP.Real - z.Real) / h;
+                        double dzdcI = (zP.Imaginary - z.Imaginary) / h;
+                        double u = z.Real * dzdcR + z.Imaginary * dzdcI;          // Re(z̄ · dzdc)
+                        double v = -(z.Real * dzdcI - z.Imaginary * dzdcR);       // -Im(z̄ · dzdc)
+                        double m = Math.Sqrt(u * u + v * v);
+                        if (m > 1e-12) { nx = (float)(u / m); ny = (float)(v / m); }
+                        else { nx = 0f; ny = 0f; }
+                    }
+                    NormalXBuffer[idx] = nx;
+                    NormalYBuffer[idx] = ny;
+
+                    ColorBuffer[idx] = orbitMap != null
+                        ? (uint)orbitMap.MapWithOrbit(smooth, 0f, maxIt, nx, ny, in acc)
+                        : (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
                 }
             }
         });

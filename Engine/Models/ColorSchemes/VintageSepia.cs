@@ -12,7 +12,7 @@ namespace FracturingFog.Models
     /// Aged sepia photograph — warm brown tones with a distance-based vignette
     /// darkening the region near the set boundary.  Cycles at deep zoom.
     /// </summary>
-    public class VintageSepiaMap : IColorMap
+    public class VintageSepiaMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Vintage Sepia";
 
@@ -52,5 +52,24 @@ namespace FracturingFog.Models
 
             return ColorUtils.PackArgbF(r, g, b);
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float traw = in_smooth * 0.020;
+    float t = traw - floor(traw);
+    float tone = t * t * (3.0 - 2.0 * t);
+    float band = 0.5 + 0.5 * sin(in_smooth * 0.08 + 0.3);
+    tone = tone * 0.80 + band * 0.20;
+    float r = saturate(0.05 + 0.87 * tone);
+    float g = saturate(0.02 + 0.64 * tone);
+    float b = saturate(0.00 + 0.40 * tone);
+    float vignette = saturate(in_dist * 0.18);
+    float vigScale = 0.35 + 0.65 * vignette;
+    return float3(r, g, b) * vigScale;
+";
+
+        public string PaletteId => "VintageSepiaMap/v1";
     }
 }

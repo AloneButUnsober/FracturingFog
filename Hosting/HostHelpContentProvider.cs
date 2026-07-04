@@ -44,10 +44,15 @@ namespace FracturingFog.Hosting
         {
             get
             {
-                var v = Assembly.GetEntryAssembly()?.GetName().Version;
-                return v != null
-                    ? $"{v.Major}.{v.Minor}.{v.Build}"
-                    : "(unknown)";
+                // BAB (2026-06-28) - Change version referenced for display.
+                // User InformationalVersion but strip off the git commit info for 
+                // onscreen and watermark display.
+                string versionInfo = Assembly.GetEntryAssembly()?
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                    .InformationalVersion ?? "(unknown)";
+
+                if (versionInfo.Contains('+')) versionInfo = versionInfo.Split('+')[0];
+                return versionInfo;
             }
         }
 
@@ -67,8 +72,10 @@ namespace FracturingFog.Hosting
         public string PosterText       => HelpTextBundle.PosterText;
         public string ArchitectureText => HelpTextBundle.ArchitectureText;
 
-        // Order mirrors the legacy WinForms FloatingHelp Math tab so users
-        // moving between the two shells see the same layout.
+        // Wave 5.4 — two-level grouping. The flat list below stays in the
+        // historical (WinForms) order for back-compat consumers. The grouped
+        // view (MathSubTabGroups) clusters by family and is what the Avalonia
+        // FloatingHelp window renders.
         public IReadOnlyList<HelpSubTab> MathSubTabs { get; } = new HelpSubTab[]
         {
             new("Overview",      HelpTextBundle.MathOverviewText),
@@ -106,6 +113,66 @@ namespace FracturingFog.Hosting
             new("Kleinian",      HelpTextBundle.MathKleinianText),
             new("Bicomplex Mandelbrot", HelpTextBundle.MathBicomplexText),
             new("DLA",           HelpTextBundle.MathDlaText),
+        };
+
+        public IReadOnlyList<HelpSubTabGroup> MathSubTabGroups { get; } = new HelpSubTabGroup[]
+        {
+            new("Overview", new HelpSubTab[]
+            {
+                new("Overview", HelpTextBundle.MathOverviewText),
+            }),
+            new("2D escape-time", new HelpSubTab[]
+            {
+                new("Mandelbrot",    HelpTextBundle.MathMandelbrotText),
+                new("Julia",         HelpTextBundle.MathJuliaText),
+                new("Burning Ship",  HelpTextBundle.MathBurningShipText),
+                new("Tricorn",       HelpTextBundle.MathTricornText),
+                new("Multibrot",     HelpTextBundle.MathMultibrotText),
+                new("Phoenix",       HelpTextBundle.MathPhoenixText),
+                new("Newton",        HelpTextBundle.MathNewtonText),
+                new("Nova",          HelpTextBundle.MathNovaText),
+                new("Magnet 1",      HelpTextBundle.MathMagnetOneText),
+                new("Magnet 2",      HelpTextBundle.MathMagnetTwoText),
+                new("Glynn",         HelpTextBundle.MathGlynnText),
+                new("Halley",        HelpTextBundle.MathHalleyText),
+                new("Secant",        HelpTextBundle.MathSecantText),
+                new("Spider",        HelpTextBundle.MathSpiderText),
+            }),
+            new("Histogram", new HelpSubTab[]
+            {
+                new("Buddhabrot",    HelpTextBundle.MathBuddhabrotText),
+                new("Logistic",      HelpTextBundle.MathLogisticText),
+            }),
+            new("Procedural", new HelpSubTab[]
+            {
+                new("IFS",           HelpTextBundle.MathIFSText),
+                new("L-System",      HelpTextBundle.MathLSystemText),
+                new("Attractor",     HelpTextBundle.MathAttractorText),
+                new("Plasma",        HelpTextBundle.MathPlasmaText),
+                new("Flame",         HelpTextBundle.MathFlameText),
+                new("Apollonian",    HelpTextBundle.MathApollonianText),
+                new("DLA",           HelpTextBundle.MathDlaText),
+            }),
+            new("3D + 4D", new HelpSubTab[]
+            {
+                new("Mandelbulb",    HelpTextBundle.MathMandelbulbText),
+                new("Mandelbox",     HelpTextBundle.MathMandelboxText),
+                new("KIFS",          HelpTextBundle.MathKifsText),
+                new("Quaternion Julia", HelpTextBundle.MathQuatJuliaText),
+                new("Quaternion Mandelbrot", HelpTextBundle.MathQuatMandelbrotText),
+                new("Bicomplex Mandelbrot", HelpTextBundle.MathBicomplexText),
+                new("Kleinian",      HelpTextBundle.MathKleinianText),
+            }),
+            new("Authoring", new HelpSubTab[]
+            {
+                new("User Equation", HelpTextBundle.MathUserEquationText),
+                new("Sandbox",       HelpTextBundle.MathSandboxText),
+                new("User Bulb 3D",  HelpTextBundle.MathUserBulbText),
+            }),
+            new("Generated", new HelpSubTab[]
+            {
+                new("Mandelbrot Z² (Generated)", HelpTextBundle.MathGeneratedZ2Text),
+            }),
         };
 
         public IReadOnlyList<HelpLink> AboutLinks { get; } = new HelpLink[]

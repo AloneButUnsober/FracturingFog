@@ -29,6 +29,18 @@
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <ProjectReference Include="..\Server\FracturingFog.Server.csproj" />
     <ProjectReference Include="..\Client\FracturingFog.Client.csproj" />
+    <!--
+      D-6b — Engine ref added so cluster ref-orbit tests can compare a
+      shared-orbit sub-rect render against a full-image render for pixel
+      parity. Engine is the smallest superset that exposes MandelbrotCalculator.
+    -->
+    <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+    <!--
+      Region Editor (Animation Roadmap Sub-goal B) — Hosting ref added so the
+      RegionEditorServiceTests can drive HostColorThemeService.GetRegionForEdit
+      / UpdateRegionMetadata. Hosting is net10.0 and cross-platform-safe.
+    -->
+    <ProjectReference Include="..\Hosting\FracturingFog.Hosting.csproj" />
   </ItemGroup>
 
 </Project>

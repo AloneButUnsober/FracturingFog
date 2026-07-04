@@ -39,6 +39,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ResetCommand            = MakeCmd(() => ResetClick?.Invoke(this, EventArgs.Empty));
         SpanCommand             = MakeCmd(() => SpanClick?.Invoke(this, EventArgs.Empty));
         ScreenshotCommand       = MakeCmd(() => ScreenshotClick?.Invoke(this, EventArgs.Empty));
+        WallpaperCommand        = MakeCmd(() => WallpaperClick?.Invoke(this, EventArgs.Empty));
         PosterCommand           = MakeCmd(() => PosterClick?.Invoke(this, EventArgs.Empty));
         SlideshowCommand        = MakeCmd(() => SlideshowClick?.Invoke(this, EventArgs.Empty));
         VideoCommand            = MakeCmd(() => VideoClick?.Invoke(this, EventArgs.Empty));
@@ -57,11 +58,18 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         DeleteThemeCommand      = MakeCmd(() => DeleteThemeClick?.Invoke(this, EventArgs.Empty));
         ReloadThemesCommand     = MakeCmd(() => ReloadThemesClick?.Invoke(this, EventArgs.Empty));
         EditThemeCommand        = MakeCmd(() => EditThemeClick?.Invoke(this, EventArgs.Empty));
+        // Phase 9b/24b — "Save Lighting → Theme". Ships the currently
+        // selected theme name to the host, which snapshots
+        // FractalParameters.Lighting into the user theme's LightingPreset.
+        SaveLightingToThemeCommand = MakeCmd(
+            () => SaveLightingToThemeClick?.Invoke(this, SelectedTheme ?? string.Empty));
         SlideshowSettingsCommand= MakeCmd(() => SlideshowSettingsClick?.Invoke(this, EventArgs.Empty));
+        AppSettingsCommand      = MakeCmd(() => AppSettingsClick?.Invoke(this, EventArgs.Empty));
         ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
         EditWatermarkCommand    = MakeCmd(() => EditWatermarkClick?.Invoke(this, EventArgs.Empty));
+        EditAnimationCommand    = MakeCmd(() => EditAnimationClick?.Invoke(this, EventArgs.Empty));
         FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
         AppDataLocationCommand  = MakeCmd(() => AppDataLocationClick?.Invoke(this, EventArgs.Empty));
     }
@@ -125,6 +133,11 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private const bool _themeEditableOnly = false;
     private RegionSortMode _regionSort = RegionSortMode.Default;
     private FractalType _regionType = FractalType.Mandelbrot;
+    /// <summary>Active fractal type used as the compat filter target when
+    /// <see cref="ThemeSortMode.ByFractalCompat"/> is selected. Pushed in by
+    /// the shell whenever the user switches fractals so the theme combo
+    /// auto-rebuilds against the new type.</summary>
+    private FractalType _compatFractalType = FractalType.Mandelbrot;
 
     /// <summary>Hand the menu the host theme service so its Region / Theme
     /// combos can sort + filter themselves. Performs the initial fill.</summary>
@@ -141,8 +154,19 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     {
         if (_themeService == null) return;
         string? prev = _selectedTheme;
-        SetThemes(_themeService.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly));
+        FractalType? compat = _themeSort == ThemeSortMode.ByFractalCompat ? _compatFractalType : null;
+        SetThemes(_themeService.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly, compat));
         if (!string.IsNullOrEmpty(prev) && ThemeNames.Contains(prev)) SetThemeSilent(prev);
+    }
+
+    /// <summary>Push the active fractal type from the shell. When the theme
+    /// combo is in <see cref="ThemeSortMode.ByFractalCompat"/> the list is
+    /// rebuilt immediately so the visible options track the new fractal.</summary>
+    public void SetCompatFractalType(FractalType ft)
+    {
+        if (_compatFractalType == ft) return;
+        _compatFractalType = ft;
+        if (_themeSort == ThemeSortMode.ByFractalCompat) RefreshThemes();
     }
 
     /// <summary>Re-pull region names under the current sort state, preserving the
@@ -166,6 +190,10 @@ public sealed class FloatingMenuViewModel : ViewModelBase
                 () => { _themeSort = ThemeSortMode.Default; RefreshThemes(); }),
             ComboMenuItem.Item("All (A–Z)", _themeSort == ThemeSortMode.All,
                 () => { _themeSort = ThemeSortMode.All; RefreshThemes(); }),
+            ComboMenuItem.Item(
+                $"Compatible with {_compatFractalType}",
+                _themeSort == ThemeSortMode.ByFractalCompat,
+                () => { _themeSort = ThemeSortMode.ByFractalCompat; RefreshThemes(); }),
             ComboMenuItem.Separator,
         };
         if (_themeService != null)
@@ -271,6 +299,17 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     {
         get => _videoButtonText;
         set => this.RaiseAndSetIfChanged(ref _videoButtonText, value);
+    }
+
+    /// <summary>Label for the Slideshow button. Flips between "Slideshow" and
+    /// "Stop" while the image slideshow cycler is running. ShellViewModel sets
+    /// this when it toggles the engine. Matches the legacy MainForm parity
+    /// where _slideshowButton.Text tracked _slideshowRunning.</summary>
+    private string _slideshowButtonText = "Slideshow";
+    public string SlideshowButtonText
+    {
+        get => _slideshowButtonText;
+        set => this.RaiseAndSetIfChanged(ref _slideshowButtonText, value);
     }
 
     /// <summary>Mirror an externally-driven region selection without firing
@@ -507,13 +546,65 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public string AdaptiveLabel => $"Adaptive: {Adaptive}";
 
     private bool _brightnessLocked;
-    public bool BrightnessLocked { get => _brightnessLocked; set => this.RaiseAndSetIfChanged(ref _brightnessLocked, value); }
+    /// <summary>Lock brightness against theme-bundle overrides. Mirrors into
+    /// MainViewModel.BrightnessLocked via <see cref="BrightnessLockedChanged"/>.
+    /// Phase 24b.</summary>
+    public bool BrightnessLocked
+    {
+        get => _brightnessLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _brightnessLocked, value))
+                BrightnessLockedChanged?.Invoke(this, value);
+        }
+    }
+    /// <summary>Raised when the user flips the BrightnessLocked checkbox. ShellViewModel
+    /// mirrors the value into <see cref="MainViewModel.BrightnessLocked"/>. Phase 24b.</summary>
+    public event System.EventHandler<bool>? BrightnessLockedChanged;
 
     private bool _contrastLocked;
-    public bool ContrastLocked { get => _contrastLocked; set => this.RaiseAndSetIfChanged(ref _contrastLocked, value); }
+    /// <summary>Lock contrast against theme-bundle overrides. Phase 24b.</summary>
+    public bool ContrastLocked
+    {
+        get => _contrastLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _contrastLocked, value))
+                ContrastLockedChanged?.Invoke(this, value);
+        }
+    }
+    public event System.EventHandler<bool>? ContrastLockedChanged;
 
     private bool _adaptiveLocked;
-    public bool AdaptiveLocked { get => _adaptiveLocked; set => this.RaiseAndSetIfChanged(ref _adaptiveLocked, value); }
+    /// <summary>Lock adaptive against theme-bundle overrides. Phase 24b.</summary>
+    public bool AdaptiveLocked
+    {
+        get => _adaptiveLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _adaptiveLocked, value))
+                AdaptiveLockedChanged?.Invoke(this, value);
+        }
+    }
+    public event System.EventHandler<bool>? AdaptiveLockedChanged;
+
+    private bool _lightingLocked;
+    /// <summary>Lock the active Lighting &amp; FX block against theme-bundle
+    /// overrides. When true, theme selection won't overwrite the user's
+    /// dialled-in lights/AO/fog/tonemap. Phase 24.</summary>
+    public bool LightingLocked
+    {
+        get => _lightingLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _lightingLocked, value))
+                LightingLockedChanged?.Invoke(this, value);
+        }
+    }
+    /// <summary>Raised when the user flips the LightingLocked checkbox so
+    /// ShellViewModel can mirror the flag into MainViewModel.LightingLocked.
+    /// Phase 24.</summary>
+    public event System.EventHandler<bool>? LightingLockedChanged;
 
     private bool _adaptiveEnabled = true;
     public bool AdaptiveEnabled { get => _adaptiveEnabled; set => this.RaiseAndSetIfChanged(ref _adaptiveEnabled, value); }
@@ -728,11 +819,48 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    // Diagnostic — bypass BLA + SA on legacy MandelbrotCalculator HP path.
+    // Used to isolate deep-zoom pixelation regressions. Wire to RenderHost
+    // via shell event handler.
+    private bool _bypassAcceleration;
+    public bool BypassAcceleration
+    {
+        get => _bypassAcceleration;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bypassAcceleration, value);
+            BypassAccelerationToggled?.Invoke(this, value);
+        }
+    }
+
+    private bool _bypassSeriesApproximation;
+    public bool BypassSeriesApproximation
+    {
+        get => _bypassSeriesApproximation;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bypassSeriesApproximation, value);
+            BypassSeriesApproximationToggled?.Invoke(this, value);
+        }
+    }
+
+    private bool _bypassDdBla;
+    public bool BypassDdBla
+    {
+        get => _bypassDdBla;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bypassDdBla, value);
+            BypassDdBlaToggled?.Invoke(this, value);
+        }
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, Unit> ResetCommand { get; }
     public ReactiveCommand<Unit, Unit> SpanCommand { get; }
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
+    public ReactiveCommand<Unit, Unit> WallpaperCommand { get; }
     public ReactiveCommand<Unit, Unit> PosterCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowCommand { get; }
     public ReactiveCommand<Unit, Unit> VideoCommand { get; }
@@ -751,11 +879,15 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DeleteThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> ReloadThemesCommand { get; }
     public ReactiveCommand<Unit, Unit> EditThemeCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveLightingToThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> AppSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ServerCommand { get; }
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
     public ReactiveCommand<Unit, Unit> EditWatermarkCommand { get; }
+    /// <summary>Animation Roadmap Phase 3c — opens the Animation Editor.</summary>
+    public ReactiveCommand<Unit, Unit> EditAnimationCommand { get; }
     public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
     public ReactiveCommand<Unit, Unit> AppDataLocationCommand { get; }
 
@@ -764,6 +896,11 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? ResetClick;
     public event EventHandler? SpanClick;
     public event EventHandler? ScreenshotClick;
+    /// <summary>User clicked the "Wallpaper" button — render an image sized to
+    /// the union of every connected monitor's pixel bounds, regardless of the
+    /// current window state. Works around the GNOME/Wayland limitation where
+    /// Span mode cannot overlay the top bar + dock across multiple monitors.</summary>
+    public event EventHandler? WallpaperClick;
     public event EventHandler? PosterClick;
     public event EventHandler? SlideshowClick;
     public event EventHandler? VideoClick;
@@ -782,10 +919,23 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler? DeleteThemeClick;
     public event EventHandler? ReloadThemesClick;
     public event EventHandler? EditThemeClick;
+    /// <summary>
+    /// Phase 9b/24b — user clicked "Save Lighting → Theme" in Color Themes
+    /// section. Payload = currently selected theme name (may be empty). Host
+    /// snapshots <c>FractalParameters.Lighting</c> into the user theme's
+    /// <c>LightingPreset</c> and shows a status banner with the outcome.
+    /// </summary>
+    public event EventHandler<string>? SaveLightingToThemeClick;
     public event EventHandler? SlideshowSettingsClick;
+    /// <summary>Open the general application-settings dialog (animated-param
+    /// ceiling override, and future app-global settings).</summary>
+    public event EventHandler? AppSettingsClick;
     public event EventHandler? ServerClick;
     public event EventHandler? ClientClick;
     public event EventHandler? EditWatermarkClick;
+    /// <summary>Animation Roadmap Phase 3c — user clicked "Edit Animation…"
+    /// in the menu. Shell opens the Animation Editor dialog.</summary>
+    public event EventHandler? EditAnimationClick;
     public event EventHandler? FfmpegSetupClick;
     public event EventHandler? AppDataLocationClick;
 
@@ -804,6 +954,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
 
     public event EventHandler<bool>? StatusBarToggled;
     public event EventHandler<bool>? GridToggled;
+    public event EventHandler<bool>? BypassAccelerationToggled;
+    public event EventHandler<bool>? BypassSeriesApproximationToggled;
+    public event EventHandler<bool>? BypassDdBlaToggled;
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }

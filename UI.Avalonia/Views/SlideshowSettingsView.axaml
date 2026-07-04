@@ -19,7 +19,7 @@
       4K display at 200% scaling with a 12pt UI font) cannot crop labels.
     -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="780">
-    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="*,Auto">
 
         <!-- Row 0: Saved-config name combo + Type droplist (library mode only) -->
@@ -140,16 +140,26 @@
                        IsEnabled="{Binding TimingEnabled}"
                        Width="110" Margin="8,2" />
 
-        <!-- Row 9: timing note, visibility bound to AudioReactive -->
-        <TextBlock Grid.Row="9" Grid.ColumnSpan="2"
+        <!-- Row 9: reproducibility seed. Not greyed by audio-reactive — it
+             governs region/theme ordering, which runs in both modes. -->
+        <TextBlock Grid.Row="9" Grid.Column="0" VerticalAlignment="Center"
+                   Text="Random seed (0 = random each run):"
+                   ToolTip.Tip="Set a fixed non-zero seed to replay the exact same region/theme order every run (demos, recordings). 0 shuffles fresh each run." />
+        <NumericUpDown Grid.Row="9" Grid.Column="1"
+                       Minimum="0" Maximum="2147483647" Increment="1"
+                       Value="{Binding RandomSeed, Mode=TwoWay}"
+                       Width="110" Margin="8,2" />
+
+        <!-- Row 10: timing note, visibility bound to AudioReactive -->
+        <TextBlock Grid.Row="10" Grid.ColumnSpan="2"
                    Text="(Disabled while Audio-Reactive is on — beats drive timing.)"
                    FontStyle="Italic"
                    Foreground="#969696"
                    Margin="0,6,0,4"
                    IsVisible="{Binding TimingNoteVisible}" />
 
-        <!-- Row 10: per-region watermark toggle -->
-        <CheckBox Grid.Row="10" Grid.ColumnSpan="2"
+        <!-- Row 11: per-region watermark toggle -->
+        <CheckBox Grid.Row="11" Grid.ColumnSpan="2"
                   Content="Use each region's embedded watermark"
                   IsChecked="{Binding UseRegionWatermark, Mode=TwoWay}"
                   Foreground="#B4DCB4"
@@ -159,7 +169,7 @@
 
         <!-- Row 11: Record-Slideshow block — capture every fade step to a PNG
              sequence and prompt Convert / Save / Cancel on Stop. -->
-        <Border Grid.Row="11" Grid.ColumnSpan="2"
+        <Border Grid.Row="12" Grid.ColumnSpan="2"
                 BorderBrush="#3C3C3C" BorderThickness="0,1,0,1"
                 Padding="0,8,0,8" Margin="0,8,0,4">
             <StackPanel Spacing="6">
@@ -180,7 +190,7 @@
         </Border>
 
         <!-- Row 12: Filter expander — regions / themes / fractal types / quality presets -->
-        <Expander Grid.Row="12" Grid.ColumnSpan="2"
+        <Expander Grid.Row="13" Grid.ColumnSpan="2"
                   Header="Filters (regions / themes / fractal type / quality)"
                   Margin="0,12,0,0"
                   IsExpanded="False">
@@ -237,7 +247,7 @@
         </Expander>
 
         <!-- Row 13: Adaptive Sweep configuration -->
-        <Expander Grid.Row="13" Grid.ColumnSpan="2"
+        <Expander Grid.Row="14" Grid.ColumnSpan="2"
                   Header="Adaptive Sweep"
                   Margin="0,8,0,0"
                   IsExpanded="False">
@@ -295,7 +305,7 @@
         </Expander>
 
         <!-- Row 14: Post-FX snapshot -->
-        <Expander Grid.Row="14" Grid.ColumnSpan="2"
+        <Expander Grid.Row="15" Grid.ColumnSpan="2"
                   Header="Post-FX snapshot"
                   Margin="0,8,0,0"
                   IsExpanded="False">
@@ -342,8 +352,47 @@
             </StackPanel>
         </Expander>
 
-        <!-- Row 15: Start / OK / Cancel buttons -->
-        <StackPanel Grid.Row="15" Grid.ColumnSpan="2"
+        <!-- Row 15: Animations panel. Always available; the Animation type
+             animates unconditionally, while Image / Video opt in via the
+             "Enable animations" toggle (Phase 5). -->
+        <Expander Grid.Row="16" Grid.ColumnSpan="2"
+                  Header="Animations"
+                  Margin="0,8,0,0"
+                  IsExpanded="{Binding AnimationsExpanded}">
+            <StackPanel Spacing="6" Margin="0,6,0,0">
+                <CheckBox Content="Enable animations on this slideshow"
+                          IsChecked="{Binding EnableAnimations, Mode=TwoWay}"
+                          IsVisible="{Binding ShowEnableAnimationsToggle}"
+                          FontWeight="Bold" Foreground="#B4DCB4"
+                          ToolTip.Tip="Play region-attached (or random type-compatible) animations during each Image/Video leg. Off = unchanged classic behaviour." />
+                <TextBlock Text="Animation type always animates each leg."
+                           IsVisible="{Binding IsAnimation}"
+                           Foreground="#969696" FontStyle="Italic" />
+                <StackPanel Spacing="6" IsEnabled="{Binding AnimationsExpanded}">
+                    <CheckBox Content="Randomize animation by fractal type"
+                              IsChecked="{Binding RandomizeAnimationsByFractalType, Mode=TwoWay}"
+                              FontWeight="Bold" Foreground="#B4DCB4"
+                              ToolTip.Tip="When on, ignore each region's attached animation and draw a random library animation whose target fractal types include the region's type." />
+                    <TextBlock Text="Included Animations  (unchecked all = all eligible)"
+                               Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
+                    <ListBox ItemsSource="{Binding AvailableAnimations}"
+                             MaxHeight="160"
+                             SelectionMode="Multiple">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Name}"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Regions with no compatible animation play static. (Video slideshow legs are Mandelbrot-only.)"
+                               Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+
+        <!-- Row 16: Start / OK / Cancel buttons -->
+        <StackPanel Grid.Row="17" Grid.ColumnSpan="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="8"

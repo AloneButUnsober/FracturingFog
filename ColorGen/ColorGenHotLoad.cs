@@ -113,6 +113,25 @@ public static class ColorGenHotLoad
     {
         var refs = new List<MetadataReference>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // S-X7.3 (2026-06-23) — TPA fallback for single-file publish. See the
+        // matching comment in CalculatorGenHotLoad.GatherReferences for the
+        // full rationale; in short, single-file builds leave Assembly.Location
+        // empty, so the loop below produces no MetadataReferences and Roslyn
+        // fails with CS0518 (Predefined types not defined). TRUSTED_PLATFORM_ASSEMBLIES
+        // carries the extracted on-disk paths every Roslyn compile needs.
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa && tpa.Length > 0)
+        {
+            char sep = OperatingSystem.IsWindows() ? ';' : ':';
+            foreach (var path in tpa.Split(sep, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrEmpty(path)) continue;
+                if (!seen.Add(path)) continue;
+                try { refs.Add(MetadataReference.CreateFromFile(path)); }
+                catch { /* skip unreadable */ }
+            }
+        }
+
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;
@@ -121,6 +140,32 @@ public static class ColorGenHotLoad
             if (string.IsNullOrEmpty(loc)) continue;
             if (!seen.Add(loc)) continue;
             try { refs.Add(MetadataReference.CreateFromFile(loc)); }
+            catch { /* best-effort */ }
+        }
+
+        // S-X7.11 (2026-06-23) — single-file bundle fallback. See
+        // CalculatorGenHotLoad.GatherReferences for the full rationale;
+        // in short, .NET 10 single-file publish keeps managed DLLs in the
+        // bundle exe so TPA + Assembly.Location are useless. Pull metadata
+        // straight from the in-memory bundle via AssemblyExtensions.TryGetRawMetadata.
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (asm.IsDynamic) continue;
+            string? simpleName = asm.GetName().Name;
+            if (string.IsNullOrEmpty(simpleName)) continue;
+            if (!seen.Add("bundle:" + simpleName)) continue;
+            try
+            {
+                unsafe
+                {
+                    if (System.Reflection.Metadata.AssemblyExtensions.TryGetRawMetadata(asm, out byte* blob, out int length)
+                        && blob != null && length > 0)
+                    {
+                        var module = ModuleMetadata.CreateFromMetadata((IntPtr)blob, length);
+                        refs.Add(AssemblyMetadata.Create(module).GetReference());
+                    }
+                }
+            }
             catch { /* best-effort */ }
         }
         return refs;

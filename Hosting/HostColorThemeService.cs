@@ -78,6 +78,11 @@ namespace FracturingFog.Hosting
 
         /// <inheritdoc/>
         public IReadOnlyList<string> EnumerateThemeNames(ThemeSortMode mode, string? kindFilter, bool editableOnly)
+            => EnumerateThemeNames(mode, kindFilter, editableOnly, compatFor: null);
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateThemeNames(
+            ThemeSortMode mode, string? kindFilter, bool editableOnly, FractalType? compatFor)
         {
             // Force user-library reload so freshly-imported themes appear.
             ColorPalette.LoadUserThemes();
@@ -98,6 +103,29 @@ namespace FracturingFog.Hosting
                         result.AddRange(byKind.ToImmutableSortedDictionary().Keys.Where(Allow));
                     }
                     break;
+
+                case ThemeSortMode.ByFractalCompat:
+                    // Flat list, grouped by kind for readability. Names whose
+                    // required calculator data is not supplied by compatFor
+                    // are dropped. Falls back to Default grouping when no
+                    // compat type is supplied so the combo never goes empty.
+                    if (compatFor is FractalType ft)
+                    {
+                        foreach (var type in Enum.GetValues<ColorPaletteType>())
+                        {
+                            var palettes = ColorPalette.GetPalettesByType(type);
+                            if (palettes.Count == 0) continue;
+                            var names = palettes.ToImmutableSortedDictionary().Keys
+                                .Where(Allow)
+                                .Where(n => ColorPalette.IsCompatible(ColorPalette.GetPaletteByName(n), ft))
+                                .ToList();
+                            if (names.Count == 0) continue;
+                            result.Add($"— {type} —");
+                            result.AddRange(names);
+                        }
+                        if (result.Count > 0) break;
+                    }
+                    goto default; // fall through to grouped Default
 
                 default: // Default — grouped by kind with "— {kind} —" headers
                     foreach (var type in Enum.GetValues<ColorPaletteType>())
@@ -242,6 +270,18 @@ namespace FracturingFog.Hosting
             // legacy MainForm.LoadRegionFractalParams.
             LoadRegionFractalParams(region, state);
             if (region.QualityPreset != null) state.Quality = region.QualityPreset;
+            // Region's saved iter count drives the next render via
+            // FractalViewState.PreferredIterations (ApplyView reads it after
+            // IterLocked + maxIters arg, before Quality.ComputeIterations
+            // fallback). Cleared on the next user pan/zoom by
+            // FractalInputController so it only governs the immediate
+            // region-jump frame. Mirrors legacy MainForm.ApplyRegion:2980
+            // which wrote region.Iterations directly into _calculator.MaxIterations
+            // when !_iterLocked. Without this the slideshow cross-fade renders
+            // its offscreen source at region.Iterations but the post-commit
+            // Trigger drops back to Quality.ComputeIterations — visible iter
+            // collapse the moment the fade-in completes.
+            state.PreferredIterations = region.Iterations > 0 ? region.Iterations : 0;
             // A region jump must NOT toggle the iteration lock — legacy
             // MainForm.ApplyRegion leaves _iterLocked untouched and lets the
             // adaptive (zoom-scaled) iteration count drive the render. Forcing
@@ -338,6 +378,66 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public bool TryGetThemeLightingPreset(
+            string themeName, out FracturingFog.Rendering.Lighting.LightingFxData lighting)
+        {
+            lighting = default;
+            if (string.IsNullOrEmpty(themeName)) return false;
+            // User library is the authoritative source for bundled presets —
+            // built-in C# themes don't carry LightingPreset. Case-insensitive
+            // match mirrors ColorPalette.GetPaletteByName's lookup contract.
+            var data = UserColorThemeLibrary.Instance.Themes.FirstOrDefault(
+                t => string.Equals(t.Name, themeName, StringComparison.OrdinalIgnoreCase));
+            if (data?.LightingPreset == null) return false;
+            lighting = data.LightingPreset.ToFx();
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool SaveLightingPresetToTheme(
+            string themeName, in FracturingFog.Rendering.Lighting.LightingFxData lighting)
+        {
+            if (string.IsNullOrEmpty(themeName)) return false;
+            var data = UserColorThemeLibrary.Instance.Themes.FirstOrDefault(
+                t => string.Equals(t.Name, themeName, StringComparison.OrdinalIgnoreCase));
+            // Built-in / algorithmic themes are not in the user library and
+            // can't carry a preset — the caller surfaces a friendly hint.
+            if (data == null) return false;
+            data.LightingPreset = LightingFxPresetData.FromFx(lighting);
+            UserColorThemeLibrary.Instance.Save();
+            ColorPalette.RebuildUserPalettes();
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool ClearLightingPresetOnTheme(string themeName)
+        {
+            if (string.IsNullOrEmpty(themeName)) return false;
+            var data = UserColorThemeLibrary.Instance.Themes.FirstOrDefault(
+                t => string.Equals(t.Name, themeName, StringComparison.OrdinalIgnoreCase));
+            if (data == null || data.LightingPreset == null) return false;
+            data.LightingPreset = null;
+            UserColorThemeLibrary.Instance.Save();
+            ColorPalette.RebuildUserPalettes();
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool TryGetRegionLightingOverride(
+            string regionName, out FracturingFog.Rendering.Lighting.LightingFxData lighting)
+        {
+            lighting = default;
+            if (string.IsNullOrEmpty(regionName)) return false;
+            var region = FractalRegionLibrary.Instance.All.FirstOrDefault(
+                r => string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                ?? FractalRegionLibrary.Instance.AllSlideshowRegions.FirstOrDefault(
+                    r => string.Equals(r.Name, regionName, StringComparison.Ordinal));
+            if (region?.LightingOverride == null) return false;
+            lighting = region.LightingOverride.ToFx();
+            return true;
+        }
+
+        /// <inheritdoc/>
         public bool ApplyThemeSilent(string themeName)
         {
             if (string.IsNullOrEmpty(themeName) || _renderHost == null) return false;
@@ -359,7 +459,46 @@ namespace FracturingFog.Hosting
             return r?.EmbeddedWatermark?.Clone();
         }
 
-        public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null)
+        /// <inheritdoc/>
+        public string? GetRegionAnimationName(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            var r = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(x => string.Equals(x.Name, regionName, StringComparison.OrdinalIgnoreCase));
+            return r?.AnimationName;
+        }
+
+        /// <inheritdoc/>
+        public FracturingFog.Abstractions.Animation.AnimationData? GetAnimation(string animationName)
+        {
+            if (string.IsNullOrWhiteSpace(animationName)) return null;
+            return AnimationLibrary.Instance.GetByName(animationName);
+        }
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateAnimationNames()
+        {
+            var lib = AnimationLibrary.Instance;
+            var list = new List<string>(lib.Animations.Count);
+            foreach (var a in lib.Animations) list.Add(a.Name);
+            return list;
+        }
+
+        /// <inheritdoc/>
+        public bool AnimationExistsInLibrary(string animationName)
+        {
+            if (string.IsNullOrWhiteSpace(animationName)) return false;
+            return AnimationLibrary.Instance.GetByName(animationName) != null;
+        }
+
+        /// <inheritdoc/>
+        public bool SaveAnimation(FracturingFog.Abstractions.Animation.AnimationData animation)
+        {
+            if (animation == null || string.IsNullOrWhiteSpace(animation.Name)) return false;
+            return AnimationLibrary.Instance.ReplaceOrAdd(animation);
+        }
+
+        public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null)
         {
             if (string.IsNullOrWhiteSpace(regionName) || state == null) return false;
 
@@ -370,16 +509,48 @@ namespace FracturingFog.Hosting
             if (existing != null && existing.IsBuiltIn) return false;
             if (existing != null) FractalRegionLibrary.Instance.UserRegions.Remove(existing);
 
+            var region = BuildGeometryFromLiveState(state);
+            region.Name = regionName;
+            region.Description = "";
+            region.EmbeddedWatermark = embeddedWatermark?.Clone();
+            region.AnimationName = string.IsNullOrWhiteSpace(animationName) ? null : animationName;
+
+            FractalRegionLibrary.Instance.UserRegions.Add(region);
+            FractalRegionLibrary.Instance.Save();
+            return true;
+        }
+
+        /// <summary>
+        /// Build a fresh user-defined region carrying only geometry, quality,
+        /// fractal type, and per-engine source identity captured from the
+        /// <b>live</b> <paramref name="state"/>. Metadata (Name, Description,
+        /// animation, curated themes, lighting/watermark) is left at defaults
+        /// for the caller to fill. Shared by <see cref="SaveCurrentAsRegion"/>
+        /// and the Region Editor's "Capture current view" (Phase R3).
+        /// </summary>
+        private static FractalRegion BuildGeometryFromLiveState(FractalViewState state)
+        {
             var p = state.FractalParameters;
-            var region = new FractalRegion
+            return new FractalRegion
             {
-                Name = regionName,
                 CenterX  = state.CenterX,  CenterXLo = state.CenterXLo,
                 CenterX2 = state.CenterX2, CenterX3  = state.CenterX3,
                 CenterY  = state.CenterY,  CenterYLo = state.CenterYLo,
                 CenterY2 = state.CenterY2, CenterY3  = state.CenterY3,
                 Zoom = state.Zoom,
-                Iterations = state.IterLocked ? state.LockedIterations : 0,
+                // Capture the live iter count so the saved region renders at
+                // the same detail it had on screen — matches legacy MainForm:2248
+                // (`Iterations = _calculator?.MaxIterations ?? 512`). Falls back
+                // through the same precedence ApplyView uses: lock → preferred
+                // (region jump still pinned) → Quality.ComputeIterations.
+                // Saving 0 when unlocked lost the live count; the recalled
+                // region then re-derived a (typically lower) default from the
+                // quality preset.
+                Iterations = state.IterLocked
+                    ? state.LockedIterations
+                    : state.PreferredIterations > 0
+                        ? state.PreferredIterations
+                        : (state.Quality ?? QualityPreset.Standard).ComputeIterations(state.Zoom),
                 FractalType = state.FractalType,
                 QualityPreset = state.Quality ?? QualityPreset.Standard,
                 RegionType = RegionType.UserDefined,
@@ -397,12 +568,7 @@ namespace FracturingFog.Hosting
                 UserBulbCameraPhi      = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraPhi      ?? 0 : 0,
                 UserBulbLightTheta     = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightTheta     ?? 0 : 0,
                 UserBulbLightPhi       = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightPhi       ?? 0 : 0,
-                Description = "",
-                EmbeddedWatermark = embeddedWatermark?.Clone(),
             };
-            FractalRegionLibrary.Instance.UserRegions.Add(region);
-            FractalRegionLibrary.Instance.Save();
-            return true;
         }
 
         /// <inheritdoc/>
@@ -417,6 +583,131 @@ namespace FracturingFog.Hosting
             lib.Save();
             return true;
         }
+
+        /// <inheritdoc/>
+        public RegionEditModel? GetRegionForEdit(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            var r = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(x => string.Equals(x.Name, regionName, StringComparison.OrdinalIgnoreCase));
+            if (r == null) return null;
+
+            return new RegionEditModel
+            {
+                OriginalName = r.Name,
+                IsBuiltIn    = r.IsBuiltIn,
+                Name         = r.Name,
+                Description  = r.Description ?? string.Empty,
+                AnimationName = r.AnimationName,
+                // Defensive copy so editor edits don't mutate the live library
+                // entry before the user commits.
+                CuratedThemes = r.CuratedThemes != null ? new List<string>(r.CuratedThemes) : null,
+                KeepLightingOverride  = true,
+                KeepEmbeddedWatermark = true,
+                FractalTypeName = r.FractalType.ToString(),
+                CenterX = r.CenterX,
+                CenterY = r.CenterY,
+                Zoom    = r.Zoom,
+                Iterations = r.Iterations,
+                HasLightingOverride  = r.LightingOverride != null,
+                HasEmbeddedWatermark = r.EmbeddedWatermark != null,
+            };
+        }
+
+        /// <inheritdoc/>
+        public RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits)
+            => UpdateRegionMetadata(edits, null);
+
+        /// <inheritdoc/>
+        public RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits, FractalViewState? recaptureGeometryFrom)
+        {
+            if (edits == null) return RegionUpdateResult.Fail("No edit data.");
+
+            string newName = (edits.Name ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(newName))
+                return RegionUpdateResult.Fail("Region name cannot be empty.");
+
+            var lib = FractalRegionLibrary.Instance;
+
+            // Resolve the source region we're editing (built-in or user).
+            var source = lib.All.FirstOrDefault(x =>
+                string.Equals(x.Name, edits.OriginalName, StringComparison.OrdinalIgnoreCase));
+            if (source == null)
+                return RegionUpdateResult.Fail($"Region \"{edits.OriginalName}\" no longer exists.");
+
+            // Collision: refuse a name already taken by a *different* region
+            // (built-in or user). Editing in place under the same name is fine.
+            var collision = lib.All.FirstOrDefault(x =>
+                string.Equals(x.Name, newName, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(x.Name, edits.OriginalName, StringComparison.OrdinalIgnoreCase));
+            if (collision != null)
+                return RegionUpdateResult.Fail($"A region named \"{newName}\" already exists.");
+
+            bool cloned = source.IsBuiltIn;
+
+            // Geometry source: by default preserve the saved region's geometry
+            // + per-engine source fields (metadata-only edit, camera unmoved).
+            // Phase R3 "Capture current view" passes the live view state to
+            // re-snap geometry instead, so the user can retag metadata and
+            // re-frame in a single edit.
+            var region = recaptureGeometryFrom != null
+                ? BuildGeometryFromLiveState(recaptureGeometryFrom)
+                : CloneRegionGeometry(source);
+            region.RegionType  = RegionType.UserDefined;
+            region.Name        = newName;
+            region.Description  = edits.Description ?? string.Empty;
+            region.AnimationName = string.IsNullOrWhiteSpace(edits.AnimationName) ? null : edits.AnimationName;
+            region.CuratedThemes = (edits.CuratedThemes != null && edits.CuratedThemes.Count > 0)
+                ? new List<string>(edits.CuratedThemes)
+                : null;
+            // Keep vs clear the two attached assets. Cloned built-ins carry the
+            // source's override/watermark forward when kept.
+            region.LightingOverride  = edits.KeepLightingOverride  ? source.LightingOverride : null;
+            region.EmbeddedWatermark = edits.KeepEmbeddedWatermark ? source.EmbeddedWatermark?.Clone() : null;
+
+            // Replace-by-name for an in-place user edit; pure add for a clone
+            // (the built-in stays put). When a user region is renamed the old
+            // name is removed too.
+            if (!cloned)
+            {
+                var existing = lib.UserRegions.FirstOrDefault(x =>
+                    string.Equals(x.Name, edits.OriginalName, StringComparison.OrdinalIgnoreCase));
+                if (existing != null) lib.UserRegions.Remove(existing);
+            }
+
+            lib.UserRegions.Add(region);
+            lib.Save();
+            return RegionUpdateResult.Ok(newName, cloned);
+        }
+
+        /// <summary>
+        /// Region Editor helper — copy a region's stored geometry, quality,
+        /// fractal type, and per-engine source identity into a fresh
+        /// user-defined <see cref="FractalRegion"/>. Metadata (Name,
+        /// Description, animation, curated themes, lighting/watermark) is left
+        /// at defaults for the caller to fill from the edit model.
+        /// </summary>
+        private static FractalRegion CloneRegionGeometry(FractalRegion src) => new()
+        {
+            CenterX  = src.CenterX,  CenterXLo = src.CenterXLo,
+            CenterX2 = src.CenterX2, CenterX3  = src.CenterX3,
+            CenterY  = src.CenterY,  CenterYLo = src.CenterYLo,
+            CenterY2 = src.CenterY2, CenterY3  = src.CenterY3,
+            Zoom = src.Zoom,
+            Iterations = src.Iterations,
+            FractalType = src.FractalType,
+            QualityPreset = src.QualityPreset,
+            RegionType = RegionType.UserDefined,
+            UserEquationName = src.UserEquationName,
+            SandboxName      = src.SandboxName,
+            UserBulbName     = src.UserBulbName,
+            UserBulbSource   = src.UserBulbSource,
+            UserBulbCameraDistance = src.UserBulbCameraDistance,
+            UserBulbCameraTheta    = src.UserBulbCameraTheta,
+            UserBulbCameraPhi      = src.UserBulbCameraPhi,
+            UserBulbLightTheta     = src.UserBulbLightTheta,
+            UserBulbLightPhi       = src.UserBulbLightPhi,
+        };
 
         /// <inheritdoc/>
         public RegionExportResult ExportUserRegionsToFile(string path)

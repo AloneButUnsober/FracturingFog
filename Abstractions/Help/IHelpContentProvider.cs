@@ -14,6 +14,15 @@ namespace FracturingFog.Help
     /// <summary>One sub-tab inside the Mathematics section.</summary>
     public sealed record HelpSubTab(string Title, string Body);
 
+    /// <summary>
+    /// Wave 5.4 — Math help two-level grouping. A group bundles a family of
+    /// related sub-tabs (e.g. all 2D escape-time families) under one outer
+    /// tab so the strip stops wrapping past ~30 entries. The FloatingHelpView
+    /// renders an outer TabControl over groups and an inner TabControl over
+    /// each group's sub-tabs.
+    /// </summary>
+    public sealed record HelpSubTabGroup(string Title, IReadOnlyList<HelpSubTab> SubTabs);
+
     /// <summary>One clickable link in the About tab footer.</summary>
     public sealed record HelpLink(string Label, string Url);
 
@@ -74,8 +83,19 @@ namespace FracturingFog.Help
         string ArchitectureText { get; }
 
         /// <summary>Math tab is itself a TabControl — each entry becomes one
-        /// sub-tab. Order is preserved.</summary>
+        /// sub-tab. Order is preserved. Kept for back-compat with any host
+        /// that still consumes the flat list; the Avalonia shell binds to
+        /// <see cref="MathSubTabGroups"/>.</summary>
         IReadOnlyList<HelpSubTab> MathSubTabs { get; }
+
+        /// <summary>
+        /// Wave 5.4 — two-level grouping. Default impl wraps
+        /// <see cref="MathSubTabs"/> into a single "All" group so legacy
+        /// providers stay compatible. Hosts override to publish a real
+        /// family-grouped layout.
+        /// </summary>
+        IReadOnlyList<HelpSubTabGroup> MathSubTabGroups
+            => new[] { new HelpSubTabGroup("All", MathSubTabs) };
 
         /// <summary>Clickable links rendered under the About body. Host
         /// chooses what to launch; the VM simply raises a LinkRequested

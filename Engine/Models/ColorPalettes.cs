@@ -679,5 +679,104 @@ namespace FracturingFog.Models
             }
             return filtered.Count > 0 ? filtered : fallback;
         }
+
+        /// <summary>
+        /// Derives the <see cref="FractalCapabilities"/> a colour map needs
+        /// from its <see cref="ColorMapFeatures"/> flags plus its sub-interface
+        /// tags (<see cref="IOrbitAwareColorMap"/>, <see cref="IInteriorAwareColorMap"/>).
+        /// Used by <see cref="IsCompatible"/> to filter the palette list by
+        /// active fractal type.
+        /// </summary>
+        public static FractalCapabilities GetRequiredCapabilities(IColorMap map)
+        {
+            var req = FractalCapabilities.None;
+            if (map is IOrbitAwareColorMap)    req |= FractalCapabilities.SuppliesOrbit;
+            if (map is IInteriorAwareColorMap) req |= FractalCapabilities.SuppliesInterior;
+
+            var f = GetStaticFeatures(map);
+            if (f.HasFlag(ColorMapFeatures.UsesNormals) ||
+                f.HasFlag(ColorMapFeatures.ThreeDEffect) ||
+                map.Type == ColorPaletteType.Relief3D)
+                req |= FractalCapabilities.SuppliesNormals;
+            if (f.HasFlag(ColorMapFeatures.UsesDistance))   req |= FractalCapabilities.SuppliesDE;
+            if (f.HasFlag(ColorMapFeatures.UsesFinalZ))     req |= FractalCapabilities.SuppliesFinalZ;
+            if (f.HasFlag(ColorMapFeatures.UsesDerivative)) req |= FractalCapabilities.SuppliesDerivative;
+            if (f.HasFlag(ColorMapFeatures.UsesHistogram))  req |= FractalCapabilities.SuppliesHistogram;
+            return req;
+        }
+
+        /// <summary>
+        /// True when every capability the theme requires is supplied by the
+        /// calculator for <paramref name="ft"/>. Pure bitmask test.
+        /// </summary>
+        public static bool IsCompatible(IColorMap map, FractalType ft)
+        {
+            var supplied = FractalCapabilityMap.For(ft);
+            var required = GetRequiredCapabilities(map);
+            return (required & ~supplied) == 0;
+        }
+
+        /// <summary>
+        /// Combines the zoom cap of <see cref="GetPaletteNamesForZoom"/> with a
+        /// fractal-type compatibility filter (<see cref="IsCompatible"/>). Used
+        /// by the slideshow / video slideshow so the random theme pick can't
+        /// land on a theme whose required data the active fractal doesn't
+        /// supply (which would render flat / solid colour).
+        ///
+        /// Three-tier fallback so callers never get a zero-length pool:
+        ///   1. Zoom-eligible AND compatible (preferred).
+        ///   2. Zoom-eligible only (compatibility filter was too strict).
+        ///   3. Every non-header palette name (zoom cap also too strict).
+        /// </summary>
+        public static List<string> GetPaletteNamesFor(FractalType ft, double zoom)
+        {
+            var compat = new List<string>();
+            var zoomOnly = new List<string>();
+            var all = new List<string>();
+            foreach (var p in Palettes)
+            {
+                string name = GetStaticName(p);
+                if (string.IsNullOrEmpty(name) || name.StartsWith("—")) continue;
+                all.Add(name);
+                bool zoomOk = zoom <= GetStaticMaxZoom(p);
+                if (!zoomOk) continue;
+                zoomOnly.Add(name);
+                if (IsCompatible(p, ft)) compat.Add(name);
+            }
+            if (compat.Count > 0) return compat;
+            if (zoomOnly.Count > 0) return zoomOnly;
+            return all;
+        }
+
+        /// <summary>
+        /// P6 — curated-aware overload. When <paramref name="curated"/> is non-null
+        /// and contains at least one registered palette name, returns the subset
+        /// of those known names. Unknown names are silently dropped so a typo in
+        /// a saved region can't fail at render time. If the filtered curated pool
+        /// is empty, delegates to <see cref="GetPaletteNamesFor(FractalType, double)"/>
+        /// so the chain remains:
+        ///   1. Region's curated pool (validated).
+        ///   2. Zoom-eligible AND fractal-compatible.
+        ///   3. Zoom-eligible only.
+        ///   4. Every non-header palette name.
+        /// </summary>
+        public static List<string> GetPaletteNamesFor(
+            FractalType ft, double zoom, IReadOnlyList<string>? curated)
+        {
+            if (curated != null && curated.Count > 0)
+            {
+                var known = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var p in Palettes)
+                {
+                    string n = GetStaticName(p);
+                    if (!string.IsNullOrEmpty(n) && !n.StartsWith("—")) known.Add(n);
+                }
+                var hit = new List<string>(curated.Count);
+                foreach (var n in curated)
+                    if (known.Contains(n)) hit.Add(n);
+                if (hit.Count > 0) return hit;
+            }
+            return GetPaletteNamesFor(ft, zoom);
+        }
     }
 }

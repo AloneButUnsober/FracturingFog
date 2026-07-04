@@ -12,7 +12,7 @@ namespace FracturingFog.Models
     /// Cosmic nebula effect — colours derived from iteration count, with
     /// distance-based brightness halos giving a dust-cloud appearance.
     /// </summary>
-    public class NebulaDustMap : IColorMap
+    public class NebulaDustMap : IColorMap, IGpuHlslPalette
     {
         public static string Name        => "Nebula Dust";
 
@@ -43,5 +43,19 @@ namespace FracturingFog.Models
             var c = ColorUtils.Hsv(hue, saturation, value);
             return ColorUtils.PackArgb(c.R, c.G, c.B);
         }
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    if (in_isInSet > 0.5) return float3(0.0, 0.0, 0.0);
+    float h0 = in_smooth * 0.018;
+    float hue = h0 - floor(h0);
+    float sat = 0.75 + 0.25 * exp(-in_dist * 0.3);
+    float glow = exp(-in_dist * 0.08);
+    float value = saturate(0.15 + 0.85 * glow);
+    return cg_hsv_to_rgb(hue, sat, value);
+";
+
+        public string PaletteId => "NebulaDustMap/v1";
     }
 }

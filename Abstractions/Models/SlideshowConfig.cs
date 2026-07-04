@@ -13,6 +13,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace FracturingFog.Models
@@ -26,6 +27,11 @@ namespace FracturingFog.Models
         Image = 0,
         /// <summary>Video Zoom slideshow — animated zoom per leg.</summary>
         Video = 1,
+        /// <summary>Animation slideshow — each leg picks a region + theme +
+        /// animation triple and plays the animation live during the leg's
+        /// hold. Falls back to a static leg when no library animation is
+        /// compatible with the chosen region (Animation Roadmap Phase 4).</summary>
+        Animation = 2,
     }
 
     /// <summary>Per-frame iteration-cap policy applied during video record /
@@ -186,6 +192,34 @@ namespace FracturingFog.Models
         /// <summary>Restrict regions by quality-preset name. Empty = no quality filter.</summary>
         public List<string> FilterQualityPresets { get; set; } = new();
 
+        /// <summary>Whitelist of animation names. Null/empty = every library
+        /// animation is eligible. Peer of <see cref="IncludedColorThemes"/>;
+        /// consulted only when <see cref="Type"/>=Animation (Animation Roadmap
+        /// Phase 4).</summary>
+        public List<string> IncludedAnimations { get; set; } = new();
+
+        /// <summary>Restrict animations by tag. Empty = no tag filter. An
+        /// animation survives when it carries at least one tag in this list.
+        /// Peer of <see cref="FilterFractalTypes"/> (Animation Roadmap
+        /// Phase 4).</summary>
+        public List<string> FilterAnimations { get; set; } = new();
+
+        /// <summary>When true, the Animation slideshow ignores any animation
+        /// the picked region carries and instead draws a random library
+        /// animation whose <c>TargetFractalTypes</c> include the region's
+        /// fractal type. When false, a region's attached animation wins if it
+        /// has one (Animation Roadmap Phase 4).</summary>
+        public bool RandomizeAnimationsByFractalType { get; set; }
+
+        /// <summary>Opt-in animation support for the Image and Video slideshow
+        /// types. When true, each leg resolves an animation the same way the
+        /// Animation type does (region-attached or a random type-compatible
+        /// library animation) and plays it during the leg. When false — the
+        /// default — Image / Video behave exactly as before (no animation).
+        /// Ignored for <see cref="Type"/>=Animation, which always animates
+        /// (Animation Roadmap Phase 5).</summary>
+        public bool EnableAnimations { get; set; }
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 
@@ -196,63 +230,36 @@ namespace FracturingFog.Models
         /// Null otherwise so the JSON stays tidy.</summary>
         public VideoSettingsConfig? Video { get; set; }
 
+        // Clone via a JSON round-trip rather than member-wise copy. A
+        // hand-rolled clone silently dropped any newly-added field (RandomSeed
+        // did exactly that until this was fixed), because the copy list has to
+        // be kept in lockstep with the properties by hand. Serializing to the
+        // same JSON shape the config persists in guarantees every persisted
+        // property is carried, so new fields can't vanish on save/cancel.
+        private static readonly JsonSerializerOptions CloneOpts = new();
+
         /// <summary>Deep clone — used by the VM working copy and by save/cancel
         /// round-trips so an in-flight edit never mutates the on-disk config.</summary>
         public SlideshowConfig Clone()
         {
-            return new SlideshowConfig
-            {
-                Name = Name,
-                Type = Type,
-                Timing = new SlideshowSettings
-                {
-                    UseExtremeRegions = Timing.UseExtremeRegions,
-                    TotalDisplayMsPerRegion = Timing.TotalDisplayMsPerRegion,
-                    ColorThemeFadeMs = Timing.ColorThemeFadeMs,
-                    RegionFadeMs = Timing.RegionFadeMs,
-                    FadeSteps = Timing.FadeSteps,
-                    UseRegionWatermark = Timing.UseRegionWatermark,
-                    RecordSlideshow = Timing.RecordSlideshow,
-                    RecordEncodePreset = Timing.RecordEncodePreset,
-                },
-                AudioReactive = AudioReactive,
-                IncludedRegions = new List<string>(IncludedRegions ?? new()),
-                IncludedColorThemes = new List<string>(IncludedColorThemes ?? new()),
-                FilterFractalTypes = new List<string>(FilterFractalTypes ?? new()),
-                FilterQualityPresets = new List<string>(FilterQualityPresets ?? new()),
-                AdaptiveSweep = new AdaptiveSweepConfig
-                {
-                    Enabled = AdaptiveSweep.Enabled,
-                    Start = AdaptiveSweep.Start,
-                    End = AdaptiveSweep.End,
-                    Mode = AdaptiveSweep.Mode,
-                    Loop = AdaptiveSweep.Loop,
-                    BeatFraction = AdaptiveSweep.BeatFraction,
-                },
-                PostFx = new PostFxConfig
-                {
-                    Enabled = PostFx.Enabled,
-                    Values = new Dictionary<string, double>(PostFx.Values ?? new()),
-                },
-                Video = Video == null ? null : new VideoSettingsConfig
-                {
-                    SpeedPreset = Video.SpeedPreset,
-                    CustomSeconds = Video.CustomSeconds,
-                    SecondsPerLeg = Video.SecondsPerLeg,
-                    PauseBetweenMs = Video.PauseBetweenMs,
-                    ConstantRate = Video.ConstantRate,
-                    Reverse = Video.Reverse,
-                    SaveVideo = Video.SaveVideo,
-                    SaveLossless = Video.SaveLossless,
-                    LosslessEncode = Video.LosslessEncode,
-                    TaaSmoothing = Video.TaaSmoothing,
-                    BandDither = Video.BandDither,
-                    BandDitherStrength = Video.BandDitherStrength,
-                    ThemeFadeEnabled = Video.ThemeFadeEnabled,
-                    ThemesPerLeg = Video.ThemesPerLeg,
-                    Extras = new Dictionary<string, string>(Video.Extras ?? new()),
-                },
-            };
+            var clone = JsonSerializer.Deserialize<SlideshowConfig>(
+                            JsonSerializer.Serialize(this, CloneOpts), CloneOpts)
+                        ?? new SlideshowConfig();
+
+            // Normalise nullable collections / sub-blocks to non-null (parity
+            // with the old member-wise clone) so consumers enumerate without
+            // null guards. Data is already copied above; this is null-safety
+            // only, not a per-field maintenance list.
+            clone.Timing ??= new();
+            clone.IncludedRegions ??= new();
+            clone.IncludedColorThemes ??= new();
+            clone.FilterFractalTypes ??= new();
+            clone.FilterQualityPresets ??= new();
+            clone.IncludedAnimations ??= new();
+            clone.FilterAnimations ??= new();
+            clone.AdaptiveSweep ??= new();
+            clone.PostFx ??= new();
+            return clone;
         }
 
         /// <summary>Factory: build a default config from the legacy

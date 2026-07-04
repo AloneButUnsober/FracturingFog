@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FracturingFog.Abstractions;
 
 namespace FracturingFog.Models
@@ -53,6 +54,17 @@ namespace FracturingFog.Models
         private static JsonSerializerOptions BuildJsonOptions() => new()
         {
             WriteIndented = true,
+        };
+
+        /// <summary>
+        /// Options for the .fbulb snapshot envelope. Nullable knobs are
+        /// elided on write so a snapshot only persists what the producer
+        /// actually set, keeping files small + forward-compatible.
+        /// </summary>
+        private static JsonSerializerOptions BuildSnapshotOptions() => new()
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         };
 
         public void Load()
@@ -137,6 +149,37 @@ namespace FracturingFog.Models
                 Source = "return Vec3.Pow(z, 8.0) + c;",
                 Chain = UserBulbChainPrimitives.MengerBulbHybrid(),
             });
+
+            // Wave 4.11 — pure KIFS folds + Quat-Julia preset.
+            Equations.Add(new UserBulbEntry
+            {
+                Name = "Menger sponge step",
+                Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdMenger)!.Source,
+            });
+            Equations.Add(new UserBulbEntry
+            {
+                Name = "Sierpinski tetrahedron",
+                Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdSierpinski)!.Source,
+            });
+            Equations.Add(new UserBulbEntry
+            {
+                Name = "Kaleidoscopic IFS (fold + rot + scale)",
+                Source = "// Single-pass fallback — chain form below carries fold/rot/scale.\n" +
+                         "var v = z;\n" +
+                         "if (v.X + v.Y < 0) v = new Vec3(-v.Y, -v.X,  v.Z);\n" +
+                         "if (v.X + v.Z < 0) v = new Vec3(-v.Z,  v.Y, -v.X);\n" +
+                         "if (v.Y + v.Z < 0) v = new Vec3( v.X, -v.Z, -v.Y);\n" +
+                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.5);\n" +
+                         "return v * 2.0 - new Vec3(1, 1, 1);",
+                Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
+            });
+            Equations.Add(new UserBulbEntry
+            {
+                Name = "Quaternion Julia (Quat mode, set Julia c)",
+                Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
+                         "// Triplex squared map; c held constant by Julia mode.\n" +
+                         "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;",
+            });
         }
 
         /// <summary>
@@ -180,6 +223,33 @@ namespace FracturingFog.Models
                 Source = "return Vec3.Pow(z, 8.0) + c;",
                 Chain = UserBulbChainPrimitives.MengerBulbHybrid(),
             });
+            Ensure("Menger sponge step", () => new UserBulbEntry
+            {
+                Name = "Menger sponge step",
+                Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdMenger)!.Source,
+            });
+            Ensure("Sierpinski tetrahedron", () => new UserBulbEntry
+            {
+                Name = "Sierpinski tetrahedron",
+                Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdSierpinski)!.Source,
+            });
+            Ensure("Kaleidoscopic IFS (fold + rot + scale)", () => new UserBulbEntry
+            {
+                Name = "Kaleidoscopic IFS (fold + rot + scale)",
+                Source = "var v = z;\n" +
+                         "if (v.X + v.Y < 0) v = new Vec3(-v.Y, -v.X,  v.Z);\n" +
+                         "if (v.X + v.Z < 0) v = new Vec3(-v.Z,  v.Y, -v.X);\n" +
+                         "if (v.Y + v.Z < 0) v = new Vec3( v.X, -v.Z, -v.Y);\n" +
+                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.5);\n" +
+                         "return v * 2.0 - new Vec3(1, 1, 1);",
+                Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
+            });
+            Ensure("Quaternion Julia (Quat mode, set Julia c)", () => new UserBulbEntry
+            {
+                Name = "Quaternion Julia (Quat mode, set Julia c)",
+                Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
+                         "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;",
+            });
             Repair("Hybrid: Mandelbox + Mandelbulb",
                    UserBulbChainPrimitives.IdMandelbox,
                    UserBulbChainPrimitives.MandelboxBulbHybrid);
@@ -210,7 +280,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 string json = JsonSerializer.Serialize(Equations, BuildJsonOptions());
-                File.WriteAllText(EquationsFile, json);
+                AtomicFile.WriteAllText(EquationsFile, json);
             }
             catch
             {
@@ -293,7 +363,11 @@ namespace FracturingFog.Models
             return null;
         }
 
-        /// <summary>Export one entry to a .fbulb JSON file.</summary>
+        /// <summary>Export one entry to a .fbulb JSON file (bare entry only —
+        /// no runtime knobs). Retained for legacy callers; new code should
+        /// build a <see cref="UserBulbSnapshot"/> and call
+        /// <see cref="ExportSnapshot"/> to also capture axis mode / Julia /
+        /// camera / lights / colour / view.</summary>
         public bool ExportEntry(string name, string filePath)
         {
             var entry = GetByName(name);
@@ -306,7 +380,9 @@ namespace FracturingFog.Models
             catch { return false; }
         }
 
-        /// <summary>Import a .fbulb JSON file. Renames on collision (suffix N).</summary>
+        /// <summary>Import a bare .fbulb entry JSON file. Renames on collision
+        /// (suffix N). Snapshot-aware import lives in
+        /// <see cref="ImportSnapshot"/>.</summary>
         public UserBulbEntry? ImportEntry(string filePath)
         {
             try
@@ -314,17 +390,84 @@ namespace FracturingFog.Models
                 string json = File.ReadAllText(filePath);
                 var entry = JsonSerializer.Deserialize<UserBulbEntry>(json, BuildJsonOptions());
                 if (entry == null || string.IsNullOrWhiteSpace(entry.Name)) return null;
-                string baseName = entry.Name;
-                int suffix = 1;
-                while (GetByName(entry.Name) != null)
-                {
-                    entry.Name = $"{baseName} ({suffix++})";
-                }
-                Equations.Add(entry);
-                Save();
+                MergeImportedEntry(entry);
                 return entry;
             }
             catch { return null; }
+        }
+
+        /// <summary>
+        /// Write a full snapshot (entry + runtime knobs) as .fbulb JSON.
+        /// Returns false on I/O error or null snapshot. Caller owns building
+        /// the snapshot from the live FractalParameters; the store keeps no
+        /// hidden state.
+        /// </summary>
+        public bool ExportSnapshot(UserBulbSnapshot snapshot, string filePath)
+        {
+            if (snapshot is null) return false;
+            try
+            {
+                File.WriteAllText(filePath,
+                    JsonSerializer.Serialize(snapshot, BuildSnapshotOptions()));
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Read a .fbulb file. Recognises both the Wave 4.13 snapshot envelope
+        /// (Version + Entry + nullable knobs) and pre-4.13 bare-entry JSON
+        /// (legacy format produced by <see cref="ExportEntry"/>) — the latter
+        /// returns a snapshot with only Entry populated. Renames the entry on
+        /// name collision before adding to the store. Returns null on parse
+        /// failure or missing entry name.
+        /// </summary>
+        public UserBulbSnapshot? ImportSnapshot(string filePath)
+        {
+            try
+            {
+                string json = File.ReadAllText(filePath);
+                var snapshot = TryParseSnapshot(json);
+                if (snapshot?.Entry is null || string.IsNullOrWhiteSpace(snapshot.Entry.Name))
+                    return null;
+                MergeImportedEntry(snapshot.Entry);
+                return snapshot;
+            }
+            catch { return null; }
+        }
+
+        private static UserBulbSnapshot? TryParseSnapshot(string json)
+        {
+            // Peek root shape: snapshot envelopes carry a "Version" property;
+            // bare entries do not. Cheaper than two failed full deserialises.
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+
+            if (root.TryGetProperty("Version", out _) && root.TryGetProperty("Entry", out _))
+                return JsonSerializer.Deserialize<UserBulbSnapshot>(json, BuildSnapshotOptions());
+
+            // Legacy: bare UserBulbEntry JSON. Wrap in a snapshot so callers
+            // get one return shape.
+            var entry = JsonSerializer.Deserialize<UserBulbEntry>(json, BuildJsonOptions());
+            if (entry is null) return null;
+            return new UserBulbSnapshot
+            {
+                Version = 0, // 0 = legacy, distinguishable from 1 = envelope.
+                Entry = entry,
+            };
+        }
+
+        private void MergeImportedEntry(UserBulbEntry entry)
+        {
+            string baseName = entry.Name;
+            int suffix = 1;
+            while (GetByName(entry.Name) != null)
+            {
+                entry.Name = $"{baseName} ({suffix++})";
+            }
+            Equations.Add(entry);
+            Save();
         }
     }
 }

@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class DistanceGlowMap : IColorMap
+    public class DistanceGlowMap : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Distance Enhanced";
 
@@ -21,6 +21,17 @@ namespace FracturingFog.Models
             var c = ColorUtils.Hsv(h, 1f, v);
             return unchecked((int)0xFF000000 | (c.R << 16) | (c.G << 8) | c.B);
         }
+
+        public string HlslPrelude => HlslPaletteHelpers.HsvAndMods;
+
+        public string HlslPaletteBody => @"
+    float h0 = in_smooth * 0.02;
+    float h = h0 - floor(h0);
+    float v = exp(-in_dist * 0.1);
+    return cg_hsv_to_rgb(h, 1.0, v);
+";
+
+        public string PaletteId => "DistanceGlowMap/v1";
     }
 
 }

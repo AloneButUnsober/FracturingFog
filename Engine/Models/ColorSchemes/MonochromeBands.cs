@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FracturingFog.Models
 {
-    public class MonoBandMap : IColorMap
+    public class MonoBandMap : IColorMap, IGpuHlslPalette
     {
         public static string Name => "Monochrome Bands";
 
@@ -19,6 +19,15 @@ namespace FracturingFog.Models
             byte b = (byte)(v * 255);
             return unchecked((int)0xFF000000 | (b << 16) | (b << 8) | b);
         }
+
+        public string HlslPrelude => string.Empty;
+
+        public string HlslPaletteBody => @"
+    float v = 0.5 + 0.5 * sin(in_smooth * 0.1);
+    return float3(v, v, v);
+";
+
+        public string PaletteId => "MonoBandMap/v1";
     }
 
 }

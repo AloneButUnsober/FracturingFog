@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    CalculatorGen.SourceGen — Roslyn IIncrementalGenerator wrapper around
+    CalculatorGenApi.Generate. Wave 2.13 (D-7.29) of the open-work-plan.
+
+    Consumers mark a partial class with [GeneratedCalculator(Equation, ...)]
+    and the generator emits the full calculator body at compile time, so
+    Engine/Calculators/Generated/ no longer needs the legacy
+    `dotnet run -p CalculatorGen` step or the bulky pre-generated .cs files.
+
+    Constraints:
+      • Roslyn analyzers run inside the compiler's AppDomain. TFM MUST be
+        netstandard2.0; deps must be netstandard2.0-compatible.
+      • Source for the Parser/Emitters/Api is pulled via Compile Include
+        from ..\CalculatorGen\ (same trick as CalculatorGen.Lib). Program.cs
+        and CalculatorGenHotLoad.cs are excluded — Program is the CLI exe
+        entry, HotLoad uses Roslyn Scripting at runtime which is overkill
+        and would pull a heavy dep into the analyzer.
+      • Templates land as EmbeddedResource so GetManifestResourceStream
+        works inside the analyzer assembly.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog.CalculatorGen.SourceGen</RootNamespace>
+    <AssemblyName>FracturingFog.CalculatorGen.SourceGen</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Analyzer package layout. -->
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- RS2008 enforces an AnalyzerReleases.* file for every diagnostic id. Two
+         in-repo diagnostics, no external consumers — release tracking is overhead. -->
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
+
+    <!--
+      Sibling CalculatorGen.csproj + CalculatorGen.Lib.csproj already share
+      obj/bin space. Isolate ours too so a sln-wide build doesn't clobber.
+    -->
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin\</BaseOutputPath>
+
+    <!-- No default Compile glob — we hand-pick. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Local generator + attribute sources. -->
+    <Compile Include="CalculatorGenerator.cs" />
+    <Compile Include="GeneratedCalculatorAttributeSource.cs" />
+    <Compile Include="Polyfills.cs" />
+
+    <!--
+      Pull CalcGen Parser/Emitters/Api source from the sibling CalculatorGen/
+      tree. Mirrors CalculatorGen.Lib but excludes HotLoad (Roslyn Scripting
+      runtime dep) since the generator only needs the codegen pipeline.
+    -->
+    <Compile Include="..\CalculatorGen\**\*.cs"
+             Exclude="..\CalculatorGen\Program.cs;..\CalculatorGen\CalculatorGenHotLoad.cs;..\CalculatorGen\Templates\**;..\CalculatorGen\SampleOutput\**;..\CalculatorGen\bin\**;..\CalculatorGen\obj\**" />
+
+    <EmbeddedResource Include="..\CalculatorGen\Templates\Calculator.template.cs" Link="Templates\Calculator.template.cs" />
+    <EmbeddedResource Include="..\CalculatorGen\Templates\SelfTest.template.cs"   Link="Templates\SelfTest.template.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Roslyn host APIs. PrivateAssets=all keeps the analyzer pack lean —
+      no transitive ref leak into consumer projects.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

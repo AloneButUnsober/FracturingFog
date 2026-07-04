@@ -180,6 +180,58 @@ namespace FracturingFog.Models
         /// <summary>UserBulb light phi (radians).</summary>
         public double UserBulbLightPhi { get; set; }
 
+        // ── Lighting & FX override (Phase 10, optional) ──────────────────────
+        //
+        // Region snapshot of the user's tuned "Lighting & FX" state. Null =
+        // region has no opinion; recall preserves whatever lighting the user
+        // currently has dialled in. Non-null = recall snaps
+        // FractalParameters.Lighting to the saved values so the dramatic
+        // shadow angle / volumetric fog / bloom that defined the saved view
+        // come back exactly as captured.
+        //
+        // Uses the same DTO as ColorThemeData.LightingPreset so theme presets
+        // and region overrides can round-trip through one serializer.
+
+        /// <summary>
+        /// Optional snapshot of the active <see cref="FractalParameters.Lighting"/>
+        /// at the time the region was saved. Null = recall leaves user lighting
+        /// alone (legacy behaviour; pre-Phase-10 regions still load cleanly).
+        /// </summary>
+        public LightingFxPresetData? LightingOverride { get; set; }
+
+        /// <summary>
+        /// P6: optional hand-picked colour-theme names this region looks best
+        /// with. When non-null+non-empty the slideshow / video slideshow draw
+        /// theme picks from this pool first; unknown names are dropped, and if
+        /// the curated pool produces zero valid entries the picker falls back
+        /// to the compat-filtered list and then the unfiltered list (three-tier
+        /// chain, never empty). Omitted from JSON when null thanks to
+        /// <c>JsonIgnoreCondition.WhenWritingNull</c> so legacy regions stay
+        /// clean.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? CuratedThemes { get; set; }
+
+        /// <summary>
+        /// Animation Roadmap Phase 3 — optional name of a saved
+        /// <c>AnimationData</c> entry in <c>AnimationLibrary</c>. On region
+        /// recall the shell loads the animation onto the shared
+        /// <c>AnimationBusHost</c> bus and starts playback. Null = no
+        /// attached animation (default for legacy regions). Omitted from
+        /// JSON when null.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? AnimationName { get; set; }
+
+        /// <summary>
+        /// Apply this region's lighting override (if any) to the given params.
+        /// No-op when the override is null. Pair with a host-side
+        /// "Lock lighting on recall" toggle to let the user opt out of the
+        /// override per recall.
+        /// </summary>
+        public void ApplyLightingTo(FractalParameters parameters)
+            => LightingOverride?.ApplyTo(parameters);
+
         /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
         /// assumed to be user-defined unless explicitly marked as built-in.
@@ -646,6 +698,66 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Apollonian,
                 QualityPreset = QualityPreset.Standard
             },
+            new()
+            {
+                Name        = "Plasma — Default",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 64,
+                Description = "Diamond-square midpoint-displacement noise field at the default seed and roughness. Pan/zoom is a no-op — the generated field IS the image; switch PlasmaSeed for variety.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Plasma,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Flame — Default Chaos",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Apophysis-style chaos-game flame at the default variation table. The renderer auto-fits the attractor; CX/CY/Zoom are advisory only.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Flame,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Logistic — r ∈ [2.9, 4.0]",
+                CenterX     =  3.45,
+                CenterY     =  0.5,
+                Zoom        =  1.8,
+                Iterations  = 512,
+                Description = "Classic bifurcation diagram framing — the period-doubling cascade from r ≈ 2.9 through the Feigenbaum point at r ≈ 3.5699 into the chaotic regime past r = 4.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Logistic,
+                QualityPreset = QualityPreset.High
+            },
+            new()
+            {
+                Name        = "TearDrop — Default",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  = 256,
+                Description = "Tear Drop fractal at default framing. The asymmetric drop shape sits centred on the origin.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.TearDrop,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Mandelbulb — Power 8",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 128,
+                Description = "Canonical power-8 Mandelbulb at default camera. Triplex algebra (spherical-coord exponent map) renders the bulb with raymarched DE and Phong shading.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Mandelbulb,
+                QualityPreset = QualityPreset.Standard
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────
@@ -732,25 +844,24 @@ namespace FracturingFog.Models
 
         /// <summary>
         /// All slideshow-eligible regions: built-ins, user-defined, and interesting random pool.
-        /// User regions are filtered to <see cref="FractalType.Mandelbrot"/> only — the slideshow
-        /// pipeline assumes Mandelbrot semantics (escape-time render, log-zoom interpolation), so
-        /// mixing in Julia/Newton/etc. regions without switching the active calculator would break it.
+        /// User regions of every fractal type are included — the Avalonia SlideshowEngine commits
+        /// each leg through <c>ApplyRegion</c> + a host Trigger, which honours the region's own
+        /// fractal type, and its cross-fade already degrades to a fade-through-black for
+        /// non-Mandelbrot incoming regions (the offscreen preview render is Mandelbrot-only).
+        /// The only quality gate is the <see cref="IncludeExtremeInAll"/> toggle, which controls
+        /// whether Extreme-quality user regions join the pool.
         /// </summary>
         public IEnumerable<FractalRegion> AllSlideshowRegions
         {
             get
             {
-
                 foreach (var r in _builtIns) yield return r;
-                if (IncludeExtremeInAll)
+
+                foreach (var r in UserRegions)
                 {
-                    foreach (var r in UserRegions)
-                        if (r.FractalType == FractalType.Mandelbrot) yield return r;
-                }
-                else
-                {
-                    foreach (var r in UserRegions.FindAll(r => !r.QualityPreset.Equals(QualityPreset.Extreme) //)) yield return r;
-                    && r.FractalType == FractalType.Sandbox)) yield return r;
+                    if (!IncludeExtremeInAll && QualityPreset.Extreme.Equals(r.QualityPreset))
+                        continue;
+                    yield return r;
                 }
 
                 foreach (var r in _randomPool) yield return r;
@@ -809,7 +920,12 @@ namespace FracturingFog.Models
                 Directory.CreateDirectory(SettingsDir);
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 string json = JsonSerializer.Serialize(UserRegions, options);
-                File.WriteAllText(RegionsFile, json);
+
+                // Atomic write with one-level rollback (temp + File.Replace →
+                // regions.json.bak). A reader never sees a half-written file and
+                // the last-known-good copy survives one bad/empty save
+                // (regions.json got wiped to "[]" once — the .bak recovers it).
+                AtomicFile.WriteAllText(RegionsFile, json);
             }
             catch
             {

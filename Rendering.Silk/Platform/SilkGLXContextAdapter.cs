@@ -125,6 +125,13 @@ public sealed class SilkGLXContextAdapter : INativeContext, IDisposable
         glXMakeCurrent(_display, _drawable, _glxCtx);
     }
 
+    // S-X6 (2026-06-23) — release ctx from calling thread; see SilkWin32 sibling.
+    public void ReleaseCurrent()
+    {
+        if (_disposed) return;
+        glXMakeCurrent(_display, 0, IntPtr.Zero);
+    }
+
     public void SwapBuffers()
     {
         if (_disposed) return;

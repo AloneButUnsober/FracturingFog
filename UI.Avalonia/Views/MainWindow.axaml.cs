@@ -38,13 +38,29 @@ public sealed partial class MainWindow : Window
     private FloatingMenuView? _menuWin;
     private ColorThemeEditorView? _editorWin;
     private WatermarkEditorView? _watermarkEditorWin;
+    private AnimationEditorView? _animationEditorWin;
+    private RegionEditorView? _regionEditorWin;
+    private AssetManagerView? _assetManagerWin;
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
     private ServerAdminView? _serverAdminWin;
+    private ClusterDashboardView? _clusterDashboardWin;
+    private JobListView? _jobListWin;
+    private JobDetailView? _jobDetailWin;
+    private WorkerDetailView? _workerDetailWin;
+    private MasterConfigView? _masterConfigWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
     private MiniWindowTether? _miniMapTether;
     private MiniWindowTether? _miniDepthTether;
+
+    // S-X8 (2026-06-27) — hold the delegates ConfigureMiniDepth subscribes
+    // to RenderHost.ColorMapChanged / FrameCompleted so DetachShell can
+    // remove them. Without the field, the lambda capture pinned the window
+    // on the long-lived RenderHost event list across shell rebuilds and
+    // mini-depth open/close cycles, accumulating one handler per cycle.
+    private EventHandler? _miniDepthColorMapHandler;
+    private EventHandler<FracturingFog.Render.RenderFrameInfo>? _miniDepthFrameCompletedHandler;
 
     // Mini Mode (#12) — saved geometry restored on exit.
     private bool _miniModeActive;
@@ -247,6 +263,7 @@ public sealed partial class MainWindow : Window
         AddItem(menu, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
         AddItem(menu, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
         AddItem(menu, "ColorGen Editor…",   () => shell.ShowColorGenEditorCommand.Execute().Subscribe());
+        AddItem(menu, "Asset Manager…",     () => shell.ShowAssetManagerCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
@@ -344,6 +361,31 @@ public sealed partial class MainWindow : Window
         if (e.Key == Key.G && e.KeyModifiers == KeyModifiers.Control)
         {
             _shell.Main.UseGpuCompute = !_shell.Main.UseGpuCompute;
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Shift+A / Ctrl+Shift+S — diagnostic toggles for the legacy
+        // MandelbrotCalculator HP path. Bare A/S are reserved for WASD 3D
+        // camera input, so the unblocked diagnostic combo is Ctrl+Shift.
+        // Title gains a [ACCEL OFF] / [SA OFF] suffix while on. Used to
+        // isolate deep-zoom pixelation regressions (BLA vs SA vs QD math).
+        const KeyModifiers ctrlShift = KeyModifiers.Control | KeyModifiers.Shift;
+        if (e.Key == Key.A && e.KeyModifiers == ctrlShift)
+        {
+            _shell.ToggleMandelbrotAcceleration();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.S && e.KeyModifiers == ctrlShift)
+        {
+            _shell.ToggleMandelbrotSeriesApproximation();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.D && e.KeyModifiers == ctrlShift)
+        {
+            _shell.ToggleMandelbrotDdBla();
             e.Handled = true;
             return;
         }
@@ -473,6 +515,16 @@ public sealed partial class MainWindow : Window
             _shell.Main.PropertyChanged -= OnMainPropertyChanged;
             _shell.MiniModeToggleRequested -= OnMiniModeToggleRequested;
             _shell.ToyModeToggleRequested  -= OnToyModeToggleRequested;
+
+            // S-X8 (2026-06-27) — drop MiniDepth handlers off the long-lived
+            // RenderHost event list so the captured window can be collected
+            // and re-attach doesn't double-fire.
+            if (_miniDepthColorMapHandler != null)
+                _shell.Main.RenderHost.ColorMapChanged -= _miniDepthColorMapHandler;
+            if (_miniDepthFrameCompletedHandler != null)
+                _shell.Main.RenderHost.FrameCompleted -= _miniDepthFrameCompletedHandler;
+            _miniDepthColorMapHandler = null;
+            _miniDepthFrameCompletedHandler = null;
         }
         _shell = null;
     }
@@ -505,6 +557,18 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.WatermarkEditor):
                 SyncWatermarkEditor();
                 break;
+            case nameof(ShellViewModel.IsAnimationEditorVisible):
+            case nameof(ShellViewModel.AnimationEditor):
+                SyncAnimationEditor();
+                break;
+            case nameof(ShellViewModel.IsRegionEditorVisible):
+            case nameof(ShellViewModel.RegionEditor):
+                SyncRegionEditor();
+                break;
+            case nameof(ShellViewModel.IsAssetManagerVisible):
+            case nameof(ShellViewModel.AssetManager):
+                SyncAssetManager();
+                break;
             case nameof(ShellViewModel.IsHelpVisible):
             case nameof(ShellViewModel.Help):
                 SyncHelp();
@@ -516,6 +580,26 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsServerAdminVisible):
             case nameof(ShellViewModel.ServerAdmin):
                 SyncServerAdmin();
+                break;
+            case nameof(ShellViewModel.IsClusterDashboardVisible):
+            case nameof(ShellViewModel.ClusterDashboard):
+                SyncClusterDashboard();
+                break;
+            case nameof(ShellViewModel.IsJobListVisible):
+            case nameof(ShellViewModel.JobList):
+                SyncJobList();
+                break;
+            case nameof(ShellViewModel.IsJobDetailVisible):
+            case nameof(ShellViewModel.JobDetail):
+                SyncJobDetail();
+                break;
+            case nameof(ShellViewModel.IsWorkerDetailVisible):
+            case nameof(ShellViewModel.WorkerDetail):
+                SyncWorkerDetail();
+                break;
+            case nameof(ShellViewModel.IsMasterConfigVisible):
+            case nameof(ShellViewModel.MasterConfig):
+                SyncMasterConfig();
                 break;
             case nameof(ShellViewModel.IsMiniMapVisible):
                 SyncMiniMap();
@@ -597,12 +681,15 @@ public sealed partial class MainWindow : Window
         // Initial gradient build using the active theme.
         win.Inner.RequestRedraw();
 
+        // S-X8 (2026-06-27) — held as fields so DetachShell can unsub.
         // Theme/region/type change → rebuild gradient.
-        shell.Main.RenderHost.ColorMapChanged += (_, _) =>
+        _miniDepthColorMapHandler = (_, _) =>
             global::Avalonia.Threading.Dispatcher.UIThread.Post(() => win.Inner.RequestRedraw());
+        shell.Main.RenderHost.ColorMapChanged += _miniDepthColorMapHandler;
         // Refresh indicator each frame to track pan/zoom.
-        shell.Main.RenderHost.FrameCompleted += (_, _) =>
+        _miniDepthFrameCompletedHandler = (_, _) =>
             global::Avalonia.Threading.Dispatcher.UIThread.Post(() => win.Inner.RefreshIndicator());
+        shell.Main.RenderHost.FrameCompleted += _miniDepthFrameCompletedHandler;
     }
 
     private void OnMiniModeToggleRequested(object? sender, bool enter)
@@ -728,6 +815,7 @@ public sealed partial class MainWindow : Window
         _shell.IsSlideshowVcrVisible = false;
 
         AvaloniaShell.LeftDragWindowHook = ToyDragWindow;
+        AttachToySpongeDrag();
         _toyModeActive = true;
     }
 
@@ -736,6 +824,7 @@ public sealed partial class MainWindow : Window
         if (!_toyModeActive || _shell == null) return;
 
         AvaloniaShell.LeftDragWindowHook = null;
+        DetachToySpongeDrag();
 
         WindowState        = _preToyState;
         WindowDecorations  = _preToyDecorations;
@@ -752,6 +841,36 @@ public sealed partial class MainWindow : Window
         _toyModeActive = false;
     }
 
+    // Phase X.3 / Slice 3.3 — cross-platform toy-mode drag via Avalonia
+    // PointerPressed → BeginMoveDrag(e). Only fires when the pointer event
+    // actually reaches the InputSponge — on Win with the DX swap-chain
+    // HWND covering the surface the event is swallowed by the native
+    // HWND, so the Win32 fallback path (NativeMouseForwarder →
+    // ToyDragWindow Win32 trick) remains the active drag on that host.
+    // On Linux/macOS (Silk OpenGL composited through Avalonia) and on
+    // Windows under `--renderer skia` the event reaches here and
+    // BeginMoveDrag drives the move natively.
+    private void AttachToySpongeDrag()
+    {
+        _sponge ??= this.FindControl<Border>("InputSponge");
+        if (_sponge == null) return;
+        _sponge.PointerPressed += OnToySpongePointerPressed;
+    }
+
+    private void DetachToySpongeDrag()
+    {
+        if (_sponge == null) return;
+        _sponge.PointerPressed -= OnToySpongePointerPressed;
+    }
+
+    private void OnToySpongePointerPressed(object? sender, global::Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (!_toyModeActive) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        try { BeginMoveDrag(e); }
+        catch { /* compositor refused (Wayland seat-focus); fall through */ }
+    }
+
     // Win32 window-move kick. Called from NativeMouseForwarder (Win-only by
     // construction) when a left-click lands on the swap-chain HWND while Toy
     // Mode is active. ReleaseCapture undoes whatever the OS auto-set on
@@ -761,24 +880,33 @@ public sealed partial class MainWindow : Window
     //
     // Phase X.3 / Slice 3.1: `OperatingSystem.IsWindows()` guard so the CA1416
     // analyzer can prove the Win32 calls are unreachable on non-Win hosts.
-    // The hook itself is set from EnterToyMode and only consumed by the Win-only
-    // NativeMouseForwarder, but the guard makes the contract explicit for
-    // cross-platform UI.Avalonia readers. Avalonia 11's BeginMoveDrag requires
-    // a PointerPressedEventArgs which the native HWND callback can't synthesise,
-    // so the Win32 trick stays here for Windows; cross-platform toy-mode drag
-    // is parked behind a future Avalonia API.
+    // The Avalonia BeginMoveDrag path above (AttachToySpongeDrag) handles
+    // every other RID; this stays as the Win+DX fallback because the
+    // swap-chain HWND eats pointer events before Avalonia sees them.
     private bool ToyDragWindow()
     {
-        if (!OperatingSystem.IsWindows()) return false;
-        try
+        if (OperatingSystem.IsWindows())
         {
-            var handle = TryGetPlatformHandle();
-            if (handle == null) return false;
-            ReleaseCapture();
-            SendMessage(handle.Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
-            return true;
+            try
+            {
+                var handle = TryGetPlatformHandle();
+                if (handle == null) return false;
+                ReleaseCapture();
+                SendMessage(handle.Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+                return true;
+            }
+            catch { return false; }
         }
-        catch { return false; }
+
+        // Linux: X11InputBridge consumed the ButtonPress before the Avalonia
+        // sponge could see it, so AttachToySpongeDrag's BeginMoveDrag path
+        // never fires. Signal "yes, drag the window" — the bridge itself
+        // issues _NET_WM_MOVERESIZE to the compositor since it owns the X
+        // display + window handles.
+        if (OperatingSystem.IsLinux() && _toyModeActive)
+            return true;
+
+        return false;
     }
 
     private const uint WM_NCLBUTTONDOWN = 0x00A1;
@@ -925,6 +1053,89 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncAnimationEditor()
+    {
+        if (_shell == null) return;
+        if (_shell.IsAnimationEditorVisible && _shell.AnimationEditor != null)
+        {
+            if (_animationEditorWin == null)
+            {
+                _animationEditorWin = new AnimationEditorView { DataContext = _shell.AnimationEditor };
+                _animationEditorWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsAnimationEditorVisible = false;
+                };
+            }
+            else if (_animationEditorWin.DataContext != _shell.AnimationEditor)
+            {
+                _animationEditorWin.DataContext = _shell.AnimationEditor;
+            }
+            if (!_animationEditorWin.IsVisible) _animationEditorWin.Show(this);
+        }
+        else
+        {
+            _animationEditorWin?.Hide();
+        }
+    }
+
+    private void SyncRegionEditor()
+    {
+        if (_shell == null) return;
+        if (_shell.IsRegionEditorVisible && _shell.RegionEditor != null)
+        {
+            if (_regionEditorWin == null)
+            {
+                _regionEditorWin = new RegionEditorView { DataContext = _shell.RegionEditor };
+                _regionEditorWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsRegionEditorVisible = false;
+                };
+            }
+            else if (_regionEditorWin.DataContext != _shell.RegionEditor)
+            {
+                // Rebuilt per Show (targets the currently-selected region) —
+                // swap the DataContext so the open window retargets.
+                _regionEditorWin.DataContext = _shell.RegionEditor;
+            }
+            if (!_regionEditorWin.IsVisible) _regionEditorWin.Show(this);
+        }
+        else
+        {
+            _regionEditorWin?.Hide();
+        }
+    }
+
+    private void SyncAssetManager()
+    {
+        if (_shell == null) return;
+        if (_shell.IsAssetManagerVisible && _shell.AssetManager != null)
+        {
+            if (_assetManagerWin == null)
+            {
+                _assetManagerWin = new AssetManagerView { DataContext = _shell.AssetManager };
+                _assetManagerWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsAssetManagerVisible = false;
+                };
+            }
+            else if (_assetManagerWin.DataContext != _shell.AssetManager)
+            {
+                _assetManagerWin.DataContext = _shell.AssetManager;
+            }
+            if (!_assetManagerWin.IsVisible) _assetManagerWin.Show(this);
+        }
+        else
+        {
+            _assetManagerWin?.Hide();
+        }
+    }
+
     private void SyncHelp()
     {
         if (_shell == null) return;
@@ -1006,6 +1217,147 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncClusterDashboard()
+    {
+        if (_shell == null) return;
+        if (_shell.IsClusterDashboardVisible && _shell.ClusterDashboard != null)
+        {
+            if (_clusterDashboardWin == null)
+            {
+                _clusterDashboardWin = new ClusterDashboardView { DataContext = _shell.ClusterDashboard };
+                _clusterDashboardWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsClusterDashboardVisible = false;
+                };
+            }
+            else if (_clusterDashboardWin.DataContext != _shell.ClusterDashboard)
+            {
+                _clusterDashboardWin.DataContext = _shell.ClusterDashboard;
+            }
+            if (!_clusterDashboardWin.IsVisible) _clusterDashboardWin.Show(this);
+        }
+        else
+        {
+            _clusterDashboardWin?.Hide();
+        }
+    }
+
+    private void SyncJobList()
+    {
+        if (_shell == null) return;
+        if (_shell.IsJobListVisible && _shell.JobList != null)
+        {
+            if (_jobListWin == null)
+            {
+                _jobListWin = new JobListView { DataContext = _shell.JobList };
+                _jobListWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsJobListVisible = false;
+                };
+            }
+            else if (_jobListWin.DataContext != _shell.JobList)
+            {
+                _jobListWin.DataContext = _shell.JobList;
+            }
+            if (!_jobListWin.IsVisible) _jobListWin.Show(this);
+        }
+        else
+        {
+            _jobListWin?.Hide();
+        }
+    }
+
+    private void SyncJobDetail()
+    {
+        if (_shell == null) return;
+        if (_shell.IsJobDetailVisible && _shell.JobDetail != null)
+        {
+            if (_jobDetailWin == null)
+            {
+                _jobDetailWin = new JobDetailView { DataContext = _shell.JobDetail };
+                _jobDetailWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsJobDetailVisible = false;
+                };
+            }
+            else if (_jobDetailWin.DataContext != _shell.JobDetail)
+            {
+                _jobDetailWin.DataContext = _shell.JobDetail;
+            }
+            if (!_jobDetailWin.IsVisible) _jobDetailWin.Show(this);
+            // Bring to front when re-opened with a different jobId so the
+            // user knows the swap landed rather than seeing the same chrome
+            // unchanged behind another window.
+            else _jobDetailWin.Activate();
+        }
+        else
+        {
+            _jobDetailWin?.Hide();
+        }
+    }
+
+    private void SyncWorkerDetail()
+    {
+        if (_shell == null) return;
+        if (_shell.IsWorkerDetailVisible && _shell.WorkerDetail != null)
+        {
+            if (_workerDetailWin == null)
+            {
+                _workerDetailWin = new WorkerDetailView { DataContext = _shell.WorkerDetail };
+                _workerDetailWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsWorkerDetailVisible = false;
+                };
+            }
+            else if (_workerDetailWin.DataContext != _shell.WorkerDetail)
+            {
+                _workerDetailWin.DataContext = _shell.WorkerDetail;
+            }
+            if (!_workerDetailWin.IsVisible) _workerDetailWin.Show(this);
+            else _workerDetailWin.Activate();
+        }
+        else
+        {
+            _workerDetailWin?.Hide();
+        }
+    }
+
+    private void SyncMasterConfig()
+    {
+        if (_shell == null) return;
+        if (_shell.IsMasterConfigVisible && _shell.MasterConfig != null)
+        {
+            if (_masterConfigWin == null)
+            {
+                _masterConfigWin = new MasterConfigView { DataContext = _shell.MasterConfig };
+                _masterConfigWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsMasterConfigVisible = false;
+                };
+            }
+            else if (_masterConfigWin.DataContext != _shell.MasterConfig)
+            {
+                _masterConfigWin.DataContext = _shell.MasterConfig;
+            }
+            if (!_masterConfigWin.IsVisible) _masterConfigWin.Show(this);
+            else _masterConfigWin.Activate();
+        }
+        else
+        {
+            _masterConfigWin?.Hide();
+        }
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         _shuttingDown = true;
@@ -1025,8 +1377,14 @@ public sealed partial class MainWindow : Window
         _helpWin?.Close();
         _ffClientWin?.Close();
         _serverAdminWin?.Close();
+        _clusterDashboardWin?.Close();
+        _jobListWin?.Close();
+        _jobDetailWin?.Close();
+        _workerDetailWin?.Close();
+        _masterConfigWin?.Close();
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
+        _assetManagerWin?.Close();
 
         DetachShell();
     }

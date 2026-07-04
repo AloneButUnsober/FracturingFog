@@ -18,10 +18,13 @@
 
 using System;
 using System.Threading;
+using FracturingFog.Rendering.Lighting;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 
 namespace FracturingFog;
 
@@ -30,6 +33,12 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // P7b — lazily-constructed GPU calculator. See MandelbulbCalculator for contract.
+    private QMandelGpuCalculator? _gpu;
+
+    /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -55,8 +64,14 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         double sliceZ = FractalParameters.QMandelSliceZ;
         double sliceW = FractalParameters.QMandelSliceW;
@@ -90,6 +105,15 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
+        // Phase 20b — true per-eye camera offset along the right basis.
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camPX += right[0] * eyeOffset;
+            camPY += right[1] * eyeOffset;
+            camPZ += right[2] * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         double fovBase = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
         double zoomLensFactor = rawCamDist >= camDistFloor
@@ -105,7 +129,60 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
             Math.Cos(FractalParameters.QMandelLightPhi),
             Math.Sin(FractalParameters.QMandelLightPhi) * Math.Sin(FractalParameters.QMandelLightTheta));
 
+        // Phase 1c — Lighting struct is authoritative for Light1/2/3.
+        var fx = FractalParameters.Lighting;
+        var deStruct = new De(sliceZ, sliceW, bailout2, deIter);
+
+        // Hoisted for shared use by GPU dispatch + CPU path.
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
+
+        // P7b — opt-in GPU raymarch path (cheap-palette shading). See
+        // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes)
+        {
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camPX, CamY = camPY, CamZ = camPZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+            };
+            var qp = new QMandelGpuParams
+            {
+                SliceZ = sliceZ, SliceW = sliceW,
+                Bailout2 = bailout2, DEIter = deIter,
+                SceneRadius = sceneRadius,
+            };
+            var sp = GpuShadingParams.Build(in fx);
+            _gpu ??= new QMandelGpuCalculator();
+            if (_gpu.Render(renderBuffer, rp, sp, qp)) return;
+        }
+
+        // Phase 4 — G-buffer for SSAO post-pass.
+        float[]? depthBuf = null;
+        float[]? normalBuf = null;
+        if (fx.SsaoSamples > 0)
+        {
+            depthBuf = new float[width * height];
+            normalBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearGBuffer(depthBuf, normalBuf);
+        }
+        // Phase 7 — HDR buffer for tonemap/bloom.
+        float[]? hdrBuf = null;
+        bool wantPost = fx.ToneMap != ToneMapOperator.None || fx.BloomStrength > 0;
+        if (wantPost)
+        {
+            hdrBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearHdrBuffer(hdrBuf);
+        }
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -137,7 +214,14 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { ColorBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit)
+                {
+                    // Ray-miss → sky backdrop when toggle on; InSetColor off (see MandelbulbCalculator).
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
+                    continue;
+                }
 
                 double h = eps * 2;
                 double n0 = QuatMandelDE(px + h, py, pz, sliceZ, sliceW, bailout2, deIter)
@@ -148,19 +232,34 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
                           - QuatMandelDE(px, py, pz - h, sliceZ, sliceW, bailout2, deIter);
                 var nrm = Normalize3(n0, n1, n2);
 
-                double diffuse = Math.Max(0.0, nrm[0] * light[0] + nrm[1] * light[1] + nrm[2] * light[2]);
-                double ambient = 0.15;
-                double shade = ambient + diffuse * (1.0 - ambient);
-
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
                              + (float)(tTotal * 0.5);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
-                byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);
-                byte G = (byte)Math.Clamp(((baseColor >> 8) & 0xFF) * shade, 0, 255);
-                byte B = (byte)Math.Clamp((baseColor & 0xFF) * shade, 0, 255);
-                ColorBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+
+                // Phase 2 — shading via shared pipeline.
+                var inputs = new ShadingInputs(
+                    px, py, pz, nrm[0], nrm[1], nrm[2],
+                    rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
+                renderBuffer[idx] = ShadingPipeline.Shade<De>(
+                    in inputs, baseColor, in fx, in deStruct, true,
+                    idx, depthBuf, normalBuf, hdrBuf);
             }
         });
+
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
+        if (hdrBuf is not null)
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>
@@ -170,6 +269,18 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
     /// Quaternion components are packed (X, Y, Z, W) — same convention as
     /// QuatJuliaCalculator. The "real" slot for q² is X.
     /// </summary>
+    /// <summary>P3 — concrete DE struct.</summary>
+    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    {
+        private readonly double _sliceZ, _sliceW, _bailout2;
+        private readonly int _iter;
+        public De(double sliceZ, double sliceW, double bailout2, int iter)
+        { _sliceZ = sliceZ; _sliceW = sliceW; _bailout2 = bailout2; _iter = iter; }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        public double Evaluate(double x, double y, double z)
+            => QuatMandelDE(x, y, z, _sliceZ, _sliceW, _bailout2, _iter);
+    }
+
     private static double QuatMandelDE(
         double sx, double sy, double sz, double sliceZ, double sliceW,
         double bailout2, int iter)

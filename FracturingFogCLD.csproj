@@ -18,7 +18,6 @@
     <Configurations>Debug;Release;Publish</Configurations>
     <ProduceReferenceAssembly>False</ProduceReferenceAssembly>
     <Title>Fracturing Fog</Title>
-    <Version>0.6.2</Version>
     <ApplicationIcon>Resources\FracturingFog.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -92,6 +91,10 @@
     <Compile Remove="ColorGen\**" />
     <Compile Remove="CalculatorGen.Lib\**" />
     <Compile Remove="ColorGen.Lib\**" />
+    <!-- Wave 2.13 — Roslyn source-gen project sits next to CalculatorGen
+         and would otherwise be slurped into the WinExe glob, producing
+         the same CS0579 duplicate-AssemblyInfo cascade as the Lib siblings. -->
+    <Compile Remove="CalculatorGen.SourceGen\**" />
     <!--
       Phase X.0 cross-platform scaffolding. These sibling projects sit under
       the WinExe's root folder and the SDK's default Compile glob would slurp
@@ -117,6 +120,28 @@
     <Compile Remove="Hosting\HostHelpContentProvider.cs" />
     <Compile Remove="Hosting\ColorThemeDefAdapter.cs" />
     <Compile Remove="Hosting\PngSlideshowFrameRecorder.cs" />
+    <!-- Wave 1.C1 — FfmpegSetupDialog moved into FracturingFog.Hosting.dll. -->
+    <Compile Remove="Hosting\FfmpegSetupDialog.cs" />
+    <!-- Wave 1.C1 closure (2026-06-22) — AvaloniaDialogs moved into
+         FracturingFog.Hosting.dll after the QD coord codec + Audio capability
+         probe carve-outs. WinExe consumes it across the ProjectReference. -->
+    <Compile Remove="Hosting\AvaloniaDialogs.cs" />
+    <!-- S-X1 (2026-06-23) — INativeInputBridge / IColorSampleBridge contracts
+         live in Hosting.dll so FracturingFog.Win can implement them against a
+         Hosting ProjectReference. WinExe consumes via the same ref. -->
+    <Compile Remove="Hosting\BootstrapHookContracts.cs" />
+    <!-- S-X1b (2026-06-23) — HostPaletteExtractionService.cs + PaletteFileIO.cs
+         flipped into Hosting.dll. PaletteFileIO moved from Views/Editors/ so the
+         bootstrap (also moving to Hosting) can consume it without dragging the
+         WinExe Views tree into the cross-plat assembly. WinExe consumes both
+         types across the Hosting ProjectReference. -->
+    <Compile Remove="Hosting\HostPaletteExtractionService.cs" />
+    <Compile Remove="Hosting\PaletteFileIO.cs" />
+    <!-- S-X1b.6 (2026-06-23) — AvaloniaShellBootstrap.cs flipped into Hosting.dll
+         after the Win-only refs were broken out into BootstrapHooks +
+         IHostSyncDialogs + WindowsDxRendererFactory. WinExe consumes the
+         bootstrap class across the Hosting ProjectReference. -->
+    <Compile Remove="Hosting\AvaloniaShellBootstrap.cs" />
     <!--
       Phase X.0 / Slice 0.2 — Audio files now owned by FracturingFog.Audio
       (temporary net10.0-windows TFM until Phase X.B introduces the backend

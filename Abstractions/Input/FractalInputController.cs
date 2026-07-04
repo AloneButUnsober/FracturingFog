@@ -35,6 +35,8 @@ namespace FracturingFog.Input
         private DD _panStartDDCY;
         private QD _panStartQDCX;
         private QD _panStartQDCY;
+        private OD _panStartODCX;
+        private OD _panStartODCY;
 
         // ── 3D right-drag state ───────────────────────────────────────────────
         private bool _rightDragging;
@@ -139,6 +141,10 @@ namespace FracturingFog.Input
                 _panStartDDCY = new DD(ViewState.CenterY, ViewState.CenterYLo);
                 _panStartQDCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
                 _panStartQDCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
+                _panStartODCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
+                                       ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7);
+                _panStartODCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
+                                       ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7);
             }
             CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.SizeAll));
         }
@@ -225,7 +231,15 @@ namespace FracturingFog.Input
             }
 
             double scale = CurrentScale(e.ClientWidth, e.ClientHeight);
-            if (ViewState.RequiresQD)
+            if (ViewState.RequiresOD)
+            {
+                double dx = -(e.X - _panStartScreenX) * scale;
+                double dy = -(e.Y - _panStartScreenY) * scale;
+                var newCX = _panStartODCX + dx;
+                var newCY = _panStartODCY + dy;
+                StoreOD(newCX, newCY);
+            }
+            else if (ViewState.RequiresQD)
             {
                 double dx = -(e.X - _panStartScreenX) * scale;
                 double dy = -(e.Y - _panStartScreenY) * scale;
@@ -322,7 +336,18 @@ namespace FracturingFog.Input
             // does CenterY -= dyPixels*scale, so a positive screen-y
             // offset corresponds to a negative world-Y delta from the
             // current centre. Mirror that sign here.
-            if (ViewState.RequiresQD)
+            if (ViewState.RequiresOD)
+            {
+                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
+                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7);
+                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
+                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7);
+                var anchorX = odCX + ox * scale;
+                var anchorY = odCY + oy * scale;
+                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+                StoreOD(anchorX, anchorY);
+            }
+            else if (ViewState.RequiresQD)
             {
                 var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
                 var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
@@ -375,7 +400,15 @@ namespace FracturingFog.Input
             double scale = CurrentScale(e.ClientWidth, e.ClientHeight);
             double dx = e.X - e.ClientWidth * 0.5;
             double dy = e.Y - e.ClientHeight * 0.5;
-            if (ViewState.RequiresQD)
+            if (ViewState.RequiresOD)
+            {
+                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
+                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7) + dx * scale;
+                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
+                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7) + dy * scale;
+                StoreOD(odCX, odCY);
+            }
+            else if (ViewState.RequiresQD)
             {
                 var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3) + dx * scale;
                 var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3) + dy * scale;
@@ -424,7 +457,21 @@ namespace FracturingFog.Input
                     $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
                     InputStatusKind.Info));
 
-            if (ViewState.RequiresQD)
+            if (ViewState.RequiresOD)
+            {
+                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
+                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7);
+                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
+                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7);
+                var anchorX = odCX + ox * scale;
+                var anchorY = odCY + oy * scale;
+                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+                double ns = CurrentScale(e.ClientWidth, e.ClientHeight);
+                var newCX = anchorX + (-ox * ns);
+                var newCY = anchorY + (-oy * ns);
+                StoreOD(newCX, newCY);
+            }
+            else if (ViewState.RequiresQD)
             {
                 var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
                 var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
@@ -475,10 +522,14 @@ namespace FracturingFog.Input
             // Suppression: pan/zoom keys ignored during a slideshow.
             if (InputSuppressed) return false;
 
-            bool isPanKey = e.Key is InputKey.A or InputKey.D or InputKey.Q or InputKey.E;
+            // Shift = precise/fine step. Allowed on pan keys (A/D/Q/E) and on the
+            // zoom / 3D-distance keys (W/S) so Shift+W and Shift+S give finer
+            // movement, matching Shift+A/Shift+D.
+            bool isMovementKey = e.Key is InputKey.A or InputKey.D or InputKey.Q or InputKey.E
+                                        or InputKey.W or InputKey.S;
             if ((e.Modifiers & InputModifiers.Control) != 0) return false;
             if ((e.Modifiers & InputModifiers.Alt) != 0) return false;
-            if ((e.Modifiers & InputModifiers.Shift) != 0 && !isPanKey) return false;
+            if ((e.Modifiers & InputModifiers.Shift) != 0 && !isMovementKey) return false;
 
             const double panPreciseFactor = 0.25;
 
@@ -504,11 +555,14 @@ namespace FracturingFog.Input
             {
                 const double zoomFactor = 1.25;
                 const double panFrac = 0.125;
-                double pan2D = (e.Modifiers & InputModifiers.Shift) != 0 ? panFrac * panPreciseFactor : panFrac;
+                bool shift2D = (e.Modifiers & InputModifiers.Shift) != 0;
+                double pan2D = shift2D ? panFrac * panPreciseFactor : panFrac;
+                // Fine zoom: shrink the 1.25 step toward 1.0 by panPreciseFactor.
+                double zoom2D = shift2D ? 1.0 + (zoomFactor - 1.0) * panPreciseFactor : zoomFactor;
                 switch (e.Key)
                 {
-                    case InputKey.W: CenterZoomBy(zoomFactor, e.ClientWidth, e.ClientHeight); return true;
-                    case InputKey.S: CenterZoomBy(1.0 / zoomFactor, e.ClientWidth, e.ClientHeight); return true;
+                    case InputKey.W: CenterZoomBy(zoom2D, e.ClientWidth, e.ClientHeight); return true;
+                    case InputKey.S: CenterZoomBy(1.0 / zoom2D, e.ClientWidth, e.ClientHeight); return true;
                     case InputKey.A: PanByPixels((int)(e.ClientWidth * pan2D), 0, e.ClientWidth, e.ClientHeight); return true;
                     case InputKey.D: PanByPixels(-(int)(e.ClientWidth * pan2D), 0, e.ClientWidth, e.ClientHeight); return true;
                     case InputKey.Q: PanByPixels(0, (int)(e.ClientHeight * pan2D), e.ClientWidth, e.ClientHeight); return true;
@@ -520,11 +574,13 @@ namespace FracturingFog.Input
             const double distStep = 0.25;
             const double rotStep = Math.PI / 36.0;
             const double pan3DFrac = 0.125;
-            double pan3D = (e.Modifiers & InputModifiers.Shift) != 0 ? pan3DFrac * panPreciseFactor : pan3DFrac;
+            bool shift3D = (e.Modifiers & InputModifiers.Shift) != 0;
+            double pan3D = shift3D ? pan3DFrac * panPreciseFactor : pan3DFrac;
+            double dist3D = shift3D ? distStep * panPreciseFactor : distStep;
             switch (e.Key)
             {
-                case InputKey.W: Adjust3DDistance(-distStep); return true;
-                case InputKey.S: Adjust3DDistance(distStep); return true;
+                case InputKey.W: Adjust3DDistance(-dist3D); return true;
+                case InputKey.S: Adjust3DDistance(dist3D); return true;
                 case InputKey.A: PanByPixels((int)(e.ClientWidth * pan3D), 0, e.ClientWidth, e.ClientHeight); return true;
                 case InputKey.D: PanByPixels(-(int)(e.ClientWidth * pan3D), 0, e.ClientWidth, e.ClientHeight); return true;
                 case InputKey.Q: PanByPixels(0, (int)(e.ClientHeight * pan3D), e.ClientWidth, e.ClientHeight); return true;
@@ -564,7 +620,15 @@ namespace FracturingFog.Input
         private void PanByPixels(int dx, int dy, int w, int h)
         {
             double scale = CurrentScale(w, h);
-            if (ViewState.RequiresQD)
+            if (ViewState.RequiresOD)
+            {
+                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
+                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7) + dx * scale;
+                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
+                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7) + dy * scale;
+                StoreOD(odCX, odCY);
+            }
+            else if (ViewState.RequiresQD)
             {
                 var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3) + dx * scale;
                 var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3) + dy * scale;
@@ -738,14 +802,16 @@ namespace FracturingFog.Input
 
         private bool AdaptQualityForWheel(double oldZoom, double newZoom)
         {
+            // Promotion only — zoom-in past the current preset's ZoomMax
+            // bumps the tier up. Zoom-out never auto-demotes; the user can
+            // pick a lower preset manually from the Quality combo if they
+            // want the iter count to drop. Prior behaviour demoted as the
+            // natural-for-zoom tier crossed a boundary downward, which
+            // surprised users tuning a deep view and zooming out for
+            // context.
             if (newZoom > ViewState.Quality.ZoomMax)
                 return AdaptQualityForZoom(newZoom);
-
-            QualityPreset natOld = NaturalQualityForZoom(oldZoom);
-            QualityPreset natNew = NaturalQualityForZoom(newZoom);
-            if (natOld.Tier == natNew.Tier) return false;
-            if (ViewState.Quality.Tier != natOld.Tier) return false;
-            return AdaptQualityForZoom(newZoom);
+            return false;
         }
 
         private bool AdaptQualityForZoom(double targetZoom)
@@ -783,22 +849,45 @@ namespace FracturingFog.Input
         private void ClearLowLimbs()
         {
             ViewState.CenterXLo = 0; ViewState.CenterX2 = 0; ViewState.CenterX3 = 0;
+            ViewState.CenterX4 = 0; ViewState.CenterX5 = 0; ViewState.CenterX6 = 0; ViewState.CenterX7 = 0;
             ViewState.CenterYLo = 0; ViewState.CenterY2 = 0; ViewState.CenterY3 = 0;
+            ViewState.CenterY4 = 0; ViewState.CenterY5 = 0; ViewState.CenterY6 = 0; ViewState.CenterY7 = 0;
         }
 
         private void StoreDD(DD cx, DD cy)
         {
             ViewState.CenterX = cx.Hi; ViewState.CenterXLo = cx.Lo; ViewState.CenterX2 = 0; ViewState.CenterX3 = 0;
+            ViewState.CenterX4 = 0; ViewState.CenterX5 = 0; ViewState.CenterX6 = 0; ViewState.CenterX7 = 0;
             ViewState.CenterY = cy.Hi; ViewState.CenterYLo = cy.Lo; ViewState.CenterY2 = 0; ViewState.CenterY3 = 0;
+            ViewState.CenterY4 = 0; ViewState.CenterY5 = 0; ViewState.CenterY6 = 0; ViewState.CenterY7 = 0;
         }
 
         private void StoreQD(QD cx, QD cy)
         {
             ViewState.CenterX = cx.X0; ViewState.CenterXLo = cx.X1; ViewState.CenterX2 = cx.X2; ViewState.CenterX3 = cx.X3;
+            ViewState.CenterX4 = 0; ViewState.CenterX5 = 0; ViewState.CenterX6 = 0; ViewState.CenterX7 = 0;
             ViewState.CenterY = cy.X0; ViewState.CenterYLo = cy.X1; ViewState.CenterY2 = cy.X2; ViewState.CenterY3 = cy.X3;
+            ViewState.CenterY4 = 0; ViewState.CenterY5 = 0; ViewState.CenterY6 = 0; ViewState.CenterY7 = 0;
+        }
+
+        private void StoreOD(OD cx, OD cy)
+        {
+            ViewState.CenterX = cx.X0; ViewState.CenterXLo = cx.X1; ViewState.CenterX2 = cx.X2; ViewState.CenterX3 = cx.X3;
+            ViewState.CenterX4 = cx.X4; ViewState.CenterX5 = cx.X5; ViewState.CenterX6 = cx.X6; ViewState.CenterX7 = cx.X7;
+            ViewState.CenterY = cy.X0; ViewState.CenterYLo = cy.X1; ViewState.CenterY2 = cy.X2; ViewState.CenterY3 = cy.X3;
+            ViewState.CenterY4 = cy.X4; ViewState.CenterY5 = cy.X5; ViewState.CenterY6 = cy.X6; ViewState.CenterY7 = cy.X7;
         }
 
         private void RaiseViewChanged(RenderHint hint)
-            => ViewChanged?.Invoke(this, new ViewChangedArgs(hint));
+        {
+            // Any user-initiated view change drops the region's preferred iter
+            // hint — subsequent renders fall back to Quality.ComputeIterations
+            // (or LockedIterations if the user explicitly locked). Region
+            // jumps + slideshow-driven applies don't pass through this
+            // controller, so they keep the hint until the user actually
+            // moves the view.
+            ViewState.PreferredIterations = 0;
+            ViewChanged?.Invoke(this, new ViewChangedArgs(hint));
+        }
     }
 }

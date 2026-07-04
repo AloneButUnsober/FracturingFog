@@ -13,8 +13,11 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using FracturingFog.Calculators.Gpu;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
@@ -23,6 +26,9 @@ public sealed class KifsCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    /// <summary>P2 — low-res interactive preview. See Mandelbulb for contract.</summary>
+    public bool LowResPreview { get; set; } = false;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -36,6 +42,10 @@ public sealed class KifsCalculator : IFractalCalculator
 
     public FractalParameters FractalParameters { get; set; } = new();
 
+    // P7a — Menger-fold GPU calculator. P7b — Sierpinski sibling. Both lazy.
+    private MengerGpuCalculator? _gpuMenger;
+    private SierpinskiGpuCalculator? _gpuSierp;
+
     public KifsCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -48,16 +58,27 @@ public sealed class KifsCalculator : IFractalCalculator
     public void Calculate(CancellationToken ct = default)
     {
         ColorMap.MaxIterations = 256;
-        int width = Width;
-        int height = Height;
+        int fullW = Width;
+        int fullH = Height;
+        bool lowRes = LowResPreview;
+        double lrScale = lowRes ? Math.Clamp(FractalParameters.LowResPreviewScale, 0.25, 1.0) : 1.0;
+        var dims = FracturingFog.Rendering.LowResPreview.ComputeDims(fullW, fullH, lrScale);
+        int width = dims.Width;
+        int height = dims.Height;
+        uint[] renderBuffer = lowRes ? new uint[width * height] : ColorBuffer;
 
         var fold = FractalParameters.KifsFold;
-        // Default scale depends on fold table — Menger needs 3, Sierpinski 2.
-        // Sentinel 0.0 means "use the canonical default". User can override.
+        // Default scale depends on fold table. Sentinel 0.0 means "use the
+        // canonical default for this fold". Per-fold defaults:
+        //   Menger        — 3.0 (Knighty)
+        //   Sierpinski    — 2.0 (Knighty)
+        //   Octahedron    — 2.0 (Menger minus z-mirror; tighter scale)
+        //   Dodecahedron  — 2.0 (Knighty PHI fold)
+        //   MandelboxRot  — 2.0 (classic Mandelbox)
         double rawScale = FractalParameters.KifsScale;
         double scale = rawScale > 0.0
             ? rawScale
-            : (fold == KifsFoldKind.Sierpinski ? 2.0 : 3.0);
+            : (fold == KifsFoldKind.Menger ? 3.0 : 2.0);
         double ox = FractalParameters.KifsOffsetX;
         double oy = FractalParameters.KifsOffsetY;
         double oz = FractalParameters.KifsOffsetZ;
@@ -69,7 +90,14 @@ public sealed class KifsCalculator : IFractalCalculator
         // a safe outer-camera distance is ≈ 4. Anchor camera against the
         // floor the same way MandelboxCalculator does so high zoom narrows
         // FOV instead of plunging the camera into the set.
-        double setRadius = fold == KifsFoldKind.Sierpinski ? 2.5 : 3.0;
+        double setRadius = fold switch
+        {
+            KifsFoldKind.Sierpinski   => 2.5,
+            KifsFoldKind.Octahedron   => 2.5,
+            KifsFoldKind.Dodecahedron => 2.8,
+            KifsFoldKind.MandelboxRot => 3.5,
+            _                         => 3.0, // Menger
+        };
         double camDistFloor = setRadius + 0.5;
         double rawCamDist = FractalParameters.KifsCameraDistance / Math.Max(0.05, Zoom);
         double camDist = Math.Max(camDistFloor, rawCamDist);
@@ -92,6 +120,15 @@ public sealed class KifsCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
+        // Phase 20b — true per-eye camera offset along the right basis.
+        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        if (eyeOffset != 0)
+        {
+            camX += right[0] * eyeOffset;
+            camY += right[1] * eyeOffset;
+            camZ += right[2] * eyeOffset;
+        }
+
         double aspect = (double)width / height;
         double fovBase = Math.Tan(0.5 * Math.PI / 3.0); // 60° FOV
         double zoomLensFactor = rawCamDist >= camDistFloor
@@ -109,6 +146,76 @@ public sealed class KifsCalculator : IFractalCalculator
 
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
         bool sierp = fold == KifsFoldKind.Sierpinski;
+        // GPU paths only exist for Menger + Sierpinski. New folds fall through
+        // to the CPU Parallel.For loop below.
+        bool gpuEligibleFold = fold == KifsFoldKind.Menger || fold == KifsFoldKind.Sierpinski;
+
+        // Phase 1c — Lighting struct is authoritative for Light1/2/3.
+        var fx = FractalParameters.Lighting;
+        DistanceEstimator deDelegate = (x, y, z) => DispatchDE(
+            fold, x, y, z, scale, ox, oy, oz, deIter);
+
+        // P7a/P7b — opt-in GPU raymarch path. Menger + Sierpinski each get
+        // their own kernel (branchy fold-switch in one kernel bloats the JIT).
+        // Cheap-palette shading only — see MandelbulbCalculator for the
+        // FX-drop trade-off + P7c lift plan.
+        if (fx.UseGpuRender && !lowRes && gpuEligibleFold)
+        {
+            var rp = new GpuRaymarchParams
+            {
+                Width = width, Height = height,
+                CamX = camX, CamY = camY, CamZ = camZ,
+                TargetX = 0, TargetY = 0, TargetZ = 0,
+                FwdX = fwd[0], FwdY = fwd[1], FwdZ = fwd[2],
+                RightX = right[0], RightY = right[1], RightZ = right[2],
+                UpX = up[0], UpY = up[1], UpZ = up[2],
+                FovScale = fovScale, Aspect = aspect,
+                PanU = panU, PanV = panV,
+                LightX = light[0], LightY = light[1], LightZ = light[2],
+                MaxSteps = maxSteps, Eps = eps,
+                CullRadiusSq = 0.0,
+                InSetColor = ColorMap.InSetColor,
+            };
+            var sp = GpuShadingParams.Build(in fx);
+            if (sierp)
+            {
+                var sip = new SierpinskiGpuParams
+                {
+                    Scale = scale, OffsetX = ox, OffsetY = oy, OffsetZ = oz,
+                    DEIter = deIter, SceneRadius = sceneRadius,
+                };
+                _gpuSierp ??= new SierpinskiGpuCalculator();
+                if (_gpuSierp.Render(renderBuffer, rp, sp, sip)) return;
+            }
+            else
+            {
+                var mp = new MengerGpuParams
+                {
+                    Scale = scale, OffsetX = ox, OffsetY = oy, OffsetZ = oz,
+                    DEIter = deIter, SceneRadius = sceneRadius,
+                };
+                _gpuMenger ??= new MengerGpuCalculator();
+                if (_gpuMenger.Render(renderBuffer, rp, sp, mp)) return;
+            }
+        }
+
+        // Phase 4 — G-buffer for SSAO post-pass.
+        float[]? depthBuf = null;
+        float[]? normalBuf = null;
+        if (fx.SsaoSamples > 0)
+        {
+            depthBuf = new float[width * height];
+            normalBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearGBuffer(depthBuf, normalBuf);
+        }
+        // Phase 7 — HDR buffer for tonemap/bloom.
+        float[]? hdrBuf = null;
+        bool wantPost = fx.ToneMap != ToneMapOperator.None || fx.BloomStrength > 0;
+        if (wantPost)
+        {
+            hdrBuf = new float[3 * width * height];
+            ScreenSpacePost.ClearHdrBuffer(hdrBuf);
+        }
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -131,9 +238,7 @@ public sealed class KifsCalculator : IFractalCalculator
 
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = sierp
-                        ? SierpDE(px, py, pz, scale, ox, oy, oz, deIter)
-                        : MengerDE(px, py, pz, scale, ox, oy, oz, deIter);
+                    double dist = DispatchDE(fold, px, py, pz, scale, ox, oy, oz, deIter);
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
                     px += rdx * dist; py += rdy * dist; pz += rdz * dist;
@@ -141,43 +246,52 @@ public sealed class KifsCalculator : IFractalCalculator
                 }
 
                 int idx = rowBase + x;
-                if (!hit) { ColorBuffer[idx] = ColorMap.InSetColor; continue; }
+                if (!hit)
+                {
+                    // Ray-miss → sky backdrop when toggle on; InSetColor off (see MandelbulbCalculator).
+                    renderBuffer[idx] = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
+                        : ColorMap.InSetColor;
+                    continue;
+                }
 
                 double h = eps * 2;
-                double n0, n1, n2;
-                if (sierp)
-                {
-                    n0 = SierpDE(px + h, py, pz, scale, ox, oy, oz, deIter)
-                       - SierpDE(px - h, py, pz, scale, ox, oy, oz, deIter);
-                    n1 = SierpDE(px, py + h, pz, scale, ox, oy, oz, deIter)
-                       - SierpDE(px, py - h, pz, scale, ox, oy, oz, deIter);
-                    n2 = SierpDE(px, py, pz + h, scale, ox, oy, oz, deIter)
-                       - SierpDE(px, py, pz - h, scale, ox, oy, oz, deIter);
-                }
-                else
-                {
-                    n0 = MengerDE(px + h, py, pz, scale, ox, oy, oz, deIter)
-                       - MengerDE(px - h, py, pz, scale, ox, oy, oz, deIter);
-                    n1 = MengerDE(px, py + h, pz, scale, ox, oy, oz, deIter)
-                       - MengerDE(px, py - h, pz, scale, ox, oy, oz, deIter);
-                    n2 = MengerDE(px, py, pz + h, scale, ox, oy, oz, deIter)
-                       - MengerDE(px, py, pz - h, scale, ox, oy, oz, deIter);
-                }
+                double n0 = DispatchDE(fold, px + h, py, pz, scale, ox, oy, oz, deIter)
+                          - DispatchDE(fold, px - h, py, pz, scale, ox, oy, oz, deIter);
+                double n1 = DispatchDE(fold, px, py + h, pz, scale, ox, oy, oz, deIter)
+                          - DispatchDE(fold, px, py - h, pz, scale, ox, oy, oz, deIter);
+                double n2 = DispatchDE(fold, px, py, pz + h, scale, ox, oy, oz, deIter)
+                          - DispatchDE(fold, px, py, pz - h, scale, ox, oy, oz, deIter);
                 var nrm = Normalize3(n0, n1, n2);
-
-                double diffuse = Math.Max(0.0, nrm[0] * light[0] + nrm[1] * light[1] + nrm[2] * light[2]);
-                double ambient = 0.15;
-                double shade = ambient + diffuse * (1.0 - ambient);
 
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
                              + (float)(tTotal * 0.5);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
-                byte R = (byte)Math.Clamp(((baseColor >> 16) & 0xFF) * shade, 0, 255);
-                byte G = (byte)Math.Clamp(((baseColor >> 8) & 0xFF) * shade, 0, 255);
-                byte B = (byte)Math.Clamp((baseColor & 0xFF) * shade, 0, 255);
-                ColorBuffer[idx] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+
+                // Phase 2 — shading via shared pipeline.
+                var inputs = new ShadingInputs(
+                    px, py, pz, nrm[0], nrm[1], nrm[2],
+                    rdx, rdy, rdz, tTotal, 0.0, hitStep, eps);
+                renderBuffer[idx] = ShadingPipeline.Shade(
+                    in inputs, baseColor, in fx, deDelegate,
+                    idx, depthBuf, normalBuf, hdrBuf);
             }
         });
+
+        ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        if (hdrBuf is not null && depthBuf is not null)
+            ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
+        if (hdrBuf is not null)
+            ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
+        if (depthBuf is not null && normalBuf is not null)
+            ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.EndGpuFrame(in fx);
+
+        if (lowRes)
+            FracturingFog.Rendering.LowResPreview.UpscaleNearest(
+                renderBuffer, width, height, ColorBuffer, fullW, fullH);
     }
 
     /// <summary>
@@ -252,5 +366,184 @@ public sealed class KifsCalculator : IFractalCalculator
         double len = Math.Sqrt(x * x + y * y + z * z);
         if (len < 1e-10) return new[] { 0.0, 0.0, 0.0 };
         return new[] { x / len, y / len, z / len };
+    }
+
+    // Wave 5.9 — fold-table dispatcher. Hot path inside the raymarch +
+    // normal-estimation loops. JIT branches on a 5-way switch; CPU branch
+    // predictor pins the dominant fold per frame because every pixel of a
+    // given frame walks the same arm.
+    private static double DispatchDE(KifsFoldKind fold,
+        double x, double y, double z,
+        double scale, double ox, double oy, double oz, int iter) => fold switch
+        {
+            KifsFoldKind.Sierpinski   => SierpDE(x, y, z, scale, ox, oy, oz, iter),
+            KifsFoldKind.Octahedron   => OctaDE(x, y, z, scale, ox, oy, oz, iter),
+            KifsFoldKind.Dodecahedron => DodecaDE(x, y, z, scale, ox, oy, oz, iter),
+            KifsFoldKind.MandelboxRot => MandelboxRotDE(x, y, z, scale, ox, oy, oz, iter),
+            _                         => MengerDE(x, y, z, scale, ox, oy, oz, iter),
+        };
+
+    /// <summary>
+    /// Octahedron fold — Menger sponge with rotated coord system. Pre-iter
+    /// rotation by 30° around the Y axis swings the sort axes off the world
+    /// axes, so the Menger holes-in-corners pattern emerges along diagonals
+    /// instead of cardinal axes. Visually a tilted / faceted version of the
+    /// Menger sponge — reads as an octahedral approximation when viewed from
+    /// the default camera angle.
+    /// </summary>
+    private static double OctaDE(double cx, double cy, double cz,
+        double scale, double ox, double oy, double oz, int iter)
+    {
+        double zx = cx, zy = cy, zz = cz;
+        double k = scale - 1.0;
+        double offX = k * ox;
+        double offY = k * oy;
+        double offZ = k * oz;
+        double mirrorThresh = -0.5 * offZ;
+        const double rot = Math.PI / 6.0; // 30°
+        double cosR = Math.Cos(rot);
+        double sinR = Math.Sin(rot);
+        for (int i = 0; i < iter; i++)
+        {
+            // Y-axis pre-rotation — twists the Menger fold off the cardinal
+            // axes, producing the octahedral-facet pattern.
+            double rxr = cosR * zx + sinR * zz;
+            double rzr = -sinR * zx + cosR * zz;
+            zx = rxr; zz = rzr;
+
+            // Menger sort-3 + corner mirror.
+            zx = Math.Abs(zx); zy = Math.Abs(zy); zz = Math.Abs(zz);
+            double t;
+            if (zx - zy < 0) { t = zx; zx = zy; zy = t; }
+            if (zx - zz < 0) { t = zx; zx = zz; zz = t; }
+            if (zy - zz < 0) { t = zy; zy = zz; zz = t; }
+
+            zx = scale * zx - offX;
+            zy = scale * zy - offY;
+            zz = scale * zz;
+            if (zz < mirrorThresh) zz += offZ;
+        }
+        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
+        return (rFinal - 2.0) * Math.Pow(scale, -iter);
+    }
+
+    /// <summary>
+    /// Dodecahedron-flavoured fold — Sierpinski tetrahedron with a per-iter
+    /// rotation around the (1, 1, 1) diagonal axis (axis-angle 36° per iter).
+    /// The accumulated rotation breaks the 4-fold tetrahedral symmetry into a
+    /// 5-fold-ish pentagonal pattern reminiscent of icosahedral filaments.
+    /// Not a true dodecahedral IFS (which requires φ-derived mirror planes
+    /// that don't converge under the fixed-dr KIFS DE scheme) — visually
+    /// distinct from Sierpinski and Menger; recognisably icosahedral when
+    /// viewed off-axis.
+    /// </summary>
+    private static double DodecaDE(double cx, double cy, double cz,
+        double scale, double ox, double oy, double oz, int iter)
+    {
+        double zx = cx, zy = cy, zz = cz;
+        double k = scale - 1.0;
+        double offX = k * ox;
+        double offY = k * oy;
+        double offZ = k * oz;
+        // 36° per-iter rotation around the (1, 1, 1) diagonal — Rodrigues
+        // rotation matrix collapsed to inline coefficients.
+        const double ang = Math.PI / 5.0; // 36°
+        double cosA = Math.Cos(ang);
+        double sinA = Math.Sin(ang);
+        const double inv3 = 1.0 / 3.0;                  // axis component squared
+        const double invSqrt3 = 0.5773502691896258;     // 1/√3
+        // Rodrigues entries for axis (1,1,1)/√3:
+        // R_ii = cos + (1-cos)·(1/3)
+        // R_ij (i!=j) = (1-cos)·(1/3) ± sin·(1/√3)
+        double k1 = cosA + (1.0 - cosA) * inv3;
+        double k2 = (1.0 - cosA) * inv3 - sinA * invSqrt3;
+        double k3 = (1.0 - cosA) * inv3 + sinA * invSqrt3;
+
+        for (int i = 0; i < iter; i++)
+        {
+            // Rotate around (1,1,1)/√3 by 36°.
+            double nx = k1 * zx + k2 * zy + k3 * zz;
+            double ny = k3 * zx + k1 * zy + k2 * zz;
+            double nz = k2 * zx + k3 * zy + k1 * zz;
+            zx = nx; zy = ny; zz = nz;
+
+            // Sierpinski tetrahedron fold.
+            double t;
+            if (zx + zy < 0) { t = -zy; zy = -zx; zx = t; }
+            if (zx + zz < 0) { t = -zz; zz = -zx; zx = t; }
+            if (zy + zz < 0) { t = -zz; zz = -zy; zy = t; }
+
+            // Scale from corner.
+            zx = scale * zx - offX;
+            zy = scale * zy - offY;
+            zz = scale * zz - offZ;
+        }
+        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
+        return rFinal * Math.Pow(scale, -iter);
+    }
+
+    /// <summary>
+    /// Mandelbox-style KIFS fold. Per iter:
+    ///   box-fold at ±1        (reflect points outside [−1,1] inward)
+    ///   sphere-fold           (radial scale: r&lt;½ → 4·z; ½&lt;r&lt;1 → z/r²)
+    ///   Y-axis rotation π/48  (per-iter twist)
+    ///   z = scale·z − (scale−1)·offset
+    /// Uses the fixed-dr KIFS DE scheme (no per-iter |dz| tracking), so the
+    /// result is visually Mandelbox-flavoured but is NOT the canonical
+    /// Mandelbox DE — the proper sphere-fold + dr-magnitude update lives in
+    /// <c>MandelboxCalculator</c>. The sphere-fold here gives the limit set
+    /// the twisty-bulb character that distinguishes it from a plain
+    /// rotated-Sierpinski; reducing rotation to π/48 (~3.75°) cuts the
+    /// stepped-ridge banding the original π/24 produced.
+    /// </summary>
+    private static double MandelboxRotDE(double cx, double cy, double cz,
+        double scale, double ox, double oy, double oz, int iter)
+    {
+        double zx = cx, zy = cy, zz = cz;
+        double k = scale - 1.0;
+        double offX = k * ox;
+        double offY = k * oy;
+        double offZ = k * oz;
+        const double rot = Math.PI / 48.0;
+        double cosR = Math.Cos(rot);
+        double sinR = Math.Sin(rot);
+        for (int i = 0; i < iter; i++)
+        {
+            // Box-fold at ±1.
+            if      (zx >  1.0) zx =  2.0 - zx;
+            else if (zx < -1.0) zx = -2.0 - zx;
+            if      (zy >  1.0) zy =  2.0 - zy;
+            else if (zy < -1.0) zy = -2.0 - zy;
+            if      (zz >  1.0) zz =  2.0 - zz;
+            else if (zz < -1.0) zz = -2.0 - zz;
+
+            // Sphere-fold — pulls points near origin outward, points in the
+            // [½, 1] shell get rescaled toward the unit sphere. Mirrors the
+            // Mandelbox spec: r<½ → 4·z, ½<r<1 → z/r², r>1 → identity.
+            double r2 = zx * zx + zy * zy + zz * zz;
+            if (r2 < 0.25)
+            {
+                zx *= 4.0; zy *= 4.0; zz *= 4.0;
+            }
+            else if (r2 < 1.0)
+            {
+                double m = 1.0 / r2;
+                zx *= m; zy *= m; zz *= m;
+            }
+
+            // Y-axis rotation — small enough that 14 iters total ~52° of
+            // accumulated twist, giving the bulb a smooth helical winding
+            // instead of stair-step ridges.
+            double nx = cosR * zx + sinR * zz;
+            double nz = -sinR * zx + cosR * zz;
+            zx = nx; zz = nz;
+
+            // Scale + offset.
+            zx = scale * zx - offX;
+            zy = scale * zy - offY;
+            zz = scale * zz - offZ;
+        }
+        double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
+        return (rFinal - 2.0) * Math.Pow(scale, -iter);
     }
 }
