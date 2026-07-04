@@ -271,6 +271,26 @@ See [Hardware tiers](#hardware-tiers-novice-friendly-performance). Pure
 wiring: a `PerformanceTier` profile sets existing knobs; Advanced drawer
 exposes them. Default tier from the existing hardware probe.
 
+**Status — Shipped (profile core).** `Abstractions/Render/PerformanceTier.cs`:
+the `PerformanceTier` enum (Potato / Balanced / Wow), the concrete
+`TierKnobs` record (preview scale, volume steps, animated-param ceiling, AA,
+precision tier, GPU / CPU-fallback gates), and pure `PerformanceTierProfile`
+with three operations — `Baseline(tier)` (default knobs per tier),
+`DefaultTier(HardwareProfile)` (picks a tier from the same cores + discrete-GPU
+probe the animation ceiling uses), and `Resolve(baseline, qualityScale)` (folds
+the live S1 governor scale onto the continuous knobs — proportional throttle,
+floor clamps, no-boost-past-baseline — while leaving structural knobs, precision
+tier / GPU gate, untouched). `Resolve` is the apply half of the
+sample→evaluate→apply loop; the periodic driver + push onto
+`FractalParameters` / `LightingFxData` is the UI consumer, wired through
+`AvaloniaShellBootstrap` later (ships behind current behaviour, same cadence
+as S0 / S1).
+
+12 tests in `Server.Tests/PerformanceTierTests.cs` cover default-tier
+selection, monotonic baseline ordering, Resolve identity at full quality,
+proportional throttle, floor clamps, no-boost-past-baseline, and
+structural-knob invariance.
+
 ### S3 — Camera track
 
 The new engine surface. `CameraTrack` + `CameraKey` + spline interpolation.
