@@ -103,7 +103,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 string json = JsonSerializer.Serialize(this, BuildJsonOptions());
-                File.WriteAllText(PrefsFile, json);
+                AtomicFile.WriteAllText(PrefsFile, json);
             }
             catch { /* non-fatal */ }
         }

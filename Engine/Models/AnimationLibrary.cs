@@ -100,7 +100,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 string json = JsonSerializer.Serialize(Animations, BuildJsonOptions());
-                File.WriteAllText(AnimationsFile, json);
+                AtomicFile.WriteAllText(AnimationsFile, json);
             }
             catch
             {

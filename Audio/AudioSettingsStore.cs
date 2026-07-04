@@ -42,7 +42,7 @@ namespace FracturingFog.Audio
             {
                 Directory.CreateDirectory(SettingsDir);
                 var json = JsonSerializer.Serialize(settings, JsonOpts);
-                File.WriteAllText(SettingsFile, json);
+                AtomicFile.WriteAllText(SettingsFile, json);
             }
             catch
             {
