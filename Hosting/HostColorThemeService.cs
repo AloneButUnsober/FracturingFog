@@ -571,6 +571,124 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public RegionEditModel? GetRegionForEdit(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            var r = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(x => string.Equals(x.Name, regionName, StringComparison.OrdinalIgnoreCase));
+            if (r == null) return null;
+
+            return new RegionEditModel
+            {
+                OriginalName = r.Name,
+                IsBuiltIn    = r.IsBuiltIn,
+                Name         = r.Name,
+                Description  = r.Description ?? string.Empty,
+                AnimationName = r.AnimationName,
+                // Defensive copy so editor edits don't mutate the live library
+                // entry before the user commits.
+                CuratedThemes = r.CuratedThemes != null ? new List<string>(r.CuratedThemes) : null,
+                KeepLightingOverride  = true,
+                KeepEmbeddedWatermark = true,
+                FractalTypeName = r.FractalType.ToString(),
+                CenterX = r.CenterX,
+                CenterY = r.CenterY,
+                Zoom    = r.Zoom,
+                Iterations = r.Iterations,
+                HasLightingOverride  = r.LightingOverride != null,
+                HasEmbeddedWatermark = r.EmbeddedWatermark != null,
+            };
+        }
+
+        /// <inheritdoc/>
+        public RegionUpdateResult UpdateRegionMetadata(RegionEditModel edits)
+        {
+            if (edits == null) return RegionUpdateResult.Fail("No edit data.");
+
+            string newName = (edits.Name ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(newName))
+                return RegionUpdateResult.Fail("Region name cannot be empty.");
+
+            var lib = FractalRegionLibrary.Instance;
+
+            // Resolve the source region we're editing (built-in or user).
+            var source = lib.All.FirstOrDefault(x =>
+                string.Equals(x.Name, edits.OriginalName, StringComparison.OrdinalIgnoreCase));
+            if (source == null)
+                return RegionUpdateResult.Fail($"Region \"{edits.OriginalName}\" no longer exists.");
+
+            // Collision: refuse a name already taken by a *different* region
+            // (built-in or user). Editing in place under the same name is fine.
+            var collision = lib.All.FirstOrDefault(x =>
+                string.Equals(x.Name, newName, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(x.Name, edits.OriginalName, StringComparison.OrdinalIgnoreCase));
+            if (collision != null)
+                return RegionUpdateResult.Fail($"A region named \"{newName}\" already exists.");
+
+            bool cloned = source.IsBuiltIn;
+
+            // Preserve the source region's geometry + per-engine source fields.
+            // Metadata is applied fresh from the edit model below. Geometry is
+            // NEVER taken from the live view here — this path edits a saved
+            // region without moving the camera.
+            var region = CloneRegionGeometry(source);
+            region.RegionType  = RegionType.UserDefined;
+            region.Name        = newName;
+            region.Description  = edits.Description ?? string.Empty;
+            region.AnimationName = string.IsNullOrWhiteSpace(edits.AnimationName) ? null : edits.AnimationName;
+            region.CuratedThemes = (edits.CuratedThemes != null && edits.CuratedThemes.Count > 0)
+                ? new List<string>(edits.CuratedThemes)
+                : null;
+            // Keep vs clear the two attached assets. Cloned built-ins carry the
+            // source's override/watermark forward when kept.
+            region.LightingOverride  = edits.KeepLightingOverride  ? source.LightingOverride : null;
+            region.EmbeddedWatermark = edits.KeepEmbeddedWatermark ? source.EmbeddedWatermark?.Clone() : null;
+
+            // Replace-by-name for an in-place user edit; pure add for a clone
+            // (the built-in stays put). When a user region is renamed the old
+            // name is removed too.
+            if (!cloned)
+            {
+                var existing = lib.UserRegions.FirstOrDefault(x =>
+                    string.Equals(x.Name, edits.OriginalName, StringComparison.OrdinalIgnoreCase));
+                if (existing != null) lib.UserRegions.Remove(existing);
+            }
+
+            lib.UserRegions.Add(region);
+            lib.Save();
+            return RegionUpdateResult.Ok(newName, cloned);
+        }
+
+        /// <summary>
+        /// Region Editor helper — copy a region's stored geometry, quality,
+        /// fractal type, and per-engine source identity into a fresh
+        /// user-defined <see cref="FractalRegion"/>. Metadata (Name,
+        /// Description, animation, curated themes, lighting/watermark) is left
+        /// at defaults for the caller to fill from the edit model.
+        /// </summary>
+        private static FractalRegion CloneRegionGeometry(FractalRegion src) => new()
+        {
+            CenterX  = src.CenterX,  CenterXLo = src.CenterXLo,
+            CenterX2 = src.CenterX2, CenterX3  = src.CenterX3,
+            CenterY  = src.CenterY,  CenterYLo = src.CenterYLo,
+            CenterY2 = src.CenterY2, CenterY3  = src.CenterY3,
+            Zoom = src.Zoom,
+            Iterations = src.Iterations,
+            FractalType = src.FractalType,
+            QualityPreset = src.QualityPreset,
+            RegionType = RegionType.UserDefined,
+            UserEquationName = src.UserEquationName,
+            SandboxName      = src.SandboxName,
+            UserBulbName     = src.UserBulbName,
+            UserBulbSource   = src.UserBulbSource,
+            UserBulbCameraDistance = src.UserBulbCameraDistance,
+            UserBulbCameraTheta    = src.UserBulbCameraTheta,
+            UserBulbCameraPhi      = src.UserBulbCameraPhi,
+            UserBulbLightTheta     = src.UserBulbLightTheta,
+            UserBulbLightPhi       = src.UserBulbLightPhi,
+        };
+
+        /// <inheritdoc/>
         public RegionExportResult ExportUserRegionsToFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
