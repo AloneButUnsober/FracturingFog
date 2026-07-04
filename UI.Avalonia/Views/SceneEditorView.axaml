@@ -187,7 +187,7 @@
                                             </Grid>
 
                                             <!-- Shot fields -->
-                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
                                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Region:" Margin="0,0,8,4" />
                                                 <ComboBox Grid.Row="0" Grid.Column="1"
                                                           ItemsSource="{Binding RegionNames}"
@@ -229,6 +229,13 @@
                                                                    Minimum="0" Maximum="30" Increment="0.25"
                                                                    FormatString="0.##" MinWidth="90" />
                                                 </StackPanel>
+
+                                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Tone-map:" Margin="0,4,8,0" />
+                                                <ComboBox Grid.Row="3" Grid.Column="1"
+                                                          ItemsSource="{Binding ToneMapOptions}"
+                                                          SelectedItem="{Binding SelectedToneMap}"
+                                                          HorizontalAlignment="Stretch" Margin="0,4,8,0"
+                                                          ToolTip.Tip="Pin this shot's HDR tone-map operator, or inherit the region lighting's" />
                                             </Grid>
 
                                             <!-- Camera track (3D types only) -->

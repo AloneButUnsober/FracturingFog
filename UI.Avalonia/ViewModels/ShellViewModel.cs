@@ -1996,6 +1996,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             FloatingMenu.SetThemeSilent(shot.ThemeName);
         }
 
+        // Per-shot tone-map override (S8) — pin it on the live params after the
+        // region jump so it survives the shot; null inherits the region's.
+        if (shot.ToneMap is { } tm)
+        {
+            var fx = Main.ViewState.FractalParameters.Lighting;
+            fx.ToneMap = tm;
+            Main.ViewState.FractalParameters.Lighting = fx;
+        }
+
         var anim = string.IsNullOrEmpty(shot.AnimationName)
             ? null
             : _themeService.GetAnimation(shot.AnimationName!);
