@@ -249,6 +249,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             RebuildWindowTitle();
             Main.RenderHost.Trigger();
         };
+        FloatingMenu.UseRebasingToggled += (_, v) =>
+        {
+            Main.RenderHost.MandelbrotAllowPtRebasing = v;
+            RebuildWindowTitle();
+            Main.RenderHost.Trigger();
+        };
 
         // Status-bar visibility flag the MainWindow status row binds to.
         FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;
@@ -1417,6 +1423,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (Main.RenderHost.MandelbrotDisableAcceleration) sb.Append("  [ACCEL OFF]");
         if (Main.RenderHost.MandelbrotDisableSeriesApproximation) sb.Append("  [SA OFF]");
         if (Main.RenderHost.MandelbrotDisableDdBla) sb.Append("  [DD-BLA OFF]");
+        if (Main.RenderHost.MandelbrotAllowPtRebasing) sb.Append("  [REBASE]");
         return sb.ToString();
     }
 

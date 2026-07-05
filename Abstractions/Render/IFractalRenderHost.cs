@@ -191,6 +191,12 @@ namespace FracturingFog.Render
         /// isolate suspected Wave 2.10 regressions at extreme zoom.</summary>
         bool MandelbrotDisableDdBla { get; set; }
 
+        /// <summary>SM-2 A/B toggle — when on, glitched deep-zoom pixels resolve
+        /// via the fast rebasing PT path instead of per-pixel QD/OD (≈100×
+        /// faster at extreme zoom, matching the QD image). Off = legacy
+        /// per-pixel QD/OD fallback.</summary>
+        bool MandelbrotAllowPtRebasing { get; set; }
+
         /// <summary>Region label rendered in the watermark.</summary>
         string? RegionName { get; set; }
 
