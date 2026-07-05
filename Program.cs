@@ -606,6 +606,88 @@ static class Program
             return allPass ? 0 : 1;
         }
 
+        // --regionprobe: headless render of the deep smoke-test regions to
+        // diagnose the "renders solid colour / takes forever" reports without a
+        // GUI. Renders each at 128² single-sample and reports the precision tier,
+        // wall-clock, in-set fraction, and — the solid-colour tell — how many
+        // DISTINCT iteration counts / colours the image actually contains. A
+        // healthy fractal has hundreds; SOLID = ≤ 2 distinct colours. Optional
+        // arg [maxIter] overrides the default 8192 cap.
+        if (args.Length > 0 && args[0] == "--regionprobe")
+        {
+            int maxIter = 8192;
+            if (args.Length > 1 && int.TryParse(args[1], out int mi) && mi > 0) maxIter = mi;
+            const int W = 128, H = 128;
+            const double QDt = 1e25, ODt = 1e50;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Region probe — {W}×{H} single-sample, maxIter={maxIter}");
+            sb.AppendLine("  tier by zoom (DD ≤1e25 < QD ≤1e50 < OD). distIter/distColor = unique values;");
+            sb.AppendLine("  SOLID verdict when distColor ≤ 2. inSet% = pixels that never escaped.");
+
+            // name, CX limbs (hi,lo,x2,x3), CY limbs, zoom. From user smoke report.
+            (string name, double[] cx, double[] cy, double zoom)[] regions =
+            {
+                ("3E47 Test",
+                    new[] { -1.9918151296901943, -7.8219844803880472E-17, 1.660139930392911E-34, 8.217274172159319E-51 },
+                    new[] { -5.5240415753972429E-06, -2.8659813126937928E-22, 6.6910924119662832E-39, 6.2394735914401016E-55 },
+                    3E+47),
+                ("E45Test04",
+                    new[] { 0.40679612541749072, 1.0460588279145483E-17, -4.3674629952735269E-35, 5.0770999219861446E-50 },
+                    new[] { -0.56778808906247447, -4.0266051197805093E-17, 1.5194922328871422E-33, 5.0770999219861446E-50 },
+                    1.07808E+47),
+                ("Deeper and Deeper",
+                    new[] { -1.9918151296901943, -7.8219818188678307E-17, 3.2454272033149852E-33, -2.6986232918289806E-49 },
+                    new[] { -5.5240415753972429E-06, -2.8404793590633191E-22, 1.5048294824547351E-38, -6.0649764033320806E-55 },
+                    4.49845E+46),
+                ("Deep Lightning in Space",
+                    new[] { -1.4181949444785762, -7.4415882477902279E-17, 0.0, 0.0 },
+                    new[] { -0.12700786443815276, -2.3429499355532375E-18, 0.0, 0.0 },
+                    7.58348E+26),
+            };
+
+            foreach (var r in regions)
+            {
+                string tier = r.zoom > ODt ? "OD" : (r.zoom > QDt ? "QD" : "DD");
+                var calc = new FracturingFog.MandelbrotCalculator(W, H)
+                {
+                    CenterX = r.cx[0], CenterXLo = r.cx[1], CenterX2 = r.cx[2], CenterX3 = r.cx[3],
+                    CenterY = r.cy[0], CenterYLo = r.cy[1], CenterY2 = r.cy[2], CenterY3 = r.cy[3],
+                    Zoom = r.zoom, MaxIterations = maxIter,
+                    Quality = FracturingFog.Models.QualityPreset.Extreme,
+                    ColorMap = new FracturingFog.Models.HsvPalette(),
+                };
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                calc.Calculate();
+                sw.Stop();
+
+                var distIter = new System.Collections.Generic.HashSet<int>();
+                var distColor = new System.Collections.Generic.HashSet<uint>();
+                int inSet = 0, minIt = int.MaxValue, maxIt = 0;
+                for (int i = 0; i < calc.IterationBuffer.Length; i++)
+                {
+                    int it = calc.IterationBuffer[i];
+                    distIter.Add(it);
+                    if (it >= maxIter) inSet++;
+                    else { if (it < minIt) minIt = it; if (it > maxIt) maxIt = it; }
+                }
+                foreach (var p in calc.ColorBuffer) distColor.Add(p);
+                if (minIt == int.MaxValue) minIt = 0;
+                double inSetPct = 100.0 * inSet / calc.IterationBuffer.Length;
+                string verdict = distColor.Count <= 2 ? "SOLID" : "ok";
+
+                sb.AppendLine(
+                    $"  {r.name,-24} {tier} zoom={r.zoom,10:G4} HP={(calc.IsHighPrecisionActive ? "Y" : "N")} " +
+                    $"ms={sw.Elapsed.TotalMilliseconds,9:F1} distIter={distIter.Count,5} distColor={distColor.Count,5} " +
+                    $"inSet={inSetPct,5:F1}% escIt=[{minIt},{maxIt}] [{verdict}]");
+            }
+
+            string rpPath = System.IO.Path.Combine(AppContext.BaseDirectory, "regionprobe.out");
+            System.IO.File.WriteAllText(rpPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location
