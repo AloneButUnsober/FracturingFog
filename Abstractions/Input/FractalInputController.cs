@@ -29,14 +29,9 @@ namespace FracturingFog.Input
         private bool _panning;
         private int _panStartScreenX;
         private int _panStartScreenY;
-        private double _panStartCX;
+        private double _panStartCX;                 // 3D pan (double centre) only
         private double _panStartCY;
-        private DD _panStartDDCX;
-        private DD _panStartDDCY;
-        private QD _panStartQDCX;
-        private QD _panStartQDCY;
-        private OD _panStartODCX;
-        private OD _panStartODCY;
+        private FFMath.DeepComplex _panStartCenter; // 2D pan anchor, full precision
 
         // ── 3D right-drag state ───────────────────────────────────────────────
         private bool _rightDragging;
@@ -67,9 +62,14 @@ namespace FracturingFog.Input
         public FractalInputController(FractalViewState state)
         {
             ViewState = state ?? throw new ArgumentNullException(nameof(state));
+            _camera = new ViewCamera(ViewState);
         }
 
         public FractalViewState ViewState { get; }
+
+        // Single screen<->world authority. All 2D pan/zoom/focus math goes
+        // through this, at full precision, so there is no per-tier branch here.
+        private readonly ViewCamera _camera;
 
         public event EventHandler<InputCursorRequest>? CursorRequested;
         public event EventHandler<ViewChangedArgs>? ViewChanged;
@@ -136,16 +136,7 @@ namespace FracturingFog.Input
             _panStartCX = ViewState.CenterX;
             _panStartCY = ViewState.CenterY;
             if (!ViewState.Is3D)
-            {
-                _panStartDDCX = new DD(ViewState.CenterX, ViewState.CenterXLo);
-                _panStartDDCY = new DD(ViewState.CenterY, ViewState.CenterYLo);
-                _panStartQDCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
-                _panStartQDCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
-                _panStartODCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
-                                       ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7);
-                _panStartODCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
-                                       ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7);
-            }
+                _panStartCenter = ViewState.GetCenter();
             CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.SizeAll));
         }
 
@@ -230,37 +221,13 @@ namespace FracturingFog.Input
                 return;
             }
 
+            // Anchor to the centre captured at pointer-down + the pixel delta,
+            // in full precision — one path, all zoom tiers. The grabbed point
+            // stays under the cursor to ~1e-28 world units at any depth.
             double scale = CurrentScale(e.ClientWidth, e.ClientHeight);
-            if (ViewState.RequiresOD)
-            {
-                double dx = -(e.X - _panStartScreenX) * scale;
-                double dy = -(e.Y - _panStartScreenY) * scale;
-                var newCX = _panStartODCX + dx;
-                var newCY = _panStartODCY + dy;
-                StoreOD(newCX, newCY);
-            }
-            else if (ViewState.RequiresQD)
-            {
-                double dx = -(e.X - _panStartScreenX) * scale;
-                double dy = -(e.Y - _panStartScreenY) * scale;
-                var newCX = _panStartQDCX + dx;
-                var newCY = _panStartQDCY + dy;
-                StoreQD(newCX, newCY);
-            }
-            else if (ViewState.RequiresDD)
-            {
-                double dx = -(e.X - _panStartScreenX) * scale;
-                double dy = -(e.Y - _panStartScreenY) * scale;
-                var newCX = _panStartDDCX + dx;
-                var newCY = _panStartDDCY + dy;
-                StoreDD(newCX, newCY);
-            }
-            else
-            {
-                ViewState.CenterX = _panStartCX - (e.X - _panStartScreenX) * scale;
-                ViewState.CenterY = _panStartCY - (e.Y - _panStartScreenY) * scale;
-                ClearLowLimbs();
-            }
+            double dx = -(e.X - _panStartScreenX) * scale;
+            double dy = -(e.Y - _panStartScreenY) * scale;
+            ViewState.SetCenter(_panStartCenter.Translate(dx, dy));
             RaiseViewChanged(RenderHint.Fast);
         }
 
@@ -310,10 +277,6 @@ namespace FracturingFog.Input
         {
             double midPxX = rx + rw * 0.5;
             double midPxY = ry + rh * 0.5;
-            double ox = midPxX - w * 0.5;
-            double oy = midPxY - h * 0.5;
-
-            double scale = CurrentScale(w, h);
 
             // Fit: shrink the smaller of width/height ratios so the whole rect
             // remains visible after zoom (no clipping).
@@ -328,52 +291,12 @@ namespace FracturingFog.Input
                     $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
                     InputStatusKind.Info));
 
-            // Box zoom uses center-anchor (box midpoint becomes screen
-            // center), not cursor-anchor: world coord at box midpoint =
-            // currentCenter + (ox, oy) * scale, and newCenter = that anchor.
-            // Y axis on screen grows downward but the fractal plane's
-            // CenterY is the world Y at screen-center pixel and pan code
-            // does CenterY -= dyPixels*scale, so a positive screen-y
-            // offset corresponds to a negative world-Y delta from the
-            // current centre. Mirror that sign here.
-            if (ViewState.RequiresOD)
-            {
-                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
-                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7);
-                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
-                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7);
-                var anchorX = odCX + ox * scale;
-                var anchorY = odCY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                StoreOD(anchorX, anchorY);
-            }
-            else if (ViewState.RequiresQD)
-            {
-                var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
-                var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
-                var anchorX = qdCX + ox * scale;
-                var anchorY = qdCY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                StoreQD(anchorX, anchorY);
-            }
-            else if (ViewState.RequiresDD)
-            {
-                var ddCX = new DD(ViewState.CenterX, ViewState.CenterXLo);
-                var ddCY = new DD(ViewState.CenterY, ViewState.CenterYLo);
-                var anchorX = ddCX + ox * scale;
-                var anchorY = ddCY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                StoreDD(anchorX, anchorY);
-            }
-            else
-            {
-                double anchorX = ViewState.CenterX + ox * scale;
-                double anchorY = ViewState.CenterY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                ViewState.CenterX = anchorX;
-                ViewState.CenterY = anchorY;
-                ClearLowLimbs();
-            }
+            // Box zoom uses centre-anchor: the box midpoint becomes the new
+            // screen centre and zoom multiplies by `factor`. One precision path
+            // for every tier.
+            _camera.BoxZoomToPoint(
+                midPxX, midPxY, factor, w, h,
+                ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
             RaiseViewChanged(RenderHint.Full);
         }
 
@@ -397,35 +320,9 @@ namespace FracturingFog.Input
                 return;
             }
 
-            double scale = CurrentScale(e.ClientWidth, e.ClientHeight);
-            double dx = e.X - e.ClientWidth * 0.5;
-            double dy = e.Y - e.ClientHeight * 0.5;
-            if (ViewState.RequiresOD)
-            {
-                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
-                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7) + dx * scale;
-                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
-                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7) + dy * scale;
-                StoreOD(odCX, odCY);
-            }
-            else if (ViewState.RequiresQD)
-            {
-                var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3) + dx * scale;
-                var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3) + dy * scale;
-                StoreQD(qdCX, qdCY);
-            }
-            else if (ViewState.RequiresDD)
-            {
-                var newCX = new DD(ViewState.CenterX, ViewState.CenterXLo) + dx * scale;
-                var newCY = new DD(ViewState.CenterY, ViewState.CenterYLo) + dy * scale;
-                StoreDD(newCX, newCY);
-            }
-            else
-            {
-                ViewState.CenterX += dx * scale;
-                ViewState.CenterY += dy * scale;
-                ClearLowLimbs();
-            }
+            // Focus: the clicked pixel becomes the new screen centre. One
+            // precision path for every tier.
+            _camera.SetCenterToScreenPoint(e.X, e.Y, e.ClientWidth, e.ClientHeight);
             RaiseViewChanged(RenderHint.Full);
         }
 
@@ -444,10 +341,6 @@ namespace FracturingFog.Input
                 return;
             }
 
-            double scale = CurrentScale(e.ClientWidth, e.ClientHeight);
-            double ox = e.X - e.ClientWidth * 0.5;
-            double oy = e.Y - e.ClientHeight * 0.5;
-
             double targetZoom = Math.Clamp(
                 ViewState.Zoom * factor,
                 QualityPreset.Draft.ZoomMin,
@@ -457,54 +350,11 @@ namespace FracturingFog.Input
                     $"Quality → {ViewState.Quality.Name} (zoom {targetZoom:G3}).",
                     InputStatusKind.Info));
 
-            if (ViewState.RequiresOD)
-            {
-                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
-                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7);
-                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
-                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7);
-                var anchorX = odCX + ox * scale;
-                var anchorY = odCY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                double ns = CurrentScale(e.ClientWidth, e.ClientHeight);
-                var newCX = anchorX + (-ox * ns);
-                var newCY = anchorY + (-oy * ns);
-                StoreOD(newCX, newCY);
-            }
-            else if (ViewState.RequiresQD)
-            {
-                var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
-                var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
-                var anchorX = qdCX + ox * scale;
-                var anchorY = qdCY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                double ns = CurrentScale(e.ClientWidth, e.ClientHeight);
-                var newCX = anchorX + (-ox * ns);
-                var newCY = anchorY + (-oy * ns);
-                StoreQD(newCX, newCY);
-            }
-            else if (ViewState.RequiresDD)
-            {
-                var ddCX = new DD(ViewState.CenterX, ViewState.CenterXLo);
-                var ddCY = new DD(ViewState.CenterY, ViewState.CenterYLo);
-                var anchorX = ddCX + ox * scale;
-                var anchorY = ddCY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                double ns = CurrentScale(e.ClientWidth, e.ClientHeight);
-                var newCX = anchorX - ox * ns;
-                var newCY = anchorY - oy * ns;
-                StoreDD(newCX, newCY);
-            }
-            else
-            {
-                double compX = ViewState.CenterX + ox * scale;
-                double compY = ViewState.CenterY + oy * scale;
-                ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor, ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
-                double ns = CurrentScale(e.ClientWidth, e.ClientHeight);
-                ViewState.CenterX = compX - ox * ns;
-                ViewState.CenterY = compY - oy * ns;
-                ClearLowLimbs();
-            }
+            // Zoom about the cursor, keeping the world point under it fixed. One
+            // precision path for every tier; quality-adapt already ran above so
+            // the clamp uses the (possibly new) quality bounds.
+            _camera.ZoomAboutScreen(e.X, e.Y, factor, e.ClientWidth, e.ClientHeight,
+                ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
             RaiseViewChanged(RenderHint.Full);
         }
 
@@ -619,33 +469,9 @@ namespace FracturingFog.Input
 
         private void PanByPixels(int dx, int dy, int w, int h)
         {
-            double scale = CurrentScale(w, h);
-            if (ViewState.RequiresOD)
-            {
-                var odCX = new OD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3,
-                                  ViewState.CenterX4, ViewState.CenterX5, ViewState.CenterX6, ViewState.CenterX7) + dx * scale;
-                var odCY = new OD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3,
-                                  ViewState.CenterY4, ViewState.CenterY5, ViewState.CenterY6, ViewState.CenterY7) + dy * scale;
-                StoreOD(odCX, odCY);
-            }
-            else if (ViewState.RequiresQD)
-            {
-                var qdCX = new QD(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3) + dx * scale;
-                var qdCY = new QD(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3) + dy * scale;
-                StoreQD(qdCX, qdCY);
-            }
-            else if (ViewState.RequiresDD)
-            {
-                var newCX = new DD(ViewState.CenterX, ViewState.CenterXLo) + dx * scale;
-                var newCY = new DD(ViewState.CenterY, ViewState.CenterYLo) + dy * scale;
-                StoreDD(newCX, newCY);
-            }
-            else
-            {
-                ViewState.CenterX += dx * scale;
-                ViewState.CenterY += dy * scale;
-                ClearLowLimbs();
-            }
+            // One precision path for every tier (2D and 3D — at 3D/shallow zoom
+            // the OD math collapses to the same double result, low limbs zero).
+            _camera.TranslateByPixels(dx, dy, w, h);
             RaiseViewChanged(RenderHint.Full);
         }
 
@@ -852,30 +678,6 @@ namespace FracturingFog.Input
             ViewState.CenterX4 = 0; ViewState.CenterX5 = 0; ViewState.CenterX6 = 0; ViewState.CenterX7 = 0;
             ViewState.CenterYLo = 0; ViewState.CenterY2 = 0; ViewState.CenterY3 = 0;
             ViewState.CenterY4 = 0; ViewState.CenterY5 = 0; ViewState.CenterY6 = 0; ViewState.CenterY7 = 0;
-        }
-
-        private void StoreDD(DD cx, DD cy)
-        {
-            ViewState.CenterX = cx.Hi; ViewState.CenterXLo = cx.Lo; ViewState.CenterX2 = 0; ViewState.CenterX3 = 0;
-            ViewState.CenterX4 = 0; ViewState.CenterX5 = 0; ViewState.CenterX6 = 0; ViewState.CenterX7 = 0;
-            ViewState.CenterY = cy.Hi; ViewState.CenterYLo = cy.Lo; ViewState.CenterY2 = 0; ViewState.CenterY3 = 0;
-            ViewState.CenterY4 = 0; ViewState.CenterY5 = 0; ViewState.CenterY6 = 0; ViewState.CenterY7 = 0;
-        }
-
-        private void StoreQD(QD cx, QD cy)
-        {
-            ViewState.CenterX = cx.X0; ViewState.CenterXLo = cx.X1; ViewState.CenterX2 = cx.X2; ViewState.CenterX3 = cx.X3;
-            ViewState.CenterX4 = 0; ViewState.CenterX5 = 0; ViewState.CenterX6 = 0; ViewState.CenterX7 = 0;
-            ViewState.CenterY = cy.X0; ViewState.CenterYLo = cy.X1; ViewState.CenterY2 = cy.X2; ViewState.CenterY3 = cy.X3;
-            ViewState.CenterY4 = 0; ViewState.CenterY5 = 0; ViewState.CenterY6 = 0; ViewState.CenterY7 = 0;
-        }
-
-        private void StoreOD(OD cx, OD cy)
-        {
-            ViewState.CenterX = cx.X0; ViewState.CenterXLo = cx.X1; ViewState.CenterX2 = cx.X2; ViewState.CenterX3 = cx.X3;
-            ViewState.CenterX4 = cx.X4; ViewState.CenterX5 = cx.X5; ViewState.CenterX6 = cx.X6; ViewState.CenterX7 = cx.X7;
-            ViewState.CenterY = cy.X0; ViewState.CenterYLo = cy.X1; ViewState.CenterY2 = cy.X2; ViewState.CenterY3 = cy.X3;
-            ViewState.CenterY4 = cy.X4; ViewState.CenterY5 = cy.X5; ViewState.CenterY6 = cy.X6; ViewState.CenterY7 = cy.X7;
         }
 
         private void RaiseViewChanged(RenderHint hint)

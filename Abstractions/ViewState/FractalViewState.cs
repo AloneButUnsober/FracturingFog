@@ -83,6 +83,29 @@ namespace FracturingFog.ViewState
         public const double DefaultCenterY = 0.0;
         public const double DefaultZoom = 0.13;
 
+        // ── High-precision centre accessor ────────────────────────────────────
+        // The 16 limb properties above are the storage + serialization + render
+        // contract; this pair is the typed view of them used by the interactive
+        // control path (ViewCamera). Reading gives all 8+8 limbs; writing sets
+        // all of them, so the centre is never partially updated (the historical
+        // "wrong tier branch left stale low limbs" bug class cannot occur here).
+
+        /// <summary>The view centre as a single octuple-double complex value.</summary>
+        public FFMath.DeepComplex GetCenter()
+            => FFMath.DeepComplex.FromLimbs(
+                CenterX, CenterXLo, CenterX2, CenterX3, CenterX4, CenterX5, CenterX6, CenterX7,
+                CenterY, CenterYLo, CenterY2, CenterY3, CenterY4, CenterY5, CenterY6, CenterY7);
+
+        /// <summary>Write the view centre, populating all 16 limbs from the OD
+        /// value (limbs above the current tier are the OD's own zero limbs).</summary>
+        public void SetCenter(FFMath.DeepComplex c)
+        {
+            CenterX = c.Re.X0; CenterXLo = c.Re.X1; CenterX2 = c.Re.X2; CenterX3 = c.Re.X3;
+            CenterX4 = c.Re.X4; CenterX5 = c.Re.X5; CenterX6 = c.Re.X6; CenterX7 = c.Re.X7;
+            CenterY = c.Im.X0; CenterYLo = c.Im.X1; CenterY2 = c.Im.X2; CenterY3 = c.Im.X3;
+            CenterY4 = c.Im.X4; CenterY5 = c.Im.X5; CenterY6 = c.Im.X6; CenterY7 = c.Im.X7;
+        }
+
         // ── Fractal type + per-engine parameters ──────────────────────────────
 
         public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
