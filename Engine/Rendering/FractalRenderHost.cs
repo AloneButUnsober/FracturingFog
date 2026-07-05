@@ -484,6 +484,16 @@ namespace FracturingFog.Rendering
             set => _calculator.DisableDdBla = value;
         }
 
+        // SM-2 — deep-zoom rebasing A/B toggle. AllowPtRebasing is a static
+        // switch on the calculator (it gates the glitch-fallback path for all
+        // instances), so this passthrough drives the process-wide flag; that is
+        // fine for a debug A/B control.
+        public bool MandelbrotAllowPtRebasing
+        {
+            get => MandelbrotCalculator.AllowPtRebasing;
+            set => MandelbrotCalculator.AllowPtRebasing = value;
+        }
+
         // T3.1: GPU compute kernel constructed lazily on the first Use
         // request when a factory is installed. Null on non-D3D11 backends or
         // when the user has never enabled the feature.
