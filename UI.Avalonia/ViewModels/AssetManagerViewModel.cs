@@ -378,9 +378,18 @@ public sealed class AssetRowViewModel
     public string SizeText => FormatSize(Descriptor.SizeOnDisk);
     public string CreatedText => Descriptor.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
 
-    // Decoded lazily from Descriptor.ThumbnailBytes (a PNG the source produced;
-    // today only colour themes carry one). Null for asset types without a
-    // thumbnail, which the view hides via HasThumbnail.
+    /// <summary>True for app-shipped assets (e.g. built-in colour themes) that
+    /// aren't in the user's library — read-only, no size on disk.</summary>
+    public bool IsReadOnly => Descriptor.ReadOnly;
+
+    /// <summary>Detail-pane provenance line.</summary>
+    public string SourceText => Descriptor.ReadOnly ? "Built-in (read-only)" : "User asset";
+
+    // Decoded lazily. The source hands either eager bytes (Descriptor.ThumbnailBytes,
+    // e.g. data-driven gradient swatches) or a lazy factory (Descriptor.ThumbnailFactory,
+    // e.g. built-in colour maps sampled into a strip) — the factory only runs on
+    // first display, keeping ~250 built-ins off the enumerate path. Null for
+    // asset types with neither, which the view hides via HasThumbnail.
     private global::Avalonia.Media.Imaging.Bitmap? _thumbnail;
     private bool _thumbnailLoaded;
     public global::Avalonia.Media.Imaging.Bitmap? Thumbnail
@@ -391,6 +400,11 @@ public sealed class AssetRowViewModel
             {
                 _thumbnailLoaded = true;
                 var bytes = Descriptor.ThumbnailBytes;
+                if ((bytes == null || bytes.Length == 0) && Descriptor.ThumbnailFactory != null)
+                {
+                    try { bytes = Descriptor.ThumbnailFactory.Invoke(); }
+                    catch { bytes = null; }
+                }
                 if (bytes != null && bytes.Length > 0)
                 {
                     try { using var ms = new MemoryStream(bytes); _thumbnail = new global::Avalonia.Media.Imaging.Bitmap(ms); }
