@@ -103,7 +103,7 @@ audio-reactive dialog without crash.
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | ✅ Shipped 2026-06-21; OD arithmetic fixed + re-enabled 2026-06-22 (op* rewrite + 23 xUnit OD parity tests in `Server.Tests/OctupleDoubleTests.cs`). UI navigation past 1e58 still pending — see status log |
 | 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 🟡 Scaffold shipped 2026-06-22 (Hi-only kernel works on CUDA). QD upgrade + perf-win analysis **deferred** as non-blocking follow-on — toggle off by default, no other wave depends on it |
 | 2.13 | D-7.29 — Roslyn source generator | ✅ Shipped 2026-06-22 |
-| 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | 🟡 Deferred 2026-06-22 — 3–5 d, no other wave depends on it; revisit after Wave 3 perf tail |
+| 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | ⚫ **Closed obsolete 2026-07-05** — premise disproven by `--qdfloorsweep` (QD separates 128/128 pixels through 1e64; no arithmetic floor in the 1e40–1e58 band). Original report predates the 2.11 OD-arith fix + SM-1 iter-cap finding. Intent folded into **SM-2** (rebasing). See status log. |
 | 2.15 | D-4.20 — OD-aware UI navigation — populate `CenterX4..X7` from pan/zoom | ✅ Shipped 2026-06-22 (`FractalInputController.cs` — 6 pan/zoom sites + OD pan-start cache + `StoreOD` helper) |
 
 ---
@@ -235,10 +235,30 @@ Convergence after Wave 1:
 | ID | Item | Status |
 |----|------|--------|
 | SM-1 | Deep regions render solid when saved/auto `MaxIterations` < escape band | 🟡 Deferred 2026-07-05 — root-caused via `--regionprobe`: not a precision bug, purely iter-count (regions need 379–3940 iters; rendered under band → 100% in-set → flat). Fix = trace region-load iteration path (where a loaded region sets `MaxIterations`) and either raise the saved values or add auto-iter that climbs until in-set fraction stabilises. Verify with `--regionprobe 20000` (all clean) vs `--regionprobe 300` (all SOLID). |
-| SM-2 | Deep-QD extreme-region render is slow (minutes at full window × AA16) | 🟡 Deferred 2026-07-05 — inherent deep-QD-perturbation cost, not a defect (3E47 = 11.2 s at 128² single-sample; ×AA16 ×full-window = observed minutes). Mitigations to weigh: lower AA for interactive/preview passes, adaptive iter cap (ties to SM-1), GPU QD ref-orbit (Wave 2.12, opt-in), progressive-resolution preview. Perf task, revisit deliberately. |
+| SM-2 | Deep-QD extreme-region render is slow (minutes at full window × AA16) | 🟢 **Rebasing shipped opt-in 2026-07-05 — `--rebaseprobe` PASS.** Root cause: SIMD PT δ-loop bails ~1e30 (glitch check `z==Z && δ!=0`), so deep frames ran per-pixel **direct-QD** `ComputePixelQD`. Fix: `ComputePixelPTRebased` (Zhuoran rebasing) — ref index `m` tracked separately, `z = Z[m] + δ` reconstructed, rebase `δ := z; m := 0` when `\|z\| < \|δ\|` or ref exhausted. Replaces the QD/OD/HP glitch fallback (all 6 sites) when `AllowPtRebasing` on. Stays in **double** — a DD δ/ref/dc variant gave byte-identical iteration counts (precision is not the limiter; the ~50 % divergence from a QD render is chaotic sensitivity the QD path shares with itself, `QDself ≈ reb-vs-QD`). Probe: **91–142× speedup, rebasing tracks QD within 0.05 % of QD's own SA-off/SA-on reproducibility.** Default OFF (render path bit-identical); flip on after a visual sign-off — same gate as 3.5. Later mitigations: SIMD rebasing (reclaim vector throughput), lower AA for preview, adaptive iter cap (ties to SM-1). |
 
 ## Status log
 
+- 2026-07-05 — **SM-2 rebasing shipped opt-in — `--rebaseprobe` PASS.** New
+  `MandelbrotCalculator.ComputePixelPTRebased` (Zhuoran rebasing) resolves any
+  pixel in double precision from the single shared reference orbit at any depth,
+  replacing the per-pixel QD/OD/HP glitch fallback at all six sites (scalar row +
+  PT4/PT8 vector-extract + PT4/PT8 scalar tail) when `AllowPtRebasing` is set.
+  Default OFF ⇒ the render path is bit-identical to pre-SM-2 (`if (AllowPtRebasing)
+  … else <existing fallback>`). Probe A/Bs it against the per-pixel QD truth on
+  the deep smoke regions:
+  * **91–142× faster** (3E47: 12740 ms → 101 ms at 128²/20 k iters).
+  * **Accuracy = QD.** reb-vs-QD tracks QDself (QD SA-off vs SA-on) to within
+    0.05 pt (51.63/51.68, 58.98/58.97, 96.77/96.77, 100/100). The ~50 % "miss"
+    on the two deepest regions is chaotic sensitivity of deep filamentary
+    structure at high iter — the QD render disagrees with itself by the same
+    amount, so there is no tighter truth to hit.
+  * A DD δ-chain + DD reference + DD dc variant was tried and produced
+    **byte-identical iteration counts** to the double path (and 50× slower):
+    precision is not the limiter here, so the fix stays in double. This is why
+    2.14's "DD δ-chain" would have bought nothing.
+  Remaining: flip `AllowPtRebasing` on after a visual sign-off (3.5-style gate);
+  optional SIMD rebasing later to reclaim vector throughput at deep zoom.
 - 2026-07-05 — **Wave 2.14 investigated — premise not reproducible; recommend
   reframe/close.** Two headless probes added to `Program.cs`:
   * `--qdfloorprobe [maxIter]` — renders each QD-band smoke region twice (SA on
