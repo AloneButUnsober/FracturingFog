@@ -192,6 +192,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Multibrot,        "Multibrot"),
         (FractalType.Phoenix,          "Phoenix"),
         (FractalType.Newton,           "Newton"),
+        (FractalType.Nova,             "Nova"),
         (FractalType.BuddhaBrot,       "Buddhabrot"),
         (FractalType.Nebulabrot,       "Nebulabrot"),
         (FractalType.AntiBuddhabrot,   "Anti-Buddhabrot"),

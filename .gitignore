@@ -374,3 +374,6 @@ Docs/site/
 
 # Claude Code worktrees and session state
 .claude/
+/Docs/Examples/Scenes/fracturingfog-assets-20260704-200304.zip
+/Docs/Examples/Scenes/Scene.zip
+/Docs/Examples/Scenes/Scene/bloom-breath.json
