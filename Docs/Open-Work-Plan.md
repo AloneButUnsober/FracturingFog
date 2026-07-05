@@ -232,6 +232,29 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-07-05 — Wave 5.9.f1 attempted — KIFS fold fixes + headless probe.
+  Added `--kifsprobe` (Program.cs) + `KifsCalculator.ProbeDE` test hook: a
+  headless geometric self-test that sphere-traces the DE inward along a
+  Fibonacci direction set and reports hit-fraction + surface radii (axis /
+  face-diagonal / body-diagonal), detecting the two documented failure modes
+  (all-black = hitFrac≈0; cube = radius signature 1:√2:√3) without a GUI.
+  Faithful ports of all three broken folds were tried and **the probe
+  disproved each**:
+  * **Octahedron** — Mandelbulber2 apex-fold port → solid cube (hitFrac 1.0,
+    radii 1:√2:√3). Reverted to the shipped rotated-Menger approximation.
+  * **Dodecahedron** — exact Coxeter [5,3] icosahedral mirror fold → all-black
+    (hitFrac 0.0; scale-from-vertex diverges because the user offset isn't an
+    icosahedron vertex). Reverted to the shipped rotated-Sierpinski (which at
+    least renders a visible shape — the icosa port was a regression).
+  * **MandelboxRot** — the documented dr-accumulator fix (DE = length/dr) →
+    object spans to radius ~6, past this fold's camera setRadius (3.5), so the
+    camera sits inside the body. Reverted rather than ship an unverifiable
+    framing regression.
+  Net: all three fold bodies stay at their shipped state; the probe + hook +
+  honest per-fold NOTE doc-comments land so the eventual fix has a headless
+  gate. **5.9.f1 remains open** — a correct fix needs reference-sourced
+  formulas (Octahedron / IcosaFold) + a matched camera retune (MandelboxRot),
+  verified visually, which is not reliably doable headlessly.
 - 2026-06-23 — Wave 7.1 shipped — Top-level `Docs/_Index.md` landing page.
   Routes by audience (User → `User/_Index.md`, Technical → `Technical/
   _Index.md`) and surfaces the project-wide roadmap layer (Open-Work-Plan,

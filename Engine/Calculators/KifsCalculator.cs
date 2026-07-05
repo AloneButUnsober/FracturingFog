@@ -390,6 +390,13 @@ public sealed class KifsCalculator : IFractalCalculator
     /// instead of cardinal axes. Visually a tilted / faceted version of the
     /// Menger sponge — reads as an octahedral approximation when viewed from
     /// the default camera angle.
+    ///
+    /// NOTE (5.9.f1): a faithful Mandelbulber-style apex-fold port was attempted
+    /// but the <c>--kifsprobe</c> harness showed it collapses to a solid cube
+    /// (hitFrac 1.0, radius signature 1:√2:√3). Reverted to the shipped
+    /// rotated-Menger approximation, which at least keeps the Menger facets. A
+    /// correct octahedral IFS still needs a reference formula + visual iteration
+    /// — see the 5.9.f1 status log. The probe is now in place to gate that work.
     /// </summary>
     private static double OctaDE(double cx, double cy, double cz,
         double scale, double ox, double oy, double oz, int iter)
@@ -432,10 +439,15 @@ public sealed class KifsCalculator : IFractalCalculator
     /// rotation around the (1, 1, 1) diagonal axis (axis-angle 36° per iter).
     /// The accumulated rotation breaks the 4-fold tetrahedral symmetry into a
     /// 5-fold-ish pentagonal pattern reminiscent of icosahedral filaments.
-    /// Not a true dodecahedral IFS (which requires φ-derived mirror planes
-    /// that don't converge under the fixed-dr KIFS DE scheme) — visually
-    /// distinct from Sierpinski and Menger; recognisably icosahedral when
-    /// viewed off-axis.
+    ///
+    /// NOTE (5.9.f1): an exact Coxeter [5,3] mirror-plane icosahedral fold was
+    /// attempted but the <c>--kifsprobe</c> harness showed it diverges to an
+    /// all-black render (hitFrac 0.0) — the scale-from-vertex sends every orbit
+    /// to infinity because the user offset is not an icosahedron vertex.
+    /// Reverted to the shipped rotated-Sierpinski, which at least renders a
+    /// visible (if not truly dodecahedral) shape. A correct icosahedral IFS
+    /// needs the scaling centre pinned to a real vertex + visual iteration —
+    /// see the 5.9.f1 status log.
     /// </summary>
     private static double DodecaDE(double cx, double cy, double cz,
         double scale, double ox, double oy, double oz, int iter)
@@ -491,10 +503,16 @@ public sealed class KifsCalculator : IFractalCalculator
     /// Uses the fixed-dr KIFS DE scheme (no per-iter |dz| tracking), so the
     /// result is visually Mandelbox-flavoured but is NOT the canonical
     /// Mandelbox DE — the proper sphere-fold + dr-magnitude update lives in
-    /// <c>MandelboxCalculator</c>. The sphere-fold here gives the limit set
-    /// the twisty-bulb character that distinguishes it from a plain
-    /// rotated-Sierpinski; reducing rotation to π/48 (~3.75°) cuts the
-    /// stepped-ridge banding the original π/24 produced.
+    /// <c>MandelboxCalculator</c>.
+    ///
+    /// NOTE (5.9.f1): the documented dr-accumulator fix (DE = length/dr with
+    /// dr updated by the sphere-fold factor and dr·|scale|+1 per iter) was
+    /// implemented and probed. The <c>--kifsprobe</c> harness showed it makes
+    /// the object span to radius ~6 — larger than this fold's camera
+    /// <c>setRadius</c> (3.5), so the camera would sit inside the body. Reverted
+    /// to the shipped fixed-dr scheme rather than ship an unverifiable framing
+    /// regression; a correct fix needs the dr accumulator *and* a matched
+    /// camera-distance retune, verified visually. See the 5.9.f1 status log.
     /// </summary>
     private static double MandelboxRotDE(double cx, double cy, double cz,
         double scale, double ox, double oy, double oz, int iter)
@@ -518,8 +536,7 @@ public sealed class KifsCalculator : IFractalCalculator
             else if (zz < -1.0) zz = -2.0 - zz;
 
             // Sphere-fold — pulls points near origin outward, points in the
-            // [½, 1] shell get rescaled toward the unit sphere. Mirrors the
-            // Mandelbox spec: r<½ → 4·z, ½<r<1 → z/r², r>1 → identity.
+            // [½, 1] shell get rescaled toward the unit sphere.
             double r2 = zx * zx + zy * zy + zz * zz;
             if (r2 < 0.25)
             {
@@ -531,9 +548,7 @@ public sealed class KifsCalculator : IFractalCalculator
                 zx *= m; zy *= m; zz *= m;
             }
 
-            // Y-axis rotation — small enough that 14 iters total ~52° of
-            // accumulated twist, giving the bulb a smooth helical winding
-            // instead of stair-step ridges.
+            // Y-axis rotation.
             double nx = cosR * zx + sinR * zz;
             double nz = -sinR * zx + cosR * zz;
             zx = nx; zz = nz;
@@ -546,4 +561,12 @@ public sealed class KifsCalculator : IFractalCalculator
         double rFinal = Math.Sqrt(zx * zx + zy * zy + zz * zz);
         return (rFinal - 2.0) * Math.Pow(scale, -iter);
     }
+
+    /// <summary>Wave 5.9.f1 — test hook exposing <see cref="DispatchDE"/> for the
+    /// headless <c>--kifsprobe</c> geometric self-test (no GUI needed to verify a
+    /// fold produces a bounded, non-cubic surface). Not used by the render path.</summary>
+    public static double ProbeDE(KifsFoldKind fold,
+        double x, double y, double z,
+        double scale, double ox, double oy, double oz, int iter)
+        => DispatchDE(fold, x, y, z, scale, ox, oy, oz, iter);
 }
