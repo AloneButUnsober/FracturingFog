@@ -688,6 +688,105 @@ static class Program
             return 0;
         }
 
+        // --qdfloorprobe: Wave 2.14 diagnostic — localise the source of deep-QD
+        // pixelation (zoom 1e40–1e58) BEFORE committing to the documented
+        // "DD-precision PT δ chain" rewrite. Finding that predates the plan: the
+        // SIMD PT δ-loop bails on iteration ~1 past ~1e30 (δ absorbed by Z in
+        // double, glitch check returns false), so deep frames are actually
+        // rendered by the per-pixel direct-QD ComputePixelQD, whose SA prelude
+        // seeds δ in *double* (dcR = dc.X0, EvalDelta in double). This probe
+        // renders each QD-band region twice — SA on vs SA off (direct QD from
+        // iter 0) — and reports a neighbour-collapse metric (fraction of
+        // horizontally/vertically adjacent escaped pixels with IDENTICAL iter,
+        // the pixelation tell). If SA-off collapses far less → the double SA
+        // seed is the culprit (cheap fix: QD/DD SA eval). If both collapse the
+        // same → the direct-QD arithmetic floor itself, needing the OD/DD-δ work.
+        if (args.Length > 0 && args[0] == "--qdfloorprobe")
+        {
+            int maxIter = 20000;
+            if (args.Length > 1 && int.TryParse(args[1], out int mi) && mi > 0) maxIter = mi;
+            const int W = 128, H = 128;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"QD-floor probe — {W}×{H} single-sample, maxIter={maxIter}");
+            sb.AppendLine("  Each region rendered SA-on then SA-off (direct QD from iter 0).");
+            sb.AppendLine("  collapse% = adjacent escaped pixels (H+V) with identical iter — pixelation tell.");
+            sb.AppendLine("  Big drop on SA-off ⇒ double SA seed is the floor. Same ⇒ direct-QD arithmetic floor.");
+
+            (string name, double[] cx, double[] cy, double zoom)[] regions =
+            {
+                ("3E47 Test",
+                    new[] { -1.9918151296901943, -7.8219844803880472E-17, 1.660139930392911E-34, 8.217274172159319E-51 },
+                    new[] { -5.5240415753972429E-06, -2.8659813126937928E-22, 6.6910924119662832E-39, 6.2394735914401016E-55 },
+                    3E+47),
+                ("E45Test04",
+                    new[] { 0.40679612541749072, 1.0460588279145483E-17, -4.3674629952735269E-35, 5.0770999219861446E-50 },
+                    new[] { -0.56778808906247447, -4.0266051197805093E-17, 1.5194922328871422E-33, 5.0770999219861446E-50 },
+                    1.07808E+47),
+                ("Deeper and Deeper",
+                    new[] { -1.9918151296901943, -7.8219818188678307E-17, 3.2454272033149852E-33, -2.6986232918289806E-49 },
+                    new[] { -5.5240415753972429E-06, -2.8404793590633191E-22, 1.5048294824547351E-38, -6.0649764033320806E-55 },
+                    4.49845E+46),
+            };
+
+            // collapse% over escaped pixels: fraction of H+V neighbour pairs
+            // (both escaped) whose iteration counts are bit-equal.
+            static double CollapsePct(int[] it, int w, int h, int cap)
+            {
+                long pairs = 0, equal = 0;
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        int i = y * w + x;
+                        if (it[i] >= cap) continue;         // in-set — skip
+                        if (x + 1 < w && it[i + 1] < cap)
+                        { pairs++; if (it[i] == it[i + 1]) equal++; }
+                        if (y + 1 < h && it[i + w] < cap)
+                        { pairs++; if (it[i] == it[i + w]) equal++; }
+                    }
+                return pairs == 0 ? 0.0 : 100.0 * equal / pairs;
+            }
+
+            foreach (var r in regions)
+            {
+                foreach (bool saOff in new[] { false, true })
+                {
+                    var calc = new FracturingFog.MandelbrotCalculator(W, H)
+                    {
+                        CenterX = r.cx[0], CenterXLo = r.cx[1], CenterX2 = r.cx[2], CenterX3 = r.cx[3],
+                        CenterY = r.cy[0], CenterYLo = r.cy[1], CenterY2 = r.cy[2], CenterY3 = r.cy[3],
+                        Zoom = r.zoom, MaxIterations = maxIter,
+                        Quality = FracturingFog.Models.QualityPreset.Extreme,
+                        ColorMap = new FracturingFog.Models.HsvPalette(),
+                        DisableSeriesApproximation = saOff,
+                    };
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    calc.Calculate();
+                    sw.Stop();
+
+                    var distIter = new System.Collections.Generic.HashSet<int>();
+                    int inSet = 0;
+                    for (int i = 0; i < calc.IterationBuffer.Length; i++)
+                    {
+                        distIter.Add(calc.IterationBuffer[i]);
+                        if (calc.IterationBuffer[i] >= maxIter) inSet++;
+                    }
+                    double inSetPct = 100.0 * inSet / calc.IterationBuffer.Length;
+                    double collapse = CollapsePct(calc.IterationBuffer, W, H, maxIter);
+
+                    sb.AppendLine(
+                        $"  {r.name,-20} SA={(saOff ? "off" : "on ")} zoom={r.zoom,10:G4} " +
+                        $"ms={sw.Elapsed.TotalMilliseconds,8:F1} distIter={distIter.Count,5} " +
+                        $"inSet={inSetPct,5:F1}% collapse={collapse,5:F1}%");
+                }
+            }
+
+            string qfPath = System.IO.Path.Combine(AppContext.BaseDirectory, "qdfloorprobe.out");
+            System.IO.File.WriteAllText(qfPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location
