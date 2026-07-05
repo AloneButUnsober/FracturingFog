@@ -1063,6 +1063,7 @@ static class Program
 
                 double prevZoom = vs.Zoom;
                 int steps = 0;
+                double maxDrift = 0;
                 while (vs.Zoom < 8e49 && steps < 100000)
                 {
                     ctl.OnWheel(new FracturingFog.Input.WheelInput(
@@ -1071,20 +1072,23 @@ static class Program
                     if (vs.Zoom == prevZoom) break;   // clamped
                     prevZoom = vs.Zoom;
 
-                    if (steps == 1 || vs.Zoom > 8e49 * 0.999 ||
-                        (steps % 40 == 0))
-                    {
-                        double s = 3.5 / (Math.Max(W, H) * vs.Zoom);
-                        // Where the ORIGINAL world point now sits on screen.
-                        double onScreenX = W * 0.5 + (double)(worldX0 - ODx()) / s;
-                        double onScreenY = H * 0.5 + (double)(worldY0 - ODy()) / s;
-                        double drift = Math.Sqrt(
-                            (onScreenX - curX) * (onScreenX - curX) +
-                            (onScreenY - curY) * (onScreenY - curY));
+                    double s = 3.5 / (Math.Max(W, H) * vs.Zoom);
+                    // Where the ORIGINAL world point now sits on screen.
+                    double onScreenX = W * 0.5 + (double)(worldX0 - ODx()) / s;
+                    double onScreenY = H * 0.5 + (double)(worldY0 - ODy()) / s;
+                    double drift = Math.Sqrt(
+                        (onScreenX - curX) * (onScreenX - curX) +
+                        (onScreenY - curY) * (onScreenY - curY));
+                    if (drift > maxDrift) maxDrift = drift;
+
+                    if (steps == 1 || vs.Zoom > 8e49 * 0.999 || (steps % 80 == 0))
                         sb.AppendLine(
                             $"    step={steps,5} zoom={vs.Zoom,9:G3} anchor-drift={drift,10:E2}px");
-                    }
                 }
+                sb.AppendLine($"  max anchor-drift over the whole zoom-in = {maxDrift:E2}px");
+                sb.AppendLine(maxDrift < 0.5
+                    ? "RESULT: PASS (anchor stable to <0.5px through 8e49)"
+                    : "RESULT: FAIL (anchor drift exceeds 0.5px)");
             }
 
             string ipPath = System.IO.Path.Combine(AppContext.BaseDirectory, "inputprobe.out");
