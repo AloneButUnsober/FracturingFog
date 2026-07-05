@@ -239,6 +239,27 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-07-05 — **Wave 2.14 investigated — premise not reproducible; recommend
+  reframe/close.** Two headless probes added to `Program.cs`:
+  * `--qdfloorprobe [maxIter]` — renders each QD-band smoke region twice (SA on
+    vs off) and reports a neighbour-collapse metric. Result: SA on/off is
+    near-identical (41.0/39.3 %, 24.4/24.7 %, 83.6/83.6 %) ⇒ the double SA seed
+    is **not** the pixelation floor. Also confirmed the SIMD PT δ-loop bails
+    ~1e30 (glitch check at `ComputePixelPT`), so deep frames run per-pixel
+    direct-QD — that is the SM-2 slowness, not a δ-chain the plan's "DD δ"
+    framing assumed.
+  * `--qdfloorsweep` — builds the 128 per-pixel X coords the QD/OD path uses
+    (`QD.FromCenterOffset`, |c|≈2 centre) across a zoom sweep and counts
+    bit-distinct values. **QD separates all 128/128 pixels through 1e64**,
+    cliffing only at 1e66. So there is **no QD arithmetic pixelation floor in
+    the stated 1e40–1e58 band** — QD headroom runs ~6 orders past the band and
+    ~37 orders past the video zoom cap (5e27).
+  Conclusion: the 2026-06-22 "pixelation 1e40–1e58" report predates the 2.11
+  OD-arithmetic fix and the SM-1 iteration-cap finding; it is not a live QD
+  precision bug. The real remaining deep-zoom lever is **SM-2** (PT δ-loop bails
+  ~1e30 → slow per-pixel direct-QD; fix = rebasing to keep cheap SIMD PT viable
+  at any depth). Recommend closing 2.14 as obsolete and folding its intent into
+  SM-2. Probes: commits `baade13` (qdfloorprobe) + this entry's sweep.
 - 2026-07-05 — Deep-region smoke-test triage + `--regionprobe` diagnostic.
   New headless renderer (`Program.cs --regionprobe [maxIter]`) renders the
   reported deep regions at 128² single-sample and reports tier / wall-clock /

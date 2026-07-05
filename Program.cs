@@ -787,6 +787,63 @@ static class Program
             return 0;
         }
 
+        // --qdfloorsweep: Wave 2.14 — locate the QD (and OD) coordinate-
+        // separation floor DIRECTLY, no rendering. For a fixed deep centre and a
+        // sweep of zoom levels, build the 128 per-pixel X coordinates the render
+        // would use (QD.FromCenterOffset, same call the QD path makes) and count
+        // how many are bit-distinct. distinctQD < 128 ⇒ QD arithmetic can no
+        // longer separate adjacent pixels at that zoom = the true pixelation
+        // floor. distinctOD shows how far OD extends it. This settles whether the
+        // plan's "pixelation at 1e40–1e58" is a QD-arithmetic floor in that band
+        // (⇒ real 2.14 work) or a mis-attribution (⇒ close it).
+        if (args.Length > 0 && args[0] == "--qdfloorsweep")
+        {
+            const int W = 128;
+            // 3E47 Test centre — |c| ≈ 2, 4 QD limbs down to ~1e-51.
+            var cxQ = new FracturingFog.FFMath.QD(
+                -1.9918151296901943, -7.8219844803880472E-17,
+                 1.660139930392911E-34, 8.217274172159319E-51);
+            var cxO = new FracturingFog.FFMath.OD(
+                -1.9918151296901943, -7.8219844803880472E-17,
+                 1.660139930392911E-34, 8.217274172159319E-51, 0, 0, 0, 0);
+
+            double[] zooms =
+            {
+                1e40, 1e45, 1e48, 1e50, 1e52, 1e54, 1e56, 1e58,
+                1e60, 1e62, 1e64, 1e66, 1e70, 1e80, 1e100, 1e120,
+            };
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"QD/OD coordinate-separation sweep — {W} pixels wide, 3E47 centre (|c|≈2).");
+            sb.AppendLine("  distinctQD/OD = bit-distinct per-pixel X coords out of 128. <128 ⇒ pixels collapse.");
+
+            foreach (double zoom in zooms)
+            {
+                double scale = (3.5 / W) / zoom;
+
+                var qset = new System.Collections.Generic.HashSet<(double, double, double, double)>();
+                var oset = new System.Collections.Generic.HashSet<(double, double, double, double, double, double, double, double)>();
+                for (int i = 0; i < W; i++)
+                {
+                    double off = i - W * 0.5;
+                    var q = FracturingFog.FFMath.QD.FromCenterOffset(cxQ, off, scale);
+                    var o = FracturingFog.FFMath.OD.FromCenterOffset(cxO, off, scale);
+                    qset.Add((q.X0, q.X1, q.X2, q.X3));
+                    oset.Add((o.X0, o.X1, o.X2, o.X3, o.X4, o.X5, o.X6, o.X7));
+                }
+
+                string flag = qset.Count < W ? "  <-- QD FLOOR" : (oset.Count < W ? "  (OD floor)" : "");
+                sb.AppendLine(
+                    $"  zoom={zoom,8:G3} scale={scale,10:E3} distinctQD={qset.Count,4}/{W} " +
+                    $"distinctOD={oset.Count,4}/{W}{flag}");
+            }
+
+            string qsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "qdfloorsweep.out");
+            System.IO.File.WriteAllText(qsPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location
