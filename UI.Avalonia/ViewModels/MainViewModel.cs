@@ -229,23 +229,116 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Dla,                   "DLA (Brownian Tree)"),
     };
 
+    /// <summary>Category filter applied to the toolbar Type combo via its
+    /// right-click sort menu. Mirrors the Region combo's RegionSortMode. A pure
+    /// view concern — narrows which entries are listed without changing the
+    /// active fractal.</summary>
+    public enum FractalTypeFilter { Default, TwoD, ThreeD, User, CalcGen, Promoted }
+
+    private FractalTypeFilter _fractalFilter = FractalTypeFilter.Default;
+
+    /// <summary>User-equation family — the three built-ins backed by editable
+    /// equation sources (matches the "User" filter bucket).</summary>
+    private static bool IsUserFamily(FractalType t) =>
+           t == FractalType.UserEquation
+        || t == FractalType.Sandbox
+        || t == FractalType.UserBulb;
+
+    /// <summary>CalculatorGen-emitted built-ins (the "Generated …" labels).</summary>
+    private static bool IsCalcGen(FractalType t) =>
+           t == FractalType.GeneratedMandelbrotZ2
+        || t == FractalType.GeneratedMandelbrotZ3
+        || t == FractalType.GeneratedMandelbrotZ4
+        || t == FractalType.GeneratedMandelbrotZ5
+        || t == FractalType.GeneratedTricorn
+        || t == FractalType.GeneratedBurningShip;
+
+    private bool MatchesFilter(FractalType t) => _fractalFilter switch
+    {
+        FractalTypeFilter.TwoD    => !FractalViewState.IsThreeD(t),
+        FractalTypeFilter.ThreeD  => FractalViewState.IsThreeD(t),
+        FractalTypeFilter.User    => IsUserFamily(t),
+        FractalTypeFilter.CalcGen => IsCalcGen(t),
+        _                          => true, // Default (Promoted handled separately)
+    };
+
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label
-    /// table + the current <see cref="RegisteredFractalCatalog"/> snapshot.
-    /// Call after a user equation is saved/promoted so the combo picks up
-    /// the new entry.</summary>
+    /// table + the current <see cref="RegisteredFractalCatalog"/> snapshot,
+    /// narrowed by the active <see cref="FractalTypeFilter"/>. Call after a user
+    /// equation is saved/promoted so the combo picks up the new entry. Preserves
+    /// the current selection when it survives the rebuild.</summary>
     public void RebuildFractalEntries()
     {
+        // Remember the live pick so a filter flip doesn't drop the active
+        // fractal's highlight when it still qualifies for the new bucket.
+        var prevType = _selectedFractalEntry?.Type ?? _selectedFractalType;
+        var prevPromoted = _selectedFractalEntry?.Promoted;
+
         FractalEntries.Clear();
-        foreach (var (t, label) in BuiltInFractalLabels)
-            FractalEntries.Add(FractalTypeEntry.BuiltIn(t, label));
 
         var promoted = RegisteredFractalCatalog.Snapshot();
-        if (promoted.Count > 0)
+
+        if (_fractalFilter == FractalTypeFilter.Promoted)
         {
-            FractalEntries.Add(FractalTypeEntry.Divider());
+            // Promoted-only view: just the catalog entries, no built-ins.
             foreach (var r in promoted)
                 FractalEntries.Add(FractalTypeEntry.FromPromoted(r));
         }
+        else
+        {
+            foreach (var (t, label) in BuiltInFractalLabels)
+                if (MatchesFilter(t))
+                    FractalEntries.Add(FractalTypeEntry.BuiltIn(t, label));
+
+            // Promoted equations follow the "— Registered —" divider under the
+            // Default view only; the category filters list built-ins alone.
+            if (_fractalFilter == FractalTypeFilter.Default && promoted.Count > 0)
+            {
+                FractalEntries.Add(FractalTypeEntry.Divider());
+                foreach (var r in promoted)
+                    FractalEntries.Add(FractalTypeEntry.FromPromoted(r));
+            }
+        }
+
+        // Restore the highlight without re-triggering a render. If the prior
+        // pick was filtered out, leave _selectedFractalEntry pointing at it —
+        // the combo simply shows no selection until a filter that includes it
+        // is chosen; the active fractal is unchanged either way.
+        FractalTypeEntry? restore = null;
+        foreach (var e in FractalEntries)
+        {
+            if (e.IsDivider) continue;
+            if (prevPromoted != null ? ReferenceEquals(e.Promoted, prevPromoted)
+                                     : (e.Promoted == null && e.Type == prevType))
+            { restore = e; break; }
+        }
+        if (restore != null && !ReferenceEquals(_selectedFractalEntry, restore))
+        {
+            _selectedFractalEntry = restore;
+            this.RaisePropertyChanged(nameof(SelectedFractalEntry));
+        }
+    }
+
+    /// <summary>Build the Type combo's right-click sort/filter menu
+    /// (Default / 2D / 3D / User / CalcGen / Promoted). Mirrors
+    /// <see cref="FloatingMenuViewModel.BuildRegionSortMenu"/>; each pick flips
+    /// the filter and rebuilds the entry list.</summary>
+    public IReadOnlyList<ComboMenuItem> BuildFractalTypeSortMenu()
+    {
+        ComboMenuItem Filter(string header, FractalTypeFilter f) =>
+            ComboMenuItem.Item(header, _fractalFilter == f,
+                () => { _fractalFilter = f; RebuildFractalEntries(); });
+
+        return new List<ComboMenuItem>
+        {
+            Filter("Default", FractalTypeFilter.Default),
+            ComboMenuItem.Separator,
+            Filter("2D",       FractalTypeFilter.TwoD),
+            Filter("3D",       FractalTypeFilter.ThreeD),
+            Filter("User",     FractalTypeFilter.User),
+            Filter("CalcGen",  FractalTypeFilter.CalcGen),
+            Filter("Promoted", FractalTypeFilter.Promoted),
+        };
     }
 
     private FractalTypeEntry? FindEntryForType(FractalType type)

@@ -481,14 +481,20 @@ public sealed partial class MainWindow : Window
             AttachContextMenu(_sponge, shell);
         }
 
-        // Right-click sort menus on the toolbar Region / Theme combos. The
-        // build callbacks read the live _shell so they stay correct if the
+        // Right-click sort menus on the toolbar Type / Region / Theme combos.
+        // The build callbacks read the live _shell so they stay correct if the
         // DataContext is swapped; attach once so ContextRequested handlers
         // don't stack on re-attach.
         if (!_sortMenusAttached)
         {
+            ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarTypeCombo"),
+                () => _shell?.Main.BuildFractalTypeSortMenu() ?? System.Array.Empty<ComboMenuItem>());
+            // Region combo: "Edit region…" (from the Edit-Region enhancement)
+            // sits above the restored filter-by-fractal-type entries so both
+            // live in one flyout. Prepending here (rather than in the VM) keeps
+            // the ShowRegionEditor command coupling in the view layer.
             ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarRegionCombo"),
-                () => _shell?.FloatingMenu.BuildRegionSortMenu() ?? System.Array.Empty<ComboMenuItem>());
+                BuildRegionComboMenu);
             ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarThemeCombo"),
                 () => _shell?.FloatingMenu.BuildThemeSortMenu() ?? System.Array.Empty<ComboMenuItem>());
             _sortMenusAttached = true;
@@ -503,6 +509,25 @@ public sealed partial class MainWindow : Window
         SyncMenu();
         SyncEditor();
         SyncHelp();
+    }
+
+    // Region combo right-click menu: "Edit region…" + separator, then the
+    // FloatingMenu's filter-by-fractal-type entries (RegionSortMode). Rebuilt
+    // on every open so the filter's checked state stays live. Returns just the
+    // Edit entry if the shell isn't attached yet.
+    private System.Collections.Generic.IReadOnlyList<ComboMenuItem> BuildRegionComboMenu()
+    {
+        var items = new System.Collections.Generic.List<ComboMenuItem>
+        {
+            ComboMenuItem.Item("Edit region…", false,
+                () => _shell?.ShowRegionEditorCommand.Execute().Subscribe()),
+        };
+        if (_shell != null)
+        {
+            items.Add(ComboMenuItem.Separator);
+            items.AddRange(_shell.FloatingMenu.BuildRegionSortMenu());
+        }
+        return items;
     }
 
     private void DetachShell()

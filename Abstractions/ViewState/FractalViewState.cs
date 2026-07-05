@@ -222,13 +222,20 @@ namespace FracturingFog.ViewState
 
         /// <summary>True for fractal types that render in 3D camera space
         /// (camera dollies on zoom, right-drag rotates).</summary>
-        public bool Is3D => FractalType == FractalType.Mandelbulb
-                         || FractalType == FractalType.Mandelbox
-                         || FractalType == FractalType.Kifs
-                         || FractalType == FractalType.QuaternionJulia
-                         || FractalType == FractalType.QuaternionMandelbrot
-                         || FractalType == FractalType.Kleinian
-                         || FractalType == FractalType.BicomplexMandelbrot
-                         || FractalType == FractalType.UserBulb;
+        public bool Is3D => IsThreeD(FractalType);
+
+        /// <summary>Static 3D classifier — single source of truth for which
+        /// <see cref="FractalType"/> values render in 3D camera space. Used by
+        /// the instance <see cref="Is3D"/> and by UI filters (toolbar Type combo
+        /// 2D/3D sort menu) that need the classification without a view state.</summary>
+        public static bool IsThreeD(FractalType t) =>
+               t == FractalType.Mandelbulb
+            || t == FractalType.Mandelbox
+            || t == FractalType.Kifs
+            || t == FractalType.QuaternionJulia
+            || t == FractalType.QuaternionMandelbrot
+            || t == FractalType.Kleinian
+            || t == FractalType.BicomplexMandelbrot
+            || t == FractalType.UserBulb;
     }
 }
