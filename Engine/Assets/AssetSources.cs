@@ -113,7 +113,7 @@ namespace FracturingFog.Assets
         public IEnumerable<AssetDescriptor> Enumerate()
         {
             foreach (var t in UserColorThemeLibrary.Instance.Themes)
-                yield return new AssetDescriptor(t.Name, Kind, null, AssetSizing.Bytes(t), null);
+                yield return new AssetDescriptor(t.Name, Kind, null, AssetSizing.Bytes(t), ThemeSwatch.RenderPng(t));
         }
 
         public bool Delete(string name) => UserColorThemeLibrary.Instance.Remove(name);
