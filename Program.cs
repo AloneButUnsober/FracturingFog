@@ -952,6 +952,147 @@ static class Program
             return allPass ? 0 : 1;
         }
 
+        // --inputprobe: locate where interactive pan/zoom precision breaks near
+        // the QD→OD tier boundary (user report: controls lose precision / stop
+        // working approaching ~9e49). Drives FractalInputController headlessly at
+        // a sweep of zooms and checks the resulting centre lands where the
+        // clicked/dragged pixel should map, measured in PIXELS of error (0 =
+        // perfect anchoring). Isolates whether the fault is the tier cascade,
+        // the double pixel·scale delta, or the QD precision floor.
+        if (args.Length > 0 && args[0] == "--inputprobe")
+        {
+            const int W = 1000, H = 1000;
+            // Deep centre with full QD limbs (3E47 region).
+            double[] cx = { -1.9918151296901943, -7.8219844803880472E-17, 1.660139930392911E-34, 8.217274172159319E-51 };
+            double[] cy = { -5.5240415753972429E-06, -2.8659813126937928E-22, 6.6910924119662832E-39, 6.2394735914401016E-55 };
+            double[] zooms = { 1e40, 1e46, 1e48, 9e49, 1.1e50, 1e52, 1e55 };
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Input probe — {W}×{H} client. Double-click + drag-pan anchor error in PIXELS.");
+            sb.AppendLine("  tier: QD (1e25–1e50) / OD (>1e50). err ≈ 0 good; err ≥ 1 px = broken anchoring.");
+
+            foreach (double zoom in zooms)
+            {
+                var vs = new FracturingFog.ViewState.FractalViewState
+                {
+                    FractalType = FracturingFog.FractalType.Mandelbrot,
+                    Quality = FracturingFog.Models.QualityPreset.Extreme,
+                    Zoom = zoom,
+                    CenterX = cx[0], CenterXLo = cx[1], CenterX2 = cx[2], CenterX3 = cx[3],
+                    CenterY = cy[0], CenterYLo = cy[1], CenterY2 = cy[2], CenterY3 = cy[3],
+                };
+                var ctl = new FracturingFog.Input.FractalInputController(vs);
+                string tier = zoom > 1e50 ? "OD" : "QD";
+                double scale = 3.5 / (Math.Max(W, H) * zoom);
+
+                // Truth centre as OD (all 8 limbs).
+                FracturingFog.FFMath.OD CenterOD(bool xAxis) => xAxis
+                    ? new FracturingFog.FFMath.OD(vs.CenterX, vs.CenterXLo, vs.CenterX2, vs.CenterX3,
+                                                  vs.CenterX4, vs.CenterX5, vs.CenterX6, vs.CenterX7)
+                    : new FracturingFog.FFMath.OD(vs.CenterY, vs.CenterYLo, vs.CenterY2, vs.CenterY3,
+                                                  vs.CenterY4, vs.CenterY5, vs.CenterY6, vs.CenterY7);
+
+                var startCXod = CenterOD(true);
+                var startCYod = CenterOD(false);
+
+                // ── Double-click focus: click 200px right, 120px down of centre.
+                int clickX = W / 2 + 200, clickY = H / 2 + 120;
+                ctl.OnPointerDoubleClick(new FracturingFog.Input.PointerInput(
+                    clickX, clickY, W, H,
+                    FracturingFog.Input.PointerButton.Left,
+                    FracturingFog.Input.InputModifiers.None));
+                // Expected new centre = old centre + pixelOffset·scale (OD truth).
+                var expDcX = startCXod + (200.0 * scale);
+                var expDcY = startCYod + (120.0 * scale);
+                double dcErrX = (double)(CenterOD(true) - expDcX) / scale;
+                double dcErrY = (double)(CenterOD(false) - expDcY) / scale;
+                double dcErr = Math.Sqrt(dcErrX * dcErrX + dcErrY * dcErrY);
+
+                // reset centre for the pan test
+                vs.CenterX = cx[0]; vs.CenterXLo = cx[1]; vs.CenterX2 = cx[2]; vs.CenterX3 = cx[3];
+                vs.CenterX4 = vs.CenterX5 = vs.CenterX6 = vs.CenterX7 = 0;
+                vs.CenterY = cy[0]; vs.CenterYLo = cy[1]; vs.CenterY2 = cy[2]; vs.CenterY3 = cy[3];
+                vs.CenterY4 = vs.CenterY5 = vs.CenterY6 = vs.CenterY7 = 0;
+
+                // ── Drag-pan: press at centre, move to (+200,+120). Centre should
+                // move by -(dx)·scale so the grabbed point stays under cursor.
+                ctl.OnPointerDown(new FracturingFog.Input.PointerInput(
+                    W / 2, H / 2, W, H, FracturingFog.Input.PointerButton.Left,
+                    FracturingFog.Input.InputModifiers.None));
+                ctl.OnPointerMove(new FracturingFog.Input.PointerInput(
+                    W / 2 + 200, H / 2 + 120, W, H, FracturingFog.Input.PointerButton.Left,
+                    FracturingFog.Input.InputModifiers.None));
+                var expPanX = startCXod + (-200.0 * scale);
+                var expPanY = startCYod + (-120.0 * scale);
+                double panErrX = (double)(CenterOD(true) - expPanX) / scale;
+                double panErrY = (double)(CenterOD(false) - expPanY) / scale;
+                double panErr = Math.Sqrt(panErrX * panErrX + panErrY * panErrY);
+
+                sb.AppendLine(
+                    $"  zoom={zoom,8:G3} {tier}  scale={scale,10:E3}  " +
+                    $"dblclick-err={dcErr,10:E2}px  pan-err={panErr,10:E2}px");
+            }
+
+            // ── Cumulative wheel-zoom drift: zoom IN from 1e12 with the cursor
+            // held off-centre, the way a user reaches deep zoom. Anchoring
+            // promises the world point under the cursor stays put; measure how
+            // far it drifts (in final-frame pixels) after N steps.
+            sb.AppendLine("  --- cumulative wheel zoom-in, cursor at (+200,+120), anchor drift ---");
+            {
+                // Realistic path: start shallow with a double-only centre (no
+                // low limbs), the way a user actually reaches deep zoom.
+                var vs = new FracturingFog.ViewState.FractalViewState
+                {
+                    FractalType = FracturingFog.FractalType.Mandelbrot,
+                    Quality = FracturingFog.Models.QualityPreset.Extreme,
+                    Zoom = 1e6,
+                    CenterX = -0.743643887037158704, CenterXLo = 0, CenterX2 = 0, CenterX3 = 0,
+                    CenterY =  0.131825904205311970, CenterYLo = 0, CenterY2 = 0, CenterY3 = 0,
+                };
+                var ctl = new FracturingFog.Input.FractalInputController(vs);
+                int curX = W / 2 + 200, curY = H / 2 + 120;
+
+                FracturingFog.FFMath.OD ODx() => new(vs.CenterX, vs.CenterXLo, vs.CenterX2, vs.CenterX3,
+                                                     vs.CenterX4, vs.CenterX5, vs.CenterX6, vs.CenterX7);
+                FracturingFog.FFMath.OD ODy() => new(vs.CenterY, vs.CenterYLo, vs.CenterY2, vs.CenterY3,
+                                                     vs.CenterY4, vs.CenterY5, vs.CenterY6, vs.CenterY7);
+                // World point under the cursor BEFORE any zoom.
+                double s0 = 3.5 / (Math.Max(W, H) * vs.Zoom);
+                var worldX0 = ODx() + (curX - W * 0.5) * s0;
+                var worldY0 = ODy() + (curY - H * 0.5) * s0;
+
+                double prevZoom = vs.Zoom;
+                int steps = 0;
+                while (vs.Zoom < 8e49 && steps < 100000)
+                {
+                    ctl.OnWheel(new FracturingFog.Input.WheelInput(
+                        curX, curY, W, H, +120, FracturingFog.Input.InputModifiers.None));
+                    steps++;
+                    if (vs.Zoom == prevZoom) break;   // clamped
+                    prevZoom = vs.Zoom;
+
+                    if (steps == 1 || vs.Zoom > 8e49 * 0.999 ||
+                        (steps % 40 == 0))
+                    {
+                        double s = 3.5 / (Math.Max(W, H) * vs.Zoom);
+                        // Where the ORIGINAL world point now sits on screen.
+                        double onScreenX = W * 0.5 + (double)(worldX0 - ODx()) / s;
+                        double onScreenY = H * 0.5 + (double)(worldY0 - ODy()) / s;
+                        double drift = Math.Sqrt(
+                            (onScreenX - curX) * (onScreenX - curX) +
+                            (onScreenY - curY) * (onScreenY - curY));
+                        sb.AppendLine(
+                            $"    step={steps,5} zoom={vs.Zoom,9:G3} anchor-drift={drift,10:E2}px");
+                    }
+                }
+            }
+
+            string ipPath = System.IO.Path.Combine(AppContext.BaseDirectory, "inputprobe.out");
+            System.IO.File.WriteAllText(ipPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location
