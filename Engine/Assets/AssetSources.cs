@@ -112,10 +112,33 @@ namespace FracturingFog.Assets
 
         public IEnumerable<AssetDescriptor> Enumerate()
         {
+            // User-saved, data-driven themes first: their gradient Stops fully
+            // describe a swatch, so ThemeSwatch rasterises it eagerly (few of
+            // them, cheap).
             foreach (var t in UserColorThemeLibrary.Instance.Themes)
                 yield return new AssetDescriptor(t.Name, Kind, null, AssetSizing.Bytes(t), ThemeSwatch.RenderPng(t));
+
+            // Then the built-in curated roster (ColorPalette.BuiltIns) — the same
+            // themes shown in the toolbar combo. These are C# IColorMap classes,
+            // not library entries: no Stops to rasterise and nothing on disk to
+            // delete or export, so they're read-only and carry no size. Their
+            // swatch comes from sampling the map (ColorMapStrip), handed as a lazy
+            // factory so the ~250 built-ins only rasterise as rows scroll into
+            // view rather than all up front on Enumerate.
+            foreach (var map in ColorPalette.BuiltIns)
+            {
+                string name = ColorPalette.GetStaticName(map);
+                if (string.IsNullOrEmpty(name)) continue;
+                var captured = map;
+                yield return new AssetDescriptor(
+                    name, Kind, null, 0, ThumbnailBytes: null,
+                    ReadOnly: true,
+                    ThumbnailFactory: () => ColorMapStrip.RenderPng(captured));
+            }
         }
 
+        // Only user-library themes are removable; a built-in name has no JSON
+        // entry, so Remove returns false for it (nothing deleted).
         public bool Delete(string name) => UserColorThemeLibrary.Instance.Remove(name);
 
         public string? ExportJson(string name) => AssetSizing.Json(

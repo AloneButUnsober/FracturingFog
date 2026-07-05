@@ -129,6 +129,10 @@
                         <TextBlock Classes="value" Text="{Binding SelectedAsset.KindLabel}" />
                     </StackPanel>
                     <StackPanel Spacing="2">
+                        <TextBlock Classes="label" Text="Source" />
+                        <TextBlock Classes="value" Text="{Binding SelectedAsset.SourceText}" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
                         <TextBlock Classes="label" Text="Size" />
                         <TextBlock Classes="value" Text="{Binding SelectedAsset.SizeText}" />
                     </StackPanel>
