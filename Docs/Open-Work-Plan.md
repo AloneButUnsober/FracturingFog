@@ -232,6 +232,27 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-07-05 — Deep-region smoke-test triage + `--regionprobe` diagnostic.
+  New headless renderer (`Program.cs --regionprobe [maxIter]`) renders the
+  reported deep regions at 128² single-sample and reports tier / wall-clock /
+  in-set% / distinct-iter / distinct-colour. Dispositions of the smoke report:
+  * **"renders solid colour"** (Deeper and Deeper, Deep Lightning in Space) —
+    **iteration-count issue, NOT a precision bug.** At maxIter=8192 all four deep
+    regions render valid fractals (distColour 550–1527, 0% in-set); at maxIter=300
+    all collapse to 100% in-set / one colour. Escape bands are 328–3940 iters, so
+    any effective cap below a region's band paints it flat. The reported-solid
+    regions (need 379 / 808 iters) were rendered under their band. Fix path: the
+    region's saved MaxIterations (or the app's per-region auto-iter) is too low —
+    not the QD path.
+  * **"takes minutes"** (3E47, E45Test04) — inherent deep-QD-perturbation cost:
+    3E47 = 11.2 s at 128² single-sample → minutes at full window × AA16 (Extreme).
+    Not a defect.
+  * **Video zoom clamp at E+27** — by design (`VideoZoom.cs:241`, Ultra cap;
+    Extreme-regime pixelation). Not a bug.
+  * **Video Settings phantom modal (Windows)** — nested modal-of-a-modal failed
+    to front on Win32 (+ ShowInTaskbar=false → unreachable). Fixed 43168a9:
+    Activate-on-Opened for the Video + Audio dialogs. Needs Windows verification.
+  * Wave 3.5 confirmed inert in production (flag set only in the probe).
 - 2026-07-05 — Wave 3.5 shipped opt-in — reference-orbit recycling across
   frames. `MandelbrotCalculator.AllowRefOrbitRecycle` (static, default **OFF**)
   gates `TryRecycleReferenceOrbit`: when the view centre moved by less than
