@@ -515,6 +515,97 @@ static class Program
             return 0;
         }
 
+        // --reforbitrecycle: Wave 3.5 — verify reference-orbit recycling across
+        // frames reproduces a fresh render. For each DD-tier viewpoint the
+        // target centre C1 is rendered twice:
+        //   * truth   — a fresh orbit built AT C1 (recycling off).
+        //   * recycle — build the orbit at a nearby C0, then move to C1 with
+        //               recycling ON so the C0 orbit is reused with a Δc shift.
+        // The recycled frame must reproduce the fresh one everywhere except a
+        // negligible fraction of escape-boundary pixels, which flip iteration
+        // count under ANY change to the reference (the reference rounds dc
+        // differently), so bit-reproduction is not attainable and not the
+        // metric. What a Δc-injection or validity-gate BUG looks like is a
+        // large-area shift (whole image dc-offset), caught by the significant-
+        // divergence fraction below. RefRecycleHits must be ≥ 1 (the recycle
+        // path actually engaged) or the test proved nothing.
+        if (args.Length > 0 && args[0] == "--reforbitrecycle")
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Reference-orbit recycle probe — Wave 3.5");
+            sb.AppendLine("  truth = fresh orbit at C1; recycle = C0 orbit reused for C1 with Δc shift.");
+            sb.AppendLine("  miss = any Δiter≠0; big = Δiter>3 (boundary flips excluded).");
+            sb.AppendLine("  PASS = recycle engaged AND significant-divergence (big) fraction < 0.1%.");
+
+            const int W = 128, H = 128, panPx = 6;
+            const double baseCx = -1.1726999042772253, baseCxLo = 8.9529605787776783E-17;
+            const double baseCy = -0.2968356710071185, baseCyLo = -2.3536240906562374E-18;
+            (string label, double zoom, int iter)[] cases =
+            {
+                ("1e13", 1.0e13, 3000),
+                ("1e15", 1.0e15, 4000),
+                ("1e18", 1.0e18, 5000),
+                ("1e22", 1.0e22, 6000),
+            };
+
+            bool allPass = true;
+            foreach (var c in cases)
+            {
+                double scale = (3.5 / Math.Max(W, H)) / c.zoom;
+                double panWorld = panPx * scale;
+                var c1x = new FracturingFog.FFMath.DD(baseCx, baseCxLo)
+                        + new FracturingFog.FFMath.DD(panWorld, 0);
+
+                // Truth: fresh orbit at C1 (recycle off).
+                FracturingFog.MandelbrotCalculator.AllowRefOrbitRecycle = false;
+                var truth = new FracturingFog.MandelbrotCalculator(W, H)
+                {
+                    CenterX = c1x.Hi, CenterXLo = c1x.Lo,
+                    CenterY = baseCy, CenterYLo = baseCyLo,
+                    Zoom = c.zoom, MaxIterations = c.iter,
+                    ColorMap = new FracturingFog.Models.HsvPalette(),
+                };
+                truth.Calculate();
+                int[] truthIter = (int[])truth.IterationBuffer.Clone();
+
+                // Recycle: build the orbit at C0, then move to C1 with recycling
+                // on so the C0 orbit is reused.
+                var recyc = new FracturingFog.MandelbrotCalculator(W, H)
+                {
+                    CenterX = baseCx, CenterXLo = baseCxLo,
+                    CenterY = baseCy, CenterYLo = baseCyLo,
+                    Zoom = c.zoom, MaxIterations = c.iter,
+                    ColorMap = new FracturingFog.Models.HsvPalette(),
+                };
+                FracturingFog.MandelbrotCalculator.AllowRefOrbitRecycle = false;
+                recyc.Calculate();                          // seed orbit + BLA at C0
+                FracturingFog.MandelbrotCalculator.AllowRefOrbitRecycle = true;
+                recyc.CenterX = c1x.Hi; recyc.CenterXLo = c1x.Lo;
+                recyc.Calculate();                          // should recycle to C1
+                FracturingFog.MandelbrotCalculator.AllowRefOrbitRecycle = false;
+                int[] recIter = recyc.IterationBuffer;
+
+                long hits = recyc.RefRecycleHits;
+                int mismatch = 0, bigMiss = 0, maxDelta = 0;
+                for (int i = 0; i < truthIter.Length; i++)
+                {
+                    int d = Math.Abs(truthIter[i] - recIter[i]);
+                    if (d != 0) { mismatch++; if (d > maxDelta) maxDelta = d; if (d > 3) bigMiss++; }
+                }
+                double mmFrac = (double)mismatch / truthIter.Length;
+                double bigFrac = (double)bigMiss / truthIter.Length;
+                bool pass = hits >= 1 && bigFrac < 0.001;
+                allPass &= pass;
+                sb.AppendLine($"  zoom={c.label,-6} iter={c.iter,5} hits={hits} miss={mismatch,6} ({mmFrac,7:P2}) big={bigMiss,4} ({bigFrac,7:P2}) maxΔ={maxDelta,4} [{(pass ? "PASS" : "FAIL")}]");
+            }
+
+            sb.AppendLine(allPass ? "RESULT: PASS" : "RESULT: FAIL");
+            string rrPath = System.IO.Path.Combine(AppContext.BaseDirectory, "reforbitrecycle.out");
+            System.IO.File.WriteAllText(rrPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return allPass ? 0 : 1;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location

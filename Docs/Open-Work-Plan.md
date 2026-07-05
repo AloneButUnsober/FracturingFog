@@ -116,7 +116,7 @@ audio-reactive dialog without crash.
 | 3.2 | T2.2 — Suppress pre-overlay snapshot during video record | ✅ Already shipped — `FractalRenderHost.cs:2085` `if (!_recordingActive)` gate; pooled `_uploadPrePool` LOH |
 | 3.3 | T2.3 — `EscapeTimeCalculator` SIMD inner loop (Mandelbrot/Julia/BurningShip/Tricorn/Multibrot) | ✅ Shipped 2026-06-22 — Mandelbrot/Julia/BurningShip/Tricorn already SIMD; Multibrot d∈{3,4,5} added (direct complex-mul scalar + `StepSimd`); d≥6 keeps polar fallback. `SimdSupported` flag drives dispatch in `EscapeTimeCalculator.Calculate` |
 | 3.4 | T3.3 — non-temporal `Avx.Store*` writes | ✅ Shipped 2026-06-22 — `ProcessRowSimd` gains `StoreAlignedNonTemporal` fast-path when dst is 32-byte aligned; pre-loop alignment check splits two hot loops |
-| 3.5 | T3.2 — ref-orbit recycling across video frames | 🟡 Deferred 2026-06-22 — needs orbit-validity checkpoint infrastructure (re-eval cached orbit vs new dc, reuse when |δ_n| stays within BLA radius); ~1-2 d, revisit after Wave 4 |
+| 3.5 | T3.2 — ref-orbit recycling across video frames | 🟢 Shipped opt-in 2026-07-05 — `MandelbrotCalculator.AllowRefOrbitRecycle` (default OFF). `TryRecycleReferenceOrbit` keeps the cached orbit when the centre moved < 25% of the frame corner (same tier + maxIter-covered); Δc injected into the SIMD PT dc (`_refRecycleDx/Dy`), DD/QD/OD glitch fallbacks stay exact via `absoluteWorldCoord − storedRefCentre`; the cheap BLA/SA tables rebuild for the widened dc, the expensive orbit build is skipped. Default path bit-identical (`x + 0.0`). Headless gate `--reforbitrecycle` (fresh-vs-recycled parity) PASS: ≤3/16384 boundary-flip pixels, 0 large-area divergence. **Remaining before production-on:** wire into the video pipeline + deep-zoom visual flicker sign-off; QD/OD tiers use the identical code path but are probe-covered only at DD tier so far |
 | 3.6 | T3.1 ext — HLSL palette codegen for hand-written `IColorMap`; GPU `ColorBuffer` for orbit-aware themes | ✅ Shipped 2026-06-22 — `HsvPalette` + all 19 sibling hand-written themes now implement `IGpuHlslPalette`. Shared HLSL prelude in `Engine/Models/HlslPaletteHelpers.cs` (cg_mods + cg_hsv_to_rgb mirroring Fractals.HsvToRgb). Auto-picked by `EscapeTimeCalculator.TryDispatchGpu` |
 | 3.7 | Finding D — Adaptive HE crossfade lerp | ✅ Shipped 2026-06-22 — `RecolorActiveToBuffer` now bakes HE into the recolor target via `BuildHistogramCdf` + `ApplyHistogramEqualizationWithCdf` when `ViewState.HistogramEq > 0`; eliminates the post-fade snap |
 | 3.8 | Pan/keyboard input fails at zoom ≥ 1e24 — QD-limb update in pan-zoom command pipeline | ✅ Superseded by Wave 2.15 (2026-06-22) — `FractalInputController.cs` all 6 pan/zoom sites carry OD/QD/DD/SP branches with `StoreOD`/`StoreQD`/`StoreDD` writing all limbs |
@@ -232,6 +232,26 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-07-05 — Wave 3.5 shipped opt-in — reference-orbit recycling across
+  frames. `MandelbrotCalculator.AllowRefOrbitRecycle` (static, default **OFF**)
+  gates `TryRecycleReferenceOrbit`: when the view centre moved by less than
+  `RecycleMaxShiftFactor` (0.25) of the frame's corner-dc — same precision tier,
+  cached maxIter covers the frame — the cached reference orbit is reused instead
+  of rebuilt. The centre shift Δc = newCentre − cachedCentre (computed at the
+  tier's DD/QD/OD precision, rounded to double) is injected into the SIMD PT dc
+  via `_refRecycleDx/_refRecycleDy` in the scalar / PT4 / PT8 paths; the DD/QD/OD
+  glitch fallbacks need no change because they already derive
+  δc = absoluteWorldCoord − storedRefCentre. The expensive orbit build is
+  skipped; the cheap BLA/SA tables rebuild for the widened dc (the kept orbit is
+  a valid perturbation base well past the BLA linearisation radius). Default path
+  is bit-identical (`x + 0.0 == x`). New headless gate `--reforbitrecycle`
+  (Program.cs) renders each target centre twice — a fresh orbit vs a recycled one
+  — and PASSes: recycling engages every case, ≤ 3 / 16384 pixels differ (escape-
+  boundary flips, inherent to any reference change), **zero** large-area
+  divergence at DD-tier zooms 1e13–1e22. Public `RefRecycleHits`/`RefRecycleMisses`
+  diagnostics. **Not yet production-on** — needs the video pipeline to opt in +
+  a deep-zoom visual flicker sign-off; QD/OD tiers run the identical code path
+  but the probe only exercises DD tier (representable pan). See item 3.5.
 - 2026-07-05 — Wave 5.9.f1 attempted — KIFS fold fixes + headless probe.
   Added `--kifsprobe` (Program.cs) + `KifsCalculator.ProbeDE` test hook: a
   headless geometric self-test that sphere-traces the DE inward along a
