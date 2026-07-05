@@ -158,13 +158,44 @@ public static class AcceleratorProbe
             sb.AppendLine("PASS: CPU accelerator constructed + disposed.");
         }
 
+        // Per-RID chosen-device assert (Open-Work-Plan 1.C3). The compute
+        // paths (UserBulbGpuCalculator, GpuAcceleratorHost, the CalcGen
+        // template, …) all pick their device via
+        // GetPreferredDevice(preferCPU: false) — CUDA → OpenCL → CPU. Probe
+        // the same selection here so the smoke asserts what the app actually
+        // runs on, not merely that a CPU device is enumerable somewhere.
+        AcceleratorType chosenKind = AcceleratorType.CPU;
+        try
+        {
+            using var ctx = Context.Create(b => b.Default());
+            var chosen = ctx.GetPreferredDevice(preferCPU: false);
+            if (chosen == null)
+            {
+                sb.AppendLine("FAIL: GetPreferredDevice returned no device.");
+                ok = false;
+            }
+            else
+            {
+                chosenKind = chosen.AcceleratorType;
+                using var acc = chosen.CreateAccelerator(ctx);
+                sb.Append("PASS: chosen device ").Append(chosenKind)
+                  .Append(" — ").Append(chosen.Name)
+                  .AppendLine(" (constructed + disposed).");
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.Append("FAIL: chosen-device create: ").AppendLine(ex.Message);
+            ok = false;
+        }
+
         bool isArmMac = OperatingSystem.IsMacOS() &&
             System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
                 System.Runtime.InteropServices.Architecture.Arm64;
         bool isArmLinux = OperatingSystem.IsLinux() &&
             System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
                 System.Runtime.InteropServices.Architecture.Arm64;
-        if ((isArmMac || isArmLinux) && sawCuda)
+        if ((isArmMac || isArmLinux) && (sawCuda || chosenKind == AcceleratorType.Cuda))
         {
             sb.AppendLine("FAIL: CUDA device on ARM host — packaging or driver bug.");
             ok = false;
