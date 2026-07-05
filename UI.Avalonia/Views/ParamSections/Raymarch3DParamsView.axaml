@@ -1,0 +1,251 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             x:Class="FracturingFog.UI.Avalonia.Views.ParamSections.Raymarch3DParamsView"
+             x:DataType="vm:FractalParamsViewModel">
+
+    <!--
+      Wave 5.8 — per-family extract of FractalParamsView. 3D / 4D raymarcher
+      families (share the cam θ/φ/dist pattern). Sections IsVisible-gated on the
+      shared VM. The Lighting & FX launcher stays in the parent dialog.
+    -->
+    <StackPanel Spacing="6">
+
+        <!-- Mandelbulb -->
+        <Grid IsVisible="{Binding IsMandelbulb}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Power N:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="2" Maximum="16" Increment="0.1" FormatString="F1"
+                           Value="{Binding BulbPower, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="2" Maximum="16" Increment="1" FormatString="F0"
+                           Value="{Binding BulbIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding BulbCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding BulbCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding BulbCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Mandelbox -->
+        <Grid IsVisible="{Binding IsMandelbox}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Scale:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-4" Maximum="4" Increment="0.1" FormatString="F2"
+                           Value="{Binding MandelboxScale, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Per-iter scale (z = scale·sphereFold(boxFold(z)) + c). Classics: −1.5, 2.0, 3.0." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Fixed radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.1" Maximum="4" Increment="0.05" FormatString="F3"
+                           Value="{Binding MandelboxFixedRadius, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Min radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="0.05" Maximum="2" Increment="0.05" FormatString="F3"
+                           Value="{Binding MandelboxMinRadius, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                           Value="{Binding MandelboxIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding MandelboxCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding MandelboxCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding MandelboxCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- KIFS -->
+        <Grid IsVisible="{Binding IsKifs}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Fold:" VerticalAlignment="Center" />
+            <ComboBox  Grid.Row="0" Grid.Column="1"
+                       ItemsSource="{Binding KifsFoldKinds}"
+                       SelectedItem="{Binding KifsFold, Mode=TwoWay}" Margin="0,2"
+                       ToolTip.Tip="Menger (sort-3, scale 3), Sierpinski (3 vertex reflections, scale 2), Octahedron (Menger w/o z-mirror), Dodecahedron (φ-plane mirrors), MandelboxRot (box-fold + Y rotation, scale 2). GPU path runs Menger / Sierpinski only — others fall back to CPU." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                           Value="{Binding KifsIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Scale (0=auto):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="0" Maximum="6" Increment="0.1" FormatString="F2"
+                           Value="{Binding KifsScale, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Per-iter linear scale after fold. 0 = use the fold's canonical default (3 Menger, 2 Sierpinski)." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Offset X:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="-3" Maximum="3" Increment="0.05" FormatString="F3"
+                           Value="{Binding KifsOffsetX, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Offset Y:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="-3" Maximum="3" Increment="0.05" FormatString="F3"
+                           Value="{Binding KifsOffsetY, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Offset Z:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="-3" Maximum="3" Increment="0.05" FormatString="F3"
+                           Value="{Binding KifsOffsetZ, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding KifsCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding KifsCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding KifsCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Quaternion Julia -->
+        <Grid IsVisible="{Binding IsQuatJulia}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="c.X:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding QJuliaCX, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Constant quaternion c — X (first) component." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="c.Y:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding QJuliaCY, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="c.Z:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding QJuliaCZ, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="c.W:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding QJuliaCW, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Slice w:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding QJuliaSliceW, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="W component of the 3D slice plane through 4D ℍ. Move to see different cross-sections of the same set." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                           Value="{Binding QJuliaIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding QJuliaCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding QJuliaCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding QJuliaCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Quaternion Mandelbrot -->
+        <Grid IsVisible="{Binding IsQuatMandelbrot}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Slice w:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding QMandelSliceW, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="W component of the 3D slice plane through 4D c-space. Pixel (x,y,z) → c = (x,y,z, sliceW)." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                           Value="{Binding QMandelIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding QMandelCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding QMandelCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding QMandelCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Bicomplex Mandelbrot -->
+        <Grid IsVisible="{Binding IsBicomplexMandelbrot}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Slice axis:" VerticalAlignment="Center" />
+            <ComboBox  Grid.Row="0" Grid.Column="1"
+                       ItemsSource="{Binding BicomplexSliceAxes}"
+                       SelectedItem="{Binding BicomplexSliceAxis, Mode=TwoWay}" Margin="0,2"
+                       ToolTip.Tip="Which 4D algebra axis takes the slice constant. K (default) keeps legacy behaviour; J / I / R rotate the slice through different bicomplex projections. GPU path runs K-axis only — other axes fall back to CPU." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Slice W:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding BicomplexSliceW, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Constant value taken by the selected slice axis. 0 = extrudes the standard 2D Mandelbrot along the chosen axis." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="DE iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                           Value="{Binding BicomplexIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding BicomplexCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding BicomplexCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding BicomplexCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Kleinian -->
+        <Grid IsVisible="{Binding IsKleinian}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Inversion iter:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="2" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding KleinianIterations, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Sphere-inversion iteration cap. Higher = sharper limit-set boundary, slower per sample." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Sphere scale:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.25" Maximum="4.0" Increment="0.05" FormatString="F3"
+                           Value="{Binding KleinianSphereScale, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Tetrahedral arrangement scale. 1 = tangent at edge midpoints; smaller separates the spheres." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding KleinianCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding KleinianCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding KleinianCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+    </StackPanel>
+</UserControl>

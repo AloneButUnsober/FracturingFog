@@ -1,0 +1,141 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             x:Class="FracturingFog.UI.Avalonia.Views.ParamSections.EscapeTimeParamsView"
+             x:DataType="vm:FractalParamsViewModel">
+
+    <!--
+      Wave 5.8 — per-family extract of FractalParamsView. 2D escape-time
+      families. Each section is IsVisible-gated on the shared VM; the parent
+      dialog hosts this control with the same FractalParamsViewModel DataContext.
+    -->
+    <StackPanel Spacing="6">
+
+        <!-- Julia -->
+        <StackPanel IsVisible="{Binding IsJulia}" Spacing="6">
+            <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Julia c (real):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                               Value="{Binding JuliaR, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Julia c (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                               Value="{Binding JuliaI, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+
+            <!-- Animation: orbit c around the origin at user-chosen speed/direction. -->
+            <Border BorderBrush="#404040" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Animate direction:" VerticalAlignment="Center" />
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                        <RadioButton GroupName="JuliaAnimDir"
+                                     Content="Forward"
+                                     IsChecked="{Binding JuliaAnimateForward, Mode=TwoWay}" />
+                        <RadioButton GroupName="JuliaAnimDir"
+                                     Content="Reverse"
+                                     IsChecked="{Binding JuliaAnimateReverse, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Speed (rad/s):" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Minimum="0.001" Maximum="6.283" Increment="0.05" FormatString="F3"
+                                   Value="{Binding JuliaAnimateSpeed, Mode=TwoWay}" Margin="0,2" />
+
+                    <Button Grid.Row="2" Grid.Column="1"
+                            Content="{Binding JuliaAnimateButtonText}"
+                            Command="{Binding ToggleJuliaAnimateCommand}"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,4,0,0" />
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <!-- Multibrot -->
+        <Grid IsVisible="{Binding IsMultibrot}" ColumnDefinitions="160,*">
+            <TextBlock Grid.Column="0" Text="Exponent d:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Column="1"
+                           Minimum="2" Maximum="8" Increment="1" FormatString="F0"
+                           Value="{Binding MultibrotExponent, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Phoenix -->
+        <Grid IsVisible="{Binding IsPhoenix}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="p (real):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                           Value="{Binding PhoenixR, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="p (imag):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.0001" FormatString="F5"
+                           Value="{Binding PhoenixI, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Glynn -->
+        <Grid IsVisible="{Binding IsGlynn}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Glynn c (real):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.001" FormatString="F4"
+                           Value="{Binding GlynnR, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Glynn c (imag):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.001" FormatString="F4"
+                           Value="{Binding GlynnI, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Spider -->
+        <Grid IsVisible="{Binding IsSpider}"
+              ColumnDefinitions="160,*">
+            <TextBlock Grid.Column="0" Text="c decay:" VerticalAlignment="Center"
+                       ToolTip.Tip="c := decay·c + z each step. 0.5 canonical, 1.0 = Mandelbrot, 0 = c collapses onto z." />
+            <NumericUpDown Grid.Column="1"
+                           Minimum="0" Maximum="1" Increment="0.01" FormatString="F4"
+                           Value="{Binding SpiderCDecay, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Logistic -->
+        <Grid IsVisible="{Binding IsLogistic}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Burn-in iters:" VerticalAlignment="Center"
+                       ToolTip.Tip="Iterations discarded before density accumulation. Plot = MaxIter − BurnIn." />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="0" Maximum="100000" Increment="100" FormatString="F0"
+                           Value="{Binding LogisticBurnIn, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Seed x₀:" VerticalAlignment="Center"
+                       ToolTip.Tip="Initial value for the logistic map iteration. Any non-fixed-point seed in (0,1) converges to the same attractor." />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.001" Maximum="0.999" Increment="0.01" FormatString="F4"
+                           Value="{Binding LogisticSeed, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Newton / Nova / Halley / Secant — shared d + R -->
+        <Grid IsVisible="{Binding IsNewtonOrNova}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Exponent d:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="2" Maximum="8" Increment="1" FormatString="F0"
+                           Value="{Binding NewtonExponent, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Relaxation R:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.1" Maximum="2" Increment="0.05" FormatString="F3"
+                           Value="{Binding NewtonRelaxation, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+        <!-- Secant initial-offset add-on -->
+        <Grid IsVisible="{Binding IsSecant}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Prev offset (real):" VerticalAlignment="Center"
+                       ToolTip.Tip="Initial prev-z displacement. Recurrence is undefined if prev = z." />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F4"
+                           Value="{Binding SecantOffsetR, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Prev offset (imag):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F4"
+                           Value="{Binding SecantOffsetI, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
+    </StackPanel>
+</UserControl>
