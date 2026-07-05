@@ -230,6 +230,13 @@ Convergence after Wave 1:
 
 ---
 
+## Deferred follow-ups — deep-region smoke test (2026-07-05)
+
+| ID | Item | Status |
+|----|------|--------|
+| SM-1 | Deep regions render solid when saved/auto `MaxIterations` < escape band | 🟡 Deferred 2026-07-05 — root-caused via `--regionprobe`: not a precision bug, purely iter-count (regions need 379–3940 iters; rendered under band → 100% in-set → flat). Fix = trace region-load iteration path (where a loaded region sets `MaxIterations`) and either raise the saved values or add auto-iter that climbs until in-set fraction stabilises. Verify with `--regionprobe 20000` (all clean) vs `--regionprobe 300` (all SOLID). |
+| SM-2 | Deep-QD extreme-region render is slow (minutes at full window × AA16) | 🟡 Deferred 2026-07-05 — inherent deep-QD-perturbation cost, not a defect (3E47 = 11.2 s at 128² single-sample; ×AA16 ×full-window = observed minutes). Mitigations to weigh: lower AA for interactive/preview passes, adaptive iter cap (ties to SM-1), GPU QD ref-orbit (Wave 2.12, opt-in), progressive-resolution preview. Perf task, revisit deliberately. |
+
 ## Status log
 
 - 2026-07-05 — Deep-region smoke-test triage + `--regionprobe` diagnostic.
