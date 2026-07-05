@@ -239,6 +239,23 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-07-05 — **Deep-zoom input rework — ViewCamera + DeepComplex (commit
+  901b641).** User report: approaching ~9e49, keyboard/mouse lose precision
+  (double-click mis-focuses, drag pans the wrong amount, box-zoom lands wrong).
+  Recurring — the input layer had been rewritten per precision tier several
+  times. `--inputprobe` (new headless gate) root-caused it: single-op anchoring
+  is exact, but a cumulative wheel zoom-in DRIFTS — the centre was carried in
+  plain double until the HP threshold (1e12), where promotion froze a ~1e-16
+  world error that bloomed ∝ zoom (3000px off at 1e17, astronomically off by
+  1e49). Fix (chosen: full ViewCamera, OD-always): `DeepComplex` (OD-backed
+  complex, precision is an internal detail) + `ViewCamera` (single screen↔world
+  authority) in Abstractions; `FractalViewState.GetCenter/SetCenter` typed
+  accessor. All six `FractalInputController` sites now delegate to ViewCamera —
+  the per-tier cascades + DD/QD/OD pan-start caches + Store* deleted (~150
+  lines). New precision tiers extend `DeepComplex` only, never the input
+  handlers. Gate: anchor drift **0.00px through 1e6→8e49** (was 3000px@1e17);
+  546/546 tests pass. Follow-up: unify the render onto ViewCamera + reconcile
+  logical-vs-device pixel dims (HiDPI) — separate constant-offset concern.
 - 2026-07-05 — **SM-2 rebasing shipped opt-in — `--rebaseprobe` PASS.** New
   `MandelbrotCalculator.ComputePixelPTRebased` (Zhuoran rebasing) resolves any
   pixel in double precision from the single shared reference orbit at any depth,
