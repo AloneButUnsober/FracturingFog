@@ -169,6 +169,44 @@ public sealed class AssetSourceTests
         Assert.Equal(AssetImportStatus.Failed, src.ImportJson("", overwrite: true).Status);
     }
 
+    // ── Colour-theme built-ins ───────────────────────────────────────────────
+
+    /// <summary>The ColorTheme node surfaces the whole curated built-in roster
+    /// (ColorPalette.BuiltIns), not just user-saved data-driven themes. Built-ins
+    /// are read-only, carry no eager thumbnail, and expose a lazy factory that
+    /// rasterises a swatch PNG on demand — kept off the enumerate hot path.</summary>
+    [Fact]
+    public void ColorTheme_source_lists_builtins_readonly_with_lazy_swatch_factory()
+    {
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.ColorTheme);
+        var rows = src.Enumerate().ToList();
+
+        // At least every built-in surfaces (plus any user themes on top).
+        Assert.True(rows.Count >= ColorPalette.BuiltIns.Count);
+
+        string builtinName = ColorPalette.GetStaticName(ColorPalette.BuiltIns[0]);
+        var row = rows.FirstOrDefault(d => d.Name == builtinName && d.ReadOnly);
+        Assert.NotNull(row);
+
+        // Read-only, no eager bytes, but a working lazy factory.
+        Assert.True(row!.ReadOnly);
+        Assert.Null(row.ThumbnailBytes);
+        Assert.NotNull(row.ThumbnailFactory);
+
+        byte[]? png = row.ThumbnailFactory!();
+        Assert.NotNull(png);
+        Assert.True(png!.Length > 0);
+        // PNG magic number (‰PNG).
+        Assert.Equal(0x89, png[0]);
+        Assert.Equal((byte)'P', png[1]);
+        Assert.Equal((byte)'N', png[2]);
+        Assert.Equal((byte)'G', png[3]);
+
+        // Built-ins have no user-library entry: not deletable or exportable there.
+        Assert.False(src.Delete(builtinName));
+        Assert.Null(src.ExportJson(builtinName));
+    }
+
     // ── Scene source (S5) ────────────────────────────────────────────────────
 
     /// <summary>The Scene node surfaces the built-in demos once the library is
