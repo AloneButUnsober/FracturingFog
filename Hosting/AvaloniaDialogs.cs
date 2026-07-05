@@ -358,6 +358,15 @@ namespace FracturingFog.Hosting
                     if (tcs.Task.IsCompleted) return;
                     tcs.TrySetResult(vm.Result);
                 };
+                // Windows nested-modal fix: a modal-of-a-modal (this Video dialog
+                // is owned by the Slideshow Settings dialog, itself a modal of the
+                // main window) does not reliably come to the foreground on Win32,
+                // and with ShowInTaskbar=false it then has no taskbar entry either
+                // — the user sees an inert parent and no visible child. Force it
+                // to activate once shown. No-op on platforms where it already
+                // fronts correctly (e.g. X11). Mirrors the existing Activate-on-
+                // Opened workaround used elsewhere in this file.
+                win.Opened += (_, _) => { try { win.Activate(); } catch { } };
                 var o = owner ?? ActiveMainWindow;
                 if (o != null) _ = win.ShowDialog(o);
                 else win.Show();
@@ -418,6 +427,11 @@ namespace FracturingFog.Hosting
                 };
 
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
+
+                // Windows nested-modal fix — see ShowVideoSettingsAsync: this
+                // Audio dialog is likewise a modal-of-a-modal that may not front
+                // on Win32. Force activation once shown (no-op elsewhere).
+                win.Opened += (_, _) => { try { win.Activate(); } catch { } };
 
                 if (owner != null) _ = win.ShowDialog(owner);
                 else if (ActiveMainWindow != null) _ = win.ShowDialog(ActiveMainWindow);
