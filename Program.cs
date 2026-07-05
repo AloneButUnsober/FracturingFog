@@ -306,19 +306,18 @@ static class Program
         // Runs three implementations at QD-tier coord + zoom:
         //   * CPU-QD     — full QD reference (truth for the perturbation path).
         //   * CPU-Hi     — plain-double Mandelbrot iteration on the QD's Hi
-        //                  limb only. Matches what the first-cut GPU kernel
-        //                  computes; used as the bit-exact parity target.
-        //   * GPU-Hi     — first-cut MandelbrotRefOrbitGpu kernel (Hi-only).
-        // Parity Δ vs CPU-QD diverges by chaos amplification at deep iter
-        // counts (expected for Hi-only); parity Δ vs CPU-Hi should be at
-        // FP64 round-off (validates the GPU kernel is functionally
-        // equivalent to the CPU Hi-only path). QD-upgrade of the kernel is
-        // the next Wave 2.12 slice.
+        //                  limb only. Kept as the pre-QD-kernel reference so
+        //                  the report shows how far Hi-only drifts.
+        //   * GPU-QD     — MandelbrotRefOrbitGpu kernel, now full quad-double.
+        // Since the kernel iterates in QD, parity Δ(GPU-QD vs CPU-QD) should
+        // now sit at QD round-off (validates the GPU QD chain matches the CPU
+        // QD truth), while Δ(GPU-QD vs CPU-Hi) diverges by chaos amplification
+        // at deep iter counts (expected — Hi-only loses precision).
         if (args.Length > 0 && args[0] == "--gpurefprobe")
         {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("GPU ref-orbit probe — Wave 2.12 (D-6.27)");
-            sb.AppendLine("  CPU-QD = QD-precision truth; CPU-Hi & GPU-Hi = plain-double comparison");
+            sb.AppendLine("  CPU-QD = QD-precision truth; GPU-QD = GPU quad-double kernel; CPU-Hi = plain-double reference");
             (string label, double cxX0, double cxX1, double cyX0, double cyX1, int iter)[] cases =
             {
                 ("1e15 saprobe", -1.1726999042772253, 8.9529605787776783E-17,
@@ -399,27 +398,36 @@ static class Program
                     continue;
                 }
                 // Two parity comparisons:
-                //   * vs CPU-Hi — should be bit-exact (FP64 round-off only).
-                //     If non-zero, the GPU kernel has drifted from the CPU
-                //     Hi-only math; investigate.
-                //   * vs CPU-QD — chaos-amplified divergence at deep iter,
-                //     expected to be O(magnitude of Z). Reported for context;
-                //     not a failure indicator until the QD kernel lands.
-                int parityN = Math.Min(cpuHiN, gpuN);
-                int[] checkIters = { 0, 100, 1000, Math.Min(5000, parityN), parityN };
-                double maxHiDelta = 0;
+                //   * vs CPU-QD — the primary check now the kernel iterates in
+                //     QD. Both sides run the same QD algorithm, so the Hi limb
+                //     should agree to QD round-off (~1e-11 abs at these
+                //     magnitudes). A large delta means the GPU QD chain drifted
+                //     from the CPU QD truth; investigate.
+                //   * vs CPU-Hi — reported for context. Diverges by chaos
+                //     amplification at deep iter (Hi-only loses precision);
+                //     expected, not a failure.
+                int parityQd = Math.Min(cpuN, gpuN);
+                int parityHi = Math.Min(cpuHiN, gpuN);
+                int[] checkQd = { 0, 100, 1000, Math.Min(5000, parityQd), parityQd };
+                int[] checkHi = { 0, 100, 1000, Math.Min(5000, parityHi), parityHi };
                 double maxQdDelta = 0;
-                foreach (int k in checkIters)
+                foreach (int k in checkQd)
                 {
-                    if (k > parityN) continue;
-                    double hi = Math.Max(Math.Abs(hZrX0[k] - gZrX0[k]),
-                                         Math.Abs(hZiX0[k] - gZiX0[k]));
-                    if (hi > maxHiDelta) maxHiDelta = hi;
+                    if (k < 0 || k > parityQd) continue;
                     double qd = Math.Max(Math.Abs(cZrX0[k] - gZrX0[k]),
                                          Math.Abs(cZiX0[k] - gZiX0[k]));
                     if (qd > maxQdDelta) maxQdDelta = qd;
                 }
-                sb.AppendLine($"  {c.label,-14} CPU-QD n={cpuN,5} ms={swCpu.Elapsed.TotalMilliseconds,7:F2}  CPU-Hi n={cpuHiN,5} ms={swCpuHi.Elapsed.TotalMilliseconds,7:F2}  GPU-Hi n={gpuN,5} ms={swGpu.Elapsed.TotalMilliseconds,7:F2}  Δ(GPU-Hi vs CPU-Hi)={maxHiDelta:E2}  Δ(GPU-Hi vs CPU-QD)={maxQdDelta:E2}  dev=[{gpu.SelectedDeviceLabel}]");
+                double maxHiDelta = 0;
+                foreach (int k in checkHi)
+                {
+                    if (k < 0 || k > parityHi) continue;
+                    double hi = Math.Max(Math.Abs(hZrX0[k] - gZrX0[k]),
+                                         Math.Abs(hZiX0[k] - gZiX0[k]));
+                    if (hi > maxHiDelta) maxHiDelta = hi;
+                }
+                string verdict = maxQdDelta < 1e-6 ? "PASS" : "CHECK";
+                sb.AppendLine($"  {c.label,-14} CPU-QD n={cpuN,5} ms={swCpu.Elapsed.TotalMilliseconds,7:F2}  CPU-Hi n={cpuHiN,5} ms={swCpuHi.Elapsed.TotalMilliseconds,7:F2}  GPU-QD n={gpuN,5} ms={swGpu.Elapsed.TotalMilliseconds,7:F2}  Δ(GPU-QD vs CPU-QD)={maxQdDelta:E2} [{verdict}]  Δ(GPU-QD vs CPU-Hi)={maxHiDelta:E2}  dev=[{gpu.SelectedDeviceLabel}]");
             }
             string gprPath = System.IO.Path.Combine(AppContext.BaseDirectory, "gpurefprobe.out");
             System.IO.File.WriteAllText(gprPath, sb.ToString());

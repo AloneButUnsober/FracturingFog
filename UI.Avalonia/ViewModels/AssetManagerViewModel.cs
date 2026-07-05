@@ -378,6 +378,31 @@ public sealed class AssetRowViewModel
     public string SizeText => FormatSize(Descriptor.SizeOnDisk);
     public string CreatedText => Descriptor.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
 
+    // Decoded lazily from Descriptor.ThumbnailBytes (a PNG the source produced;
+    // today only colour themes carry one). Null for asset types without a
+    // thumbnail, which the view hides via HasThumbnail.
+    private global::Avalonia.Media.Imaging.Bitmap? _thumbnail;
+    private bool _thumbnailLoaded;
+    public global::Avalonia.Media.Imaging.Bitmap? Thumbnail
+    {
+        get
+        {
+            if (!_thumbnailLoaded)
+            {
+                _thumbnailLoaded = true;
+                var bytes = Descriptor.ThumbnailBytes;
+                if (bytes != null && bytes.Length > 0)
+                {
+                    try { using var ms = new MemoryStream(bytes); _thumbnail = new global::Avalonia.Media.Imaging.Bitmap(ms); }
+                    catch { _thumbnail = null; }
+                }
+            }
+            return _thumbnail;
+        }
+    }
+
+    public bool HasThumbnail => Thumbnail != null;
+
     private static string FormatSize(long bytes)
     {
         if (bytes <= 0) return "—";
