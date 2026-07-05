@@ -435,6 +435,86 @@ static class Program
             return 0;
         }
 
+        // --kifsprobe: Wave 5.9.f1 — headless geometric check on the KIFS folds.
+        // Sphere-traces the DE inward from radius 6 along a Fibonacci set of
+        // directions and records the surface radius R(dir) per direction, plus
+        // R along the +X axis, a face-diagonal (1,1,0) and the body-diagonal
+        // (1,1,1). Detects the two documented failure modes without a GUI:
+        //   * all-black  → hitFrac ≈ 0 (DE never gets small; nothing to render)
+        //   * cube       → R is near-constant / larger along diagonals than axes
+        // Menger + Sierpinski are printed as known-good baselines to compare the
+        // three fixed folds (Octahedron / Dodecahedron / MandelboxRot) against.
+        if (args.Length > 0 && args[0] == "--kifsprobe")
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("KIFS geometric probe — Wave 5.9.f1");
+            sb.AppendLine("  hitFrac = fraction of directions that reach a surface;");
+            sb.AppendLine("  Rmin/Rmean/Rmax over the sphere; Raxis/Rface/Rbody = radius along +X / (1,1,0) / (1,1,1).");
+
+            const double eps = 1e-4;
+            const int iter = 12;
+            const double ox = 1.0, oy = 1.0, oz = 1.0;
+
+            double SurfaceRadius(FracturingFog.Models.KifsFoldKind fold, double scale,
+                double dx, double dy, double dz)
+            {
+                // Normalize the direction, sphere-trace from 6·dir toward origin.
+                double dl = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                if (dl < 1e-12) return -1;
+                dx /= dl; dy /= dl; dz /= dl;
+                double px = 6.0 * dx, py = 6.0 * dy, pz = 6.0 * dz;
+                double t = 6.0;
+                for (int step = 0; step < 512; step++)
+                {
+                    double de = FracturingFog.KifsCalculator.ProbeDE(fold, px, py, pz, scale, ox, oy, oz, iter);
+                    if (de < eps) return Math.Sqrt(px * px + py * py + pz * pz);
+                    t -= de;
+                    if (t <= 0) return -1;               // marched past the origin, miss
+                    px -= dx * de; py -= dy * de; pz -= dz * de;
+                }
+                return -1;
+            }
+
+            (string name, FracturingFog.Models.KifsFoldKind fold, double scale)[] cases =
+            {
+                ("Menger",       FracturingFog.Models.KifsFoldKind.Menger,       3.0),
+                ("Sierpinski",   FracturingFog.Models.KifsFoldKind.Sierpinski,   2.0),
+                ("Octahedron",   FracturingFog.Models.KifsFoldKind.Octahedron,   2.0),
+                ("Dodecahedron", FracturingFog.Models.KifsFoldKind.Dodecahedron, 2.0),
+                ("MandelboxRot", FracturingFog.Models.KifsFoldKind.MandelboxRot, 2.0),
+            };
+
+            const int N = 512;
+            foreach (var c in cases)
+            {
+                int hits = 0;
+                double rMin = double.MaxValue, rMax = 0, rSum = 0;
+                for (int i = 0; i < N; i++)
+                {
+                    // Fibonacci sphere direction.
+                    double phi = Math.Acos(1.0 - 2.0 * (i + 0.5) / N);
+                    double theta = Math.PI * (1.0 + Math.Sqrt(5.0)) * i;
+                    double dx = Math.Sin(phi) * Math.Cos(theta);
+                    double dy = Math.Sin(phi) * Math.Sin(theta);
+                    double dz = Math.Cos(phi);
+                    double r = SurfaceRadius(c.fold, c.scale, dx, dy, dz);
+                    if (r > 0) { hits++; rSum += r; if (r < rMin) rMin = r; if (r > rMax) rMax = r; }
+                }
+                double hitFrac = (double)hits / N;
+                double rMean = hits > 0 ? rSum / hits : 0;
+                if (hits == 0) rMin = 0;
+                double rAxis = SurfaceRadius(c.fold, c.scale, 1, 0, 0);
+                double rFace = SurfaceRadius(c.fold, c.scale, 1, 1, 0);
+                double rBody = SurfaceRadius(c.fold, c.scale, 1, 1, 1);
+                sb.AppendLine($"  {c.name,-13} hitFrac={hitFrac,5:F2}  Rmin={rMin,6:F3} Rmean={rMean,6:F3} Rmax={rMax,6:F3}  Raxis={rAxis,6:F3} Rface={rFace,6:F3} Rbody={rBody,6:F3}");
+            }
+
+            string kpPath = System.IO.Path.Combine(AppContext.BaseDirectory, "kifsprobe.out");
+            System.IO.File.WriteAllText(kpPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location
