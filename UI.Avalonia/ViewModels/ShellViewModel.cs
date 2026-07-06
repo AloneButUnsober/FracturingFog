@@ -2213,6 +2213,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (ServerAdmin == null)
         {
             ServerAdmin = new ServerAdminViewModel();
+            // Close => hide via the shell visibility flag (same pattern as the
+            // sibling cluster windows). The view no longer self-closes now that
+            // it is a UserControl hosted by MainWindow.SyncServerAdmin.
+            ServerAdmin.CloseRequested += (_, _) => IsServerAdminVisible = false;
             // SAVM exposes a "Cluster Dashboard…" button; bounce that through
             // the shell so MainWindow's SyncClusterDashboard handles the
             // window lifecycle on the same visibility-flag pattern as the

@@ -1,34 +1,18 @@
 // Views/JobDetailView.axaml.cs
-// Code-behind mirrors ClusterDashboardView: start the 2 s VM poll on
-// Open, stop on Closed, cancel OS-close so the shell's
-// IsJobDetailVisible flag stays authoritative.
+// Hybrid-shell: UserControl hosted modeless by MainWindow.SyncJobDetail. Poll
+// lifecycle (host Opened/Closed) + close => hide (VM CloseRequested ->
+// IsJobDetailVisible=false in ShellViewModel) are owned by the host + shell
+// flag. Single-instance VM: the JobId setter clears state + immediate-polls,
+// so a target swap needs no window/lifecycle churn here.
 
-using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using FracturingFog.UI.Avalonia.Input;
-using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
-public partial class JobDetailView : Window
+public partial class JobDetailView : UserControl
 {
-    public JobDetailView()
-    {
-        InitializeComponent();
-        EscapeCloseBehavior.Attach(this);
-        DataContextChanged += OnDcChanged;
-    }
+    public JobDetailView() => InitializeComponent();
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
-
-    private void OnDcChanged(object? sender, EventArgs e)
-    {
-        if (DataContext is JobDetailViewModel vm)
-        {
-            vm.CloseRequested += (_, _) => Close();
-            Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
-            Closed += (_, _) => vm.StopPolling();
-        }
-    }
 }

@@ -1,17 +1,13 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         mc:Ignorable="d"
         x:Class="FracturingFog.UI.Avalonia.Views.ServerAdminView"
-        x:DataType="vm:ServerAdminViewModel"
-        Title="FracturingFog — Server Admin"
-        Width="560" Height="680"
-        MinWidth="480" MinHeight="480"
-        Background="#171717">
+        x:DataType="vm:ServerAdminViewModel">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#DDD" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -42,7 +38,7 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="Padding" Value="12,5" />
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <ScrollViewer>
         <StackPanel Margin="12">
@@ -178,4 +174,4 @@
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
-</Window>
+</UserControl>

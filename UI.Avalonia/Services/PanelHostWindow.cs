@@ -22,6 +22,7 @@ namespace FracturingFog.UI.Avalonia.Services
         double MinHeight = double.NaN,
         bool SizeToContentHeight = true,
         bool CanResize = false,
+        bool ShowInTaskbar = false,
         IBrush? Background = null);
 
     /// <summary>
@@ -46,7 +47,7 @@ namespace FracturingFog.UI.Avalonia.Services
             if (opts == null) throw new ArgumentNullException(nameof(opts));
 
             Title = opts.Title;
-            ShowInTaskbar = false;
+            ShowInTaskbar = opts.ShowInTaskbar;
             CanResize = opts.CanResize;
             SizeToContent = opts.SizeToContentHeight ? SizeToContent.Height : SizeToContent.Manual;
             if (!double.IsNaN(opts.Width)) Width = opts.Width;
