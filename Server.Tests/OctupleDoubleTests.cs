@@ -154,6 +154,40 @@ public sealed class OctupleDoubleTests
         Assert.Equal(1e-50, r.X0, 1e-65);
     }
 
+    // Regression (SM-6): a deep-zoom offset that lands MANY limbs below X0 must
+    // still separate adjacent pixels. With a Mandelbrot-style centre (X0..X3
+    // populated, |c|≈2) and zoom ~1e70 the offset magnitude is ~1e-70 — limb X4.
+    // The old FromCenterOffset routed through the OD+OD sloppy add whose 3-level
+    // carry cascade parked the offset against X3 and rounded it off, collapsing
+    // every pixel to the centre. The OD+double full cascade places it correctly.
+    [Fact]
+    public void FromCenterOffset_DeepOffset_SeparatesAdjacentPixels()
+    {
+        // Real 3E47-style centre, |c|≈2, four QD-depth limbs.
+        var c = new OD(-1.9918151296901943, -7.8219844803880472E-17,
+                        1.660139930392911E-34, 8.217274172159319E-51,
+                        0, 0, 0, 0);
+        double scale = (3.5 / 128) / 1e70; // ~2.7e-72 per pixel at zoom 1e70
+
+        var seen = new System.Collections.Generic.HashSet<(double, double, double, double,
+                                                           double, double, double, double)>();
+        for (int i = 0; i < 128; i++)
+        {
+            double off = i - 64;
+            var p = OD.FromCenterOffset(c, off, scale);
+            seen.Add((p.X0, p.X1, p.X2, p.X3, p.X4, p.X5, p.X6, p.X7));
+        }
+        Assert.Equal(128, seen.Count);
+
+        // And the per-pixel step must actually equal the offset delta (not be
+        // absorbed): coord(1) - coord(0) ≈ scale, recovered from the low limbs.
+        var p0 = OD.FromCenterOffset(c, -64, scale);
+        var p1 = OD.FromCenterOffset(c, -63, scale);
+        double delta = (double)(p1 - p0);
+        Assert.True(Math.Abs(delta - scale) < scale * 1e-6,
+            $"pixel step lost: delta={delta:G6}, expected≈{scale:G6}");
+    }
+
     // ── Renorm9 stress — zero mid-limbs ──────────────────────────────────
 
     [Fact]
