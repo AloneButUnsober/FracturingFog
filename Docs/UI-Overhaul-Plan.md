@@ -147,13 +147,22 @@ Status: **F2 done** (commit pending). Full solution build green.
 7. `AvaloniaDialogs` show-helper: build panel, `await ShowPanelDialogAsync`,
    read `vm.Result` after.
 
-**Remaining views to convert** (~19): SlideshowSettings, VideoSettings,
-AudioSettings, RegionEditor, SceneEditor, AnimationEditor, FractalParams (+
-ParamSections), ColorThemeEditor, ColorGenEditor, WatermarkEditor, Cookbook,
-EquationMorph, UserEquation, UserBulb, MasterConfig, ServerAdmin,
-Cluster/Job/Worker views, HelpViewer, Sandbox. **Not converted:** `MainWindow`
-(the render window), the Mini* tool windows, `FloatingMenuView` (the modeless
-main menu — revisited when the shell replaces it in S1).
+**Converted:** AppSettings (pattern, verified live), VideoSettings,
+AudioSettings.
+**Remaining (~17), by area:**
+- *Settings:* SlideshowSettings, MasterConfig.
+- *Editors:* RegionEditor, SceneEditor, AnimationEditor, ColorThemeEditor,
+  ColorGenEditor, WatermarkEditor. (Heavier — several carry unsaved-change
+  guards and/or live data pumps; convert with care.)
+- *Equation tools:* Cookbook, EquationMorph, UserEquation, UserBulb,
+  FractalParams (+ ParamSections), LightingFxDialog.
+- *Server/cluster:* ServerAdmin, ClusterDashboard, JobDetail, JobList,
+  WorkerDetail, FFClient.
+- *Misc:* HelpViewer, FloatingHelp, Sandbox, AssetManager.
+
+**Not converted:** `MainWindow` (the render window), the Mini* tool windows,
+`FloatingMenuView` (the modeless main menu — revisited when the shell replaces
+it in S1).
 
 Status: **F3 pattern + AppSettingsView done and RUNTIME-VERIFIED**
 (2026-07-06). Drove the live app: App Settings opens via `PanelHostWindow`,
