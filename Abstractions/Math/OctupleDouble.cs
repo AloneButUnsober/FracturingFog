@@ -414,7 +414,14 @@ namespace FracturingFog.FFMath
         public static OD FromCenterOffset(OD center, double pixelOffset, double scale)
         {
             var (offHi, offLo) = TwoProduct(pixelOffset, scale);
-            return center + new OD(offHi, offLo, 0, 0, 0, 0, 0, 0);
+            // Add via the OD+double operator (full-cascade), NOT center + OD(offHi,…).
+            // The OD+OD sloppy operator only carries a residual down ~3 limbs, so a
+            // deep-zoom offset landing at limb X4+ (|off| ~ 1e-64, zoom > ~1e64) gets
+            // parked against X3 and rounded away — every pixel collapsing to the
+            // centre. OD+double propagates the addend's residual through all 8 limbs,
+            // placing it at its true magnitude and extending the coordinate floor to
+            // OD's real ~1e112 reach.
+            return (center + offHi) + offLo;
         }
 
         public override string ToString()
