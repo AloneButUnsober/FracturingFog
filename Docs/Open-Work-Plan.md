@@ -246,6 +246,23 @@ Convergence after Wave 1:
 
 ## Status log
 
+- 2026-07-06 — **Deep-zoom nav evidence tooling: `--navrepro` + overlay limb
+  counts (SM-10).** User still reports outline-zoom / pan / double-click "close
+  but not exact" past ~E+64, but words alone haven't pinned it and the synthetic
+  probes are self-referential (controller OD vs OD truth) or can't measure on a
+  flat frame. Added `--navrepro [file]`: reads a coordinate file the user fills
+  straight from the floating menu (full-limb `cx=`/`cy=`, `zoom=`, `dim=`,
+  `click=`), renders the frame, runs the real `FractalInputController`
+  double-click focus, re-renders, and patch-matches the clicked feature to report
+  focus error IN PIXELS (0 = perfect, >1 = the reported bug reproduced). Validated
+  on the user's own 3E47 coordinate: focus 0.00px at 5e58 (textured), and at 1e64
+  the frame is flat (distinctIters=1, maxUseful=1e62) — i.e. that coordinate's
+  reported "past-E+64 breakage" IS the SM-7 detail floor, not an input fault. To
+  catch a genuine error the user must supply a coordinate that still has DETAIL
+  past E+64. Also added centre limb-counts (`limbs X:n/8 Y:n/8`) + render px to
+  the perf-HUD render-context block — a truncated centre would show instantly.
+  `Docs/Nav-Repro-Template.txt` is the fill-in form. Awaiting a detailed-frame
+  repro coordinate.
 - 2026-07-06 — **"Controls break past 1e63" root-caused: it's the point's detail
   floor, not input (SM-7).** New `--focusprobe` renders a deep frame, double-click
   focuses via the real `FractalInputController`, re-renders, and patch-matches to

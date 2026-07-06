@@ -1278,6 +1278,144 @@ static class Program
             return 0;
         }
 
+        // --navrepro: reproduce a USER-reported deep-zoom navigation issue from a
+        // coordinate file (`navrepro.txt` next to the exe, or a path in args[1]).
+        // The user copies CX / CY straight from the floating menu (pipe-separated
+        // limbs) plus zoom + client px + the click offset; this renders the frame,
+        // performs the exact double-click focus through FractalInputController,
+        // re-renders, and patch-matches the clicked feature to report the real
+        // focus error in pixels. File format (one key=value per line):
+        //   cx=-1.99...|-7.8E-17|1.6E-34|...      (up to 8 pipe-separated limbs)
+        //   cy=-5.5E-06|...
+        //   zoom=5e63
+        //   dim=1600            (client width in px; square assumed unless h= given)
+        //   h=900               (optional client height)
+        //   click=44,26         (optional; pixels off-centre the user clicked)
+        if (args.Length > 0 && args[0] == "--navrepro")
+        {
+            string path = args.Length > 1
+                ? args[1]
+                : System.IO.Path.Combine(AppContext.BaseDirectory, "navrepro.txt");
+            if (!System.IO.File.Exists(path))
+            {
+                Console.WriteLine($"--navrepro: no coordinate file at {path}. See the header comment for the format.");
+                return 1;
+            }
+
+            double[] ParseLimbs(string s)
+            {
+                var parts = s.Split('|');
+                var v = new double[8];
+                for (int i = 0; i < 8; i++)
+                    v[i] = i < parts.Length && double.TryParse(parts[i].Trim(),
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double d) ? d : 0.0;
+                return v;
+            }
+
+            double[] cx = new double[8], cy = new double[8];
+            double zoom = 1e60; int W = 1000, H = 1000, clickX = 44, clickY = 26;
+            foreach (var raw in System.IO.File.ReadAllLines(path))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("#")) continue;
+                int eq = line.IndexOf('=');
+                if (eq <= 0) continue;
+                string k = line.Substring(0, eq).Trim().ToLowerInvariant();
+                string val = line.Substring(eq + 1).Trim();
+                switch (k)
+                {
+                    case "cx": cx = ParseLimbs(val); break;
+                    case "cy": cy = ParseLimbs(val); break;
+                    case "zoom": double.TryParse(val, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out zoom); break;
+                    case "dim": case "w": int.TryParse(val, out W); break;
+                    case "h": int.TryParse(val, out H); break;
+                    case "click":
+                        var cp = val.Split(',');
+                        if (cp.Length == 2) { int.TryParse(cp[0].Trim(), out clickX); int.TryParse(cp[1].Trim(), out clickY); }
+                        break;
+                }
+            }
+            if (H == 1000 && W != 1000) H = W;   // square unless h given
+            const int r = 3, search = 16;
+            clickX = Math.Min(clickX, W / 2 - r - search - 1);
+            clickY = Math.Min(clickY, H / 2 - r - search - 1);
+
+            var sb = new System.Text.StringBuilder();
+            int Nz(double[] a) { int n = 0; foreach (var v in a) if (v != 0) n++; return n; }
+            int nzX = Nz(cx), nzY = Nz(cy);
+            sb.AppendLine($"NAV REPRO — {W}x{H}  zoom={zoom:G6}  click=(+{clickX},+{clickY})");
+            sb.AppendLine($"  centre limbs: X {nzX}/8  Y {nzY}/8");
+
+            int maxIter = FracturingFog.Models.QualityPreset.Extreme.ComputeIterations(zoom);
+            FracturingFog.MandelbrotCalculator Make(double[] x, double[] y)
+                => new FracturingFog.MandelbrotCalculator(W, H)
+                {
+                    CenterX = x[0], CenterXLo = x[1], CenterX2 = x[2], CenterX3 = x[3],
+                    CenterX4 = x[4], CenterX5 = x[5], CenterX6 = x[6], CenterX7 = x[7],
+                    CenterY = y[0], CenterYLo = y[1], CenterY2 = y[2], CenterY3 = y[3],
+                    CenterY4 = y[4], CenterY5 = y[5], CenterY6 = y[6], CenterY7 = y[7],
+                    Zoom = zoom, MaxIterations = maxIter,
+                    Quality = FracturingFog.Models.QualityPreset.Extreme,
+                    ColorMap = new FracturingFog.Models.HsvPalette(),
+                };
+
+            var calcA = Make(cx, cy); calcA.Calculate();
+            int[] A = (int[])calcA.IterationBuffer.Clone();
+            var fd = new System.Collections.Generic.HashSet<int>();
+            foreach (var it in A) fd.Add(it);
+            sb.AppendLine($"  frame: distinctIters={fd.Count}  maxUseful=1e{calcA.MaxUsefulZoomLog10:F0}  " +
+                          $"ref-orbit {(calcA.ReferenceOrbitEscaped ? "escaped@" + calcA.ReferenceOrbitLength : "bounded")}");
+
+            var vs = new FracturingFog.ViewState.FractalViewState
+            {
+                FractalType = FracturingFog.FractalType.Mandelbrot,
+                Quality = FracturingFog.Models.QualityPreset.Extreme, Zoom = zoom,
+                CenterX = cx[0], CenterXLo = cx[1], CenterX2 = cx[2], CenterX3 = cx[3],
+                CenterX4 = cx[4], CenterX5 = cx[5], CenterX6 = cx[6], CenterX7 = cx[7],
+                CenterY = cy[0], CenterYLo = cy[1], CenterY2 = cy[2], CenterY3 = cy[3],
+                CenterY4 = cy[4], CenterY5 = cy[5], CenterY6 = cy[6], CenterY7 = cy[7],
+            };
+            var ctl = new FracturingFog.Input.FractalInputController(vs);
+            ctl.OnPointerDoubleClick(new FracturingFog.Input.PointerInput(
+                W / 2 + clickX, H / 2 + clickY, W, H,
+                FracturingFog.Input.PointerButton.Left, FracturingFog.Input.InputModifiers.None));
+
+            double[] bx = { vs.CenterX, vs.CenterXLo, vs.CenterX2, vs.CenterX3, vs.CenterX4, vs.CenterX5, vs.CenterX6, vs.CenterX7 };
+            double[] by = { vs.CenterY, vs.CenterYLo, vs.CenterY2, vs.CenterY3, vs.CenterY4, vs.CenterY5, vs.CenterY6, vs.CenterY7 };
+            var calcB = Make(bx, by); calcB.Calculate();
+            int[] B = (int[])calcB.IterationBuffer.Clone();
+
+            int acx = W / 2 + clickX, acy = H / 2 + clickY;
+            long bestSad = long.MaxValue; int bex = 0, bey = 0;
+            for (int ey = -search; ey <= search; ey++)
+            for (int ex = -search; ex <= search; ex++)
+            {
+                long sad = 0;
+                for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    int ax = acx + dx, ay = acy + dy, bxp = W / 2 + ex + dx, byp = H / 2 + ey + dy;
+                    if (ax < 0 || ay < 0 || ax >= W || ay >= H || bxp < 0 || byp < 0 || bxp >= W || byp >= H) { sad = long.MaxValue; goto skip; }
+                    sad += Math.Abs((long)A[ay * W + ax] - B[byp * W + bxp]);
+                }
+                if (sad < bestSad) { bestSad = sad; bex = ex; bey = ey; }
+                skip: ;
+            }
+            var patch = new System.Collections.Generic.HashSet<int>();
+            for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) patch.Add(A[(acy + dy) * W + (acx + dx)]);
+            double err = Math.Sqrt((double)bex * bex + bey * bey);
+            sb.AppendLine(patch.Count <= 1
+                ? "  focus-err: N/A (clicked patch is flat — pick a textured spot / lower zoom)"
+                : $"  focus-err = ({bex},{bey})  |{err:F2}| px   (0 = perfect; >1 = the reported bug, reproduced)");
+
+            string np = System.IO.Path.Combine(AppContext.BaseDirectory, "navrepro.out");
+            System.IO.File.WriteAllText(np, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location
