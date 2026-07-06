@@ -133,6 +133,32 @@ Status: **F2 done** (commit pending). Full solution build green.
   fields onto `LabeledNumericField` / `LabeledSlider` (the F1 field-retrofit,
   folded here so every view is touched once).
 
+**Pattern (established on `AppSettingsView`, build green):**
+1. `ViewModels/IClosableDialog.cs` — `event EventHandler<bool>? CloseRequested`.
+2. `Services/PanelHostWindow.cs` + `PanelHostOptions` — generic pop-out host:
+   owns window chrome (title/size/background), Esc-to-close, and wires the
+   panel VM's `CloseRequested` → window close.
+3. `WindowService.ShowPanelDialogAsync(panel, options, owner)` → `Task<bool?>`.
+4. View: `<Window>` → `<UserControl>`, chrome removed (moved to host options);
+   `.axaml.cs`: `Window` → `UserControl`, drop self-close + `EscapeCloseBehavior`.
+5. VM: add `: IClosableDialog` (event already present on most).
+6. Field retrofit: swap bare `NumericUpDown`/slider rows for `LabeledNumericField`
+   / `LabeledSlider`.
+7. `AvaloniaDialogs` show-helper: build panel, `await ShowPanelDialogAsync`,
+   read `vm.Result` after.
+
+**Remaining views to convert** (~19): SlideshowSettings, VideoSettings,
+AudioSettings, RegionEditor, SceneEditor, AnimationEditor, FractalParams (+
+ParamSections), ColorThemeEditor, ColorGenEditor, WatermarkEditor, Cookbook,
+EquationMorph, UserEquation, UserBulb, MasterConfig, ServerAdmin,
+Cluster/Job/Worker views, HelpViewer, Sandbox. **Not converted:** `MainWindow`
+(the render window), the Mini* tool windows, `FloatingMenuView` (the modeless
+main menu — revisited when the shell replaces it in S1).
+
+Status: **F3 pattern + AppSettingsView done** (commit pending). Remaining
+conversions are mechanical replication of the pattern above, but each is a
+contract change not runtime-verifiable headlessly — sweep strategy TBD with user.
+
 ### Phase S1 — Shell
 - `SplitView`: left nav-rail (grouped ~5–6 nav groups collapsing the current
   ~11 menu sections) + content region hosting the UserControls.

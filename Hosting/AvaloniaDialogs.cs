@@ -453,26 +453,30 @@ namespace FracturingFog.Hosting
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            void Run()
+            async void Run()
             {
                 var current = FracturingFog.Models.AnimationSettingsStore.Load();
                 var vm = new AppSettingsViewModel(current);
-                var win = new AppSettingsView { DataContext = vm };
+                var panel = new AppSettingsView { DataContext = vm };
 
-                vm.CloseRequested += (_, ok) =>
+                // PanelHostWindow owns the window chrome + closing; we await the
+                // pop-out and persist on a committed result.
+                await WindowService.ShowPanelDialogAsync(
+                    panel,
+                    new PanelHostOptions(
+                        "Application Settings",
+                        Width: 520, MinWidth: 440,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
+                    owner);
+
+                if (vm.Result != null)
                 {
-                    if (ok && vm.Result != null)
-                    {
-                        try { FracturingFog.Models.AnimationSettingsStore.Save(vm.Result); } catch { }
-                        FracturingFog.UI.Avalonia.ViewModels.Animation
-                            .AnimationBusHost.InvalidateCeilingCache();
-                    }
-                };
+                    try { FracturingFog.Models.AnimationSettingsStore.Save(vm.Result); } catch { }
+                    FracturingFog.UI.Avalonia.ViewModels.Animation
+                        .AnimationBusHost.InvalidateCeilingCache();
+                }
 
-                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
-
-                // WindowService falls back to the active main window when owner is null.
-                _ = WindowService.ShowDialogAsync(win, owner);
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
