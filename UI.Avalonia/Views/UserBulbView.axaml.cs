@@ -60,13 +60,7 @@ public sealed partial class UserBulbView : Window
     }
 
     private void OnHelpRequested(object? sender, (string DocId, string? Anchor, string Title) args)
-    {
-        var view = new HelpViewerView
-        {
-            DataContext = new HelpViewerViewModel(args.DocId, args.Anchor, args.Title),
-        };
-        view.Show(this);
-    }
+        => HelpViewerLauncher.Show(TopLevel.GetTopLevel(this) as Window, args.DocId, args.Anchor, args.Title);
 
     private void OnErrorSpanChanged(object? sender, EventArgs e)
     {
