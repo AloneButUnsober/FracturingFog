@@ -132,7 +132,8 @@ public sealed class MandelbrotCalculator
 
     /// <summary>Zoom threshold above which OD ref orbit is used (else QD).
     /// Wave 2.11 — 8-limb octuple-double centre + reference orbit.
-    /// QD ceiling is ~5×10⁵⁸ (X3 limb noise floor); OD pushes to ~10¹¹⁶.
+    /// QD ceiling is ~1×10⁶⁴ (coordinate-separation floor, --qdfloorsweep:
+    /// 128/128 distinct at 1e64, collapses at 1e66); OD pushes to ~10¹¹⁶.
     /// Engaged just below QD's wall so a single zoom step doesn't bounce
     /// off the precision floor.
     /// Verified by `OctupleDoubleTests.RefOrbit_ModerateZoom_OdMatchesQd`:
@@ -2036,7 +2037,7 @@ public sealed class MandelbrotCalculator
     // ── Full-QD per-pixel fallback (used for PT glitches at zoom > QDZoomThreshold) ─
     // DD cannot distinguish adjacent pixels at zoom > ~5e27 (pixel spacing falls below
     // DD precision ~6e-32), causing all glitched pixels in a block to produce identical
-    // coordinates and colors. QD (~62 digits) resolves pixels down to zoom ~5e58.
+    // coordinates and colors. QD (~62 digits) resolves pixels down to zoom ~1e64.
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ComputePixelQD<TMap>(QD cx, QD cy, int maxIter, int idx, TMap colorMap)
