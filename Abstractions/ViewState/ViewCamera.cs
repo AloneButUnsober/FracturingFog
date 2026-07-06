@@ -16,6 +16,13 @@
 // derive it from PlaneExtent / (max(px) * zoom) so there is a single source of
 // truth. Callers pass the viewport in the SAME pixel space the frame is
 // rendered in.
+//
+// DEEP-ZOOM NAVIGATION NOTE: this path is provably EXACT to 1e70 (--inputprobe,
+// and the input-math check in --navrepro: 9.5e-15 px at 4.65e64). If a user
+// reports deep-zoom "controls off / drift / jitter," it is NOT here — it is the
+// reference-dependent RENDER (or the per-point detail floor). Do not re-derive;
+// see Docs/Deep-Zoom-Perturbation.md (§4-5) before changing anything in the
+// input path.
 
 using System;
 
