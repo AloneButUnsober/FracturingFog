@@ -494,6 +494,49 @@ namespace FracturingFog.Rendering
             set => MandelbrotCalculator.AllowPtRebasing = value;
         }
 
+        // Render-context overlay lines + optional detail-limit warning, folded
+        // into the perf HUD (ShowPerfHud). Kept out of the status bar so a long
+        // warning can't wrap and resize the panel. Reads the live calculator
+        // state; called on the render thread just before the HUD composites.
+        private (System.Collections.Generic.List<string> lines, string? warning)
+            BuildRenderContextOverlay()
+        {
+            var lines = new System.Collections.Generic.List<string>(8);
+            double zoom = _calculator.Zoom;
+            lines.Add($"type   {ViewState.FractalType}");
+            lines.Add($"center {_calculator.CenterX:G10}");
+            lines.Add($"       {_calculator.CenterY:G10}");
+            lines.Add($"zoom   {zoom:G4}   iter {_calculator.MaxIterations}");
+
+            double maxUseful = _calculator.MaxUsefulZoomLog10;
+            string orbit = _calculator.ReferenceOrbitEscaped
+                ? $"ref-orbit escaped @ {_calculator.ReferenceOrbitLength}"
+                : $"ref-orbit bounded ({_calculator.ReferenceOrbitLength})";
+            lines.Add(orbit);
+            lines.Add(double.IsPositiveInfinity(maxUseful)
+                ? "max-detail zoom: unbounded (bounded orbit)"
+                : $"max-detail zoom: ~1e{maxUseful:F0}");
+
+            // Active diagnostic toggles (only when off/on-non-default).
+            var flags = new System.Collections.Generic.List<string>(4);
+            if (!MandelbrotCalculator.AllowPtRebasing) flags.Add("REBASE off");
+            if (_calculator.DisableAcceleration) flags.Add("ACCEL off");
+            if (_calculator.DisableSeriesApproximation) flags.Add("SA off");
+            if (_calculator.DisableDdBla) flags.Add("DD-BLA off");
+            if (flags.Count > 0) lines.Add("flags  " + string.Join(", ", flags));
+
+            // Detail-limit warning when the live zoom has passed this centre's
+            // δ-amplification floor (frame collapses to flat → navigation has no
+            // structure to grab). Fires just as detail degrades (estimate − 1).
+            string? warning = null;
+            if (!double.IsPositiveInfinity(maxUseful) && zoom > 0 &&
+                Math.Log10(zoom) > maxUseful - 1.0)
+            {
+                warning = $"detail limit ~1e{maxUseful:F0} - recenter on structure to zoom deeper";
+            }
+            return (lines, warning);
+        }
+
         // T3.1: GPU compute kernel constructed lazily on the first Use
         // request when a factory is installed. Null on non-D3D11 backends or
         // when the user has never enabled the feature.
@@ -1516,6 +1559,20 @@ namespace FracturingFog.Rendering
             if (!TaaFingerprintMatches(calc)) return;
             if (_taaSampleCount >= taaMax) return;
 
+            // Deep-zoom TAA no-op guard. RunOneTaaSample jitters the centre by
+            // ~scale on the DOUBLE CenterX/CenterY only; once that sub-pixel
+            // offset falls below the centre's double ULP (roughly past zoom
+            // ~1e10) it rounds away, so every continuation renders a byte-
+            // identical frame. Those are pure waste and re-run the upload/HUD/
+            // status path each pass — the "status flushing after the render
+            // finished" the user sees at deep zoom. Skip them: the base sample
+            // already IS the converged image. (Real deep-zoom TAA needs the
+            // jitter fed through the OD centre / per-pixel offset — deferred.)
+            double taaScale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+            double ulpCentre = Math.Max(Math.Abs(calc.CenterX), Math.Abs(calc.CenterY))
+                               * 2.220446049250313e-16;
+            if (taaScale <= ulpCentre) return;
+
             var nextJob = new FrameJob(
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
                 staleBuf: null, staleW: 0, staleH: 0,
@@ -2462,9 +2519,11 @@ namespace FracturingFog.Rendering
                     {
                         lbl += " (GPU)";
                     }
+                    var (ctxLines, warnLine) = BuildRenderContextOverlay();
                     _overlay.CompositePerfHud(dst, w, h,
                         snap, HardwareProbe.Summary,
-                        w, h, _calculator.MaxIterations, lbl);
+                        w, h, _calculator.MaxIterations, lbl,
+                        ctxLines, warnLine);
                 }
                 catch (Exception ex)
                 {
