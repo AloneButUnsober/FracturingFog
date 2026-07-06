@@ -11,17 +11,19 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 
-using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
-public partial class FFClientView : Window
+// Hybrid-shell: UserControl hosted modeless by MainWindow.SyncFFClient. The host
+// + shell flag own chrome + close => hide (VM CloseRequested -> IsFFClientVisible
+// =false, wired in ShellViewModel). This view keeps only the file-browse /
+// save-bytes / Help interactions that need the live TopLevel.
+public partial class FFClientView : UserControl
 {
     public FFClientView()
     {
         InitializeComponent();
-        EscapeCloseBehavior.Attach(this);
         DataContextChanged += OnDcChanged;
     }
 
@@ -33,12 +35,6 @@ public partial class FFClientView : Window
         {
             vm.BrowseFileRequested  += async (_, t) => await BrowseAsync(t.kind, t.suggestedName, t.assign);
             vm.SaveBytesRequested   += async (_, args) => await SaveBytesAsync(args);
-            // Use Close() so MainWindow.SyncFFClient's Closing handler
-            // intercepts, cancels the close, and flips the shell flag false
-            // — which lets the next ShowFFClient transition reopen. Calling
-            // Hide() directly here would skip the flag flip and the dialog
-            // would never reappear on the second click.
-            vm.CloseRequested       += (_, _) => Close();
         }
     }
 
@@ -72,7 +68,8 @@ public partial class FFClientView : Window
     }
 
     private void OnHelpClick(object? sender, RoutedEventArgs e)
-        => HelpViewerLauncher.Show(this,
+        => HelpViewerLauncher.Show(
+            TopLevel.GetTopLevel(this) as Window,
             "User/ClientServer-UserGuide.md",
             "First-time server setup",
             "Client / Server — Help");

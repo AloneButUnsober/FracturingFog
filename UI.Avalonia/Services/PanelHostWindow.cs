@@ -23,6 +23,7 @@ namespace FracturingFog.UI.Avalonia.Services
         bool SizeToContentHeight = true,
         bool CanResize = false,
         bool ShowInTaskbar = false,
+        WindowStartupLocation StartupLocation = WindowStartupLocation.Manual,
         IBrush? Background = null);
 
     /// <summary>
@@ -48,6 +49,7 @@ namespace FracturingFog.UI.Avalonia.Services
 
             Title = opts.Title;
             ShowInTaskbar = opts.ShowInTaskbar;
+            WindowStartupLocation = opts.StartupLocation;
             CanResize = opts.CanResize;
             SizeToContent = opts.SizeToContentHeight ? SizeToContent.Height : SizeToContent.Manual;
             if (!double.IsNaN(opts.Width)) Width = opts.Width;

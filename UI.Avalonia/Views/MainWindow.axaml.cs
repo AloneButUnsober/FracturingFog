@@ -42,10 +42,10 @@ public sealed partial class MainWindow : Window
     private WatermarkEditorView? _watermarkEditorWin;
     private AnimationEditorView? _animationEditorWin;
     private SceneEditorView? _sceneEditorWin;
-    private RegionEditorView? _regionEditorWin;
-    private AssetManagerView? _assetManagerWin;
-    private FloatingHelpView? _helpWin;
-    private FFClientView? _ffClientWin;
+    private PanelHostWindow? _regionEditorWin;
+    private PanelHostWindow? _assetManagerWin;
+    private PanelHostWindow? _helpWin;
+    private PanelHostWindow? _ffClientWin;
     private PanelHostWindow? _serverAdminWin;
     private PanelHostWindow? _clusterDashboardWin;
     private PanelHostWindow? _jobListWin;
@@ -1146,7 +1146,17 @@ public sealed partial class MainWindow : Window
         {
             if (_regionEditorWin == null)
             {
-                _regionEditorWin = new RegionEditorView { DataContext = _shell.RegionEditor };
+                _regionEditorWin = new PanelHostWindow(
+                    new RegionEditorView(),
+                    new PanelHostOptions(
+                        "Region Editor",
+                        Width: 560, Height: 520, MinWidth: 460, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.RegionEditor,
+                };
                 _regionEditorWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1175,7 +1185,17 @@ public sealed partial class MainWindow : Window
         {
             if (_assetManagerWin == null)
             {
-                _assetManagerWin = new AssetManagerView { DataContext = _shell.AssetManager };
+                _assetManagerWin = new PanelHostWindow(
+                    new AssetManagerView(),
+                    new PanelHostOptions(
+                        "Asset Manager",
+                        Width: 820, Height: 540, MinWidth: 640, MinHeight: 380,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.AssetManager,
+                };
                 _assetManagerWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1202,7 +1222,17 @@ public sealed partial class MainWindow : Window
         {
             if (_helpWin == null)
             {
-                _helpWin = new FloatingHelpView { DataContext = _shell.Help };
+                _helpWin = new PanelHostWindow(
+                    new FloatingHelpView(),
+                    new PanelHostOptions(
+                        "Help",
+                        Width: 720, Height: 780, MinWidth: 520, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterScreen,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.Help,
+                };
                 _helpWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1229,7 +1259,16 @@ public sealed partial class MainWindow : Window
         {
             if (_ffClientWin == null)
             {
-                _ffClientWin = new FFClientView { DataContext = _shell.FFClient };
+                _ffClientWin = new PanelHostWindow(
+                    new FFClientView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Remote Client",
+                        Width: 720, Height: 780, MinWidth: 600, MinHeight: 600,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = _shell.FFClient,
+                };
                 _ffClientWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
