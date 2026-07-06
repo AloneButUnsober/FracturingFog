@@ -235,10 +235,25 @@ Convergence after Wave 1:
 | ID | Item | Status |
 |----|------|--------|
 | SM-1 | Deep regions render solid when saved/auto `MaxIterations` < escape band | 🟡 Deferred 2026-07-05 — root-caused via `--regionprobe`: not a precision bug, purely iter-count (regions need 379–3940 iters; rendered under band → 100% in-set → flat). Fix = trace region-load iteration path (where a loaded region sets `MaxIterations`) and either raise the saved values or add auto-iter that climbs until in-set fraction stabilises. Verify with `--regionprobe 20000` (all clean) vs `--regionprobe 300` (all SOLID). |
-| SM-2 | Deep-QD extreme-region render is slow (minutes at full window × AA16) | 🟢 **Rebasing shipped opt-in 2026-07-05 — `--rebaseprobe` PASS.** Root cause: SIMD PT δ-loop bails ~1e30 (glitch check `z==Z && δ!=0`), so deep frames ran per-pixel **direct-QD** `ComputePixelQD`. Fix: `ComputePixelPTRebased` (Zhuoran rebasing) — ref index `m` tracked separately, `z = Z[m] + δ` reconstructed, rebase `δ := z; m := 0` when `\|z\| < \|δ\|` or ref exhausted. Replaces the QD/OD/HP glitch fallback (all 6 sites) when `AllowPtRebasing` on. Stays in **double** — a DD δ/ref/dc variant gave byte-identical iteration counts (precision is not the limiter; the ~50 % divergence from a QD render is chaotic sensitivity the QD path shares with itself, `QDself ≈ reb-vs-QD`). Probe: **91–142× speedup, rebasing tracks QD within 0.05 % of QD's own SA-off/SA-on reproducibility.** Default OFF (render path bit-identical); flip on after a visual sign-off — same gate as 3.5. Later mitigations: SIMD rebasing (reclaim vector throughput), lower AA for preview, adaptive iter cap (ties to SM-1). |
+| SM-3 | Status bar reports "done" while TAA refinement is still running | 🟡 Deferred 2026-07-05 — surfaced once rebasing went default-ON: only the first full-res sample (`TaaSampleIndex==0`) updates the status bar (S-X8, to avoid per-sample ms oscillation); pre-rebasing that sample was slow so status tracked the real work, now it finishes fast while ≤15 TAA continuations keep computing. Fix = keep "Calculating…" (or "Refining n/N") while continuations are pending and fire the authoritative `FrameCompleted` when TAA settles (`_taaSampleCount >= taaMax`). Touches the TAA/upload timing loop — needs the running GUI to verify. |
+| SM-4 | Right-click selection-box outline redraws slowly at deep zoom | 🟡 Deferred 2026-07-05 — also a rebasing-default side effect: the overlay repaint (`RepaintWithPostFx`) shares `_uploadGate` with `Calculate`; rebasing lets deep frames complete and spawn TAA continuations that hold the gate, so overlay repaints block behind them. Real fix = decouple the overlay repaint from the calc gate (or suppress TAA continuations while a box-select drag is active). |
+| SM-2 | Deep-QD extreme-region render is slow (minutes at full window × AA16) | 🟢 **Rebasing shipped opt-in 2026-07-05 — `--rebaseprobe` PASS.** Root cause: SIMD PT δ-loop bails ~1e30 (glitch check `z==Z && δ!=0`), so deep frames ran per-pixel **direct-QD** `ComputePixelQD`. Fix: `ComputePixelPTRebased` (Zhuoran rebasing) — ref index `m` tracked separately, `z = Z[m] + δ` reconstructed, rebase `δ := z; m := 0` when `\|z\| < \|δ\|` or ref exhausted. Replaces the QD/OD/HP glitch fallback (all 6 sites) when `AllowPtRebasing` on. Stays in **double** — a DD δ/ref/dc variant gave byte-identical iteration counts (precision is not the limiter; the ~50 % divergence from a QD render is chaotic sensitivity the QD path shares with itself, `QDself ≈ reb-vs-QD`). Probe: **91–142× speedup, rebasing tracks QD within 0.05 % of QD's own SA-off/SA-on reproducibility.** **Default flipped ON 2026-07-05** after user confirmed the speed win; the debug toggle is now "Bypass Rebasing" (checked = off) to A/B against legacy QD/OD. Later mitigations: SIMD rebasing (reclaim vector throughput), lower AA for preview, adaptive iter cap (ties to SM-1). |
 
 ## Status log
 
+- 2026-07-05 — **Input rework CONFIRMED FIXED after a clean rebuild** (commit
+  168eedc). Smoke retest initially still failed — root cause was a **stale
+  binary**: `dotnet build` kept reporting success without relinking the exe, so
+  the tested build lacked the ViewCamera change (rebasing, a runtime static
+  flag, was present — hence its effects showed but the input fix did not). A
+  `--no-incremental -t:Rebuild` resolved it. Also fixed a real render bug found
+  in passing: `ApplyView` copied only the QD centre limbs (X0..X3) into the
+  render calculator, dropping OD (X4..X7) — past 1e50 the render sat at a
+  QD-truncated centre while the view state held full OD, so deep frames rendered
+  at a wrong centre and navigation compounded against the mis-placed image; now
+  copies all eight limbs (`MirrorMandelbrotState` already did). Rebasing default
+  flipped ON (see SM-2); two rebasing-default side effects filed as SM-3
+  (status-bar premature done) + SM-4 (outline redraw slow), deferred.
 - 2026-07-05 — **Deep-zoom input rework — ViewCamera + DeepComplex (commit
   901b641).** User report: approaching ~9e49, keyboard/mouse lose precision
   (double-click mis-focuses, drag pans the wrong amount, box-zoom lands wrong).
