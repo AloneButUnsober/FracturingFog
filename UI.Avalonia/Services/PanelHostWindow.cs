@@ -58,17 +58,27 @@ namespace FracturingFog.UI.Avalonia.Services
             Content = panel;
             EscapeCloseBehavior.Attach(this);
 
-            // Panels carry their VM as DataContext. Bind now if present,
-            // otherwise when it is assigned. The host closes when the VM asks.
-            BindVm(panel.DataContext);
-            panel.DataContextChanged += (_, _) => BindVm(panel.DataContext);
+            // The close signal comes from an IClosableDialog. Most views expose
+            // it on their VM (DataContext); some (code-behind close via Click
+            // handlers) expose it on the control itself. Prefer the control,
+            // fall back to the DataContext, and rebind if the DataContext is
+            // assigned later.
+            _panel = panel;
+            Bind(panel as IClosableDialog ?? panel.DataContext as IClosableDialog);
+            panel.DataContextChanged += (_, _) =>
+            {
+                if (_boundVm == null)
+                    Bind(_panel as IClosableDialog ?? _panel.DataContext as IClosableDialog);
+            };
         }
 
-        private void BindVm(object? dataContext)
+        private Control? _panel;
+
+        private void Bind(IClosableDialog? closable)
         {
-            if (ReferenceEquals(_boundVm, dataContext)) return;
+            if (ReferenceEquals(_boundVm, closable)) return;
             if (_boundVm != null) _boundVm.CloseRequested -= OnCloseRequested;
-            _boundVm = dataContext as IClosableDialog;
+            _boundVm = closable;
             if (_boundVm != null) _boundVm.CloseRequested += OnCloseRequested;
         }
 
