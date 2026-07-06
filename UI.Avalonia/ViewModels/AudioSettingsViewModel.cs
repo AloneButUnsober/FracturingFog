@@ -15,7 +15,7 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 /// callback (host owns the meter timer to avoid sucking an Avalonia
 /// dispatcher into the slideshow loop on shutdown).
 /// </summary>
-public sealed class AudioSettingsViewModel : ViewModelBase
+public sealed class AudioSettingsViewModel : ViewModelBase, IClosableDialog
 {
     private readonly AudioSettings _working;
     private readonly IBeatSource? _liveSource;

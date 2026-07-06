@@ -155,9 +155,17 @@ Cluster/Job/Worker views, HelpViewer, Sandbox. **Not converted:** `MainWindow`
 (the render window), the Mini* tool windows, `FloatingMenuView` (the modeless
 main menu — revisited when the shell replaces it in S1).
 
-Status: **F3 pattern + AppSettingsView done** (commit pending). Remaining
-conversions are mechanical replication of the pattern above, but each is a
-contract change not runtime-verifiable headlessly — sweep strategy TBD with user.
+Status: **F3 pattern + AppSettingsView done and RUNTIME-VERIFIED**
+(2026-07-06). Drove the live app: App Settings opens via `PanelHostWindow`,
+`LabeledNumericField` renders + edits, OK commits + persists (reopen reflects
+saved value), Cancel discards, placement centers over owner (F2), F1 global
+styles render on the FloatingMenu. Sweep strategy: by-area, commit per batch.
+
+**Finding (pre-existing, out of scope):** Escape closes NO dialog app-wide —
+`EscapeCloseBehavior` (attached to ~30 dialogs) does not fire in Avalonia
+12.0.4; confirmed on both a converted (`PanelHostWindow`) and an unconverted
+(`SlideshowSettings`) dialog, so it is not an F3 regression. Tracked as a
+standalone shared-input fix (spawned task), not folded into the conversion sweep.
 
 ### Phase S1 — Shell
 - `SplitView`: left nav-rail (grouped ~5–6 nav groups collapsing the current

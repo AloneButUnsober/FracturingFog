@@ -348,25 +348,18 @@ namespace FracturingFog.Hosting
         {
             var tcs = new TaskCompletionSource<global::FracturingFog.Models.VideoSettingsConfig?>();
 
-            void Run()
+            async void Run()
             {
                 var vm = new VideoSettingsViewModel(current);
-                var win = new VideoSettingsView { DataContext = vm };
-                win.Closed += (_, _) =>
-                {
-                    if (tcs.Task.IsCompleted) return;
-                    tcs.TrySetResult(vm.Result);
-                };
-                // Windows nested-modal fix: a modal-of-a-modal (this Video dialog
-                // is owned by the Slideshow Settings dialog, itself a modal of the
-                // main window) does not reliably come to the foreground on Win32,
-                // and with ShowInTaskbar=false it then has no taskbar entry either
-                // — the user sees an inert parent and no visible child. Force it
-                // to activate once shown. No-op on platforms where it already
-                // fronts correctly (e.g. X11). Mirrors the existing Activate-on-
-                // Opened workaround used elsewhere in this file.
-                // Foreground activation is handled centrally by WindowService.
-                _ = WindowService.ShowDialogAsync(win, owner ?? ActiveMainWindow);
+                var panel = new VideoSettingsView { DataContext = vm };
+                await WindowService.ShowPanelDialogAsync(
+                    panel,
+                    new PanelHostOptions(
+                        "Video Settings",
+                        Width: 460, MinWidth: 380,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
+                    owner ?? ActiveMainWindow);
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(vm.Result);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -398,12 +391,12 @@ namespace FracturingFog.Hosting
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            void Run()
+            async void Run()
             {
                 var current = AudioSettingsStore.Load();
                 var vm = new AudioSettingsViewModel(current, liveSource: null,
                     capabilities: AudioCapabilityProbe.Detect());
-                var win = new AudioSettingsView { DataContext = vm };
+                var panel = new AudioSettingsView { DataContext = vm };
 
                 // Browse… → Avalonia open-file picker; push the chosen path back.
                 vm.BrowseFileRequested += async (_, _) =>
@@ -414,24 +407,21 @@ namespace FracturingFog.Hosting
                     if (!string.IsNullOrEmpty(path)) vm.FilePath = path!;
                 };
 
-                // OK commits vm.Result; persist it. Cancel raises false → no save.
-                vm.CloseRequested += (_, ok) =>
+                var result = await WindowService.ShowPanelDialogAsync(
+                    panel,
+                    new PanelHostOptions(
+                        "Audio-Reactive Slideshow",
+                        Width: 520, MinWidth: 420,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
+                    owner);
+
+                // OK (true) commits vm.Result; persist it. Cancel/dismiss → no save.
+                if (result == true)
                 {
-                    if (ok)
-                    {
-                        try { AudioSettingsStore.Save(vm.Result); } catch { }
-                    }
-                };
+                    try { AudioSettingsStore.Save(vm.Result); } catch { }
+                }
 
-                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
-
-                // Windows nested-modal fix — see ShowVideoSettingsAsync: this
-                // Audio dialog is likewise a modal-of-a-modal that may not front
-                // on Win32. Force activation once shown (no-op elsewhere).
-                // Foreground activation is handled centrally by WindowService.
-
-                // WindowService falls back to the active main window when owner is null.
-                _ = WindowService.ShowDialogAsync(win, owner);
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
