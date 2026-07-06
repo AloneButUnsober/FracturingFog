@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="FracturingFog.UI.Avalonia.Controls.LabeledNumericField"
+             x:Name="Root">
+    <!--
+        Label + numeric entry, sized so the value is always fully visible.
+
+        Fixes the recurring "numeric field too narrow to show its value" bug by
+        giving every numeric entry a shared, generous default width (token
+        FieldWidthNumeric) instead of each dialog guessing. Use this instead of
+        a bare NumericUpDown in dialogs.
+
+        Bind Value two-way. Label/Minimum/Maximum/Increment/FormatString/Unit
+        are all settable. LabelWidth defaults to the shared label column.
+    -->
+    <Grid ColumnDefinitions="Auto,Auto,Auto"
+          VerticalAlignment="Center">
+        <TextBlock Grid.Column="0"
+                   Text="{Binding Label, ElementName=Root}"
+                   Width="{Binding LabelWidth, ElementName=Root}"
+                   Foreground="{StaticResource BrushTextLabel}"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Right"
+                   Margin="0,0,8,0" />
+        <NumericUpDown Grid.Column="1"
+                       x:Name="Nud"
+                       Value="{Binding Value, ElementName=Root, Mode=TwoWay}"
+                       Minimum="{Binding Minimum, ElementName=Root}"
+                       Maximum="{Binding Maximum, ElementName=Root}"
+                       Increment="{Binding Increment, ElementName=Root}"
+                       FormatString="{Binding FormatString, ElementName=Root}"
+                       Width="{Binding FieldWidth, ElementName=Root}"
+                       HorizontalContentAlignment="Right" />
+        <TextBlock Grid.Column="2"
+                   Text="{Binding Unit, ElementName=Root}"
+                   IsVisible="{Binding HasUnit, ElementName=Root}"
+                   Foreground="{StaticResource BrushTextLabelAlt}"
+                   VerticalAlignment="Center"
+                   Margin="4,0,0,0" />
+    </Grid>
+</UserControl>
