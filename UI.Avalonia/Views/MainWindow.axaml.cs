@@ -21,9 +21,11 @@ using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using FracturingFog.Input;
 using FracturingFog.UI.Avalonia.Controls;
 using FracturingFog.UI.Avalonia.Input;
+using FracturingFog.UI.Avalonia.Services;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -49,7 +51,7 @@ public sealed partial class MainWindow : Window
     private JobListView? _jobListWin;
     private JobDetailView? _jobDetailWin;
     private WorkerDetailView? _workerDetailWin;
-    private MasterConfigView? _masterConfigWin;
+    private PanelHostWindow? _masterConfigWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
     private MiniWindowTether? _miniMapTether;
@@ -1394,7 +1396,20 @@ public sealed partial class MainWindow : Window
         {
             if (_masterConfigWin == null)
             {
-                _masterConfigWin = new MasterConfigView { DataContext = _shell.MasterConfig };
+                // Hybrid-shell: view is a UserControl wrapped in a generic
+                // modeless host that carries the former Window chrome. Close =>
+                // hide is owned here (the VM's CloseRequested already flips
+                // IsMasterConfigVisible via ShellViewModel, routing to Hide).
+                _masterConfigWin = new PanelHostWindow(
+                    new MasterConfigView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Master Config",
+                        Width: 540, Height: 600, MinWidth: 460, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = _shell.MasterConfig,
+                };
                 _masterConfigWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
