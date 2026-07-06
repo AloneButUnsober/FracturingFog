@@ -71,60 +71,57 @@ layer is not the source of any deep-zoom navigation complaint.** Native input
 (`GetClientSize`), and the render buffer is device-px, so there is no HiDPI
 scale mismatch (it cancels).
 
-## 5. The deep-zoom navigation symptom (SM-11) — reference-dependent RENDER
+## 5. The deep-zoom navigation symptom (SM-11) — RESOLVED: render is consistent
 
-**Symptom:** past ~1e63–1e64, double-click / outline-zoom "get close but not
-exact" and click-drag pan makes the image "jump around" as the mouse moves, even
-though the grabbed point stays roughly put.
+**Symptom (user):** past ~1e63–1e64, double-click / outline-zoom "get close but
+not exact" and click-drag pan makes the image "jump around" as the mouse moves.
 
-**Root cause (measured, not theorised):** the render is **reference-dependent**.
-Recentring (any pan/focus/box-zoom) recomputes the reference orbit; the *same*
-world region then renders with slightly different iteration counts, which the
-rainbow palette amplifies into apparent position drift + live-drag shimmer. The
-pan preview is `Trigger(progressive)` = ¼-res **full-iteration** (not
-under-iterated), so the jitter is this same effect, not preview coarseness.
+**Conclusion after full measurement: the navigation core is SOUND.** Input is
+exact (§4). The render is **reference-consistent** during navigation — it does
+NOT meaningfully redraw the same region differently as the centre moves.
 
-**Evidence (`--navrepro` on the user's working 1.32701e63 vs broken 4.65087e64
-coords, both detailed, below their 1e67 floor):**
-- input-math error: 9.5e-15 px (exact) at both.
-- rendered focus error (patch-match): ~2 px at 1.32e63, ~16 px at 4.65e64 —
-  grows smoothly with zoom.
-- best-alignment SAD ≈ 700–890 (~18 iteration-counts/pixel) — the two frames
-  genuinely differ for the same world region.
+**The trail (kept so it is not re-walked):**
+- `--navrepro` on the user's working 1.32701e63 vs broken 4.65087e64 coords
+  first showed a double-click focus "error" of ~2 px → ~16 px (patch-matched),
+  suggesting a zoom-growing reference-dependence.
+- **SM-11a (DD reference + DD δ)** implemented (`ComputePixelPTRebasedDD`) and
+  forced across ALL pixels (`--navrepro scalar ddref`, `rebasedPx=942079/942080`):
+  focus-err stayed **byte-identical 16 px**. Rebasing/SA/BLA on/off: also
+  unchanged. So it was never double-rounding precision (matches the old "DD
+  byte-identical" result).
+- **`--panjitter`** (the artefact-free test — consecutive OFF-centre pan frames,
+  fresh reference each frame, compare beyond the pure translation): inter-frame
+  Δiter is only **0 / 1 / 3 / 6 per px** at 2 / 8 / 20 / 40 px steps. The render
+  is stable frame-to-frame. **SM-11b (reference recycling during the drag)
+  changed nothing** (recycle vs fresh identical) — because fresh is already
+  consistent.
+- Therefore the `--navrepro` 16 px was a **measurement artefact**: frame B is
+  centred exactly on the clicked point, making it frame B's *reference* pixel
+  (δ=0, escapes at the reference length) vs a perturbed pixel in frame A — the
+  neighbourhoods differ for that reason, and patch-match on self-similar deep
+  structure locks onto colour noise. It is NOT user-visible positional drift.
 
-**What does NOT fix it (all tested, all byte-identical / unchanged):**
-- Rebasing on/off; SA/BLA on/off (`--navrepro ... norebase|acceloff|saoff`).
-- **DD reference + DD δ-chain** in the rebased loop, even forced across ALL
-  pixels (`--navrepro ... scalar ddref`, `rebasedPx=942079/942080`): focus-err
-  stayed exactly 16 px. **So the divergence is NOT double-rounding of the
-  reference orbit or the δ-chain in the 16→31-digit range.** This matches the
-  earlier "DD δ byte-identical at 1e47" result — DD is not the lever.
+**So neither SM-11a nor SM-11b was needed.** What the user perceives as "close
+but not exact / jumping" is the residual below, not a navigation fault.
 
-**Open hypotheses (for whoever picks this up):**
-1. **Precision floor higher than DD.** At 4.65e64 a centre-invariant δ needs
-   ~65 significant digits; DD (31) is below that, QD (62) borderline, OD (124)
-   sufficient. DD being *byte-identical* (not merely insufficient) argues against
-   this, but a QD-δ variant is the clean next experiment — mirror
-   `ComputePixelPTRebasedDD` with QD and A/B via `--navrepro`.
-2. **Rebasing-decision divergence.** Two references rebase at different
-   iterations (`|z| < |δ|` fires at different m), accumulating different rounding
-   paths. Test: log rebase counts per pixel for the two centres.
-3. **Measurement caveat.** In the `--navrepro` focus test, frame B is centred
-   exactly on the clicked world point, making it frame B's *reference* pixel
-   (δ=0, escapes at the reference length) while in frame A it is a perturbed
-   pixel — so part of the 16 px may be a compare-against-reference artefact, not
-   user-visible drift. Before investing in a fix, tighten the test: focus to a
-   point OFFSET from the clicked feature so neither frame has it as centre.
+## 6. What actually remains (cosmetic, deep zoom)
 
-## 6. Practical mitigations (independent of the precision question)
+- **¼-res progressive drag preview.** `RenderHint.Fast` → `Trigger(progressive)`
+  shows a ¼-then-½-res preview during a drag; the block edges shift as you move,
+  which reads as "jumping" on a busy deep image. This is preview *resolution*,
+  not navigation. Lever: higher preview floor (½ instead of ¼) at deep zoom, or a
+  brief settle before the first preview.
+- **Palette sensitivity.** The reference-consistent render still varies by a few
+  iteration counts frame-to-frame (Δiter ≤ ~6/px over a 40px pan); a fast-cycling
+  rainbow palette turns that into visible shimmer. Lever: a less
+  iteration-sensitive / smoothed palette.
+- Both are cosmetic. The reference-recycle plumbing (`RecyclePreviewOrbit`,
+  default OFF; `MandelbrotCalculator.AllowRecycleThisRender`) is kept but unused —
+  `--panjitter` showed it changes neither pixels nor perceptible speed.
 
-- **Reference-orbit recycling during a drag (SM-11b).** `AllowRefOrbitRecycle`
-  (implemented, default off) keeps ONE reference for the whole pan, so every
-  preview frame shares it → no shimmer mid-drag. Best UX win for the "pan jumps"
-  complaint; residual on the committed frame only.
-- The per-recenter difference is ~0.03 % of the iteration count — cosmetic
-  palette shimmer, not a positional fault. A less iteration-sensitive palette or
-  slight smoothing hides it.
+If a *positional* error is ever reproduced on a DETAILED frame, re-open with
+`--panjitter` (artefact-free) rather than the `--navrepro` focus test, and only
+then consider a QD-δ variant.
 
 ## 7. Diagnostic tools (headless, in `Program.cs`)
 
@@ -134,7 +131,8 @@ Run `dotnet FracturingFog.dll <flag>`; each writes a `.out` next to the exe.
 |------|----------|
 | `--inputprobe` | Controller anchor drift vs OD truth, wheel/click/pan, to 1e70. Expect 0.00 px. |
 | `--focusprobe [dim]` | End-to-end double-click focus px error + frame richness + `MaxUsefulZoomLog10` + ref-orbit escape, over a zoom sweep. |
-| `--navrepro [file]` | Reproduce a USER view from a coordinate file (`Docs/Nav-Repro-Template.txt`): full-limb `cx/cy`, `zoom`, `dim`, `click`. Reports input-math error, rendered focus-err, SAD(0,0) vs SAD(min), rebased-pixel count, `maxUseful`. Path toggles: `norebase acceloff saoff ddref scalar`. |
+| `--navrepro [file]` | Reproduce a USER view from a coordinate file (`Docs/Nav-Repro-Template.txt`): full-limb `cx/cy`, `zoom`, `dim`, `click`. Reports input-math error, rendered focus-err, SAD(0,0) vs SAD(min), rebased-pixel count, `maxUseful`. Path toggles: `norebase acceloff saoff ddref scalar`. NOTE: its focus-err centres frame B on the clicked point (reference-pixel artefact) — use `--panjitter` for an artefact-free reference-consistency check. |
+| `--panjitter [step]` | Artefact-free render-consistency test: simulate a horizontal drag at a deep centre, compare consecutive OFF-centre frames beyond the pure pan (inter-frame Δiter/px), FRESH vs RECYCLE. Low = render is stable during navigation. |
 | `--qdfloorsweep` | QD/OD coordinate-separation floor (distinct per-pixel coords vs zoom). |
 | `--rebaseprobe` | Rebasing vs QD parity + speedup. |
 

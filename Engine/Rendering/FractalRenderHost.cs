@@ -494,6 +494,16 @@ namespace FracturingFog.Rendering
             set => MandelbrotCalculator.AllowPtRebasing = value;
         }
 
+        /// <summary>SM-11b — reuse the reference orbit across progressive pan/zoom
+        /// PREVIEW frames instead of recomputing it each move. Default OFF:
+        /// `--panjitter` showed the FRESH per-frame render is already
+        /// reference-consistent during a drag (inter-frame Δiter ≈ 0-6/px even at
+        /// 40px steps), so recycling changes neither the pixels nor perceptibly
+        /// the speed — the deep-zoom "jumping" is NOT reference recompute. Kept as
+        /// clean plumbing (instance flag on the preview calc) for future recycle
+        /// work; flip on only with a measured reason. See Docs/Deep-Zoom-Perturbation.md §6.</summary>
+        public bool RecyclePreviewOrbit { get; set; } = false;
+
         // Render-context overlay lines + optional detail-limit warning, folded
         // into the perf HUD (ShowPerfHud). Kept out of the status bar so a long
         // warning can't wrap and resize the panel. Reads the live calculator
@@ -1096,6 +1106,11 @@ namespace FracturingFog.Rendering
                     ? _previewCalcQuarter
                     : _previewCalcHalf;
                 MirrorMandelbrotState(calc, preview);
+                // SM-11b — let the preview reuse its cached reference orbit across
+                // a drag so consecutive preview frames share one reference (no
+                // per-move recompute → no deep-zoom "jumping"). Only the transient
+                // preview; the committed full-res calc below stays fresh/exact.
+                preview.AllowRecycleThisRender = RecyclePreviewOrbit;
                 try { preview.Calculate(token); }
                 catch (OperationCanceledException)
                 {

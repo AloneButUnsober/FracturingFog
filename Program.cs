@@ -1467,6 +1467,99 @@ static class Program
             return 0;
         }
 
+        // --panjitter: SM-11b validation. Simulate a horizontal drag (centre
+        // steps by `step` px each frame) at a deep centre and measure how much
+        // each preview frame CHANGES beyond the pure pan translation — that
+        // change is the "image jumps around while dragging" the user reports.
+        // Compares two render modes: FRESH (recompute the reference orbit every
+        // frame, current preview behaviour) vs RECYCLE (reuse one reference across
+        // the drag, SM-11b). Metric: for consecutive frames, shift frame[i] by the
+        // known `step` and SAD it against frame[i+1] over the overlap — 0 = the
+        // image only translated (stable); large = reference-recompute shimmer.
+        if (args.Length > 0 && args[0] == "--panjitter")
+        {
+            const int W = 512, H = 512, frames = 6;
+            int[] steps = { 2, 8, 20, 40 };
+            if (args.Length > 1 && int.TryParse(args[1], out int stepArg) && stepArg > 0)
+                steps = new[] { stepArg };
+            double[] cx = { -1.9918151296901943, -7.8219844803880472E-17, 1.6601399303928428E-34,
+                             5.9806621034830635E-51, -2.60673981819717E-67, 0, 0, 0 };
+            double[] cy = { -5.5240415753972429E-06, -2.8659813126937928E-22, 6.6910924089534E-39,
+                             -3.7336955151644623E-55, -2.8541322190114832E-71, 0, 0, 0 };
+            double zoom = 4.65087e64;
+            int maxIter = FracturingFog.Models.QualityPreset.Extreme.ComputeIterations(zoom);
+            double scaleD = (3.5 / Math.Max(W, H)) / zoom;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Pan-jitter probe — {W}x{H} zoom={zoom:G4}, {frames} frames per drag.");
+            sb.AppendLine("  interFrameSAD = change beyond the pure pan (0 = stable, high = shimmer).");
+
+            // Build the OD centre for a given horizontal pixel-step offset k.
+            FracturingFog.MandelbrotCalculator MakeAt(int k, int step, bool recycle, FracturingFog.MandelbrotCalculator? reuse)
+            {
+                var cxOD = FracturingFog.FFMath.OD.FromCenterOffset(
+                    new FracturingFog.FFMath.OD(cx[0], cx[1], cx[2], cx[3], cx[4], cx[5], cx[6], cx[7]),
+                    k * step, scaleD);
+                var c = reuse ?? new FracturingFog.MandelbrotCalculator(W, H)
+                {
+                    Zoom = zoom, MaxIterations = maxIter,
+                    Quality = FracturingFog.Models.QualityPreset.Extreme,
+                    ColorMap = new FracturingFog.Models.HsvPalette(),
+                };
+                c.CenterX = cxOD.X0; c.CenterXLo = cxOD.X1; c.CenterX2 = cxOD.X2; c.CenterX3 = cxOD.X3;
+                c.CenterX4 = cxOD.X4; c.CenterX5 = cxOD.X5; c.CenterX6 = cxOD.X6; c.CenterX7 = cxOD.X7;
+                c.CenterY = cy[0]; c.CenterYLo = cy[1]; c.CenterY2 = cy[2]; c.CenterY3 = cy[3];
+                c.CenterY4 = cy[4]; c.CenterY5 = cy[5]; c.CenterY6 = cy[6]; c.CenterY7 = cy[7];
+                c.AllowRecycleThisRender = recycle;
+                return c;
+            }
+
+            long InterFrameSad(int[] a, int[] b, int step)
+            {
+                // b is the same view panned by +step px in X; shift a by step and
+                // compare on the overlap [step, W) so a pure translation scores 0.
+                long sad = 0; int n = 0;
+                for (int y = 0; y < H; y += 2)
+                for (int x = step; x < W; x += 2)
+                { sad += Math.Abs((long)a[y * W + (x - step)] - b[y * W + x]); n++; }
+                return n > 0 ? sad / n : 0;   // avg |Δiter| per sampled pixel
+            }
+
+            foreach (int step in steps)
+            {
+                foreach (bool recycle in new[] { false, true })
+                {
+                    var reuseCalc = recycle ? new FracturingFog.MandelbrotCalculator(W, H)
+                    {
+                        Zoom = zoom, MaxIterations = maxIter,
+                        Quality = FracturingFog.Models.QualityPreset.Extreme,
+                        ColorMap = new FracturingFog.Models.HsvPalette(),
+                    } : null;
+
+                    int[]? prev = null; long sum = 0, worst = 0; int cnt = 0; int misses = 0;
+                    for (int k = 0; k < frames; k++)
+                    {
+                        var c = MakeAt(k, step, recycle, reuseCalc);
+                        c.Calculate();
+                        int[] cur = (int[])c.IterationBuffer.Clone();
+                        if (prev != null)
+                        {
+                            long s = InterFrameSad(prev, cur, step);
+                            sum += s; if (s > worst) worst = s; cnt++;
+                        }
+                        prev = cur;
+                    }
+                    sb.AppendLine($"  step={step,2}px [{(recycle ? "RECYCLE" : "FRESH  ")}] " +
+                                  $"avg interFrameSAD={(cnt > 0 ? sum / cnt : 0),6}  worst={worst,6}");
+                }
+            }
+
+            string pjPath = System.IO.Path.Combine(AppContext.BaseDirectory, "panjitter.out");
+            System.IO.File.WriteAllText(pjPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
         // Generated vs legacy MandelbrotCalculator comparison harness.
         // Renders both at a small grid of standard viewpoints and reports
         // per-location pixel-count disagreement. PASS when each location

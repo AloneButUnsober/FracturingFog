@@ -391,6 +391,14 @@ public sealed class MandelbrotCalculator
     // perturbation tolerance (measured near-identical by --reforbitrecycle),
     // pending video-flicker sign-off before it drives production renders.
     public static bool AllowRefOrbitRecycle { get; set; } = false;
+
+    /// <summary>SM-11b — per-render opt-in for reference-orbit recycling, set by
+    /// the host on the progressive pan/zoom PREVIEW calculators so a drag reuses
+    /// one reference across preview frames (no per-move recompute → no deep-zoom
+    /// "jumping"). Instance flag (not the global static) so it applies only to
+    /// the sidecar preview calcs; the committed full-res calc keeps it false and
+    /// renders a fresh, exact reference. See Docs/Deep-Zoom-Perturbation.md §6.</summary>
+    public bool AllowRecycleThisRender { get; set; }
     // Per-frame centre shift from the cached reference centre, in world units,
     // rounded to double (the SIMD PT dc is double regardless of tier). Zero on
     // any non-recycled frame — `x + 0.0 == x`, so the default path is
@@ -1663,7 +1671,15 @@ public sealed class MandelbrotCalculator
         // (or when the feature is off) Δc stays zero and we compute fresh.
         _refRecycleDx = 0.0;
         _refRecycleDy = 0.0;
-        bool recycled = AllowRefOrbitRecycle && TryRecycleReferenceOrbit(maxIt, scale);
+        // SM-11b — recycle also when this render opts in per-frame (progressive
+        // pan/zoom PREVIEW sidecars) so a drag keeps ONE reference orbit across
+        // preview frames instead of recomputing it each move. Recomputing per
+        // move is what makes the same region redraw slightly differently — the
+        // "image jumps around while dragging" the user sees at deep zoom. The
+        // committed full-res frame leaves this off and computes fresh, so the
+        // final image is always exact; only the transient preview reuses.
+        bool recycled = (AllowRefOrbitRecycle || AllowRecycleThisRender)
+                        && TryRecycleReferenceOrbit(maxIt, scale);
         if (!recycled)
         {
             if (Zoom > ODZoomThreshold)
