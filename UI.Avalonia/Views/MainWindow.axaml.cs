@@ -46,11 +46,11 @@ public sealed partial class MainWindow : Window
     private AssetManagerView? _assetManagerWin;
     private FloatingHelpView? _helpWin;
     private FFClientView? _ffClientWin;
-    private ServerAdminView? _serverAdminWin;
-    private ClusterDashboardView? _clusterDashboardWin;
-    private JobListView? _jobListWin;
-    private JobDetailView? _jobDetailWin;
-    private WorkerDetailView? _workerDetailWin;
+    private PanelHostWindow? _serverAdminWin;
+    private PanelHostWindow? _clusterDashboardWin;
+    private PanelHostWindow? _jobListWin;
+    private PanelHostWindow? _jobDetailWin;
+    private PanelHostWindow? _workerDetailWin;
     private PanelHostWindow? _masterConfigWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
@@ -1256,7 +1256,19 @@ public sealed partial class MainWindow : Window
         {
             if (_serverAdminWin == null)
             {
-                _serverAdminWin = new ServerAdminView { DataContext = _shell.ServerAdmin };
+                var vm = _shell.ServerAdmin;
+                _serverAdminWin = new PanelHostWindow(
+                    new ServerAdminView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Server Admin",
+                        Width: 560, Height: 680, MinWidth: 480, MinHeight: 480,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _serverAdminWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _serverAdminWin.Closed += (_, _) => vm.StopPolling();
                 _serverAdminWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1283,7 +1295,19 @@ public sealed partial class MainWindow : Window
         {
             if (_clusterDashboardWin == null)
             {
-                _clusterDashboardWin = new ClusterDashboardView { DataContext = _shell.ClusterDashboard };
+                var vm = _shell.ClusterDashboard;
+                _clusterDashboardWin = new PanelHostWindow(
+                    new ClusterDashboardView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Cluster Dashboard",
+                        Width: 980, Height: 640, MinWidth: 720, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _clusterDashboardWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _clusterDashboardWin.Closed += (_, _) => vm.StopPolling();
                 _clusterDashboardWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1310,7 +1334,19 @@ public sealed partial class MainWindow : Window
         {
             if (_jobListWin == null)
             {
-                _jobListWin = new JobListView { DataContext = _shell.JobList };
+                var vm = _shell.JobList;
+                _jobListWin = new PanelHostWindow(
+                    new JobListView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Cluster Jobs",
+                        Width: 1040, Height: 640, MinWidth: 760, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _jobListWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _jobListWin.Closed += (_, _) => vm.StopPolling();
                 _jobListWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1337,7 +1373,19 @@ public sealed partial class MainWindow : Window
         {
             if (_jobDetailWin == null)
             {
-                _jobDetailWin = new JobDetailView { DataContext = _shell.JobDetail };
+                var vm = _shell.JobDetail;
+                _jobDetailWin = new PanelHostWindow(
+                    new JobDetailView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Job Detail",
+                        Width: 780, Height: 780, MinWidth: 520, MinHeight: 540,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _jobDetailWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _jobDetailWin.Closed += (_, _) => vm.StopPolling();
                 _jobDetailWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1368,7 +1416,19 @@ public sealed partial class MainWindow : Window
         {
             if (_workerDetailWin == null)
             {
-                _workerDetailWin = new WorkerDetailView { DataContext = _shell.WorkerDetail };
+                var vm = _shell.WorkerDetail;
+                _workerDetailWin = new PanelHostWindow(
+                    new WorkerDetailView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Worker Detail",
+                        Width: 640, Height: 640, MinWidth: 480, MinHeight: 540,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _workerDetailWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _workerDetailWin.Closed += (_, _) => vm.StopPolling();
                 _workerDetailWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1405,7 +1465,7 @@ public sealed partial class MainWindow : Window
                     new PanelHostOptions(
                         "FracturingFog — Master Config",
                         Width: 540, Height: 600, MinWidth: 460, MinHeight: 420,
-                        SizeToContentHeight: false, CanResize: true,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
                         Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
                 {
                     DataContext = _shell.MasterConfig,

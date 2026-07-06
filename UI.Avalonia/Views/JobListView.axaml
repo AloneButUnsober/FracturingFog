@@ -1,17 +1,13 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         mc:Ignorable="d"
         x:Class="FracturingFog.UI.Avalonia.Views.JobListView"
-        x:DataType="vm:JobListViewModel"
-        Title="FracturingFog — Cluster Jobs"
-        Width="1040" Height="640"
-        MinWidth="760" MinHeight="420"
-        Background="#171717">
+        x:DataType="vm:JobListViewModel">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#DDD" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -56,7 +52,7 @@
             <Setter Property="Foreground" Value="#222" />
             <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="12">
 
@@ -146,4 +142,4 @@
             <Button Classes="primary" Content="Close" Command="{Binding CloseCommand}" />
         </StackPanel>
     </Grid>
-</Window>
+</UserControl>
