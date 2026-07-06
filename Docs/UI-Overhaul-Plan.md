@@ -147,22 +147,50 @@ Status: **F2 done** (commit pending). Full solution build green.
 7. `AvaloniaDialogs` show-helper: build panel, `await ShowPanelDialogAsync`,
    read `vm.Result` after.
 
-**Converted:** AppSettings (pattern, verified live), VideoSettings,
-AudioSettings.
-**Remaining (~17), by area:**
-- *Settings:* SlideshowSettings, MasterConfig.
-- *Editors:* RegionEditor, SceneEditor, AnimationEditor, ColorThemeEditor,
-  ColorGenEditor, WatermarkEditor. (Heavier — several carry unsaved-change
-  guards and/or live data pumps; convert with care.)
-- *Equation tools:* Cookbook, EquationMorph, UserEquation, UserBulb,
-  FractalParams (+ ParamSections), LightingFxDialog.
-- *Server/cluster:* ServerAdmin, ClusterDashboard, JobDetail, JobList,
-  WorkerDetail, FFClient.
-- *Misc:* HelpViewer, FloatingHelp, Sandbox, AssetManager.
+**Two host families** (discovered during the sweep — dictates conversion shape):
 
-**Not converted:** `MainWindow` (the render window), the Mini* tool windows,
-`FloatingMenuView` (the modeless main menu — revisited when the shell replaces
-it in S1).
+1. **Modal dialogs** — shown via `WindowService.ShowPanelDialogAsync` returning
+   a result. View implements `IClosableDialog`; the `PanelHostWindow` binds
+   `CloseRequested` → close + `DialogResult`. Launcher in `AvaloniaDialogs.cs`.
+2. **Modeless windows** — persistent, shown non-modal with a close⇒hide
+   lifecycle owned by a *manager*. Two managers:
+   - **MainWindow `Sync*`**: create-once, `Closing`⇒cancel+hide, shell
+     `IsXVisible` flag authoritative, VM poll (where present) on host
+     `Opened`/`Closed`. `PanelHostWindow` reused as a plain chrome wrapper
+     (no `IClosableDialog`; VM `CloseRequested` is a plain `EventHandler`
+     routed via the shell flag). Field type becomes `PanelHostWindow`.
+   - **AvaloniaShellBootstrap `.Show()`**: static/instance window fields,
+     inter-parenting (e.g. Cookbook shown over the UserEquation window),
+     per-view `Opened` hooks (sort menus, focus). Needs host wiring in
+     *Bootstrap*, not MainWindow. **Not yet started.**
+
+**Converted:**
+- *Modal:* AppSettings (pattern, verified live), VideoSettings, AudioSettings,
+  **SlideshowSettings** (both legacy + library launchers).
+- *Modeless / MainWindow Sync\*:* **MasterConfig** (modeless-host exemplar),
+  **ServerAdmin, ClusterDashboard, JobList, JobDetail, WorkerDetail**.
+
+**Remaining:**
+- *Modeless / MainWindow Sync\* (simple, no poll):* AssetManager, RegionEditor,
+  FloatingHelp, FFClient (FFClient needs a ShellViewModel `CloseRequested`
+  wiring like ServerAdmin got).
+- *Modeless / MainWindow Sync\* (heavier — unsaved guards / live pumps):*
+  SceneEditor, AnimationEditor, WatermarkEditor.
+- *Modeless / Bootstrap `.Show()` (not started):* ColorThemeEditor (heavy —
+  Opened sort-menus, scroll-into-view, focus, pointer routing), ColorGenEditor,
+  Cookbook, EquationMorph, UserEquation, UserBulb, FractalParams
+  (+ ParamSections), LightingFxDialog, Sandbox, HelpViewer.
+
+**Not converted (intentional):** `MainWindow` (the render window), the Mini*
+tool windows, `FloatingMenuView` (the modeless main menu — revisited when the
+shell replaces it in S1).
+
+**Verification debt:** the modeless-host pattern (MasterConfig + the 5
+server/cluster views) is built + builds green but is **not yet runtime-tested**
+— it is a new host path (Loaded-not-Opened poll rebind, DataContext inheritance
+through the host, close⇒hide). Recommend a GUI relaunch to exercise open/hide/
+reopen + poll on the converted modeless windows before grinding the riskier
+Bootstrap family blind.
 
 Status: **F3 pattern + AppSettingsView done and RUNTIME-VERIFIED**
 (2026-07-06). Drove the live app: App Settings opens via `PanelHostWindow`,
