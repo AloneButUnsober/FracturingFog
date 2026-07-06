@@ -39,7 +39,7 @@ public sealed partial class MainWindow : Window
     private bool _sortMenusAttached;
 
     private FloatingMenuView? _menuWin;
-    private ColorThemeEditorView? _editorWin;
+    private PanelHostWindow? _editorWin;
     private PanelHostWindow? _watermarkEditorWin;
     private PanelHostWindow? _animationEditorWin;
     private PanelHostWindow? _sceneEditorWin;
@@ -1060,7 +1060,17 @@ public sealed partial class MainWindow : Window
         {
             if (_editorWin == null)
             {
-                _editorWin = new ColorThemeEditorView { DataContext = _shell.ColorThemeEditor };
+                _editorWin = new PanelHostWindow(
+                    new ColorThemeEditorView(),
+                    new PanelHostOptions(
+                        "Color Theme Editor",
+                        Width: 980, Height: 900, MinWidth: 780, MinHeight: 600,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.ColorThemeEditor,
+                };
                 _editorWin.Closing += async (_, ev) =>
                 {
                     if (_shuttingDown) return;
