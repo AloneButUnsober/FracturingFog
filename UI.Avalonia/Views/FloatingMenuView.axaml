@@ -173,11 +173,11 @@
                                       Foreground="#FFCC00"
                                       FontWeight="Bold"
                                       ToolTip.Tip="Diagnostic: force legacy single-precision BLA (pre-Wave-2.10). Ctrl+Shift+D" />
-                            <CheckBox Content="Rebasing (deep)"
-                                      IsChecked="{Binding UseRebasing}"
+                            <CheckBox Content="Bypass Rebasing"
+                                      IsChecked="{Binding BypassRebasing}"
                                       Foreground="#FFCC00"
                                       FontWeight="Bold"
-                                      ToolTip.Tip="SM-2: resolve glitched deep-zoom pixels via fast rebasing PT (≈100× faster than per-pixel QD/OD, matches the QD image). Off = legacy per-pixel QD/OD. A/B test deep regions." />
+                                      ToolTip.Tip="SM-2: rebasing is ON by default (≈100× faster than per-pixel QD/OD at deep zoom, matches the QD image). Check to BYPASS it and fall back to the legacy per-pixel QD/OD path for A/B comparison." />
                         </StackPanel>
                     </StackPanel>
                 </Border>

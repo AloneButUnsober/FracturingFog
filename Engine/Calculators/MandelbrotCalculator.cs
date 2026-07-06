@@ -397,8 +397,10 @@ public sealed class MandelbrotCalculator
     // stays in double (fast) and never needs the glitch fallback. Off by default
     // pending A/B parity + perf sign-off against the QD/OD truth via
     // --rebaseprobe; when on it replaces the QD/OD/HP glitch fallback with the
-    // rebased scalar path. Default OFF ⇒ render path bit-identical to pre-SM-2.
-    public static bool AllowPtRebasing { get; set; } = false;
+    // rebased scalar path. Default ON (2026-07-05) — probe-verified equal to the
+    // QD render at ~100× the speed; the "Bypass Rebasing" debug toggle flips it
+    // off to A/B against the legacy per-pixel QD/OD path.
+    public static bool AllowPtRebasing { get; set; } = true;
     // Diagnostics — pixels resolved by the rebased scalar fallback.
     private long _ptRebasedPixels;
     /// <summary>SM-2 — count of pixels resolved by the rebased PT fallback

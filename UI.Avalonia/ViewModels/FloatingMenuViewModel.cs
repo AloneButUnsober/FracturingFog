@@ -856,17 +856,18 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
-    // SM-2 — deep-zoom rebasing A/B toggle. On ⇒ glitched deep pixels resolve
-    // via the fast rebasing PT path instead of per-pixel QD/OD (≈100× faster at
-    // extreme zoom, matching the QD render). Off ⇒ legacy per-pixel QD/OD.
-    private bool _useRebasing;
-    public bool UseRebasing
+    // SM-2 — deep-zoom rebasing A/B toggle. Rebasing is ON by default (≈100×
+    // faster at extreme zoom, matching the QD render); this "Bypass Rebasing"
+    // toggle turns it OFF to fall back to the legacy per-pixel QD/OD path, so
+    // the checked = disabled convention matches the other Bypass toggles.
+    private bool _bypassRebasing;
+    public bool BypassRebasing
     {
-        get => _useRebasing;
+        get => _bypassRebasing;
         set
         {
-            this.RaiseAndSetIfChanged(ref _useRebasing, value);
-            UseRebasingToggled?.Invoke(this, value);
+            this.RaiseAndSetIfChanged(ref _bypassRebasing, value);
+            BypassRebasingToggled?.Invoke(this, value);
         }
     }
 
@@ -977,7 +978,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<bool>? BypassAccelerationToggled;
     public event EventHandler<bool>? BypassSeriesApproximationToggled;
     public event EventHandler<bool>? BypassDdBlaToggled;
-    public event EventHandler<bool>? UseRebasingToggled;
+    public event EventHandler<bool>? BypassRebasingToggled;
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }
