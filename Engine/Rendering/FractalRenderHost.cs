@@ -501,11 +501,22 @@ namespace FracturingFog.Rendering
         private (System.Collections.Generic.List<string> lines, string? warning)
             BuildRenderContextOverlay()
         {
-            var lines = new System.Collections.Generic.List<string>(8);
+            var lines = new System.Collections.Generic.List<string>(9);
             double zoom = _calculator.Zoom;
+            // Non-zero limb counts for X/Y centre. If these drop below what the
+            // zoom needs (rough rule: ~1 limb per 16 zoom-decades, so ~5 limbs at
+            // 1e64), the centre has been truncated somewhere and deep-zoom anchors
+            // will drift — the single fastest tell for a navigation-precision bug.
+            int lx = NonZeroLimbs(_calculator.CenterX, _calculator.CenterXLo, _calculator.CenterX2,
+                _calculator.CenterX3, _calculator.CenterX4, _calculator.CenterX5,
+                _calculator.CenterX6, _calculator.CenterX7);
+            int ly = NonZeroLimbs(_calculator.CenterY, _calculator.CenterYLo, _calculator.CenterY2,
+                _calculator.CenterY3, _calculator.CenterY4, _calculator.CenterY5,
+                _calculator.CenterY6, _calculator.CenterY7);
             lines.Add($"type   {ViewState.FractalType}");
             lines.Add($"center {_calculator.CenterX:G10}");
             lines.Add($"       {_calculator.CenterY:G10}");
+            lines.Add($"limbs  X:{lx}/8  Y:{ly}/8   px {_calculator.Width}x{_calculator.Height}");
             lines.Add($"zoom   {zoom:G4}   iter {_calculator.MaxIterations}");
 
             double maxUseful = _calculator.MaxUsefulZoomLog10;
@@ -535,6 +546,15 @@ namespace FracturingFog.Rendering
                 warning = $"detail limit ~1e{maxUseful:F0} - recenter on structure to zoom deeper";
             }
             return (lines, warning);
+        }
+
+        private static int NonZeroLimbs(double a, double b, double c, double d,
+                                        double e, double f, double g, double h)
+        {
+            int n = 0;
+            if (a != 0) n++; if (b != 0) n++; if (c != 0) n++; if (d != 0) n++;
+            if (e != 0) n++; if (f != 0) n++; if (g != 0) n++; if (h != 0) n++;
+            return n;
         }
 
         // T3.1: GPU compute kernel constructed lazily on the first Use
