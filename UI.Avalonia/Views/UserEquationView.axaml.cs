@@ -18,7 +18,7 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// two-way fights the user's own caret moves, so we listen to an event from
 /// the VM and apply once per validation cycle.
 /// </summary>
-public sealed partial class UserEquationView : Window
+public sealed partial class UserEquationView : UserControl
 {
     private TextBox? _userEqEditor;
     private TextBox? _dslEditor;
@@ -39,7 +39,6 @@ public sealed partial class UserEquationView : Window
     public UserEquationView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
         _userEqEditor = this.FindControl<TextBox>("UserEquationEditor");
         _dslEditor    = this.FindControl<TextBox>("DslEditor");
         if (_userEqEditor != null)

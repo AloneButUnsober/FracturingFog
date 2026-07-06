@@ -1,30 +1,31 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using FracturingFog.UI.Avalonia.Input;
+using Avalonia.Media;
+
+using FracturingFog.UI.Avalonia.Services;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>
 /// Avalonia port of the legacy WinForms <c>FractalParamsDialog</c>.
-/// Live-edit modal — host wires <see cref="FractalParamsViewModel.ParamChanged"/>
-/// to a re-render and shows the window non-modal (or modal) as desired.
-/// Closes when the user clicks Close or fires the VM's CloseCommand.
+/// Hybrid-shell: a UserControl hosted modeless by AvaloniaShellBootstrap
+/// (PanelHostWindow). Live-edit — the host wires
+/// <see cref="FractalParamsViewModel.ParamChanged"/> to a re-render.
 ///
 /// Lighting & FX controls used to live inline as Expanders in this view.
 /// They were extracted to <see cref="LightingFxDialog"/> in Phase 26b so the
-/// Params dialog stays compact; the "Open Lighting & FX…" button below
-/// shows the secondary window, both bound to the same VM.
+/// Params panel stays compact; the "Open Lighting & FX…" button below shows
+/// the secondary window (its own PanelHostWindow), both bound to the same VM.
 /// </summary>
-public sealed partial class FractalParamsView : Window
+public sealed partial class FractalParamsView : UserControl
 {
-    private LightingFxDialog? _lightingFxWin;
+    private PanelHostWindow? _lightingFxWin;
 
     public FractalParamsView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
         DataContextChanged += (_, _) =>
         {
             if (DataContext is FractalParamsViewModel vm)
@@ -33,22 +34,27 @@ public sealed partial class FractalParamsView : Window
                 vm.CloseRequested += OnVmCloseRequested;
             }
         };
-        Closing += (_, _) =>
+        // Detach from the visual tree = the host window closed (close-and-
+        // destroy). Stop any Julia timers explicitly to avoid a leaked
+        // DispatcherTimer ticking against a stale animation, and close any open
+        // Lighting FX child so it can't outlive its parent. (Was Window.Closing
+        // before the UserControl conversion.)
+        Unloaded += (_, _) =>
         {
-            // Window-chrome close (X / Alt+F4) bypasses the VM's CloseCommand,
-            // so stop any timers explicitly to avoid a leaked DispatcherTimer
-            // ticking against a stale Julia animation. Also close any open
-            // Lighting FX child window so it can't outlive its parent.
             (DataContext as FractalParamsViewModel)?.StopAnimations();
             _lightingFxWin?.Close();
             _lightingFxWin = null;
         };
     }
 
-    private void OnVmCloseRequested(object? sender, System.EventArgs e) => Close();
+    // The VM's Close button routes to the host window (a UserControl can't
+    // close itself).
+    private void OnVmCloseRequested(object? sender, System.EventArgs e)
+        => (TopLevel.GetTopLevel(this) as Window)?.Close();
 
     private void OnHelpClick(object? sender, RoutedEventArgs e)
-        => HelpViewerLauncher.Show(this,
+        => HelpViewerLauncher.Show(
+            TopLevel.GetTopLevel(this) as Window,
             "User/Avalonia-UserGuide.md",
             "Params",
             "Fractal Params — Help");
@@ -64,8 +70,18 @@ public sealed partial class FractalParamsView : Window
             return;
         }
 
-        _lightingFxWin = new LightingFxDialog { DataContext = DataContext };
+        _lightingFxWin = new PanelHostWindow(
+            new LightingFxDialog(),
+            new PanelHostOptions(
+                "Lighting & FX",
+                Width: 520, Height: 720, MinWidth: 440, MinHeight: 400,
+                SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                StartupLocation: WindowStartupLocation.CenterOwner,
+                Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+        {
+            DataContext = DataContext,
+        };
         _lightingFxWin.Closed += (_, _) => _lightingFxWin = null;
-        _lightingFxWin.Show(this);
+        _lightingFxWin.Show(TopLevel.GetTopLevel(this) as Window);
     }
 }

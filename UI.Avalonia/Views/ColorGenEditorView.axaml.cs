@@ -1,30 +1,28 @@
 // Views/ColorGenEditorView.axaml.cs
 //
-// Code-behind for the ColorGenEditor dialog. Mirrors UserEquationView —
-// nothing happens here beyond InitializeComponent; all interactive logic
-// lives in ColorGenEditorViewModel (binding) or the host wiring in
-// AvaloniaShellBootstrap (HotLoad / Generate / NamePrompt / ConfirmDelete).
+// Code-behind for the ColorGen editor. Hybrid-shell: a UserControl hosted
+// modeless by AvaloniaShellBootstrap (PanelHostWindow); the host owns chrome +
+// close, and Bootstrap wires HotLoad / Generate / NamePrompt / ConfirmDelete.
+// Interactive logic lives in ColorGenEditorViewModel (binding).
 
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
-using FracturingFog.UI.Avalonia.Input;
-
 namespace FracturingFog.UI.Avalonia.Views;
 
-public partial class ColorGenEditorView : Window
+public partial class ColorGenEditorView : UserControl
 {
     public ColorGenEditorView()
     {
         InitializeComponent();
-        EscapeCloseBehavior.Attach(this);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 
     private void OnHelpClick(object? sender, RoutedEventArgs e)
-        => HelpViewerLauncher.Show(this,
+        => HelpViewerLauncher.Show(
+            TopLevel.GetTopLevel(this) as Window,
             "User/ColorGen-UserGuide.md",
             null,
             "ColorGen Editor — Help");

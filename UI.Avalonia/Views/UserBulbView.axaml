@@ -1,20 +1,12 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         xmlns:m="using:FracturingFog.Models"
         x:Class="FracturingFog.UI.Avalonia.Views.UserBulbView"
         x:DataType="vm:UserBulbViewModel"
-        Title="User Bulb (3D)"
-        Width="1280"
-        Height="940"
-        MinWidth="980"
-        MinHeight="700"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#282828"
         Foreground="White">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.header">
             <Setter Property="Foreground" Value="#C8C8FF" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -45,7 +37,7 @@
             <Setter Property="FontFamily" Value="Consolas, monospace" />
             <Setter Property="FontSize" Value="11" />
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid Margin="10" ColumnDefinitions="600,12,*">
 
@@ -92,7 +84,6 @@
                              Classes="code"
                              AcceptsReturn="True"
                              AcceptsTab="True"
-                             MinHeight="200"
                              Text="{Binding Source, Mode=TwoWay}" />
                 </Border>
                 <TextBlock Classes="error"
@@ -379,4 +370,4 @@
             </StackPanel>
         </ScrollViewer>
     </Grid>
-</Window>
+</UserControl>
