@@ -33,11 +33,5 @@ public sealed partial class SandboxView : Window
     }
 
     private void OnHelpRequested(string docId, string? anchor, string title)
-    {
-        var view = new HelpViewerView
-        {
-            DataContext = new HelpViewerViewModel(docId, anchor, title),
-        };
-        view.Show(this);
-    }
+        => HelpViewerLauncher.Show(TopLevel.GetTopLevel(this) as Window, docId, anchor, title);
 }

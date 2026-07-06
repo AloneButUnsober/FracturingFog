@@ -65,13 +65,7 @@ public sealed partial class UserEquationView : Window
     }
 
     private void OnHelpRequested(string docId, string? anchor, string title)
-    {
-        var view = new HelpViewerView
-        {
-            DataContext = new ViewModels.HelpViewerViewModel(docId, anchor, title),
-        };
-        view.Show(this);
-    }
+        => HelpViewerLauncher.Show(TopLevel.GetTopLevel(this) as Window, docId, anchor, title);
 
     // Receives the VM's "I just produced a new error span" notification. We
     // stash the span and apply it ONLY when the editor isn't focused — that
