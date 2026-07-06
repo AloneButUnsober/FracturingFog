@@ -20,6 +20,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using FracturingFog.Input;
@@ -131,6 +132,14 @@ public sealed partial class MainWindow : Window
         // bubble up unhandled and we route them to the shell. Mirrors the
         // universal shortcuts in WinForms MainForm.OnKeyDown.
         KeyDown += OnWindowKeyDown;
+
+        // Escape is handled on KeyUp, not KeyDown: Avalonia 12.0.4 swallows the
+        // Escape KeyDown before it is raised as a routed event (verified live —
+        // no window, focused-control, or class handler ever sees it), but the
+        // Escape KeyUp routes normally. Same workaround used for dialogs in
+        // EscapeCloseBehavior / FfmpegSetupDialog. All other command keys stay
+        // on KeyDown.
+        KeyUp += OnWindowKeyUp;
     }
 
     private void OnOpened(object? sender, EventArgs e)
@@ -223,6 +232,21 @@ public sealed partial class MainWindow : Window
     private (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
     {
         var menu = new ContextMenu();
+
+        // Escape closes the menu. The menu is hosted in its own popup
+        // top-level, so its keyboard events never reach OnWindowKeyUp; and
+        // Avalonia 12.0.4's built-in menu Escape-close runs on the swallowed
+        // KeyDown, so it no longer fires either. Handle Escape on the menu's
+        // own KeyUp (a focused MenuItem's KeyUp bubbles up to here).
+        menu.AddHandler(InputElement.KeyUpEvent, (_, e) =>
+        {
+            if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None && menu.IsOpen)
+            {
+                menu.Close();
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+
         var toolbarItem = new MenuItem { Header = "Toolbar" };
         toolbarItem.Click += (_, _) => shell.IsToolbarVisible = !shell.IsToolbarVisible;
         menu.Items.Add(toolbarItem);
@@ -324,16 +348,9 @@ public sealed partial class MainWindow : Window
     {
         if (_shell == null || e.Handled) return;
 
-        // Esc closes an open context menu before anything else looks at the
-        // key. Without this, OnWindowKeyDown routes Esc to HandleCommandKey
-        // (cancel-run) while the menu stays open, surprising the user.
-        if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None
-            && _contextMenu != null && _contextMenu.IsOpen)
-        {
-            _contextMenu.Close();
-            e.Handled = true;
-            return;
-        }
+        // NOTE: Escape is NOT handled here — Avalonia 12.0.4 never raises its
+        // KeyDown. Context-menu close + exit-span / stop-run live in
+        // OnWindowKeyUp instead.
 
         // Backspace = Back: pop the most recent nav snapshot off the shell's
         // history stack. Like Escape, allowed even when a non-text combo has
@@ -345,8 +362,8 @@ public sealed partial class MainWindow : Window
         }
 
         // Don't steal keys from an editable control (toolbar combos / dialog
-        // fields). Escape is always allowed so it can cancel span / a run.
-        if (e.Key != Key.Escape && IsEditableFocused()) return;
+        // fields).
+        if (IsEditableFocused()) return;
 
         // Shift+H = reset the perf HUD's rolling buffers so a new region /
         // video capture starts clean. Handled before the unmodified switch
@@ -393,8 +410,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // Command keys (M/T/R/V/Escape) — unmodified only; Ctrl/Alt/Shift
-        // combos are reserved (diagnostic toggles, precise-pan).
+        // Command keys (M/T/R/V) — unmodified only; Ctrl/Alt/Shift combos are
+        // reserved (diagnostic toggles, precise-pan). Escape is handled in
+        // OnWindowKeyUp (its KeyDown is swallowed by Avalonia 12.0.4).
         if (e.KeyModifiers == KeyModifiers.None)
         {
             InputKey cmd = e.Key switch
@@ -403,7 +421,6 @@ public sealed partial class MainWindow : Window
                 Key.T => InputKey.T,
                 Key.R => InputKey.R,
                 Key.V => InputKey.V,
-                Key.Escape => InputKey.Escape,
                 _ => InputKey.None,
             };
             if (cmd != InputKey.None)
@@ -452,6 +469,29 @@ public sealed partial class MainWindow : Window
         var ki = AvaloniaInputAdapter.BuildKeyInput(e, _sponge);
         if (ki.Key != InputKey.None && _shell.Main.Input.OnKeyDown(ki))
             e.Handled = true;
+    }
+
+    // Escape-only handler. Avalonia 12.0.4 swallows the Escape KeyDown before
+    // it becomes a routed event (verified live), so the two Escape behaviours
+    // that used to live in OnWindowKeyDown run here on KeyUp instead.
+    private void OnWindowKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (_shell == null || e.Handled) return;
+        if (e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None) return;
+
+        // Esc closes an open context menu first. Without this it would route to
+        // HandleCommandKey (cancel-run) while the menu stays open.
+        if (_contextMenu != null && _contextMenu.IsOpen)
+        {
+            _contextMenu.Close();
+            e.Handled = true;
+            return;
+        }
+
+        // Otherwise route to the shell (exit span / stop run). Allowed even
+        // when an editable control has focus so the user doesn't have to click
+        // the surface first.
+        if (_shell.HandleCommandKey(InputKey.Escape)) e.Handled = true;
     }
 
     private bool IsEditableFocused()
