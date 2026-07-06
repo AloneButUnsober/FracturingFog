@@ -29,7 +29,14 @@ namespace FracturingFog.Render
         bool HighPrecisionActive,
         bool IterLocked,
         FractalType FractalType,
-        string? PrecisionLabel = null);
+        string? PrecisionLabel = null,
+        // Estimated deepest zoom (log₁₀) at which THIS centre still resolves
+        // detail — set from the Mandelbrot reference orbit's δ-amplification.
+        // +∞ = centre stays bounded (unbounded depth). The shell warns when the
+        // live zoom exceeds it so a collapsed (flat) deep frame reads as a
+        // location depth limit, not broken navigation. Other fractal paths
+        // leave it +∞ (no notice).
+        double MaxUsefulZoomLog10 = double.PositiveInfinity);
 
     /// <summary>
     /// Orchestrates the renderer + per-fractal-type calculators. The input
