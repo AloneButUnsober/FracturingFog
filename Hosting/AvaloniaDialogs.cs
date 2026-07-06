@@ -32,6 +32,7 @@ using Avalonia.Threading;
 
 using FracturingFog.Audio;
 using FracturingFog.Imaging;
+using FracturingFog.UI.Avalonia.Services;
 using FracturingFog.UI.Avalonia.ViewModels;
 using FracturingFog.UI.Avalonia.Views;
 
@@ -207,8 +208,7 @@ namespace FracturingFog.Hosting
                         tcs.TrySetResult(null);
                 };
                 var owner = ActiveMainWindow;
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -331,8 +331,7 @@ namespace FracturingFog.Hosting
                 };
 
                 var owner = ActiveMainWindow;
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -366,10 +365,8 @@ namespace FracturingFog.Hosting
                 // to activate once shown. No-op on platforms where it already
                 // fronts correctly (e.g. X11). Mirrors the existing Activate-on-
                 // Opened workaround used elsewhere in this file.
-                win.Opened += (_, _) => { try { win.Activate(); } catch { } };
-                var o = owner ?? ActiveMainWindow;
-                if (o != null) _ = win.ShowDialog(o);
-                else win.Show();
+                // Foreground activation is handled centrally by WindowService.
+                _ = WindowService.ShowDialogAsync(win, owner ?? ActiveMainWindow);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -431,11 +428,10 @@ namespace FracturingFog.Hosting
                 // Windows nested-modal fix — see ShowVideoSettingsAsync: this
                 // Audio dialog is likewise a modal-of-a-modal that may not front
                 // on Win32. Force activation once shown (no-op elsewhere).
-                win.Opened += (_, _) => { try { win.Activate(); } catch { } };
+                // Foreground activation is handled centrally by WindowService.
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else if (ActiveMainWindow != null) _ = win.ShowDialog(ActiveMainWindow);
-                else win.Show();
+                // WindowService falls back to the active main window when owner is null.
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -475,9 +471,8 @@ namespace FracturingFog.Hosting
 
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else if (ActiveMainWindow != null) _ = win.ShowDialog(ActiveMainWindow);
-                else win.Show();
+                // WindowService falls back to the active main window when owner is null.
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -589,8 +584,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -668,8 +662,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
                 box.Focus();
                 box.SelectAll();
             }
@@ -812,8 +805,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
                 box.Focus();
                 box.SelectAll();
             }
@@ -995,8 +987,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1478,8 +1469,7 @@ namespace FracturingFog.Hosting
                 win.Content = root;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1504,10 +1494,7 @@ namespace FracturingFog.Hosting
             void Run()
             {
                 var win = BuildMessageWindow(title, body, expectsConfirmation, tcs);
-                if (owner != null)
-                    _ = win.ShowDialog(owner);
-                else
-                    win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1654,8 +1641,7 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1752,9 +1738,8 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
-                win.Opened += (_, _) => { try { win.Activate(); } catch { } };
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                // Foreground activation is handled centrally by WindowService.
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1809,9 +1794,7 @@ namespace FracturingFog.Hosting
                 if (!tcs.Task.IsCompleted) tcs.TrySetResult(accepted != null);
             };
 
-            var owner = ActiveMainWindow;
-            if (owner != null) _ = win.ShowDialog(owner);
-            else win.Show();
+            _ = WindowService.ShowDialogAsync(win, ActiveMainWindow);
 
             await tcs.Task;
             return accepted;

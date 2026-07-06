@@ -110,12 +110,21 @@ This keeps F1 low-risk (no behavioral edits to feature dialogs) and avoids a
 Status: **F1 done** (commit pending).
 
 ### Phase F2 — WindowService
-- `IWindowService` — single entry to open any window. Owns ownership chain,
-  z-order, startup placement, multi-monitor targeting, screen-fit `MaxHeight`
-  clamp.
-- Remove scattered `win.Activate()` Win32 hacks and per-dialog
-  `WindowStartupLocation`.
+- `WindowService` (static, `UI.Avalonia/Services/`) — single entry to open any
+  window: `ShowDialogAsync` (modal), `Show` (modeless), `Prepare` (treatment
+  without showing, for pop-out hosts in F3/S2). Owns owner resolution,
+  startup placement, multi-monitor targeting (`Placement.SecondaryMonitor`
+  primitive landed; auto-populate policy toggle is S2), screen-fit
+  `MaxWidth`/`MaxHeight` clamp, and an on-open position clamp that nudges any
+  spilled window back onto its screen.
+- All ~14 show call-sites in `AvaloniaDialogs.cs` routed through it; the three
+  scattered `win.Activate()` Win32 nested-modal hacks are centralized (deliberate
+  `Topmost=true` on the video/recording prompts kept).
 - Kills: on-top/under chaos, off-screen-on-small-screen, oversized dialogs.
+- Note: content-overflow *inside* a clamped window (dialog taller than screen
+  with no internal scroll) is a per-dialog concern handled during F3.
+
+Status: **F2 done** (commit pending). Full solution build green.
 
 ### Phase F3 — View → UserControl conversion (+ folded field retrofit)
 - Convert each feature View from `Window` to `UserControl`; floating = wrap in
