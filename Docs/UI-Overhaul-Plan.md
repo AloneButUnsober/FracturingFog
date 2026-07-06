@@ -170,33 +170,37 @@ Status: **F2 done** (commit pending). Full solution build green.
 - *Modeless / MainWindow Sync\*:* **MasterConfig** (modeless-host exemplar),
   **ServerAdmin, ClusterDashboard, JobList, JobDetail, WorkerDetail**.
 
-**Remaining:**
-- *Modeless / MainWindow Sync\* (simple, no poll):* AssetManager, RegionEditor,
-  FloatingHelp, FFClient (FFClient needs a ShellViewModel `CloseRequested`
-  wiring like ServerAdmin got).
-- *Modeless / MainWindow Sync\* (heavier — unsaved guards / live pumps):*
-  SceneEditor, AnimationEditor, WatermarkEditor.
-- *Modeless / Bootstrap `.Show()` (not started):* ColorThemeEditor (heavy —
-  Opened sort-menus, scroll-into-view, focus, pointer routing), ColorGenEditor,
-  Cookbook, EquationMorph, UserEquation, UserBulb, FractalParams
-  (+ ParamSections), LightingFxDialog, Sandbox, HelpViewer.
+**F3 COMPLETE (2026-07-06).** Every feature View is now a `UserControl`:
+- *Modal (PanelHostWindow + result):* AppSettings, VideoSettings,
+  AudioSettings, SlideshowSettings.
+- *Modeless / MainWindow Sync\* (host wrapper, close⇒hide):* MasterConfig,
+  ServerAdmin, ClusterDashboard, JobList, JobDetail, WorkerDetail,
+  AssetManager, RegionEditor, FloatingHelp, FFClient, SceneEditor,
+  AnimationEditor, WatermarkEditor, ColorThemeEditor.
+- *Modeless / Bootstrap `.Show()` (close-and-destroy):* HelpViewer (hub),
+  UserEquation, Sandbox, UserBulb, ColorGenEditor, Cookbook, EquationMorph,
+  FractalParams (+ ParamSections, already UserControls), LightingFxDialog.
+
+`PanelHostOptions` grew `ShowInTaskbar` + `StartupLocation` for the modeless
+hosts. `HelpViewerLauncher` builds the host + snapshots vm.Title. Bootstrap
+`s_*Win` fields + all `new XView{DC}` sites now build `PanelHostWindow`.
 
 **Not converted (intentional):** `MainWindow` (the render window), the Mini*
 tool windows, `FloatingMenuView` (the modeless main menu — revisited when the
 shell replaces it in S1).
 
-**Verification debt:** the modeless-host pattern (MasterConfig + the 5
-server/cluster views) is built + builds green but is **not yet runtime-tested**
-— it is a new host path (Loaded-not-Opened poll rebind, DataContext inheritance
-through the host, close⇒hide). Recommend a GUI relaunch to exercise open/hide/
-reopen + poll on the converted modeless windows before grinding the riskier
-Bootstrap family blind.
+**Verification debt (OPEN):** the whole sweep builds green but is **largely
+un-runtime-tested** beyond the AppSettings exemplar. New host paths to exercise
+on a relaunch: (a) modeless MainWindow Sync\* — open/hide/reopen + live polling
+(Server Admin, cluster, editors); (b) Bootstrap close-and-destroy — open/close/
+reopen, toggle-close, Cookbook/Morph over UserEquation, FractalParams'
+LightingFx child + Julia-animation cleanup on close, source-editor error-span
+highlight; (c) Help viewer from any `?` button. Recommend a GUI pass before S1.
 
-Status: **F3 pattern + AppSettingsView done and RUNTIME-VERIFIED**
-(2026-07-06). Drove the live app: App Settings opens via `PanelHostWindow`,
-`LabeledNumericField` renders + edits, OK commits + persists (reopen reflects
-saved value), Cancel discards, placement centers over owner (F2), F1 global
-styles render on the FloatingMenu. Sweep strategy: by-area, commit per batch.
+Status: **F3 COMPLETE (2026-07-06)** — all feature Views converted (see the
+Converted list below). AppSettings runtime-verified live; the rest build green,
+pending a GUI verification pass (see Verification debt). Sweep ran by-area,
+commit per batch (batches 1–7).
 
 **Finding (pre-existing, out of scope):** Escape closes NO dialog app-wide —
 `EscapeCloseBehavior` (attached to ~30 dialogs) does not fire in Avalonia
