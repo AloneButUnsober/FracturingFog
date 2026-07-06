@@ -249,9 +249,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             RebuildWindowTitle();
             Main.RenderHost.Trigger();
         };
-        FloatingMenu.UseRebasingToggled += (_, v) =>
+        FloatingMenu.BypassRebasingToggled += (_, v) =>
         {
-            Main.RenderHost.MandelbrotAllowPtRebasing = v;
+            Main.RenderHost.MandelbrotAllowPtRebasing = !v;   // checked = bypass = off
             RebuildWindowTitle();
             Main.RenderHost.Trigger();
         };
@@ -1423,7 +1423,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (Main.RenderHost.MandelbrotDisableAcceleration) sb.Append("  [ACCEL OFF]");
         if (Main.RenderHost.MandelbrotDisableSeriesApproximation) sb.Append("  [SA OFF]");
         if (Main.RenderHost.MandelbrotDisableDdBla) sb.Append("  [DD-BLA OFF]");
-        if (Main.RenderHost.MandelbrotAllowPtRebasing) sb.Append("  [REBASE]");
+        if (!Main.RenderHost.MandelbrotAllowPtRebasing) sb.Append("  [REBASE OFF]");
         return sb.ToString();
     }
 

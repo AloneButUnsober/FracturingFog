@@ -1064,7 +1064,7 @@ static class Program
                 double prevZoom = vs.Zoom;
                 int steps = 0;
                 double maxDrift = 0;
-                while (vs.Zoom < 8e49 && steps < 100000)
+                while (vs.Zoom < 1e55 && steps < 100000)
                 {
                     ctl.OnWheel(new FracturingFog.Input.WheelInput(
                         curX, curY, W, H, +120, FracturingFog.Input.InputModifiers.None));
@@ -1081,13 +1081,13 @@ static class Program
                         (onScreenY - curY) * (onScreenY - curY));
                     if (drift > maxDrift) maxDrift = drift;
 
-                    if (steps == 1 || vs.Zoom > 8e49 * 0.999 || (steps % 80 == 0))
+                    if (steps == 1 || vs.Zoom > 1e55 * 0.999 || (steps % 80 == 0))
                         sb.AppendLine(
                             $"    step={steps,5} zoom={vs.Zoom,9:G3} anchor-drift={drift,10:E2}px");
                 }
                 sb.AppendLine($"  max anchor-drift over the whole zoom-in = {maxDrift:E2}px");
                 sb.AppendLine(maxDrift < 0.5
-                    ? "RESULT: PASS (anchor stable to <0.5px through 8e49)"
+                    ? "RESULT: PASS (anchor stable to <0.5px through 1e55)"
                     : "RESULT: FAIL (anchor drift exceeds 0.5px)");
             }
 

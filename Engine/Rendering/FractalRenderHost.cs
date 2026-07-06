@@ -764,10 +764,22 @@ namespace FracturingFog.Rendering
             _calculator.CenterXLo = ViewState.CenterXLo;
             _calculator.CenterX2 = ViewState.CenterX2;
             _calculator.CenterX3 = ViewState.CenterX3;
+            // OD limbs (X4..X7) — required past the OD threshold (1e50). Dropping
+            // them truncated the render centre to QD while the view state held
+            // the full OD value, so deep frames rendered at a wrong centre and
+            // navigation compounded against the mis-placed image.
+            _calculator.CenterX4 = ViewState.CenterX4;
+            _calculator.CenterX5 = ViewState.CenterX5;
+            _calculator.CenterX6 = ViewState.CenterX6;
+            _calculator.CenterX7 = ViewState.CenterX7;
             _calculator.CenterY = ViewState.CenterY;
             _calculator.CenterYLo = ViewState.CenterYLo;
             _calculator.CenterY2 = ViewState.CenterY2;
             _calculator.CenterY3 = ViewState.CenterY3;
+            _calculator.CenterY4 = ViewState.CenterY4;
+            _calculator.CenterY5 = ViewState.CenterY5;
+            _calculator.CenterY6 = ViewState.CenterY6;
+            _calculator.CenterY7 = ViewState.CenterY7;
             _calculator.Zoom = ViewState.Zoom;
             _calculator.Quality = ViewState.Quality;
 
