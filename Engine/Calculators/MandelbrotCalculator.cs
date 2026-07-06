@@ -426,6 +426,29 @@ public sealed class MandelbrotCalculator
     // QD render at ~100× the speed; the "Bypass Rebasing" debug toggle flips it
     // off to A/B against the legacy per-pixel QD/OD path.
     public static bool AllowPtRebasing { get; set; } = true;
+
+    // SM-11a — use a DOUBLE-DOUBLE reference orbit in the rebased δ-loop instead
+    // of the single-double Z_n. The full reference orbit is already stored to 8
+    // limbs (_refZr/_refZrLo/..X7); the rebased loop historically consumed only
+    // the top limb (_refZr[m] = X0), so two nearby view centres' double-rounded
+    // Z chains diverged over thousands of iterations. That made the deep-zoom
+    // render REFERENCE-DEPENDENT: recentring (any pan / focus / box-zoom) redrew
+    // the same world region with slightly different iteration counts, which the
+    // palette amplified into apparent navigation drift + live pan "jumping" —
+    // even though the input math places the centre exactly (proved 9.5e-15 px at
+    // 4.65e64 via --navrepro). Feeding DD Z_n (Hi=_refZr, Lo=_refZrLo) halves the
+    // per-step reference rounding (~1e-16 → ~1e-32), restoring centre-invariance.
+    // A/B via --navrepro ddref (target: focus-err → 0 on the user's 4.65e64
+    // coord). Gate to deep zoom once verified — DD in the hot loop is ~4-8× the
+    // double cost, wasted where the single-double reference already suffices.
+    // See Docs/Deep-Zoom-Perturbation.md for the full model and history.
+    public static bool UseDdRebaseReference { get; set; } = false;
+
+    // SM-11a diagnostic only — force the scalar PT path (bypass SIMD) so every
+    // pixel routes through ComputePixelPTRebased. Slow; used by --navrepro to A/B
+    // the DD reference across ALL pixels, not just the ~2 % glitch fallback.
+    public static bool ForceScalarPtPath { get; set; } = false;
+
     // Diagnostics — pixels resolved by the rebased scalar fallback.
     private long _ptRebasedPixels;
     /// <summary>SM-2 — count of pixels resolved by the rebased PT fallback
@@ -1698,6 +1721,10 @@ public sealed class MandelbrotCalculator
         // dispatch fires for tile and full-image renders.
         bool useSimd512 = Avx512F.IsSupported && Vector512.IsHardwareAccelerated;
         bool useSimd = DD4.IsSupported;
+        // SM-11a diagnostic: force the scalar per-pixel path so every pixel routes
+        // through ComputePixelPTRebased (→ the DD-reference variant when enabled),
+        // isolating whether DD reference cures the deep-zoom centre-dependence.
+        if (ForceScalarPtPath) { useSimd512 = false; useSimd = false; }
         if (!_loggedSimdPath)
         {
             Debug.WriteLine(useSimd512 ? "PT path: AVX-512 (8 lanes)"
@@ -2658,6 +2685,12 @@ public sealed class MandelbrotCalculator
         int maxIter, int idx, TMap colorMap)
         where TMap : IColorMap
     {
+        if (UseDdRebaseReference)
+        {
+            ComputePixelPTRebasedDD(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+            return;
+        }
+
         int refLen = _refOrbitLen;
         if (refLen < 1)
         {
@@ -2723,6 +2756,78 @@ public sealed class MandelbrotCalculator
         Interlocked.Increment(ref _ptRebasedPixels);
         IterationBuffer[idx] = iter;
         FillAuxAndColorHP(idx, iter, maxIter, zr, zi, drv, div, colorMap);
+    }
+
+    // SM-11a — DOUBLE-DOUBLE-reference variant of ComputePixelPTRebased. Same
+    // Zhuoran rebasing, but the reference orbit Z[m] and the δ-chain carry a DD
+    // (Hi+Lo) so recentring reproduces the same iteration count for a fixed world
+    // point (centre-invariance). dc is captured exactly from the two source
+    // doubles via a DD multiply. Selected by UseDdRebaseReference; ~4-8× the
+    // double loop cost, so intended to gate on deep zoom once --navrepro confirms
+    // it drives focus-err → 0. Mirror of the double loop line-for-line — keep the
+    // two in sync if either changes. See Docs/Deep-Zoom-Perturbation.md.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ComputePixelPTRebasedDD<TMap>(
+        double colOffsetX, double rowOffsetY, double scale,
+        int maxIter, int idx, TMap colorMap)
+        where TMap : IColorMap
+    {
+        int refLen = _refOrbitLen;
+        if (refLen < 1)
+        {
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorHP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+
+        // dc as DD, exact product of the two source doubles (DD*double keeps the
+        // low word that colOffsetX*scale would round away).
+        DD dcR = new DD(scale) * colOffsetX + _refRecycleDx;
+        DD dcI = new DD(scale) * rowOffsetY + _refRecycleDy;
+
+        DD dr = new DD(0.0), di = new DD(0.0);   // δ_0 = 0
+        double drv = 1.0, div = 0.0;             // derivative stays double (normals)
+        int m = 0;
+        double zrHi = 0.0, ziHi = 0.0;           // full-value Hi (last = escape z)
+
+        int iter;
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            DD Zr = new DD(_refZr[m], _refZrLo[m]);
+            DD Zi = new DD(_refZi[m], _refZiLo[m]);
+            DD zr = Zr + dr;      // z = Z[m] + δ   (DD)
+            DD zi = Zi + di;
+            zrHi = zr.Hi; ziHi = zi.Hi;
+
+            double zmag2 = zr.Hi * zr.Hi + zi.Hi * zi.Hi;
+            if (zmag2 >= EscapeRadius2) break;
+
+            double newDrv = 2.0 * (zr.Hi * drv - zi.Hi * div) + 1.0;
+            double newDiv = 2.0 * (zr.Hi * div + zi.Hi * drv);
+            drv = newDrv; div = newDiv;
+
+            // Rebase when the full value drops below the perturbation magnitude
+            // (reference no longer anchors) or the reference is exhausted.
+            double dmag2 = dr.Hi * dr.Hi + di.Hi * di.Hi;
+            if (zmag2 < dmag2 || m + 1 >= refLen)
+            {
+                dr = zr; di = zi;               // δ := z (full DD kept)
+                Zr = new DD(0.0); Zi = new DD(0.0);
+                m = 0;
+            }
+
+            // δ_{n+1} = (2·Z[m] + δ)·δ + dc   (Z[m]=0 right after a rebase).
+            DD a = Zr * 2.0 + dr;
+            DD b = Zi * 2.0 + di;
+            DD newDr = a * dr - b * di + dcR;
+            DD newDi = a * di + b * dr + dcI;
+            dr = newDr; di = newDi;
+            m++;
+        }
+
+        Interlocked.Increment(ref _ptRebasedPixels);
+        IterationBuffer[idx] = iter;
+        FillAuxAndColorHP(idx, iter, maxIter, zrHi, ziHi, drv, div, colorMap);
     }
 
     private void ComputeRowPTScalar<TMap>(

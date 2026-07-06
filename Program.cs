@@ -1366,10 +1366,14 @@ static class Program
             foreach (var a in args)
             {
                 if (a == "norebase") FracturingFog.MandelbrotCalculator.AllowPtRebasing = false;
+                if (a == "ddref") FracturingFog.MandelbrotCalculator.UseDdRebaseReference = true;
+                if (a == "scalar") FracturingFog.MandelbrotCalculator.ForceScalarPtPath = true;
             }
             bool accelOff = Array.IndexOf(args, "acceloff") >= 0;
             bool saOff = Array.IndexOf(args, "saoff") >= 0;
-            sb.AppendLine($"  path: rebase={FracturingFog.MandelbrotCalculator.AllowPtRebasing} accelOff={accelOff} saOff={saOff}");
+            sb.AppendLine($"  path: rebase={FracturingFog.MandelbrotCalculator.AllowPtRebasing} " +
+                          $"ddRef={FracturingFog.MandelbrotCalculator.UseDdRebaseReference} " +
+                          $"accelOff={accelOff} saOff={saOff}");
 
             var calcA = Make(cx, cy);
             calcA.DisableAcceleration = accelOff; calcA.DisableSeriesApproximation = saOff;
@@ -1378,7 +1382,8 @@ static class Program
             var fd = new System.Collections.Generic.HashSet<int>();
             foreach (var it in A) fd.Add(it);
             sb.AppendLine($"  frame: distinctIters={fd.Count}  maxUseful=1e{calcA.MaxUsefulZoomLog10:F0}  " +
-                          $"ref-orbit {(calcA.ReferenceOrbitEscaped ? "escaped@" + calcA.ReferenceOrbitLength : "bounded")}");
+                          $"ref-orbit {(calcA.ReferenceOrbitEscaped ? "escaped@" + calcA.ReferenceOrbitLength : "bounded")}  " +
+                          $"rebasedPx={calcA.PtRebasedPixels}/{W * H}");
 
             var vs = new FracturingFog.ViewState.FractalViewState
             {
