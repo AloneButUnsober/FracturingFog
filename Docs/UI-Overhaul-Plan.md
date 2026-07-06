@@ -94,9 +94,20 @@ Foundation (F) first, then shell (S). Commit per phase.
 - Reusable controls: `LabeledNumericField` (label + numeric auto-sized to fit
   its value range), `LabeledSlider`.
 - Canonical rule: bounded ~0–100 params → slider; unbounded/precise → numeric.
-- Retrofit `FloatingMenuView` and the imperative dialogs in
-  `AvaloniaDialogs.cs` onto the shared resources.
+- Retrofit `FloatingMenuView` onto the shared resources (local `Window.Styles`
+  block deleted; classes now come from the global merge).
 - Kills: narrow fields, slider/numeric inconsistency, non-uniform buttons.
+
+**Scope note (decided during F1):** the *infrastructure* — `Tokens.axaml`,
+`ControlThemes.axaml`, `LabeledNumericField`, `LabeledSlider`, App wiring — plus
+the `FloatingMenuView` de-dup ships as F1. **Per-dialog field retrofit** (moving
+each view's cramped numeric fields / inconsistent slider-vs-numeric params onto
+`Labeled*`) is **folded into F3**: each view is retrofitted at the same time it
+is converted `Window`→`UserControl`, so every view is touched once, not twice.
+This keeps F1 low-risk (no behavioral edits to feature dialogs) and avoids a
+30-dialog sweep that can't be visually verified in one commit.
+
+Status: **F1 done** (commit pending).
 
 ### Phase F2 — WindowService
 - `IWindowService` — single entry to open any window. Owns ownership chain,
@@ -106,9 +117,12 @@ Foundation (F) first, then shell (S). Commit per phase.
   `WindowStartupLocation`.
 - Kills: on-top/under chaos, off-screen-on-small-screen, oversized dialogs.
 
-### Phase F3 — View → UserControl conversion
+### Phase F3 — View → UserControl conversion (+ folded field retrofit)
 - Convert each feature View from `Window` to `UserControl`; floating = wrap in
   the generic host window via WindowService. No feature logic changed.
+- **While each view is open for conversion**, retrofit its numeric/slider
+  fields onto `LabeledNumericField` / `LabeledSlider` (the F1 field-retrofit,
+  folded here so every view is touched once).
 
 ### Phase S1 — Shell
 - `SplitView`: left nav-rail (grouped ~5–6 nav groups collapsing the current
