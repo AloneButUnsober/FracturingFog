@@ -1,18 +1,12 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         x:Class="FracturingFog.UI.Avalonia.Views.SlideshowSettingsView"
-        x:DataType="vm:SlideshowSettingsViewModel"
-        Title="Slideshow Settings"
-        Width="520"
-        SizeToContent="Height"
-        MinWidth="460"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#1C1C1C">
+        x:DataType="vm:SlideshowSettingsViewModel">
 
     <!--
+      Window chrome (title/size/background) lives on the PanelHostWindow that
+      hosts this UserControl (see AvaloniaDialogs.ShowSlideshowSettingsAsync).
       DIP-only layout. Auto rows expand to fit fonts at any DPI; no Left/Top/
       Width arithmetic anywhere in the file. The width is the only fixed
       dimension and even that uses MinWidth so a larger system font (e.g. a
@@ -429,4 +423,4 @@
     </Grid>
     </ScrollViewer>
 
-</Window>
+</UserControl>

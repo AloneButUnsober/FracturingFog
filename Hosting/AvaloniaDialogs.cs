@@ -182,6 +182,15 @@ namespace FracturingFog.Hosting
 
         // ── Slideshow settings ───────────────────────────────────────────────
 
+        /// <summary>Window chrome for the Slideshow Settings panel host — the
+        /// title/size/background formerly on the view's <c>&lt;Window&gt;</c> root.
+        /// Shared by both the legacy and library-mode launchers.</summary>
+        private static PanelHostOptions SlideshowHostOptions() =>
+            new PanelHostOptions(
+                "Slideshow Settings",
+                Width: 520, MinWidth: 460,
+                Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C)));
+
         /// <summary>
         /// Legacy overload — opens the dialog bound to a single
         /// <see cref="global::FracturingFog.Models.SlideshowSettings"/>.
@@ -197,9 +206,10 @@ namespace FracturingFog.Hosting
             void Run()
             {
                 var vm = new SlideshowSettingsViewModel(current, audioReactive);
-                var win = new SlideshowSettingsView { DataContext = vm };
-                vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
-                win.Closed += (_, _) =>
+                var panel = new SlideshowSettingsView { DataContext = vm };
+                var host = new PanelHostWindow(panel, SlideshowHostOptions());
+                vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(host);
+                host.Closed += (_, _) =>
                 {
                     if (tcs.Task.IsCompleted) return;
                     if (vm.ResultSettings != null)
@@ -208,7 +218,7 @@ namespace FracturingFog.Hosting
                         tcs.TrySetResult(null);
                 };
                 var owner = ActiveMainWindow;
-                _ = WindowService.ShowDialogAsync(win, owner);
+                _ = WindowService.ShowDialogAsync(host, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -247,7 +257,8 @@ namespace FracturingFog.Hosting
             {
                 var vm = new SlideshowSettingsViewModel(file, audioReactive);
                 vm.PopulateAvailableLists(regionNames, themeNames, animationNames);
-                var win = new SlideshowSettingsView { DataContext = vm };
+                var panel = new SlideshowSettingsView { DataContext = vm };
+                var win = new PanelHostWindow(panel, SlideshowHostOptions());
                 vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
                 vm.CapturePostFxRequested += (_, _) =>
                 {
