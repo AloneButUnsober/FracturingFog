@@ -1,24 +1,16 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         x:Class="FracturingFog.UI.Avalonia.Views.UserEquationView"
         x:DataType="vm:UserEquationViewModel"
-        Title="User Equation"
-        Width="700"
-        Height="680"
-        MinWidth="460"
-        MinHeight="480"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#282828"
         Foreground="White">
 
     <!-- Ctrl+. mimics Visual Studio's "Quick Actions" shortcut. Bound at the
          Window so the user does not need focus on the button to apply the
          current suggestion. -->
-    <Window.KeyBindings>
+    <UserControl.KeyBindings>
         <KeyBinding Gesture="Ctrl+OemPeriod" Command="{Binding ApplyFixCommand}" />
-    </Window.KeyBindings>
+    </UserControl.KeyBindings>
 
     <!--
       Header (saved/save/delete/promote/compile/generate + rotation) sits
@@ -287,4 +279,4 @@
 
     </Grid>
 
-</Window>
+</UserControl>

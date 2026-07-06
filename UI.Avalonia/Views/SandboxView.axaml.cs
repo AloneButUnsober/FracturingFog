@@ -14,14 +14,13 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// MessageRequested, CompileRequested, PromotionChanged. The view owns
 /// HelpRequested → opens HelpViewerView in-process.
 /// </summary>
-public sealed partial class SandboxView : Window
+public sealed partial class SandboxView : UserControl
 {
     private SandboxViewModel? _vm;
 
     public SandboxView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
         DataContextChanged += OnDataContextChanged;
     }
 

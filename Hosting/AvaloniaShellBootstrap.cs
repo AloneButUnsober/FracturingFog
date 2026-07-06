@@ -31,7 +31,10 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Media;
 using Avalonia.Threading;
+
+using FracturingFog.UI.Avalonia.Services;
 
 using FracturingFog.Abstractions;
 using FracturingFog.Audio;
@@ -75,13 +78,17 @@ namespace FracturingFog.Hosting
         private static ShellViewModel? s_shell;
         private static IGpuSurface? s_surface;
         private static HostColorThemeService? s_themeService;
-        private static FractalParamsView? s_paramsWin;
+        // Hybrid-shell: the feature views are UserControls wrapped in a generic
+        // PanelHostWindow (chrome + close). These modeless editors are
+        // close-and-destroy (Closed => field null; reopen builds fresh), unlike
+        // the hide-on-close MainWindow Sync* windows.
+        private static PanelHostWindow? s_paramsWin;
 
         // Dedicated source-compiled editors (one window each, modeless).
-        private static UserEquationView? s_userEqWin;
-        private static SandboxView? s_sandboxWin;
-        private static UserBulbView? s_userBulbWin;
-        private static ColorGenEditorView? s_colorGenWin;
+        private static PanelHostWindow? s_userEqWin;
+        private static PanelHostWindow? s_sandboxWin;
+        private static PanelHostWindow? s_userBulbWin;
+        private static PanelHostWindow? s_colorGenWin;
         private static DispatcherTimer? s_userBulbAnimTimer;
 
         // Audio-reactive backend — lazily created on first audio-reactive
@@ -1686,7 +1693,17 @@ namespace FracturingFog.Hosting
                     var host = s_renderHost!;
                     host.FrameCompleted += onFrame;
 
-                    var win = new FractalParamsView { DataContext = vm };
+                    var win = new PanelHostWindow(
+                        new FractalParamsView(),
+                        new PanelHostOptions(
+                            string.IsNullOrEmpty(vm.Title) ? "Fractal Params" : vm.Title,
+                            Width: 400, MinWidth: 320,
+                            SizeToContentHeight: true, CanResize: false, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = vm,
+                    };
                     win.Closed += (_, _) =>
                     {
                         host.FrameCompleted -= onFrame;
@@ -1889,7 +1906,18 @@ namespace FracturingFog.Hosting
             {
                 var cookbookVm = new CookbookViewModel();
                 cookbookVm.Accepted += entry => vm.ApplyCookbookEntry(entry);
-                var cookbookWin = new CookbookView { DataContext = cookbookVm };
+                var cookbookWin = new PanelHostWindow(
+                    new CookbookView(),
+                    new PanelHostOptions(
+                        "Equation Cookbook",
+                        Width: 720, Height: 520, MinWidth: 520, MinHeight: 380,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))))
+                {
+                    DataContext = cookbookVm,
+                };
+                cookbookVm.CloseRequested += () => cookbookWin.Close();
                 if (s_userEqWin != null) cookbookWin.Show(s_userEqWin);
                 else ShowEditor(cookbookWin);
             };
@@ -1977,7 +2005,18 @@ namespace FracturingFog.Hosting
                 // the process. Flush on close once we've cleared the alt slot.
                 FracturingFog.CalculatorGen.CalculatorGenHotLoad.KeepContexts = true;
 
-                var morphWin = new EquationMorphView { DataContext = morphVm };
+                var morphWin = new PanelHostWindow(
+                    new EquationMorphView(),
+                    new PanelHostOptions(
+                        "Equation Morph",
+                        Width: 760, Height: 600, MinWidth: 560, MinHeight: 460,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))))
+                {
+                    DataContext = morphVm,
+                };
+                morphVm.CloseRequested += () => morphWin.Close();
                 morphWin.Closed += (_, _) =>
                 {
                     try { s_renderHost?.SetDynamicAltCalculator(null); }
@@ -2018,7 +2057,17 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            var win = new UserEquationView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new UserEquationView(),
+                new PanelHostOptions(
+                    "User Equation",
+                    Width: 700, Height: 680, MinWidth: 460, MinHeight: 480,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) => s_userEqWin = null;
             s_userEqWin = win;
 
@@ -2049,7 +2098,17 @@ namespace FracturingFog.Hosting
                 PickOpenSync("Import Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
 
-            var win = new SandboxView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new SandboxView(),
+                new PanelHostOptions(
+                    "Sandbox Equation",
+                    Width: 760, Height: 520, MinWidth: 520, MinHeight: 400,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) => s_sandboxWin = null;
             s_sandboxWin = win;
 
@@ -2127,7 +2186,17 @@ namespace FracturingFog.Hosting
             timer.Start();
             s_userBulbAnimTimer = timer;
 
-            var win = new UserBulbView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new UserBulbView(),
+                new PanelHostOptions(
+                    "User Bulb (3D)",
+                    Width: 1280, Height: 940, MinWidth: 980, MinHeight: 700,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) =>
             {
                 timer.Stop();
@@ -2218,7 +2287,17 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            var win = new ColorGenEditorView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new ColorGenEditorView(),
+                new PanelHostOptions(
+                    "ColorGen Editor",
+                    Width: 720, Height: 600, MinWidth: 520, MinHeight: 420,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) => s_colorGenWin = null;
             s_colorGenWin = win;
 

@@ -7,19 +7,19 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using FracturingFog.Rendering.Lighting;
-using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>
-/// Standalone Lighting & FX dialog. Bound to the same
+/// Standalone Lighting & FX panel. Bound to the same
 /// <see cref="FractalParamsViewModel"/> as <see cref="FractalParamsView"/> so
 /// every knob still routes through the existing LightingFxData partial — this
-/// view only hosts the controls. Opened modeless from FractalParamsView via
-/// a button so the Params dialog stays compact.
+/// view only hosts the controls. Hybrid-shell: a UserControl opened modeless
+/// from FractalParamsView (wrapped in a PanelHostWindow) so the Params panel
+/// stays compact.
 /// </summary>
-public sealed partial class LightingFxDialog : Window
+public sealed partial class LightingFxDialog : UserControl
 {
     // Yellow per user-colorblindness memory (#FFCC00). See FractalParamsView
     // code-behind for the same brushes — duplicated here so the dialog can
@@ -31,10 +31,10 @@ public sealed partial class LightingFxDialog : Window
     public LightingFxDialog()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
     }
 
-    private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+    private void OnCloseClick(object? sender, RoutedEventArgs e)
+        => (TopLevel.GetTopLevel(this) as Window)?.Close();
 
     /// <summary>Browse… handler for the HDRI preset / file row. Same flow as
     /// the original FractalParamsView handler — kept here so the dialog
