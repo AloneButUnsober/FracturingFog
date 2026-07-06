@@ -1,21 +1,13 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         xmlns:m="using:FracturingFog.Models"
         xmlns:cp="using:Avalonia.Controls"
         x:Class="FracturingFog.UI.Avalonia.Views.ColorThemeEditorView"
         x:DataType="vm:ColorThemeEditorViewModel"
-        Title="Color Theme Editor"
-        Width="980"
-        Height="900"
-        MinWidth="780"
-        MinHeight="600"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#161616"
         Foreground="#DCDCDC">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#C8C864" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -46,7 +38,7 @@
         <Style Selector="Button.danger">  <Setter Property="Background" Value="#502323" /> </Style>
         <Style Selector="Button.add">     <Setter Property="Background" Value="#283C28" /> </Style>
         <Style Selector="Button.help">    <Setter Property="Background" Value="#283C64" /> </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
 
@@ -569,4 +561,4 @@
                    TextWrapping="Wrap"
                    Margin="0,6,0,0" />
     </Grid>
-</Window>
+</UserControl>

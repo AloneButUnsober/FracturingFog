@@ -8,20 +8,22 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 using FracturingFog.UI.Avalonia.Controls;
-using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>
-/// Avalonia port of <c>ColorThemeEditor</c>. Floating modeless editor for
-/// data-driven colour themes. The host wires the VM's events:
-/// PreviewRequested, RegionRequested, EditorThemeSelected,
+/// Avalonia port of <c>ColorThemeEditor</c>. Hybrid-shell: a UserControl hosted
+/// modeless by MainWindow.SyncEditor, which owns the window chrome and the
+/// unsaved-changes guard on the host's Closing. The host also wires the VM's
+/// events: PreviewRequested, RegionRequested, EditorThemeSelected,
 /// ThemeSavedToLibrary, HelpRequested, MessageRequested, SaveFileRequested,
 /// FromImageRequested, ImportPaletteRequested, ExportPaletteRequested,
-/// SampleColorRequested.
+/// SampleColorRequested. This view keeps the presentation-only concerns that
+/// need the live control tree (sort menus, scroll-into-view, name focus,
+/// row-select pointer routing).
 /// </summary>
-public sealed partial class ColorThemeEditorView : Window
+public sealed partial class ColorThemeEditorView : UserControl
 {
     private bool _sortMenusAttached;
     private ColorThemeEditorViewModel? _boundVm;
@@ -29,8 +31,10 @@ public sealed partial class ColorThemeEditorView : Window
     public ColorThemeEditorView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
-        Opened += (_, _) => AttachSortMenus();
+        // Loaded (first attach) is the UserControl analogue of the former
+        // Window.Opened hook — the sort-menu attach must run once the visual
+        // tree + inherited DataContext exist.
+        Loaded += (_, _) => AttachSortMenus();
         DataContextChanged += OnDataContextChanged;
 
         // Route any pointer-press inside a stop row up to the parent VM as
@@ -67,8 +71,11 @@ public sealed partial class ColorThemeEditorView : Window
         {
             try
             {
-                if (!IsVisible) return;
-                Activate();
+                // Bring the *host window* to front (UserControl has no Activate);
+                // bail if the host is hidden so we don't steal focus while the
+                // editor is tucked away.
+                if (TopLevel.GetTopLevel(this) is not Window w || !w.IsVisible) return;
+                w.Activate();
                 var tb = this.FindControl<TextBox>("NameField");
                 if (tb != null)
                 {
@@ -110,7 +117,8 @@ public sealed partial class ColorThemeEditorView : Window
     }
 
     private void OnHelpClick(object? sender, RoutedEventArgs e)
-        => HelpViewerLauncher.Show(this,
+        => HelpViewerLauncher.Show(
+            TopLevel.GetTopLevel(this) as Window,
             "User/ColorThemeEditor-Guide.md",
             null,
             "Colour Theme Editor — Help");
