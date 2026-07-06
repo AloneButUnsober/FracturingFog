@@ -1361,7 +1361,19 @@ static class Program
                     ColorMap = new FracturingFog.Models.HsvPalette(),
                 };
 
-            var calcA = Make(cx, cy); calcA.Calculate();
+            // Optional path toggles to test whether the render divergence is
+            // fixable precision: `--navrepro <file> norebase|acceloff|saoff`.
+            foreach (var a in args)
+            {
+                if (a == "norebase") FracturingFog.MandelbrotCalculator.AllowPtRebasing = false;
+            }
+            bool accelOff = Array.IndexOf(args, "acceloff") >= 0;
+            bool saOff = Array.IndexOf(args, "saoff") >= 0;
+            sb.AppendLine($"  path: rebase={FracturingFog.MandelbrotCalculator.AllowPtRebasing} accelOff={accelOff} saOff={saOff}");
+
+            var calcA = Make(cx, cy);
+            calcA.DisableAcceleration = accelOff; calcA.DisableSeriesApproximation = saOff;
+            calcA.Calculate();
             int[] A = (int[])calcA.IterationBuffer.Clone();
             var fd = new System.Collections.Generic.HashSet<int>();
             foreach (var it in A) fd.Add(it);
@@ -1384,7 +1396,27 @@ static class Program
 
             double[] bx = { vs.CenterX, vs.CenterXLo, vs.CenterX2, vs.CenterX3, vs.CenterX4, vs.CenterX5, vs.CenterX6, vs.CenterX7 };
             double[] by = { vs.CenterY, vs.CenterYLo, vs.CenterY2, vs.CenterY3, vs.CenterY4, vs.CenterY5, vs.CenterY6, vs.CenterY7 };
-            var calcB = Make(bx, by); calcB.Calculate();
+
+            // PURE-MATH input check (no render / patch-match): the controller's new
+            // centre vs the ideal centre computed directly in OD. Isolates an input
+            // fault from a render/patch-match artefact.
+            {
+                double scaleD = (3.5 / Math.Max(W, H)) / zoom;
+                var cAx = new FracturingFog.FFMath.OD(cx[0], cx[1], cx[2], cx[3], cx[4], cx[5], cx[6], cx[7]);
+                var cAy = new FracturingFog.FFMath.OD(cy[0], cy[1], cy[2], cy[3], cy[4], cy[5], cy[6], cy[7]);
+                var idealX = FracturingFog.FFMath.OD.FromCenterOffset(cAx, clickX, scaleD);
+                var idealY = FracturingFog.FFMath.OD.FromCenterOffset(cAy, clickY, scaleD);
+                var ctlX = new FracturingFog.FFMath.OD(bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], bx[6], bx[7]);
+                var ctlY = new FracturingFog.FFMath.OD(by[0], by[1], by[2], by[3], by[4], by[5], by[6], by[7]);
+                double ex = (double)(ctlX - idealX) / scaleD;
+                double ey = (double)(ctlY - idealY) / scaleD;
+                sb.AppendLine($"  input-math err (controller centre vs ideal OD): " +
+                              $"({ex:E2},{ey:E2}) px  [0 ⇒ input exact ⇒ any focus-err below is RENDER/patch]");
+            }
+
+            var calcB = Make(bx, by);
+            calcB.DisableAcceleration = accelOff; calcB.DisableSeriesApproximation = saOff;
+            calcB.Calculate();
             int[] B = (int[])calcB.IterationBuffer.Clone();
 
             int acx = W / 2 + clickX, acy = H / 2 + clickY;
@@ -1403,9 +1435,23 @@ static class Program
                 if (sad < bestSad) { bestSad = sad; bex = ex; bey = ey; }
                 skip: ;
             }
+            // SAD at offset (0,0) — if it is ~as good as the found minimum, the
+            // structure is self-similar and the "min" offset is a patch-match
+            // artefact, not a real render displacement.
+            long sad00 = 0;
+            for (int dy = -r; dy <= r; dy++)
+            for (int dx = -r; dx <= r; dx++)
+            {
+                int ax = acx + dx, ay = acy + dy, bxp = W / 2 + dx, byp = H / 2 + dy;
+                if (ax >= 0 && ay >= 0 && ax < W && ay < H && bxp >= 0 && byp >= 0 && bxp < W && byp < H)
+                    sad00 += Math.Abs((long)A[ay * W + ax] - B[byp * W + bxp]);
+            }
+
             var patch = new System.Collections.Generic.HashSet<int>();
             for (int dy = -r; dy <= r; dy++) for (int dx = -r; dx <= r; dx++) patch.Add(A[(acy + dy) * W + (acx + dx)]);
             double err = Math.Sqrt((double)bex * bex + bey * bey);
+            sb.AppendLine($"  match: SAD(min)={bestSad} at ({bex},{bey})  vs SAD(0,0)={sad00}  " +
+                          $"[SAD(0,0)≈SAD(min) ⇒ self-similar ⇒ min is a patch artefact]");
             sb.AppendLine(patch.Count <= 1
                 ? "  focus-err: N/A (clicked patch is flat — pick a textured spot / lower zoom)"
                 : $"  focus-err = ({bex},{bey})  |{err:F2}| px   (0 = perfect; >1 = the reported bug, reproduced)");
