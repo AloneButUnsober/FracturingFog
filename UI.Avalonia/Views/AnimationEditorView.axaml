@@ -1,21 +1,13 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         xmlns:ff="using:FracturingFog"
         xmlns:anim="using:FracturingFog.Abstractions.Animation"
         x:Class="FracturingFog.UI.Avalonia.Views.AnimationEditorView"
         x:DataType="vm:AnimationEditorViewModel"
-        Title="Animation Editor"
-        Width="780"
-        Height="700"
-        MinWidth="640"
-        MinHeight="560"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#161616"
         Foreground="#DCDCDC">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#C8C864" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -52,7 +44,7 @@
         <Style Selector="Button.preview"> <Setter Property="Background" Value="#1E5034" /> </Style>
         <Style Selector="Button.stop">    <Setter Property="Background" Value="#5A4A1E" /> </Style>
         <Style Selector="Button.close">   <Setter Property="Background" Value="#3A3A3A" /> </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
 
@@ -217,4 +209,4 @@
         </StackPanel>
 
     </Grid>
-</Window>
+</UserControl>

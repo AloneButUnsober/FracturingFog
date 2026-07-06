@@ -40,9 +40,9 @@ public sealed partial class MainWindow : Window
 
     private FloatingMenuView? _menuWin;
     private ColorThemeEditorView? _editorWin;
-    private WatermarkEditorView? _watermarkEditorWin;
-    private AnimationEditorView? _animationEditorWin;
-    private SceneEditorView? _sceneEditorWin;
+    private PanelHostWindow? _watermarkEditorWin;
+    private PanelHostWindow? _animationEditorWin;
+    private PanelHostWindow? _sceneEditorWin;
     private PanelHostWindow? _regionEditorWin;
     private PanelHostWindow? _assetManagerWin;
     private PanelHostWindow? _helpWin;
@@ -1105,7 +1105,17 @@ public sealed partial class MainWindow : Window
         {
             if (_watermarkEditorWin == null)
             {
-                _watermarkEditorWin = new WatermarkEditorView { DataContext = _shell.WatermarkEditor };
+                _watermarkEditorWin = new PanelHostWindow(
+                    new WatermarkEditorView(),
+                    new PanelHostOptions(
+                        "Watermark Editor",
+                        Width: 640, Height: 640, MinWidth: 520, MinHeight: 500,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.WatermarkEditor,
+                };
                 _watermarkEditorWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1132,7 +1142,17 @@ public sealed partial class MainWindow : Window
         {
             if (_animationEditorWin == null)
             {
-                _animationEditorWin = new AnimationEditorView { DataContext = _shell.AnimationEditor };
+                _animationEditorWin = new PanelHostWindow(
+                    new AnimationEditorView(),
+                    new PanelHostOptions(
+                        "Animation Editor",
+                        Width: 780, Height: 700, MinWidth: 640, MinHeight: 560,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.AnimationEditor,
+                };
                 _animationEditorWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1159,7 +1179,17 @@ public sealed partial class MainWindow : Window
         {
             if (_sceneEditorWin == null)
             {
-                _sceneEditorWin = new SceneEditorView { DataContext = _shell.SceneEditor };
+                _sceneEditorWin = new PanelHostWindow(
+                    new SceneEditorView(),
+                    new PanelHostOptions(
+                        "Scene Editor",
+                        Width: 900, Height: 760, MinWidth: 720, MinHeight: 580,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.SceneEditor,
+                };
                 _sceneEditorWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
