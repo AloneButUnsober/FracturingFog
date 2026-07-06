@@ -1,17 +1,16 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         mc:Ignorable="d"
         x:Class="FracturingFog.UI.Avalonia.Views.FFClientView"
-        x:DataType="vm:FFClientViewModel"
-        Title="FracturingFog — Remote Client"
-        Width="720" Height="780"
-        MinWidth="600" MinHeight="600"
-        Background="#171717">
+        x:DataType="vm:FFClientViewModel">
 
-    <Window.Styles>
+    <!-- Chrome (title/720x780/#171717 bg) lives on the PanelHostWindow built
+         in MainWindow.SyncFFClient. -->
+
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#DDD" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -45,7 +44,7 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="Padding" Value="14,6" />
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <ScrollViewer>
         <StackPanel Margin="12" Spacing="2">
@@ -258,4 +257,4 @@
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
-</Window>
+</UserControl>

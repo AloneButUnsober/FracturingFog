@@ -2201,7 +2201,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private void ShowFFClient()
     {
         if (FFClient == null)
+        {
             FFClient = new FFClientViewModel(_themeService);
+            // Close => hide via the shell visibility flag (same pattern as the
+            // sibling floating windows). The view is a UserControl now and can
+            // no longer self-close.
+            FFClient.CloseRequested += (_, _) => IsFFClientVisible = false;
+        }
         // Mirror MainViewModel's active custom watermark in so the form's
         // "Send custom watermark" checkbox has something to send.
         FFClient.ActiveWatermark = Main.ActiveCustomWatermark;

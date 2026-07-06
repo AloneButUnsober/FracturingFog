@@ -1,19 +1,14 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         x:Class="FracturingFog.UI.Avalonia.Views.RegionEditorView"
         x:DataType="vm:RegionEditorViewModel"
-        Title="Region Editor"
-        Width="560"
-        Height="520"
-        MinWidth="460"
-        MinHeight="420"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#161616"
         Foreground="#DCDCDC">
 
-    <Window.Styles>
+    <!-- Chrome (title/560x520/#161616 bg/CenterOwner) lives on the
+         PanelHostWindow built in MainWindow.SyncRegionEditor. -->
+
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#C8C864" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -38,7 +33,7 @@
         </Style>
         <Style Selector="Button.save">  <Setter Property="Background" Value="#283C64" /> </Style>
         <Style Selector="Button.close"> <Setter Property="Background" Value="#3A3A3A" /> </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="10">
 
@@ -151,4 +146,4 @@
         </StackPanel>
 
     </Grid>
-</Window>
+</UserControl>
