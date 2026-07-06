@@ -1,20 +1,12 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         xmlns:m="using:FracturingFog.Models"
         x:Class="FracturingFog.UI.Avalonia.Views.WatermarkEditorView"
         x:DataType="vm:WatermarkEditorViewModel"
-        Title="Watermark Editor"
-        Width="640"
-        Height="640"
-        MinWidth="520"
-        MinHeight="500"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#161616"
         Foreground="#DCDCDC">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#C8C864" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -43,7 +35,7 @@
         <Style Selector="Button.danger"> <Setter Property="Background" Value="#502323" /> </Style>
         <Style Selector="Button.help">   <Setter Property="Background" Value="#283C64" /> </Style>
         <Style Selector="Button.close">  <Setter Property="Background" Value="#3A3A3A" /> </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
 
@@ -190,4 +182,4 @@
         </StackPanel>
 
     </Grid>
-</Window>
+</UserControl>

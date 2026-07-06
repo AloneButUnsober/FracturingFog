@@ -1,19 +1,11 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         x:Class="FracturingFog.UI.Avalonia.Views.SceneEditorView"
         x:DataType="vm:SceneEditorViewModel"
-        Title="Scene Editor"
-        Width="900"
-        Height="760"
-        MinWidth="720"
-        MinHeight="580"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#161616"
         Foreground="#DCDCDC">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="Foreground" Value="#C8C864" />
             <Setter Property="FontWeight" Value="Bold" />
@@ -65,7 +57,7 @@
             <Setter Property="Background" Value="#2E2E38" />
             <Setter Property="Foreground" Value="#DCDCDC" />
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
 
@@ -303,4 +295,4 @@
         </StackPanel>
 
     </Grid>
-</Window>
+</UserControl>
