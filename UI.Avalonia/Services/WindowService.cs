@@ -78,6 +78,29 @@ namespace FracturingFog.UI.Avalonia.Services
         }
 
         /// <summary>
+        /// Wraps a feature panel (<c>UserControl</c>) in a <see cref="PanelHostWindow"/>
+        /// and shows it modally with the standard placement + screen-fit
+        /// treatment. Resolves to the host's <see cref="PanelHostWindow.DialogResult"/>
+        /// once closed (true = VM committed, false = cancelled, null = X/Esc).
+        /// This is the pop-out path for the Hybrid shell's F3 conversion.
+        /// </summary>
+        public static Task<bool?> ShowPanelDialogAsync(
+            Control panel,
+            PanelHostOptions options,
+            Window? owner = null,
+            Placement placement = Placement.CenterOwner)
+        {
+            if (panel == null) throw new ArgumentNullException(nameof(panel));
+            if (options == null) throw new ArgumentNullException(nameof(options));
+
+            var host = new PanelHostWindow(panel, options);
+            var tcs = new TaskCompletionSource<bool?>();
+            host.Closed += (_, _) => tcs.TrySetResult(host.DialogResult);
+            _ = ShowDialogAsync(host, owner, placement);
+            return tcs.Task;
+        }
+
+        /// <summary>
         /// Prepares and shows <paramref name="win"/> modelessly (non-modal),
         /// e.g. tool/palette windows and pop-out panels. Same placement +
         /// screen-fit + activation treatment as <see cref="ShowDialogAsync"/>.
