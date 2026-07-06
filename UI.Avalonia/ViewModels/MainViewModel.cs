@@ -1029,19 +1029,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             $"zoom={info.Zoom:G6}  iter={info.Iterations}  " +
             $"{precTag}  [{info.ElapsedMs} ms  {info.Width}×{info.Height}]" +
             (info.IterLocked ? "  [ITER LOCKED]" : "");
-
-        // Detail-depth notice: when the live zoom passes this centre's
-        // δ-amplification limit the whole viewport collapses to one escape value
-        // (flat frame). Without a cue that reads as "navigation broke" — clicks
-        // and drags have no visible structure to land on. Tell the user it is a
-        // property of the location and how to proceed. (Yellow, not red, in the
-        // status bar per the colour-blind palette convention.)
-        if (!double.IsPositiveInfinity(info.MaxUsefulZoomLog10) && info.Zoom > 0 &&
-            Math.Log10(info.Zoom) > info.MaxUsefulZoomLog10 - 1.0)
-        {
-            text += $"   ⚠ detail limit for this point (~1e{info.MaxUsefulZoomLog10:F0}) — " +
-                    "recenter on visible structure to zoom deeper";
-        }
+        // NOTE: the detail-depth limit notice moved OFF the status bar — a long
+        // wrapping string there resized the panel and bounced the image edge.
+        // It now lives in the render-context overlay (RenderContextOverlay).
         _lastFrameInfo = info;
         ApplyOrDeferStatusText(text);
     }

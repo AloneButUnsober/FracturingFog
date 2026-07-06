@@ -203,6 +203,15 @@ public sealed class MandelbrotCalculator
     /// notice so a collapsed deep frame doesn't read as broken navigation.</summary>
     public double MaxUsefulZoomLog10 { get; private set; } = double.PositiveInfinity;
 
+    /// <summary>Iteration count of the last reference orbit (escape index, or
+    /// maxIter when the centre stays bounded). Diagnostic — surfaced in the
+    /// render-context overlay.</summary>
+    public int ReferenceOrbitLength => _refOrbitLen;
+
+    /// <summary>True when the last reference orbit escaped before maxIter (a
+    /// finite <see cref="MaxUsefulZoomLog10"/>); false when it stayed bounded.</summary>
+    public bool ReferenceOrbitEscaped => _refCachedEscaped;
+
     /// <summary>
     /// When true the HP path runs the perturbation loop without SA prelude
     /// or BLA skip — used by the benchmark harness to measure raw AVX2/AVX-512

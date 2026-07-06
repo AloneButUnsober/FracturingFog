@@ -337,7 +337,9 @@ namespace FracturingFog.Rendering
         public void CompositePerfHud(
             uint[] bgra, int width, int height,
             PerfSnapshot snap, string hwSummary,
-            int frameW, int frameH, int maxIter, string precisionLabel)
+            int frameW, int frameH, int maxIter, string precisionLabel,
+            System.Collections.Generic.IReadOnlyList<string>? contextLines = null,
+            string? warningLine = null)
         {
             if (bgra == null || bgra.Length < width * height) return;
             if (width <= 1 || height <= 1) return;
@@ -377,6 +379,25 @@ namespace FracturingFog.Rendering
                 coreLines.Add("");
                 coreLines.Add($"frame  {frameW}x{frameH}  iter {maxIter}  {precisionLabel}");
                 coreLines.Add(hwSummary);
+
+                // Render-context block (host-built): centre, zoom, ref-orbit,
+                // detail-depth estimate, active toggles. Helps diagnose deep-zoom
+                // behaviour without cluttering the (deliberately simple) status bar.
+                if (contextLines != null && contextLines.Count > 0)
+                {
+                    coreLines.Add("");
+                    coreLines.Add("RENDER CONTEXT");
+                    foreach (var cl in contextLines) coreLines.Add(cl);
+                }
+
+                // Yellow (#FFCC00, colour-blind-safe) warning line, drawn last.
+                int warnIndex = -1;
+                if (!string.IsNullOrEmpty(warningLine))
+                {
+                    coreLines.Add("");
+                    warnIndex = coreLines.Count;
+                    coreLines.Add(warningLine!);
+                }
                 string[] lines = coreLines.ToArray();
 
                 float maxW = 0;
@@ -401,6 +422,7 @@ namespace FracturingFog.Rendering
                 using var bord = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true, Color = new SKColor(80, 200, 255, 180) };
                 using var headBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(120, 220, 255, 255) };
                 using var bodyBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(230, 230, 230, 245) };
+                using var warnBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(255, 204, 0, 255) };  // #FFCC00
                 using var shadowBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0, 0, 0, 160) };
 
                 canvas.DrawRect(x0, y0, boxW, boxH, bg);
@@ -419,8 +441,9 @@ namespace FracturingFog.Rendering
                 {
                     if (lines[i].Length > 0)
                     {
+                        var brush = i == warnIndex ? warnBrush : bodyBrush;
                         canvas.DrawText(lines[i], x0 + pad + 1, ty + 1 + bodyBase, _hudBody, shadowBrush);
-                        canvas.DrawText(lines[i], x0 + pad,     ty     + bodyBase, _hudBody, bodyBrush);
+                        canvas.DrawText(lines[i], x0 + pad,     ty     + bodyBase, _hudBody, brush);
                     }
                     ty += lineH;
                 }
