@@ -965,7 +965,7 @@ static class Program
             // Deep centre with full QD limbs (3E47 region).
             double[] cx = { -1.9918151296901943, -7.8219844803880472E-17, 1.660139930392911E-34, 8.217274172159319E-51 };
             double[] cy = { -5.5240415753972429E-06, -2.8659813126937928E-22, 6.6910924119662832E-39, 6.2394735914401016E-55 };
-            double[] zooms = { 1e40, 1e46, 1e48, 9e49, 1.1e50, 1e52, 1e55 };
+            double[] zooms = { 1e40, 1e46, 1e48, 9e49, 1.1e50, 1e52, 1e55, 1e58, 1e60, 1e62, 1e63, 1e64, 1e66, 1e70 };
 
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"Input probe — {W}×{H} client. Double-click + drag-pan anchor error in PIXELS.");
@@ -1064,7 +1064,7 @@ static class Program
                 double prevZoom = vs.Zoom;
                 int steps = 0;
                 double maxDrift = 0;
-                while (vs.Zoom < 1e55 && steps < 100000)
+                while (vs.Zoom < 1e70 && steps < 100000)
                 {
                     ctl.OnWheel(new FracturingFog.Input.WheelInput(
                         curX, curY, W, H, +120, FracturingFog.Input.InputModifiers.None));
@@ -1081,18 +1081,199 @@ static class Program
                         (onScreenY - curY) * (onScreenY - curY));
                     if (drift > maxDrift) maxDrift = drift;
 
-                    if (steps == 1 || vs.Zoom > 1e55 * 0.999 || (steps % 80 == 0))
+                    if (steps == 1 || vs.Zoom > 1e70 * 0.999 || (steps % 80 == 0))
                         sb.AppendLine(
                             $"    step={steps,5} zoom={vs.Zoom,9:G3} anchor-drift={drift,10:E2}px");
                 }
                 sb.AppendLine($"  max anchor-drift over the whole zoom-in = {maxDrift:E2}px");
                 sb.AppendLine(maxDrift < 0.5
-                    ? "RESULT: PASS (anchor stable to <0.5px through 1e55)"
+                    ? "RESULT: PASS (anchor stable to <0.5px through 1e70)"
                     : "RESULT: FAIL (anchor drift exceeds 0.5px)");
             }
 
             string ipPath = System.IO.Path.Combine(AppContext.BaseDirectory, "inputprobe.out");
             System.IO.File.WriteAllText(ipPath, sb.ToString());
+            Console.WriteLine(sb.ToString());
+            return 0;
+        }
+
+        // --focusprobe: END-TO-END double-click-focus accuracy through the REAL
+        // render. The --inputprobe checks only that the controller moves the
+        // ViewState centre self-consistently (OD math vs OD truth) — it can't see
+        // whether the RENDERED image agrees. This renders a deep frame, performs a
+        // double-click focus via FractalInputController, re-renders at the new
+        // centre, then patch-matches to find where the clicked feature actually
+        // landed. err = |offset of the clicked patch from screen centre| in px;
+        // 0 = focus is pixel-perfect. Reproduces the user report "double-click
+        // misses / pan overshoots past ~1e63".
+        if (args.Length > 0 && args[0] == "--focusprobe")
+        {
+            // Optional dim override: `--focusprobe 64` shrinks the viewport. If the
+            // flat-collapse zoom rises when dim shrinks (bigger pixel scale), the
+            // limit is the point's δ-amplification floor (scale-dependent), not a
+            // fixed-zoom engine bug.
+            int dim = 220;
+            if (args.Length > 1 && int.TryParse(args[1], out int dimArg) && dimArg >= 16) dim = dimArg;
+            int W = dim, H = dim;
+            // User's real deep centre (5 printed limbs; X5..X7 = 0).
+            double[] cx = { -1.9918151296901943, -7.8219844803880472E-17,
+                             1.6601399303928428E-34, 5.9806621035236938E-51,
+                             4.0825430733972371E-67, 0, 0, 0 };
+            double[] cy = { -5.5240415753972429E-06, -2.8659813126937928E-22,
+                             6.6910924089534E-39, -3.7336948285574332E-55,
+                             1.3067965264006595E-71, 0, 0, 0 };
+            double[] zooms = { 1e56, 1e58, 1e60, 1e62, 1e63, 1e64, 1e66, 1e70 };
+            const int r = 3;                        // patch radius (7×7)
+            const int search = 12;                  // ± match search window (px)
+            // Click offset from centre — kept inside the viewport for small dims
+            // (patch + search must not run off the edge).
+            int clickDX = Math.Min(44, W / 2 - r - search - 1);
+            int clickDY = Math.Min(26, H / 2 - r - search - 1);
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Focus probe — {W}×{H}. Double-click at (+{clickDX},+{clickDY}) from centre; the");
+            sb.AppendLine("clicked world point must land at screen centre after re-render.");
+            sb.AppendLine("  err = best-match offset of clicked patch from centre (px). 0 = perfect focus.");
+
+            // Reference-orbit escape depth for this centre (zoom-independent). The
+            // perturbation δ is amplified by ~∏|2 Z_n| over the orbit; if the orbit
+            // ESCAPES at iteration N the deepest resolvable zoom is ~that product.
+            // A short orbit ⇒ a hard depth limit that is a property of the POINT,
+            // not a precision bug.
+            {
+                var zc = FracturingFog.FFMath.OD.Zero;
+                var zci = FracturingFog.FFMath.OD.Zero;
+                var ccr = new FracturingFog.FFMath.OD(cx[0], cx[1], cx[2], cx[3], cx[4], cx[5], cx[6], cx[7]);
+                var cci = new FracturingFog.FFMath.OD(cy[0], cy[1], cy[2], cy[3], cy[4], cy[5], cy[6], cy[7]);
+                int escN = -1; double logDeriv = 0; // Σ log2|2 Zn| ⇒ zoom decades resolvable
+                for (int n = 0; n < 200000; n++)
+                {
+                    double zr = zc.X0, zi = zci.X0;
+                    double mag2 = zr * zr + zi * zi;
+                    if (mag2 > 4.0) { escN = n; break; }
+                    if (n > 0) { double d = 2.0 * Math.Sqrt(mag2); if (d > 0) logDeriv += Math.Log10(d); }
+                    var nzr = zc.Square() - zci.Square() + ccr;
+                    var nzi = (zc * zci) + (zc * zci) + cci;
+                    zc = nzr; zci = nzi;
+                }
+                sb.AppendLine($"  ref-orbit: escapeIter={(escN < 0 ? ">=200000 (bounded)" : escN.ToString())}  " +
+                              $"Σlog10|2Zn|≈{logDeriv:F1} decades of δ-amplification");
+            }
+
+            FracturingFog.MandelbrotCalculator MakeCalc(double zoom, int maxIter,
+                double x0, double x1, double x2, double x3, double x4, double x5, double x6, double x7,
+                double y0, double y1, double y2, double y3, double y4, double y5, double y6, double y7)
+                => new FracturingFog.MandelbrotCalculator(W, H)
+                {
+                    CenterX = x0, CenterXLo = x1, CenterX2 = x2, CenterX3 = x3,
+                    CenterX4 = x4, CenterX5 = x5, CenterX6 = x6, CenterX7 = x7,
+                    CenterY = y0, CenterYLo = y1, CenterY2 = y2, CenterY3 = y3,
+                    CenterY4 = y4, CenterY5 = y5, CenterY6 = y6, CenterY7 = y7,
+                    Zoom = zoom, MaxIterations = maxIter,
+                    Quality = FracturingFog.Models.QualityPreset.Extreme,
+                    ColorMap = new FracturingFog.Models.HsvPalette(),
+                };
+
+            foreach (double zoom in zooms)
+            {
+                int maxIter = FracturingFog.Models.QualityPreset.Extreme.ComputeIterations(zoom);
+                string tier = zoom > 1e50 ? "OD" : "QD";
+
+                // Localize the collapse: normal (SA+BLA acceleration) vs
+                // DisableAcceleration (raw perturbation δ-loop, no SA prelude / BLA
+                // skip). If raw survives where accelerated collapses → SA/BLA is the
+                // precision sink; if both collapse → the δ core / reference orbit.
+                foreach (bool disAcc in new[] { false, true })
+                {
+                    var calcR = MakeCalc(zoom, maxIter,
+                        cx[0], cx[1], cx[2], cx[3], cx[4], cx[5], cx[6], cx[7],
+                        cy[0], cy[1], cy[2], cy[3], cy[4], cy[5], cy[6], cy[7]);
+                    calcR.DisableAcceleration = disAcc;
+                    calcR.Calculate();
+                    var fd = new System.Collections.Generic.HashSet<int>();
+                    foreach (var it in calcR.IterationBuffer) fd.Add(it);
+                    sb.AppendLine($"      [accel={(disAcc ? "OFF" : "ON ")}] frameDistinct={fd.Count,5}");
+                }
+
+                // Frame A — centred on the deep coord.
+                var calcA = MakeCalc(zoom, maxIter,
+                    cx[0], cx[1], cx[2], cx[3], cx[4], cx[5], cx[6], cx[7],
+                    cy[0], cy[1], cy[2], cy[3], cy[4], cy[5], cy[6], cy[7]);
+                calcA.Calculate();
+                int[] A = (int[])calcA.IterationBuffer.Clone();
+                double calcMaxUseful = calcA.MaxUsefulZoomLog10;
+
+                // Frame-A richness — detect a collapsed (near-solid) deep render.
+                var frameDistinct = new System.Collections.Generic.HashSet<int>();
+                int frameInSet = 0;
+                for (int i = 0; i < A.Length; i++)
+                { frameDistinct.Add(A[i]); if (A[i] >= maxIter) frameInSet++; }
+                double frameInSetPct = 100.0 * frameInSet / A.Length;
+
+                // Double-click focus at the clicked pixel through the real controller.
+                var vs = new FracturingFog.ViewState.FractalViewState
+                {
+                    FractalType = FracturingFog.FractalType.Mandelbrot,
+                    Quality = FracturingFog.Models.QualityPreset.Extreme,
+                    Zoom = zoom,
+                    CenterX = cx[0], CenterXLo = cx[1], CenterX2 = cx[2], CenterX3 = cx[3],
+                    CenterX4 = cx[4], CenterX5 = cx[5], CenterX6 = cx[6], CenterX7 = cx[7],
+                    CenterY = cy[0], CenterYLo = cy[1], CenterY2 = cy[2], CenterY3 = cy[3],
+                    CenterY4 = cy[4], CenterY5 = cy[5], CenterY6 = cy[6], CenterY7 = cy[7],
+                };
+                var ctl = new FracturingFog.Input.FractalInputController(vs);
+                ctl.OnPointerDoubleClick(new FracturingFog.Input.PointerInput(
+                    W / 2 + clickDX, H / 2 + clickDY, W, H,
+                    FracturingFog.Input.PointerButton.Left,
+                    FracturingFog.Input.InputModifiers.None));
+
+                // Frame B — centred on the focused (new) centre from the ViewState.
+                var calcB = MakeCalc(zoom, maxIter,
+                    vs.CenterX, vs.CenterXLo, vs.CenterX2, vs.CenterX3,
+                    vs.CenterX4, vs.CenterX5, vs.CenterX6, vs.CenterX7,
+                    vs.CenterY, vs.CenterYLo, vs.CenterY2, vs.CenterY3,
+                    vs.CenterY4, vs.CenterY5, vs.CenterY6, vs.CenterY7);
+                calcB.Calculate();
+                int[] B = (int[])calcB.IterationBuffer.Clone();
+
+                // Patch-match: the 7×7 patch around the clicked pixel in A should now
+                // sit at the centre of B. Search a window for the min-SAD offset.
+                int acx = W / 2 + clickDX, acy = H / 2 + clickDY;
+                long bestSad = long.MaxValue; int bex = 0, bey = 0;
+                for (int ey = -search; ey <= search; ey++)
+                for (int ex = -search; ex <= search; ex++)
+                {
+                    long sad = 0;
+                    for (int dy = -r; dy <= r; dy++)
+                    for (int dx = -r; dx <= r; dx++)
+                    {
+                        int ax = acx + dx, ay = acy + dy;
+                        int bx = W / 2 + ex + dx, by = H / 2 + ey + dy;
+                        if (ax < 0 || ay < 0 || ax >= W || ay >= H ||
+                            bx < 0 || by < 0 || bx >= W || by >= H) { sad = long.MaxValue; goto skip; }
+                        sad += Math.Abs((long)A[ay * W + ax] - B[by * W + bx]);
+                    }
+                    if (sad < bestSad) { bestSad = sad; bex = ex; bey = ey; }
+                    skip: ;
+                }
+                double err = Math.Sqrt((double)bex * bex + bey * bey);
+                // Distinct iters in the A patch — guards against a flat (SOLID) region
+                // giving a false 0-err match.
+                var patchDistinct = new System.Collections.Generic.HashSet<int>();
+                for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
+                    patchDistinct.Add(A[(acy + dy) * W + (acx + dx)]);
+
+                string errStr = patchDistinct.Count <= 1 ? "  (flat patch — err N/A)"
+                                                         : $" |err|={err,6:F2}px";
+                sb.AppendLine(
+                    $"  zoom={zoom,8:G3} {tier}  focus-err=({bex,3},{bey,3}){errStr}  " +
+                    $"frameDistinct={frameDistinct.Count,5} frameInSet={frameInSetPct,5:F1}%  " +
+                    $"patchDistinct={patchDistinct.Count,3} maxUseful=1e{calcMaxUseful,4:F0}");
+            }
+
+            string fpPath = System.IO.Path.Combine(AppContext.BaseDirectory, "focusprobe.out");
+            System.IO.File.WriteAllText(fpPath, sb.ToString());
             Console.WriteLine(sb.ToString());
             return 0;
         }

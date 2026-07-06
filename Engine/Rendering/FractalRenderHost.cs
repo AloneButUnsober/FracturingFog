@@ -1716,9 +1716,13 @@ namespace FracturingFog.Rendering
                 // animation gating stay accurate.
                 if (job.TaaSampleIndex == 0)
                 {
+                    // Detail-depth estimate is meaningful only for the canonical
+                    // Mandelbrot calculator's reference orbit; alt calcs leave +∞.
+                    double maxUseful = useAlt ? double.PositiveInfinity
+                                              : _calculator.MaxUsefulZoomLog10;
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         curCx, curCy, curZoom, curIter, ms, curW, curH,
-                        hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+                        hp, ViewState.IterLocked, ViewState.FractalType, lbl, maxUseful));
                 }
 
                 if (ShowPerfHud) _perfStats.RecordFrame(ms);

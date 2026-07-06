@@ -188,6 +188,21 @@ public sealed class MandelbrotCalculator
     /// <summary>True when the last Calculate() used double-double arithmetic.</summary>
     public bool IsHighPrecisionActive { get; private set; }
 
+    /// <summary>Estimated deepest zoom (as log₁₀) at which the CURRENT view
+    /// centre still resolves detail, set by the last reference-orbit build.
+    ///
+    /// Perturbation resolves a pixel only while its offset δ (∝ 1/zoom),
+    /// amplified by ∏|2·Zₙ| over the reference orbit, reaches O(1). If the
+    /// orbit ESCAPES at iteration N the amplification is finite —
+    /// Σ log₁₀|2·Zₙ| decades — so zoom beyond ~10^that collapses the whole
+    /// viewport to a single escape value (flat frame). A centre that stays
+    /// bounded to maxIter has effectively unbounded depth ⇒
+    /// <see cref="double.PositiveInfinity"/>. This is a property of the POINT,
+    /// not a precision limit: to go deeper the user must recentre on a point
+    /// with a longer-lived orbit. The host surfaces it as a "detail limit"
+    /// notice so a collapsed deep frame doesn't read as broken navigation.</summary>
+    public double MaxUsefulZoomLog10 { get; private set; } = double.PositiveInfinity;
+
     /// <summary>
     /// When true the HP path runs the perturbation loop without SA prelude
     /// or BLA skip — used by the benchmark harness to measure raw AVX2/AVX-512
@@ -2234,6 +2249,7 @@ public sealed class MandelbrotCalculator
 
         EnsureRefOrbitCapacity(maxIter);
         DD zr = DD.Zero, zi = DD.Zero;
+        double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -2243,11 +2259,19 @@ public sealed class MandelbrotCalculator
             _refZiX2[n] = 0;    _refZiX3[n] = 0;
             _refZrX4[n] = 0;    _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
             _refZiX4[n] = 0;    _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
-            if (zr.Hi * zr.Hi + zi.Hi * zi.Hi >= EscapeRadius2) break;
+            double zmag2 = zr.Hi * zr.Hi + zi.Hi * zi.Hi;
+            if (zmag2 >= EscapeRadius2) break;
+            // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
+            // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
+            // escape radius the orbit blows up to the bailout and its derivative
+            // growth no longer corresponds to resolvable detail (that tail would
+            // otherwise inflate the estimate ~5 decades over the real collapse).
+            if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             DD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
+        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
         _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
         _refZrX2[n] = 0;    _refZrX3[n] = 0;
@@ -2309,6 +2333,7 @@ public sealed class MandelbrotCalculator
 
         EnsureRefOrbitCapacity(maxIter);
         QD zr = QD.Zero, zi = QD.Zero;
+        double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -2316,11 +2341,19 @@ public sealed class MandelbrotCalculator
             _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
             _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
             _refZiX4[n] = 0; _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
-            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= EscapeRadius2) break;
+            double zmag2 = zr.X0 * zr.X0 + zi.X0 * zi.X0;
+            if (zmag2 >= EscapeRadius2) break;
+            // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
+            // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
+            // escape radius the orbit blows up to the bailout and its derivative
+            // growth no longer corresponds to resolvable detail (that tail would
+            // otherwise inflate the estimate ~5 decades over the real collapse).
+            if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             QD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
+        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
         _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
         _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
@@ -2416,6 +2449,7 @@ public sealed class MandelbrotCalculator
 
         EnsureRefOrbitCapacity(maxIter);
         OD zr = OD.Zero, zi = OD.Zero;
+        double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -2427,11 +2461,19 @@ public sealed class MandelbrotCalculator
             _refZiX2[n] = zi.X2; _refZiX3[n] = zi.X3;
             _refZiX4[n] = zi.X4; _refZiX5[n] = zi.X5;
             _refZiX6[n] = zi.X6; _refZiX7[n] = zi.X7;
-            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= EscapeRadius2) break;
+            double zmag2 = zr.X0 * zr.X0 + zi.X0 * zi.X0;
+            if (zmag2 >= EscapeRadius2) break;
+            // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
+            // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
+            // escape radius the orbit blows up to the bailout and its derivative
+            // growth no longer corresponds to resolvable detail (that tail would
+            // otherwise inflate the estimate ~5 decades over the real collapse).
+            if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             OD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
+        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
         _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
         _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
