@@ -189,13 +189,9 @@ hosts. `HelpViewerLauncher` builds the host + snapshots vm.Title. Bootstrap
 tool windows, `FloatingMenuView` (the modeless main menu — revisited when the
 shell replaces it in S1).
 
-**Verification debt (OPEN):** the whole sweep builds green but is **largely
-un-runtime-tested** beyond the AppSettings exemplar. New host paths to exercise
-on a relaunch: (a) modeless MainWindow Sync\* — open/hide/reopen + live polling
-(Server Admin, cluster, editors); (b) Bootstrap close-and-destroy — open/close/
-reopen, toggle-close, Cookbook/Morph over UserEquation, FractalParams'
-LightingFx child + Julia-animation cleanup on close, source-editor error-span
-highlight; (c) Help viewer from any `?` button. Recommend a GUI pass before S1.
+**Verification: smoke-test GREEN (2026-07-06).** The converted sweep was
+smoke-tested live — dialogs open/close, no systemic host regression. F3 signed
+off; proceeding to S1.
 
 Status: **F3 COMPLETE (2026-07-06)** — all feature Views converted (see the
 Converted list below). AppSettings runtime-verified live; the rest build green,
