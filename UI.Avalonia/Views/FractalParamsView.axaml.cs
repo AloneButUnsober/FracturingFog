@@ -82,6 +82,8 @@ public sealed partial class FractalParamsView : UserControl
             DataContext = DataContext,
         };
         _lightingFxWin.Closed += (_, _) => _lightingFxWin = null;
-        _lightingFxWin.Show(TopLevel.GetTopLevel(this) as Window);
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner != null) _lightingFxWin.Show(owner);
+        else _lightingFxWin.Show();
     }
 }

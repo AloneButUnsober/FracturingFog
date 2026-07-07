@@ -248,54 +248,44 @@ public sealed partial class MainWindow : Window
             }
         }, RoutingStrategies.Bubble, handledEventsToo: true);
 
+        // S2 reorg — the render-window right-click is now a SHORT quick-access
+        // menu: view toggles + capture essentials + the running-slideshow
+        // controls, with everything else (Params, editors, Asset Manager,
+        // ColorGen, Watermark, Mini*/Toy, Span) moved into the Control Center.
+        AddItem(menu, "Control Center…",    () => shell.ShowControlCenterCommand.Execute().Subscribe());
+        AddItem(menu, "Menu (legacy)",      () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
+        menu.Items.Add(new Separator());
+
         var toolbarItem = new MenuItem { Header = "Toolbar" };
         toolbarItem.Click += (_, _) => shell.IsToolbarVisible = !shell.IsToolbarVisible;
         menu.Items.Add(toolbarItem);
-        AddItem(menu, "Control Center",     () => shell.ShowControlCenterCommand.Execute().Subscribe());
-        AddItem(menu, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
         var statusItem = new MenuItem { Header = "Status" };
         statusItem.Click += (_, _) => shell.IsStatusBarVisible = !shell.IsStatusBarVisible;
         menu.Items.Add(statusItem);
+        AddItem(menu, "Grid",               () => shell.Main.ShowGrid = !shell.Main.ShowGrid);
         var onTopItem = new MenuItem { Header = "On Top" };
         onTopItem.Click += (_, _) => shell.IsRenderTopmost = !shell.IsRenderTopmost;
         menu.Items.Add(onTopItem);
         AddItem(menu, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
-        AddItem(menu, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
         menu.Items.Add(new Separator());
-        AddItem(menu, "Span Monitors",      () => shell.ToggleSpanCommand.Execute().Subscribe());
+
+        AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
+        AddItem(menu, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
-        AddItem(menu, "Mini Map",           () => shell.ToggleMiniMapCommand.Execute().Subscribe());
-        AddItem(menu, "Mini Depth",         () => shell.ToggleMiniDepthCommand.Execute().Subscribe());
-        var miniModeItem = new MenuItem { Header = "Mini Mode" };
-        miniModeItem.Click += (_, _) => shell.ToggleMiniModeCommand.Execute().Subscribe();
-        menu.Items.Add(miniModeItem);
-        var toyModeItem = new MenuItem { Header = "Toy Mode" };
-        toyModeItem.Click += (_, _) => shell.ToggleToyModeCommand.Execute().Subscribe();
-        menu.Items.Add(toyModeItem);
+
         AddItem(menu, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
-        // Slideshow-specific items. Header text + enable state updated each
-        // time the menu opens (see Opening handler in BuildContextMenu's
-        // caller path) to reflect current SlideshowEngine state.
+        // Slideshow-specific items. Header text + enable state updated each time
+        // the menu opens (sync closure below) to reflect current engine state.
         var lockRegionItem = new MenuItem { Header = "Slideshow: Lock Region" };
         lockRegionItem.Click += (_, _) => shell.ToggleSlideshowLockRegionCommand.Execute().Subscribe();
         menu.Items.Add(lockRegionItem);
         var focusItem = new MenuItem { Header = "Slideshow: More Colors" };
         focusItem.Click += (_, _) => shell.ToggleSlideshowFocusCommand.Execute().Subscribe();
         menu.Items.Add(focusItem);
-        AddItem(menu, "Watermark",          () => shell.Main.ShowWatermark = !shell.Main.ShowWatermark);
-        menu.Items.Add(new Separator());
         AddItem(menu, "Video",              () => shell.ToggleVideoCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
-        AddItem(menu, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
-        AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
-        menu.Items.Add(new Separator());
-        AddItem(menu, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
-        AddItem(menu, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
-        AddItem(menu, "ColorGen Editor…",   () => shell.ShowColorGenEditorCommand.Execute().Subscribe());
-        AddItem(menu, "Asset Manager…",     () => shell.ShowAssetManagerCommand.Execute().Subscribe());
-        menu.Items.Add(new Separator());
+
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
-        menu.Items.Add(new Separator());
         AddItem(menu, "Close Program",      () => shell.FloatingMenu.CloseProgramCommand.Execute().Subscribe());
 
         // Refresh slideshow item state every time the menu opens. Avalonia's
@@ -328,8 +318,6 @@ public sealed partial class MainWindow : Window
             // as a drag handle).
             toolbarItem.IsEnabled = !_toyModeActive && !_miniModeActive;
             statusItem.IsEnabled  = !_toyModeActive;
-            miniModeItem.Header = (_miniModeActive ? "✓ " : "") + "Mini Mode";
-            toyModeItem.Header  = (_toyModeActive  ? "✓ " : "") + "Toy Mode";
         };
         menu.Opening += (_, _) => sync();
         return (menu, sync);
