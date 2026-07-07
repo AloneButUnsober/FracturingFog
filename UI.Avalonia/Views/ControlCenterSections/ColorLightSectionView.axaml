@@ -42,9 +42,40 @@
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.AdaptiveLabel}" Margin="0,0,6,0" IsEnabled="{Binding Menu.AdaptiveEnabled}" />
                     <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Menu.Adaptive}" Minimum="0" Maximum="100" TickFrequency="25" Margin="0,0,6,0" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
                     <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding Menu.AdaptiveLocked}" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
-                    <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting" Margin="0,4,6,0"
+                               ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
                     <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding Menu.LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
                 </Grid>
+
+                <!-- Adaptive sweep (mirrors the main menu) -->
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,6,0,0">
+                    <Button Grid.Column="0"
+                            Classes="action neutral"
+                            Content="{Binding Menu.AdaptiveSweepButtonLabel}"
+                            Command="{Binding Menu.ToggleAdaptiveSweepCommand}"
+                            IsEnabled="{Binding Menu.AdaptiveEnabled}"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,6,0"
+                            ToolTip.Tip="Sweep Adaptive across the given duration in the selected mode" />
+                    <NumericUpDown Grid.Column="1"
+                                   Value="{Binding Menu.AdaptiveSweepDurationSeconds}"
+                                   Minimum="0.25" Maximum="600" Increment="0.5"
+                                   FormatString="0.##"
+                                   Width="120"
+                                   IsEnabled="{Binding Menu.AdaptiveEnabled}"
+                                   ToolTip.Tip="Sweep duration in seconds (default 5)" />
+                    <TextBlock Grid.Column="2" Classes="fxLabel" Text="s" VerticalAlignment="Center" Margin="4,0,0,0" />
+                </Grid>
+                <UniformGrid Columns="3" Margin="0,6,0,0">
+                    <RadioButton GroupName="CcAdaptiveSweepMode" Content="Forward"   IsChecked="{Binding Menu.IsForwardMode, Mode=TwoWay}"  IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="0 → 100" />
+                    <RadioButton GroupName="CcAdaptiveSweepMode" Content="Reverse"   IsChecked="{Binding Menu.IsReverseMode, Mode=TwoWay}"  IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="100 → 0" />
+                    <RadioButton GroupName="CcAdaptiveSweepMode" Content="Ping-Pong" IsChecked="{Binding Menu.IsPingPongMode, Mode=TwoWay}" IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="0 → 100 → 0 within the duration (split in half)" />
+                </UniformGrid>
+                <CheckBox Content="Loop"
+                          IsChecked="{Binding Menu.AdaptiveSweepLoop, Mode=TwoWay}"
+                          IsEnabled="{Binding Menu.AdaptiveEnabled}"
+                          Foreground="#B4B4B4" Margin="0,4,0,0"
+                          ToolTip.Tip="Repeat the selected sweep mode indefinitely until stopped" />
             </StackPanel>
         </Border>
     </StackPanel>
