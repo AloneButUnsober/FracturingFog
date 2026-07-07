@@ -84,6 +84,13 @@ namespace FracturingFog.Hosting
         // the hide-on-close MainWindow Sync* windows.
         private static PanelHostWindow? s_paramsWin;
 
+        // S2 — standalone Volumetric Lighting & FX panel. Independent of the
+        // Fractal Params window: its own FractalParamsViewModel over the shared
+        // ViewState, and because LightingFxData is type-independent it stays open
+        // across fractal-type changes (unlike s_paramsWin, which is retyped/
+        // reopened on type change). Toggle-close, close-and-destroy.
+        private static PanelHostWindow? s_lightingFxWin;
+
         // Dedicated source-compiled editors (one window each, modeless).
         private static PanelHostWindow? s_userEqWin;
         private static PanelHostWindow? s_sandboxWin;
@@ -1710,6 +1717,52 @@ namespace FracturingFog.Hosting
                         s_paramsWin = null;
                     };
                     s_paramsWin = win;
+
+                    var owner = AvaloniaDialogs.ActiveMainWindow;
+                    if (owner != null) win.Show(owner);
+                    else win.Show();
+                });
+            };
+
+            // ── Standalone Volumetric Lighting & FX (S2) ─────────────────
+            //
+            // Surfaces the Lighting/FX block on its own so it isn't buried
+            // inside Fractal Params. Its own FractalParamsViewModel over the
+            // shared ViewState.FractalParameters — the LightingFxData partial
+            // reads/writes _p.Lighting, which every fractal type shares, so the
+            // panel is type-independent and needs no close/reopen on type
+            // change (the type-change handler above leaves s_lightingFxWin
+            // untouched). Toggle-close on repeated invocation.
+            shell.LightingFxRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+
+                    if (s_lightingFxWin != null)
+                    {
+                        try { s_lightingFxWin.Close(); } catch { }
+                        s_lightingFxWin = null;
+                        return;
+                    }
+
+                    var vs = s_renderHost.ViewState;
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    vm.ParamChanged += () => s_renderHost?.Trigger();
+
+                    var win = new PanelHostWindow(
+                        new LightingFxDialog(),
+                        new PanelHostOptions(
+                            "Volumetric Lighting & FX",
+                            Width: 520, Height: 720, MinWidth: 440, MinHeight: 400,
+                            SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = vm,
+                    };
+                    win.Closed += (_, _) => s_lightingFxWin = null;
+                    s_lightingFxWin = win;
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
                     if (owner != null) win.Show(owner);
