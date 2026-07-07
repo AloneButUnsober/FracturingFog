@@ -424,11 +424,15 @@ public sealed partial class MainWindow : Window
             // Overlay / dialog toggles. Active in every fractal type so the
             // shortcuts work consistently regardless of selected mode.
             //   G  = Grid           K  = Watermark    H = Perf HUD (Shift+H = reset)
-            //   P  = Params dialog  F1 = Help window
+            //   P  = Params dialog  F1 = Help window  X = Post-FX HUD overlay
             switch (e.Key)
             {
                 case Key.G:
                     _shell.Main.ShowGrid = !_shell.Main.ShowGrid;
+                    e.Handled = true;
+                    return;
+                case Key.X:
+                    _shell.TogglePostFxHudCommand.Execute().Subscribe();
                     e.Handled = true;
                     return;
                 case Key.K:
