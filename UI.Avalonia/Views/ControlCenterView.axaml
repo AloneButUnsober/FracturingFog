@@ -110,6 +110,10 @@
                                 <Button Classes="action neutral" Content="Mini Mode"  Command="{Binding Shell.ToggleMiniModeCommand}"  Margin="0,0,4,0" ToolTip.Tip="Shrink to a compact drag-handle window" />
                                 <Button Classes="action neutral" Content="Toy Mode"   Command="{Binding Shell.ToggleToyModeCommand}"   ToolTip.Tip="Hide toolbar + status for a clean canvas" />
                             </UniformGrid>
+                            <CheckBox Content="Keep render window on top"
+                                      IsChecked="{Binding Shell.IsRenderTopmost, Mode=TwoWay}"
+                                      Foreground="#9B9B9B" FontWeight="Bold" Margin="0,4,0,0"
+                                      ToolTip.Tip="Always-on-top for the render window" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

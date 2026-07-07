@@ -257,7 +257,7 @@ public sealed partial class MainWindow : Window
         statusItem.Click += (_, _) => shell.IsStatusBarVisible = !shell.IsStatusBarVisible;
         menu.Items.Add(statusItem);
         var onTopItem = new MenuItem { Header = "On Top" };
-        onTopItem.Click += (_, _) => Topmost = !Topmost;
+        onTopItem.Click += (_, _) => shell.IsRenderTopmost = !shell.IsRenderTopmost;
         menu.Items.Add(onTopItem);
         AddItem(menu, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
         AddItem(menu, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
@@ -622,6 +622,9 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsControlCenterVisible):
             case nameof(ShellViewModel.ControlCenter):
                 SyncControlCenter();
+                break;
+            case nameof(ShellViewModel.IsRenderTopmost):
+                Topmost = _shell.IsRenderTopmost;
                 break;
             case nameof(ShellViewModel.IsColorThemeEditorVisible):
             case nameof(ShellViewModel.ColorThemeEditor):

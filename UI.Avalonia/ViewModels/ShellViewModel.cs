@@ -1284,6 +1284,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isControlCenterVisible, value);
     }
 
+    /// <summary>Render-window always-on-top. MainWindow mirrors this onto its
+    /// Window.Topmost; the Control Center + the context-menu "On Top" item both
+    /// drive it so the two stay in sync.</summary>
+    private bool _isRenderTopmost;
+    public bool IsRenderTopmost
+    {
+        get => _isRenderTopmost;
+        set => this.RaiseAndSetIfChanged(ref _isRenderTopmost, value);
+    }
+
     private bool _isColorThemeEditorVisible;
     public bool IsColorThemeEditorVisible
     {
