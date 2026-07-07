@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.AssetsSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Assets ═══ (extracted from ControlCenterView for detach/pop-out) -->
+    <StackPanel Spacing="0">
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Libraries &amp; Editors" />
+                <Button Classes="action help" Content="Asset Manager…"   Command="{Binding Shell.ShowAssetManagerCommand}"   HorizontalAlignment="Stretch" ToolTip.Tip="Browse every saved asset type" />
+                <Button Classes="action help" Content="Region Editor…"   Command="{Binding Shell.ShowRegionEditorCommand}"   HorizontalAlignment="Stretch" ToolTip.Tip="Edit the selected region's metadata" />
+                <Button Classes="action help" Content="Edit Scene…"      Command="{Binding Menu.EditSceneCommand}"           HorizontalAlignment="Stretch" ToolTip.Tip="Open the Scene Editor" />
+                <Button Classes="action help" Content="Edit Animation…"  Command="{Binding Menu.EditAnimationCommand}"       HorizontalAlignment="Stretch" ToolTip.Tip="Open the Animation Editor" />
+                <Button Classes="action help" Content="ColorGen Editor…" Command="{Binding Shell.ShowColorGenEditorCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Open the ColorGen palette editor" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.AdvancedSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Advanced ═══ (extracted from ControlCenterView for detach/pop-out) -->
+    <StackPanel Spacing="0">
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Remote Rendering" />
+                <UniformGrid Columns="2">
+                    <Button Classes="action neutral" Content="Server…" Command="{Binding Menu.ServerCommand}" HorizontalAlignment="Stretch" Margin="0,0,4,0" ToolTip.Tip="Local render server: status, metrics, start/restart/kill" />
+                    <Button Classes="action neutral" Content="Client…" Command="{Binding Menu.ClientCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Connect to a remote FracturingFog server" />
+                </UniformGrid>
+            </StackPanel>
+        </Border>
+
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="System" />
+                <Button Classes="action slideshow" Content="App Settings…"     Command="{Binding Menu.AppSettingsCommand}"     HorizontalAlignment="Stretch" ToolTip.Tip="Application settings" />
+                <Button Classes="action video"     Content="FFmpeg…"           Command="{Binding Menu.FfmpegSetupCommand}"     HorizontalAlignment="Stretch" ToolTip.Tip="Install, update, or skip the FFmpeg video encoder" />
+                <Button Classes="action neutral"   Content="AppData Location…" Command="{Binding Menu.AppDataLocationCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Choose where FracturingFog stores its data" />
+                <Button Classes="action help"      Content="Help…"             Command="{Binding Menu.HelpCommand}"            HorizontalAlignment="Stretch" ToolTip.Tip="Open help" />
+                <Button Classes="action danger"    Content="Close Program"     Command="{Binding Menu.CloseProgramCommand}"    HorizontalAlignment="Stretch" Margin="0,8,0,0" ToolTip.Tip="Exit Fracturing Fog" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>
