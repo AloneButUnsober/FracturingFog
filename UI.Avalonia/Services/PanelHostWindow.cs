@@ -60,6 +60,9 @@ namespace FracturingFog.UI.Avalonia.Services
 
             Content = panel;
             EscapeCloseBehavior.Attach(this);
+            // Magnetic edge-snap to screen work-area + sibling windows (incl. the
+            // render MainWindow) so floating/detached panels click into alignment.
+            EdgeSnapBehavior.Attach(this);
 
             // The close signal comes from an IClosableDialog. Most views expose
             // it on their VM (DataContext); some (code-behind close via Click
