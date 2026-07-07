@@ -2,6 +2,7 @@ using System.Collections.Generic;
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -47,9 +48,25 @@ public sealed partial class ControlCenterView : UserControl
     {
         if (DataContext is not ControlCenterViewModel vm) return;
 
+        // Owner is the render MainWindow, NOT the Control Center window: the
+        // detached section must survive the Control Center being closed/hidden
+        // (the user navigates from the floating panel alone). Owning it to the
+        // CC window would hide/close it whenever the CC hides.
+        var owner = (Application.Current?.ApplicationLifetime
+            as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
         if (_detached.TryGetValue(section, out var existing))
         {
-            try { existing.Activate(); } catch { /* window may be closing */ }
+            try
+            {
+                if (!existing.IsVisible)
+                {
+                    if (owner != null) existing.Show(owner);
+                    else existing.Show();
+                }
+                existing.Activate();
+            }
+            catch { _detached.Remove(section); }
             return;
         }
 
@@ -84,7 +101,6 @@ public sealed partial class ControlCenterView : UserControl
         host.Closed += (_, _) => _detached.Remove(section);
         _detached[section] = host;
 
-        var owner = TopLevel.GetTopLevel(this) as Window;
         if (owner != null) host.Show(owner);
         else host.Show();
     }
