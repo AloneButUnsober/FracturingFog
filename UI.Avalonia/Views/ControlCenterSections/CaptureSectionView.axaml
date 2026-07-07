@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.CaptureSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Capture ═══ (extracted from ControlCenterView for detach/pop-out) -->
+    <StackPanel Spacing="0">
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Stills &amp; Video" />
+                <UniformGrid Columns="3">
+                    <Button Classes="action neutral"   Content="Image"  Command="{Binding Menu.ScreenshotCommand}" ToolTip.Tip="High-resolution screenshot" Margin="0,0,4,0" />
+                    <Button Classes="action neutral"   Content="Poster" Command="{Binding Menu.PosterCommand}"     ToolTip.Tip="Print-ready poster image" Margin="0,0,4,0" />
+                    <Button Classes="action video"     Content="{Binding Menu.VideoButtonText}" Command="{Binding Menu.VideoCommand}" ToolTip.Tip="Animated zoom" />
+                </UniformGrid>
+                <UniformGrid Columns="2" Margin="0,4,0,0">
+                    <Button Classes="action slideshow" Content="{Binding Menu.SlideshowButtonText}" Command="{Binding Menu.SlideshowCommand}" ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />
+                    <Button Classes="action slideshow" Content="Slideshow Settings…" Command="{Binding Menu.SlideshowSettingsCommand}" ToolTip.Tip="Configure slideshow timing + audio-reactive options" />
+                </UniformGrid>
+                <UniformGrid Columns="2" Margin="0,4,0,0">
+                    <Button Classes="action slideshow" Content="Lock Region" Command="{Binding Shell.ToggleSlideshowLockRegionCommand}" IsEnabled="{Binding Shell.IsSlideshowRunning}" Margin="0,0,4,0" ToolTip.Tip="Pin the running slideshow to the current region (only while a slideshow is running)" />
+                    <Button Classes="action slideshow" Content="More Colors" Command="{Binding Shell.ToggleSlideshowFocusCommand}"      IsEnabled="{Binding Shell.IsSlideshowRunning}" ToolTip.Tip="Toggle 3 vs 8 themes per region while the slideshow runs" />
+                </UniformGrid>
+            </StackPanel>
+        </Border>
+
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Watermark" />
+                <CheckBox Content="Show watermark" IsChecked="{Binding Menu.ShowWatermark, Mode=TwoWay}" ToolTip.Tip="Master toggle for the on-screen watermark overlay" />
+                <CheckBox Content="Use custom watermark" IsChecked="{Binding Menu.UseCustomWatermark, Mode=TwoWay}" ToolTip.Tip="Replace the default region/theme watermark with your saved custom one" />
+                <ComboBox ItemsSource="{Binding Menu.WatermarkNames}" SelectedItem="{Binding Menu.SelectedWatermark}" IsEnabled="{Binding Menu.UseCustomWatermark}" HorizontalAlignment="Stretch" />
+                <CheckBox Content="Override region watermark" IsChecked="{Binding Menu.OverrideRegionWatermark, Mode=TwoWay}" ToolTip.Tip="Force the active custom watermark even when the region carries its own" />
+                <Button Classes="action help" Content="Edit Watermark…" Command="{Binding Menu.EditWatermarkCommand}" HorizontalAlignment="Stretch" Margin="0,4,0,0" ToolTip.Tip="Open the Watermark Editor" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

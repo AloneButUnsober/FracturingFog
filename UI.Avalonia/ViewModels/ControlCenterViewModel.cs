@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -55,10 +56,29 @@ public sealed class ControlCenterViewModel : ViewModelBase
         Menu = shell.FloatingMenu;
         Nav = new ObservableCollection<ControlCenterNavItem>();
         ToggleModeCommand = ReactiveCommand.Create(ToggleMode);
+        DetachSectionCommand = ReactiveCommand.Create(
+            () => DetachRequested?.Invoke(this, _selectedSection));
         RebuildNav();
     }
 
     public ReactiveCommand<Unit, Unit> ToggleModeCommand { get; }
+
+    /// <summary>S2 — pop the currently-selected section into its own floating
+    /// window (2nd-monitor friendly). The view code-behind opens a
+    /// PanelHostWindow hosting a fresh instance of the section's UserControl,
+    /// bound to this same VM so the detached copy and the docked copy stay in
+    /// lock-step.</summary>
+    public ReactiveCommand<Unit, Unit> DetachSectionCommand { get; }
+
+    /// <summary>Raised by <see cref="DetachSectionCommand"/> with the section to
+    /// float. Handled in <c>ControlCenterView</c> code-behind (it owns the
+    /// Avalonia window + control-instance factory).</summary>
+    public event EventHandler<ControlCenterSection>? DetachRequested;
+
+    /// <summary>Human label for a section — reused for the detached window's
+    /// title bar so it matches the nav-rail entry.</summary>
+    public static string LabelFor(ControlCenterSection section) =>
+        AllNav.First(n => n.Section == section).Label;
 
     /// <summary>The shell VM — sections bind its Show* commands (Params,
     /// ColorGen, Asset Manager, Mini/Toy) that live outside FloatingMenu.</summary>
