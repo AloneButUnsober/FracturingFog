@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
     private bool _sortMenusAttached;
 
     private FloatingMenuView? _menuWin;
+    private PanelHostWindow? _controlCenterWin;
     private PanelHostWindow? _editorWin;
     private PanelHostWindow? _watermarkEditorWin;
     private PanelHostWindow? _animationEditorWin;
@@ -250,6 +251,7 @@ public sealed partial class MainWindow : Window
         var toolbarItem = new MenuItem { Header = "Toolbar" };
         toolbarItem.Click += (_, _) => shell.IsToolbarVisible = !shell.IsToolbarVisible;
         menu.Items.Add(toolbarItem);
+        AddItem(menu, "Control Center",     () => shell.ShowControlCenterCommand.Execute().Subscribe());
         AddItem(menu, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
         var statusItem = new MenuItem { Header = "Status" };
         statusItem.Click += (_, _) => shell.IsStatusBarVisible = !shell.IsStatusBarVisible;
@@ -616,6 +618,10 @@ public sealed partial class MainWindow : Window
         {
             case nameof(ShellViewModel.IsFloatingMenuVisible):
                 SyncMenu();
+                break;
+            case nameof(ShellViewModel.IsControlCenterVisible):
+            case nameof(ShellViewModel.ControlCenter):
+                SyncControlCenter();
                 break;
             case nameof(ShellViewModel.IsColorThemeEditorVisible):
             case nameof(ShellViewModel.ColorThemeEditor):
@@ -1050,6 +1056,46 @@ public sealed partial class MainWindow : Window
         else
         {
             _menuWin?.Hide();
+        }
+    }
+
+    // Phase S1 Control Center shell — modeless, close => hide (same family as
+    // the other Sync* windows). Wraps the ControlCenterView UserControl.
+    private void SyncControlCenter()
+    {
+        if (_shell == null) return;
+        if (_shell.IsControlCenterVisible && _shell.ControlCenter != null)
+        {
+            if (_controlCenterWin == null)
+            {
+                _controlCenterWin = new PanelHostWindow(
+                    new ControlCenterView(),
+                    new PanelHostOptions(
+                        "Fracturing Fog — Control Center",
+                        Width: 1000, Height: 760, MinWidth: 820, MinHeight: 560,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterScreen,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.ControlCenter,
+                };
+                _controlCenterWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsControlCenterVisible = false;
+                };
+            }
+            else if (_controlCenterWin.DataContext != _shell.ControlCenter)
+            {
+                _controlCenterWin.DataContext = _shell.ControlCenter;
+            }
+            if (!_controlCenterWin.IsVisible) _controlCenterWin.Show(this);
+            else _controlCenterWin.Activate();
+        }
+        else
+        {
+            _controlCenterWin?.Hide();
         }
     }
 
@@ -1624,6 +1670,7 @@ public sealed partial class MainWindow : Window
         _miniDepthTether = null;
 
         _menuWin?.Close();
+        _controlCenterWin?.Close();
         _editorWin?.Close();
         // Editors whose Closing handler cancels + hides (guarded by
         // _shuttingDown) — must be force-closed here too, else they linger

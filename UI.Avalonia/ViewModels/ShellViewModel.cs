@@ -500,6 +500,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
+        ShowControlCenterCommand    = ReactiveCommand.Create(ShowControlCenter);
         ShowRegionEditorCommand   = ReactiveCommand.Create(ShowRegionEditor);
         ShowAssetManagerCommand   = ReactiveCommand.Create(ShowAssetManager);
         ShowSceneEditorCommand    = ReactiveCommand.Create(() => ShowSceneEditor());
@@ -1129,6 +1130,23 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public MainViewModel Main { get; }
     public FloatingMenuViewModel FloatingMenu { get; }
 
+    // ── Phase S1 Control Center shell ─────────────────────────────────────
+    // Re-presents FloatingMenu + this shell's Show* commands into a nav-rail.
+    // Lazily built on first open; shares FloatingMenu so the render window and
+    // the shell stay in lock-step.
+    private ControlCenterViewModel? _controlCenter;
+    public ControlCenterViewModel? ControlCenter
+    {
+        get => _controlCenter;
+        private set => this.RaiseAndSetIfChanged(ref _controlCenter, value);
+    }
+
+    private void ShowControlCenter()
+    {
+        ControlCenter ??= new ControlCenterViewModel(this);
+        IsControlCenterVisible = !IsControlCenterVisible;
+    }
+
     /// <summary>VCR transport for the running slideshow. Shown only while
     /// <see cref="IsSlideshowVcrVisible"/> is true.</summary>
     public SlideshowVcrViewModel SlideshowVcr { get; }
@@ -1257,6 +1275,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         get => _isFloatingMenuVisible;
         set => this.RaiseAndSetIfChanged(ref _isFloatingMenuVisible, value);
+    }
+
+    private bool _isControlCenterVisible;
+    public bool IsControlCenterVisible
+    {
+        get => _isControlCenterVisible;
+        set => this.RaiseAndSetIfChanged(ref _isControlCenterVisible, value);
     }
 
     private bool _isColorThemeEditorVisible;
@@ -1494,6 +1519,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, bool> ShowFloatingMenuCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowHelpCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowColorThemeEditorCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowControlCenterCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowRegionEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowAssetManagerCommand { get; }
     /// <summary>Scene Engine Roadmap Phase S5 — opens the Scene Editor.</summary>
