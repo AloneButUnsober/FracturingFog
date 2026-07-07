@@ -197,8 +197,8 @@
                     <Border Classes="group">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Lighting &amp; FX" />
-                            <Button Classes="action help" Content="Volumetric Lighting &amp; FX…" Command="{Binding Shell.ShowFractalParamsCommand}" HorizontalAlignment="Stretch"
-                                    ToolTip.Tip="Opens Fractal Params, which hosts the Lighting &amp; FX panel (lights, ambient occlusion, fog, tonemap, HDRI/IBL). Standalone surfacing lands in S2." />
+                            <Button Classes="action help" Content="Volumetric Lighting &amp; FX…" Command="{Binding Shell.ShowLightingFxCommand}" HorizontalAlignment="Stretch"
+                                    ToolTip.Tip="Opens the standalone Lighting &amp; FX panel (lights, ambient occlusion, fog, tonemap, HDRI/IBL) — no longer buried inside Fractal Params. Stays open across fractal-type changes." />
                         </StackPanel>
                     </Border>
 

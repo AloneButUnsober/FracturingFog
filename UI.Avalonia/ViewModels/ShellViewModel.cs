@@ -508,6 +508,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             () => OpenColorGenEditorRequested?.Invoke(this, EventArgs.Empty));
         ShowFractalParamsCommand  = ReactiveCommand.Create(
             () => FractalParamsRequested?.Invoke(this, EventArgs.Empty));
+        ShowLightingFxCommand     = ReactiveCommand.Create(
+            () => LightingFxRequested?.Invoke(this, EventArgs.Empty));
 
         // Context-menu commands. Toolbar / status / grid / watermark are
         // simple flag flips; the rest delegate to the existing private
@@ -1537,6 +1539,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowColorGenEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
+    /// <summary>S2 — opens the standalone Volumetric Lighting &amp; FX panel
+    /// (the Lighting/FX block on its own, not buried inside Fractal Params).</summary>
+    public ReactiveCommand<Unit, Unit> ShowLightingFxCommand { get; }
+
     // Context-menu commands (right-click on render surface).
     public ReactiveCommand<Unit, bool> ToggleToolbarCommand { get; }
     public ReactiveCommand<Unit, bool> ToggleStatusBarCommand { get; }
@@ -2505,6 +2511,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <c>FractalParameters</c> + active <c>FractalType</c>, and re-renders on
     /// each live change. Mirrors the legacy WinForms FractalParamsDialog.</summary>
     public event EventHandler? FractalParamsRequested;
+
+    /// <summary>User asked for the standalone Volumetric Lighting &amp; FX panel.
+    /// Host pops <c>LightingFxDialog</c> bound to a <c>FractalParamsViewModel</c>
+    /// over the shared ViewState — the Lighting/FX block is type-independent, so
+    /// this stays open across fractal-type changes (unlike Fractal Params).</summary>
+    public event EventHandler? LightingFxRequested;
 
     /// <summary>Begin a video zoom / slideshow from a request the host
     /// collected via the dialog. Sets the button label + (slideshow) shows the
