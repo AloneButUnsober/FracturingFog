@@ -23,7 +23,10 @@ namespace FracturingFog.UI.Avalonia.Views;
 
 internal sealed class MiniWindowTether : IDisposable
 {
-    public enum AnchorCorner { BottomLeft, BottomRight }
+    public enum AnchorCorner { BottomLeft, BottomRight, TopLeft, TopRight }
+
+    private bool IsRight  => _anchor is AnchorCorner.BottomRight or AnchorCorner.TopRight;
+    private bool IsBottom => _anchor is AnchorCorner.BottomLeft or AnchorCorner.BottomRight;
 
     private readonly Window _main;
     private readonly Window _mini;
@@ -79,10 +82,8 @@ internal sealed class MiniWindowTether : IDisposable
     private PixelPoint MainAnchorCornerPx()
     {
         double scale = _main.DesktopScaling;
-        int x = _main.Position.X + (_anchor == AnchorCorner.BottomRight
-            ? (int)(_main.Bounds.Width * scale)
-            : 0);
-        int y = _main.Position.Y + (int)(_main.Bounds.Height * scale);
+        int x = _main.Position.X + (IsRight  ? (int)(_main.Bounds.Width  * scale) : 0);
+        int y = _main.Position.Y + (IsBottom ? (int)(_main.Bounds.Height * scale) : 0);
         return new PixelPoint(x, y);
     }
 
@@ -92,10 +93,8 @@ internal sealed class MiniWindowTether : IDisposable
         int inset  = (int)(_insetDip * scale);
         int miniW  = (int)(_mini.Width  * scale);
         int miniH  = (int)(_mini.Height * scale);
-        int x = _anchor == AnchorCorner.BottomRight
-            ? anchorPx.X - miniW - inset
-            : anchorPx.X + inset;
-        int y = anchorPx.Y - miniH - inset;
+        int x = IsRight  ? anchorPx.X - miniW - inset : anchorPx.X + inset;
+        int y = IsBottom ? anchorPx.Y - miniH - inset : anchorPx.Y + inset;
         return new PixelPoint(x, y);
     }
 

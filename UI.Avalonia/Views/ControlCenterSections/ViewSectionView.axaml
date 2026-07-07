@@ -30,10 +30,11 @@
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Display" />
                 <UniformGrid Columns="2">
-                    <Button Classes="action neutral" Content="Mini Map"   Command="{Binding Shell.ToggleMiniMapCommand}"   Margin="0,0,4,4" ToolTip.Tip="Toggle the mini map overlay window" />
-                    <Button Classes="action neutral" Content="Mini Depth" Command="{Binding Shell.ToggleMiniDepthCommand}" Margin="0,0,0,4" ToolTip.Tip="Toggle the mini depth histogram window" />
-                    <Button Classes="action neutral" Content="Mini Mode"  Command="{Binding Shell.ToggleMiniModeCommand}"  Margin="0,0,4,0" ToolTip.Tip="Shrink to a compact drag-handle window" />
-                    <Button Classes="action neutral" Content="Toy Mode"   Command="{Binding Shell.ToggleToyModeCommand}"   ToolTip.Tip="Hide toolbar + status for a clean canvas" />
+                    <Button Classes="action neutral" Content="Mini Map"    Command="{Binding Shell.ToggleMiniMapCommand}"   Margin="0,0,4,4" ToolTip.Tip="Toggle the mini map overlay window" />
+                    <Button Classes="action neutral" Content="Mini Depth"  Command="{Binding Shell.ToggleMiniDepthCommand}" Margin="0,0,0,4" ToolTip.Tip="Toggle the mini depth histogram window" />
+                    <Button Classes="action neutral" Content="Mini Mode"   Command="{Binding Shell.ToggleMiniModeCommand}"  Margin="0,0,4,4" ToolTip.Tip="Shrink to a compact drag-handle window" />
+                    <Button Classes="action neutral" Content="Toy Mode"    Command="{Binding Shell.ToggleToyModeCommand}"   Margin="0,0,0,4" ToolTip.Tip="Hide toolbar + status for a clean canvas" />
+                    <Button Classes="action neutral" Content="Post-FX HUD" Command="{Binding Shell.TogglePostFxHudCommand}" ToolTip.Tip="Toggle the on-canvas brightness/contrast/adaptive overlay, tethered to the render window" />
                 </UniformGrid>
                 <CheckBox Content="Keep render window on top"
                           IsChecked="{Binding Shell.IsRenderTopmost, Mode=TwoWay}"
