@@ -36,7 +36,11 @@
                 <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Adaptive}" Minimum="0" Maximum="100" TickFrequency="25" Margin="0,0,6,4" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
                 <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding AdaptiveLocked}" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0" />
+                <!-- Not fxLabel (that style fixes Width=84 and clips this text). -->
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Text="Lock Lighting &amp; FX"
+                           Foreground="#9B9B9B" FontWeight="Bold" VerticalAlignment="Center"
+                           HorizontalAlignment="Left" Margin="0,4,6,0"
+                           ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block." />
                 <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
             </Grid>
         </Grid>
