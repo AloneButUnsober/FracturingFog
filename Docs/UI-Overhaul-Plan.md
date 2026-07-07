@@ -210,6 +210,25 @@ standalone shared-input fix (spawned task), not folded into the conversion sweep
 - Beginner/Power toggle → `IsBeginnerMode` bound, drives advanced-section
   visibility ("guiding hand").
 
+**Decisions (2026-07-06):** shell **replaces** FloatingMenu (render window stays
+minimal + HUD/Lighting overlays), lives in its **own window** (WindowService,
+2nd-monitor aware), **6-group taxonomy**: View · Explore · Color & Light ·
+Capture · Assets · Advanced (+ System under Advanced).
+
+**S1.1 DONE (scaffold, builds green):** `ControlCenterViewModel` re-presents the
+existing `FloatingMenuViewModel` + shell `Show*` commands (no state duplicated —
+shared `Menu` instance keeps render window + shell in lock-step).
+`ControlCenterView` = SplitView nav-rail + 6 sectioned panels (lifted from the
+FloatingMenu groups). Beginner/power toggle hides Advanced group + deep-zoom
+diagnostics. Hosted modeless via `MainWindow.SyncControlCenter` (PanelHostWindow,
+close⇒hide). Opened from the render-window context menu ("Control Center");
+FloatingMenu kept alongside until parity.
+
+**S1.2 remaining:** surface Volumetric Lighting FX under Color & Light; add
+Mini Map/Depth/Mode + Toy Mode + On Top toggles under View; slideshow
+lock-region / more-colors under Capture; nav taxonomy polish; then retire the
+FloatingMenu "Menu" entry once parity is confirmed. Runtime smoke-test pending.
+
 ### Phase S2 — Poppable + overlays + reorg
 - Detach button per panel → floats via WindowService (2nd-monitor aware).
 - Move brightness/contrast/post-FX to a HUD overlay.
