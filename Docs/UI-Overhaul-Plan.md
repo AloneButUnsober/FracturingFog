@@ -246,9 +246,20 @@ confirmed.
   would kill the detached panel); reuse branch re-Shows a hidden window before
   Activate. ab7f3af + c623b63.
 
-**S2 remaining:**
-- Move brightness/contrast/post-FX to a HUD overlay on the render surface.
-- Edge-snap between floating windows (custom; scope TBD).
+- **Edge-snap** — `Input/EdgeSnapBehavior.Attach` on every PanelHostWindow;
+  magnetic snap-on-pause (120 ms debounce, not during-drag) to the screen
+  work-area + sibling windows (incl. render MainWindow). Physical-px, 14 px
+  threshold, Normal state only. Commit cd543f2.
+- **Post-FX HUD overlay** — brightness/contrast/adaptive on-canvas via a
+  borderless `PostFxHudWindow` tethered to the render window (the GPU HWND sits
+  above the Avalonia tree, so a true in-tree overlay isn't possible on DX — this
+  follows the Mini Map/Depth precedent). Bound to the shared FloatingMenu, so it
+  and the Control Center Post-FX panel stay in lock-step. `MiniWindowTether`
+  gained TopLeft/TopRight anchors; HUD anchors TopLeft (clears the two minis).
+  Toggle in Control Center › View › Display.
+
+**S2 complete.** Follow-up (optional, own branch): retire the FloatingMenu
+context entry + code once parity is fully confirmed (rule 5).
 
 ## 6. Open decisions
 
@@ -271,7 +282,7 @@ confirmed.
 | Overlong main-window context menu | org | S2.1 ✅ |
 | Volumetric Lighting FX buried | org | S2 ✅ |
 | Clunky collapsible dropdowns, unfilterable lists | org | F1 control + S2 |
-| Post-FX would suit overlays | org | S2 (HUD overlay pending) |
+| Post-FX would suit overlays | org | S2 HUD ✅ |
 | 2nd-monitor auto-populate | vision | F2 + S2 detach ✅ |
-| Docking / windows align to each other | vision | S2 (edge-snap pending) |
+| Docking / windows align to each other | vision | S2 edge-snap ✅ |
 | Control center + guiding hand | vision | S1 |
