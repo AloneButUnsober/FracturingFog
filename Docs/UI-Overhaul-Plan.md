@@ -224,16 +224,30 @@ diagnostics. Hosted modeless via `MainWindow.SyncControlCenter` (PanelHostWindow
 close⇒hide). Opened from the render-window context menu ("Control Center");
 FloatingMenu kept alongside until parity.
 
-**S1.2 remaining:** surface Volumetric Lighting FX under Color & Light; add
-Mini Map/Depth/Mode + Toy Mode + On Top toggles under View; slideshow
-lock-region / more-colors under Capture; nav taxonomy polish; then retire the
-FloatingMenu "Menu" entry once parity is confirmed. Runtime smoke-test pending.
+**S1.2 + S1 DONE, smoke-green:** Mini/Toy/On-Top under View, slideshow
+lock-region/more-colors under Capture, full FloatingMenu parity + beginner/power
+gating. FloatingMenu kept as fallback (rule 5), retire once parity fully
+confirmed.
 
 ### Phase S2 — Poppable + overlays + reorg
-- Detach button per panel → floats via WindowService (2nd-monitor aware).
-- Move brightness/contrast/post-FX to a HUD overlay.
-- Regroup the overlong main-window context menu; surface Volumetric Lighting
-  FX at top level.
+**Shipped, smoke-green (2026-07-07):**
+- **S2.1 context-menu reorg** — render-window right-click cut ~25→~16 items;
+  editor/tool launchers (Params, Edit Theme, ColorGen, Asset Manager, Watermark,
+  Mini*/Toy, Span) moved to the Control Center. Commit b1faa09.
+- **Standalone Volumetric Lighting FX** — surfaced at top level (Control Center
+  › Color & Light), no longer buried inside Fractal Params.
+  `ShellViewModel.ShowLightingFxCommand`/`LightingFxRequested`; bootstrap pops
+  `LightingFxDialog` in `s_lightingFxWin` over a `FractalParamsViewModel` on the
+  shared ViewState. Type-independent → stays open across type changes. 0eb13a2.
+- **Detachable panels** — 6 Control Center sections extracted to UserControls
+  (`Views/ControlCenterSections/`); "⧉ Detach section" floats the current one in
+  its own window bound to the same VM (live sync). Detached windows own to the
+  render **MainWindow** (not the CC window — CC is hide-on-close, so owning to it
+  would kill the detached panel); reuse branch re-Shows a hidden window before
+  Activate. ab7f3af + c623b63.
+
+**S2 remaining:**
+- Move brightness/contrast/post-FX to a HUD overlay on the render surface.
 - Edge-snap between floating windows (custom; scope TBD).
 
 ## 6. Open decisions
@@ -254,10 +268,10 @@ FloatingMenu "Menu" entry once parity is confirmed. Runtime smoke-test pending.
 | Oversized dialogs | R2 | F2 |
 | Overlong floating menu | org | S1 |
 | No central jumping-off point | org | S1 |
-| Overlong main-window context menu | org | S2 |
-| Volumetric Lighting FX buried | org | S2 |
+| Overlong main-window context menu | org | S2.1 ✅ |
+| Volumetric Lighting FX buried | org | S2 ✅ |
 | Clunky collapsible dropdowns, unfilterable lists | org | F1 control + S2 |
-| Post-FX would suit overlays | org | S2 |
-| 2nd-monitor auto-populate | vision | F2 + S2 |
-| Docking / windows align to each other | vision | S2 |
+| Post-FX would suit overlays | org | S2 (HUD overlay pending) |
+| 2nd-monitor auto-populate | vision | F2 + S2 detach ✅ |
+| Docking / windows align to each other | vision | S2 (edge-snap pending) |
 | Control center + guiding hand | vision | S1 |
