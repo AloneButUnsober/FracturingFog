@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.PostFxHudWindow"
+        x:DataType="vm:FloatingMenuViewModel"
+        Title="Post-FX"
+        Width="250" SizeToContent="Height"
+        MinWidth="200"
+        WindowDecorations="None"
+        WindowStartupLocation="Manual"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Foreground="#DCDCDC"
+        Background="#121212">
+    <Border BorderBrush="#404040" BorderThickness="1">
+        <Grid RowDefinitions="16,*">
+            <Border x:Name="DragHandle" Grid.Row="0" Background="#202020" Cursor="SizeAll">
+                <TextBlock Text="Post-FX"
+                           Foreground="#A0A0A0"
+                           FontSize="10"
+                           VerticalAlignment="Center"
+                           Margin="6,0,0,0" />
+            </Border>
+
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" Margin="6">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding BrightnessLabel}" Margin="0,0,6,4" />
+                <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,0,6,4" ToolTip.Tip="Brightness (-100..100)" />
+                <CheckBox  Grid.Row="0" Grid.Column="2" IsChecked="{Binding BrightnessLocked}" ToolTip.Tip="Lock brightness" Margin="0,0,0,4" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Classes="fxLabel" Text="{Binding ContrastLabel}" Margin="0,0,6,4" />
+                <Slider    Grid.Row="1" Grid.Column="1" Value="{Binding Contrast}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,0,6,4" ToolTip.Tip="Contrast (-100..100)" />
+                <CheckBox  Grid.Row="1" Grid.Column="2" IsChecked="{Binding ContrastLocked}" ToolTip.Tip="Lock contrast" Margin="0,0,0,4" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="{Binding AdaptiveLabel}" Margin="0,0,6,4" IsEnabled="{Binding AdaptiveEnabled}" />
+                <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Adaptive}" Minimum="0" Maximum="100" TickFrequency="25" Margin="0,0,6,4" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
+                <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding AdaptiveLocked}" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0" />
+                <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

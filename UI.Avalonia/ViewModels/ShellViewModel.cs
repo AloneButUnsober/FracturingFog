@@ -544,6 +544,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         });
         ToggleMiniMapCommand = ReactiveCommand.Create(() => IsMiniMapVisible = !IsMiniMapVisible);
         ToggleMiniDepthCommand = ReactiveCommand.Create(() => IsMiniDepthVisible = !IsMiniDepthVisible);
+        TogglePostFxHudCommand = ReactiveCommand.Create(() => IsPostFxHudVisible = !IsPostFxHudVisible);
         ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
         ToggleToyModeCommand   = ReactiveCommand.Create(() => IsToyMode  = !IsToyMode);
 
@@ -1630,6 +1631,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     }
 
     public ReactiveCommand<Unit, bool> ToggleMiniDepthCommand { get; private set; } = null!;
+
+    // ── Post-FX HUD overlay (S2) ────────────────────────────────────────
+    // A borderless brightness/contrast/adaptive strip tethered to a render-
+    // window corner, bound to FloatingMenu (same props the Control Center
+    // Post-FX panel uses). Host wires the tether in MainWindow.SyncPostFxHud.
+    private bool _isPostFxHudVisible;
+    public bool IsPostFxHudVisible
+    {
+        get => _isPostFxHudVisible;
+        set => this.RaiseAndSetIfChanged(ref _isPostFxHudVisible, value);
+    }
+
+    public ReactiveCommand<Unit, bool> TogglePostFxHudCommand { get; private set; } = null!;
 
     /// <summary>Host-supplied palette sampler. Returns the packed ARGB color
     /// for a smooth-iteration index against the active IColorMap. Used by

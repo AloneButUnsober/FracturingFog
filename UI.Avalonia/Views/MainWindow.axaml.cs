@@ -58,6 +58,8 @@ public sealed partial class MainWindow : Window
     private MiniDepthWindow? _miniDepthWin;
     private MiniWindowTether? _miniMapTether;
     private MiniWindowTether? _miniDepthTether;
+    private PostFxHudWindow? _postFxHudWin;
+    private MiniWindowTether? _postFxHudTether;
 
     // S-X8 (2026-06-27) — hold the delegates ConfigureMiniDepth subscribes
     // to RenderHost.ColorMapChanged / FrameCompleted so DetachShell can
@@ -676,6 +678,9 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsMiniDepthVisible):
                 SyncMiniDepth();
                 break;
+            case nameof(ShellViewModel.IsPostFxHudVisible):
+                SyncPostFxHud();
+                break;
             case nameof(ShellViewModel.IsSlideshowVcrVisible):
                 // Slideshow start path flips this true unconditionally; in
                 // mini/toy mode we want it suppressed. Capture the intended
@@ -986,6 +991,43 @@ public sealed partial class MainWindow : Window
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    private void SyncPostFxHud()
+    {
+        if (_shell == null) return;
+        if (_shell.IsPostFxHudVisible)
+        {
+            if (_postFxHudWin == null)
+            {
+                _postFxHudWin = new PostFxHudWindow { DataContext = _shell.FloatingMenu };
+                _postFxHudWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsPostFxHudVisible = false;
+                };
+            }
+            if (!_postFxHudWin.IsVisible)
+            {
+                _postFxHudWin.Show(this);
+                if (_postFxHudTether == null)
+                {
+                    _postFxHudTether = new MiniWindowTether(
+                        this, _postFxHudWin, MiniWindowTether.AnchorCorner.TopLeft);
+                    _postFxHudWin.ResetAnchorRequested += (_, _) => _postFxHudTether?.ResetAnchor();
+                }
+                // Defer initial placement so Show's own PositionChanged settles
+                // before the tether takes ownership (else read as a user drag).
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _postFxHudTether?.Apply(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }
+        else
+        {
+            _postFxHudWin?.Hide();
+        }
+    }
 
     private void SyncMiniMap()
     {
@@ -1682,6 +1724,7 @@ public sealed partial class MainWindow : Window
         _masterConfigWin?.Close();
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
+        _postFxHudWin?.Close();
         _assetManagerWin?.Close();
 
         DetachShell();
