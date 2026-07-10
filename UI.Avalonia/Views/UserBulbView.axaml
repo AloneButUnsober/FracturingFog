@@ -155,7 +155,7 @@
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Algebra:" />
                     <ComboBox    Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding AxisModeIndex}"
-                                 ToolTip.Tip="Vec3 = 3D mandelbulb-style. Quat = 4D quaternion fractal (slice W picks the hyperplane). Sandbox compiler in Quat mode: use qmul, qpow, qconj, qvec(x,y,z,w), .w member access.">
+                                 ToolTip.Tip="Vec3 = 3D mandelbulb-style. Quat = 4D quaternion fractal (slice W picks the hyperplane). Sandbox compiler in Quat mode: use qmul, qpow, qconj, qinv, qvec(x,y,z,w), .w member access, plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qsinh/qcosh/qtanh/qasin/qacos/qatan (and reciprocals qcsc/qsec/qcot).">
                         <ComboBoxItem Content="Vec3 (3D)" />
                         <ComboBoxItem Content="Quat (4D)" />
                     </ComboBox>
@@ -166,7 +166,7 @@
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Compiler:" />
                     <ComboBox    Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="5" SelectedIndex="{Binding CompilerIndex}"
-                                 ToolTip.Tip="Roslyn — full C# step body, all BCL helpers, GPU-translatable. Use for performance and unrestricted math. Sandbox — small DSL (vec, triplex, fold ops, let, ternary, qmul/qpow/qconj/qvec for Quat). Safer for untrusted source and supports compile-time analytic DE detection. CPU-only.">
+                                 ToolTip.Tip="Roslyn — full C# step body, all BCL helpers, GPU-translatable. Use for performance and unrestricted math. Sandbox — small DSL (vec, triplex, fold ops, let, ternary, and for Quat: qmul/qpow/qconj/qvec plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qasin/qacos/qatan...). Safer for untrusted source and supports compile-time analytic DE detection. CPU-only.">
                         <ComboBoxItem Content="Roslyn (full C#, BCL, GPU-translatable)" />
                         <ComboBoxItem Content="Sandbox (safe DSL, Vec3 only, CPU)" />
                     </ComboBox>

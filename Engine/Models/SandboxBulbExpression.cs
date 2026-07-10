@@ -100,6 +100,13 @@ namespace FracturingFog.Models
         // 1-arg
         QConj, Length, Normalize, AbsX, AbsY, AbsZ, Floor, Sign,
         Sin, Cos, Tan, Sinh, Cosh, Tanh, Exp, Log, Sqrt, Abs,
+        // 1-arg quaternion-algebra transcendentals (distinct from the
+        // componentwise scalar funcs above — these treat the arg as a
+        // quaternion, not a 4-tuple). Map to Quat.* in Quat.cs.
+        QExp, QLog, QSqrt, QInv,
+        QSin, QCos, QTan, QSinh, QCosh, QTanh,
+        QAsin, QAcos, QAtan, QAsinh, QAcosh, QAtanh,
+        QCsc, QSec, QCot, QCsch, QSech, QCoth,
     }
 
     /// <summary>Tagged value: scalar real, 3-vector, or quaternion. W is
@@ -195,21 +202,14 @@ namespace FracturingFog.Models
             _            => R(-a.X),
         };
 
-        /// <summary>Vec → triplex Mandelbulb power. Quat → integer Hamilton
-        /// self-multiply (non-integer power throws). Real → Math.Pow.</summary>
+        /// <summary>Vec → triplex Mandelbulb power. Quat → Quat.Pow (exact
+        /// self-multiply for non-negative integer exponents, analytic form for
+        /// fractional/negative). Real → Math.Pow. Never throws — undefined
+        /// cases yield non-finite values that escape the pixel, matching the
+        /// Quat escape contract (see Quat.cs).</summary>
         public static SbxVal3 Pow(SbxVal3 a, SbxVal3 b)
         {
-            if (a.IsQuat)
-            {
-                double exp = b.AsReal();
-                int n = (int)Math.Round(exp);
-                if (Math.Abs(exp - n) > 1e-9 || n < 0)
-                    throw new InvalidOperationException("Quat power must be a non-negative integer.");
-                var qa = a.AsQuat();
-                var r = Quat.Identity;
-                for (int i = 0; i < n; i++) r = r * qa;
-                return Q(r);
-            }
+            if (a.IsQuat) return Q(Quat.Pow(a.AsQuat(), b.AsReal()));
             if (a.IsVec) return V(Vec3.Pow(a.AsVec(), b.AsReal()));
             return R(Math.Pow(a.X, b.AsReal()));
         }
@@ -358,6 +358,28 @@ namespace FracturingFog.Models
             "qvec"       => SbxFuncId.QVec,
             "qmul"       => SbxFuncId.QMul,
             "qpow"       => SbxFuncId.QPow,
+            "qexp"       => SbxFuncId.QExp,
+            "qlog"       => SbxFuncId.QLog,
+            "qsqrt"      => SbxFuncId.QSqrt,
+            "qinv"       => SbxFuncId.QInv,
+            "qsin"       => SbxFuncId.QSin,
+            "qcos"       => SbxFuncId.QCos,
+            "qtan"       => SbxFuncId.QTan,
+            "qsinh"      => SbxFuncId.QSinh,
+            "qcosh"      => SbxFuncId.QCosh,
+            "qtanh"      => SbxFuncId.QTanh,
+            "qasin"      => SbxFuncId.QAsin,
+            "qacos"      => SbxFuncId.QAcos,
+            "qatan"      => SbxFuncId.QAtan,
+            "qasinh"     => SbxFuncId.QAsinh,
+            "qacosh"     => SbxFuncId.QAcosh,
+            "qatanh"     => SbxFuncId.QAtanh,
+            "qcsc"       => SbxFuncId.QCsc,
+            "qsec"       => SbxFuncId.QSec,
+            "qcot"       => SbxFuncId.QCot,
+            "qcsch"      => SbxFuncId.QCsch,
+            "qsech"      => SbxFuncId.QSech,
+            "qcoth"      => SbxFuncId.QCoth,
             "dot"        => SbxFuncId.Dot,
             "cross"      => SbxFuncId.Cross,
             "triplex"    => SbxFuncId.Triplex,
@@ -408,6 +430,28 @@ namespace FracturingFog.Models
                 }
                 case SbxFuncId.QMul:   return SbxVal3.Q(Args[0].Eval(env).AsQuat() * Args[1].Eval(env).AsQuat());
                 case SbxFuncId.QConj:  return SbxVal3.Q(Args[0].Eval(env).AsQuat().Conjugate());
+                case SbxFuncId.QExp:   return SbxVal3.Q(Quat.Exp(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QLog:   return SbxVal3.Q(Quat.Log(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QSqrt:  return SbxVal3.Q(Quat.Sqrt(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QInv:   return SbxVal3.Q(Quat.Inverse(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QSin:   return SbxVal3.Q(Quat.Sin(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QCos:   return SbxVal3.Q(Quat.Cos(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QTan:   return SbxVal3.Q(Quat.Tan(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QSinh:  return SbxVal3.Q(Quat.Sinh(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QCosh:  return SbxVal3.Q(Quat.Cosh(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QTanh:  return SbxVal3.Q(Quat.Tanh(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QAsin:  return SbxVal3.Q(Quat.Asin(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QAcos:  return SbxVal3.Q(Quat.Acos(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QAtan:  return SbxVal3.Q(Quat.Atan(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QAsinh: return SbxVal3.Q(Quat.Asinh(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QAcosh: return SbxVal3.Q(Quat.Acosh(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QAtanh: return SbxVal3.Q(Quat.Atanh(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QCsc:   return SbxVal3.Q(Quat.Csc(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QSec:   return SbxVal3.Q(Quat.Sec(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QCot:   return SbxVal3.Q(Quat.Cot(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QCsch:  return SbxVal3.Q(Quat.Csch(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QSech:  return SbxVal3.Q(Quat.Sech(Args[0].Eval(env).AsQuat()));
+                case SbxFuncId.QCoth:  return SbxVal3.Q(Quat.Coth(Args[0].Eval(env).AsQuat()));
                 case SbxFuncId.QPow:
                 {
                     var qa = Args[0].Eval(env);
@@ -835,7 +879,14 @@ namespace FracturingFog.Models
                     or "length" or "normalize"
                     or "absx" or "absy" or "absz"
                     or "floor" or "sign"
-                    or "qconj" => 1,
+                    or "qconj"
+                    or "qexp" or "qlog" or "qsqrt" or "qinv"
+                    or "qsin" or "qcos" or "qtan"
+                    or "qsinh" or "qcosh" or "qtanh"
+                    or "qasin" or "qacos" or "qatan"
+                    or "qasinh" or "qacosh" or "qatanh"
+                    or "qcsc" or "qsec" or "qcot"
+                    or "qcsch" or "qsech" or "qcoth" => 1,
                 "dot" or "cross" or "triplex" or "boxfold" or "mod"
                     or "pow" or "min" or "max"
                     or "qmul" or "qpow" => 2,
