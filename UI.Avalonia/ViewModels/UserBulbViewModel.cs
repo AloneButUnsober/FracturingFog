@@ -592,8 +592,19 @@ public sealed class UserBulbViewModel : ViewModelBase
                     Chain.Add(clone);
                 }
             }
+
+            // Restore the equation's own saved settings (axis/Julia/camera/
+            // render budget/params/Time). Legacy entries have no Settings —
+            // leave the current knobs untouched (old load behaviour).
+            if (entry.Settings != null)
+                ApplySnapshotToParams(entry.Settings);
         }
         finally { _loadingNamedEquation = false; }
+
+        // Push restored settings into the bound VM fields so the editor controls
+        // (MaxSteps, camera, Julia, …) reflect what just loaded.
+        if (entry.Settings != null)
+            SyncMirrorFromParams();
 
         if (!string.Equals(_selectedSavedName, entry.Name, StringComparison.Ordinal))
         {
@@ -668,7 +679,12 @@ public sealed class UserBulbViewModel : ViewModelBase
             if (!confirm.Result) return;
         }
 
-        var entry = UserBulbStore.Instance.SaveEquation(trimmed, _source, _params.UserBulbChain);
+        // Capture the current render/view/animation settings alongside the
+        // source + chain so loading this equation later restores its own knobs.
+        // Pass an empty Entry into the snapshot — the entry that owns it is the
+        // one being saved; nesting itself would self-reference.
+        var settings = BuildSnapshotFromParams(new UserBulbEntry());
+        var entry = UserBulbStore.Instance.SaveEquation(trimmed, _source, _params.UserBulbChain, settings);
         if (entry is null) return;
 
         _params.UserBulbName = entry.Name;
