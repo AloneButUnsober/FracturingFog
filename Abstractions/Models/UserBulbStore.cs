@@ -35,6 +35,18 @@ namespace FracturingFog.Models
         /// single-source entries.
         /// </summary>
         public List<UserBulbChainStep>? Chain { get; set; }
+
+        /// <summary>
+        /// Render/view/animation settings captured when the equation was saved
+        /// (axis mode, Julia, camera, lights, colour driver, render budget,
+        /// FOV, Time, named params). Applied on load so switching between saved
+        /// equations restores each one's own settings — not just its source.
+        /// Null on legacy entries saved before this field existed (load then
+        /// leaves the current settings untouched, matching old behaviour). The
+        /// nested snapshot's own <see cref="UserBulbSnapshot.Entry"/> is unused
+        /// here and left empty to avoid self-reference.
+        /// </summary>
+        public UserBulbSnapshot? Settings { get; set; }
     }
 
     public sealed class UserBulbStore
@@ -294,7 +306,7 @@ namespace FracturingFog.Models
         /// so the caller can keep mutating its own list afterwards; null/empty
         /// chain clears any prior chain on a replaced entry.
         /// </summary>
-        public UserBulbEntry? SaveEquation(string name, string source, IReadOnlyList<UserBulbChainStep>? chain = null)
+        public UserBulbEntry? SaveEquation(string name, string source, IReadOnlyList<UserBulbChainStep>? chain = null, UserBulbSnapshot? settings = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
 
@@ -311,12 +323,13 @@ namespace FracturingFog.Models
                 {
                     Equations[i].Source = source ?? string.Empty;
                     Equations[i].Chain = chainCopy;
+                    Equations[i].Settings = settings;
                     Save();
                     return Equations[i];
                 }
             }
 
-            var entry = new UserBulbEntry { Name = name, Source = source ?? string.Empty, Chain = chainCopy };
+            var entry = new UserBulbEntry { Name = name, Source = source ?? string.Empty, Chain = chainCopy, Settings = settings };
             Equations.Add(entry);
             Save();
             return entry;
