@@ -32,6 +32,7 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -116,6 +117,12 @@ public sealed class UserBulbCalculator : IFractalCalculator
     private UserBulbAxisModeKind _compiledAxisMode = UserBulbAxisModeKind.Vec3;
     private UserBulbCompilerKind _compiledCompiler = UserBulbCompilerKind.Roslyn;
     private AnalyticDEPattern _analyticPattern = new(AnalyticDEKind.None, 0);
+    // True when the compiled step references the sample point `c`. Maps that
+    // don't (pure z-folds: KIFS Menger/Sierpinski, Kaleidoscopic-IFS chains)
+    // are position-independent under the Mandelbrot seeding (z=0, c=point) and
+    // render blank; they need the orbit seeded AT the sample point instead.
+    // Default true = classic z=0 + c seeding (safe for z^p+c style maps).
+    private bool _mapUsesC = true;
     private readonly UserBulbTemporalCache _cache = new();
     private UserBulbGpuCalculator? _gpu;
     private UserBulbSandboxGpuCompiler? _sandboxGpu;
@@ -137,12 +144,41 @@ public sealed class UserBulbCalculator : IFractalCalculator
     /// component-wise statics so users can write Vec3.Sin(z) or just use
     /// Math.Sin(z.X) inside a `new Vec3(...)`.
     /// </summary>
+    /// <summary>True when <paramref name="source"/> references the sample
+    /// point `c` as a standalone identifier (ignoring `//` and block comments).
+    /// Used to pick the orbit seeding convention: maps that use `c` seed at
+    /// z=0 (Mandelbrot style); maps that don't seed at the sample point (KIFS
+    /// style) so they aren't position-invariant.</summary>
+    private static bool SourceReferencesC(string? source)
+    {
+        if (string.IsNullOrEmpty(source)) return false;
+        // Strip comments so `c` in prose ("try c instead of...") doesn't count.
+        string stripped = Regex.Replace(source, @"//[^\n]*", " ");
+        stripped = Regex.Replace(stripped, @"/\*.*?\*/", " ", RegexOptions.Singleline);
+        return Regex.IsMatch(stripped, @"\bc\b");
+    }
+
     public void Compile(string source)
     {
         LastErrorPosition = -1;
         LastErrorLength = 0;
         var chain = FractalParameters.UserBulbChain;
         bool useChain = chain != null && chain.Count > 0;
+
+        // Decide the orbit seeding convention. A step that never references the
+        // sample point `c` (KIFS folds, Kaleidoscopic-IFS) is position-invariant
+        // under z=0 seeding and would render blank; seed such maps at the point.
+        if (useChain)
+        {
+            _mapUsesC = false;
+            foreach (var st in chain!)
+                if (SourceReferencesC(st.Source)) { _mapUsesC = true; break; }
+        }
+        else
+        {
+            _mapUsesC = SourceReferencesC(source);
+        }
+
         if (!useChain && string.IsNullOrWhiteSpace(source))
         {
             _compiled = null;
@@ -633,6 +669,12 @@ namespace FracturingFogDyn
         pArr[_compiledParamNames.Length] = FractalParameters.UserBulbTime;
 
         bool juliaMode = FractalParameters.UserBulbJuliaMode;
+        // A map that never references `c` is position-invariant under z=0
+        // seeding (blank render). Seed it at the sample point instead — this is
+        // exactly the Julia-mode seeding path (perturb the point, c held const),
+        // and with jc defaulting to 0 the unused `c` is harmless. Real Julia
+        // mode still forces point-seeding regardless.
+        if (!_mapUsesC) juliaMode = true;
         double jcX = FractalParameters.UserBulbJuliaCX;
         double jcY = FractalParameters.UserBulbJuliaCY;
         double jcZ = FractalParameters.UserBulbJuliaCZ;
