@@ -793,6 +793,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         ClipPlaneEnabled = _params.UserBulbClipPlaneEnabled,
         SuperSample      = _params.UserBulbSuperSample,
         Time             = _params.UserBulbTime,
+        AnimSpeed        = _animSpeed,
+        AnimLoopSeconds  = _animLoopSeconds,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -833,6 +835,11 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.ClipPlaneEnabled is { } cpe)       _params.UserBulbClipPlaneEnabled = cpe;
         if (s.SuperSample is { } ss)             _params.UserBulbSuperSample = ss;
         if (s.Time is { } t)                     _params.UserBulbTime = t;
+        // AnimSpeed / AnimLoopSeconds are VM-only (not in FractalParameters).
+        // Set through the public setters so they clamp and raise change
+        // notifications for the bound Speed / Loop-s controls.
+        if (s.AnimSpeed is { } aspd)             AnimSpeed = aspd;
+        if (s.AnimLoopSeconds is { } aloop)      AnimLoopSeconds = aloop;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
