@@ -177,13 +177,21 @@ namespace FracturingFog.Models
             {
                 Name = "Kaleidoscopic IFS (fold + rot + scale)",
                 Source = "// Single-pass fallback — chain form below carries fold/rot/scale.\n" +
-                         "var v = z;\n" +
-                         "if (v.X + v.Y < 0) v = new Vec3(-v.Y, -v.X,  v.Z);\n" +
-                         "if (v.X + v.Z < 0) v = new Vec3(-v.Z,  v.Y, -v.X);\n" +
-                         "if (v.Y + v.Z < 0) v = new Vec3( v.X, -v.Z, -v.Y);\n" +
-                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.5);\n" +
-                         "return v * 2.0 - new Vec3(1, 1, 1);",
+                         "// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n" +
+                         "// defeats the numerical-Jacobian DE.\n" +
+                         "var v = Vec3.Abs(z);\n" +
+                         "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
+                         "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
+                         "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
+                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.3);\n" +
+                         "return v * 3.0 - new Vec3(2, 2, 0);",
                 Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
+                Settings = new UserBulbSnapshot
+                {
+                    KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
+                    CameraDistance = 3.0,
+                    Iterations = 12,
+                },
             });
             Equations.Add(new UserBulbEntry
             {
@@ -248,13 +256,20 @@ namespace FracturingFog.Models
             Ensure("Kaleidoscopic IFS (fold + rot + scale)", () => new UserBulbEntry
             {
                 Name = "Kaleidoscopic IFS (fold + rot + scale)",
-                Source = "var v = z;\n" +
-                         "if (v.X + v.Y < 0) v = new Vec3(-v.Y, -v.X,  v.Z);\n" +
-                         "if (v.X + v.Z < 0) v = new Vec3(-v.Z,  v.Y, -v.X);\n" +
-                         "if (v.Y + v.Z < 0) v = new Vec3( v.X, -v.Z, -v.Y);\n" +
-                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.5);\n" +
-                         "return v * 2.0 - new Vec3(1, 1, 1);",
+                Source = "// Needs DE Mode = Scalar KIFS (scale 3) — see chain steps.\n" +
+                         "var v = Vec3.Abs(z);\n" +
+                         "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
+                         "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
+                         "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
+                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.3);\n" +
+                         "return v * 3.0 - new Vec3(2, 2, 0);",
                 Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
+                Settings = new UserBulbSnapshot
+                {
+                    KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
+                    CameraDistance = 3.0,
+                    Iterations = 12,
+                },
             });
             Ensure("Quaternion Julia (Quat mode, set Julia c)", () => new UserBulbEntry
             {
@@ -280,6 +295,30 @@ namespace FracturingFog.Models
                     && !entry.Chain[1].Source.Contains("* 0.3"))
                 {
                     entry.Chain = UserBulbChainPrimitives.MengerBulbHybrid();
+                    changed = true;
+                }
+            }
+
+            // Kaleidoscopic-IFS repair: earlier builds shipped a Sierpinski-fold
+            // chain with per-iteration rotation, which is invisible under the
+            // numerical DE and carries no KIFS-scale setting → renders as a
+            // sparse speck. Re-seed to the Menger-fold chain and attach the
+            // Scalar-KIFS settings. Detect by a chain lacking the KIFS-scale
+            // setting or still using the old rotation-of-Sierpinski step.
+            {
+                var entry = GetByName("Kaleidoscopic IFS (fold + rot + scale)");
+                bool needsFix = entry?.Chain is { Count: > 0 }
+                    && (entry.Settings?.KifsScale is not > 0.0
+                        || (entry.Chain.Count > 1 && entry.Chain[1].Source.Contains(UserBulbChainPrimitives.IdSierpinski)));
+                if (needsFix)
+                {
+                    entry!.Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain();
+                    entry.Settings = new UserBulbSnapshot
+                    {
+                        KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
+                        CameraDistance = 3.0,
+                        Iterations = 12,
+                    };
                     changed = true;
                 }
             }

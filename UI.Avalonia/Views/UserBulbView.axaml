@@ -148,10 +148,14 @@
                         <ComboBoxItem Content="Numerical" />
                     </ComboBox>
                     <TextBlock Grid.Row="2" Grid.Column="2" Classes="label" Text="Backend:" Margin="10,0,6,0" />
-                    <ComboBox    Grid.Row="2" Grid.Column="3" Grid.ColumnSpan="3" SelectedIndex="{Binding BackendIndex}">
+                    <ComboBox    Grid.Row="2" Grid.Column="3" SelectedIndex="{Binding BackendIndex}">
                         <ComboBoxItem Content="CPU" />
                         <ComboBoxItem Content="GPU (experimental)" />
                     </ComboBox>
+                    <TextBlock Grid.Row="2" Grid.Column="4" Classes="label" Text="KIFS scale:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="5" Minimum="0" Maximum="20" Increment="0.5" FormatString="0.0"
+                                   ToolTip.Tip="Per-iteration linear scale for the scalar KIFS/Mandelbox distance estimator. 0 = off (use DE Mode). Set to the map's scale factor (e.g. 3 for the Kaleidoscopic-IFS preset) to render fold+rotation IFS whose folds have discontinuities the numerical Jacobian can't handle. CPU-only; overrides DE Mode when > 0."
+                                   Value="{Binding KifsScale}" />
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Algebra:" />
                     <ComboBox    Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding AxisModeIndex}"

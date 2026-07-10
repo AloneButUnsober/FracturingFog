@@ -67,6 +67,7 @@ namespace FracturingFog.Models
         public double? Bailout { get; set; }
         public double? JacobianH { get; set; }
         public double? CullRadius { get; set; }
+        public double? KifsScale { get; set; }
 
         // ── View ───────────────────────────────────────────────────────
         public double? FovDegrees { get; set; }
