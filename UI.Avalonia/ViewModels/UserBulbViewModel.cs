@@ -496,9 +496,17 @@ public sealed class UserBulbViewModel : ViewModelBase
             double L = _animLoopSeconds;
             next -= L * Math.Floor(next / L);
         }
+        // Update the bound t field without letting its setter fire a second
+        // (ungated) render — AnimationTick owns the single gated render below.
         _suppressRender = true;
         AnimTime = next;
         _suppressRender = false;
+        // The AnimTime setter skips the _params write under _suppressRender, so
+        // advance the render-facing time here — otherwise UserBulbTime stays at
+        // its initial value, `next` recomputes from a fixed base every tick (t
+        // jitters in a tiny range around one dt-step), and the render never sees
+        // the advancing time, so nothing animates.
+        _params.UserBulbTime = next;
         if (_renderInFlight) return;
         _renderInFlight = true;
         RenderRequested?.Invoke(this, EventArgs.Empty);
