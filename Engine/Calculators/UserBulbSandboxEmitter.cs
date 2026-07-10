@@ -446,6 +446,20 @@ public static class UserBulbSandboxEmitter
                     EmitAsReal(call.Args[1], sb); sb.Append(')');
                     return SbxEmitKind.Quat;
                 }
+                case "qexp": case "qlog": case "qsqrt": case "qinv":
+                case "qsin": case "qcos": case "qtan":
+                case "qsinh": case "qcosh": case "qtanh":
+                case "qasin": case "qacos": case "qatan":
+                case "qasinh": case "qacosh": case "qatanh":
+                case "qcsc": case "qsec": case "qcot":
+                case "qcsch": case "qsech": case "qcoth":
+                    // Quaternion-algebra transcendental. Emits Quat.* directly:
+                    // those are throw-free and Clamp-free, hence device-safe on
+                    // GPU with no QuatGpuOps mirror needed.
+                    sb.Append("Quat.").Append(QuatFuncMethod(call.Name)).Append('(');
+                    EmitAsQuat(call.Args[0], sb);
+                    sb.Append(')');
+                    return SbxEmitKind.Quat;
                 case "sin": case "cos": case "tan":
                 case "sinh": case "cosh": case "tanh":
                 case "exp": case "log": case "sqrt":
@@ -569,5 +583,19 @@ public static class UserBulbSandboxEmitter
 
         private static string Lit(double d)
             => d.ToString("R", CultureInfo.InvariantCulture);
+
+        /// <summary>Maps a "q"-prefixed DSL transcendental name to its Quat.*
+        /// method name (e.g. "qsin" → "Sin", "qinv" → "Inverse").</summary>
+        private static string QuatFuncMethod(string name) => name switch
+        {
+            "qexp"   => "Exp",   "qlog"   => "Log",   "qsqrt"  => "Sqrt",  "qinv"   => "Inverse",
+            "qsin"   => "Sin",   "qcos"   => "Cos",   "qtan"   => "Tan",
+            "qsinh"  => "Sinh",  "qcosh"  => "Cosh",  "qtanh"  => "Tanh",
+            "qasin"  => "Asin",  "qacos"  => "Acos",  "qatan"  => "Atan",
+            "qasinh" => "Asinh", "qacosh" => "Acosh", "qatanh" => "Atanh",
+            "qcsc"   => "Csc",   "qsec"   => "Sec",   "qcot"   => "Cot",
+            "qcsch"  => "Csch",  "qsech"  => "Sech",  "qcoth"  => "Coth",
+            _ => throw new NotSupportedException($"Emit: unknown quat function '{name}'"),
+        };
     }
 }
