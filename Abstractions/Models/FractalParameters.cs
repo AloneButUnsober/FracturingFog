@@ -410,6 +410,14 @@ namespace FracturingFog.Models
         /// skip raymarching entirely. Set large enough to enclose any feature; 2.5 covers all
         /// standard bulbs/Mandelboxes.</summary>
         public double UserBulbCullRadius { get; set; } = 2.5;
+        /// <summary>Per-iteration linear scale factor for the scalar KIFS/Mandelbox
+        /// distance estimator. When &gt; 0 the DE uses a running-derivative
+        /// (dr *= |scale| each iteration, DE = |z|/dr) instead of the numerical
+        /// Jacobian — correct for fold+rotation IFS maps whose folds have
+        /// discontinuities the finite-difference Jacobian cannot handle. 0 =
+        /// disabled (use the selected DE mode). The user declares this because it
+        /// cannot be inferred from arbitrary chain source.</summary>
+        public double UserBulbKifsScale { get; set; }
         /// <summary>DE mode: Auto picks analytic when source matches a known power map and
         /// a probe validates within tolerance; Analytic forces analytic (mis-detect = wrong
         /// surface); Numerical forces numerical Jacobian.</summary>
@@ -635,6 +643,7 @@ namespace FracturingFog.Models
                 UserBulbEpsilon = UserBulbEpsilon,
                 UserBulbJacobianH = UserBulbJacobianH,
                 UserBulbCullRadius = UserBulbCullRadius,
+                UserBulbKifsScale = UserBulbKifsScale,
                 UserBulbDEMode = UserBulbDEMode,
                 UserBulbTemporalReuse = UserBulbTemporalReuse,
                 UserBulbBackend = UserBulbBackend,

@@ -62,6 +62,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         _bailout      = _params.UserBulbBailout;
         _jacobianH    = _params.UserBulbJacobianH;
         _cullRadius   = _params.UserBulbCullRadius;
+        _kifsScale    = _params.UserBulbKifsScale;
         _deModeIndex  = (int)_params.UserBulbDEMode;
         _backendIndex = (int)_params.UserBulbBackend;
         _compilerIndex = (int)_params.UserBulbCompiler;
@@ -273,6 +274,11 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     private double _cullRadius;
     public double CullRadius { get => _cullRadius; set => SetRender(ref _cullRadius, Math.Clamp(value, 0.1, 50.0), () => _params.UserBulbCullRadius = _cullRadius); }
+    private double _kifsScale;
+    /// <summary>Per-iteration linear scale for the scalar KIFS/Mandelbox DE.
+    /// 0 = off (use the DE Mode). Set to the map's scale (e.g. 3 for the
+    /// Kaleidoscopic-IFS preset) to render fold+rotation IFS correctly.</summary>
+    public double KifsScale { get => _kifsScale; set => SetRender(ref _kifsScale, Math.Clamp(value, 0.0, 20.0), () => _params.UserBulbKifsScale = _kifsScale); }
 
     private int _deModeIndex;
     public int DEModeIndex { get => _deModeIndex; set => SetRender(ref _deModeIndex, Math.Clamp(value, 0, 2), () => _params.UserBulbDEMode = (UserBulbDEModeKind)_deModeIndex); }
@@ -789,6 +795,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         Bailout          = _params.UserBulbBailout,
         JacobianH        = _params.UserBulbJacobianH,
         CullRadius       = _params.UserBulbCullRadius,
+        KifsScale        = _params.UserBulbKifsScale,
         FovDegrees       = _params.UserBulbFovDegrees,
         ClipPlaneEnabled = _params.UserBulbClipPlaneEnabled,
         SuperSample      = _params.UserBulbSuperSample,
@@ -831,6 +838,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.Bailout is { } bo)                 _params.UserBulbBailout = bo;
         if (s.JacobianH is { } jh)               _params.UserBulbJacobianH = jh;
         if (s.CullRadius is { } cr)              _params.UserBulbCullRadius = cr;
+        if (s.KifsScale is { } kifs)             _params.UserBulbKifsScale = kifs;
         if (s.FovDegrees is { } fov)             _params.UserBulbFovDegrees = fov;
         if (s.ClipPlaneEnabled is { } cpe)       _params.UserBulbClipPlaneEnabled = cpe;
         if (s.SuperSample is { } ss)             _params.UserBulbSuperSample = ss;
@@ -873,6 +881,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             _bailout      = _params.UserBulbBailout;
             _jacobianH    = _params.UserBulbJacobianH;
             _cullRadius   = _params.UserBulbCullRadius;
+            _kifsScale    = _params.UserBulbKifsScale;
             _deModeIndex  = (int)_params.UserBulbDEMode;
             _backendIndex = (int)_params.UserBulbBackend;
             _compilerIndex = (int)_params.UserBulbCompiler;
@@ -919,6 +928,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(Bailout));
         this.RaisePropertyChanged(nameof(JacobianH));
         this.RaisePropertyChanged(nameof(CullRadius));
+        this.RaisePropertyChanged(nameof(KifsScale));
         this.RaisePropertyChanged(nameof(DEModeIndex));
         this.RaisePropertyChanged(nameof(BackendIndex));
         this.RaisePropertyChanged(nameof(CompilerIndex));
