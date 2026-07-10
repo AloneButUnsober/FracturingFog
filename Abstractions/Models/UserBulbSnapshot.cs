@@ -75,6 +75,8 @@ namespace FracturingFog.Models
 
         // ── Animation ──────────────────────────────────────────────────
         public double? Time { get; set; }
+        public double? AnimSpeed { get; set; }
+        public double? AnimLoopSeconds { get; set; }
 
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }
