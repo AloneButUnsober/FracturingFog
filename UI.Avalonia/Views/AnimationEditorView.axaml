@@ -136,7 +136,7 @@
                                 <DataTemplate x:DataType="vm:AnimationTrackRowViewModel">
                                     <Border Classes="trackrow">
                                         <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto"
-                                              RowDefinitions="Auto,Auto">
+                                              RowDefinitions="Auto,Auto,Auto">
 
                                             <CheckBox Grid.Row="0" Grid.Column="0"
                                                       IsChecked="{Binding Enabled}"
@@ -154,39 +154,39 @@
                                                 </TextBlock>
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Vertical" Margin="0,0,8,0">
+                                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Vertical" Margin="0,0,8,0">
                                                 <TextBlock Classes="label" Text="Mode" FontSize="10" />
                                                 <ComboBox ItemsSource="{Binding AvailableModes}"
                                                           SelectedItem="{Binding Mode}"
                                                           MinWidth="100" />
                                             </StackPanel>
-                                            <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Vertical" Margin="0,0,8,0">
+                                            <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Vertical" Margin="0,0,8,0">
                                                 <TextBlock Classes="label" Text="Min" FontSize="10" />
                                                 <NumericUpDown Value="{Binding Min}"
                                                                Increment="0.1" FormatString="0.###"
                                                                MinWidth="90" />
                                             </StackPanel>
-                                            <StackPanel Grid.Row="0" Grid.Column="4" Orientation="Vertical" Margin="0,0,8,0">
+                                            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Vertical" Margin="0,0,8,0">
                                                 <TextBlock Classes="label" Text="Max" FontSize="10" />
                                                 <NumericUpDown Value="{Binding Max}"
                                                                Increment="0.1" FormatString="0.###"
                                                                MinWidth="90" />
                                             </StackPanel>
-                                            <StackPanel Grid.Row="0" Grid.Column="5" Orientation="Vertical" Margin="0,0,8,0">
+                                            <StackPanel Grid.Row="1" Grid.Column="4" Orientation="Vertical" Margin="0,0,8,0">
                                                 <TextBlock Classes="label" Text="Hz" FontSize="10" />
                                                 <NumericUpDown Value="{Binding FrequencyHz}"
                                                                Minimum="0" Maximum="20"
                                                                Increment="0.05" FormatString="0.###"
                                                                MinWidth="80" />
                                             </StackPanel>
-                                            <StackPanel Grid.Row="0" Grid.Column="6" Orientation="Vertical">
+                                            <StackPanel Grid.Row="1" Grid.Column="5" Orientation="Vertical">
                                                 <TextBlock Classes="label" Text="Phase (rad)" FontSize="10" />
                                                 <NumericUpDown Value="{Binding PhaseOffsetRadians}"
                                                                Increment="0.1" FormatString="0.###"
                                                                MinWidth="80" />
                                             </StackPanel>
 
-                                            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="6"
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="6"
                                                        FontSize="11" Foreground="#888888"
                                                        Text="{Binding Notes}"
                                                        IsVisible="{Binding HasNotes}"
