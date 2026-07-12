@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
-        xmlns:m="using:FracturingFog.Models"
-        x:Class="FracturingFog.UI.Avalonia.Views.UserBulbView"
-        x:DataType="vm:UserBulbViewModel"
-        Foreground="White">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             xmlns:m="using:FracturingFog.Models"
+             x:Class="FracturingFog.UI.Avalonia.Views.UserBulbView"
+             x:DataType="vm:UserBulbViewModel"
+             Foreground="White">
 
     <UserControl.Styles>
         <Style Selector="TextBlock.header">
@@ -37,12 +37,15 @@
             <Setter Property="FontFamily" Value="Consolas, monospace" />
             <Setter Property="FontSize" Value="11" />
         </Style>
+        <Style Selector="GridSplitter.splitter">
+            <Setter Property="Background" Value="#C8C864"/>
+        </Style>
     </UserControl.Styles>
 
-    <Grid Margin="10" ColumnDefinitions="600,12,*">
+    <Grid Margin="10" ColumnDefinitions="620,12,*" RowDefinitions="*">
 
         <!-- ── LEFT COLUMN ──────────────────────────────────────────── -->
-        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" >
             <StackPanel Spacing="6">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Grid.Column="0" Text="{Binding HintText}" Foreground="#B4B4B4" TextWrapping="Wrap" />
@@ -84,7 +87,8 @@
                              Classes="code"
                              AcceptsReturn="True"
                              AcceptsTab="True"
-                             Text="{Binding Source, Mode=TwoWay}" />
+                             Text="{Binding Source, Mode=TwoWay}"
+                             MinHeight="110"/>
                 </Border>
                 <TextBlock Classes="error"
                            Text="{Binding StatusMessage}"
@@ -95,102 +99,124 @@
 
                 <!-- Camera -->
                 <TextBlock Classes="header" Text="Camera" />
-                <Grid ColumnDefinitions="Auto,120,Auto,120,Auto,120"
-                      RowDefinitions="Auto,Auto" Margin="0,0,0,4">
+                <Grid ColumnDefinitions="75,Auto,75,Auto,75,Auto"
+                      RowDefinitions="Auto,Auto" Margin="0,0,0,4"
+                      RowSpacing="4">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Distance:" />
                     <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0.1" Maximum="500" Increment="0.1" FormatString="0.00"
-                                   Value="{Binding CamDistance}" />
-                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="label" Text="Theta°:" Margin="10,0,6,0" />
+                                   Value="{Binding CamDistance}" MinWidth="120"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="label" Text="Theta°:" Margin="10,0,4,0" />
                     <NumericUpDown Grid.Row="0" Grid.Column="3" Minimum="-360" Maximum="360" Increment="5" FormatString="0.0"
-                                   Value="{Binding CamThetaDeg}" />
-                    <TextBlock Grid.Row="0" Grid.Column="4" Classes="label" Text="Phi°:" Margin="10,0,6,0" />
+                                   Value="{Binding CamThetaDeg}" MinWidth="120" />
+                    <TextBlock Grid.Row="0" Grid.Column="4" Classes="label" Text="Phi°:" Margin="10,0,4,0" />
                     <NumericUpDown Grid.Row="0" Grid.Column="5" Minimum="1" Maximum="179" Increment="5" FormatString="0.0"
-                                   Value="{Binding CamPhiDeg}" />
+                                   Value="{Binding CamPhiDeg}" MinWidth="120" />
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Light θ°:" />
                     <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="-360" Maximum="360" Increment="5" FormatString="0.0"
-                                   Value="{Binding LightThetaDeg}" />
-                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Light φ°:" Margin="10,0,6,0" />
+                                   Value="{Binding LightThetaDeg}" MinWidth="120" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Light φ°:" Margin="10,0,4,0" />
                     <NumericUpDown Grid.Row="1" Grid.Column="3" Minimum="1" Maximum="179" Increment="5" FormatString="0.0"
-                                   Value="{Binding LightPhiDeg}" />
+                                   Value="{Binding LightPhiDeg}" MinWidth="120" />
                     <Button        Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Classes="tool" Content="Reset cam"
                                    Command="{Binding ResetCameraCommand}"
                                    HorizontalAlignment="Right" Margin="10,0,0,0" />
                 </Grid>
 
                 <!-- Render -->
-                <TextBlock Classes="header" Text="Render" />
-                <Grid ColumnDefinitions="Auto,120,Auto,120,Auto,120"
-                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Iterations:" />
-                    <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="64" Increment="1" FormatString="0"
-                                   Value="{Binding Iterations}" />
-                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="label" Text="Bailout:" Margin="10,0,6,0" />
-                    <NumericUpDown Grid.Row="0" Grid.Column="3" Minimum="1" Maximum="100" Increment="0.5" FormatString="0.0"
-                                   Value="{Binding Bailout}" />
-                    <TextBlock Grid.Row="0" Grid.Column="4" Classes="label" Text="Max steps:" Margin="10,0,6,0" />
-                    <NumericUpDown Grid.Row="0" Grid.Column="5" Minimum="16" Maximum="512" Increment="8" FormatString="0"
-                                   Value="{Binding MaxSteps}" />
+                <Grid ColumnDefinitions="Auto" RowDefinitions="Auto,Auto,Auto">
+                    <Grid Grid.Row="0" Grid.Column="0" ColumnDefinitions="75,75,Auto,Auto" 
+                          RowDefinitions="Auto,Auto" Margin="0,0,0,4">
+                        <TextBlock Grid.Column="0" Grid.Row="0" Classes="header" Text="Render" 
+                                   Margin="0,4,0,0"/>    
+                        <TextBlock Grid.Column="1" Grid.Row="0" Text="DE detect:" 
+                               FontSize="12" Foreground="#64F070" Margin="0,4,0,0"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Epsilon:" />
-                    <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0.00001" Maximum="0.1" Increment="0.0005" FormatString="0.00000"
-                                   Value="{Binding Epsilon}" />
-                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Jac h:" Margin="10,0,6,0" />
-                    <NumericUpDown Grid.Row="1" Grid.Column="3" Minimum="0.0000001" Maximum="0.01" Increment="0.00005" FormatString="0.0000000"
-                                   Value="{Binding JacobianH}" />
-                    <TextBlock Grid.Row="1" Grid.Column="4" Classes="label" Text="Cull r:" Margin="10,0,6,0" />
-                    <NumericUpDown Grid.Row="1" Grid.Column="5" Minimum="0.1" Maximum="50" Increment="0.25" FormatString="0.00"
-                                   Value="{Binding CullRadius}" />
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="DE mode:" />
-                    <ComboBox    Grid.Row="2" Grid.Column="1" SelectedIndex="{Binding DEModeIndex}">
-                        <ComboBoxItem Content="Auto" />
-                        <ComboBoxItem Content="Analytic" />
-                        <ComboBoxItem Content="Numerical" />
-                    </ComboBox>
-                    <TextBlock Grid.Row="2" Grid.Column="2" Classes="label" Text="Backend:" Margin="10,0,6,0" />
-                    <ComboBox    Grid.Row="2" Grid.Column="3" SelectedIndex="{Binding BackendIndex}">
-                        <ComboBoxItem Content="CPU" />
-                        <ComboBoxItem Content="GPU (experimental)" />
-                    </ComboBox>
-                    <TextBlock Grid.Row="2" Grid.Column="4" Classes="label" Text="KIFS scale:" Margin="10,0,6,0" />
-                    <NumericUpDown Grid.Row="2" Grid.Column="5" Minimum="0" Maximum="20" Increment="0.5" FormatString="0.0"
-                                   ToolTip.Tip="Per-iteration linear scale for the scalar KIFS/Mandelbox distance estimator. 0 = off (use DE Mode). Set to the map's scale factor (e.g. 3 for the Kaleidoscopic-IFS preset) to render fold+rotation IFS whose folds have discontinuities the numerical Jacobian can't handle. CPU-only; overrides DE Mode when > 0."
-                                   Value="{Binding KifsScale}" />
-
-                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="Algebra:" />
-                    <ComboBox    Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding AxisModeIndex}"
-                                 ToolTip.Tip="Vec3 = 3D mandelbulb-style. Quat = 4D quaternion fractal (slice W picks the hyperplane). Sandbox compiler in Quat mode: use qmul, qpow, qconj, qinv, qvec(x,y,z,w), .w member access, plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qsinh/qcosh/qtanh/qasin/qacos/qatan (and reciprocals qcsc/qsec/qcot).">
-                        <ComboBoxItem Content="Vec3 (3D)" />
-                        <ComboBoxItem Content="Quat (4D)" />
-                    </ComboBox>
-                    <TextBlock Grid.Row="3" Grid.Column="2" Classes="label" Text="Slice W:" Margin="10,0,6,0" />
-                    <NumericUpDown Grid.Row="3" Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000"
-                                   IsEnabled="{Binding QuatEnabled}"
-                                   Value="{Binding QuatSliceW}" />
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="Compiler:" />
-                    <ComboBox    Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="5" SelectedIndex="{Binding CompilerIndex}"
-                                 ToolTip.Tip="Roslyn — full C# step body, all BCL helpers, GPU-translatable. Use for performance and unrestricted math. Sandbox — small DSL (vec, triplex, fold ops, let, ternary, and for Quat: qmul/qpow/qconj/qvec plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qasin/qacos/qatan...). Safer for untrusted source and supports compile-time analytic DE detection. CPU-only.">
-                        <ComboBoxItem Content="Roslyn (full C#, BCL, GPU-translatable)" />
-                        <ComboBoxItem Content="Sandbox (safe DSL, Vec3 only, CPU)" />
-                    </ComboBox>
-
-                    <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="DE detect:" />
-                    <Grid Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="5"
+                        <Grid Grid.Column="2" Grid.Row="0" Grid.ColumnSpan="2"
+                              Margin="0,5,0,0"
                           ToolTip.Tip="Closed-form DE pattern detected on the current source. When 'Analytic engaged', the raymarch runs a single trajectory with the Hubbard-Douady recurrence instead of four-trajectory numerical Jacobian — typically 3-4x faster.">
                         <TextBlock Text="{Binding AnalyticBadgeText}"
                                    IsVisible="{Binding AnalyticBadgeOk}"
                                    Foreground="#64FF64"
                                    FontFamily="Consolas, monospace"
                                    FontSize="11"
-                                   VerticalAlignment="Center" />
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"/>
                         <TextBlock Text="{Binding AnalyticBadgeText}"
                                    IsVisible="{Binding !AnalyticBadgeOk}"
                                    Foreground="#888888"
                                    FontFamily="Consolas, monospace"
                                    FontSize="11"
-                                   VerticalAlignment="Center" />
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"/>
+                        </Grid>
                     </Grid>
+                    <Grid Grid.Row="1" Grid.Column="0" ColumnDefinitions="75,Auto,75,Auto,75,Auto"
+                          RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+                        <TextBlock Grid.Column="0" Classes="label" Text="Algebra:" Margin="10,0,4,0"/>
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding AxisModeIndex}"
+                                 ToolTip.Tip="Vec3 = 3D mandelbulb-style. Quat = 4D quaternion fractal (slice W picks the hyperplane). Sandbox compiler in Quat mode: use qmul, qpow, qconj, qinv, qvec(x,y,z,w), .w member access, plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qsinh/qcosh/qtanh/qasin/qacos/qatan (and reciprocals qcsc/qsec/qcot)."
+                                  MinWidth="120">
+                        <ComboBoxItem Content="Vec3 (3D)" />
+                        <ComboBoxItem Content="Quat (4D)" />
+                    </ComboBox>
+                        <TextBlock Grid.Column="2" Classes="label" Text="Compiler:" Margin="8,0,4,0"/>
+                    <ComboBox    Grid.Column="3" Grid.ColumnSpan="4" SelectedIndex="{Binding CompilerIndex}"
+                                 ToolTip.Tip="Roslyn — full C# step body, all BCL helpers, GPU-translatable. Use for performance and unrestricted math. Sandbox — small DSL (vec, triplex, fold ops, let, ternary, and for Quat: qmul/qpow/qconj/qvec plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qasin/qacos/qatan...). Safer for untrusted source and supports compile-time analytic DE detection. CPU-only."
+                                  MinWidth="120">
+                        <ComboBoxItem Content="Roslyn (full C#, BCL, GPU-translatable)" />
+                        <ComboBoxItem Content="Sandbox (safe DSL, Vec3 only, CPU)" />
+                    </ComboBox>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="DE mode:" Margin="10,0,4,0"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" SelectedIndex="{Binding DEModeIndex}" MinWidth="120">
+                        <ComboBoxItem Content="Auto" />
+                        <ComboBoxItem Content="Analytic" />
+                        <ComboBoxItem Content="Numerical" />
+                    </ComboBox>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Backend:" Margin="8,0,4,0" />
+                    <ComboBox    Grid.Row="1" Grid.Column="3" SelectedIndex="{Binding BackendIndex}" MinWidth="120"
+                                 Grid.ColumnSpan="2">
+                        <ComboBoxItem Content="CPU" />
+                        <ComboBoxItem Content="GPU (experimental)" />
+                    </ComboBox>
+                                          
+                        </Grid>
+                    <Border Grid.Row="2" Grid.Column="0" BorderBrush="#5A5A5A" BorderThickness="1"
+                            Margin="0,4,0,0" Padding="0,2,0,2">
+                            <Grid ColumnDefinitions="75,Auto,75,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto" 
+                                  RowSpacing="4">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Iterations:" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="64" Increment="1" FormatString="0"
+                                   Value="{Binding Iterations}" MinWidth="120" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="label" Text="Bailout:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="3" Minimum="1" Maximum="100" Increment="0.5" FormatString="0.0"
+                                   Value="{Binding Bailout}" MinWidth="120" />
+                    <TextBlock Grid.Row="0" Grid.Column="4" Classes="label" Text="Max steps:" Margin="10,0,6,0" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="5" Minimum="16" Maximum="512" Increment="8" FormatString="0"
+                                   Value="{Binding MaxSteps}" MinWidth="120" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="K-scale:" Margin="10,0,6,0" />
+                                <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="20" Increment="0.5" FormatString="0.0"
+                                   ToolTip.Tip="Per-iteration linear scale for the scalar KIFS/Mandelbox distance estimator. 0 = off (use DE Mode). Set to the map's scale factor (e.g. 3 for the Kaleidoscopic-IFS preset) to render fold+rotation IFS whose folds have discontinuities the numerical Jacobian can't handle. CPU-only; overrides DE Mode when > 0."
+                                   Value="{Binding KifsScale}" MinWidth="120" />
+                                <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Slice W:" Margin="10,0,6,0" />
+                                <NumericUpDown Grid.Row="1" Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000"
+                                   IsEnabled="{Binding QuatEnabled}"
+                                   Value="{Binding QuatSliceW}" MinWidth="120" 
+                                   ToolTip.Tip="Set the KIFS scale value"/>
+                                <TextBlock Grid.Row="1" Grid.Column="4" Classes="label" Text="Cull r:" Margin="10,0,6,0" />
+                                <NumericUpDown Grid.Row="1" Grid.Column="5" Minimum="0.1" Maximum="50" Increment="0.25" FormatString="0.00"
+                                   Value="{Binding CullRadius}" MinWidth="120" />  
+
+                                <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="7" ColumnDefinitions="75,Auto,75,Auto">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="Epsilon:" />
+                                    <NumericUpDown Grid.Column="1" Minimum="0.00001" Maximum="0.1" Increment="0.0005" FormatString="0.00000" 
+                                                   Value="{Binding Epsilon}" MinWidth="120" />
+                                    <TextBlock Grid.Column="2" Classes="label" Text="Jac h:" Margin="10,0,6,0" />
+                                    <NumericUpDown Grid.Column="3" Minimum="0.0000001" Maximum="0.01" Increment="0.00005" FormatString="0.0000000" 
+                                                   Value="{Binding JacobianH}" MinWidth="120" />    
+                                </Grid>
+                            </Grid>
+                        </Border>
                 </Grid>
 
                 <!-- Params -->
@@ -203,7 +229,7 @@
                     <ItemsControl ItemsSource="{Binding Params}" MaxHeight="180">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="m:UserBulbParam">
-                                <Grid ColumnDefinitions="80,130,95,95,Auto" Margin="2">
+                                <Grid ColumnDefinitions="80,*,*,*,Auto" Margin="2">
                                     <TextBox       Grid.Column="0" Text="{Binding Name, Mode=TwoWay}" />
                                     <NumericUpDown Grid.Column="1" Value="{Binding Value, Mode=TwoWay}" FormatString="0.0000" />
                                     <NumericUpDown Grid.Column="2" Value="{Binding Min,   Mode=TwoWay}" FormatString="0.000" />
@@ -219,93 +245,123 @@
 
                 <!-- Animation -->
                 <TextBlock Classes="header" Text="Animation (t)" />
-                <Grid ColumnDefinitions="Auto,Auto,110,Auto,110,Auto,170">
+                <Grid ColumnDefinitions="Auto" RowDefinitions="Auto,Auto" RowSpacing="4">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto">
                     <Button        Grid.Column="0" Classes="tool" Content="{Binding PlayPauseLabel}"
                                    Command="{Binding TogglePlayCommand}" />
-                    <TextBlock     Grid.Column="1" Classes="label" Text="Speed:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="2" Minimum="-10" Maximum="10" Increment="0.1" FormatString="0.00"
-                                   Value="{Binding AnimSpeed}" />
-                    <TextBlock     Grid.Column="3" Classes="label" Text="Loop s:" Margin="10,0,4,0"
+                    </Grid>
+                    <Grid Grid.Row="1" ColumnDefinitions="75,Auto,75,Auto,75,*">
+                    <TextBlock     Grid.Column="0" Classes="label" Text="Speed:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.1" FormatString="0.00"
+                                   Value="{Binding AnimSpeed}" MinWidth="120"/>
+                    <TextBlock     Grid.Column="2" Classes="label" Text="Loop s:" Margin="10,0,4,0"
                                    ToolTip.Tip="Loop length in seconds. 0 = no loop." />
-                    <NumericUpDown Grid.Column="4" Minimum="0" Maximum="600" Increment="0.5" FormatString="0.00"
-                                   Value="{Binding AnimLoopSeconds}" />
-                    <TextBlock     Grid.Column="5" Classes="label" Text="t:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="6" Minimum="-1000000" Maximum="1000000" Increment="0.1" FormatString="0.000"
-                                   Value="{Binding AnimTime}" />
+                    <NumericUpDown Grid.Column="3" Minimum="0" Maximum="600" Increment="0.5" FormatString="0.00"
+                                   Value="{Binding AnimLoopSeconds}" MinWidth="120"/>
+                    <TextBlock     Grid.Column="4" Classes="label" Text="t:" Margin="10,0,4,0" />
+                    <NumericUpDown Grid.Column="5" Minimum="-1000000" Maximum="1000000" Increment="0.1" FormatString="0.000"
+                                   Value="{Binding AnimTime}" MinWidth="140" />
+                        </Grid>
                 </Grid>
 
                 <!-- Julia -->
                 <TextBlock Classes="header" Text="Julia mode" />
                 <CheckBox  Content="Enable (fix c)"
                            IsChecked="{Binding JuliaMode}"
-                           Margin="0,0,0,4" />
-                <Grid ColumnDefinitions="Auto,110,Auto,110,Auto,110,Auto,110" Margin="0,0,0,8">
-                    <TextBlock     Grid.Column="0" Classes="label" Text="c.X:" Margin="0,0,4,0" />
+                           Margin="0,0,0,2" />
+                <Grid ColumnDefinitions="*" RowDefinitions="Auto,Auto" RowSpacing="4">
+                <Grid Grid.Row="0" ColumnDefinitions="75,Auto,75,Auto,75,Auto,75,Auto" >
+                    <TextBlock     Grid.Column="0" Classes="label" Text="c.X:" Margin="10,0,4,0" />
                     <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
-                                   Value="{Binding JuliaCX}" />
+                                   Value="{Binding JuliaCX}" MinWidth="120" />
                     <TextBlock     Grid.Column="2" Classes="label" Text="c.Y:" Margin="10,0,4,0" />
                     <NumericUpDown Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
-                                   Value="{Binding JuliaCY}" />
+                                   Value="{Binding JuliaCY}" MinWidth="120" />
                     <TextBlock     Grid.Column="4" Classes="label" Text="c.Z:" Margin="10,0,4,0" />
                     <NumericUpDown Grid.Column="5" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
-                                   Value="{Binding JuliaCZ}" />
-                    <TextBlock     Grid.Column="6" Classes="label" Text="c.W:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="7" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
+                                   Value="{Binding JuliaCZ}" MinWidth="120" />
+                </Grid>
+                    <Grid Grid.Row="1" ColumnDefinitions="75,Auto">
+                        
+                    <TextBlock     Grid.Column="0" Classes="label" Text="c.W:" Margin="0,0,4,0" />
+                    <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000"
                                    IsEnabled="{Binding QuatEnabled}"
-                                   Value="{Binding JuliaCW}" />
+                                   Value="{Binding JuliaCW}" MinWidth="120" />
+                    </Grid>
                 </Grid>
             </StackPanel>
         </ScrollViewer>
-
+        <GridSplitter Grid.Column="1"
+                      ResizeDirection="Columns"
+                      Classes="splitter"
+                      HorizontalAlignment="Center"
+                      Margin="4,0,4,0"
+                      Width="4"/>
         <!-- ── RIGHT COLUMN ─────────────────────────────────────────── -->
-        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="6">
+             <Grid Grid.Column="2" 
+                   Margin="12,0,0,0"
+                   ColumnDefinitions="*" 
+                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*">
+                    <!-- Color driver -->
+                <TextBlock Grid.Row="0" Classes="header" Text="Color driver" />
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto" RowSpacing="4">
+                    <Grid Grid.Row="0" ColumnDefinitions="50,Auto,50,Auto">
+                        <TextBlock Grid.Column="0" Classes="label" Text="Type:" Margin="4,0,4,0" Grid.Row="0" />
+                        <ComboBox Grid.Column="1" SelectedIndex="{Binding ColorDriverIndex}" Grid.Row="0" MinWidth="125">
+                            <ComboBoxItem Content="StepDepth" />
+                            <ComboBoxItem Content="OrbitTrap" />
+                            <ComboBoxItem Content="EscapeAngle" />
+                            <ComboBoxItem Content="FinalMagnitude" />
+                            <ComboBoxItem Content="IterComponent" />
+                            <ComboBoxItem Content="Normal" />
+                        </ComboBox>
+                        <TextBlock Grid.Column="2" Classes="label" Text="axis:" Margin="4,0,4,0" Grid.Row="0" />
+                        <ComboBox Grid.Column="3" SelectedIndex="{Binding IterAxis}" MinWidth="60" Grid.Row="0">
+                            <ComboBoxItem Content="X" />
+                            <ComboBoxItem Content="Y" />
+                            <ComboBoxItem Content="Z" />
+                        </ComboBox>
+                    </Grid>
 
-                <!-- Color driver -->
-                <TextBlock Classes="header" Text="Color driver" />
-                <Grid ColumnDefinitions="160,Auto,90,Auto,90,Auto,90,Auto,Auto">
-                    <ComboBox    Grid.Column="0" SelectedIndex="{Binding ColorDriverIndex}">
-                        <ComboBoxItem Content="StepDepth" />
-                        <ComboBoxItem Content="OrbitTrap" />
-                        <ComboBoxItem Content="EscapeAngle" />
-                        <ComboBoxItem Content="FinalMagnitude" />
-                        <ComboBoxItem Content="IterComponent" />
-                        <ComboBoxItem Content="Normal" />
-                    </ComboBox>
-                    <TextBlock     Grid.Column="1" Classes="label" Text="tx:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="2" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000" Value="{Binding TrapX}" />
-                    <TextBlock     Grid.Column="3" Classes="label" Text="ty:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="4" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000" Value="{Binding TrapY}" />
-                    <TextBlock     Grid.Column="5" Classes="label" Text="tz:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="6" Minimum="-10" Maximum="10" Increment="0.01" FormatString="0.000" Value="{Binding TrapZ}" />
-                    <TextBlock     Grid.Column="7" Classes="label" Text="axis:" Margin="10,0,4,0" />
-                    <ComboBox      Grid.Column="8" SelectedIndex="{Binding IterAxis}">
-                        <ComboBoxItem Content="X" />
-                        <ComboBoxItem Content="Y" />
-                        <ComboBoxItem Content="Z" />
-                    </ComboBox>
+                    <Grid Grid.Row="1" ColumnDefinitions="50,Auto,50,Auto,50,Auto" Grid.Column="0">
+                        <TextBlock Grid.Column="0" Classes="label" Text="tx:" Margin="10,0,4,0"/>
+                        <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.01"
+                                       FormatString="0.000" Value="{Binding TrapX}" MinWidth="120"/>
+                        <TextBlock     Grid.Column="2" Classes="label" Text="ty:" Margin="10,0,4,0"/>
+                        <NumericUpDown Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.01"
+                                       FormatString="0.000" Value="{Binding TrapY}" MinWidth="120" />
+                        <TextBlock     Grid.Column="4" Classes="label" Text="tz:" Margin="10,0,4,0" />
+                        <NumericUpDown Grid.Column="5" Minimum="-10" Maximum="10" Increment="0.01"
+                                       FormatString="0.000" Value="{Binding TrapZ}" MinWidth="120" />
+                    </Grid>
                 </Grid>
 
                 <!-- Lighting -->
-                <TextBlock Classes="header" Text="Lighting (L1/L2/L3 intensity, AO, fog)" />
-                <Grid ColumnDefinitions="Auto,95,Auto,95,Auto,95,Auto,80,Auto,90">
-                    <TextBlock     Grid.Column="0" Classes="label" Text="L1:" />
-                    <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Value="{Binding Light1}" />
-                    <TextBlock     Grid.Column="2" Classes="label" Text="L2:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Value="{Binding Light2}" />
-                    <TextBlock     Grid.Column="4" Classes="label" Text="L3:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="5" Minimum="-10" Maximum="10" Increment="0.05" FormatString="0.000" Value="{Binding Light3}" />
-                    <TextBlock     Grid.Column="6" Classes="label" Text="AO:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="7" Minimum="0" Maximum="16" Increment="1" FormatString="0" Value="{Binding AOSamples}" />
-                    <TextBlock     Grid.Column="8" Classes="label" Text="Fog:" Margin="10,0,4,0" />
-                    <NumericUpDown Grid.Column="9" Minimum="0" Maximum="5" Increment="0.05" FormatString="0.000" Value="{Binding FogDensity}" />
+                <TextBlock Grid.Row="2" Classes="header" Text="Lighting (L1/L2/L3 intensity, AO, fog)" />
+                <Grid Grid.Row="3" ColumnDefinitions="50,Auto,50,Auto,50,Auto" RowDefinitions="Auto,Auto" RowSpacing="4">
+                    <TextBlock     Grid.Column="0" Classes="label" Text="L1:" Grid.Row="0"/>
+                    <NumericUpDown Grid.Column="1" Minimum="-10" Maximum="10" Increment="0.05"
+                                   FormatString="0.000" Value="{Binding Light1}" Grid.Row="0" MinWidth="120"/>
+                    <TextBlock     Grid.Column="2" Classes="label" Text="L2:" Margin="10,0,4,0" Grid.Row="0" />
+                    <NumericUpDown Grid.Column="3" Minimum="-10" Maximum="10" Increment="0.05"
+                                   FormatString="0.000" Value="{Binding Light2}"  Grid.Row="0" MinWidth="120"/>
+                    <TextBlock     Grid.Column="4" Classes="label" Text="L3:" Margin="10,0,4,0" Grid.Row="0" />
+                    <NumericUpDown Grid.Column="5" Minimum="-10" Maximum="10" Increment="0.05"
+                                   FormatString="0.000" Value="{Binding Light3}"  Grid.Row="0" MinWidth="120"/>
+                    <TextBlock     Grid.Column="0" Classes="label" Text="AO:" Margin="10,0,4,0" Grid.Row="1" />
+                    <NumericUpDown Grid.Column="1" Minimum="0" Maximum="16" Increment="1"
+                                   FormatString="0" Value="{Binding AOSamples}" Grid.Row="1" MinWidth="120"/>
+                    <TextBlock     Grid.Column="2" Classes="label" Text="Fog:" Margin="10,0,4,0" Grid.Row="1"/>
+                    <NumericUpDown Grid.Column="3" Minimum="0" Maximum="5" Increment="0.05"
+                                   FormatString="0.000" Value="{Binding FogDensity}" Grid.Row="1" MinWidth="120"/>
                 </Grid>
 
                 <!-- View -->
-                <TextBlock Classes="header" Text="View (FOV / clip / SS)" />
-                <Grid ColumnDefinitions="Auto,100,Auto,Auto,80">
+                <TextBlock Grid.Row="4" Classes="header" Text="View (FOV / clip / SS)" />
+                <Grid Grid.Row="5" ColumnDefinitions="50,Auto,Auto,Auto,80">
                     <TextBlock     Grid.Column="0" Classes="label" Text="FOV°:" />
-                    <NumericUpDown Grid.Column="1" Minimum="5" Maximum="170" Increment="1" FormatString="0.0" Value="{Binding FovDegrees}" />
+                    <NumericUpDown Grid.Column="1" Minimum="5" Maximum="170" Increment="1"
+                                   FormatString="0.0" Value="{Binding FovDegrees}" MinWidth="120"/>
                     <CheckBox      Grid.Column="2" Content="Clip+Y" Margin="14,0,0,0" IsChecked="{Binding ClipPlane}" />
                     <TextBlock     Grid.Column="3" Classes="label" Text="SS:" Margin="14,0,4,0" />
                     <ComboBox      Grid.Column="4" SelectedIndex="{Binding SSIndex}">
@@ -316,62 +372,66 @@
                 </Grid>
 
                 <!-- Chain -->
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,8,0,0">
-                    <TextBlock Grid.Column="0" Classes="header" Text="Chain (when non-empty, overrides single source)" Margin="0,0,0,0" />
-                    <Button    Grid.Column="1" Classes="tool" Content="+ Step"
-                               Command="{Binding AddChainCommand}" />
-                    <Button    Grid.Column="2" Classes="tool" Content="+ Primitive ▾" Margin="6,0,0,0"
-                               ToolTip.Tip="Append a fold/power primitive to the chain">
-                        <Button.Flyout>
-                            <MenuFlyout ItemsSource="{Binding ChainPrimitives}">
-                                <MenuFlyout.ItemTemplate>
-                                    <DataTemplate DataType="m:UserBulbChainPrimitive">
-                                        <MenuItem Header="{Binding DisplayName}"
-                                                  Command="{Binding $parent[Window].((vm:UserBulbViewModel)DataContext).InsertPrimitiveCommand}"
-                                                  CommandParameter="{Binding}" />
-                                    </DataTemplate>
-                                </MenuFlyout.ItemTemplate>
-                            </MenuFlyout>
-                        </Button.Flyout>
-                    </Button>
-                    <Button    Grid.Column="3" Classes="tool" Content="Hybrid ▾" Margin="6,0,0,0"
-                               ToolTip.Tip="Replace chain with a worked-example hybrid">
-                        <Button.Flyout>
-                            <MenuFlyout>
-                                <MenuItem Header="Mandelbox + Mandelbulb"
-                                          Command="{Binding LoadHybridCommand}"
-                                          CommandParameter="mbox+bulb" />
-                                <MenuItem Header="Menger + Mandelbulb"
-                                          Command="{Binding LoadHybridCommand}"
-                                          CommandParameter="menger+bulb" />
-                            </MenuFlyout>
-                        </Button.Flyout>
-                    </Button>
+                <Grid Grid.Row="6" ColumnDefinitions="Auto" Margin="0,8,0,0" RowDefinitions="Auto,Auto" RowSpacing="4">
+                    <TextBlock Grid.Column="0" Classes="header" Text="Chain (when non-empty, overrides single source)"
+                               Margin="0,0,0,0" Grid.Row="0"/>
+                    <!-- Export -->
+                    <Grid ColumnDefinitions="110,Auto,Auto,Auto,Auto" Grid.Row="1" Grid.Column="0">
+                        <Button    Grid.Column="1" Grid.Row="1" Classes="tool" Content="+ Step"
+                                   Command="{Binding AddChainCommand}" Margin="6,0,0,0" />
+                        <Button    Grid.Column="2" Grid.Row="1" Classes="tool" Content="+ Primitive ▾" Margin="6,0,0,0"
+                                   ToolTip.Tip="Append a fold/power primitive to the chain">
+                            <Button.Flyout>
+                                <MenuFlyout ItemsSource="{Binding ChainPrimitives}">
+                                    <MenuFlyout.ItemTemplate>
+                                        <DataTemplate DataType="m:UserBulbChainPrimitive">
+                                            <MenuItem Header="{Binding DisplayName}"
+                                                      Command="{Binding $parent[Window].((vm:UserBulbViewModel)DataContext).InsertPrimitiveCommand}"
+                                                      CommandParameter="{Binding}" />
+                                        </DataTemplate>
+                                    </MenuFlyout.ItemTemplate>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button Grid.Column="3" Grid.Row="1"  Classes="tool" Content="Hybrid ▾" Margin="6,0,0,0"
+                                ToolTip.Tip="Replace chain with a worked-example hybrid">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuItem Header="Mandelbox + Mandelbulb"
+                                              Command="{Binding LoadHybridCommand}"
+                                              CommandParameter="mbox+bulb" />
+                                    <MenuItem Header="Menger + Mandelbulb"
+                                              Command="{Binding LoadHybridCommand}"
+                                              CommandParameter="menger+bulb" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button Grid.Column="4" Grid.Row="1"
+                                Classes="tool"
+                                Content="Export mesh (OBJ)…"
+                                Command="{Binding ExportMeshCommand}"
+                                HorizontalAlignment="Left"
+                                Margin="6,0,0,0"/>
+                    </Grid>
                 </Grid>
-                <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323">
-                    <ItemsControl ItemsSource="{Binding Chain}" MaxHeight="220">
+            <Border Grid.Row="7" BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323" >
+                <ScrollViewer VerticalScrollBarVisibility="Auto"> 
+                    <ItemsControl ItemsSource="{Binding Chain}" >
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="m:UserBulbChainStep">
-                                <Grid ColumnDefinitions="70,*,Auto" Margin="2">
-                                    <TextBox Grid.Column="0" Text="{Binding OutputName, Mode=TwoWay}" />
-                                    <TextBox Grid.Column="1" Classes="code"
-                                             Text="{Binding Source, Mode=TwoWay}" Margin="4,0,4,0" />
-                                    <Button  Grid.Column="2" Content="X" Background="#5A3232" Foreground="White"
-                                             Command="{Binding $parent[ItemsControl].((vm:UserBulbViewModel)DataContext).RemoveChainCommand}"
-                                             CommandParameter="{Binding}" />
-                                </Grid>
+                                    <Grid ColumnDefinitions="70,*,Auto" Margin="2">
+                                        <TextBox Grid.Column="0" Text="{Binding OutputName, Mode=TwoWay}" />
+                                        <TextBox Grid.Column="1" Classes="code"
+                                                 Text="{Binding Source, Mode=TwoWay}" Margin="4,0,4,0" />
+                                        <Button  Grid.Column="2" Content="X" Background="#5A3232" Foreground="White"
+                                                 Command="{Binding $parent[ItemsControl].((vm:UserBulbViewModel)DataContext).RemoveChainCommand}"
+                                                 CommandParameter="{Binding}" />
+                                    </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </Border>
-
-                <!-- Export -->
-                <Button Classes="tool"
-                        Content="Export mesh (OBJ)…"
-                        Command="{Binding ExportMeshCommand}"
-                        HorizontalAlignment="Left"
-                        Margin="0,12,0,0" />
-            </StackPanel>
-        </ScrollViewer>
+                </ScrollViewer> 
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>

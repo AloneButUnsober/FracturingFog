@@ -32,7 +32,7 @@
         <Style Selector="Button.neutral"> <Setter Property="Background" Value="#283C64" /> </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto" Margin="10">
+    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="10">
 
         <!-- Header -->
         <TextBlock Grid.Row="0"
@@ -116,23 +116,23 @@
                                Stretch="Fill" />
                     </Border>
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="label" Text="Name" />
+                        <TextBlock Classes="label" Text="Name" HorizontalAlignment="Left" />
                         <TextBlock Classes="value" Text="{Binding SelectedAsset.Name}" />
                     </StackPanel>
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="label" Text="Type" />
+                        <TextBlock Classes="label" Text="Type" HorizontalAlignment="Left"/>
                         <TextBlock Classes="value" Text="{Binding SelectedAsset.KindLabel}" />
                     </StackPanel>
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="label" Text="Source" />
+                        <TextBlock Classes="label" Text="Source" HorizontalAlignment="Left"/>
                         <TextBlock Classes="value" Text="{Binding SelectedAsset.SourceText}" />
                     </StackPanel>
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="label" Text="Size" />
+                        <TextBlock Classes="label" Text="Size" HorizontalAlignment="Left"/>
                         <TextBlock Classes="value" Text="{Binding SelectedAsset.SizeText}" />
                     </StackPanel>
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="label" Text="Created" />
+                        <TextBlock Classes="label" Text="Created" HorizontalAlignment="Left"/>
                         <TextBlock Classes="value" Text="{Binding SelectedAsset.CreatedText}" />
                     </StackPanel>
                     <Button Classes="action neutral"
@@ -151,6 +151,8 @@
                        Text="Tip: Ctrl/Shift-select multiple rows, then Export bundle. Import merges a bundle back in."
                        Foreground="#808080"
                        VerticalAlignment="Center" />
+            </Grid>
+        <Grid Grid.Row="3" Margin="0,10,0,0" ColumnDefinitions="*,Auto">
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Classes="action neutral" Content="Import bundle…" Click="OnImportBundle" />
                 <Button Classes="action neutral" Content="Export bundle…" Click="OnExportBundle" />

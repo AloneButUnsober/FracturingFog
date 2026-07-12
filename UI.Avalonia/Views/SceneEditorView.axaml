@@ -124,7 +124,7 @@
                 <Border Classes="group">
                     <StackPanel Spacing="6">
                         <TextBlock Classes="section" Text="Export (offline render)" />
-                        <Grid ColumnDefinitions="Auto,80,Auto,80,Auto,80" RowDefinitions="Auto,Auto" Margin="0,4,0,0"
+                        <Grid ColumnDefinitions="Auto,140,Auto,140,Auto,110" RowDefinitions="Auto,Auto" Margin="0,4,0,0"
                               ColumnSpacing="6" RowSpacing="4">
                             <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Width:" />
                             <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding ExportWidth}"
