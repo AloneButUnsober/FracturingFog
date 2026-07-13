@@ -13,8 +13,14 @@
   -->
 
   <PropertyGroup>
+    <!--
+      TFM flipped net10.0-windows -> net10.0 (matches PaletteBuilder.Lib's
+      Slice 1.2 flip). Nothing here or in the Lib needs Windows: no
+      DllImport/System.Drawing/Win32, and QuestPDF+SkiaSharp replaced the
+      old PDFsharp-gdi export path. Standalone app now runs on Linux/macOS.
+    -->
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <Platforms>AnyCPU;x64</Platforms>
@@ -74,16 +80,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.4">
+    <PackageReference Include="Avalonia" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.4">
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4">
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.4">
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
     <PackageReference Include="ReactiveUI.Avalonia" Version="12.0.3" />
