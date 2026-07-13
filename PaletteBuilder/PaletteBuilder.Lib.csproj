@@ -26,9 +26,10 @@
       PDFsharp-gdi + System.Drawing.Common dependencies that pinned the lib
       to net10.0-windows were removed in Slice 1.1 (QuestPDF + SkiaSharp
       raster path); the Avalonia + ReactiveUI closure is cross-platform.
-      Parent WinExe projects (PaletteBuilder.csproj, FracturingFogCLD.csproj)
-      continue to reference this lib via net10.0-windows → net10.0 TFM
-      downcompat.
+      PaletteBuilder.csproj (the standalone wrapper) flipped to net10.0
+      too, so it now builds/runs on Linux/macOS. FracturingFogCLD.csproj
+      stays net10.0-windows (WinForms/UseWindowsForms) and references this
+      lib via net10.0-windows → net10.0 TFM downcompat.
     -->
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -79,16 +80,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.4">
+    <PackageReference Include="Avalonia" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.4">
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4">
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.4">
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.5">
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
     <!--

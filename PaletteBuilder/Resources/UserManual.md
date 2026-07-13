@@ -1,7 +1,7 @@
 # Palette Builder — User Documentation
 
 Generate color palettes from images. Standalone Avalonia desktop app.
-Windows-only build (uses System.Drawing for image decode).
+Cross-platform (Windows/Linux/macOS) — image decode + PDF export run via SkiaSharp/QuestPDF.
 
 ---
 
