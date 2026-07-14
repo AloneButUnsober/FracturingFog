@@ -101,6 +101,17 @@ namespace FracturingFog.Batch
 
         public bool Verbose { get; set; }
 
+        // ── Post-FX (parity with interactive ViewState post-processing) ───────
+        // Null = "not specified on the command line". Slideshow mode falls back
+        // to the named SlideshowConfig.PostFx block when a flag is null; the
+        // flag, when present, overrides the preset. Image/Video modes read the
+        // flags only (no preset). Brightness/Contrast are BGRA post-passes;
+        // Adaptive is histogram-equalization strength applied on the calculator
+        // before the colour buffer is read (Mandelbrot only).
+        public int? Brightness { get; set; }   // -100..100, 0 = none
+        public int? Contrast { get; set; }     // -100..100, 0 = none
+        public int? Adaptive { get; set; }     //    0..100, 0 = none (HistogramEq)
+
         // Optional fractal-parameter overrides plumbed into FractalParameters.
         // Default null means "leave the FractalParameters default in place".
         public double? BulbPower { get; set; }
@@ -335,6 +346,22 @@ namespace FracturingFog.Batch
                         opts.Verbose = true;
                         break;
 
+                    case "--brightness":
+                        if (!NextInt(args, ref i, a, out int brv, out error)) return false;
+                        opts.Brightness = brv;
+                        break;
+
+                    case "--contrast":
+                        if (!NextInt(args, ref i, a, out int ctv, out error)) return false;
+                        opts.Contrast = ctv;
+                        break;
+
+                    case "--adaptive":
+                    case "--histogram-eq":
+                        if (!NextInt(args, ref i, a, out int adv, out error)) return false;
+                        opts.Adaptive = adv;
+                        break;
+
                     case "--bulb-power":
                         if (!NextDouble(args, ref i, a, out double bpv, out error)) return false;
                         opts.BulbPower = bpv;
@@ -450,6 +477,14 @@ namespace FracturingFog.Batch
                 error = "Width/height must be at least 16.";
                 return false;
             }
+
+            // Post-FX range checks (parity with the interactive sliders).
+            if (opts.Brightness is < -100 or > 100)
+                { error = "--brightness must be -100..100."; return false; }
+            if (opts.Contrast is < -100 or > 100)
+                { error = "--contrast must be -100..100."; return false; }
+            if (opts.Adaptive is < 0 or > 100)
+                { error = "--adaptive must be 0..100."; return false; }
 
             if (opts.Mode == BatchMode.Slideshow)
             {

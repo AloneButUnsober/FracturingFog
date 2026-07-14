@@ -77,7 +77,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapPointMap : OrbitTrapBaseMap
     {
-        public static string Name => "Orbit Trap — Point";
+        public static string Name => "Orbit Trap - Point";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the origin. " +
@@ -113,7 +113,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapCrossMap : OrbitTrapBaseMap
     {
-        public static string Name => "Orbit Trap — Cross";
+        public static string Name => "Orbit Trap - Cross";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the nearer " +
@@ -149,7 +149,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapCircleMap : OrbitTrapBaseMap
     {
-        public static string Name => "Orbit Trap — Circle";
+        public static string Name => "Orbit Trap - Circle";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the unit circle " +
@@ -187,7 +187,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapLineMap : OrbitTrapBaseMap
     {
-        public static string Name => "Orbit Trap — Line";
+        public static string Name => "Orbit Trap - Line";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to a line through the origin " +
@@ -228,7 +228,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapStarMap : OrbitTrapBaseMap
     {
-        public static string Name => "Orbit Trap — Star";
+        public static string Name => "Orbit Trap - Star";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the nearest of " +
@@ -275,7 +275,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapPickoverStalksMap : OrbitTrapBaseMap
     {
-        public static string Name => "Orbit Trap — Pickover Stalks";
+        public static string Name => "Orbit Trap - Pickover Stalks";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Pickover stalks: tracks min|Re(z_n)| (warm channel) and min|Im(z_n)| (cool " +
@@ -345,7 +345,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapBiomorphMap : OrbitTrapBaseMap
     {
-        public static string Name => "Orbit Trap — Biomorph";
+        public static string Name => "Orbit Trap - Biomorph";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Biomorph filaments (Pickover).  Pixels whose orbit grazes either axis are " +

@@ -157,7 +157,11 @@ namespace FracturingFog.Batch
             Console.WriteLine("                                ffv1    — FFV1 v3 lossless MKV");
             Console.WriteLine("  --more-colors               Color Focus cadence (8 themes per region, shorter");
             Console.WriteLine("                              per-theme dwell). Synonym of the \"Slideshow: More");
-            Console.WriteLine("                              Colors\" context-menu item.");
+            Console.WriteLine("                              Colors\" context-menu item. (Image-type presets.)");
+            Console.WriteLine("                              Video-type presets play one animated zoom leg per");
+            Console.WriteLine("                              region (SecondsPerLeg from the preset), honouring");
+            Console.WriteLine("                              --start-zoom and --reverse, cross-fading between");
+            Console.WriteLine("                              regions.");
             Console.WriteLine("  --out PATH                  Output video file (extension implied by --encode).");
             Console.WriteLine();
             Console.WriteLine("Scene options (--mode scene):");
@@ -188,6 +192,14 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --watermark                 Composite region/theme + program watermark into every");
             Console.WriteLine("                              emitted frame across image / video / slideshow modes");
             Console.WriteLine("                              (image mode already watermarks unconditionally).");
+            Console.WriteLine();
+            Console.WriteLine("Post-FX (parity with the interactive sliders; image, video + slideshow modes):");
+            Console.WriteLine("  --brightness N              Brightness -100..100 (0 = none).");
+            Console.WriteLine("  --contrast N                Contrast -100..100 (0 = none).");
+            Console.WriteLine("  --adaptive N                Adaptive histogram-equalization strength 0..100");
+            Console.WriteLine("                              (Mandelbrot only). Alias: --histogram-eq.");
+            Console.WriteLine("                              In slideshow mode these override the preset's PostFx");
+            Console.WriteLine("                              block; omit to use the preset.");
             Console.WriteLine();
             Console.WriteLine("Remote rendering (uses a saved FFClient connection + render preset):");
             Console.WriteLine("  --remote                    Route this batch through a remote FracturingFog server");
