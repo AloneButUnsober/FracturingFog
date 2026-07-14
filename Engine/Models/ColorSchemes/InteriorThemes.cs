@@ -121,7 +121,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class MultiplierMap : GradientColorMap, IInteriorAwareColorMap
     {
-        public static string Name => "Multiplier |λ|";
+        public static string Name => "Multiplier |lambda|";
         public static string Category => "Interior";
         public static string Description =>
             "In-set pixels coloured by cycle multiplier magnitude |λ|. " +

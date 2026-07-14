@@ -231,7 +231,7 @@ namespace FracturingFog.Models
             // sequencing + transitions, still region-free.
             yield return new SceneData
             {
-                Name = "Bulb → Box",
+                Name = "Bulb -> Box",
                 Category = "Built-in",
                 Description = "The camera orbits a Mandelbulb, then a Mandelbox — the " +
                               "built-in demonstration of multi-shot scene sequencing. The " +

@@ -217,7 +217,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapPointPhong3DMap : OrbitTrapPhong3DBase
     {
-        public static string Name => "Orbit Trap — Point 3D";
+        public static string Name => "Orbit Trap - Point 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the origin, " +
@@ -257,7 +257,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapCrossPhong3DMap : OrbitTrapPhong3DBase
     {
-        public static string Name => "Orbit Trap — Cross 3D";
+        public static string Name => "Orbit Trap - Cross 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the nearer " +
@@ -297,7 +297,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapCirclePhong3DMap : OrbitTrapPhong3DBase
     {
-        public static string Name => "Orbit Trap — Circle 3D";
+        public static string Name => "Orbit Trap - Circle 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the unit circle " +
@@ -337,7 +337,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapLinePhong3DMap : OrbitTrapPhong3DBase
     {
-        public static string Name => "Orbit Trap — Line 3D";
+        public static string Name => "Orbit Trap - Line 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to a line through " +
@@ -380,7 +380,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapStarPhong3DMap : OrbitTrapPhong3DBase
     {
-        public static string Name => "Orbit Trap — Star 3D";
+        public static string Name => "Orbit Trap - Star 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the nearest of " +
@@ -427,7 +427,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapSquarePhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Square 3D";
+        public static string Name => "Orbit Trap - Square 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum Chebyshev distance from z_n to the " +
@@ -468,7 +468,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapRingPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Ring 3D";
+        public static string Name => "Orbit Trap - Ring 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to a circle of " +
@@ -515,7 +515,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapHyperbolaPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Hyperbola 3D";
+        public static string Name => "Orbit Trap - Hyperbola 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to |Re·Im| = 1.  " +
@@ -558,7 +558,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapLemniscatePhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Lemniscate 3D";
+        public static string Name => "Orbit Trap - Lemniscate 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the Bernoulli " +
@@ -605,7 +605,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapCardioidPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Cardioid 3D";
+        public static string Name => "Orbit Trap - Cardioid 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the main " +
@@ -648,7 +648,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapDiagonalCrossPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Diagonal Cross 3D";
+        public static string Name => "Orbit Trap - Diagonal Cross 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to y = x or y = −x.  " +
@@ -691,7 +691,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapTrianglePhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Triangle 3D";
+        public static string Name => "Orbit Trap - Triangle 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to an equilateral " +
@@ -741,7 +741,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapHexagonPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Hexagon 3D";
+        public static string Name => "Orbit Trap - Hexagon 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to a regular " +
@@ -791,7 +791,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapHeartPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Heart 3D";
+        public static string Name => "Orbit Trap - Heart 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the implicit " +
@@ -841,7 +841,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapSineWavePhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Sine Wave 3D";
+        public static string Name => "Orbit Trap - Sine Wave 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to y = sin(π·x).  " +
@@ -886,7 +886,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapConcentricPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Concentric 3D";
+        public static string Name => "Orbit Trap - Concentric 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to concentric " +
@@ -930,7 +930,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapGridPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Grid 3D";
+        public static string Name => "Orbit Trap - Grid 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the half-integer " +
@@ -976,7 +976,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapPinwheelPhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Pinwheel 3D";
+        public static string Name => "Orbit Trap - Pinwheel 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to 8 rotated lines " +
@@ -1024,7 +1024,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapPolarRosePhong3DMap : OrbitTrapPowerPhong3DBase
     {
-        public static string Name => "Orbit Trap — Polar Rose 3D";
+        public static string Name => "Orbit Trap - Polar Rose 3D";
         public static string Category => "Orbit Trap 3D";
         public static string Description =>
             "3D-lit orbit-trap: minimum distance from z_n to the rose curve " +

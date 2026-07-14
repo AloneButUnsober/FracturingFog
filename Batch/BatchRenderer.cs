@@ -48,13 +48,32 @@ namespace FracturingFog.Batch
             if (opts.FlameGamma.HasValue)         fp.FlameGamma         = opts.FlameGamma.Value;
             if (opts.FlameVibrancy.HasValue)      fp.FlameVibrancy      = opts.FlameVibrancy.Value;
 
+            var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
+
+            // Full-precision centre: when a Mandelbrot region is used without a
+            // manual --x/--y override, carry its extended limbs (CenterXLo/2/3)
+            // into the poster so deep regions (zoom past ~1e15) render at the
+            // right coordinate instead of a collapsed double centre.
+            FractalRegion? limbRegion =
+                (frType == FractalType.Mandelbrot
+                 && opts.CenterX == null && opts.CenterY == null
+                 && !string.IsNullOrWhiteSpace(opts.RegionName))
+                ? FractalRegionLibrary.Instance.FindByName(opts.RegionName!)
+                : null;
+
             var req = new PosterRequest
             {
                 FractalType = frType,
                 Width = opts.Width,
                 Height = opts.Height,
-                CenterX = cx, CenterXLo = 0, CenterX2 = 0, CenterX3 = 0,
-                CenterY = cy, CenterYLo = 0, CenterY2 = 0, CenterY3 = 0,
+                CenterX = cx,
+                CenterXLo = limbRegion?.CenterXLo ?? 0,
+                CenterX2 = limbRegion?.CenterX2 ?? 0,
+                CenterX3 = limbRegion?.CenterX3 ?? 0,
+                CenterY = cy,
+                CenterYLo = limbRegion?.CenterYLo ?? 0,
+                CenterY2 = limbRegion?.CenterY2 ?? 0,
+                CenterY3 = limbRegion?.CenterY3 ?? 0,
                 Zoom = zoom,
                 MaxIterations = iter,
                 ColorMap = theme,
@@ -65,6 +84,9 @@ namespace FracturingFog.Batch
                 Format = format,
                 Watermark = regionDispName ?? "",
                 SubText = "Fracturing Fog batch render",
+                Brightness = pfBrightness,
+                Contrast = pfContrast,
+                HistogramEq = pfAdaptive,
             };
 
             Console.WriteLine($"Batch image render");
@@ -74,6 +96,8 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  zoom    : {zoom:G6}    iter: {iter}");
             Console.WriteLine($"  theme   : {opts.ThemeName}    quality: {quality.Name}");
             Console.WriteLine($"  size    : {opts.Width}x{opts.Height}");
+            if (pfBrightness != 0 || pfContrast != 0 || pfAdaptive != 0)
+                Console.WriteLine($"  post-fx : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
             Console.WriteLine($"  out     : {outPath}");
 
             using var spinner = new ConsoleSpinner("Rendering");
@@ -97,6 +121,18 @@ namespace FracturingFog.Batch
         {
             var (cx, cy, targetZoom, iter, frType, quality, regionDispName) = ResolveRegion(opts);
             var theme = ResolveTheme(opts.ThemeName);
+
+            // Full-precision zoom path: when a Mandelbrot region is used without
+            // a manual --x/--y override, render frames through the region's
+            // extended centre limbs (CenterXLo/2/3) instead of the double cx/cy
+            // ResolveRegion collapses to — otherwise deep regions (zoom past
+            // ~1e15) render at wrong/imprecise coordinates.
+            FractalRegion? limbRegion =
+                (frType == FractalType.Mandelbrot
+                 && opts.CenterX == null && opts.CenterY == null
+                 && !string.IsNullOrWhiteSpace(opts.RegionName))
+                ? FractalRegionLibrary.Instance.FindByName(opts.RegionName!)
+                : null;
 
             int totalFrames = (int)Math.Round(opts.VideoSeconds * opts.VideoFps);
             if (totalFrames < 2) totalFrames = 2;
@@ -222,6 +258,11 @@ namespace FracturingFog.Batch
 
             Directory.CreateDirectory(pngFolder);
 
+            // Post-FX from CLI flags (video has no preset — cfg = null).
+            var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
+            if (pfBrightness != 0 || pfContrast != 0 || pfAdaptive != 0)
+                Console.WriteLine($"  post-fx  : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
+
             double logZ0 = Math.Log(startZoom);
             double logZ1 = Math.Log(endZoom);
 
@@ -240,8 +281,13 @@ namespace FracturingFog.Batch
                     double te = t * t * (3.0 - 2.0 * t);
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
 
-                    uint[] buffer = RenderOneFrame(
-                        frType, outW, outH, cx, cy, frameZoom, iter, theme, quality);
+                    uint[] buffer = limbRegion != null
+                        ? RenderRegionMandelFrame(limbRegion, outW, outH, frameZoom, iter, theme, pfAdaptive, quality)
+                        : RenderOneFrame(frType, outW, outH, cx, cy, frameZoom, iter, theme, quality, pfAdaptive);
+
+                    // Brightness/Contrast BGRA post-pass (parity with the
+                    // interactive image); HE already baked in the frame render.
+                    ApplyBrightnessContrast(buffer, outW * outH, pfBrightness, pfContrast);
 
                     // --watermark bakes the region/theme + program sub-line
                     // into every emitted frame so the WMF Mp4Writer path AND
@@ -353,7 +399,7 @@ namespace FracturingFog.Batch
         private static uint[] RenderOneFrame(
             FractalType frType, int w, int h,
             double cx, double cy, double zoom, int iter,
-            IColorMap theme, QualityPreset quality)
+            IColorMap theme, QualityPreset quality, int adaptive = 0)
         {
             IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(new PosterRequest
             {
@@ -371,6 +417,10 @@ namespace FracturingFog.Batch
 
             if (alt != null)
             {
+                // Adaptive HE is Mandelbrot-only and Mandelbrot never routes
+                // through BuildCaptureCalculator (it returns null for it), so
+                // the alt path carries no HE — brightness/contrast still apply
+                // downstream on the returned buffer.
                 alt.Calculate(CancellationToken.None);
                 return CopyBuffer(alt.ColorBuffer, w, h);
             }
@@ -385,6 +435,8 @@ namespace FracturingFog.Batch
                 Quality = quality,
             };
             calc.Calculate(CancellationToken.None);
+            if (adaptive > 0)
+                calc.ApplyHistogramEqualization(adaptive / 100.0);
             return CopyBuffer(calc.ColorBuffer, w, h);
         }
 
@@ -408,6 +460,228 @@ namespace FracturingFog.Batch
             var dst = new uint[n];
             Array.Copy(src, dst, Math.Min(src.Length, n));
             return dst;
+        }
+
+        // ── Post-FX (parity with interactive ViewState post-processing) ────────
+
+        // Number of frames a cross-fade of <paramref name="fadeMs"/> spans at
+        // <paramref name="fps"/>. Mirrors the interactive fade's wall-clock
+        // duration (the fade ms floor of 50 matches SlideshowEngine); minimum
+        // two frames so a fade is never a single hard-cut frame.
+        private static int FadeFrames(int fadeMs, int fps)
+            => Math.Max(2, (int)Math.Round(Math.Max(50, fadeMs) / 1000.0 * fps));
+
+        // Resolve effective brightness / contrast / adaptive(HE) values.
+        // CLI flags (when present) override the named preset's PostFx block;
+        // a null flag falls back to the preset (Image/Video pass cfg = null,
+        // so they read the flags only). Clamped to the interactive ranges.
+        private static (int brightness, int contrast, int adaptive) ResolvePostFx(
+            BatchOptions opts, FracturingFog.Models.SlideshowConfig? cfg)
+        {
+            int b = opts.Brightness ?? ReadPostFxValue(cfg, "Brightness", 0);
+            int c = opts.Contrast   ?? ReadPostFxValue(cfg, "Contrast", 0);
+            int a = opts.Adaptive   ?? ReadPostFxValue(cfg, "HistogramEq", 0);
+            return (Math.Clamp(b, -100, 100), Math.Clamp(c, -100, 100), Math.Clamp(a, 0, 100));
+        }
+
+        private static int ReadPostFxValue(
+            FracturingFog.Models.SlideshowConfig? cfg, string key, int fallback)
+        {
+            var pf = cfg?.PostFx;
+            if (pf == null || !pf.Enabled || pf.Values == null) return fallback;
+            return pf.Values.TryGetValue(key, out double v) ? (int)Math.Round(v) : fallback;
+        }
+
+        // In-place brightness/contrast BGRA post-pass. Same math as
+        // FractalRenderHost.UploadProcessedBuffer so batch output matches the
+        // interactive image: contrast pivots around mid-grey (127.5), then
+        // brightness offsets in 0..255 space.
+        private static void ApplyBrightnessContrast(uint[] buf, int n, int brightness, int contrast)
+        {
+            if (brightness == 0 && contrast == 0) return;
+            float contrastFactor = 1f + contrast / 100f;
+            float brightnessOffset255 = brightness / 100f * 255f;
+            int len = Math.Min(n, buf.Length);
+            for (int i = 0; i < len; i++)
+            {
+                uint p = buf[i];
+                float r = (p >> 16) & 0xFF;
+                float g = (p >> 8) & 0xFF;
+                float b = p & 0xFF;
+                r = (r - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                g = (g - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                b = (b - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                byte R = (byte)Math.Clamp(r, 0f, 255f);
+                byte G = (byte)Math.Clamp(g, 0f, 255f);
+                byte B = (byte)Math.Clamp(b, 0f, 255f);
+                buf[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+            }
+        }
+
+        // Render one Mandelbrot frame for a region at an arbitrary zoom, honouring
+        // the region's full-precision centre limbs + quality. Adaptive HE (when
+        // > 0) is applied on the calculator before the buffer is copied out.
+        // Shared by the video-slideshow leg loop (many zoom frames per region).
+        private static uint[] RenderRegionMandelFrame(
+            FractalRegion region, int w, int h, double zoom, int iter, IColorMap theme, int adaptive,
+            QualityPreset? quality = null)
+        {
+            var calc = new MandelbrotCalculator(w, h)
+            {
+                CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                Zoom = zoom,
+                MaxIterations = iter,
+                ColorMap = theme,
+                Quality = quality ?? region.QualityPreset ?? QualityPreset.Standard,
+            };
+            calc.Calculate(CancellationToken.None);
+            if (adaptive > 0) calc.ApplyHistogramEqualization(adaptive / 100.0);
+            return CopyBuffer(calc.ColorBuffer, w, h);
+        }
+
+        // Cross-fade helper: write `fadeFrames` blended frames from `from` to
+        // `to` into the PNG sequence, honouring the total frame budget. Returns
+        // the number of frames written. Shared by region + theme boundary fades.
+        private static int WriteCrossFade(
+            PngSequenceWriter pngWriter, uint[] from, uint[] to, int n,
+            int fadeFrames, int budgetRemaining)
+        {
+            if (from.Length != to.Length) return 0;
+            var blend = new uint[to.Length];
+            int written = 0;
+            for (int s = 1; s <= fadeFrames && written < budgetRemaining; s++)
+            {
+                float a = s / (float)fadeFrames;
+                float ia = 1f - a;
+                for (int i = 0; i < n; i++)
+                {
+                    uint o = from[i], nw = to[i];
+                    byte rB = (byte)(((o >> 16) & 0xFF) * ia + ((nw >> 16) & 0xFF) * a);
+                    byte gB = (byte)(((o >> 8) & 0xFF) * ia + ((nw >> 8) & 0xFF) * a);
+                    byte bB = (byte)((o & 0xFF) * ia + (nw & 0xFF) * a);
+                    blend[i] = 0xFF000000u | ((uint)rB << 16) | ((uint)gB << 8) | bB;
+                }
+                pngWriter.WriteFrame(blend);
+                written++;
+            }
+            return written;
+        }
+
+        // Video-slideshow render loop: one animated log-zoom leg per region
+        // (vStartZoom → region target, smoothstep-eased), cross-fading between
+        // regions over regionFadeFrames. Each leg is split into themesPerLeg
+        // theme segments; at each segment boundary the theme cross-fades over
+        // themeFadeFrames with the zoom frozen for the fade window — mirroring
+        // the interactive video-slideshow's per-leg colour-theme schedule.
+        private static int RenderVideoSlideshowLegs(
+            PngSequenceWriter pngWriter,
+            System.Collections.Generic.List<FractalRegion> regionPool,
+            System.Collections.Generic.List<string> regionNames,
+            ShuffleBag<string> regionBag,
+            System.Collections.Generic.List<string> themePool,
+            Random rng,
+            int outW, int outH, int totalFrames, int legFrames,
+            int regionFadeFrames, int themeFadeFrames, int themesPerLeg,
+            double startZoom, bool reverse, bool watermark,
+            int pfBrightness, int pfContrast, int pfAdaptive)
+        {
+            uint[]? prevFrame = null;
+            int framesWritten = 0;
+            int lastTheme = -1;
+            int n = outW * outH;
+
+            while (framesWritten < totalFrames)
+            {
+                string regionName = regionBag.Draw(regionNames);
+                var region = regionPool.Find(r =>
+                    string.Equals(r.Name, regionName, StringComparison.Ordinal));
+                if (region == null) break;
+
+                int iter = region.Iterations > 0 ? region.Iterations : 1000;
+                double target = Math.Max(region.Zoom, 1e-12);
+                double z0 = reverse ? target : startZoom;
+                double z1 = reverse ? startZoom : target;
+                double logZ0 = Math.Log(z0), logZ1 = Math.Log(z1);
+
+                // Pick up to themesPerLeg distinct non-black themes for this leg,
+                // probing each at the deepest zoom (target). Fewer is fine — a
+                // region with only one non-black theme plays a single-theme leg.
+                var legThemeNames = new System.Collections.Generic.List<string>(themesPerLeg);
+                var legThemeMaps = new System.Collections.Generic.List<IColorMap>(themesPerLeg);
+                int attempts = Math.Max(1, themePool.Count);
+                for (int at = 0; at < attempts && legThemeMaps.Count < themesPerLeg; at++)
+                {
+                    int ti;
+                    do { ti = rng.Next(themePool.Count); }
+                    while (themePool.Count > 1 && ti == lastTheme);
+                    lastTheme = ti;
+                    var name = themePool[ti];
+                    if (legThemeNames.Contains(name)) continue;
+                    var map = ResolveTheme(name);
+                    var probe = RenderRegionMandelFrame(region, outW, outH, target, iter, map, pfAdaptive);
+                    if (IsAllBlack(probe, n)) continue;
+                    legThemeNames.Add(name);
+                    legThemeMaps.Add(map);
+                }
+                if (legThemeMaps.Count == 0) continue; // no non-black theme; next region
+
+                int legThemes = legThemeMaps.Count;
+                int segLen = Math.Max(1, legFrames / legThemes);
+                var sw = Stopwatch.StartNew();
+                int legFramesWritten = 0;
+                int curSeg = 0;
+                Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / " +
+                              $"{string.Join(",", legThemeNames)} zoom {z0:G4}->{z1:G4} … ");
+
+                for (int f = 0; f < legFrames && framesWritten + legFramesWritten < totalFrames; f++)
+                {
+                    double t = legFrames == 1 ? 1.0 : (double)f / (legFrames - 1);
+                    double te = t * t * (3.0 - 2.0 * t);        // smoothstep ease
+                    double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
+                    int seg = Math.Min(legThemes - 1, f / segLen);
+
+                    var frame = RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                    ApplyBrightnessContrast(frame, n, pfBrightness, pfContrast);
+                    if (watermark)
+                        ApplyWatermarkInPlace(frame, outW, outH, region.Name, $"Theme: {legThemeNames[seg]}");
+
+                    if (f == 0 && prevFrame != null)
+                    {
+                        // Region boundary: fade prev leg's last frame → this
+                        // leg's first frame (zoom frozen for the fade window).
+                        legFramesWritten += WriteCrossFade(
+                            pngWriter, prevFrame, frame, n, regionFadeFrames,
+                            totalFrames - (framesWritten + legFramesWritten));
+                    }
+                    else if (seg > curSeg)
+                    {
+                        // Theme boundary within the leg: fade the SAME zoom from
+                        // the previous theme to the new one, zoom frozen.
+                        var fromFrame = RenderRegionMandelFrame(
+                            region, outW, outH, frameZoom, iter, legThemeMaps[curSeg], pfAdaptive);
+                        ApplyBrightnessContrast(fromFrame, n, pfBrightness, pfContrast);
+                        if (watermark)
+                            ApplyWatermarkInPlace(fromFrame, outW, outH, region.Name, $"Theme: {legThemeNames[curSeg]}");
+                        legFramesWritten += WriteCrossFade(
+                            pngWriter, fromFrame, frame, n, themeFadeFrames,
+                            totalFrames - (framesWritten + legFramesWritten));
+                        curSeg = seg;
+                    }
+
+                    if (framesWritten + legFramesWritten >= totalFrames) break;
+                    pngWriter.WriteFrame(frame);
+                    legFramesWritten++;
+                    prevFrame = frame;
+                }
+
+                framesWritten += legFramesWritten;
+                sw.Stop();
+                Console.WriteLine($"{legFramesWritten} frames in {sw.ElapsedMilliseconds} ms");
+            }
+            return framesWritten;
         }
 
         // In-place watermark composite for batch video + slideshow buffers.
@@ -554,14 +828,43 @@ namespace FracturingFog.Batch
             Directory.CreateDirectory(tempRoot);
 
             // 5. Compute cadence from preset timing.
-            // --more-colors flips the cadence to FocusRegion=false (Color Focus,
-            // 8 themes/region, shorter per-theme dwell) — synonym of the
-            // "Slideshow: More Colors" context-menu item in the interactive UI.
-            int fadeSteps = Math.Clamp(cfg.Timing.FadeSteps, 2, 200);
+            //
+            // Mirror the interactive SlideshowEngine's structure (Bug fix):
+            //   • ONE region is held for a full "region leg" of N theme
+            //     sub-legs — N = 3 (Region Focus) or 8 (Color Focus,
+            //     --more-colors) — instead of drawing a fresh random region
+            //     every leg. Regions are drawn without replacement via a
+            //     shuffle-bag so every region shows once before any repeat,
+            //     no back-to-back (parity with SlideshowEngine._regionBag).
+            //   • The first theme sub-leg of a region is a REGION cross-fade
+            //     (RegionFadeMs); the remaining sub-legs are THEME cross-fades
+            //     (ColorThemeFadeMs). The fade DURATION is honoured in
+            //     wall-clock: the fade spans (fadeMs/1000 × fps) frames rather
+            //     than a fixed FadeSteps count — the old code wrote exactly
+            //     FadeSteps frames (~0.7 s @ 22 steps / 30 fps) which read as a
+            //     hard-cut compared with the interactive 2 s fade.
+            // --more-colors flips the cadence to Color Focus (8 themes/region,
+            // shorter per-theme dwell) — synonym of the "Slideshow: More
+            // Colors" context-menu item in the interactive UI.
             int themesPerRegion = opts.MoreColors ? 8 : 3;
             int totalRegionMs = Math.Max(3_000, cfg.Timing.TotalDisplayMsPerRegion);
-            int themeDurationMs = Math.Max(800, totalRegionMs / themesPerRegion);
-            int themeDurationFrames = Math.Max(fadeSteps, (int)Math.Round(themeDurationMs / 1000.0 * fps));
+            int legMs = Math.Max(800, totalRegionMs / themesPerRegion); // full per-theme leg incl. fade
+            int legFrames = Math.Max(1, (int)Math.Round(legMs / 1000.0 * fps));
+            int regionFadeFrames = FadeFrames(cfg.Timing.RegionFadeMs, fps);
+            int themeFadeFrames = FadeFrames(cfg.Timing.ColorThemeFadeMs, fps);
+
+            // Video-slideshow cadence (Type == Video): one animated zoom leg per
+            // region — zoom from vStartZoom into the region's target zoom over
+            // legSeconds — with a cross-fade between regions (RegionFadeMs).
+            bool videoType = cfg.Type == FracturingFog.Models.SlideshowType.Video;
+            double legSeconds = cfg.Video?.SecondsPerLeg > 0 ? cfg.Video.SecondsPerLeg : 8.0;
+            int videoLegFrames = Math.Max(2, (int)Math.Round(legSeconds * fps));
+            int videoThemesPerLeg = Math.Clamp(cfg.Video?.ThemesPerLeg ?? 3, 1, 8);
+            double vStartZoom = Math.Max(opts.VideoStartZoom, 1e-12);
+            bool vReverse = opts.VideoReverse || (cfg.Video?.Reverse ?? false);
+
+            // Post-FX: CLI flags override the preset's PostFx block.
+            var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, cfg);
 
             FfmpegEncoder.Preset encodePreset = opts.SlideshowEncode switch
             {
@@ -574,104 +877,147 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  preset    : {cfg.Name}");
             Console.WriteLine($"  regions   : {regionPool.Count}  themes: {themePool.Count}");
             Console.WriteLine($"  size      : {outW}x{outH}  fps: {fps}  duration: {opts.SlideshowSeconds:G4}s ({totalFrames} frames)");
-            Console.WriteLine($"  fade      : {fadeSteps} steps, {themeDurationFrames} frames/theme");
+            Console.WriteLine($"  type      : {cfg.Type}");
+            if (videoType)
+                Console.WriteLine($"  cadence   : {legSeconds:G4}s zoom legs ({videoLegFrames} f/leg), " +
+                                  $"{videoThemesPerLeg} themes/leg, start-zoom {vStartZoom:G4}" +
+                                  $"{(vReverse ? " reverse" : "")}, fade region {regionFadeFrames}f / theme {themeFadeFrames}f");
+            else
+            {
+                Console.WriteLine($"  cadence   : {themesPerRegion} themes/region, {legFrames} frames/leg");
+                Console.WriteLine($"  fade      : region {regionFadeFrames}f / theme {themeFadeFrames}f");
+            }
+            Console.WriteLine($"  post-fx   : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
             Console.WriteLine($"  temp      : {tempRoot}");
             Console.WriteLine($"  encode    : {encodePreset}");
             Console.WriteLine($"  out       : {opts.OutputPath}");
 
-            // 6. Render loop.
+            // 6. Render loop — outer region (shuffle-bag). Image type cycles
+            // themes per region with static cross-fades; Video type plays one
+            // animated zoom leg per region with cross-fades between regions.
             using var pngWriter = new PngSequenceWriter(tempRoot, outW, outH);
+            var regionNames = regionPool.ConvertAll(r => r.Name);
+            var regionBag = new ShuffleBag<string>(n => rng.Next(n), StringComparer.Ordinal);
             uint[]? prevFrame = null;
             int framesWritten = 0;
-            int lastRegion = -1, lastTheme = -1;
 
+            if (videoType)
+            {
+                framesWritten = RenderVideoSlideshowLegs(
+                    pngWriter, regionPool, regionNames, regionBag, themePool, rng,
+                    outW, outH, totalFrames, videoLegFrames,
+                    regionFadeFrames, themeFadeFrames, videoThemesPerLeg,
+                    vStartZoom, vReverse, opts.Watermark,
+                    pfBrightness, pfContrast, pfAdaptive);
+            }
+            else
             while (framesWritten < totalFrames)
             {
-                int ri;
-                do { ri = rng.Next(regionPool.Count); }
-                while (regionPool.Count > 1 && ri == lastRegion);
-                lastRegion = ri;
-                var region = regionPool[ri];
+                string regionName = regionBag.Draw(regionNames);
+                var region = regionPool.Find(r =>
+                    string.Equals(r.Name, regionName, StringComparison.Ordinal));
+                if (region == null) break; // pool emptied unexpectedly
+                int lastTheme = -1;
 
-                int ti;
-                do { ti = rng.Next(themePool.Count); }
-                while (themePool.Count > 1 && ti == lastTheme);
-                lastTheme = ti;
-                var theme = ResolveTheme(themePool[ti]);
-
-                Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / {themePool[ti]} … ");
-
-                // Calculate the Mandelbrot frame.
-                int iter = region.Iterations > 0 ? region.Iterations : 1000;
-                var calc = new MandelbrotCalculator(outW, outH)
+                for (int tIdx = 0; tIdx < themesPerRegion && framesWritten < totalFrames; tIdx++)
                 {
-                    CenterX = region.CenterX, CenterXLo = region.CenterXLo,
-                    CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
-                    CenterY = region.CenterY, CenterYLo = region.CenterYLo,
-                    CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
-                    Zoom = region.Zoom,
-                    MaxIterations = iter,
-                    ColorMap = theme,
-                    Quality = region.QualityPreset ?? QualityPreset.Standard,
-                };
-                var sw = Stopwatch.StartNew();
-                calc.Calculate(CancellationToken.None);
-                sw.Stop();
-
-                uint[] currFrame = calc.ColorBuffer;
-
-                // Skip legs where the region+theme combination produced an
-                // entirely black frame (theme renders to black at this iter
-                // depth, or the region is fully in-set with a colour map that
-                // paints in-set black). Picking again gives the user another
-                // theme without spending budget on a hole.
-                if (IsAllBlack(currFrame, outW * outH))
-                {
-                    Console.WriteLine($"all-black; skip ({sw.ElapsedMilliseconds} ms)");
-                    continue;
-                }
-
-                if (opts.Watermark)
-                    ApplyWatermarkInPlace(currFrame, outW, outH,
-                        region.Name, $"Theme: {themePool[ti]}");
-
-                int legFramesWritten = 0;
-
-                // Cross-fade from prev → curr (skip on first leg).
-                if (prevFrame != null && prevFrame.Length == currFrame.Length)
-                {
-                    var blend = new uint[currFrame.Length];
-                    int n = outW * outH;
-                    for (int s = 1; s <= fadeSteps && framesWritten + legFramesWritten < totalFrames; s++)
+                    // Pick a non-black theme (retry up to one pass over the
+                    // pool). HE is applied on the calculator before the colour
+                    // buffer is read; the all-black test runs on the final
+                    // coloured buffer so an HE-flattened frame is judged fairly.
+                    uint[]? currFrame = null;
+                    string? themeChosen = null;
+                    long calcMs = 0;
+                    int attempts = Math.Max(1, themePool.Count);
+                    for (int at = 0; at < attempts; at++)
                     {
-                        float a = s / (float)fadeSteps;
-                        float ia = 1f - a;
-                        for (int i = 0; i < n; i++)
+                        int ti;
+                        do { ti = rng.Next(themePool.Count); }
+                        while (themePool.Count > 1 && ti == lastTheme);
+                        lastTheme = ti;
+                        var themeName = themePool[ti];
+                        var theme = ResolveTheme(themeName);
+
+                        int iter = region.Iterations > 0 ? region.Iterations : 1000;
+                        var calc = new MandelbrotCalculator(outW, outH)
                         {
-                            uint o = prevFrame[i], nw = currFrame[i];
-                            byte rB = (byte)(((o >> 16) & 0xFF) * ia + ((nw >> 16) & 0xFF) * a);
-                            byte gB = (byte)(((o >> 8) & 0xFF) * ia + ((nw >> 8) & 0xFF) * a);
-                            byte bB = (byte)((o & 0xFF) * ia + (nw & 0xFF) * a);
-                            blend[i] = 0xFF000000u | ((uint)rB << 16) | ((uint)gB << 8) | bB;
+                            CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                            CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                            CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                            CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                            Zoom = region.Zoom,
+                            MaxIterations = iter,
+                            ColorMap = theme,
+                            Quality = region.QualityPreset ?? QualityPreset.Standard,
+                        };
+                        var sw = Stopwatch.StartNew();
+                        calc.Calculate(CancellationToken.None);
+                        if (pfAdaptive > 0)
+                            calc.ApplyHistogramEqualization(pfAdaptive / 100.0);
+                        sw.Stop();
+                        calcMs = sw.ElapsedMilliseconds;
+
+                        if (IsAllBlack(calc.ColorBuffer, outW * outH)) continue;
+
+                        // Own the pixels — calc.ColorBuffer is reused across
+                        // calculators / recolours, and we mutate it below.
+                        currFrame = CopyBuffer(calc.ColorBuffer, outW, outH);
+                        themeChosen = themeName;
+                        break;
+                    }
+                    if (currFrame == null) break; // no non-black theme this region
+
+                    // Brightness/Contrast BGRA post-pass (parity with the
+                    // interactive UploadProcessedBuffer), baked before the fade
+                    // so cross-fades interpolate the processed image.
+                    ApplyBrightnessContrast(currFrame, outW * outH, pfBrightness, pfContrast);
+
+                    if (opts.Watermark)
+                        ApplyWatermarkInPlace(currFrame, outW, outH,
+                            region.Name, $"Theme: {themeChosen}");
+
+                    Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / {themeChosen} … ");
+
+                    int fadeFrames = tIdx == 0 ? regionFadeFrames : themeFadeFrames;
+                    int legFramesWritten = 0;
+
+                    // Cross-fade prev → curr. Skipped only for the very first
+                    // frame of the whole show (no prior frame to fade from).
+                    if (prevFrame != null && prevFrame.Length == currFrame.Length)
+                    {
+                        var blend = new uint[currFrame.Length];
+                        int n = outW * outH;
+                        for (int s = 1; s <= fadeFrames && framesWritten + legFramesWritten < totalFrames; s++)
+                        {
+                            float a = s / (float)fadeFrames;
+                            float ia = 1f - a;
+                            for (int i = 0; i < n; i++)
+                            {
+                                uint o = prevFrame[i], nw = currFrame[i];
+                                byte rB = (byte)(((o >> 16) & 0xFF) * ia + ((nw >> 16) & 0xFF) * a);
+                                byte gB = (byte)(((o >> 8) & 0xFF) * ia + ((nw >> 8) & 0xFF) * a);
+                                byte bB = (byte)((o & 0xFF) * ia + (nw & 0xFF) * a);
+                                blend[i] = 0xFF000000u | ((uint)rB << 16) | ((uint)gB << 8) | bB;
+                            }
+                            pngWriter.WriteFrame(blend);
+                            legFramesWritten++;
                         }
-                        pngWriter.WriteFrame(blend);
+                    }
+
+                    // Dwell — hold the final frame to fill the leg budget.
+                    int holdFrames = Math.Max(0, legFrames - legFramesWritten);
+                    int remaining = totalFrames - (framesWritten + legFramesWritten);
+                    if (holdFrames > remaining) holdFrames = remaining;
+                    for (int s = 0; s < holdFrames; s++)
+                    {
+                        pngWriter.WriteFrame(currFrame);
                         legFramesWritten++;
                     }
-                }
 
-                // Dwell — hold the final frame to fill the leg budget.
-                int holdFrames = Math.Max(0, themeDurationFrames - legFramesWritten);
-                int remaining = totalFrames - (framesWritten + legFramesWritten);
-                if (holdFrames > remaining) holdFrames = remaining;
-                for (int s = 0; s < holdFrames; s++)
-                {
-                    pngWriter.WriteFrame(currFrame);
-                    legFramesWritten++;
+                    framesWritten += legFramesWritten;
+                    prevFrame = currFrame;
+                    Console.WriteLine($"{legFramesWritten} frames in {calcMs} ms");
                 }
-
-                framesWritten += legFramesWritten;
-                prevFrame = currFrame;
-                Console.WriteLine($"{legFramesWritten} frames in {sw.ElapsedMilliseconds} ms");
             }
 
             pngWriter.Dispose();

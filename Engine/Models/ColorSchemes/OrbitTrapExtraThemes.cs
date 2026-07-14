@@ -75,7 +75,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapSquareMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Square";
+        public static string Name => "Orbit Trap - Square";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the unit-square " +
@@ -115,7 +115,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapRingMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Ring";
+        public static string Name => "Orbit Trap - Ring";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to a circle of " +
@@ -160,7 +160,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapHyperbolaMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Hyperbola";
+        public static string Name => "Orbit Trap - Hyperbola";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the curve " +
@@ -200,7 +200,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapLemniscateMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Lemniscate";
+        public static string Name => "Orbit Trap - Lemniscate";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the Bernoulli " +
@@ -245,7 +245,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapCardioidMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Cardioid";
+        public static string Name => "Orbit Trap - Cardioid";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the main " +
@@ -285,7 +285,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapDiagonalCrossMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Diagonal Cross";
+        public static string Name => "Orbit Trap - Diagonal Cross";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the nearer of " +
@@ -325,7 +325,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapTriangleMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Triangle";
+        public static string Name => "Orbit Trap - Triangle";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the edges of " +
@@ -372,7 +372,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapHexagonMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Hexagon";
+        public static string Name => "Orbit Trap - Hexagon";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the edges of " +
@@ -419,7 +419,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapHeartMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Heart";
+        public static string Name => "Orbit Trap - Heart";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the implicit " +
@@ -465,7 +465,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapSineWaveMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Sine Wave";
+        public static string Name => "Orbit Trap - Sine Wave";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the curve " +
@@ -508,7 +508,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapConcentricMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Concentric";
+        public static string Name => "Orbit Trap - Concentric";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the nearest " +
@@ -551,7 +551,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapGridMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Grid";
+        public static string Name => "Orbit Trap - Grid";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the half-integer " +
@@ -594,7 +594,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapPinwheelMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Pinwheel";
+        public static string Name => "Orbit Trap - Pinwheel";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the nearest of " +
@@ -639,7 +639,7 @@ namespace FracturingFog.Models
     // =========================================================================
     public sealed class OrbitTrapPolarRoseMap : OrbitTrapPowerBaseMap
     {
-        public static string Name => "Orbit Trap — Polar Rose";
+        public static string Name => "Orbit Trap - Polar Rose";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Orbit-trap colouring: minimum distance from z_n to the rose " +

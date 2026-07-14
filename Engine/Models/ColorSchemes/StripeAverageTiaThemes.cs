@@ -138,7 +138,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class StripeAverageClassicMap : StripeTiaBaseMap
     {
-        public static string Name => "Stripe Average — Classic";
+        public static string Name => "Stripe Average - Classic";
         public static string Category => "Stripe / TIA";
         public static string Description =>
             "Pure Stripe Average Coloring (Ultra Fractal look).  Smooth monochrome " +

@@ -135,7 +135,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class OrbitTrapImageRainbowMap : OrbitTrapImageBaseMap
     {
-        public static string Name => "Orbit Trap — Image (Rainbow)";
+        public static string Name => "Orbit Trap - Image (Rainbow)";
         public static string Category => "Orbit Trap";
         public static string Description =>
             "Image orbit trap: the orbit point at minimum distance from the origin is " +

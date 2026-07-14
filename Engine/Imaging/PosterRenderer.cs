@@ -56,6 +56,14 @@ namespace FracturingFog.Imaging
         public QualityPreset Quality { get; init; } = null!;
         public FractalParameters FractalParameters { get; init; } = new();
 
+        // Post-FX (parity with the interactive ViewState sliders). Defaults =
+        // identity. Brightness/Contrast are a BGRA post-pass; HistogramEq is
+        // adaptive equalization strength applied on the calculator before the
+        // colour buffer is read (Mandelbrot only).
+        public int Brightness { get; init; }   // -100..100, 0 = none
+        public int Contrast { get; init; }     // -100..100, 0 = none
+        public int HistogramEq { get; init; }  //    0..100, 0 = none
+
         /// <summary>Landscape render dimensions. When <see cref="Rotate"/> is
         /// set the saved image is the 90°-rotated transpose of these.</summary>
         public int Width { get; init; }
@@ -211,12 +219,19 @@ namespace FracturingFog.Imaging
                 }
                 calc.Calculate(token);
                 token.ThrowIfCancellationRequested();
+                // Adaptive HE — Mandelbrot-only, applied on the calculator so
+                // it recolours from the iteration histogram before read.
+                if (req.HistogramEq > 0)
+                    calc.ApplyHistogramEqualization(req.HistogramEq / 100.0);
                 buffer = calc.ColorBuffer;
                 w = calc.Width;
                 h = calc.Height;
             }
 
             sw.Stop();
+
+            // Brightness/Contrast BGRA post-pass (both calculator paths).
+            ApplyBrightnessContrast(buffer, w * h, req.Brightness, req.Contrast);
 
             if (req.Rotate)
             {
@@ -244,6 +259,32 @@ namespace FracturingFog.Imaging
                     buffer, w, h, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi);
                 return new PosterResult(w, h, sw.ElapsedMilliseconds);
+            }
+        }
+
+        // In-place brightness/contrast BGRA post-pass. Same math as
+        // FractalRenderHost.UploadProcessedBuffer so poster output matches the
+        // interactive image: contrast pivots around mid-grey (127.5), then
+        // brightness offsets in 0..255 space.
+        private static void ApplyBrightnessContrast(uint[] buf, int n, int brightness, int contrast)
+        {
+            if (brightness == 0 && contrast == 0) return;
+            float contrastFactor = 1f + contrast / 100f;
+            float brightnessOffset255 = brightness / 100f * 255f;
+            int len = Math.Min(n, buf.Length);
+            for (int i = 0; i < len; i++)
+            {
+                uint p = buf[i];
+                float r = (p >> 16) & 0xFF;
+                float g = (p >> 8) & 0xFF;
+                float b = p & 0xFF;
+                r = (r - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                g = (g - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                b = (b - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                byte R = (byte)Math.Clamp(r, 0f, 255f);
+                byte G = (byte)Math.Clamp(g, 0f, 255f);
+                byte B = (byte)Math.Clamp(b, 0f, 255f);
+                buf[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
             }
         }
 

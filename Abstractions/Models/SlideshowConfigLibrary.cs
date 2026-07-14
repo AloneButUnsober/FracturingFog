@@ -58,6 +58,7 @@ namespace FracturingFog.Models
                     if (file != null && file.Configs.Count > 0)
                     {
                         EnsureActiveValid(file);
+                        NormalizeLegacyNames(file);
                         return file;
                     }
                 }
@@ -155,6 +156,8 @@ namespace FracturingFog.Models
                 var json = File.ReadAllText(path);
                 var cfg = JsonSerializer.Deserialize<SlideshowConfig>(json, JsonOpts);
                 if (cfg == null || string.IsNullOrWhiteSpace(cfg.Name)) return null;
+                var wrap = new SlideshowConfigFile { Configs = { cfg }, ActiveName = cfg.Name };
+                NormalizeLegacyNames(wrap);
                 Upsert(file, cfg);
                 return cfg.Name;
             }
@@ -204,6 +207,29 @@ namespace FracturingFog.Models
             };
             Save(file);
             return file;
+        }
+
+        // Rewrite any saved pre-ASCII (Unicode) region / color-theme names in
+        // the include lists to their current ASCII names via the alias map, so
+        // filter matching against the live (renamed) libraries keeps working.
+        // Self-healing: the ASCII names persist on the next Save.
+        private static void NormalizeLegacyNames(SlideshowConfigFile file)
+        {
+            foreach (var c in file.Configs)
+            {
+                MapInPlace(c.IncludedRegions);
+                MapInPlace(c.IncludedColorThemes);
+            }
+
+            static void MapInPlace(List<string>? names)
+            {
+                if (names == null) return;
+                for (int i = 0; i < names.Count; i++)
+                {
+                    var mapped = LegacyNameAliases.Resolve(names[i]);
+                    if (mapped != null) names[i] = mapped;
+                }
+            }
         }
 
         private static void EnsureActiveValid(SlideshowConfigFile file)

@@ -68,7 +68,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DistanceFieldChromaticMap : DistanceEstimationBaseMap
     {
-        public static string Name => "Distance — Chromatic";
+        public static string Name => "Distance - Chromatic";
         public static string Category => "Distance Estimation";
         public static string Description =>
             "Pixel-normalised distance estimate over a six-stop rainbow gradient. " +
@@ -98,7 +98,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DistanceFieldGlowMap : DistanceEstimationBaseMap
     {
-        public static string Name => "Distance — Glow";
+        public static string Name => "Distance - Glow";
         public static string Category => "Distance Estimation";
         public static string Description =>
             "Classic distance-estimator look: bright thin filaments glowing on a " +
@@ -128,7 +128,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DistanceFieldSilverMap : DistanceEstimationBaseMap
     {
-        public static string Name => "Distance — Silver Etching";
+        public static string Name => "Distance - Silver Etching";
         public static string Category => "Distance Estimation";
         public static string Description =>
             "Monochrome silver engraving driven by the pixel-normalised distance " +

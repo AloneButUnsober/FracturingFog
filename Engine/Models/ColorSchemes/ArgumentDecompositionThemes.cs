@@ -23,7 +23,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class ArgDecompQuadrantsMap : IColorMap
     {
-        public static string Name => "Arg Decomp — Quadrants";
+        public static string Name => "Arg Decomp - Quadrants";
         public static string Category => "Binary / Argument Decomposition";
         public static string Description =>
             "Four-way argument decomposition: one colour per quadrant of arg(z) " +
@@ -60,7 +60,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class ArgDecompPinwheelMap : IColorMap
     {
-        public static string Name => "Arg Decomp — Pinwheel (8)";
+        public static string Name => "Arg Decomp - Pinwheel (8)";
         public static string Category => "Binary / Argument Decomposition";
         public static string Description =>
             "Eight-way pinwheel: arg(z) split into 8 equal sectors, " +
@@ -102,7 +102,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class ArgDecompSpectralMap : IColorMap
     {
-        public static string Name => "Arg Decomp — Spectral Pinwheel";
+        public static string Name => "Arg Decomp - Spectral Pinwheel";
         public static string Category => "Binary / Argument Decomposition";
         public static string Description =>
             "Continuous HSV pinwheel keyed to arg(z) at escape.  Smooth rainbow " +

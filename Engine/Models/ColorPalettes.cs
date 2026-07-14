@@ -504,6 +504,12 @@ namespace FracturingFog.Models
         {
             foreach (var p in Palettes)
                 if (GetStaticName(p) == name) return p;
+            // Back-compat: saved data may reference the pre-ASCII (Unicode)
+            // theme name. Resolve the alias and retry once before HSV fallback.
+            var aliased = LegacyNameAliases.Resolve(name);
+            if (aliased != null)
+                foreach (var p in Palettes)
+                    if (GetStaticName(p) == aliased) return p;
             return new HsvPalette();
         }
 
