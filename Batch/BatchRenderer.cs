@@ -570,12 +570,32 @@ namespace FracturingFog.Batch
             return written;
         }
 
+        // In-memory per-pixel lerp `from`→`to` at weight `a` (0..1). Used by the
+        // concurrent theme cross-fade so the blended frame can still be zoomed,
+        // post-processed, and watermarked before it is written.
+        private static uint[] BlendFrames(uint[] from, uint[] to, float a, int n)
+        {
+            var outb = new uint[to.Length];
+            float ia = 1f - a;
+            int len = Math.Min(n, Math.Min(from.Length, to.Length));
+            for (int i = 0; i < len; i++)
+            {
+                uint o = from[i], nw = to[i];
+                byte rB = (byte)(((o >> 16) & 0xFF) * ia + ((nw >> 16) & 0xFF) * a);
+                byte gB = (byte)(((o >> 8) & 0xFF) * ia + ((nw >> 8) & 0xFF) * a);
+                byte bB = (byte)((o & 0xFF) * ia + (nw & 0xFF) * a);
+                outb[i] = 0xFF000000u | ((uint)rB << 16) | ((uint)gB << 8) | bB;
+            }
+            return outb;
+        }
+
         // Video-slideshow render loop: one animated log-zoom leg per region
         // (vStartZoom → region target, smoothstep-eased), cross-fading between
         // regions over regionFadeFrames. Each leg is split into themesPerLeg
         // theme segments; at each segment boundary the theme cross-fades over
-        // themeFadeFrames with the zoom frozen for the fade window — mirroring
-        // the interactive video-slideshow's per-leg colour-theme schedule.
+        // themeFadeFrames CONCURRENTLY with the zoom (the fade blends both
+        // themes rendered at the live zoom, consuming normal zoom frames) so the
+        // video never stalls — mirroring the interactive video-slideshow.
         private static int RenderVideoSlideshowLegs(
             PngSequenceWriter pngWriter,
             System.Collections.Generic.List<FractalRegion> regionPool,
@@ -630,9 +650,15 @@ namespace FracturingFog.Batch
 
                 int legThemes = legThemeMaps.Count;
                 int segLen = Math.Max(1, legFrames / legThemes);
+                // Theme cross-fade runs CONCURRENTLY with the zoom: the fade
+                // consumes ordinary zoom frames (each a blend of the outgoing
+                // and incoming theme rendered at that frame's live zoom) rather
+                // than inserting frozen frames. This is why the video no longer
+                // stalls at a theme change. Fade length is capped to the segment
+                // so a fade always completes before the next boundary.
+                int themeFade = Math.Min(themeFadeFrames, segLen);
                 var sw = Stopwatch.StartNew();
                 int legFramesWritten = 0;
-                int curSeg = 0;
                 Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / " +
                               $"{string.Join(",", legThemeNames)} zoom {z0:G4}->{z1:G4} … ");
 
@@ -643,32 +669,38 @@ namespace FracturingFog.Batch
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
                     int seg = Math.Min(legThemes - 1, f / segLen);
 
-                    var frame = RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                    // A theme boundary opens a fade window at the start of a new
+                    // segment: blend the previous theme into the new one while
+                    // the zoom keeps advancing. Outside the window a single
+                    // theme renders.
+                    int intoSeg = f - seg * segLen;         // frames into this segment
+                    uint[] frame;
+                    if (seg > 0 && intoSeg < themeFade)
+                    {
+                        float a = (intoSeg + 1) / (float)themeFade;
+                        var fromFrame = RenderRegionMandelFrame(
+                            region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive);
+                        var toFrame = RenderRegionMandelFrame(
+                            region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                        frame = BlendFrames(fromFrame, toFrame, a, n);
+                    }
+                    else
+                    {
+                        frame = RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                    }
+
                     ApplyBrightnessContrast(frame, n, pfBrightness, pfContrast);
                     if (watermark)
                         ApplyWatermarkInPlace(frame, outW, outH, region.Name, $"Theme: {legThemeNames[seg]}");
 
+                    // Region boundary cross-fade (between different regions /
+                    // zoom sequences) stays a frozen fade — the previous leg has
+                    // ended, so there is no shared zoom to advance across it.
                     if (f == 0 && prevFrame != null)
                     {
-                        // Region boundary: fade prev leg's last frame → this
-                        // leg's first frame (zoom frozen for the fade window).
                         legFramesWritten += WriteCrossFade(
                             pngWriter, prevFrame, frame, n, regionFadeFrames,
                             totalFrames - (framesWritten + legFramesWritten));
-                    }
-                    else if (seg > curSeg)
-                    {
-                        // Theme boundary within the leg: fade the SAME zoom from
-                        // the previous theme to the new one, zoom frozen.
-                        var fromFrame = RenderRegionMandelFrame(
-                            region, outW, outH, frameZoom, iter, legThemeMaps[curSeg], pfAdaptive);
-                        ApplyBrightnessContrast(fromFrame, n, pfBrightness, pfContrast);
-                        if (watermark)
-                            ApplyWatermarkInPlace(fromFrame, outW, outH, region.Name, $"Theme: {legThemeNames[curSeg]}");
-                        legFramesWritten += WriteCrossFade(
-                            pngWriter, fromFrame, frame, n, themeFadeFrames,
-                            totalFrames - (framesWritten + legFramesWritten));
-                        curSeg = seg;
                     }
 
                     if (framesWritten + legFramesWritten >= totalFrames) break;
