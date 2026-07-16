@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/ClusterDashboardView.axaml.cs
 // Hybrid-shell: a UserControl hosted modeless by MainWindow.SyncClusterDashboard.
 // The VM poll lifecycle (start on host Opened, stop on host Closed) and the

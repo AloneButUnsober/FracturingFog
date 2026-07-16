@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Rendering.D3D/RenderFactory.cs
 //
 // S-X1b (2026-06-23) — Windows-only DirectX renderer factory. Carved out of

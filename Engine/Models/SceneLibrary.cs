@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Engine/Models/SceneLibrary.cs
 //
 // Scene Engine Roadmap — Phase S4: singleton library of Scene assets, persisted

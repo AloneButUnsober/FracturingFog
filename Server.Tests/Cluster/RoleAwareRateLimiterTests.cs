@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server.Tests/Cluster/RoleAwareRateLimiterTests.cs
 // D-6c — covers the per-role per-method rate limiter that sits on the
 // FFServer dispatch path. Unit-level: drives RoleAwareRateLimiter directly

@@ -1,4 +1,7 @@
-﻿// Models/ColorSchemes/ColorPalettes.cs  — v6 (user-defined JSON themes)
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/ColorSchemes/ColorPalettes.cs  — v6 (user-defined JSON themes)
 //
 // Add new built-in themes to the BuiltIns list; they appear automatically in
 // the UI.  User-defined themes loaded from %APPDATA%\FracturingFog\colorthemes.json

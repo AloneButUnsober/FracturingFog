@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/Editors/DesktopEyedropper.cs
 //
 // Global desktop pixel sampler. Begin() installs a WH_MOUSE_LL hook and

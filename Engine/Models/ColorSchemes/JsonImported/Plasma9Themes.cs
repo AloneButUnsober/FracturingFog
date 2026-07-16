@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/JsonImported/Plasma9Themes.cs
 //
 // Three Plasma 9 TST variants — perceptually uniform violet→pink→orange→yellow

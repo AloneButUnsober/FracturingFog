@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Guard/WatermarkPayloadValidator.cs
 // Defensive shape-check on a client-supplied WatermarkDef JSON blob before
 // the engine deserializes it. Mirrors RegionPayloadValidator's idiom: parse

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/Vec3GpuOps.cs
 //
 // Device-safe mirrors of Vec3 helpers for ILGPU kernels emitted by

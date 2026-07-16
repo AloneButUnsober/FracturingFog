@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PosterRenderer.cs
 //
 // Shell-neutral poster / high-resolution capture engine extracted from the

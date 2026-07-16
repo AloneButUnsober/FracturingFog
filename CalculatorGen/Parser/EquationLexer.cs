@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // EquationLexer.cs
 //
 // Tokeniser for the polynomial-in-(z,c) grammar. One-shot: feed a string

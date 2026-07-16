@@ -1,4 +1,7 @@
-﻿// Models/DataDrivenColorThemes.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/DataDrivenColorThemes.cs
 //
 // Concrete IColorMap implementations driven entirely by a ColorThemeData DTO.
 // These classes let a JSON-loaded theme actually render — they slot into the

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Guard/EndpointRateLimiter.cs
 // Token-bucket rate limiter keyed on remote IP. Cheap, in-process, no
 // allocation on the hot path once a bucket exists. Bounds the cost of a

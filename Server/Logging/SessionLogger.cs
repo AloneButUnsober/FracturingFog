@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Logging/SessionLogger.cs
 // Per-connection text log under %APPDATA%\FracturingFog\server-logs\.
 // One file per accepted session: <utc>_<remote>_<conn-id>.log.

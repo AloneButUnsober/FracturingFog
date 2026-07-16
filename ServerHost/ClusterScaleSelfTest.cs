@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ServerHost/ClusterScaleSelfTest.cs
 // D-3b / D-4 acceptance harness: render the same workload two ways and
 // report wall-time + speedup. Both arms use the real

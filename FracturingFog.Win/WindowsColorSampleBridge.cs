@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // FracturingFog.Win/WindowsColorSampleBridge.cs
 //
 // S-X8 (2026-06-27) — Win32 IColorSampleBridge that replaces the legacy

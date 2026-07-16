@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/IClusterCoordinator.cs
 // Hook FFServer calls into for cluster-only protocol methods
 // (worker.* and cluster.*). Default coordinator is null — FFServer falls

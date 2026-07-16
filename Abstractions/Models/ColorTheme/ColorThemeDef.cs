@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Models/ColorTheme/ColorThemeDef.cs
 //
 // UI-neutral mirror of the WinForms ColorThemeData hierarchy. Used by the

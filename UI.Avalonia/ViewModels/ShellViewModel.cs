@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/ShellViewModel.cs
 //
 // Step E of the Phase 2.3 MainForm cut plan. Top-level composition VM the

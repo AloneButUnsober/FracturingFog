@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/AnimationEditorViewModel.cs
 //
 // Animation Roadmap Phase 3c. Editor VM for AnimationData assets. Mirrors the

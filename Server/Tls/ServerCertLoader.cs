@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Tls/ServerCertLoader.cs
 // Loads the server identity (PFX) and the trusted client-CA bundle, and
 // returns a RemoteCertificateValidationCallback that requires the client to

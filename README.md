@@ -72,9 +72,32 @@ Tracking branch: `feature/cross-platform-full`. Plan:
 
 ## License
 
-See the repository's license file. Third-party dependencies:
+Fracturing Fog is licensed under the **GNU Affero General Public License v3.0
+or later** (AGPL-3.0-or-later). See [`LICENSE`](LICENSE) for the full text.
 
-* ffmpeg — GPL (Windows bundle); apt / brew installs follow the user's
+In short: you are free to use, study, modify, and share this software, but any
+derivative work — including a modified version made available to users **over a
+network** (AGPL §13) — must be released under the same license with complete
+corresponding source. If you distribute or host a modified build, you must make
+your source available to its users.
+
+Copyright © 2026 Bradley Brown.
+
+### Contributing
+
+Contributions are welcome via pull request. All contributions are accepted under
+the project's [Contributor License Agreement](CLA.md), which you accept by adding
+a `Signed-off-by:` trailer to your commits (`git commit -s`). The CLA lets the
+maintainer offer alternative (e.g. commercial) licenses in addition to the AGPL.
+
+### Third-party components
+
+Full attributions and dependency licenses are listed in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Summary:
+
+* **ffmpeg** — GPL (optional Windows bundle); AGPL-3.0 is GPLv3-compatible, so
+  the bundle is a compatible aggregate. apt / brew installs follow the user's
   distro licence.
-* QuestPDF — Community licence (free for OSS / sub-USD-1M revenue).
-* Avalonia, Silk.NET, SkiaSharp, NAudio, ILGPU, Vortice.* — MIT.
+* **QuestPDF** — Community licence (free for OSS / sub-USD-1M revenue).
+* **Avalonia, Silk.NET, SkiaSharp, NAudio, ILGPU, Vortice.\***, Roslyn,
+  MathNet.Numerics, Markdig — MIT / BSD / NCSA (permissive).

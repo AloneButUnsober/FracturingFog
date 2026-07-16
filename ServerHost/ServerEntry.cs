@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ServerHost/ServerEntry.cs
 // --server CLI handler. Parses flags, ensures the self-signed dev bundle is
 // present (or loads operator-supplied PFX paths), loads user themes +

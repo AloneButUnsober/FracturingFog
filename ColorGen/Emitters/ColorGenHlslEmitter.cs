@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ColorGenHlslEmitter.cs — T3.1 phase 2
 //
 // HLSL twin of ColorGenEmitter. Walks the same CgProgram AST and emits the

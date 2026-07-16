@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/WorkerDetailViewModel.cs
 // D-5d. Per-worker drill-in for the cluster admin UI. Polls cluster.status
 // every 5 s through an FFAdminConnection (matches dashboard cadence — the

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/VintageSepia.cs
 // Recreates the look of an aged silver-gelatin photographic print: deep rich
 // blacks, warm brown midtones, and bright cream highlights.  Cycles the sepia

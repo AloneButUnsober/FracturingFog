@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // DdDirectEmitter.cs
 //
 // Emits the per-iteration z-update body in DoubleDouble arithmetic.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/Tropical.cs
 // High-energy cycling palette modelled on tropical ocean and reef colouration.
 // Turquoise, lime, hot pink, and coral cycle rapidly so deep-zoom images stay

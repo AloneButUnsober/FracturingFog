@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UI.Avalonia/ViewModels/SceneExportEventArgs.cs
 //
 // Scene Engine Roadmap — Phase S8 polish: the shell seam for the "Export

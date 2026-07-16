@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Protocol/ChunkDto.cs
 // Payload of a "chunk" envelope. Sent after a streamed render response so
 // neither side has to hold the full rendered artifact in RAM. Each chunk

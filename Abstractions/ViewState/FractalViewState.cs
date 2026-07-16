@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/ViewState/FractalViewState.cs
 //
 // Pure POCO holding everything the renderer needs to draw one frame of any

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // LSystemCalculator.cs
 //
 // Rewrites the L-system axiom N times using the production rules, then walks

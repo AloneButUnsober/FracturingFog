@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ScreenSpacePost.cs
 //
 // Post-process passes that operate on the calculator's final color buffer

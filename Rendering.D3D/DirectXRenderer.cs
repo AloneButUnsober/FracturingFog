@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // DirectXRenderer.cs  — Vortice.DirectX 3.8.3 (now implements IFractalRenderer)
 //
 // API conventions verified against Vortice 3.8.x source and official samples:

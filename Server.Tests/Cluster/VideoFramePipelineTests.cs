@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server.Tests/Cluster/VideoFramePipelineTests.cs
 // D-4b — exercise the streaming ffmpeg encoder pipeline and its
 // preset / extension mapping helpers. The encode round-trip tests are

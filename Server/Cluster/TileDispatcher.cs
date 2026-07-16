@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/TileDispatcher.cs
 // Per-job tile work queue + in-flight tracking + retry budget. Backs
 // the coordinator's tile.next long-poll: workers ask for a tile, the

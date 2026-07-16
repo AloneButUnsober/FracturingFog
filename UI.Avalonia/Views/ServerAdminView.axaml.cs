@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/ServerAdminView.axaml.cs
 // Hybrid-shell: UserControl hosted modeless by MainWindow.SyncServerAdmin. The
 // VM poll lifecycle (start on host Opened, stop on host Closed) and close =>

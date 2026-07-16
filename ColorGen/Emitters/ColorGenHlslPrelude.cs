@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ColorGenHlslPrelude.cs — T3.1 phase 2
 //
 // Builds the HLSL helper prelude (mod / hash / hsv / hsl / palette-N) that

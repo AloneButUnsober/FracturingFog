@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/HeartbeatAckDto.cs
 // Master → Worker. Cheap ack with optional control flags. Errors come
 // back as ErrorDto with codes: "unknown-worker", "thumbprint-pin-mismatch".

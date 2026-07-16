@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // EscapeCloseBehavior.cs
 //
 // Single-line opt-in: in a dialog/floating Window constructor call

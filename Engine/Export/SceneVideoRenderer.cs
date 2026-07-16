@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Engine/Export/SceneVideoRenderer.cs
 //
 // Scene Engine Roadmap — Phase S7: the offline, frame-locked scene renderer.

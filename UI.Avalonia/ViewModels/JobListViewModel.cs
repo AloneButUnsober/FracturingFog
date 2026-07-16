@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/JobListViewModel.cs
 // D-5c. Paged + filterable job list backed by cluster.listJobs. Distinct
 // from ClusterDashboardViewModel's embedded recent-jobs block because

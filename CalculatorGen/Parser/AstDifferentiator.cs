@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // AstDifferentiator.cs
 //
 // Symbolic differentiation of polynomial-in-(z,c) ASTs. Used to:

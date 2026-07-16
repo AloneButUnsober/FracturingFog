@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UserEquationCalculator.cs
 //
 // Renders an escape-time fractal whose per-iteration step function is supplied

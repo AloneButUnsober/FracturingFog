@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PaletteExtraction/HistogramExtractor.cs
 //
 // Dumb-but-fast palette: quantize each channel to 3 bits (8 levels =

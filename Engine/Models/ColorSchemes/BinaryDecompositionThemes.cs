@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/BinaryDecompositionThemes.cs
 //
 // Binary decomposition — at escape, the sign of Im(z_n) splits the exterior

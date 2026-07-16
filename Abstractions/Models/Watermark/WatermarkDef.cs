@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Models/Watermark/WatermarkDef.cs
 //
 // User-defined watermark — the top-line text + colors + edge placement that

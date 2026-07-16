@@ -1,4 +1,7 @@
-﻿using FracturingFog.Imaging;
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using System;

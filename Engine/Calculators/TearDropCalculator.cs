@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Calculators/TearDropCalculator.cs
 //
 // Concrete escape-time calculator for the "Tear Drop" fractal:

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UserBulbSelfTest.cs — invoked via `dotnet run -- --ubtest`. Headlessly
 // compiles the default UserBulb source and runs Calculate on a small grid,
 // then prints diagnostics (compile error, hit %) so we can confirm the

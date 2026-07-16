@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UI.Avalonia/Controls/FractalOverlayControl.cs
 //
 // Cross-platform port of the legacy GridOverlayPanel + AddWaterMark routines

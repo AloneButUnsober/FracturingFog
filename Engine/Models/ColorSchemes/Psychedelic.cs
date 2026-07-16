@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/Psychedelic.cs
 // Very rapid hue cycling combined with oscillating saturation and value
 // produces a garish, high-energy kaleidoscope of colour bands.

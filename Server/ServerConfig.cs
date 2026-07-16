@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/ServerConfig.cs
 // Runtime configuration written to %APPDATA%\FracturingFog\server-config.json
 // and edited live by the Avalonia ServerAdmin dialog. Loaded once at

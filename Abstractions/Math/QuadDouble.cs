@@ -1,4 +1,7 @@
-﻿// Math/QuadDouble.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Math/QuadDouble.cs
 //
 // Quad-Double (QD) floating-point arithmetic — 4 doubles unevaluated sum.
 // Provides ~62 decimal digits of precision (4× double, 2× DD).

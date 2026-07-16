@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Render/PerformanceTier.cs
 //
 // Scene Engine Roadmap — Phase S2: hardware-tier profiles (the single knob).

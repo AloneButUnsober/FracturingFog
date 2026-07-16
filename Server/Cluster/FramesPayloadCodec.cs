@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/FramesPayloadCodec.cs
 // Pack / unpack the binary trailer for tile.deliver PayloadKind="frames"
 // (D-4). One tile carries N video frames as PNGs; rather than open a

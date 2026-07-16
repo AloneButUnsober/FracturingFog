@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/ServerInstanceProbe.cs
 // Two ways to tell whether a server is already running on this machine:
 //   1) Try to open a TcpClient against the configured port (cheap, works

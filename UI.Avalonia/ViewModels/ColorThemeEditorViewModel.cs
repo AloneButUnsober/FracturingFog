@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/ColorThemeEditorViewModel.cs
 //
 // Avalonia port of the legacy WinForms ColorThemeEditor. UI.Avalonia stays

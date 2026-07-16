@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/JobDetailView.axaml.cs
 // Hybrid-shell: UserControl hosted modeless by MainWindow.SyncJobDetail. Poll
 // lifecycle (host Opened/Closed) + close => hide (VM CloseRequested ->
