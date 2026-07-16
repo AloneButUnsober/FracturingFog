@@ -96,14 +96,24 @@ agreement on this subject.
 
 ### How to accept
 
-Indicate acceptance by adding a line to the bottom of Your commit message using
-the `Signed-off-by` trailer (git `-s` flag), which certifies the
+There are two ways to accept, either is sufficient:
+
+**1. CLA bot (default).** When You open a pull request, an automated check
+(`CLA Assistant`) will ask You to sign if You have not already. Accept by
+posting this exact comment on the pull request:
+
+```
+I have read the CLA Document and I hereby sign the CLA
+```
+
+Your signature is recorded once and applies to all future Contributions. Post
+`recheck` to re-run the check.
+
+**2. Signed-off-by trailer.** Add a sign-off line to each commit message
+(git `-s` flag), which certifies the
 [Developer Certificate of Origin](https://developercertificate.org/) **and**,
 for this Project, acceptance of this Agreement:
 
 ```
 Signed-off-by: Your Name <your.email@example.com>
 ```
-
-Alternatively, if the Project adopts an automated CLA bot, follow the prompt on
-your first pull request.
