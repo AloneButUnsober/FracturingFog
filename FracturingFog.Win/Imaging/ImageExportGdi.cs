@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/ImageExportGdi.cs
 //
 // Phase X.A / Slice A.7 — Windows-only ImageExport surface carved out of the

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // FractalParamsViewModel.Lighting.cs
 //
 // Bindings for the shared LightingFxData parameter block. Every 3D raymarcher

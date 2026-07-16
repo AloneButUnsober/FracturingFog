@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/MainWindow.axaml.cs
 //
 // Phase 2.3 F.2. Top-level Avalonia window. Binds to ShellViewModel.

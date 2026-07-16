@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Avx512PerturbationEmitter.cs
 //
 // Emits the per-iteration δ-update body using Vector512<double> (8 lanes,

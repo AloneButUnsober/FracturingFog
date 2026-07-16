@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/WarpedHSV.cs
 // Enhances the classic HSV palette with non-linear saturation and value
 // curves that respond to both the smooth iteration count and the distance

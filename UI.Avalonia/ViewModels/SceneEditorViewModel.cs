@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/SceneEditorViewModel.cs
 //
 // Scene Engine Roadmap Phase S5. Editor VM for SceneData assets. Mirrors the

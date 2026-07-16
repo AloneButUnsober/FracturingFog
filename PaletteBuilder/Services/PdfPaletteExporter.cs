@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Services/PdfPaletteExporter.cs
 //
 // Palette → PDF via QuestPDF (Community licence). Honours PdfExportOptions

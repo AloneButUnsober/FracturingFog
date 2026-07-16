@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // FlamePresets.cs
 //
 // Hand-coded built-in Flame fractal map sets. Each entry is a small (2–6)

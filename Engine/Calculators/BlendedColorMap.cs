@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // BlendedColorMap.cs
 //
 // IColorMap wrapper that returns a per-pixel lerp between two underlying

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Engine/Rendering/Lighting/StagePerf.cs
 //
 // Static hook used by ScreenSpacePost.Apply* to publish per-pass elapsed-ms

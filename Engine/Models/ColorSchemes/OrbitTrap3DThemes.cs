@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/OrbitTrap3DThemes.cs
 //
 // 3D-lit variants of the gradient orbit-trap colour themes from

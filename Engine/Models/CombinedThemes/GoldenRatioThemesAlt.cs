@@ -1,4 +1,7 @@
-﻿// Models/GoldenRatioThemes.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/GoldenRatioThemes.cs
 //
 // Four colour-map themes that re-imagine the algorithmic Golden Ratio palette
 // (Models/ColorSchemes/GoldenRatio.cs) as a gradient family with red-dominant

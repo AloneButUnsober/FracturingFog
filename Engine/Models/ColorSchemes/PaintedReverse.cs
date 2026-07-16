@@ -1,4 +1,7 @@
-﻿// Models/ColorSchemes/HSV-Modified.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/ColorSchemes/HSV-Modified.cs
 //
 // HsvModified — smooth version that preserves the original visual character.
 //

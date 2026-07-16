@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/DomainColoringThemes.cs
 //
 // Domain coloring of the final escape value z_n — the standard complex-function

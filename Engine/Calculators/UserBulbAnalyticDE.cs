@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UserBulbAnalyticDE.cs
 //
 // Source-pattern detector for User Bulb step functions whose growth is

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // QJuliaGpuCalculator.cs
 //
 // P7b — ILGPU-backed GPU raymarcher for the Quaternion Julia set (Hart /

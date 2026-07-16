@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // AttractorCalculator.cs
 //
 // Iterates a 2D / 3D strange attractor map and accumulates a per-pixel hit

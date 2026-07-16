@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PaletteExtraction/MaterialPaletteExtractor.cs
 //
 // Android's Material palette: picks colour slots that best fit named

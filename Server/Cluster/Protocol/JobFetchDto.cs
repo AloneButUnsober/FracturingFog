@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/JobFetchDto.cs
 // Client → Master, body of job.fetch. The master replies first with a
 // JobFetchAckDto (declaring size + hash + chunkCount + extension), then

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/ImageFileFormat.cs
 //
 // Cross-platform encoded image format token used across the engine's save

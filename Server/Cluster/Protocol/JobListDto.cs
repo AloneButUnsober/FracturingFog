@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/JobListDto.cs
 // Admin → Master. Paged list of jobs from the on-disk store. Distinct
 // from cluster.status' embedded recent-jobs block because the admin UI

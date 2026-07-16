@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/JobSubmitDto.cs
 // Client → Master, body of job.submit. Wraps a RenderRequestDto with
 // distribution-only hints. The render fields themselves stay in

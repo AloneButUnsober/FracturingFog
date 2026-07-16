@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/RoiGridOverlay.axaml.cs
 //
 // Overlays the preview Image with a configurable rule-of-thirds-style

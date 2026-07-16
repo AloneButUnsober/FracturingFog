@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/ChromostereopsisFamilyThemes.cs
 //
 // Wide-spectrum family of Chromostereopsis-driven palettes.  Every theme

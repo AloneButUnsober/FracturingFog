@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Render/CameraTrack.cs
 //
 // Scene Engine Roadmap — Phase S3: the camera track (the new engine surface).

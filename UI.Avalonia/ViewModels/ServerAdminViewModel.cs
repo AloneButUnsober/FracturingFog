@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/ServerAdminViewModel.cs
 // Phase 3 server admin dialog. Polls server.status once per second while
 // the dialog is visible. Exposes Start/Restart/Kill controls that operate

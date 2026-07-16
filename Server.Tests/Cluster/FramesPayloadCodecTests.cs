@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server.Tests/Cluster/FramesPayloadCodecTests.cs
 // D-4a — round-trip tests for the FRMS frames trailer codec used by
 // tile.deliver PayloadKind="frames".

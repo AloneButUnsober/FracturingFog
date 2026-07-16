@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/TileErrorDto.cs
 // Worker → Master, body of tile.error. Reports a tile the worker failed
 // to render (engine threw, timed out, guard refused). Master decides

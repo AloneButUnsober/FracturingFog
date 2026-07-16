@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Client/AesVault.cs
 // PBKDF2(SHA-256, 200k iters) → 256-bit AES-GCM key. Used to encrypt the
 // per-connection secrets in client-connections.json so a stolen disk does

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // DlaCalculator.cs
 //
 // Diffusion-Limited Aggregation. A single seed cell sits at the grid centre.

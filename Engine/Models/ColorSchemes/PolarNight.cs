@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/PolarNight.cs
 // Inspired by Nordic polar nights — near-black deep navy transitions through
 // midnight blue, dusky purple, pale aqua, to an icy almost-white at the tips

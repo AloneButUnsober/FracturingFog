@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/FFClientViewModel.cs
 // Phase 3 client dialog. Holds:
 //   • Saved connections combo (ClientConnectionStore-backed, AES vault locked)

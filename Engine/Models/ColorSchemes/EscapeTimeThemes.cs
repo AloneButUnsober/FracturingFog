@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/EscapeTimeThemes.cs
 //
 // Raw escape-time / level-set colourings.  These themes deliberately AVOID the

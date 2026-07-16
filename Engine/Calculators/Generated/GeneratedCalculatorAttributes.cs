@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // GeneratedCalculatorAttributes.cs
 //
 // Wave 2.13 (D-7.29) — Roslyn source-gen registry. Each

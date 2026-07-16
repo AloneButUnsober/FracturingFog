@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/MasterConfigView.axaml.cs
 // D-5e. No background polling — values change rarely and a timer would
 // clobber an in-progress edit. Triggers one Load on first appearance so the

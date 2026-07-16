@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Client/ClientConnectionStore.cs
 // Persistent list of named server connections. Each entry carries plaintext
 // non-secret fields (host, port, cert path) plus an AES-GCM-sealed blob

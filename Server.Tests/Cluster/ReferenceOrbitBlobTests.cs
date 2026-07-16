@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server.Tests/Cluster/ReferenceOrbitBlobTests.cs
 // D-6b — codec round-trip, planner attach, and a calculator-level
 // pixel-parity check that a shared-orbit sub-rect render matches the

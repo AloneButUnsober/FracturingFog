@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Services/WcagContrast.cs
 //
 // WCAG 2.1 relative luminance + contrast-ratio helpers. Produces the same

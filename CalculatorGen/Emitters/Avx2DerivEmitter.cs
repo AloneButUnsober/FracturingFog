@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Avx2DerivEmitter.cs
 //
 // Emits the dz/dc derivative update inside the AVX-2 perturbation lane.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/FFServer.cs
 // Accept loop, mTLS handshake, JSON-RPC dispatch. One connection at a time
 // can be running a render (queue depth gate). Long-running renders run

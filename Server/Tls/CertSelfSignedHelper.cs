@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Tls/CertSelfSignedHelper.cs
 // One-shot dev bundle generator. On first --server run we create a CA cert,
 // a server cert signed by the CA (CN=fracturingfog-server), and a client

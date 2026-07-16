@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ServerHost/HostFractalRenderEngine.cs
 // WinExe-side IFractalRenderEngine implementation. Binds the protocol
 // RenderRequestDto to the existing PosterRenderer / calculator zoo and to a

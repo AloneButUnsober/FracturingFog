@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Services/Exporters/PngSheetExporter.cs
 //
 // Render the palette as a single PNG image: 1-column strip of swatch tiles

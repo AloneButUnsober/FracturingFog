@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // NewtonCalculator.cs
 //
 // Renders Newton fractal for f(z) = z^d - 1. Iterates z := z - R·f(z)/f'(z)

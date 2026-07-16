@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // AstHelpers.cs
 //
 // Lightweight AST queries the generator uses to gate which output

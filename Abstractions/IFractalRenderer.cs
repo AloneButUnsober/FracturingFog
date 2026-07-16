@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // IFractalRenderer.cs
 // Shared abstraction for renderer implementations. Lives in Abstractions so
 // Phase 2.4 cross-platform backends (Rendering.Silk OpenGL/Vulkan, Skia

@@ -1,4 +1,7 @@
-﻿// Models/ColorSchemes3D/RedAndBlack3D.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/ColorSchemes3D/RedAndBlack3D.cs
 //
 // Phong-lit 3D version of the original RedAndBlack / Radio Interference theme.
 //

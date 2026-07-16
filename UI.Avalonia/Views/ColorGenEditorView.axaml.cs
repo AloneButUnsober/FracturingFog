@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/ColorGenEditorView.axaml.cs
 //
 // Code-behind for the ColorGen editor. Hybrid-shell: a UserControl hosted

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/QuatGpuOps.cs
 //
 // Device-safe mirrors of Quat helpers for ILGPU kernels emitted by

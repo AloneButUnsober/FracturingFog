@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PaletteExtraction/DbscanExtractor.cs
 //
 // Density-based spatial clustering in Lab. Runs on a 32³ Lab histogram of

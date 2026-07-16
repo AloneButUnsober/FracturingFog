@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Math/SeriesApproximation.cs
 //
 // Series Approximation (SA) — third-order polynomial expansion of the

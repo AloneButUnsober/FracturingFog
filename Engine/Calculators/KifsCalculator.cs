@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // KifsCalculator.cs
 //
 // Kaleidoscopic IFS distance-estimation raymarcher. Selects one of two

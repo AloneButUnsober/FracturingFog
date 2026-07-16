@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // MandelbrotGpuKernel.cs — T3.1 phase 1+2+4
 //
 // HLSL compute shader for the SP (double-precision) Mandelbrot escape-time

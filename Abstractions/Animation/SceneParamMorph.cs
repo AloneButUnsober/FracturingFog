@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Animation/SceneParamMorph.cs
 //
 // Scene Engine Roadmap — Phase S8: the ParamMorph transition's numeric core.

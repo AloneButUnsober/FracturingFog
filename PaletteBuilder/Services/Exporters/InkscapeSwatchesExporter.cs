@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Services/Exporters/InkscapeSwatchesExporter.cs
 //
 // Inkscape uses the GIMP .gpl format for swatches, but also reads an SVG

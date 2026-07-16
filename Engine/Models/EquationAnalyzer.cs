@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/EquationAnalyzer.cs
 //
 // Static AST walker that extracts structural features from a parsed

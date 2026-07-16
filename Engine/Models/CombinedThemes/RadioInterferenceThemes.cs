@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/RadioInterferenceThemes.cs
 //
 // Four colour-map themes inspired by RadioInterference.cs (originally RedAndBlack).

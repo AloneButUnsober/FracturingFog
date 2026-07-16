@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/CesiumColorThemes.cs  — v2
 //
 // Updated to use PbrGradient3DBase v2.  Changes per theme:

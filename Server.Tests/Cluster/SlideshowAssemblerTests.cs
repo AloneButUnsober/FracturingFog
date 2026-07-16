@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server.Tests/Cluster/SlideshowAssemblerTests.cs
 // D-4c — SlideshowAssembler walks a slideshow job's slides dir and
 // writes a slides-manifest.json describing each per-slide PNG. The

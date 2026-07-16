@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/HeartbeatDto.cs
 // Worker → Master. Sent every ~5 s on the cluster session. Carries the
 // live load so the master's tile planner can avoid piling work onto a

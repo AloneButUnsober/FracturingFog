@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/FramePlanner.cs
 // Splits a video RenderRequestDto into frame-range tiles. Each tile owns
 // a contiguous half-open [startFrame, endFrame) range; the worker walks

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Metrics.cs
 // Lock-free counters surfaced through server.status. Polled by ServerAdmin.
 

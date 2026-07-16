@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // HlslPaletteHelpers.cs — Wave 3.6 follow-on
 //
 // Shared HLSL helper strings used by hand-written IGpuHlslPalette themes.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/FfmpegPreferences.cs
 //
 // User election for the FFmpeg first-run modal (auto-download / manual /

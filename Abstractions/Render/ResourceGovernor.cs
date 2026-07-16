@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Render/ResourceGovernor.cs
 //
 // Scene Engine Roadmap — Phase S1: the resource governor (the 90% cap).

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UserBulbSandboxEmitter.cs
 //
 // Walks a parsed Sandbox-Bulb AST (Sbx3Node) and emits an equivalent C#

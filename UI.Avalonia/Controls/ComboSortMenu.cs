@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Controls/ComboSortMenu.cs
 //
 // View-layer helper that gives a ComboBox the WinForms right-click "sort

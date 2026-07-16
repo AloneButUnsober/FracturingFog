@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/PhongStone.cs  — v2 (BUG FIX)
 //
 // ROOT CAUSE OF BLACK DISPLAY (now fixed):

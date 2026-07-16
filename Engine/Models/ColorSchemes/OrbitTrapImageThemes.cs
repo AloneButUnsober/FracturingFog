@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/OrbitTrapImageThemes.cs
 //
 // Image / texture orbit traps.  Per iteration the calculator records the

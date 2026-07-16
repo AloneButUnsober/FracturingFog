@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Client/FFClientConnection.cs
 // mTLS TCP + JSON-RPC consumer of the server protocol. One instance == one
 // open connection. Methods are thread-unsafe; serialize calls from one

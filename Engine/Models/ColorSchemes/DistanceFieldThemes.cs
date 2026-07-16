@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/DistanceFieldThemes.cs
 //
 // Distance Estimation (DE) colourings.  Consume the exterior distance estimate

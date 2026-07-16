@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Client/RenderOptionsStore.cs
 // Named render presets — same field shape as RenderRequestDto so the FFClient
 // dialog and the --batch --remote path round-trip them losslessly. Plaintext

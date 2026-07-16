@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UI.Avalonia/Slideshow/SlideshowEngine.cs
 //
 // Avalonia-side slideshow cycler with CPU cross-fade. Drives the shell-neutral
