@@ -303,34 +303,35 @@ namespace FracturingFog.Imaging
 
             // The caller (FractalRenderHost.CreatePosterRequest) pre-composes
             // req.Watermark (= "Region - Theme") and req.SubText
-            // (= "Program vX YYYY"). The render struct can use those verbatim
-            // for the default path, or substitute the custom watermark's
-            // top-line + colours / placement / justify when supplied. Subtext
-            // (program/version) is always req.SubText — the user can re-style
-            // and re-place it but not edit or hide it.
-            if (req.CustomWatermark != null)
-            {
-                return new WatermarkRender
-                {
-                    TopText = req.CustomWatermark.Text ?? string.Empty,
-                    SubText = req.SubText ?? string.Empty,
-                    TextColor = req.CustomWatermark.TextColor ?? new RgbDef(255, 255, 255),
-                    HighlightColor = req.CustomWatermark.HighlightColor,
-                    BackgroundColor = req.CustomWatermark.BackgroundColor,
-                    Placement = req.CustomWatermark.Placement,
-                    Justify = req.CustomWatermark.Justify,
-                    IsCustom = true,
-                };
-            }
+            // (= "Program vX YYYY"), so those go in as the already-formatted
+            // default rather than being re-derived from region/theme here.
+            // Precedence itself belongs to WatermarkResolver — the shell has
+            // already collapsed the chain into req.CustomWatermark, so a
+            // non-null value is by construction the active choice.
+            var wm = WatermarkResolver.Resolve(
+                activeCustom: req.CustomWatermark,
+                regionEmbedded: null,
+                overrideRegionWatermark: req.CustomWatermark != null,
+                useCustomWatermark: req.CustomWatermark != null,
+                regionName: req.Watermark ?? string.Empty,
+                themeName: string.Empty,
+                programName: string.Empty,
+                programVersion: string.Empty,
+                defaultTextColor: new RgbDef(fontColor.R, fontColor.G, fontColor.B));
 
+            // Resolve composes its own program/version sub-line from the
+            // program name/version it is handed; the poster path already has
+            // the formatted string, so keep that one.
             return new WatermarkRender
             {
-                TopText = req.Watermark ?? string.Empty,
+                TopText = wm.TopText,
                 SubText = req.SubText ?? string.Empty,
-                TextColor = new RgbDef(fontColor.R, fontColor.G, fontColor.B),
-                Placement = WatermarkPlacement.Bottom,
-                Justify = WatermarkJustify.Right,
-                IsCustom = false,
+                TextColor = wm.TextColor,
+                HighlightColor = wm.HighlightColor,
+                BackgroundColor = wm.BackgroundColor,
+                Placement = wm.Placement,
+                Justify = wm.Justify,
+                IsCustom = wm.IsCustom,
             };
         }
 

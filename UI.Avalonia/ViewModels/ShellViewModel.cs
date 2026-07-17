@@ -1311,7 +1311,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public bool IsWatermarkEditorVisible
     {
         get => _isWatermarkEditorVisible;
-        set => this.RaiseAndSetIfChanged(ref _isWatermarkEditorVisible, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isWatermarkEditorVisible, value);
+            // Dropping the editor drops its unsaved draft, so the overlay falls
+            // back to the saved-library chain instead of pinning whatever was
+            // last typed. Done here rather than on CloseRequested because the
+            // editor can also be dismissed by the shell without raising it.
+            if (!value) Main.DraftWatermark = null;
+        }
     }
 
     private bool _isAnimationEditorVisible;
@@ -1846,20 +1854,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (WatermarkEditor == null)
         {
             var vm = new WatermarkEditorViewModel(initialWatermarkName: Main.SelectedCustomWatermarkName);
-            // Live preview pipe: push the edited def straight into MainViewModel
-            // so the running overlay reflects every change. The shell already
-            // routes ActiveWatermark through the precedence chain, so feeding
-            // the editor's draft as if it were the saved entry is enough.
-            vm.PreviewRequested += (_, def) =>
-            {
-                // Mirror name selection if the user is editing the active one.
-                if (!string.IsNullOrEmpty(Main.SelectedCustomWatermarkName)
-                    && string.Equals(Main.SelectedCustomWatermarkName, def.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    Main.PushActiveWatermark();
-                    Main.RenderHost.RepaintWithPostFx();
-                }
-            };
+            // Live preview pipe: hand the edited def itself to MainViewModel as
+            // the draft. This used to discard `def` and call PushActiveWatermark,
+            // which re-reads UserWatermarkStore by name — so nothing unsaved
+            // could ever render, and a brand-new watermark (no name selected
+            // yet) failed the guard outright. Hence "save, then toggle Use
+            // Custom Watermark off/on to see it".
+            vm.PreviewRequested += (_, def) => Main.DraftWatermark = def;
+            vm.PreviewCancelled += (_, _) => Main.DraftWatermark = null;
             vm.WatermarkSavedToLibrary += (_, name) =>
             {
                 FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
@@ -1883,6 +1885,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             WatermarkEditor = vm;
         }
         IsWatermarkEditorVisible = true;
+        // The VM raises its first PreviewRequested from its own constructor,
+        // before the handler above exists, so seed the draft here — otherwise
+        // the overlay shows nothing until the first keystroke.
+        if (WatermarkEditor != null && WatermarkEditor.LivePreview)
+            Main.DraftWatermark = WatermarkEditor.BuildDef();
     }
 
     /// <summary>Animation Roadmap Phase 3c — open the Animation Editor.

@@ -20,6 +20,7 @@
 // WatermarkRender DTO that draw paths translate into their own colour types.
 
 using System;
+using System.Reflection;
 using FracturingFog.Models;
 
 namespace FracturingFog.Imaging
@@ -92,15 +93,9 @@ namespace FracturingFog.Imaging
                 };
             }
 
-            // Default path — preserve today's behaviour exactly: "Region - Theme".
-            string main = "";
-            if (!string.IsNullOrEmpty(regionName)) main = regionName;
-            if (!string.IsNullOrEmpty(themeName))
-                main = string.IsNullOrEmpty(main) ? themeName : main + " - " + themeName;
-
             return new WatermarkRender
             {
-                TopText = main,
+                TopText = ComposeDefaultTopText(regionName, themeName),
                 SubText = sub,
                 TextColor = defaultTextColor,
                 HighlightColor = null,
@@ -111,10 +106,45 @@ namespace FracturingFog.Imaging
             };
         }
 
+        /// <summary>The default (non-custom) top-line: "Region - Theme",
+        /// degrading to whichever half is present. Public so surfaces that
+        /// pre-compose the top-line before reaching Resolve (poster/wallpaper
+        /// requests, batch) format it the same way rather than each spelling
+        /// out the separator.</summary>
+        public static string ComposeDefaultTopText(string? regionName, string? themeName)
+        {
+            string main = string.IsNullOrEmpty(regionName) ? string.Empty : regionName!;
+            if (!string.IsNullOrEmpty(themeName))
+                main = string.IsNullOrEmpty(main) ? themeName! : main + " - " + themeName;
+            return main;
+        }
+
         /// <summary>The mandatory program/version line. Centralised so every
         /// surface formats it identically.</summary>
         public static string BuildSubText(string programName, string programVersion)
             => $"{programName} v{(string.IsNullOrEmpty(programVersion) ? "?" : programVersion)} {DateTime.Now.Year}";
+
+        /// <summary>Product name for the sub-line. Headless surfaces (batch,
+        /// server) have no shell to hand them one.</summary>
+        public const string DefaultProgramName = "Fracturing Fog";
+
+        /// <summary>Version for the sub-line, read off the entry assembly with
+        /// the git-hash suffix stripped — the same rule the shell's help
+        /// provider applies, so headless output carries the version the UI
+        /// shows rather than a surface-specific label.</summary>
+        public static string DetectProgramVersion()
+        {
+            string v = Assembly.GetEntryAssembly()?
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion ?? string.Empty;
+            int plus = v.IndexOf('+');
+            return plus >= 0 ? v.Substring(0, plus) : v;
+        }
+
+        /// <summary>The mandatory sub-line for a surface with no shell to ask.
+        /// Equivalent to what the interactive paths produce.</summary>
+        public static string BuildDefaultSubText()
+            => BuildSubText(DefaultProgramName, DetectProgramVersion());
 
         /// <summary>Geometry helper used by callers that need to allocate
         /// scratch surfaces (slideshow overlay bitmap, video frame compositor).

@@ -1253,21 +1253,16 @@ namespace FracturingFog.Hosting
 
                     // Re-use the Poster watermark plumbing so wallpaper output
                     // honours the current region/theme watermark + the custom
-                    // override toggle, matching what Poster does.
-                    string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
-                        ? s_renderHost.RegionName!
-                        : "Fracturing Fog";
-                    if (!string.IsNullOrEmpty(s_renderHost.ThemeName))
-                        watermark += " - " + s_renderHost.ThemeName;
-                    string subText = $"Fracturing Fog {DateTime.Now.Year}";
-
+                    // override toggle, matching what Poster does. The top-line
+                    // and program/version sub-line are composed by
+                    // CreatePosterRequest off the render host's own state — the
+                    // shell does not get to spell them out.
                     var customWm = shell.Main.UseCustomWatermark
                         ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
                         : null;
 
                     var req = s_renderHost.CreatePosterRequest(
-                        wpW, wpH, rotate: false,
-                        path, format, watermark, subText, customWm);
+                        wpW, wpH, rotate: false, path, format, customWm);
 
                     try
                     {
@@ -1586,19 +1581,12 @@ namespace FracturingFog.Hosting
                         _ => FracturingFog.Imaging.ImageFileFormat.Png,
                     };
 
-                    string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
-                        ? s_renderHost.RegionName!
-                        : "Fracturing Fog";
-                    if (!string.IsNullOrEmpty(s_renderHost.ThemeName))
-                        watermark += " - " + s_renderHost.ThemeName;
-                    string subText = $"Fracturing Fog {DateTime.Now.Year}";
-
                     var customWm = dims.Value.UseCustomWatermark
                         ? UserWatermarkStore.Instance.GetByName(dims.Value.WatermarkName)
                         : null;
                     var req = s_renderHost.CreatePosterRequest(
                         dims.Value.Width, dims.Value.Height, rotate: dims.Value.Portrait,
-                        path, format, watermark, subText, customWm);
+                        path, format, customWm);
 
                     try
                     {

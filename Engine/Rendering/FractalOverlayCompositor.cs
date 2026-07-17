@@ -44,10 +44,10 @@ namespace FracturingFog.Rendering
         // SKFontManager when "Courier New" / "Arial" aren't installed (Linux,
         // macOS — Skia maps to DejaVu Sans Mono / Helvetica respectively).
 
+        // Watermark fonts are not cached here — WatermarkPainterSkia owns them,
+        // so the live overlay and every export path share one definition.
         private readonly SKFont _labelFont = MakeFont("Courier New", 9f,  SKFontStyle.Normal);
         private readonly SKFont _zeroFont  = MakeFont("Courier New", 11f, SKFontStyle.Bold);
-        private readonly SKFont _mainFont  = MakeFont("Arial",       14f, SKFontStyle.Bold);
-        private readonly SKFont _subFont   = MakeFont("Arial",        9f, SKFontStyle.Normal);
 
         private readonly SKFont _hudHeader = MakeFont("Courier New", 10f, SKFontStyle.Bold);
         private readonly SKFont _hudBody   = MakeFont("Courier New",  9f, SKFontStyle.Normal);
@@ -276,53 +276,12 @@ namespace FracturingFog.Rendering
                 programVersion: programVersion ?? string.Empty,
                 defaultTextColor: defaultText);
 
-            Color fill = Color.FromArgb(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-            using var mainBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(wm.IsCustom ? 255 : 220, fill)) };
-            using var subBrush  = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(wm.IsCustom ? 230 : 180, fill)) };
-            Color haloColor = wm.HighlightColor != null
-                ? Color.FromArgb(wm.HighlightColor.A, wm.HighlightColor.R, wm.HighlightColor.G, wm.HighlightColor.B)
-                : halo;
-            using var shdBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(haloColor) };
-
-            float topW_f = string.IsNullOrEmpty(wm.TopText) ? 0f : _mainFont.MeasureText(wm.TopText);
-            float subW_f = string.IsNullOrEmpty(wm.SubText) ? 0f : _subFont.MeasureText(wm.SubText);
-            float topH_f = string.IsNullOrEmpty(wm.TopText) ? 0f : LineHeight(_mainFont);
-            float subH_f = string.IsNullOrEmpty(wm.SubText) ? 0f : LineHeight(_subFont);
-
-            int topW = (int)Math.Ceiling(topW_f);
-            int topH = (int)Math.Ceiling(topH_f);
-            int subW = (int)Math.Ceiling(subW_f);
-            int subH = (int)Math.Ceiling(subH_f);
-
-            const int edgePad = 6;
-            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
-                wm, w, h, topW, topH, subW, subH, edgePad);
-
-            if (wm.BackgroundColor != null)
-            {
-                var bg = Color.FromArgb(wm.BackgroundColor.A,
-                    wm.BackgroundColor.R, wm.BackgroundColor.G, wm.BackgroundColor.B);
-                const int bgPad = 4;
-                using var bgBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, Color = ToSk(bg) };
-                canvas.DrawRect(bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2, bgBrush);
-            }
-
-            int topX = WatermarkResolver.AlignLineX(bx, bw, topW, wm.Justify);
-            int subX = WatermarkResolver.AlignLineX(bx, bw, subW, wm.Justify);
-
-            if (!string.IsNullOrEmpty(wm.TopText))
-            {
-                float yb = Baseline(_mainFont);
-                canvas.DrawText(wm.TopText, topX + 1, by + 1 + yb, _mainFont, shdBrush);
-                canvas.DrawText(wm.TopText, topX,     by     + yb, _mainFont, mainBrush);
-            }
-            if (!string.IsNullOrEmpty(wm.SubText))
-            {
-                int subY = by + topH;
-                float yb = Baseline(_subFont);
-                canvas.DrawText(wm.SubText, subX + 1, subY + 1 + yb, _subFont, shdBrush);
-                canvas.DrawText(wm.SubText, subX,     subY     + yb, _subFont, subBrush);
-            }
+            // scale 1.0: the live overlay keeps fixed on-screen metrics rather
+            // than growing with the window. Export surfaces scale with the
+            // image instead; both go through the same painter.
+            WatermarkPainterSkia.Paint(canvas, wm, w, h,
+                defaultHalo: new RgbaDef(halo.R, halo.G, halo.B, halo.A),
+                scale: 1f);
         }
 
         // ── Perf HUD ──────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.Versioning;
 
+using FracturingFog.Models;
 using SkiaSharp;
 
 namespace FracturingFog.Imaging
@@ -74,8 +75,9 @@ namespace FracturingFog.Imaging
 
         // ── GDI+ watermark renderers (public, called by WinExe overlay path) ──
 
-        /// <summary>Render the region/theme watermark + program sub-line in
-        /// the lower-right corner with a contrasting outline.</summary>
+        /// <summary>Render the default region/theme watermark + program
+        /// sub-line. Layout comes from the shared WatermarkLayout, so this
+        /// agrees with the live overlay and the Skia export paths.</summary>
         public static void AddWaterMark(
             Graphics g,
             string text,
@@ -85,33 +87,15 @@ namespace FracturingFog.Imaging
             string subText = "",
             bool poster = false)
         {
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            var sz = g.MeasureString(text, font);
-            int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-            var pos = new PointF(width - sz.Width - 20, height - sz.Height - yOffset);
-
-            // Outline colour: opposite luminance of fill, ~75% opacity.
-            float lum = (fontColor.R * 0.299f + fontColor.G * 0.587f + fontColor.B * 0.114f) / 255f;
-            Color outlineColor = lum < 0.5f
-                ? Color.FromArgb(190, 255, 255, 255)
-                : Color.FromArgb(190, 0, 0, 0);
-
-            float mainStroke = poster ? System.Math.Max(2f, fontSize / 10f) : 2f;
-            float subStroke = poster ? System.Math.Max(1.5f, fontSize / 16f) : 1.5f;
-
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-
-            DrawOutlinedString(g, text, font, pos, fontColor, outlineColor, mainStroke);
-
-            if (!string.IsNullOrEmpty(subText))
+            AddWaterMark(g, new WatermarkRender
             {
-                using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
-                var sz2 = g.MeasureString(subText, fontSmall);
-                int subTextOffset = poster ? 0 : 2;
-                var subPos = new PointF(width - sz2.Width - 55, height - sz2.Height - subTextOffset);
-                DrawOutlinedString(g, subText, fontSmall, subPos, fontColor, outlineColor, subStroke);
-            }
+                TopText = text ?? string.Empty,
+                SubText = subText ?? string.Empty,
+                TextColor = new RgbDef(fontColor.R, fontColor.G, fontColor.B),
+                Placement = WatermarkPlacement.Bottom,
+                Justify = WatermarkJustify.Right,
+                IsCustom = false,
+            }, width, height, poster);
         }
 
         /// <summary>Draw <paramref name="text"/> as a filled glyph path with a
@@ -138,40 +122,14 @@ namespace FracturingFog.Imaging
         /// bitmap instead of a full-frame one.</summary>
         public static Rectangle MeasureWatermarkBBox(
             string text, string subText, int width, int height, bool poster = false)
-        {
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var dummy = new Bitmap(1, 1);
-            using var g = Graphics.FromImage(dummy);
-
-            var sz = g.MeasureString(text, font);
-            int yOffset = poster ? System.Math.Min(width, height) / 150 : 12;
-            float left = width - sz.Width - 20;
-            float top = height - sz.Height - yOffset;
-            float right = left + sz.Width;
-            float bottom = top + sz.Height;
-
-            if (!string.IsNullOrEmpty(subText))
+            => MeasureWatermarkBBox(new WatermarkRender
             {
-                using var fontSmall = new Font("Segoe UI", fontSize / 2, FontStyle.Bold, GraphicsUnit.Pixel);
-                var sz2 = g.MeasureString(subText, fontSmall);
-                int subTextOffset = poster ? 0 : 2;
-                float sLeft = width - sz2.Width - 55;
-                float sTop = height - sz2.Height - subTextOffset;
-                left = System.Math.Min(left, sLeft);
-                top = System.Math.Min(top, sTop);
-                right = System.Math.Max(right, sLeft + sz2.Width);
-                bottom = System.Math.Max(bottom, sTop + sz2.Height);
-            }
-
-            // Pad for outline stroke + AA fringe.
-            const int pad = 6;
-            int x0 = System.Math.Max(0, (int)System.Math.Floor(left) - pad);
-            int y0 = System.Math.Max(0, (int)System.Math.Floor(top) - pad);
-            int x1 = System.Math.Min(width, (int)System.Math.Ceiling(right) + pad);
-            int y1 = System.Math.Min(height, (int)System.Math.Ceiling(bottom) + pad);
-            return new Rectangle(x0, y0, x1 - x0, y1 - y0);
-        }
+                TopText = text ?? string.Empty,
+                SubText = subText ?? string.Empty,
+                Placement = WatermarkPlacement.Bottom,
+                Justify = WatermarkJustify.Right,
+                IsCustom = false,
+            }, width, height, poster);
 
         /// <summary>Draw the resolved watermark onto an arbitrary GDI surface.
         /// Honours top-line text + colour, optional background fill, optional
@@ -186,67 +144,59 @@ namespace FracturingFog.Imaging
         {
             if (wm == null) return;
 
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            int subFontSize = System.Math.Max(1, fontSize / 2);
-            int edgePad = poster ? System.Math.Min(width, height) / 150 : 12;
-
-            using var fontMain = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var fontSub  = new Font("Segoe UI", subFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-
-            var fill = Color.FromArgb(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-
-            Color outline;
-            if (wm.HighlightColor != null)
-            {
-                outline = Color.FromArgb(wm.HighlightColor.A, wm.HighlightColor.R, wm.HighlightColor.G, wm.HighlightColor.B);
-            }
-            else
-            {
-                float lum = (fill.R * 0.299f + fill.G * 0.587f + fill.B * 0.114f) / 255f;
-                outline = lum < 0.5f
-                    ? Color.FromArgb(190, 255, 255, 255)
-                    : Color.FromArgb(190, 0, 0, 0);
-            }
-
-            float mainStroke = poster ? System.Math.Max(2f, fontSize / 10f) : 2f;
-            float subStroke = poster ? System.Math.Max(1.5f, fontSize / 16f) : 1.5f;
+            var plan = BuildPlan(wm, width, height);
+            if (plan == null) return;
 
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-            var szTop = string.IsNullOrEmpty(wm.TopText)
-                ? new SizeF(0, 0)
-                : g.MeasureString(wm.TopText, fontMain);
-            var szSub = string.IsNullOrEmpty(wm.SubText)
-                ? new SizeF(0, 0)
-                : g.MeasureString(wm.SubText, fontSub);
-
-            int topW = (int)System.Math.Ceiling(szTop.Width);
-            int topH = (int)System.Math.Ceiling(szTop.Height);
-            int subW = (int)System.Math.Ceiling(szSub.Width);
-            int subH = (int)System.Math.Ceiling(szSub.Height);
-
-            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
-                wm, width, height, topW, topH, subW, subH, edgePad);
-
-            if (wm.BackgroundColor != null)
+            if (plan.Background is { } bgRect && plan.BackgroundColor != null)
             {
-                var bg = Color.FromArgb(wm.BackgroundColor.A,
-                    wm.BackgroundColor.R, wm.BackgroundColor.G, wm.BackgroundColor.B);
-                const int bgPad = 4;
-                using var bgBrush = new SolidBrush(bg);
-                g.FillRectangle(bgBrush, bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2);
+                using var bgBrush = new SolidBrush(ToGdi(plan.BackgroundColor));
+                g.FillRectangle(bgBrush, bgRect.X, bgRect.Y, bgRect.W, bgRect.H);
             }
 
-            int topX = WatermarkResolver.AlignLineX(bx, bw, topW, wm.Justify);
-            int subX = WatermarkResolver.AlignLineX(bx, bw, subW, wm.Justify);
-            int topY = by;
-            int subY = by + topH;
+            DrawPlanLine(g, plan.Top, plan.TopFill, plan.Halo, plan.ShadowOffset);
+            DrawPlanLine(g, plan.Sub, plan.SubFill, plan.Halo, plan.ShadowOffset);
+        }
 
-            if (!string.IsNullOrEmpty(wm.TopText))
-                DrawOutlinedString(g, wm.TopText, fontMain, new PointF(topX, topY), fill, outline, mainStroke);
+        // Shared geometry, GDI+ measurement. `poster` is no longer a layout
+        // switch anywhere — WatermarkLayout scales off the image height, which
+        // is what keeps a 4K export matching the on-screen proportions.
+        private static WatermarkPlan? BuildPlan(WatermarkRender wm, int width, int height)
+        {
+            using var dummy = new Bitmap(1, 1);
+            using var g = Graphics.FromImage(dummy);
 
-            if (!string.IsNullOrEmpty(wm.SubText))
-                DrawOutlinedString(g, wm.SubText, fontSub, new PointF(subX, subY), fill, outline, subStroke);
+            return WatermarkLayout.Compute(
+                wm, width, height,
+                WatermarkLayout.ScaleForImage(height),
+                WatermarkLayout.HaloForInk(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B),
+                (text, fontPx) =>
+                {
+                    using var f = MakeGdiFont(fontPx);
+                    var sz = g.MeasureString(text ?? string.Empty, f);
+                    return (sz.Width, sz.Height);
+                });
+        }
+
+        private static Font MakeGdiFont(float fontPx)
+            => new Font("Arial", fontPx, FontStyle.Bold, GraphicsUnit.Pixel);
+
+        private static Color ToGdi(RgbaDef c) => Color.FromArgb(c.A, c.R, c.G, c.B);
+
+        private static void DrawPlanLine(
+            Graphics g, WatermarkLine? line, RgbaDef fill, RgbaDef halo, int shadow)
+        {
+            if (line == null || string.IsNullOrEmpty(line.Text)) return;
+
+            using var font = MakeGdiFont(line.FontPx);
+            using var shadowBrush = new SolidBrush(ToGdi(halo));
+            using var fillBrush = new SolidBrush(ToGdi(fill));
+
+            // GDI+ DrawString positions at the top-left of the glyph box, which
+            // is exactly what the plan's X/Y name — no baseline shift needed.
+            g.DrawString(line.Text, font, shadowBrush, line.X + shadow, line.Y + shadow);
+            g.DrawString(line.Text, font, fillBrush, line.X, line.Y);
         }
 
         /// <summary>Measure the on-image bounding rectangle the resolved
@@ -257,28 +207,35 @@ namespace FracturingFog.Imaging
         {
             if (wm == null) return Rectangle.Empty;
 
-            int fontSize = poster ? System.Math.Max(width, height) / 140 : 16;
-            int subFontSize = System.Math.Max(1, fontSize / 2);
-            int edgePad = poster ? System.Math.Min(width, height) / 150 : 12;
+            var plan = BuildPlan(wm, width, height);
+            if (plan == null) return Rectangle.Empty;
 
-            using var fontMain = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var fontSub  = new Font("Segoe UI", subFontSize, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var dummy = new Bitmap(1, 1);
-            using var g = Graphics.FromImage(dummy);
+            // Union of whatever the plan actually places, so the box tracks the
+            // draw instead of re-deriving bounds that can disagree with it.
+            int left = width, top = height, right = 0, bottom = 0;
+            foreach (var line in new[] { plan.Top, plan.Sub })
+            {
+                if (line == null || string.IsNullOrEmpty(line.Text)) continue;
+                left = System.Math.Min(left, line.X);
+                top = System.Math.Min(top, line.Y);
+                right = System.Math.Max(right, line.X + line.Width);
+                bottom = System.Math.Max(bottom, line.Y + line.Height);
+            }
+            if (plan.Background is { } bg)
+            {
+                left = System.Math.Min(left, bg.X);
+                top = System.Math.Min(top, bg.Y);
+                right = System.Math.Max(right, bg.X + bg.W);
+                bottom = System.Math.Max(bottom, bg.Y + bg.H);
+            }
+            if (right <= left || bottom <= top) return Rectangle.Empty;
 
-            int topW = string.IsNullOrEmpty(wm.TopText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.TopText, fontMain).Width);
-            int topH = string.IsNullOrEmpty(wm.TopText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.TopText, fontMain).Height);
-            int subW = string.IsNullOrEmpty(wm.SubText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.SubText, fontSub).Width);
-            int subH = string.IsNullOrEmpty(wm.SubText) ? 0 : (int)System.Math.Ceiling(g.MeasureString(wm.SubText, fontSub).Height);
-
-            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
-                wm, width, height, topW, topH, subW, subH, edgePad);
-
-            const int pad = 8;
-            int x0 = System.Math.Max(0, bx - pad);
-            int y0 = System.Math.Max(0, by - pad);
-            int x1 = System.Math.Min(width, bx + bw + pad);
-            int y1 = System.Math.Min(height, by + bh + pad);
+            // Pad for the shadow offset + AA fringe.
+            int pad = plan.ShadowOffset + 8;
+            int x0 = System.Math.Max(0, left - pad);
+            int y0 = System.Math.Max(0, top - pad);
+            int x1 = System.Math.Min(width, right + pad);
+            int y1 = System.Math.Min(height, bottom + pad);
             return new Rectangle(x0, y0, x1 - x0, y1 - y0);
         }
 

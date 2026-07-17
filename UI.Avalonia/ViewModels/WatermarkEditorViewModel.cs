@@ -197,7 +197,17 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
     public bool LivePreview
     {
         get => _livePreview;
-        set => this.RaiseAndSetIfChanged(ref _livePreview, value);
+        set
+        {
+            bool changed = _livePreview != value;
+            this.RaiseAndSetIfChanged(ref _livePreview, value);
+            if (!changed) return;
+            // Turning live preview on should show the current buffer straight
+            // away; turning it off should drop the preview rather than leave
+            // the last pushed edit stuck on the overlay.
+            if (value) PushPreview();
+            else PreviewCancelled?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private string _titleText = "Watermark Editor";
@@ -220,6 +230,10 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
     /// MainViewModel calls _renderHost.RepaintWithPostFx which is itself
     /// throttled by the renderer's debounce).</summary>
     public event EventHandler<WatermarkDef>? PreviewRequested;
+
+    /// <summary>Fires when the user turns Live Preview off — the host drops
+    /// the draft so the overlay reverts to the saved-library chain.</summary>
+    public event EventHandler? PreviewCancelled;
 
     /// <summary>Fires after a successful Save — host refreshes any combos
     /// (FloatingMenu watermark dropdown, Poster dialog dropdown, ServerAdmin).</summary>
