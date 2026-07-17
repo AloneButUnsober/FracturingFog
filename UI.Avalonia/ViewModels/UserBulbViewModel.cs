@@ -725,12 +725,17 @@ public sealed class UserBulbViewModel : ViewModelBase
         var args = new OpenFileEventArgs("Import .fbulb", "FracturingFog bulb|*.fbulb;*.json|All files|*.*");
         OpenFilePromptRequested?.Invoke(this, args);
         if (string.IsNullOrEmpty(args.Path)) return;
-        var snapshot = UserBulbStore.Instance.ImportSnapshot(args.Path!);
-        if (snapshot?.Entry is null)
+        var snapshots = UserBulbStore.Instance.ImportSnapshots(args.Path!);
+        if (snapshots.Count == 0)
         {
             MessageRequested?.Invoke(this, "Import failed (invalid file).");
             return;
         }
+
+        // A multi-entry file lands every equation in the store; the last one
+        // wins the editor so the user sees something rendered rather than an
+        // empty selection.
+        var snapshot = snapshots[snapshots.Count - 1];
 
         // Apply snapshot knobs to _params before loading the entry — the
         // load path triggers a recompile and we want the imported axis /
@@ -738,8 +743,11 @@ public sealed class UserBulbViewModel : ViewModelBase
         ApplySnapshotToParams(snapshot);
         SyncMirrorFromParams();
 
-        RefreshSavedList(snapshot.Entry.Name);
+        RefreshSavedList(snapshot.Entry!.Name);
         LoadEquationByName(snapshot.Entry.Name);
+
+        if (snapshots.Count > 1)
+            MessageRequested?.Invoke(this, $"{snapshots.Count} equations imported.");
     }
 
     private void OnExport()

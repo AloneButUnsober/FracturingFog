@@ -1877,6 +1877,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.HelpRequested += (_, _) => ShowHelp();
             vm.CloseRequested += (_, _) => IsWatermarkEditorVisible = false;
             vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
+            vm.ImportRequested += (_, _) => AssetJsonImportRequested?.Invoke(this,
+                new AssetJsonImportEventArgs(
+                    FracturingFog.Abstractions.Assets.AssetKind.Watermark, "Import Watermarks"));
             WatermarkEditor = vm;
         }
         IsWatermarkEditorVisible = true;
@@ -1903,6 +1906,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             };
             vm.CloseRequested += (_, _) => IsAnimationEditorVisible = false;
             vm.MessageRequested += (_, args) => MessageRequested?.Invoke(this, args);
+            vm.ImportRequested += (_, _) => AssetJsonImportRequested?.Invoke(this,
+                new AssetJsonImportEventArgs(
+                    FracturingFog.Abstractions.Assets.AssetKind.Animation, "Import Animations"));
             AnimationEditor = vm;
         }
         IsAnimationEditorVisible = true;
@@ -1926,6 +1932,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.StopPreviewRequested  += (_, _) => StopScenePreview();
             vm.CloseRequested        += (_, _) => IsSceneEditorVisible = false;
             vm.MessageRequested      += (_, args) => MessageRequested?.Invoke(this, args);
+            vm.ImportRequested       += (_, _) => AssetJsonImportRequested?.Invoke(this,
+                new AssetJsonImportEventArgs(
+                    FracturingFog.Abstractions.Assets.AssetKind.Scene, "Import Scenes"));
             SceneEditor = vm;
         }
         if (!string.IsNullOrEmpty(initialSceneName)) SceneEditor.SelectedScene = initialSceneName;
@@ -2256,6 +2265,73 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// manager isn't open.</summary>
     public AssetImportSummary ImportAssetBundle(byte[] zipBytes, bool overwrite)
         => AssetManager?.ImportBundle(zipBytes, overwrite) ?? new AssetImportSummary();
+
+    /// <summary>Raised when an editor wants to import assets of its own kind
+    /// from a JSON file. The host shows an open picker + overwrite prompt,
+    /// reads the text, and calls <see cref="ImportAssetsFromJson"/> back with
+    /// the result.</summary>
+    public event EventHandler<AssetJsonImportEventArgs>? AssetJsonImportRequested;
+
+    /// <summary>Host entry point for a single-kind JSON import (the per-editor
+    /// Import buttons). Routes every entry in the file through the kind's own
+    /// <see cref="FracturingFog.Abstractions.Assets.IAssetSource"/> — the same
+    /// importer the Asset Manager's bundle uses, so a file exported from either
+    /// place lands identically — then refreshes the kind's editor list.
+    ///
+    /// Unlike <see cref="ImportAssetBundle"/> this needs no open Asset Manager:
+    /// the shell holds the source roster directly.</summary>
+    public AssetImportSummary ImportAssetsFromJson(
+        FracturingFog.Abstractions.Assets.AssetKind kind, string json, bool overwrite)
+    {
+        var summary = new AssetImportSummary();
+
+        FracturingFog.Abstractions.Assets.IAssetSource? source = null;
+        foreach (var s in _assetSources)
+            if (s.Kind == kind) { source = s; break; }
+        if (source == null)
+        {
+            summary.Unreadable = true;
+            return summary;
+        }
+
+        var entries = FracturingFog.Abstractions.Assets.AssetJsonFile.SplitEntries(json);
+        if (entries.Count == 0)
+        {
+            // Empty vs malformed is indistinguishable after the split; both mean
+            // "nothing usable in this file", which Describe() reports as such.
+            summary.Unreadable = true;
+            return summary;
+        }
+
+        foreach (var entry in entries)
+            summary.Tally(source.ImportJson(entry, overwrite).Status);
+
+        RefreshEditorListFor(kind);
+        RefreshAssetManagerIfVisible();
+        return summary;
+    }
+
+    // Post-import list refresh for the editor that raised the import. Only the
+    // shell-owned editors with an Import button are wired; the host-owned source
+    // editors (UserEquation / Sandbox / UserBulb) import against their store
+    // singletons directly and refresh themselves.
+    private void RefreshEditorListFor(FracturingFog.Abstractions.Assets.AssetKind kind)
+    {
+        switch (kind)
+        {
+            case FracturingFog.Abstractions.Assets.AssetKind.Scene:
+                SceneEditor?.RefreshSceneNames();
+                break;
+            case FracturingFog.Abstractions.Assets.AssetKind.Animation:
+                AnimationEditor?.RefreshAnimationNames();
+                break;
+            case FracturingFog.Abstractions.Assets.AssetKind.Watermark:
+                WatermarkEditor?.RefreshWatermarkNames();
+                // Imported watermarks are selectable from the main menu too.
+                FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
+                break;
+        }
+    }
 
     private void ShowFFClient()
     {

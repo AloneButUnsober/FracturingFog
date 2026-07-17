@@ -916,8 +916,21 @@ namespace FracturingFog.Hosting
             try
             {
                 string text = File.ReadAllText(path);
-                imported = JsonSerializer.Deserialize<List<ColorThemeData>>(
-                    text, UserColorThemeLibrary.BuildJsonOptions());
+                // Root shape decides: '[' = the library form ExportUserThemesToFile
+                // writes, anything else = one bare theme object (what the Asset
+                // Manager's per-row export produces). Accepting both means a
+                // single-theme export round-trips through this importer.
+                if (text.TrimStart().StartsWith("["))
+                {
+                    imported = JsonSerializer.Deserialize<List<ColorThemeData>>(
+                        text, UserColorThemeLibrary.BuildJsonOptions());
+                }
+                else
+                {
+                    var one = JsonSerializer.Deserialize<ColorThemeData>(
+                        text, UserColorThemeLibrary.BuildJsonOptions());
+                    imported = one == null ? null : new List<ColorThemeData> { one };
+                }
             }
             catch (Exception ex)
             {

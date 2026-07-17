@@ -78,6 +78,8 @@
             <Button Classes="action stop"    Content="Stop"      Command="{Binding StopPreviewCommand}" />
             <Button Classes="action save"    Content="Save"      Command="{Binding SaveCommand}" />
             <Button Classes="action export"  Content="⤓ Export…" Command="{Binding ExportCommand}" />
+            <Button Classes="action new"     Content="Import…"   Command="{Binding ImportCommand}"
+                    ToolTip.Tip="Import scenes from JSON (one scene or many)" />
             <Button Classes="action danger"  Content="Delete"    Command="{Binding DeleteCommand}" />
         </StackPanel>
 

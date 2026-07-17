@@ -69,6 +69,8 @@
             <Button Classes="action preview" Content="Preview" Command="{Binding PreviewCommand}" />
             <Button Classes="action stop"    Content="Stop"    Command="{Binding StopPreviewCommand}" />
             <Button Classes="action save"    Content="Save"    Command="{Binding SaveCommand}" />
+            <Button Classes="action new"     Content="Import…" Command="{Binding ImportCommand}"
+                    ToolTip.Tip="Import animations from JSON (one animation or many)" />
             <Button Classes="action danger"  Content="Delete"  Command="{Binding DeleteCommand}" />
         </StackPanel>
 

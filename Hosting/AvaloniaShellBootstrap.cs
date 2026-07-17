@@ -1875,6 +1875,44 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Per-editor JSON import (Scenes / Animations / Watermarks). Same
+            // shape as the bundle import above — picker, one up-front overwrite
+            // prompt, then the shell routes every entry through the kind's own
+            // asset source — but scoped to the editor's single kind.
+            shell.AssetJsonImportRequested += (_, args) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                            args.Title,
+                            "JSON File (*.json)|*.json|All files (*.*)|*");
+                        if (string.IsNullOrEmpty(path)) return;
+
+                        var choice = await AvaloniaDialogs.ShowMessageAsync(
+                            args.Title,
+                            "Overwrite assets that already exist?\n\n" +
+                            "Yes — replace matching saved assets with the file's.\n" +
+                            "No — keep your existing assets and skip those names.",
+                            expectsConfirmation: true);
+                        bool overwrite = choice == AvaloniaDialogs.MessageResult.Yes;
+
+                        string json = await System.IO.File.ReadAllTextAsync(path);
+                        var summary = shell.ImportAssetsFromJson(args.Kind, json, overwrite);
+
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            args.Title, summary.Describe(), expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset JSON import failed: {ex.Message}");
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            args.Title, "Import failed:\n" + ex.Message, expectsConfirmation: false);
+                    }
+                });
+            };
+
             // Recording finished — the engine has finalised the temp MP4 and/or
             // PNG sequence. On success, prompt for save destinations; on cancel
             // or fault, discard the temp artefacts. Fires on a background thread
@@ -1933,6 +1971,9 @@ namespace FracturingFog.Hosting
             vm.ConfirmOverwriteRequested += name => ConfirmYesNo(
                 $"A saved equation named \"{name}\" already exists.\n\nOverwrite it?",
                 "Overwrite Equation");
+            vm.OpenFilePromptRequested += () =>
+                PickOpenSync("Import User Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
+            vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
             vm.HotLoadRequested += (eq, baseName) =>
             {
                 try

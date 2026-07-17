@@ -276,8 +276,21 @@ namespace FracturingFog.Hosting
                             "Import Slideshow Preset",
                             "JSON File (*.json)|*.json|All Files (*.*)|*.*");
                         if (string.IsNullOrEmpty(path)) return;
-                        var name = global::FracturingFog.Models.SlideshowConfigLibrary.Import(file, path);
-                        vm.ApplyImportedConfig(name);
+                        var names = global::FracturingFog.Models.SlideshowConfigLibrary.Import(file, path);
+                        if (names.Count == 0)
+                        {
+                            await ShowMessageAsync(
+                                "Import Slideshow Preset",
+                                "The file contains no slideshow presets.",
+                                expectsConfirmation: false);
+                            return;
+                        }
+                        vm.ApplyImportedConfig(names[names.Count - 1]);
+                        if (names.Count > 1)
+                            await ShowMessageAsync(
+                                "Import Slideshow Preset",
+                                $"{names.Count} presets imported.",
+                                expectsConfirmation: false);
                     }
                     catch (Exception ex)
                     {
