@@ -67,8 +67,10 @@
                       Margin="0,0,12,0" />
             <Button Classes="action new"    Content="New"    Command="{Binding NewBlankCommand}" />
             <Button Classes="action revert" Content="Revert" Command="{Binding RevertCommand}" />
-            <Button Classes="action save"   Content="Save"   Command="{Binding SaveCommand}" />
-            <Button Classes="action danger" Content="Delete" Command="{Binding DeleteCommand}" />
+            <Button Classes="action save"   Content="Save"    Command="{Binding SaveCommand}" />
+            <Button Classes="action new"    Content="Import…" Command="{Binding ImportCommand}"
+                    ToolTip.Tip="Import watermarks from JSON (one watermark or many)" />
+            <Button Classes="action danger" Content="Delete"  Command="{Binding DeleteCommand}" />
         </StackPanel>
 
         <!-- Content -->

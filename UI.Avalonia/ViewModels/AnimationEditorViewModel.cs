@@ -166,6 +166,8 @@ public sealed class AnimationEditorViewModel : ViewModelBase
         DeleteCommand      = ReactiveCommand.CreateFromTask(DeleteAsync);
         PreviewCommand     = ReactiveCommand.Create(PushPreview);
         StopPreviewCommand = ReactiveCommand.Create(StopPreview);
+        ImportCommand      = ReactiveCommand.Create(() =>
+            ImportRequested?.Invoke(this, EventArgs.Empty));
         CloseCommand       = ReactiveCommand.Create(() =>
         {
             StopPreview();
@@ -290,6 +292,7 @@ public sealed class AnimationEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> PreviewCommand { get; }
     public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
     // ── Events for the shell ──────────────────────────────────────────────
@@ -303,6 +306,12 @@ public sealed class AnimationEditorViewModel : ViewModelBase
 
     public event EventHandler? CloseRequested;
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
+
+    /// <summary>Import animations from a JSON file (one animation object, or an
+    /// array of them). The shell owns the import — AnimationLibrary lives in
+    /// Engine — and calls <see cref="RefreshAnimationNames"/> back when it
+    /// lands.</summary>
+    public event EventHandler? ImportRequested;
 
     // ── Build / load ──────────────────────────────────────────────────────
 
@@ -489,6 +498,20 @@ public sealed class AnimationEditorViewModel : ViewModelBase
             $"Delete from disk is not yet exposed in the UI. Remove \"{deleted}\" by editing animations.json directly.",
             MessageSeverity.Info));
         AnimationDeletedFromLibrary?.Invoke(this, deleted);
+    }
+
+    /// <summary>Re-pull the saved-animation list from the library. Called by the
+    /// shell after an import adds entries behind the editor's back; the current
+    /// edit buffer and selection are left alone.</summary>
+    public void RefreshAnimationNames()
+    {
+        string? selected = SelectedAnimation;
+        _suppressChange = true;
+        AnimationNames.Clear();
+        foreach (var n in _service.EnumerateAnimationNames()) AnimationNames.Add(n);
+        if (!string.IsNullOrEmpty(selected) && AnimationNames.Contains(selected))
+            SelectedAnimation = selected;
+        _suppressChange = false;
     }
 
     private Task RaiseMessageAsync(ThemeMessageEventArgs args)

@@ -16,6 +16,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FracturingFog.Abstractions;
+using FracturingFog.Abstractions.Assets;
 
 namespace FracturingFog.Models
 {
@@ -470,25 +471,44 @@ namespace FracturingFog.Models
         }
 
         /// <summary>
-        /// Read a .fbulb file. Recognises both the Wave 4.13 snapshot envelope
-        /// (Version + Entry + nullable knobs) and pre-4.13 bare-entry JSON
-        /// (legacy format produced by <see cref="ExportEntry"/>) — the latter
-        /// returns a snapshot with only Entry populated. Renames the entry on
-        /// name collision before adding to the store. Returns null on parse
-        /// failure or missing entry name.
+        /// Read a .fbulb file and import its first entry. Convenience wrapper
+        /// over <see cref="ImportSnapshots"/> for callers that only care about
+        /// one entry; note a multi-entry file still imports in full. Returns
+        /// null on parse failure or when no element carried an entry name.
         /// </summary>
         public UserBulbSnapshot? ImportSnapshot(string filePath)
+        {
+            var all = ImportSnapshots(filePath);
+            return all.Count > 0 ? all[0] : null;
+        }
+
+        /// <summary>
+        /// Read a .fbulb file and import every entry it holds. Recognises the
+        /// Wave 4.13 snapshot envelope (Version + Entry + nullable knobs),
+        /// pre-4.13 bare-entry JSON (legacy format produced by
+        /// <see cref="ExportEntry"/>) — the latter yields a snapshot with only
+        /// Entry populated — and a JSON array of either form. Each entry is
+        /// renamed on name collision before being added, and entries merge in
+        /// file order. Returns the imported snapshots, empty on parse failure
+        /// or when no element carried an entry name.
+        /// </summary>
+        public IReadOnlyList<UserBulbSnapshot> ImportSnapshots(string filePath)
         {
             try
             {
                 string json = File.ReadAllText(filePath);
-                var snapshot = TryParseSnapshot(json);
-                if (snapshot?.Entry is null || string.IsNullOrWhiteSpace(snapshot.Entry.Name))
-                    return null;
-                MergeImportedEntry(snapshot.Entry);
-                return snapshot;
+                var imported = new List<UserBulbSnapshot>();
+                foreach (var element in AssetJsonFile.SplitEntries(json))
+                {
+                    var snapshot = TryParseSnapshot(element);
+                    if (snapshot?.Entry is null || string.IsNullOrWhiteSpace(snapshot.Entry.Name))
+                        continue;
+                    MergeImportedEntry(snapshot.Entry);
+                    imported.Add(snapshot);
+                }
+                return imported;
             }
-            catch { return null; }
+            catch { return Array.Empty<UserBulbSnapshot>(); }
         }
 
         private static UserBulbSnapshot? TryParseSnapshot(string json)

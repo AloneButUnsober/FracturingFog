@@ -380,6 +380,8 @@ public sealed class SceneEditorViewModel : ViewModelBase
         AddShotCommand     = ReactiveCommand.Create(AddShot);
         PlayCommand        = ReactiveCommand.Create(Play);
         ExportCommand      = ReactiveCommand.CreateFromTask(ExportAsync);
+        ImportCommand      = ReactiveCommand.Create(() =>
+            ImportRequested?.Invoke(this, EventArgs.Empty));
         StopPreviewCommand = ReactiveCommand.Create(StopPreview);
         CloseCommand       = ReactiveCommand.Create(() =>
         {
@@ -517,6 +519,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> AddShotCommand { get; }
     public ReactiveCommand<Unit, Unit> PlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportCommand { get; }
     public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
@@ -540,6 +543,11 @@ public sealed class SceneEditorViewModel : ViewModelBase
     /// host picks an output path and runs the Engine's frame-locked
     /// SceneVideoRenderer (motion blur + composited transitions).</summary>
     public event EventHandler<SceneExportEventArgs>? ExportSceneRequested;
+
+    /// <summary>Import scenes from a JSON file (one scene object, or an array
+    /// of them). The shell owns the import — SceneLibrary lives in Engine — and
+    /// calls <see cref="RefreshSceneNames"/> back when it lands.</summary>
+    public event EventHandler? ImportRequested;
 
     public event EventHandler? StopPreviewRequested;
 
@@ -814,6 +822,20 @@ public sealed class SceneEditorViewModel : ViewModelBase
         NewBlank();
         await RaiseMessageAsync(new ThemeMessageEventArgs(
             "Delete Scene", $"\"{deleted}\" deleted.", MessageSeverity.Info));
+    }
+
+    /// <summary>Re-pull the saved-scene list from the library. Called by the
+    /// shell after an import adds entries behind the editor's back; the current
+    /// edit buffer and selection are left alone.</summary>
+    public void RefreshSceneNames()
+    {
+        string? selected = SelectedScene;
+        _suppressChange = true;
+        SceneNames.Clear();
+        foreach (var n in _service.EnumerateSceneNames()) SceneNames.Add(n);
+        if (!string.IsNullOrEmpty(selected) && SceneNames.Contains(selected))
+            SelectedScene = selected;
+        _suppressChange = false;
     }
 
     private Task RaiseMessageAsync(ThemeMessageEventArgs args)
