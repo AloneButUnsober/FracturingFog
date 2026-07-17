@@ -796,16 +796,27 @@ namespace FracturingFog.Rendering
         /// <summary>
         /// Snapshot the current view + colour state into a
         /// <see cref="PosterRequest"/> for an offscreen high-resolution render.
-        /// Used by the Avalonia shell's Poster command (the shared
+        /// Used by the Avalonia shell's Poster + Wallpaper commands (the shared
         /// <see cref="PosterRenderer"/> does the actual calc + save). The full
         /// quad-precision centre is copied so a Mandelbrot deep zoom survives
         /// the re-render at poster resolution.
+        ///
+        /// The watermark top-line and program/version sub-line are composed
+        /// here, from the same RegionName / ThemeName / ProgramName /
+        /// ProgramVersion the live overlay reads. Callers used to pass those
+        /// strings in, and each one spelled them out slightly differently —
+        /// that is how Wallpaper ended up with a "Fracturing Fog" region
+        /// fallback and a version-less sub-line that no other surface had.
         /// </summary>
         public PosterRequest CreatePosterRequest(
             int width, int height, bool rotate,
-            string path, FracturingFog.Imaging.ImageFileFormat format, string watermark, string subText,
+            string path, FracturingFog.Imaging.ImageFileFormat format,
             FracturingFog.Models.WatermarkDef? customWatermark = null)
         {
+            string watermark = FracturingFog.Imaging.WatermarkResolver.ComposeDefaultTopText(
+                RegionName, ThemeName);
+            string subText = FracturingFog.Imaging.WatermarkResolver.BuildSubText(
+                ProgramName ?? "Fracturing Fog", ProgramVersion ?? string.Empty);
             var s = ViewState;
             int effIters = _calculator.MaxIterations > 0
                 ? _calculator.MaxIterations

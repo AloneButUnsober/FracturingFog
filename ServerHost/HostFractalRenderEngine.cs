@@ -409,8 +409,14 @@ public sealed class HostFractalRenderEngine : IFractalRenderEngine
             Rotate = posterMode && req.PosterPortrait,
             Path = outPath,
             Format = FracturingFog.Imaging.ImageFileFormat.Png,
-            Watermark = req.SuppressDecorations ? "" : (region?.Name ?? ""),
-            SubText = req.SuppressDecorations ? "" : "Fracturing Fog server render",
+            // Composed through the shared resolver so server output carries the
+            // same "Region - Theme" top line and versioned program sub-line as
+            // every other surface. This used to be the region name alone over a
+            // hand-written "Fracturing Fog server render" with no version.
+            Watermark = req.SuppressDecorations
+                ? ""
+                : WatermarkResolver.ComposeDefaultTopText(region?.Name, req.ThemeName),
+            SubText = req.SuppressDecorations ? "" : WatermarkResolver.BuildDefaultSubText(),
             Dpi = dpiStamp,
             CustomWatermark = req.SuppressDecorations ? null : ResolveServerWatermark(req, region, log),
             // D-6b — sub-rect geometry + seeded orbit forwarded to the

@@ -85,8 +85,13 @@ namespace FracturingFog.Batch
                 Rotate = false,
                 Path = outPath,
                 Format = format,
-                Watermark = regionDispName ?? "",
-                SubText = "Fracturing Fog batch render",
+                // Pre-composed exactly like the interactive poster path
+                // (FractalRenderHost.CreatePosterRequest): "Region - Theme"
+                // over the mandatory program/version line. Batch printed its
+                // own "batch render" label here before, which is the kind of
+                // per-surface special-casing this consolidation removes.
+                Watermark = WatermarkResolver.ComposeDefaultTopText(regionDispName, opts.ThemeName),
+                SubText = WatermarkResolver.BuildDefaultSubText(),
                 Brightness = pfBrightness,
                 Contrast = pfContrast,
                 HistogramEq = pfAdaptive,
@@ -298,7 +303,7 @@ namespace FracturingFog.Batch
                     if (opts.Watermark)
                         ApplyWatermarkInPlace(buffer, outW, outH,
                             regionDispName ?? frType.ToString(),
-                            "Fracturing Fog batch render");
+                            opts.ThemeName);
 
                     if (mp4 != null)
                     {
@@ -694,7 +699,7 @@ namespace FracturingFog.Batch
 
                     ApplyBrightnessContrast(frame, n, pfBrightness, pfContrast);
                     if (watermark)
-                        ApplyWatermarkInPlace(frame, outW, outH, region.Name, $"Theme: {legThemeNames[seg]}");
+                        ApplyWatermarkInPlace(frame, outW, outH, region.Name, legThemeNames[seg]);
 
                     // Region boundary cross-fade (between different regions /
                     // zoom sequences) stays a frozen fade — the previous leg has
@@ -720,60 +725,45 @@ namespace FracturingFog.Batch
         }
 
         // In-place watermark composite for batch video + slideshow buffers.
-        // Wraps the BGRA buffer in a System.Drawing.Bitmap, calls the shared
-        // ImageExport.AddWaterMark, and copies the painted pixels back into
-        // the buffer. Windows-only (System.Drawing); the batch host is
-        // already Windows-only.
-        private static unsafe void ApplyWatermarkInPlace(
-            uint[] pixels, int w, int h, string text, string subText)
+        //
+        // Batch used to hand-roll its own content ("Region" + "Theme: X",
+        // hardcoded white) and its own layout via the legacy GDI+ overload,
+        // which is how it drifted out of step with every other surface. It now
+        // goes through WatermarkResolver for content and WatermarkPainterSkia
+        // for pixels, exactly like the live overlay and the save paths — and
+        // paints straight onto the BGRA buffer, so the System.Drawing detour
+        // (and the Windows-only constraint it carried) is gone.
+        private static void ApplyWatermarkInPlace(
+            uint[] pixels, int w, int h, string? regionName, string? themeName)
         {
-            if (string.IsNullOrEmpty(text)) return;
-            using var bmp = new System.Drawing.Bitmap(w, h, PixelFormat.Format32bppArgb);
-            var wd = bmp.LockBits(
-                new System.Drawing.Rectangle(0, 0, w, h),
-                ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                fixed (uint* src = pixels)
-                {
-                    if (wd.Stride == w * 4)
-                        Buffer.MemoryCopy(src, (void*)wd.Scan0, (long)w * h * 4, (long)w * h * 4);
-                    else
-                    {
-                        byte* dst = (byte*)wd.Scan0;
-                        for (int row = 0; row < h; row++)
-                            Buffer.MemoryCopy((byte*)src + (long)row * w * 4,
-                                              dst + (long)row * wd.Stride,
-                                              (long)w * 4, (long)w * 4);
-                    }
-                }
-            }
-            finally { bmp.UnlockBits(wd); }
+            var wm = BuildBatchWatermark(regionName, themeName, pixels, w, h);
+            if (wm == null) return;
+            WatermarkPainterSkia.PaintOntoBgra(pixels, w, h, wm);
+        }
 
-            using (var g = System.Drawing.Graphics.FromImage(bmp))
-                ImageExportGdi.AddWaterMark(
-                    g, text, w, h, System.Drawing.Color.White, subText, poster: false);
+        // Default-path watermark for headless renders: "Region - Theme" over
+        // the mandatory program/version line, auto-contrasted against the
+        // pixels the block will sit on. Batch has no custom-watermark CLI
+        // surface, so the resolver's custom branches are unreachable here —
+        // it is still the resolver that decides, not this call site.
+        private static WatermarkRender? BuildBatchWatermark(
+            string? regionName, string? themeName, uint[] pixels, int w, int h)
+        {
+            if (string.IsNullOrEmpty(regionName) && string.IsNullOrEmpty(themeName)) return null;
 
-            var rd = bmp.LockBits(
-                new System.Drawing.Rectangle(0, 0, w, h),
-                ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                fixed (uint* dst = pixels)
-                {
-                    if (rd.Stride == w * 4)
-                        Buffer.MemoryCopy((void*)rd.Scan0, dst, (long)w * h * 4, (long)w * h * 4);
-                    else
-                    {
-                        byte* src = (byte*)rd.Scan0;
-                        for (int row = 0; row < h; row++)
-                            Buffer.MemoryCopy(src + (long)row * rd.Stride,
-                                              (byte*)dst + (long)row * w * 4,
-                                              (long)w * 4, (long)w * 4);
-                    }
-                }
-            }
-            finally { bmp.UnlockBits(rd); }
+            var auto = ImageExport.ComputeContrastColor(
+                System.Drawing.Color.White, watermark: true, pixels: pixels, imgW: w, imgH: h);
+
+            return WatermarkResolver.Resolve(
+                activeCustom: null,
+                regionEmbedded: null,
+                overrideRegionWatermark: false,
+                useCustomWatermark: false,
+                regionName: regionName ?? string.Empty,
+                themeName: themeName ?? string.Empty,
+                programName: WatermarkResolver.DefaultProgramName,
+                programVersion: WatermarkResolver.DetectProgramVersion(),
+                defaultTextColor: new RgbDef(auto.R, auto.G, auto.B));
         }
 
         // ── Slideshow ─────────────────────────────────────────────────────────
@@ -1009,7 +999,7 @@ namespace FracturingFog.Batch
 
                     if (opts.Watermark)
                         ApplyWatermarkInPlace(currFrame, outW, outH,
-                            region.Name, $"Theme: {themeChosen}");
+                            region.Name, themeChosen);
 
                     Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / {themeChosen} … ");
 

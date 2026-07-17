@@ -772,6 +772,28 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private FracturingFog.Models.WatermarkDef? _draftWatermark;
+    /// <summary>Unsaved watermark currently being edited in the Watermark
+    /// Editor. Outranks every other source while the editor is open, and is
+    /// deliberately *not* routed through UserWatermarkStore: a draft has not
+    /// been saved yet, so a store lookup can never see it. Set to null when
+    /// the editor closes to fall back to the normal chain.</summary>
+    public FracturingFog.Models.WatermarkDef? DraftWatermark
+    {
+        get => _draftWatermark;
+        set
+        {
+            _draftWatermark = value;
+            this.RaisePropertyChanged(nameof(DraftWatermark));
+            // A draft is only visible if the overlay is on at all. Same
+            // intent-signal reasoning as the UseCustomWatermark setter: the
+            // user is actively editing a watermark, so show it.
+            if (value != null && !_showWatermark) ShowWatermark = true;
+            PushActiveWatermark();
+            if (_showWatermark) _renderHost.RepaintWithPostFx();
+        }
+    }
+
     /// <summary>The library entry pointed at by SelectedCustomWatermarkName,
     /// resolved fresh each call so the editor's Save round-trip is visible.
     /// Null when the name is unset or no longer exists.</summary>
@@ -782,6 +804,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// hands it to FractalOverlayCompositor + ImageExport on the next frame.</summary>
     public void PushActiveWatermark()
     {
+        if (_draftWatermark != null)
+        {
+            _renderHost.ActiveWatermark = _draftWatermark;
+            return;
+        }
+
         var custom = ActiveCustomWatermark;
         FracturingFog.Models.WatermarkDef? resolved =
             (_overrideRegionWatermark && custom != null) ? custom :

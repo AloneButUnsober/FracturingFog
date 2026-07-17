@@ -49,7 +49,10 @@ namespace FracturingFog.Imaging
         }
 
         /// <summary>Save BGRA pixels then composite a resolved watermark on
-        /// top via SkiaSharp.</summary>
+        /// top via SkiaSharp. <paramref name="poster"/> no longer selects a
+        /// layout — WatermarkPainterSkia scales the watermark from the image
+        /// dimensions, so posters, wallpapers and screenshots all agree with
+        /// the on-screen overlay. The parameter is retained for callers.</summary>
         public static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFileFormat format,
             WatermarkRender? wm, bool poster = false, float dpi = 0f)
@@ -139,22 +142,18 @@ namespace FracturingFog.Imaging
             string path, ImageFileFormat format,
             string topText, string subText, Color fontColor, bool poster)
         {
-            using var existing = SKBitmap.Decode(path);
-            if (existing == null) return;
-            int width = existing.Width;
-            int height = existing.Height;
-
-            using var surface = SKSurface.Create(existing.Info);
-            var canvas = surface.Canvas;
-            canvas.DrawBitmap(existing, 0, 0);
-
-            DrawWatermarkSkia(canvas, topText, subText, width, height, fontColor, poster);
-
-            using var snap = surface.Snapshot();
-            SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
-            using var data = snap.Encode(skFmt, 100);
-            using var fs = File.OpenWrite(path);
-            data.SaveTo(fs);
+            // The string overload has no placement/justify of its own — it is
+            // the default bottom-right region/theme watermark by definition.
+            var wm = new WatermarkRender
+            {
+                TopText = topText ?? string.Empty,
+                SubText = subText ?? string.Empty,
+                TextColor = new RgbDef(fontColor.R, fontColor.G, fontColor.B),
+                Placement = WatermarkPlacement.Bottom,
+                Justify = WatermarkJustify.Right,
+                IsCustom = false,
+            };
+            CompositeWatermarkRenderSkia(path, format, wm, poster);
         }
 
         private static void CompositeWatermarkRenderSkia(
@@ -169,83 +168,17 @@ namespace FracturingFog.Imaging
             var canvas = surface.Canvas;
             canvas.DrawBitmap(existing, 0, 0);
 
-            var fill = Color.FromArgb(255, wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-            DrawWatermarkSkia(canvas, wm.TopText, wm.SubText, width, height, fill, poster);
+            // Shared painter: same geometry, fonts, stacking and placement the
+            // live overlay uses, scaled up so a high-res export's watermark
+            // covers the same fraction of the frame as it does on screen.
+            // `poster` no longer selects a layout — size follows the image.
+            WatermarkPainterSkia.Paint(canvas, wm, width, height);
 
             using var snap = surface.Snapshot();
             SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
             using var data = snap.Encode(skFmt, 100);
             using var fs = File.OpenWrite(path);
             data.SaveTo(fs);
-        }
-
-        private static void DrawWatermarkSkia(
-            SKCanvas canvas, string topText, string subText,
-            int width, int height, Color fontColor, bool poster)
-        {
-            int fontSize = poster ? Math.Max(width, height) / 140 : 16;
-            int yOffset = poster ? Math.Min(width, height) / 150 : 12;
-
-            using var typeface = SKTypeface.FromFamilyName("Inter",
-                SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright)
-                ?? SKTypeface.Default;
-            using var fontMain = new SKFont(typeface, fontSize);
-            using var fontSub  = new SKFont(typeface, Math.Max(1, fontSize / 2));
-
-            float lum = (fontColor.R * 0.299f + fontColor.G * 0.587f + fontColor.B * 0.114f) / 255f;
-            var outline = lum < 0.5f
-                ? new SKColor(255, 255, 255, 190)
-                : new SKColor(0, 0, 0, 190);
-            var fill = new SKColor(fontColor.R, fontColor.G, fontColor.B, fontColor.A);
-
-            float mainStroke = poster ? Math.Max(2f, fontSize / 10f) : 2f;
-            float subStroke  = poster ? Math.Max(1.5f, fontSize / 16f) : 1.5f;
-
-            DrawOutlinedSkia(canvas, topText, fontMain, fill, outline, mainStroke,
-                width - MeasureText(topText, fontMain) - 20,
-                height - fontSize - yOffset);
-
-            if (!string.IsNullOrEmpty(subText))
-            {
-                int subFontSize = Math.Max(1, fontSize / 2);
-                DrawOutlinedSkia(canvas, subText, fontSub, fill, outline, subStroke,
-                    width - MeasureText(subText, fontSub) - 55,
-                    height - subFontSize - (poster ? 0 : 2));
-            }
-        }
-
-        private static float MeasureText(string text, SKFont font)
-        {
-            if (string.IsNullOrEmpty(text)) return 0;
-            return font.MeasureText(text);
-        }
-
-        private static void DrawOutlinedSkia(
-            SKCanvas canvas, string text, SKFont font,
-            SKColor fill, SKColor outline, float strokeWidth,
-            float x, float y)
-        {
-            using var stroke = new SKPaint
-            {
-                Color = outline,
-                Style = SKPaintStyle.Stroke,
-                StrokeWidth = strokeWidth,
-                StrokeJoin = SKStrokeJoin.Round,
-                IsAntialias = true,
-            };
-            using var fillPaint = new SKPaint
-            {
-                Color = fill,
-                Style = SKPaintStyle.Fill,
-                IsAntialias = true,
-            };
-            // Skia text baseline is at y; shift down by font ascent so the
-            // coordinate (x, y) names the upper-left corner of the glyph
-            // bounding box (matches GDI+ DrawString semantics the caller expects).
-            var metrics = font.Metrics;
-            float baseline = y - metrics.Ascent;
-            canvas.DrawText(text, x, baseline, font, stroke);
-            canvas.DrawText(text, x, baseline, font, fillPaint);
         }
 
         // ── Contrast picker ───────────────────────────────────────────────
