@@ -74,6 +74,8 @@ namespace FracturingFog.Diagnostics
                 return RunAlphaPosterGate(args);
             if (args.Length > 1 && string.Equals(args[1], "alphascan", StringComparison.OrdinalIgnoreCase))
                 return RunAlphaScan(args);
+            if (args.Length > 1 && string.Equals(args[1], "alphalit", StringComparison.OrdinalIgnoreCase))
+                return RunAlphaLitGate();
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -730,6 +732,89 @@ namespace FracturingFog.Diagnostics
                 ? "RESULT: PASS (PNG-sequence frame kept straight alpha; RGB intact)"
                 : "RESULT: FAIL (alpha dropped or RGB mangled — premultiply regression?)");
             return ok ? 0 : 1;
+        }
+
+        // --colorprobe alphalit: TRUE gate for F10.4 — the 3D lit bases
+        // (GradientPhong3DBase / PbrGradient3DBase) sample the gradient LUT for
+        // albedo, then light the RGB. Before F10.4 they packed a forced 0xFF top
+        // byte, dropping the stop's authored alpha. This gate builds a Phong3D
+        // AND a Pbr3D theme whose stops ramp A: 0 → 255 and asserts the lit
+        // output carries an interpolated coverage byte (not forced opaque), while
+        // an all-opaque control theme still packs 0xFF everywhere (byte-exact).
+        private static int RunAlphaLitGate()
+        {
+            // Two stops: colour constant-ish, alpha ramps 0 → 255. Kind chosen per
+            // case below. No lights supplied → the DataDriven bases apply their
+            // defaults, so the lit path evaluates normally.
+            static ColorThemeData LitData(ColorThemeKind kind, bool opaque) => new()
+            {
+                Name = "probe-alphalit",
+                Kind = kind,
+                Stops = new List<ColorStopData>
+                {
+                    new ColorStopData { Position = 0.00f, R = 60, G = 200, B = 240, A = (byte)(opaque ? 255 : 0)   },
+                    new ColorStopData { Position = 1.00f, R = 250, G = 230, B = 90, A = 255 },
+                },
+            };
+
+            // Sweep alpha through the lit path. The lit bases use CyclicT(smooth,
+            // CycleSpeed=0.02), so t = smooth*0.02; keep smooth in [0,50) so t
+            // sweeps [0,1) monotonically without wrapping. maxIter is large so we
+            // never hit the in-set early-out.
+            static (int a0, int a1, bool monotone, bool nonBlack) SweepLit(IColorMap map)
+            {
+                int a0 = 0, a1 = 0, prevA = -1; bool mono = true, nonBlack = false;
+                const int n = 50;
+                for (int i = 0; i < n; i++)
+                {
+                    float smooth = i * (49.5f / (n - 1)); // 0 .. 49.5 → t 0 .. 0.99
+                    int argb = map.Map(smooth, 0f, MaxIter);
+                    int a = (argb >> 24) & 0xFF;
+                    int rgb = argb & 0xFFFFFF;
+                    if (rgb != 0) nonBlack = true;
+                    if (i == 0) a0 = a;
+                    if (i == n - 1) a1 = a;
+                    if (a < prevA) mono = false;
+                    prevA = a;
+                }
+                return (a0, a1, mono, nonBlack);
+            }
+
+            bool overallOk = true;
+            Console.WriteLine("F10.4 3D-lit per-stop alpha gate:");
+            foreach (var kind in new[] { ColorThemeKind.Phong3D, ColorThemeKind.Pbr3D })
+            {
+                var litMap = DataDrivenColorThemes.Create(LitData(kind, opaque: false));
+                var opaqueMap = DataDrivenColorThemes.Create(LitData(kind, opaque: true));
+                if (litMap == null || opaqueMap == null)
+                {
+                    Console.WriteLine($"  {kind,-8}: FAIL (Create returned null)");
+                    overallOk = false;
+                    continue;
+                }
+
+                var (a0, a1, mono, nonBlack) = SweepLit(litMap);
+                var (oa0, oa1, _, _) = SweepLit(opaqueMap);
+
+                // Ramp theme: alpha must start near 0, end near 255 (the final
+                // sample sits at t≈0.99 because t=1.0 wraps to 0 under Repeat),
+                // rise monotonically, and the lit RGB must be non-black (lighting
+                // actually ran). Opaque control: every sample forced to 255
+                // (byte-exact preserved).
+                bool rampOk = a0 <= 8 && a1 >= 250 && mono && nonBlack;
+                bool ctrlOk = oa0 == 255 && oa1 == 255;
+                bool ok = rampOk && ctrlOk;
+                overallOk &= ok;
+
+                Console.WriteLine(
+                    $"  {kind,-8}: ramp a0={a0} a1={a1} mono={mono} nonBlack={nonBlack} | opaque a0={oa0} a1={oa1} -> {(ok ? "PASS" : "FAIL")}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(overallOk
+                ? "RESULT: PASS (3D lit bases carry per-stop alpha as coverage; opaque byte-exact)"
+                : "RESULT: FAIL (lit path dropped alpha or lighting did not run)");
+            return overallOk ? 0 : 1;
         }
 
         private static string Rgb(int argb)

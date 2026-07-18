@@ -148,6 +148,10 @@ namespace FracturingFog.Models
             // Sample gradient at cycling t (density / offset / wrap honoured).
             float t       = CyclicT(smooth, CycleSpeed);
             int   albedoI = MapNormalized(t, distance);
+            // F10.4: carry the stop's alpha through as coverage. Lighting
+            // modulates the covered RGB only; alpha is not a light term. Opaque
+            // stops (A=255) keep the historical 0xFF top byte → byte-exact.
+            int   albedoA = (albedoI >> 24) & 0xFF;
             float aR      = ((albedoI >> 16) & 0xFF) / 255f;
             float aG      = ((albedoI >>  8) & 0xFF) / 255f;
             float aB      = ( albedoI        & 0xFF) / 255f;
@@ -226,7 +230,7 @@ namespace FracturingFog.Models
             byte R = (byte)Math.Clamp(Math.Clamp(r, 0f, 1f) * 255f + od, 0f, 255f);
             byte G = (byte)Math.Clamp(Math.Clamp(g, 0f, 1f) * 255f + od, 0f, 255f);
             byte B = (byte)Math.Clamp(Math.Clamp(b, 0f, 1f) * 255f + od, 0f, 255f);
-            return unchecked((int)0xFF000000 | (R << 16) | (G << 8) | B);
+            return unchecked((albedoA << 24) | (R << 16) | (G << 8) | B);
         }
     }
 }
