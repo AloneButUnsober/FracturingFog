@@ -76,6 +76,8 @@ namespace FracturingFog.Diagnostics
                 return RunAlphaScan(args);
             if (args.Length > 1 && string.Equals(args[1], "alphalit", StringComparison.OrdinalIgnoreCase))
                 return RunAlphaLitGate();
+            if (args.Length > 1 && string.Equals(args[1], "gpualpha", StringComparison.OrdinalIgnoreCase))
+                return RunGpuAlphaGate();
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -815,6 +817,66 @@ namespace FracturingFog.Diagnostics
                 ? "RESULT: PASS (3D lit bases carry per-stop alpha as coverage; opaque byte-exact)"
                 : "RESULT: FAIL (lit path dropped alpha or lighting did not run)");
             return overallOk ? 0 : 1;
+        }
+
+        // --colorprobe gpualpha: TRUE gate for F10.4b — the GPU colour path.
+        //
+        // The GPU pack (MandelbrotGpuKernel.cg_pack_bgra) forces an opaque 0xFF
+        // top byte. Audited (issue #46): that is CORRECT, not a gap — there is
+        // no authored-alpha source on the GPU path to carry. A theme only reaches
+        // the GPU pack when it implements IGpuHlslPalette (EscapeTimeCalculator
+        // does `ColorMap as IGpuHlslPalette`; gradient themes return null there
+        // and colourise on the alpha-aware CPU writeback instead). Every
+        // IGpuHlslPalette theme is a procedural scheme whose colour model is
+        // float3 / vec3 (rgb()/hsv()/palette() — the ColorGen DSL has NO alpha
+        // primitive), so there is no per-stop alpha to lose. The ONLY themes that
+        // carry authored alpha are GradientColorMap subclasses (the F10.1 LUT
+        // 4th lane), and none of those implements IGpuHlslPalette.
+        //
+        // The forced-0xFF pack is therefore safe *as long as those two sets stay
+        // disjoint*. This gate reflects over the engine assembly and fails if any
+        // concrete IGpuHlslPalette type is also a GradientColorMap — i.e. someone
+        // hand-wrote an HLSL body on an alpha-carrying gradient theme, at which
+        // point the GPU pack really would need the float3→float4 codegen change
+        // and this gate would flag it instead of shipping silent opaque output.
+        private static int RunGpuAlphaGate()
+        {
+            var asm = typeof(IGpuHlslPalette).Assembly;
+            Type gpuIface = typeof(IGpuHlslPalette);
+            Type gradBase = typeof(GradientColorMap);
+
+            Type?[] types;
+            try { types = asm.GetTypes(); }
+            catch (System.Reflection.ReflectionTypeLoadException ex) { types = ex.Types; }
+
+            var gpuThemes = new List<string>();
+            var violators = new List<string>();
+            foreach (var t in types)
+            {
+                if (t == null || t.IsAbstract || t.IsInterface) continue;
+                if (!gpuIface.IsAssignableFrom(t)) continue;
+                gpuThemes.Add(t.Name);
+                if (gradBase.IsAssignableFrom(t)) violators.Add(t.Name);
+            }
+            gpuThemes.Sort(StringComparer.Ordinal);
+
+            Console.WriteLine("F10.4b GPU-pack alpha-source invariant gate:");
+            Console.WriteLine($"  IGpuHlslPalette themes scanned          = {gpuThemes.Count}");
+            Console.WriteLine($"  authored-alpha (GradientColorMap) among them = {violators.Count}");
+            if (violators.Count > 0)
+                Console.WriteLine($"  VIOLATORS: {string.Join(", ", violators)}");
+
+            // Must have found the procedural GPU themes (guards against an empty
+            // reflection scan making the gate vacuously pass) AND none of them may
+            // be an authored-alpha carrier.
+            bool ok = gpuThemes.Count > 0 && violators.Count == 0;
+            Console.WriteLine();
+            Console.WriteLine(ok
+                ? "RESULT: PASS (no authored-alpha theme reaches the GPU pack; forced-0xFF is correct)"
+                : violators.Count > 0
+                    ? "RESULT: FAIL (a GradientColorMap ships an HLSL body — GPU pack now drops its alpha; F10.4b float3→float4 needed)"
+                    : "RESULT: FAIL (found no IGpuHlslPalette themes — reflection scan is wrong, gate is vacuous)");
+            return ok ? 0 : 1;
         }
 
         private static string Rgb(int argb)

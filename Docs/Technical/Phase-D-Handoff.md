@@ -290,11 +290,30 @@ That correctness work is F10.3.
     — LEFT OPAQUE by design.** They compute RGB from a formula (HSV cycling,
     fire ramp, etc.) with **no authored-alpha source** — there is no stop alpha
     to carry, so forcing `0xFF` is correct, not a bug.
-  - **GPU `cg_pack_bgra` (D3D) — DEFERRED to F10.4b.** The GPU `EvalPalette`
-    returns `float3` (no alpha lane); carrying stop alpha needs a ColorGen HLSL
-    codegen change (float3→float4) plus buffer semantics, and only affects
-    GPU-rendered translucent-theme exports (niche). Filed as
-    [issue #46](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/46).
+  - **GPU `cg_pack_bgra` (D3D) — F10.4b: NO-OP by design (premise void).**
+    Audited the whole GPU colour path. The forced-`0xFF` pack is **correct**, not
+    a gap: there is no authored-alpha source that can ever reach it. A theme only
+    hits the GPU pack when it implements `IGpuHlslPalette` (`EscapeTimeCalculator`
+    does `ColorMap as IGpuHlslPalette` → `SetPalette`; a gradient theme returns
+    `null` there, so `HasGpuPalette==false`, `colorDst==null`, and the CPU
+    writeback colourises it via the **alpha-aware** `Map`/`MapNormalized`). Every
+    one of the 21 `IGpuHlslPalette` themes is a **procedural** `ColorSchemes/*`
+    scheme whose colour model is `float3`/vec3 (`rgb()`/`hsv()`/`palette()` — the
+    ColorGen DSL has **no alpha primitive**; `CgType` is Scalar|Vec3 only), so
+    there is no per-stop alpha to carry. The only authored-alpha carriers are
+    `GradientColorMap` subclasses (F10.1 LUT 4th lane), and **none** implements
+    `IGpuHlslPalette`. So a translucent gradient theme already exports with alpha
+    even when GPU compute is on — its palette pass runs on the CPU. The
+    float3→float4 codegen change was **rejected**: it would carry a constant
+    `1.0` alpha (pure overhead, zero payoff).
+    - **Guard gate: `--colorprobe gpualpha`** (TRUE gate). Reflects the engine
+      assembly and asserts `IGpuHlslPalette ∩ GradientColorMap == ∅` — i.e. no
+      authored-alpha theme reaches the GPU pack. PASS today (21 GPU themes, 0
+      carriers). If someone later hand-writes an HLSL body on a gradient theme,
+      this fails loudly (the point where the float3→float4 work would actually
+      become necessary) instead of shipping silent opaque output.
+    - Issue [#46](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/46)
+      closed as by-design with this reasoning + the gate as the regression guard.
 
 ## Housekeeping / constraints
 
