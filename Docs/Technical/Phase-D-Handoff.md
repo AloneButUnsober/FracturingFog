@@ -148,10 +148,34 @@ this RDP session, so the on-screen deband + the GPU F11b path still need a
 local visual sign-off (toggle Deband on at a shallow gradient / deep zoom and
 confirm the banding smooths without artefacts, on both CPU and D3D renderers).
 
-**Still TODO:** persist BandDither/strength (settings load/save + the
-`Set*Silent` restore path); apply `ApplyBandDitherState()` on the video/export
-Calculate paths too if those should honour the toggle independent of the last
-interactive render.
+**Export path — DONE (commit `0c19363`).** Still export goes through
+`PosterRenderer` (interactive "Image" button, batch, server, scene capture),
+which builds its own calculator and never touched the deband globals — so the
+toggle only reached exports by accident, via whatever the last interactive
+frame left in the process-global statics (and not at all headless). Fixed:
+`PosterRequest` now carries `BandDither`/`BandDitherStrength` (default off);
+`RenderToFile` sets the `GradientColorMap` deband globals from the request
+around the calc and restores them in a `finally`; `CreatePosterRequest` fills
+both from ViewState → the "Image" export is WYSIWYG. Batch/server/scene keep
+their existing (off) behaviour until they thread the fields. Default-off byte-
+identical; `--colorprobe` PASS (digest `b68af584…`).
+
+_Video is NOT this gap_ — the animation/slideshow pipeline has its own,
+older "BandDither" (a **smooth-iter** spatial dither via
+`MandelbrotCalculator.ApplyBandDitherRecolor`, sourced from Video Settings /
+`SlideshowConfig`), a different technique from the F11 float→byte deband.
+Forcing the F11 globals on during a video render would double-dither; left
+alone by design.
+
+**Persistence — SKIPPED (owner decision 2026-07-18).** The premise was false:
+NO interactive post-FX persists across restart today (Brightness / Contrast /
+Gamma / Adaptive all reset to ViewState defaults on launch — deliberate, post-FX
+is a per-session look tied to theme/region). The `Set*Silent` restore methods
+(incl. `SetBandDitherSilent`) are defined but never called — dead stubs, no
+loader. Persisting only BandDither would be inconsistent with every other
+slider, and doing it "right" is a new app-session post-FX store touching all
+sliders (its own feature, not a colour unit). Deferred; revisit as a general
+"persist interactive post-FX" feature if ever wanted.
 
 ## F10 — per-stop alpha (F10.1 foundation DONE)
 
