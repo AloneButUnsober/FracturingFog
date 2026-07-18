@@ -350,6 +350,7 @@ Pbr3D entries add a `pbrExtras` block with `lightingMode`, `glowExp`, `glowScale
 | `interpolationCurve` | `Linear` / `Cosine` / `Cubic` / `Step` | `Linear` | Segment blend shape. `Cosine` eases at both stops; `Cubic` = Catmull-Rom spline through stops (sRGB); `Step` = hard bands. |
 | `transferFunction` | `Linear` / `Sqrt` / `Cubic` / `Log` / `Sine` | `Linear` | Remaps the mapping scalar before lookup (Ultra-Fractal "transfer"). `Log`/`Sqrt` spread deep detail; `Cubic` compresses shadows. Gradient + Cycling only. |
 | `transferStrength` | float `[0,1]` | `1` | Blends identity↔`transferFunction`. |
+| `paletteGamma` | float `[0.2,3]` | `1` | Per-theme gamma baked into the LUT (`out = in^(1/gamma)`). `>1` lifts shadows/brightens, `<1` darkens. Zero render cost; compounds with the live image-gamma slider. |
 | `colorOffset` | float | `0` | Phase rotation of the palette along the iteration axis (Cycling / Phong3D / Pbr3D). |
 | `colorDensity` | float | `1` | Frequency multiplier — how many cycles fit, independent of `cycleSpeed`. |
 | `wrapMode` | `Repeat` / `PingPong` / `Clamp` | `Repeat` | Boundary behaviour. `PingPong` mirrors so there is no 1→0 seam. |

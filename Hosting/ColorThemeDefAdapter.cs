@@ -38,6 +38,7 @@ namespace FracturingFog.Hosting
                 InterpolationCurve = (InterpolationCurve)def.InterpolationCurve,
                 TransferFunction = (TransferFunction)def.TransferFunction,
                 TransferStrength = def.TransferStrength,
+                PaletteGamma = def.PaletteGamma,
 
                 CycleSpeed = def.CycleSpeed,
 
@@ -128,6 +129,7 @@ namespace FracturingFog.Hosting
                 InterpolationCurve = (InterpolationCurveDef)data.InterpolationCurve,
                 TransferFunction = (TransferFunctionDef)data.TransferFunction,
                 TransferStrength = data.TransferStrength,
+                PaletteGamma = data.PaletteGamma,
 
                 CycleSpeed = data.CycleSpeed,
 

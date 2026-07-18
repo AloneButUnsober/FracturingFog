@@ -150,6 +150,21 @@ namespace FracturingFog.Models
         /// <summary>Identity↔transfer blend in [0,1] (F3).</summary>
         protected float TransferStrength { get; set; } = 1f;
 
+        private float _paletteGamma = 1f;
+
+        /// <summary>
+        /// Per-theme palette gamma (Phase C / F6, theme-baked half). Applied to
+        /// every LUT entry at build time — <c>out = pow(in, 1/gamma)</c> per
+        /// channel — so it is free per pixel and independent of the host's live
+        /// image-gamma slider (which compounds on top). 1.0 = neutral.
+        /// LUT-affecting → invalidates on change.
+        /// </summary>
+        protected float PaletteGamma
+        {
+            get => _paletteGamma;
+            set { if (_paletteGamma != value) { _paletteGamma = value; InvalidateGradientLut(); } }
+        }
+
         // Export accessors so data-driven themes round-trip the options to JSON.
         public GradientColorSpace ExportInterpolationSpace => _interpSpace;
         public float ExportColorOffset => ColorOffset;
@@ -158,6 +173,7 @@ namespace FracturingFog.Models
         public InterpolationCurve ExportInterpolationCurve => _interpCurve;
         public TransferFunction ExportTransferFunction => Transfer;
         public float ExportTransferStrength => TransferStrength;
+        public float ExportPaletteGamma => _paletteGamma;
 
         /// <summary>
         /// Remaps the mapping scalar before palette lookup (F3). Every curve
@@ -249,11 +265,20 @@ namespace FracturingFog.Models
                 return lut;
             }
 
+            bool applyGamma = _paletteGamma != 1f && _paletteGamma > 0f;
+            float gammaExp = applyGamma ? 1f / _paletteGamma : 1f;
             Span<Vector128<float>> samples = stackalloc Vector128<float>[LutSize + 1];
             for (int i = 0; i <= LutSize; i++)
             {
                 float t = (i >= LutSize) ? 1f : i / (float)LutSize;
                 SampleStops(t, out float r, out float g, out float b);
+                if (applyGamma)
+                {
+                    // F6 palette gamma, baked once per LUT entry (0..255 space).
+                    r = MathF.Pow(System.Math.Clamp(r / 255f, 0f, 1f), gammaExp) * 255f;
+                    g = MathF.Pow(System.Math.Clamp(g / 255f, 0f, 1f), gammaExp) * 255f;
+                    b = MathF.Pow(System.Math.Clamp(b / 255f, 0f, 1f), gammaExp) * 255f;
+                }
                 samples[i] = Vector128.Create(r, g, b, 0f);
             }
             for (int i = 0; i < LutSize; i++)
