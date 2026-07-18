@@ -98,10 +98,11 @@ public sealed class MiniMapControl : Control
             return;
         }
 
-        // Bitmap fill — letterboxed at 88% so the indicator reticle has
+        // Bitmap fill — letterboxed at 80% so the indicator reticle has
         // breathing room against the window edge and the fractal doesn't
-        // butt up against the border.
-        var imgRect = ShrinkCentered(rect, 0.88);
+        // butt up against the border. (Issue #29: the fractal read too large
+        // in the window at 88%; scaled down slightly for more margin.)
+        var imgRect = ShrinkCentered(rect, 0.80);
         if (vm.Thumbnail is Bitmap bmp)
         {
             g.DrawImage(bmp, new Rect(0, 0, bmp.PixelSize.Width, bmp.PixelSize.Height), imgRect);
