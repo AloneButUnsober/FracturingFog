@@ -272,12 +272,28 @@ That correctness work is F10.3.
     `CompositeWatermarkRenderSkia`) is the same code the gates + artifact
     exercise, but a human eyeball of the actual button output is still worth
     doing when convenient.
-- **F10.4 — procedural/3D/GPU pack parity.** `ColorUtils.PackArgb`/`PackArgbF`
-  (~40 `ColorSchemes/*` sites), the two 3D lit packs (`GradientPhong3DBase`,
-  `PbrGradient3DBase`), and the GPU `cg_pack_bgra` (D3D/Silk/Skia) still force
-  `0xFF`. Decide per-surface whether lit / procedural / GPU paths carry stop
-  alpha, then make the packs alpha-aware. Lower priority than F10.3 — no visible
-  effect until F10.3 lets alpha out of the pipeline.
+- **F10.4 — procedural/3D/GPU pack parity. DONE (lit) + scoped.**
+  Per-surface decision:
+  - **3D lit bases — FIXED.** `GradientPhong3DBase.LitMap` and
+    `PbrGradient3DBase.LitMapPbr` sample the gradient LUT for albedo (which
+    carries authored stop alpha in the top byte) but then packed a forced
+    `0xFF`, silently dropping it. Now they read `albedoA = (albedoI>>24)&0xFF`
+    and pack it back as **coverage** — lighting modulates the covered RGB only,
+    alpha is not a light term. Opaque stops (A=255) keep the `0xFF` top byte →
+    byte-exact; golden `--colorprobe` digest unchanged (`b68af584…`). The
+    in-set early-out still returns opaque black. Gate: **`--colorprobe alphalit`**
+    (TRUE gate) builds a Phong3D AND a Pbr3D theme whose stops ramp A:0→255 and
+    asserts the lit output carries an interpolated, monotone coverage byte with
+    non-black RGB, while an all-opaque control theme still packs 255 everywhere.
+    Both PASS.
+  - **Procedural themes (~33 `ColorSchemes/*`, `ColorUtils.PackArgb`/`PackArgbF`)
+    — LEFT OPAQUE by design.** They compute RGB from a formula (HSV cycling,
+    fire ramp, etc.) with **no authored-alpha source** — there is no stop alpha
+    to carry, so forcing `0xFF` is correct, not a bug.
+  - **GPU `cg_pack_bgra` (D3D) — DEFERRED to F10.4b.** The GPU `EvalPalette`
+    returns `float3` (no alpha lane); carrying stop alpha needs a ColorGen HLSL
+    codegen change (float3→float4) plus buffer semantics, and only affects
+    GPU-rendered translucent-theme exports (niche). Filed as follow-up.
 
 ## Housekeeping / constraints
 
