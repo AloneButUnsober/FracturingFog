@@ -315,6 +315,23 @@ That correctness work is F10.3.
     - Issue [#46](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/46)
       closed as by-design with this reasoning + the gate as the regression guard.
 
+## Remaining Phase-D work
+
+1. **Control Center parity for the Phase-D Post-FX controls (XAML-only).** The
+   **Deband** checkbox + strength slider and the **Alpha preview** checkbox were
+   added to `FloatingMenuView.axaml`'s Post-FX group only — they are MISSING from
+   the canonical shell (`UI.Avalonia/Views/ControlCenterSections/ColorLightSectionView.axaml`,
+   whose Post-FX section has only Brightness / Contrast / Adaptive). The VM
+   properties (`Menu.BandDither`, `Menu.BandDitherStrength`, `Menu.AlphaPreview`)
+   are already shared through the `Menu` binding, so this is a pure XAML add — no
+   VM/wiring change. Per the UI-overhaul rule new UI belongs in the Control Center,
+   not the deprecated FloatingMenu. Add the Deband row to the CC ColorLight Post-FX
+   grid and an Alpha-preview toggle (Display/View), and mirror into detach parity.
+2. **F11b GPU deband** — still needs on-device visual sign-off (runtime-compiled
+   HLSL; no GPU render with `DitherEnabled=true` has run yet). See the F11b section.
+3. **F10.6 "flatten over background" export option** — optional, previously
+   declined; revisit only if wanted.
+
 ## Housekeeping / constraints
 
 - **CLAUDE.md:** all new UI work goes to `UI.Avalonia/` only; do not touch
