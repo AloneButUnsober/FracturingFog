@@ -294,11 +294,32 @@ builtins. All four are independently shippable and each visibly upgrades output.
   ping-pong seam continuity).
 - **Not yet done (follow-up):** editor UI, user worked-examples.
 
-**Phase C — DSL depth + post-FX:**
-☐ F9 · ☐ F6 · ☐ F12
+**Phase C — DSL depth + post-FX:** ☑ SHIPPED (2026-07-17)
+☑ F9 · ☑ F6 · ☑ F12
 
-OkLab in ColorGen (port matrices to CPU+HLSL), gamma post-FX stage + slider,
-randomize UI.
+- **F9** (commit 92c4178) — ColorGen `oklab(L,a,b)`, `oklch(L,C,h)` (h in
+  radians), `mix_oklab(va,vb,t)`. Ottosson matrices in the `Cg3` template block
+  + always-emitted HLSL prelude (`sign*pow(abs,1/3)` for the missing `cbrt`).
+  Additive builtins, generic parser path. Verified: generated theme
+  Roslyn-compiles vs Engine + HLSL prelude self-contained with parity call
+  sites.
+- **F6** — palette gamma, split in two:
+  - *Part 1, theme-baked* (commit b9a13da): `ColorThemeData.PaletteGamma`
+    (float, default 1) baked into the gradient LUT at build (`out=in^(1/gamma)`,
+    all four kinds), editor Gamma slider, Export round-trip. Zero per-pixel
+    cost. Verified: probe 0.5→63 / 1.0→127 / 2.0→180 at mid-grey, round-trips.
+  - *Part 2, live host slider* (commit d7b9e36): `ViewState.Gamma` [-100,100] +
+    a Post-FX **Gamma** slider (FloatingMenu → Main → RepaintWithPostFx). 256-
+    entry byte gamma LUT in the upload pass; SIMD fast path kept for the no-
+    gamma case, scalar path when gamma is active. `2^(slider/100)` exponent.
+    No lock / no theme default (themes use PaletteGamma); the two gammas
+    compound.
+- **F12** (commit 5604a85) — editor "Random" button: golden-ratio hue walk,
+  5 stops, jittered S/V, seed recorded in Description. UI-only, additive.
+
+**Editor UI (cross-cutting):** all Phase A/B fields wired into the Avalonia
+Color Theme Editor in commit e33d05a (interp space/curve/transfer + strength,
+offset/density/wrap, per-stop midpoint), plus the F6/F12 controls above.
 
 **Phase D — structural (gate behind explicit sign-off):**
 ☐ F10 · ☐ F11
