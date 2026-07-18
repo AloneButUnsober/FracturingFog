@@ -177,6 +177,9 @@ public sealed class ColorGenHlslEmitter
             case "rgb":      return $"float3({A(0)}, {A(1)}, {A(2)})";
             case "hsv":      return $"cg_fromHsv({A(0)}, {A(1)}, {A(2)})";
             case "hsl":      return $"cg_fromHsl({A(0)}, {A(1)}, {A(2)})";
+            case "oklab":    return $"cg_fromOkLab({A(0)}, {A(1)}, {A(2)})";
+            case "oklch":    return $"cg_fromOkLch({A(0)}, {A(1)}, {A(2)})";
+            case "mix_oklab":return $"cg_mixOkLab({A(0)}, {A(1)}, {A(2)})";
             case "palette":
             {
                 int stops = c.Args.Count - 1;
