@@ -47,6 +47,29 @@ prerequisite gate is built**. Remaining Phase D order:
    whole export/capture/video chain. It is a compositing-contract change, not a
    "add a 4th LUT lane". Do it LAST, behind a premultiply audit.
 
+## F10.5 live alpha preview + the "export loses alpha" report (2026-07-18)
+
+- **F10.5 (commit `7787af7`)** — the on-screen present is opaque (swap-chain
+  ignores the alpha channel; `UploadProcessedBuffer` force-opaques the buffer),
+  so a theme's authored stop-alpha was invisible while editing. New default-off
+  **Alpha preview** checkbox (Post-FX floating menu) composites the render over a
+  checkerboard using the authored coverage byte (read from the source calc buffer
+  so it survives the post-FX force-opaque). Display-only — runs after the
+  save-snapshot, so exports keep straight alpha.
+- **"Saved images don't show the transparency" is NOT a bug.** The real export
+  path carries alpha end to end (verified: `--colorprobe alphaposter` →
+  min 1..255, ~87% translucent, identical with and without a watermark; both the
+  poster path and `SaveLastFrameToPng` preserve it). Straight-alpha PNGs keep RGB
+  **byte-identical** to an opaque theme, so an alpha-unaware viewer (Windows
+  Photos, Explorer thumbnails) renders translucent and opaque exports the same.
+  The transparency is in the file. Owner chose to **keep straight alpha** and
+  verify with the diagnostics below rather than bake a background.
+- **Diagnostics (commit `9498c53`):** `--colorprobe alphawm` (TRUE gate,
+  watermarked export), `alphaposter [out]` (TRUE gate, real PosterRenderer render;
+  writes a `_checker.png` preview), `alphascan <file.png>` (inspect any PNG:
+  alpha min..max + `_checker.png`). If `alphascan` on a genuine user export ever
+  reports `255..255`, THAT is a real bug — start at theme persistence.
+
 ## The gate: `--colorprobe`
 
 `Engine/Diagnostics/ColorProbe.cs`, dispatched in `Program.cs` just above the
