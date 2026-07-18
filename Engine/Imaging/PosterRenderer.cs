@@ -318,7 +318,10 @@ namespace FracturingFog.Imaging
                 byte R = (byte)Math.Clamp(r, 0f, 255f);
                 byte G = (byte)Math.Clamp(g, 0f, 255f);
                 byte B = (byte)Math.Clamp(b, 0f, 255f);
-                buf[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                // F10.3 — preserve the source alpha byte (was forced 0xFF, which
+                // clobbered per-stop coverage on any brightness/contrast export).
+                // Opaque pixels keep 0xFF, so pre-F10 output is byte-identical.
+                buf[i] = (p & 0xFF000000u) | ((uint)R << 16) | ((uint)G << 8) | B;
             }
         }
 
