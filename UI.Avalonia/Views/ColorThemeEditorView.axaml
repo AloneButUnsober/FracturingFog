@@ -150,12 +150,15 @@
                     <!-- Stops -->
                     <Border Classes="group">
                         <StackPanel Spacing="6">
-                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
                                 <TextBlock Grid.Column="0" Classes="section" Text="Color stops" VerticalAlignment="Center" />
                                 <Button Grid.Column="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
-                                <Button Grid.Column="2" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
-                                <Button Grid.Column="3" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
-                                <Button Grid.Column="4" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
+                                <Button Grid.Column="2" Classes="action new"    Content="🎲 Random"
+                                        Command="{Binding RandomizeCommand}"
+                                        ToolTip.Tip="Generate a random 5-stop palette (golden-ratio hue walk; seed recorded in Description)." />
+                                <Button Grid.Column="3" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
+                                <Button Grid.Column="4" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
+                                <Button Grid.Column="5" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
                             </Grid>
                             <Grid ColumnDefinitions="Auto,Auto,*">
                                 <CheckBox  Grid.Column="0" Content="Inspect"  IsChecked="{Binding InspectActive}"

@@ -99,6 +99,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         HelpCommand = ReactiveCommand.Create(() => HelpRequested?.Invoke(this, EventArgs.Empty));
         FromImageCommand = ReactiveCommand.CreateFromTask(FromImageAsync);
         AddStopCommand = ReactiveCommand.Create(AddStop);
+        RandomizeCommand = ReactiveCommand.Create(RandomizePalette);
         AddBandCommand = ReactiveCommand.Create(AddBand);
         RemoveStopCommand = ReactiveCommand.Create<ColorStopRowVm>(RemoveStop);
         RemoveBandCommand = ReactiveCommand.Create<MaterialBandRowVm>(RemoveBand);
@@ -436,6 +437,44 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         if (_selectedStop == row) _selectedStop = null;
         Stops.Remove(row);
         FieldChanged();
+    }
+
+    // ── Randomize (Phase C / F12) ─────────────────────────────────────────
+    //
+    // One-click random palette: a golden-ratio hue walk (maximally-spaced
+    // hues, no two stops close on the wheel) with jittered saturation/value.
+    // Reproducible — a fresh integer seed drives a local Random each click and
+    // is recorded in the Description so a palette the user likes can be traced
+    // back. Replaces the current stops; kind/lighting untouched.
+
+    private void RandomizePalette()
+    {
+        int seed = System.Random.Shared.Next(1, 1_000_000);
+        var rng = new Random(seed);
+        const double golden = 0.6180339887498949;
+        const int n = 5;
+        double hue = rng.NextDouble();
+
+        _suppressChange = true;
+        try
+        {
+            Stops.Clear();
+            for (int i = 0; i < n; i++)
+            {
+                hue = (hue + golden) % 1.0;
+                double sat = 0.55 + rng.NextDouble() * 0.40;  // 0.55..0.95
+                double val = 0.65 + rng.NextDouble() * 0.35;  // 0.65..1.00
+                var c = new HsvColor(1.0, hue * 360.0, sat, val).ToRgb();
+                float pos = i / (float)(n - 1);
+                Stops.Add(new ColorStopRowVm(
+                    new ColorStopDef { Position = pos, R = c.R, G = c.G, B = c.B }, this));
+            }
+        }
+        finally { _suppressChange = false; }
+
+        Description = $"Random palette (seed {seed})";
+        FieldChanged();
+        PushPreview();
     }
 
     // ── Inspect ───────────────────────────────────────────────────────────
@@ -988,6 +1027,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> HelpCommand { get; }
     public ReactiveCommand<Unit, Unit> FromImageCommand { get; }
     public ReactiveCommand<Unit, Unit> AddStopCommand { get; }
+    public ReactiveCommand<Unit, Unit> RandomizeCommand { get; }
     public ReactiveCommand<Unit, Unit> AddBandCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportPaletteCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportPaletteCommand { get; }
