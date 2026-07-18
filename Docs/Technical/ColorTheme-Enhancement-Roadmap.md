@@ -187,6 +187,23 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   it is high-risk.
 - **Test:** alpha=128 stop composites over a known background; PNG export keeps alpha.
 
+> **Audit 2026-07-17 (feature/ui-overhaul).** The opaque-ARGB assumption is
+> confirmed baked at **two hard sites in `ColorUtils.cs`** — `PackArgb`
+> (`0xFF000000 | …`) and `MapNormalized` (returns `0xFF000000 | …`) — **plus the
+> two 3D pack points** (`GradientPhong3DBase`, `PbrGradient3DBase`). The same
+> `0xFF`/opaque force recurs across **~104 files** (grep `0xFF000000` /
+> `PixelFormat` / `Bgra8888`): every `ColorSchemes3D/*` and `ColorSchemes/*`
+> theme, every calculator, all three GPU renderers (`Rendering.D3D`,
+> `Rendering.Silk`, `Rendering.Skia`), and the whole export/capture/video chain
+> (`ImageExport`, `PosterRenderer`, `BatchRenderer`, `SceneVideoRenderer`,
+> `PngSequenceWriter`, `FractalOverlayCompositor`). Alpha is not a "carry one
+> lane" change — it is a pipeline-wide compositing contract change. Real risk is
+> **subtle premultiply / over-composite bugs** at any consumer that blends onto
+> a background (overlay compositor, watermark, video frame accumulation) plus
+> PNG-vs-video alpha-handling divergence. **Prerequisite before any F10 code: a
+> `--colorprobe` golden gate** so a composited alpha result can be regression-
+> checked across the option matrix. Estimate revised 3 → **5+ ideal-days**.
+
 ### F11 — Dithering (anti-banding)
 
 - **What:** ordered/blue-noise dither on the final 8-bit quantise to kill
@@ -201,6 +218,39 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   pixels), or (b) thread x/y through `Map` (invasive). Prefer (a).
 - **Back-compat:** off by default.
 - **Test:** flat gradient histogram shows dither noise; SSIM vs undithered stays high.
+
+> **Audit 2026-07-17 — route (a) is wrong; it cannot deband.** Banding is born
+> at exactly one place: `MapNormalized` (`ColorUtils.cs:449-453`) lerps the LUT
+> to a **float** RGB, then `(int)rgb.GetElement(0)` **truncates** to byte. That
+> truncation is the only quantise step, and the float sub-byte precision exists
+> **only there**. The buffer handed to the post-FX upload pass
+> (`FractalRenderHost.UploadProcessedBuffer`) is **already 8-bit** — Map already
+> truncated. Ordered dither on an already-quantised integer is a no-op:
+> `floor(V + threshold)` with `V ∈ ℤ` and `threshold ∈ [0,1)` returns `V`. So a
+> post-pass over the rendered ARGB adds patterned noise but **recovers zero band
+> detail** — the information is gone before the post-pass runs. Route (a) is
+> dropped.
+>
+> To actually kill bands the dither threshold must be added to the **float**
+> value *before* the `(int)` cast, i.e. inside the colour path. Coordinate
+> delivery without breaking `IColorMap.Map`'s signature:
+>
+> - **(b1) thread-static dither offset** — render loops set a `[ThreadStatic]`
+>   `GradientColorMap.DitherOffset = bayer8x8[x&7, y&7] − 0.5f` immediately
+>   before each `Map` call; `MapNormalized` adds it pre-cast. No interface
+>   change, thread-safe (each worker sets its own before use), CPU-only.
+>   Contained: `MapNormalized` + the two 3D pack points + the CPU render loops.
+> - **(b2) explicit x/y overload** — new `Map(..., int x, int y)`; invasive
+>   across every calculator + the interface. Rejected (blast radius ≈ F10).
+> - **GPU parity is separate.** On the GPU path `Map` is never called — colour
+>   is packed in HLSL. GPU dither needs a `cg_dither(col, uv)` in the HLSL
+>   prelude wired into every GPU final-pack site (`Rendering.D3D`,
+>   `Rendering.Silk`, ColorGen HLSL emitter). Deep-zoom banding is worst on GPU,
+>   so a *complete* F11 spans CPU **and** GPU; they can ship in that order.
+>
+> Revised plan: **F11a = CPU deband via (b1)** (contained, real payoff, off by
+> default), **F11b = GPU HLSL dither** (separate, wider). A `--colorprobe` gate
+> should assert histogram-spread on a flat gradient and SSIM parity.
 
 ### F12 — Randomize / seed palette generator
 
@@ -238,10 +288,14 @@ Rationale for the two high-risk items:
 
 - **F10 (alpha)** touches the opaque-ARGB assumption baked into the LUT, the
   packer, `IColorMap.InSetColor`, and every export/capture/video consumer.
-  Wide blast radius, easy to ship subtle premultiply bugs.
-- **F11 (dither)** either changes the `IColorMap.Map` signature (invasive) or
-  needs a new pixel-space post-pass. The post-pass route de-risks it — reranks
-  toward the middle if scoped that way.
+  Wide blast radius, easy to ship subtle premultiply bugs. **Audit confirmed
+  ~104 files carry the assumption; estimate raised to 5+ days (see F10 note).**
+- **F11 (dither)** must add the dither threshold **before** the float→byte
+  truncate in `MapNormalized` — the post-pass route (a) was found unable to
+  deband (8-bit in = 8-bit out; see F11 note). The contained route is a
+  thread-static offset set by the CPU render loops (F11a); GPU HLSL dither
+  (F11b) is a separate, wider follow-up. F11a reranks toward the middle;
+  full CPU+GPU stays high.
 
 ---
 
@@ -322,12 +376,29 @@ Color Theme Editor in commit e33d05a (interp space/curve/transfer + strength,
 offset/density/wrap, per-stop midpoint), plus the F6/F12 controls above.
 
 **Phase D — structural (gate behind explicit sign-off):**
-☐ F10 · ☐ F11
+☐ F11a (CPU deband) · ☐ F11b (GPU dither) · ☐ F10 (alpha)
 
-Alpha and dithering. Do the pipeline audit first; prefer the post-pass dither
-route. Consider a `--colorprobe` headless gate (mirrors existing `--kifsprobe`
-/ `--inputprobe` pattern) to golden-compare colour output across the whole
-matrix of options before these land.
+Pipeline audit **done 2026-07-17** (see the F10 / F11 notes above); it overturned
+two assumptions the original phasing rested on, so the plan is re-sequenced:
+
+1. **Prerequisite — `--colorprobe` golden gate.** Mirrors `--kifsprobe` /
+   `--inputprobe`. Golden-compares colour output across the option matrix.
+   Nothing structural lands without it, because both remaining features change
+   pixel values in ways only a golden diff catches.
+2. **F11a — CPU deband (lowest risk, real payoff).** Add the ordered-dither
+   threshold *before* the `(int)` truncate in `MapNormalized`, coord delivered
+   by a `[ThreadStatic]` offset the CPU render loops set per pixel. No
+   `IColorMap` change. Off by default; per-theme `DitherStrength` + global
+   toggle. **The roadmap's original "cheap post-pass over the ARGB buffer"
+   route is rejected — it is provably a no-op on already-8-bit data.**
+3. **F11b — GPU HLSL dither (separate, wider).** `cg_dither(col, uv)` in the
+   HLSL prelude wired into every GPU final-pack site. Deep-zoom banding is worst
+   on the GPU path, so F11 is only "done" once this ships, but it is a distinct
+   unit of work behind its own sign-off.
+4. **F10 — per-stop alpha (highest blast radius, do last).** ~104 files carry
+   the opaque-ARGB assumption; it is a compositing-contract change, not a
+   lane-add. Needs the `--colorprobe` gate plus a premultiply audit of every
+   export/capture/video consumer first.
 
 ---
 
