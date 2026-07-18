@@ -34,7 +34,16 @@ namespace FracturingFog.Hosting
 
                 Stops = def.Stops.Select(ToData).ToList(),
 
+                InterpolationSpace = (GradientColorSpace)def.InterpolationSpace,
+                InterpolationCurve = (InterpolationCurve)def.InterpolationCurve,
+                TransferFunction = (TransferFunction)def.TransferFunction,
+                TransferStrength = def.TransferStrength,
+
                 CycleSpeed = def.CycleSpeed,
+
+                ColorOffset = def.ColorOffset,
+                ColorDensity = def.ColorDensity,
+                WrapMode = (ColorWrapMode)def.WrapMode,
 
                 Steepness = def.Steepness,
                 Ambient = def.Ambient,
@@ -65,6 +74,7 @@ namespace FracturingFog.Hosting
         {
             Position = s.Position,
             R = s.R, G = s.G, B = s.B,
+            Midpoint = s.Midpoint,
         };
 
         private static LightSourceData? ToData(LightSourceDef? d) => d == null ? null : new LightSourceData
@@ -114,7 +124,16 @@ namespace FracturingFog.Hosting
 
                 Stops = (data.Stops ?? new List<ColorStopData>()).Select(ToDef).ToList(),
 
+                InterpolationSpace = (GradientColorSpaceDef)data.InterpolationSpace,
+                InterpolationCurve = (InterpolationCurveDef)data.InterpolationCurve,
+                TransferFunction = (TransferFunctionDef)data.TransferFunction,
+                TransferStrength = data.TransferStrength,
+
                 CycleSpeed = data.CycleSpeed,
+
+                ColorOffset = data.ColorOffset,
+                ColorDensity = data.ColorDensity,
+                WrapMode = (ColorWrapModeDef)data.WrapMode,
 
                 Steepness = data.Steepness,
                 Ambient = data.Ambient,
@@ -145,6 +164,7 @@ namespace FracturingFog.Hosting
         {
             Position = s.Position,
             R = s.R, G = s.G, B = s.B,
+            Midpoint = s.Midpoint <= 0f ? 0.5f : s.Midpoint,
         };
 
         private static LightSourceDef? ToDef(LightSourceData? d) => d == null ? null : new LightSourceDef

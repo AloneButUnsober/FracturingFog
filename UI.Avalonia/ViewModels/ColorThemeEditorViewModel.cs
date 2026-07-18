@@ -342,6 +342,68 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         ShowPbrExtras = Kind == ColorThemeKindDef.Pbr3D;
     }
 
+    // ── Gradient interpolation (Phase A F1 / Phase B F2, F3) ──────────────
+    //
+    // These bake into the 256-entry LUT (space + curve) or remap the mapping
+    // scalar (transfer), so they carry zero per-pixel cost. Combos bind to the
+    // *Options arrays; defaults reproduce the historical byte-lerp render.
+
+    public GradientColorSpaceDef[] ColorSpaceOptions { get; } = Enum.GetValues<GradientColorSpaceDef>();
+    public InterpolationCurveDef[] CurveOptions { get; } = Enum.GetValues<InterpolationCurveDef>();
+    public TransferFunctionDef[] TransferOptions { get; } = Enum.GetValues<TransferFunctionDef>();
+    public ColorWrapModeDef[] WrapModeOptions { get; } = Enum.GetValues<ColorWrapModeDef>();
+
+    private GradientColorSpaceDef _interpSpace = GradientColorSpaceDef.Srgb;
+    public GradientColorSpaceDef InterpSpace
+    {
+        get => _interpSpace;
+        set { this.RaiseAndSetIfChanged(ref _interpSpace, value); FieldChanged(); }
+    }
+
+    private InterpolationCurveDef _interpCurve = InterpolationCurveDef.Linear;
+    public InterpolationCurveDef InterpCurve
+    {
+        get => _interpCurve;
+        set { this.RaiseAndSetIfChanged(ref _interpCurve, value); FieldChanged(); }
+    }
+
+    private TransferFunctionDef _transferFn = TransferFunctionDef.Linear;
+    public TransferFunctionDef TransferFn
+    {
+        get => _transferFn;
+        set { this.RaiseAndSetIfChanged(ref _transferFn, value); FieldChanged(); }
+    }
+
+    private double _transferStrength = 1d;
+    public double TransferStrength
+    {
+        get => _transferStrength;
+        set { this.RaiseAndSetIfChanged(ref _transferStrength, Math.Clamp(value, 0d, 1d)); FieldChanged(); }
+    }
+
+    // ── Cycling phase / density / wrap (Phase A F4, F5) ───────────────────
+
+    private decimal _colorOffset;
+    public decimal ColorOffset
+    {
+        get => _colorOffset;
+        set { this.RaiseAndSetIfChanged(ref _colorOffset, value); FieldChanged(); }
+    }
+
+    private decimal _colorDensity = 1M;
+    public decimal ColorDensity
+    {
+        get => _colorDensity;
+        set { this.RaiseAndSetIfChanged(ref _colorDensity, value); FieldChanged(); }
+    }
+
+    private ColorWrapModeDef _wrapMode = ColorWrapModeDef.Repeat;
+    public ColorWrapModeDef WrapMode
+    {
+        get => _wrapMode;
+        set { this.RaiseAndSetIfChanged(ref _wrapMode, value); FieldChanged(); }
+    }
+
     // ── Stops ─────────────────────────────────────────────────────────────
 
     public ObservableCollection<ColorStopRowVm> Stops { get; } = new();
@@ -1051,7 +1113,15 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             foreach (var s in def.Stops.OrderBy(x => x.Position))
                 Stops.Add(new ColorStopRowVm(s, this));
 
+            InterpSpace = def.InterpolationSpace;
+            InterpCurve = def.InterpolationCurve;
+            TransferFn = def.TransferFunction;
+            TransferStrength = Math.Clamp((double)def.TransferStrength, 0d, 1d);
+
             CycleSpeed = ClampDec((decimal)def.CycleSpeed, 0.0001M, 10M);
+            ColorOffset = ClampDec((decimal)def.ColorOffset, -10M, 10M);
+            ColorDensity = ClampDec((decimal)def.ColorDensity, 0M, 20M);
+            WrapMode = def.WrapMode;
             Steepness = ClampDec((decimal)def.Steepness, 0.1M, 10M);
             Ambient = ClampDec((decimal)def.Ambient, 0M, 1M);
 
@@ -1116,7 +1186,14 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             MaxRecommendedZoom = MaxZoomEnabled ? MaxRecommendedZoom : (double?)null,
             Kind = Kind,
             Stops = Stops.Select(r => r.ToDef()).OrderBy(s => s.Position).ToList(),
+            InterpolationSpace = InterpSpace,
+            InterpolationCurve = InterpCurve,
+            TransferFunction = TransferFn,
+            TransferStrength = (float)TransferStrength,
             CycleSpeed = (float)CycleSpeed,
+            ColorOffset = (float)ColorOffset,
+            ColorDensity = (float)ColorDensity,
+            WrapMode = WrapMode,
             Steepness = (float)Steepness,
             Ambient = (float)Ambient,
             KeyLight = KeyLight.ToDef(),
@@ -1354,6 +1431,7 @@ public sealed class ColorStopRowVm : ReactiveObject
         _r = seed.R;
         _g = seed.G;
         _b = seed.B;
+        _midpoint = seed.Midpoint <= 0f ? 0.5f : seed.Midpoint;
 
         SelectCommand = ReactiveCommand.Create(() => _parent.SelectRow(this));
         SampleCommand = ReactiveCommand.CreateFromTask(() => _parent.BeginSampleForRowAsync(this));
@@ -1455,6 +1533,20 @@ public sealed class ColorStopRowVm : ReactiveObject
 
     public IBrush SwatchBrush => new ImmutableSolidColorBrush(Color.FromRgb(R, G, B));
 
+    private float _midpoint = 0.5f;
+    /// <summary>Segment blend bias in (0,1) for the segment starting at this
+    /// stop (Phase B / F7). 0.5 = linear.</summary>
+    public float Midpoint
+    {
+        get => _midpoint;
+        set
+        {
+            float clamped = value < 0.01f ? 0.01f : (value > 0.99f ? 0.99f : value);
+            this.RaiseAndSetIfChanged(ref _midpoint, clamped);
+            _parent.NotifyRowChanged();
+        }
+    }
+
     /// <summary>Composite RGB binding target for the ColorPicker control.</summary>
     public Color StopColor
     {
@@ -1462,7 +1554,7 @@ public sealed class ColorStopRowVm : ReactiveObject
         set { R = value.R; G = value.G; B = value.B; this.RaisePropertyChanged(nameof(StopColor)); }
     }
 
-    public ColorStopDef ToDef() => new() { Position = Position, R = R, G = G, B = B };
+    public ColorStopDef ToDef() => new() { Position = Position, R = R, G = G, B = B, Midpoint = Midpoint };
 }
 
 public sealed class MaterialBandRowVm : ReactiveObject
