@@ -70,6 +70,44 @@ namespace FracturingFog.Models
         Clamp,
     }
 
+    /// <summary>
+    /// Shape of the blend within a gradient segment (Phase B / F2). Baked into
+    /// the LUT — zero per-pixel cost. <c>Linear</c> is the historical default.
+    /// <c>Cubic</c> is a Catmull-Rom spline through the stops (evaluated in
+    /// sRGB, independent of <see cref="GradientColorSpace"/>).
+    /// </summary>
+    public enum InterpolationCurve
+    {
+        /// <summary>Straight lerp (historical default).</summary>
+        Linear,
+        /// <summary>Cosine ease at both stops.</summary>
+        Cosine,
+        /// <summary>Catmull-Rom spline through neighbouring stops (sRGB).</summary>
+        Cubic,
+        /// <summary>Hard bands — hold the lower stop.</summary>
+        Step,
+    }
+
+    /// <summary>
+    /// Remaps the mapping scalar <c>t</c> before palette lookup (Phase B / F3;
+    /// Ultra Fractal "transfer function"). All curves fix <c>f(0)=0, f(1)=1</c>
+    /// so cycling seams stay continuous. Applied to Gradient + Cycling kinds
+    /// (3D albedo is left on the linear scalar so material bands stay put).
+    /// </summary>
+    public enum TransferFunction
+    {
+        /// <summary>Identity (historical default).</summary>
+        Linear,
+        /// <summary><c>t^0.5</c> — lifts shadow detail.</summary>
+        Sqrt,
+        /// <summary><c>t^3</c> — compresses shadows, expands highlights.</summary>
+        Cubic,
+        /// <summary>Logarithmic — spreads deep detail.</summary>
+        Log,
+        /// <summary>Raised cosine S-curve.</summary>
+        Sine,
+    }
+
     // ColorStopData moved to Abstractions/Models/ColorStopData.cs so the
     // shared lib (PaletteBuilder.Lib) and this host can both reference the
     // same type. The ColorStop interop helpers (ctor from ColorStop +
@@ -181,6 +219,21 @@ namespace FracturingFog.Models
         /// historical render.
         /// </summary>
         public GradientColorSpace InterpolationSpace { get; set; } = GradientColorSpace.Srgb;
+
+        /// <summary>Segment blend shape (Phase B / F2). Default Linear.</summary>
+        public InterpolationCurve InterpolationCurve { get; set; } = InterpolationCurve.Linear;
+
+        /// <summary>
+        /// Transfer curve applied to the mapping scalar (Phase B / F3). Default
+        /// Linear (identity).
+        /// </summary>
+        public TransferFunction TransferFunction { get; set; } = TransferFunction.Linear;
+
+        /// <summary>
+        /// Blend of identity↔transfer curve in [0,1] (Phase B / F3). 1 = full
+        /// curve (default), 0 = identity.
+        /// </summary>
+        public float TransferStrength { get; set; } = 1f;
 
         // ── Cycling / 3D ──────────────────────────────────────────────────────
 
