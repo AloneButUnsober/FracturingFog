@@ -24,10 +24,25 @@ namespace FracturingFog.Models
         public float Position;
         public System.Drawing.Color Color;
 
+        /// <summary>
+        /// Segment midpoint bias for the segment starting at this stop (F7).
+        /// 0.5 = linear. A value of 0 (the default from the 2-arg ctor used by
+        /// built-in themes) is interpreted as 0.5, so legacy stops are linear.
+        /// </summary>
+        public float Midpoint;
+
         public ColorStop(float pos, System.Drawing.Color color)
         {
             Position = pos;
             Color = color;
+            Midpoint = 0.5f;
+        }
+
+        public ColorStop(float pos, System.Drawing.Color color, float midpoint)
+        {
+            Position = pos;
+            Color = color;
+            Midpoint = midpoint;
         }
     }
 
@@ -120,11 +135,52 @@ namespace FracturingFog.Models
         /// <summary>Boundary behaviour of the cycling parameter (F5).</summary>
         protected ColorWrapMode CycleWrap { get; set; } = ColorWrapMode.Repeat;
 
+        private InterpolationCurve _interpCurve = InterpolationCurve.Linear;
+
+        /// <summary>Segment blend shape (F2). LUT-affecting → invalidates on change.</summary>
+        protected InterpolationCurve InterpCurve
+        {
+            get => _interpCurve;
+            set { if (_interpCurve != value) { _interpCurve = value; InvalidateGradientLut(); } }
+        }
+
+        /// <summary>Transfer curve on the mapping scalar (F3). Runtime, not LUT-baked.</summary>
+        protected TransferFunction Transfer { get; set; } = TransferFunction.Linear;
+
+        /// <summary>Identity↔transfer blend in [0,1] (F3).</summary>
+        protected float TransferStrength { get; set; } = 1f;
+
         // Export accessors so data-driven themes round-trip the options to JSON.
         public GradientColorSpace ExportInterpolationSpace => _interpSpace;
         public float ExportColorOffset => ColorOffset;
         public float ExportColorDensity => ColorDensity;
         public ColorWrapMode ExportWrapMode => CycleWrap;
+        public InterpolationCurve ExportInterpolationCurve => _interpCurve;
+        public TransferFunction ExportTransferFunction => Transfer;
+        public float ExportTransferStrength => TransferStrength;
+
+        /// <summary>
+        /// Remaps the mapping scalar before palette lookup (F3). Every curve
+        /// fixes f(0)=0, f(1)=1 so cycling seams stay continuous. Identity when
+        /// Transfer==Linear or strength==0 (the default).
+        /// </summary>
+        protected float ApplyTransfer(float t)
+        {
+            if (Transfer == TransferFunction.Linear || TransferStrength <= 0f) return t;
+            t = System.Math.Clamp(t, 0f, 1f);
+            float c;
+            switch (Transfer)
+            {
+                case TransferFunction.Sqrt: c = MathF.Sqrt(t); break;
+                case TransferFunction.Cubic: c = t * t * t; break;
+                // log(1+9t)/log(10): maps [0,1]→[0,1], compresses toward the top.
+                case TransferFunction.Log: c = MathF.Log(1f + 9f * t) / MathF.Log(10f); break;
+                case TransferFunction.Sine: c = 0.5f - 0.5f * MathF.Cos(MathF.PI * t); break;
+                default: return t;
+            }
+            float s = System.Math.Clamp(TransferStrength, 0f, 1f);
+            return t + (c - t) * s;
+        }
 
         /// <summary>
         /// Maps a raw cycling value to [0,1] honouring density, offset, and wrap
@@ -214,43 +270,118 @@ namespace FracturingFog.Models
 
         private void SampleStops(float t, out float r, out float g, out float b)
         {
-            ColorStop a = Stops[0];
-            ColorStop bStop = Stops[^1];
             int n = Stops.Count - 1;
+            int seg = 0;
+            bool found = false;
             for (int i = 0; i < n; i++)
             {
                 if (t >= Stops[i].Position && t <= Stops[i + 1].Position)
                 {
-                    a = Stops[i];
-                    bStop = Stops[i + 1];
+                    seg = i;
+                    found = true;
                     break;
                 }
             }
-            float range = bStop.Position - a.Position;
-            float localT = (range <= 0f) ? 0f : (t - a.Position) / range;
+            if (!found)
+            {
+                // t outside the stop span → clamp to the nearest endpoint.
+                if (t <= Stops[0].Position)
+                {
+                    r = Stops[0].Color.R; g = Stops[0].Color.G; b = Stops[0].Color.B;
+                    return;
+                }
+                seg = n - 1;
+            }
 
-            // Output is in 0..255 float space (the LUT stores these directly).
+            ColorStop a = Stops[seg];
+            ColorStop bStop = Stops[seg + 1];
+
+            float range = bStop.Position - a.Position;
+            float u = (range <= 0f) ? 0f : (t - a.Position) / range;
+
+            // F7: per-segment midpoint bias (belongs to the lower stop).
+            u = ApplyMidpoint(u, a.Midpoint);
+
+            // F2: segment blend shape.
+            switch (_interpCurve)
+            {
+                case InterpolationCurve.Cubic when Stops.Count >= 3:
+                    SampleCubic(seg, u, out r, out g, out b);
+                    return;
+                case InterpolationCurve.Cosine:
+                    u = 0.5f - 0.5f * MathF.Cos(MathF.PI * u);
+                    break;
+                case InterpolationCurve.Step:
+                    u = 0f;
+                    break;
+            }
+
+            BlendInSpace(a.Color, bStop.Color, u, out r, out g, out b);
+        }
+
+        /// <summary>Blends two stop colours at <paramref name="u"/> in the
+        /// active <see cref="InterpolationSpace"/>. Output 0..255 float.</summary>
+        private void BlendInSpace(System.Drawing.Color ca, System.Drawing.Color cb, float u,
+                                  out float r, out float g, out float b)
+        {
             switch (_interpSpace)
             {
                 case GradientColorSpace.OkLab:
-                    GradientColorSpaces.MixOkLab(a.Color, bStop.Color, localT, out r, out g, out b);
+                    GradientColorSpaces.MixOkLab(ca, cb, u, out r, out g, out b);
                     return;
                 case GradientColorSpace.Hsv:
-                    GradientColorSpaces.MixHsv(a.Color, bStop.Color, localT, out r, out g, out b);
+                    GradientColorSpaces.MixHsv(ca, cb, u, out r, out g, out b);
                     return;
                 default: // Srgb — historical byte lerp.
-                    r = a.Color.R + (bStop.Color.R - a.Color.R) * localT;
-                    g = a.Color.G + (bStop.Color.G - a.Color.G) * localT;
-                    b = a.Color.B + (bStop.Color.B - a.Color.B) * localT;
+                    r = ca.R + (cb.R - ca.R) * u;
+                    g = ca.G + (cb.G - ca.G) * u;
+                    b = ca.B + (cb.B - ca.B) * u;
                     return;
             }
+        }
+
+        /// <summary>Catmull-Rom spline through the four stops around segment
+        /// <paramref name="seg"/>, per channel in sRGB. <paramref name="u"/> is
+        /// the (midpoint-biased) segment parameter.</summary>
+        private void SampleCubic(int seg, float u, out float r, out float g, out float b)
+        {
+            int last = Stops.Count - 1;
+            System.Drawing.Color p0 = Stops[System.Math.Max(0, seg - 1)].Color;
+            System.Drawing.Color p1 = Stops[seg].Color;
+            System.Drawing.Color p2 = Stops[seg + 1].Color;
+            System.Drawing.Color p3 = Stops[System.Math.Min(last, seg + 2)].Color;
+            r = System.Math.Clamp(CatmullRom(p0.R, p1.R, p2.R, p3.R, u), 0f, 255f);
+            g = System.Math.Clamp(CatmullRom(p0.G, p1.G, p2.G, p3.G, u), 0f, 255f);
+            b = System.Math.Clamp(CatmullRom(p0.B, p1.B, p2.B, p3.B, u), 0f, 255f);
+        }
+
+        private static float CatmullRom(float p0, float p1, float p2, float p3, float u)
+        {
+            float u2 = u * u;
+            float u3 = u2 * u;
+            return 0.5f * ((2f * p1)
+                + (-p0 + p2) * u
+                + (2f * p0 - 5f * p1 + 4f * p2 - p3) * u2
+                + (-p0 + 3f * p1 - 3f * p2 + p3) * u3);
+        }
+
+        /// <summary>Power-bias remap so <c>u==mid</c> maps to 0.5 (F7). A
+        /// <paramref name="mid"/> of 0 (legacy) or out of (0,1) is treated as
+        /// 0.5 (linear).</summary>
+        private static float ApplyMidpoint(float u, float mid)
+        {
+            if (mid <= 0f || mid >= 1f) return u;
+            if (MathF.Abs(mid - 0.5f) < 1e-4f) return u;
+            float e = MathF.Log(0.5f) / MathF.Log(mid);
+            return MathF.Pow(System.Math.Clamp(u, 0f, 1f), e);
         }
 
         /// <inheritdoc/>
         public virtual int Map(float smooth, float distance, int maxIterations)
         {
             float t = (maxIterations > 0) ? smooth / maxIterations : 0f;
-            return MapNormalized(System.Math.Clamp(t, 0f, 1f), distance);
+            t = ApplyTransfer(System.Math.Clamp(t, 0f, 1f));
+            return MapNormalized(t, distance);
         }
 
         // Virtual 9-arg overload exists at the class level so derived themes that
@@ -329,7 +460,7 @@ namespace FracturingFog.Models
         {
             // Density / offset / wrap honoured via the shared CyclicT helper.
             // Defaults collapse to the historical ((smooth*speed) mod 1).
-            float t = CyclicT(smooth, CycleSpeed);
+            float t = ApplyTransfer(CyclicT(smooth, CycleSpeed));
             return MapNormalized(t, distance);
         }
     }

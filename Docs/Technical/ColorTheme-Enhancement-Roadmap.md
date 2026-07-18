@@ -272,11 +272,27 @@ Rationale: F1/F4/F5 are additive nullable DTO fields + LUT-build or one-line
 `Map` edits, byte-identical when defaulted. F8 is purely additive ColorGen
 builtins. All four are independently shippable and each visibly upgrades output.
 
-**Phase B — small-surface curves & knobs:**
-☐ F2 · ☐ F3 · ☐ F7
+**Phase B — small-surface curves & knobs:** ☑ SHIPPED (2026-07-17)
+☑ F2 · ☑ F3 · ☑ F7
 
-Interpolation curve, transfer function, per-stop midpoint. Same DTO+LUT pattern;
-F2 cubic and F7 add fields to the `ColorStop` value type.
+- **F2** — `ColorThemeData.InterpolationCurve` (`Linear`/`Cosine`/`Cubic`/`Step`).
+  Cosine/Step remap the segment parameter in `SampleStops`; `Cubic` is a
+  Catmull-Rom spline through the 4 neighbouring stops in sRGB (`SampleCubic`).
+  LUT-baked → zero per-pixel cost.
+- **F3** — `TransferFunction` (`Linear`/`Sqrt`/`Cubic`/`Log`/`Sine`) +
+  `TransferStrength`. Shared `GradientColorMap.ApplyTransfer(t)` called from
+  `GradientColorMap.Map` and `CyclingGradientColorMap.Map`. Every curve fixes
+  f(0)=0/f(1)=1 so cycling seams stay continuous. **Not applied to 3D albedo**
+  (would move PBR material bands); the `InterpCurve` LUT effect still applies to
+  3D albedo.
+- **F7** — `ColorStopData.Midpoint` (+ `ColorStop.Midpoint` runtime field, +
+  interop). Power-bias remap in `SampleStops` (`ApplyMidpoint`); 0/out-of-range
+  ⇒ 0.5 = linear, so legacy stops are unaffected.
+- Round-trip via `Export*` accessors; `FromColorStop` normalises legacy 0→0.5.
+- Verified: Engine + WinExe build clean; 12/12 runtime invariant checks pass
+  (transfer endpoints, step/cosine/cubic curves, midpoint bias, OkLab≠sRGB,
+  ping-pong seam continuity).
+- **Not yet done (follow-up):** editor UI, user worked-examples.
 
 **Phase C — DSL depth + post-FX:**
 ☐ F9 · ☐ F6 · ☐ F12

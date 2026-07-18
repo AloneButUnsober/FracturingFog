@@ -31,5 +31,14 @@ namespace FracturingFog.Models
         public byte R { get; set; }
         public byte G { get; set; }
         public byte B { get; set; }
+
+        /// <summary>
+        /// Segment midpoint bias in (0,1) for the gradient segment that
+        /// <em>starts</em> at this stop (Phase B / F7). 0.5 = linear (default);
+        /// smaller pushes the halfway colour toward this stop, larger toward the
+        /// next. 0 or out-of-range is treated as 0.5 so legacy themes are
+        /// unaffected.
+        /// </summary>
+        public float Midpoint { get; set; } = 0.5f;
     }
 }

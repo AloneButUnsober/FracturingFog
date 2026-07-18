@@ -85,6 +85,9 @@ namespace FracturingFog.Models
                             MaxRecommendedZoom = maxZoomField,
                             Kind = ColorThemeKind.Pbr3D,
                             InterpolationSpace = pbr.ExportInterpolationSpace,
+                            InterpolationCurve = pbr.ExportInterpolationCurve,
+                            TransferFunction = pbr.ExportTransferFunction,
+                            TransferStrength = pbr.ExportTransferStrength,
                             ColorOffset = pbr.ExportColorOffset,
                             ColorDensity = pbr.ExportColorDensity,
                             WrapMode = pbr.ExportWrapMode,
@@ -122,6 +125,9 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Phong3D,
                         InterpolationSpace = phong.ExportInterpolationSpace,
+                        InterpolationCurve = phong.ExportInterpolationCurve,
+                        TransferFunction = phong.ExportTransferFunction,
+                        TransferStrength = phong.ExportTransferStrength,
                         ColorOffset = phong.ExportColorOffset,
                         ColorDensity = phong.ExportColorDensity,
                         WrapMode = phong.ExportWrapMode,
@@ -151,6 +157,9 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Cycling,
                         InterpolationSpace = cyc.ExportInterpolationSpace,
+                        InterpolationCurve = cyc.ExportInterpolationCurve,
+                        TransferFunction = cyc.ExportTransferFunction,
+                        TransferStrength = cyc.ExportTransferStrength,
                         ColorOffset = cyc.ExportColorOffset,
                         ColorDensity = cyc.ExportColorDensity,
                         WrapMode = cyc.ExportWrapMode,
@@ -170,6 +179,9 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Gradient,
                         InterpolationSpace = grad.ExportInterpolationSpace,
+                        InterpolationCurve = grad.ExportInterpolationCurve,
+                        TransferFunction = grad.ExportTransferFunction,
+                        TransferStrength = grad.ExportTransferStrength,
                         Stops = StopsToData(grad.ExportStops),
                         Brightness = bright,
                         Contrast = contrast,
@@ -269,6 +281,9 @@ namespace FracturingFog.Models
             ThemeAdaptive = data.Adaptive;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -307,6 +322,9 @@ namespace FracturingFog.Models
             _cycleSpeed = data.CycleSpeed;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -366,6 +384,9 @@ namespace FracturingFog.Models
             _rimDiffScale = data.RimDiffScale;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -457,6 +478,9 @@ namespace FracturingFog.Models
             _glowScale = data.GlowBoostScale;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
             InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
