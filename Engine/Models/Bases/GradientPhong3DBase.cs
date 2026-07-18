@@ -145,8 +145,8 @@ namespace FracturingFog.Models
             if (smooth >= maxIterations)
                 return unchecked((int)0xFF000000);
 
-            // Sample gradient at cycling t.
-            float t       = (smooth * CycleSpeed) % 1.0f;
+            // Sample gradient at cycling t (density / offset / wrap honoured).
+            float t       = CyclicT(smooth, CycleSpeed);
             int   albedoI = MapNormalized(t, distance);
             float aR      = ((albedoI >> 16) & 0xFF) / 255f;
             float aG      = ((albedoI >>  8) & 0xFF) / 255f;

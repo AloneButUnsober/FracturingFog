@@ -345,7 +345,8 @@ namespace FracturingFog.Models
             var (exposure, rimBoost, glowMult, specBoost) = GetLightingParams();
 
             // 1. Sample gradient (sRGB), convert to linear for PBR math.
-            float t = (smooth * CycleSpeed) % 1f;
+            //    Density / offset / wrap honoured via the shared CyclicT helper.
+            float t = CyclicT(smooth, CycleSpeed);
             int albedoI = MapNormalized(t, distance);
 
             float aR = PbrMath.SrgbToLinear(((albedoI >> 16) & 0xFF) / 255f);

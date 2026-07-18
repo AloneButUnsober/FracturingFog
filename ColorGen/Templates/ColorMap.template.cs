@@ -188,6 +188,18 @@ public sealed class {{CLASS_NAME}} : IColorMap, INamedColorMap, IColorMapWithPix
             return Mix(stops[k], stops[k2], f);
         }
 
+        /// <summary>Inigo Quilez cosine palette: a + b·cos(2π·(c·t + d)).
+        /// a,b,c,d are per-channel coefficient vectors. Output is unclamped
+        /// (the ARGB packer clamps to [0,1]).</summary>
+        public static Cg3 Cosine(double t, Cg3 a, Cg3 b, Cg3 c, Cg3 d)
+        {
+            const double tau = 6.283185307179586;
+            return new Cg3(
+                a.R + b.R * System.Math.Cos(tau * (c.R * t + d.R)),
+                a.G + b.G * System.Math.Cos(tau * (c.G * t + d.G)),
+                a.B + b.B * System.Math.Cos(tau * (c.B * t + d.B)));
+        }
+
         public static Cg3 Brightness(Cg3 a, double s) => new(a.R + s, a.G + s, a.B + s);
 
         public static Cg3 Contrast(Cg3 a, double s)

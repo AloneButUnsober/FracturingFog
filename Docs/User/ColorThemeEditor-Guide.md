@@ -342,6 +342,15 @@ Each entry in `colorthemes.json` is a single `ColorThemeData` object. Field omis
 
 Pbr3D entries add a `pbrExtras` block with `lightingMode`, `glowExp`, `glowScale`, and a `materialBands` array.
 
+**Colour options (optional, all kinds).** Omit for the historical look:
+
+| Field | Values | Default | Effect |
+|---|---|---|---|
+| `interpolationSpace` | `Srgb` / `OkLab` / `Hsv` | `Srgb` | Colour space the gradient blends stops in. `OkLab` = perceptually smooth mid-tones; `Hsv` = shorter-arc hue sweep. Zero render cost (baked into the LUT). |
+| `colorOffset` | float | `0` | Phase rotation of the palette along the iteration axis (Cycling / Phong3D / Pbr3D). |
+| `colorDensity` | float | `1` | Frequency multiplier — how many cycles fit, independent of `cycleSpeed`. |
+| `wrapMode` | `Repeat` / `PingPong` / `Clamp` | `Repeat` | Boundary behaviour. `PingPong` mirrors so there is no 1→0 seam. |
+
 ---
 
 ## 15. Worked Examples

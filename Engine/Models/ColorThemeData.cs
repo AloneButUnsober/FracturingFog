@@ -37,6 +37,39 @@ namespace FracturingFog.Models
         Pbr3D
     }
 
+    /// <summary>
+    /// Colour space the gradient blends stops in (Phase A / F1). Only affects
+    /// how the 256-entry LUT is *built* — zero per-pixel cost. <c>Srgb</c> is
+    /// the historical byte-lerp; <c>OkLab</c> gives perceptually smooth
+    /// mid-tones between distant hues; <c>Hsv</c> sweeps hue along the shorter
+    /// arc for rainbow ramps.
+    /// </summary>
+    public enum GradientColorSpace
+    {
+        /// <summary>Linear byte lerp in sRGB (historical default — byte-identical).</summary>
+        Srgb,
+        /// <summary>Perceptually uniform OkLab blend (Björn Ottosson).</summary>
+        OkLab,
+        /// <summary>HSV with shorter-arc hue interpolation.</summary>
+        Hsv,
+    }
+
+    /// <summary>
+    /// How the cycling parameter wraps at the [0,1] boundary (Phase A / F5).
+    /// <c>Repeat</c> is the historical modulo wrap; <c>PingPong</c> mirrors so
+    /// there is no hard seam where the palette jumps 1→0; <c>Clamp</c> holds
+    /// the endpoints.
+    /// </summary>
+    public enum ColorWrapMode
+    {
+        /// <summary>Modulo wrap (historical default).</summary>
+        Repeat,
+        /// <summary>Triangle-wave mirror — seamless.</summary>
+        PingPong,
+        /// <summary>Clamp to [0,1].</summary>
+        Clamp,
+    }
+
     // ColorStopData moved to Abstractions/Models/ColorStopData.cs so the
     // shared lib (PaletteBuilder.Lib) and this host can both reference the
     // same type. The ColorStop interop helpers (ctor from ColorStop +
@@ -142,9 +175,36 @@ namespace FracturingFog.Models
 
         public List<ColorStopData> Stops { get; set; } = new();
 
+        /// <summary>
+        /// Colour space the gradient LUT is built in (Phase A / F1). Absent /
+        /// <see cref="GradientColorSpace.Srgb"/> ⇒ byte-identical to the
+        /// historical render.
+        /// </summary>
+        public GradientColorSpace InterpolationSpace { get; set; } = GradientColorSpace.Srgb;
+
         // ── Cycling / 3D ──────────────────────────────────────────────────────
 
         public float CycleSpeed { get; set; } = 0.02f;
+
+        /// <summary>
+        /// Additive phase applied to the cycling parameter (Phase A / F4),
+        /// rotating the palette along the iteration axis. Default 0.
+        /// </summary>
+        public float ColorOffset { get; set; } = 0f;
+
+        /// <summary>
+        /// Multiplies the cycling frequency (Phase A / F4) — how many palette
+        /// cycles fit per <c>1/CycleSpeed</c> smooth-units. Default 1
+        /// (unchanged). Distinct from <see cref="CycleSpeed"/> so density can
+        /// be tuned/animated without disturbing the base rhythm.
+        /// </summary>
+        public float ColorDensity { get; set; } = 1f;
+
+        /// <summary>
+        /// Boundary behaviour of the cycling parameter (Phase A / F5). Default
+        /// <see cref="ColorWrapMode.Repeat"/> (historical modulo wrap).
+        /// </summary>
+        public ColorWrapMode WrapMode { get; set; } = ColorWrapMode.Repeat;
 
         // ── 3D shared (Phong + PBR) ───────────────────────────────────────────
 

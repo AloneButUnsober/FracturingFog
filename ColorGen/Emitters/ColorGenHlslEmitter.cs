@@ -190,6 +190,9 @@ public sealed class ColorGenHlslEmitter
                 sb.Append(')');
                 return sb.ToString();
             }
+            // IQ cosine palette — native HLSL vector ops, no prelude helper.
+            //   a + b * cos(tau * (c*t + d)); output may exceed [0,1] (packer clamps).
+            case "cosine":     return $"({A(1)} + {A(2)} * cos(6.283185307179586 * ({A(3)} * {A(0)} + {A(4)})))";
             case "brightness": return $"({A(0)} + {A(1)}.xxx)";
             case "contrast":   return $"(0.5 + ({A(0)} - 0.5.xxx) * (1.0 + {A(1)}))";
             case "gamma":      return $"pow(max({A(0)}, 0.0.xxx), 1.0 / max({A(1)}, 1e-6))";
