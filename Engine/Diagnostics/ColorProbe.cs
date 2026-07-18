@@ -60,6 +60,8 @@ namespace FracturingFog.Diagnostics
             bool verbose = args.Length > 1 && string.Equals(args[1], "verbose", StringComparison.OrdinalIgnoreCase);
             if (args.Length > 1 && string.Equals(args[1], "dither", StringComparison.OrdinalIgnoreCase))
                 return RunDitherDemo();
+            if (args.Length > 1 && string.Equals(args[1], "alpha", StringComparison.OrdinalIgnoreCase))
+                return RunAlphaDemo();
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -201,6 +203,57 @@ namespace FracturingFog.Diagnostics
             }
             Console.WriteLine($"RESULT: FAIL (spread={spread}, meanOk={meanOk})");
             return 1;
+        }
+
+        // --colorprobe alpha: diagnostic (NOT a gate) proving F10's per-stop
+        // alpha rides the LUT's 4th lane end-to-end — a stop with A=0 through a
+        // stop with A=255 must produce an interpolated alpha byte in the packed
+        // ARGB, not the historical forced 0xFF.
+        private static int RunAlphaDemo()
+        {
+            var data = new ColorThemeData
+            {
+                Name = "probe-alpha",
+                Kind = ColorThemeKind.Gradient,
+                Stops = new List<ColorStopData>
+                {
+                    new ColorStopData { Position = 0.00f, R = 10,  G = 20,  B = 40,  A = 0   },
+                    new ColorStopData { Position = 1.00f, R = 240, G = 230, B = 120, A = 255 },
+                },
+            };
+            var map = DataDrivenColorThemes.Create(data);
+            if (map == null)
+            {
+                Console.WriteLine("RESULT: FAIL (alpha gradient did not create a map)");
+                return 1;
+            }
+
+            Console.WriteLine("F10 per-stop alpha demo — gradient A: 0 → 255 across t=0..1:");
+            int a0 = 0, a1 = 0;
+            bool monotone = true;
+            int prevA = -1;
+            for (int i = 0; i < Samples; i++)
+            {
+                float t = i / (float)(Samples - 1);
+                int argb = map.Map(t * MaxIter, 0f, MaxIter);
+                int aByte = (argb >> 24) & 0xFF;
+                if (i == 0) a0 = aByte;
+                if (i == Samples - 1) a1 = aByte;
+                if (aByte < prevA) monotone = false;
+                prevA = aByte;
+            }
+            Console.WriteLine($"  alpha at t=0   = {a0}");
+            Console.WriteLine($"  alpha at t=1   = {a1}");
+            Console.WriteLine($"  monotone rise  = {monotone}");
+
+            // Plumbing works iff alpha starts near 0, ends at 255, and never
+            // falls — i.e. the forced-0xFF is gone and the lane interpolates.
+            bool ok = a0 <= 8 && a1 == 255 && monotone;
+            Console.WriteLine();
+            Console.WriteLine(ok
+                ? "RESULT: PASS (per-stop alpha carried through the LUT)"
+                : $"RESULT: FAIL (a0={a0}, a1={a1}, monotone={monotone})");
+            return ok ? 0 : 1;
         }
 
         private static string Rgb(int argb)
