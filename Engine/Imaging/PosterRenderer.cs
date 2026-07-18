@@ -67,6 +67,18 @@ namespace FracturingFog.Imaging
         public int Contrast { get; init; }     // -100..100, 0 = none
         public int HistogramEq { get; init; }  //    0..100, 0 = none
 
+        /// <summary>F11 ordered-dither deband of the palette float→byte quantise
+        /// (CPU F11a + GPU F11b). Off = plain truncate/round. The colour pipeline
+        /// reads this through process-global <see cref="GradientColorMap"/> statics,
+        /// which <see cref="PosterRenderer.RenderToFile"/> sets from this request
+        /// (and restores afterwards) so a headless / batch render is deterministic
+        /// regardless of whatever the last interactive frame left in those globals.</summary>
+        public bool BandDither { get; init; }
+
+        /// <summary>Ordered-dither amplitude in [0,100]; 100 = full ±0.5-LSB spread.
+        /// Only consulted when <see cref="BandDither"/> is on.</summary>
+        public int BandDitherStrength { get; init; } = 100;
+
         /// <summary>Landscape render dimensions. When <see cref="Rotate"/> is
         /// set the saved image is the 90°-rotated transpose of these.</summary>
         public int Width { get; init; }
@@ -158,6 +170,18 @@ namespace FracturingFog.Imaging
             uint[] buffer;
             int w, h;
 
+            // F11 deband — the colour pipeline reads dither state from process-global
+            // GradientColorMap statics, so set them from this request for the render
+            // and restore afterwards. Explicit here (not inherited from ambient global)
+            // so a headless / batch / server render debands deterministically instead
+            // of depending on whatever the last interactive frame happened to leave set.
+            bool prevDither = GradientColorMap.DitherEnabled;
+            float prevDitherStrength = GradientColorMap.DitherStrength;
+            GradientColorMap.DitherEnabled = req.BandDither;
+            GradientColorMap.DitherStrength = Math.Clamp(req.BandDitherStrength, 0, 100) / 100f;
+            try
+            {
+
             IFractalCalculator? alt = BuildCaptureCalculator(req);
             if (alt != null)
             {
@@ -229,6 +253,13 @@ namespace FracturingFog.Imaging
                 buffer = calc.ColorBuffer;
                 w = calc.Width;
                 h = calc.Height;
+            }
+
+            }
+            finally
+            {
+                GradientColorMap.DitherEnabled = prevDither;
+                GradientColorMap.DitherStrength = prevDitherStrength;
             }
 
             sw.Stop();

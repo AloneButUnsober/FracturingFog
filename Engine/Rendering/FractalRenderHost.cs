@@ -834,6 +834,12 @@ namespace FracturingFog.Rendering
                 ColorMap = _calculator.ColorMap,
                 Quality = s.Quality,
                 FractalParameters = s.FractalParameters,
+                // F11 deband parity — carry the interactive toggle into the
+                // offscreen render so an exported still matches what the deband
+                // switch shows on screen (WYSIWYG). Default-off requests stay
+                // byte-identical to the pre-F11 poster output.
+                BandDither = s.BandDither,
+                BandDitherStrength = s.BandDitherStrength,
                 Rotate = rotate,
                 Path = path,
                 Format = format,
