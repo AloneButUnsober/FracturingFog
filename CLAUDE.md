@@ -1,5 +1,17 @@
 # Fracturing Fog — Project Notes for Claude
 
+## Dev tracking: use GitHub issues
+
+**Prefer the GitHub issues list for dev tracking whenever possible.** New work,
+bugs, spikes, and multi-slice plans get filed as issues (`gh issue create`)
+rather than tracked only in scratch notes or ad-hoc TODOs.
+
+- Multi-phase work: one tracking issue per slice, with dependencies stated in
+  the body (repo has no labels/milestones/auto-blocking configured).
+- A companion design/dev doc under `Docs/Technical/` may back a plan, but the
+  issues are the canonical task list — link doc ↔ issues both ways.
+- Repo: `AloneButUnsober/MandelbrotExplorer`. `gh` is authenticated with admin.
+
 ## UI status: Avalonia is canonical. WinForms is deprecated.
 
 **All new UI work goes into `UI.Avalonia/`.** Do not add features, fix
