@@ -1991,7 +1991,11 @@ namespace FracturingFog.Rendering
                 }
             }
             if (srcBuf != null)
-                UploadProcessedBuffer(srcBuf, srcW, srcH);
+                // srcBuf is _lastFullResBuffer — a snapshot with post-FX
+                // already baked in. Flag it so UploadProcessedBuffer does NOT
+                // re-apply brightness/contrast/gamma (which would compound on
+                // every selection-box repaint, e.g. repeated right-clicks).
+                UploadProcessedBuffer(srcBuf, srcW, srcH, srcAlreadyProcessed: true);
             else
                 RepaintWithPostFx();
         }
@@ -2443,7 +2447,15 @@ namespace FracturingFog.Rendering
         private int _leakDiagBaselineGen0, _leakDiagBaselineGen1, _leakDiagBaselineGen2;
         private bool _leakDiagBaselineTaken;
 
-        private void UploadProcessedBuffer(uint[] src, int w, int h)
+        // srcAlreadyProcessed: true when the caller hands us a buffer that has
+        // ALREADY had brightness/contrast/gamma baked in (the _lastFullResBuffer
+        // snapshot). Re-applying the post-FX pass to it would compound the
+        // adjustment on every call — the exact bug behind "right-click darkens
+        // the image, progressively darker each click": a plain right-click
+        // fires two selection-box repaints (set + clear), each re-uploading the
+        // already-processed snapshot, and each re-darkening it because we then
+        // write the result back into that same snapshot below.
+        private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
@@ -2463,7 +2475,8 @@ namespace FracturingFog.Rendering
             int brightness = ViewState.Brightness;
             int contrast = ViewState.Contrast;
             int gamma = ViewState.Gamma;
-            bool needsProcess = brightness != 0 || contrast != 0 || gamma != 0;
+            bool needsProcess = !srcAlreadyProcessed
+                                && (brightness != 0 || contrast != 0 || gamma != 0);
 
             if (needsProcess)
             {
