@@ -1099,8 +1099,20 @@ namespace FracturingFog.Rendering
             catch (ObjectDisposedException) { }
         }
 
+        // F11: push the ViewState deband toggle into the global GradientColorMap
+        // statics that the CPU (F11a) and GPU (F11b) quantise points read. One
+        // knob, applied at every render entry so interactive / video / export
+        // stay consistent. Default-off ⇒ statics stay false ⇒ plain quantise.
+        private void ApplyBandDitherState()
+        {
+            FracturingFog.Models.GradientColorMap.DitherEnabled = ViewState.BandDither;
+            FracturingFog.Models.GradientColorMap.DitherStrength =
+                System.Math.Clamp(ViewState.BandDitherStrength, 0, 100) / 100f;
+        }
+
         private void RunFrameJobCalc(in FrameJob job)
         {
+            ApplyBandDitherState();
             var token = job.Token;
             var calc = job.Calc;
             var altCalc = job.AltCalc;

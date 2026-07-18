@@ -16,7 +16,8 @@ and the live host gamma slider. Phase D is **planned + audited but only the
 prerequisite gate is built**. Remaining Phase D order:
 
 ```
-☑ --colorprobe gate  →  ☑ F11a (CPU deband)  →  ◐ F11b (GPU dither, code done / UNVERIFIED on-device)  →  ☐ F10 (alpha)
+☑ --colorprobe gate  →  ☑ F11a (CPU deband)  →  ◐ F11b (GPU dither, code done / UNVERIFIED on-device)
+→  ☑ runtime toggle (Deband checkbox + strength)  →  ☐ F10 (alpha)
 ```
 
 ## Commit ledger (this arc, newest last)
@@ -27,7 +28,8 @@ prerequisite gate is built**. Remaining Phase D order:
 | `82720b8` | feat: `--colorprobe` golden gate (`Engine/Diagnostics/ColorProbe.cs` + Program.cs dispatch) |
 | `b2dc48e` | docs: mark `--colorprobe` shipped in Phase D plan |
 | `8d5ce45` | feat: F11a CPU ordered dither (Bayer 8×8, pre-quantise, default-off) |
-| _(this)_ | feat: F11b GPU HLSL ordered dither in cg_pack_bgra (default-off, UNVERIFIED on-device) |
+| `5e9afc4` | feat: F11b GPU HLSL ordered dither in cg_pack_bgra (default-off, UNVERIFIED on-device) |
+| _(this)_ | feat: Deband runtime toggle (Post-FX checkbox + strength slider → GradientColorMap statics) |
 
 ## Audit findings that changed the plan (do NOT re-derive)
 
@@ -124,16 +126,36 @@ a real GPU — the C# build does NOT exercise it. Nobody has run a GPU render wi
 (2) default-off output is unchanged, (3) enabled output visibly debands a deep
 gradient without artefacts. This is Windows + D3D11 only.
 
-## Next task: wire the runtime toggle, then F10
+## Runtime toggle (WIRED)
 
-F11a + F11b are both **dormant** — nothing flips `GradientColorMap.DitherEnabled`
-at runtime. Next unit: an Avalonia toggle (+ optional strength slider, per
-`feedback_tunable_params`) that the render host lifts into
-`GradientColorMap.DitherEnabled` / `.DitherStrength`. That single knob lights up
-both the CPU and GPU deband and makes the on-device F11b verification possible.
+"Deband" now lives in the Post-FX group of the floating menu (a checkbox + a
+0–100 strength slider), following the live-gamma chain:
 
-F10 (alpha) is the last, widest unit — separate sign-off, behind a premultiply
-audit (~104 files).
+- `FloatingMenuView.axaml` — Deband row (Post-FX grid) → `FloatingMenuViewModel`
+  `BandDither` / `BandDitherStrength` (+ `*Silent` setters + toggle/slide events).
+- `ShellViewModel` bridges those events → `MainViewModel.BandDither` /
+  `.BandDitherStrength`, which write `FractalViewState.BandDither(Strength)` and
+  call `Trigger()` (full re-render — deband acts at colorize, not post-FX).
+- `FractalRenderHost.ApplyBandDitherState()` lifts the ViewState into
+  `GradientColorMap.DitherEnabled` / `.DitherStrength` at the top of
+  `RunFrameJobCalc` (interactive path) — the SAME statics the CPU (F11a) and GPU
+  (F11b) quantise points read. One knob drives both.
+
+Default OFF. `--colorprobe` still PASS; app launches clean (no XAML parse
+error). NOT visually driven: the GUI window isn't screenshot-reachable under
+this RDP session, so the on-screen deband + the GPU F11b path still need a
+local visual sign-off (toggle Deband on at a shallow gradient / deep zoom and
+confirm the banding smooths without artefacts, on both CPU and D3D renderers).
+
+**Still TODO:** persist BandDither/strength (settings load/save + the
+`Set*Silent` restore path); apply `ApplyBandDitherState()` on the video/export
+Calculate paths too if those should honour the toggle independent of the last
+interactive render.
+
+## Next task: F10 (alpha)
+
+The last, widest unit — a compositing-contract change (opaque-ARGB force across
+~104 files), separate sign-off, behind a premultiply audit.
 
 ## Housekeeping / constraints
 

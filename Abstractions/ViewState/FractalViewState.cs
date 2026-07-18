@@ -153,6 +153,15 @@ namespace FracturingFog.ViewState
         /// <summary>Adaptive contrast (histogram eq) strength in [0, 100]; 0 = off.</summary>
         public int HistogramEq { get; set; }
 
+        /// <summary>F11: ordered-dither deband of the palette float→byte quantise
+        /// (CPU F11a + GPU F11b). Off = the plain truncate/round. Applied during
+        /// colorize, so toggling needs a fresh render, not a post-FX repaint.</summary>
+        public bool BandDither { get; set; }
+
+        /// <summary>Ordered-dither amplitude in [0, 100]; 100 = full ±0.5-LSB
+        /// spread. Only consulted when <see cref="BandDither"/> is on.</summary>
+        public int BandDitherStrength { get; set; } = 100;
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
         /// <summary>

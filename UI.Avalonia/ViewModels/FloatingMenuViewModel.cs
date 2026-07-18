@@ -567,6 +567,34 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     }
     public string GammaLabel => $"Gamma: {Gamma}";
 
+    private bool _bandDither;
+    /// <summary>F11 deband toggle. Raises <see cref="BandDitherToggle"/> for
+    /// ShellViewModel to forward to MainViewModel (which flips the
+    /// GradientColorMap statics + re-renders).</summary>
+    public bool BandDither
+    {
+        get => _bandDither;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bandDither, value);
+            BandDitherToggle?.Invoke(this, value);
+        }
+    }
+
+    private int _bandDitherStrength = 100;
+    /// <summary>Deband amplitude in [0,100]; 100 = full ±0.5-LSB. Raises
+    /// <see cref="BandDitherStrengthSlide"/>.</summary>
+    public int BandDitherStrength
+    {
+        get => _bandDitherStrength;
+        set
+        {
+            int v = Math.Clamp(value, 0, 100);
+            this.RaiseAndSetIfChanged(ref _bandDitherStrength, v);
+            BandDitherStrengthSlide?.Invoke(this, v);
+        }
+    }
+
     private bool _brightnessLocked;
     /// <summary>Lock brightness against theme-bundle overrides. Mirrors into
     /// MainViewModel.BrightnessLocked via <see cref="BrightnessLockedChanged"/>.
@@ -826,6 +854,21 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(GammaLabel));
     }
 
+    public void SetBandDitherSilent(bool value)
+    {
+        if (_bandDither == value) return;
+        _bandDither = value;
+        this.RaisePropertyChanged(nameof(BandDither));
+    }
+
+    public void SetBandDitherStrengthSilent(int value)
+    {
+        int v = Math.Clamp(value, 0, 100);
+        if (_bandDitherStrength == v) return;
+        _bandDitherStrength = v;
+        this.RaisePropertyChanged(nameof(BandDitherStrength));
+    }
+
     // ── Toggles ──────────────────────────────────────────────────────────
 
     private bool _showStatusBar = true;
@@ -1003,6 +1046,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<int>? ContrastSlide;
     public event EventHandler<int>? AdaptiveSlide;
     public event EventHandler<int>? GammaSlide;
+    public event EventHandler<bool>? BandDitherToggle;
+    public event EventHandler<int>? BandDitherStrengthSlide;
 
     public event EventHandler<bool>? StatusBarToggled;
     public event EventHandler<bool>? GridToggled;

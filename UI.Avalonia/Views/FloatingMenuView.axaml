@@ -175,7 +175,7 @@
                 <Border Classes="group">
                     <StackPanel Spacing="4">
                         <TextBlock Classes="section" Text="Post-FX" />
-                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding BrightnessLabel}" Margin="0,0,6,4" />
                             <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" 
                                        TickFrequency="25" Margin="0,0,6,4"
@@ -200,9 +200,16 @@
                                        TickFrequency="25" Margin="0,0,6,4"
                                        ToolTip.Tip="Image gamma (-100 to +100, default 0). +brightens, −darkens. Compounds with a theme's baked palette gamma." />
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0"
+                            <CheckBox  Grid.Row="4" Grid.Column="0" Content="Deband" IsChecked="{Binding BandDither}" Margin="0,4,6,0"
+                                       ToolTip.Tip="Ordered dither before the palette float→byte quantise — smooths gradient banding (CPU + GPU). Off by default." />
+                            <Slider    Grid.Row="4" Grid.Column="1" Value="{Binding BandDitherStrength}" Minimum="0" Maximum="100"
+                                       TickFrequency="25" Margin="0,4,6,0"
+                                       IsEnabled="{Binding BandDither}"
+                                       ToolTip.Tip="Deband strength (0–100, default 100 = full ±0.5-LSB spread)." />
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0"
                                        ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
-                            <CheckBox  Grid.Row="4" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+                            <CheckBox  Grid.Row="5" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
                         </Grid>
                         <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="0,6,0,0">
                             <Button Grid.Column="0"
