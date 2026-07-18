@@ -213,18 +213,29 @@ That correctness work is F10.3.
 
 **Remaining F10 phases (each its own sign-off — NOT started):**
 
-- **F10.3 — the risky one: straight-alpha export + compositing audit.** Flip
-  `SaveBgraSkia` to `Unpremul` (opaque case byte-identical: A=255 ⇒ premul==
-  straight), audit every consumer that blends onto a background:
-  `PosterRenderer.ApplyBrightnessContrast` (forces `0xFF000000`), the watermark
-  composite (`CompositeWatermarkSkia` reloads + draws over a now-translucent
-  PNG), `BatchRenderer`, `SceneVideoRenderer`, `PngSequenceWriter`,
-  `FractalOverlayCompositor`. Gate: a **headless** probe that renders a 2-stop
-  A=128 theme through `PosterRenderer` → temp PNG → reads the pixel back and
-  asserts A preserved + RGB unmangled (testable without the GUI). PNG-vs-video
-  alpha divergence + premultiply is where the ~5-day estimate and real bug risk
-  live. Do this as its own focused unit with on-device visual sign-off
-  (translucent theme over a checkerboard).
+- **F10.3a — straight-alpha PNG encode (DONE, commit `c06367f`).**
+  `SaveBgraSkia` now declares `SKAlphaType.Unpremul` (opaque case byte-
+  identical: A=255 ⇒ premul==straight), and `PosterRenderer.ApplyBrightnessContrast`
+  preserves the source alpha byte (was forced `0xFF`). New TRUE gate
+  `--colorprobe alphapng` round-trips a hand-built A=128 BGRA buffer through
+  `SavePixelsToFile` → PNG → SkiaSharp decode and asserts A survives + RGB
+  unmangled (PASS). This closes the core author→export vertical slice: an F10.2
+  translucent theme now exports with its alpha. **Scope: the PNG *encode* path
+  only.**
+
+- **F10.3b — the risky remainder: multi-consumer compositing audit + visual
+  sign-off.** Every consumer that blends onto a background or reloads/reencodes
+  is still opaque-assuming or unverified: the watermark composite
+  (`CompositeWatermarkSkia` reloads a now-translucent PNG, draws, re-encodes —
+  the interactive "Image" button ALWAYS takes this path), `SceneVideoRenderer` +
+  `PngSequenceWriter` (video frame accumulation, PNG-vs-video alpha divergence),
+  `FractalOverlayCompositor`, `BatchRenderer`, and the on-screen display (opaque
+  blit — screen can't show translucency at all). Needs a per-consumer premultiply
+  audit + **on-device visual sign-off** (author a translucent theme, export, view
+  the PNG over a checkerboard; confirm the "Image" button's watermarked output
+  keeps alpha). This is where the residual ~multi-day estimate + real bug risk
+  live; do it as its own focused unit with a real GUI (RDP here can't drive/see
+  the window).
 - **F10.4 — procedural/3D/GPU pack parity.** `ColorUtils.PackArgb`/`PackArgbF`
   (~40 `ColorSchemes/*` sites), the two 3D lit packs (`GradientPhong3DBase`,
   `PbrGradient3DBase`), and the GPU `cg_pack_bgra` (D3D/Silk/Skia) still force
