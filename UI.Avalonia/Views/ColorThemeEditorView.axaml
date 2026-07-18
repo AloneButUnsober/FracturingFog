@@ -180,7 +180,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="vm:ColorStopRowVm">
                                                 <Border Background="{Binding RowBackground}" CornerRadius="2" Margin="2,1" Padding="2">
-                                                    <Grid ColumnDefinitions="132,Auto,Auto,Auto" Margin="2,1">
+                                                    <Grid ColumnDefinitions="132,Auto,Auto,Auto,Auto" Margin="2,1">
                                                         <Grid.Styles>
                                                             <Style Selector="Grid">
                                                                 <Setter Property="Background" Value="Transparent" />
@@ -194,12 +194,16 @@
                                                         <!--<Border Grid.Column="1" Width="32" Height="22" Margin="6,0"
                                                                 Background="{Binding SwatchBrush}"
                                                                 BorderBrush="#444" BorderThickness="1" />-->
-                                                        <ColorPicker Grid.Column="1" Color="{Binding StopColor, Mode=TwoWay}" 
+                                                        <ColorPicker Grid.Column="1" Color="{Binding StopColor, Mode=TwoWay}"
                                                                      Margin="4,0" HorizontalAlignment="Left" Width="120" />
                                                         <Button Grid.Column="2" Content="◎" Width="32" Margin="2,0,12,0"
                                                                 Background="#325A6E" Foreground="White" FontWeight="Bold"
                                                                 Command="{Binding SampleCommand}"
                                                                 ToolTip.Tip="Sample a color from anywhere on the desktop and apply to this stop." />
+                                                        <NumericUpDown Grid.Column="3" Value="{Binding Midpoint}"
+                                                                       Minimum="0.01" Maximum="0.99" Increment="0.05"
+                                                                       FormatString="0.00" Width="82" Margin="0,0,10,0"
+                                                                       ToolTip.Tip="Segment midpoint bias for the blend starting at this stop (0.5 = linear)." />
                                                         <Button Grid.Column="4" Classes="action danger" Content="X" Width="28"
                                                                 Command="{Binding $parent[ItemsControl].((vm:ColorThemeEditorViewModel)DataContext).RemoveStopCommand}"
                                                                 CommandParameter="{Binding}" />
@@ -213,16 +217,68 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Gradient interpolation (F1 space, F2 curve, F3 transfer) -->
+                    <Border Classes="group">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="section" Text="Interpolation" />
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Space:" Margin="0,0,8,4" />
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          ItemsSource="{Binding ColorSpaceOptions}" SelectedItem="{Binding InterpSpace}"
+                                          HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
+                                          ToolTip.Tip="Colour space the gradient LUT blends in. OkLab = perceptually smooth mid-tones; HSV = shorter-arc hue." />
+                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Curve:" Margin="0,0,8,4" />
+                                <ComboBox Grid.Row="1" Grid.Column="1"
+                                          ItemsSource="{Binding CurveOptions}" SelectedItem="{Binding InterpCurve}"
+                                          HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
+                                          ToolTip.Tip="Segment blend shape. Cubic = Catmull-Rom spline through stops; Step = hard bands." />
+                                <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Transfer:" Margin="0,0,8,4" />
+                                <ComboBox Grid.Row="2" Grid.Column="1"
+                                          ItemsSource="{Binding TransferOptions}" SelectedItem="{Binding TransferFn}"
+                                          HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
+                                          ToolTip.Tip="Remaps the mapping scalar before palette lookup (Gradient + Cycling kinds; 3D albedo unaffected)." />
+                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Strength:" Margin="0,0,8,0" />
+                                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Slider Value="{Binding TransferStrength}" Minimum="0" Maximum="1"
+                                            Width="170" VerticalAlignment="Center"
+                                            ToolTip.Tip="Blend from identity (0) to full transfer curve (1)." />
+                                    <TextBlock Text="{Binding TransferStrength, StringFormat=0.00}"
+                                               Foreground="#9B9B9B" Width="36" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Cycle -->
                     <Border Classes="group">
                         <StackPanel Spacing="4" Orientation="Horizontal">
                                 <StackPanel Spacing="6" IsEnabled="{Binding ShowCycle}">
                                     <TextBlock Classes="section" Text="Cycle" />
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Classes="label" Text="Speed:" />
+                                        <TextBlock Classes="label" Text="Speed:" Width="56" />
                                         <NumericUpDown Value="{Binding CycleSpeed}"
                                                        Minimum="0.0001" Maximum="10" Increment="0.001"
                                                        FormatString="0.0000" Width="135" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="Offset:" Width="56" />
+                                        <NumericUpDown Value="{Binding ColorOffset}"
+                                                       Minimum="-10" Maximum="10" Increment="0.01"
+                                                       FormatString="0.000" Width="135"
+                                                       ToolTip.Tip="Additive phase — rotates the palette along the iteration axis (F4)." />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="Density:" Width="56" />
+                                        <NumericUpDown Value="{Binding ColorDensity}"
+                                                       Minimum="0" Maximum="20" Increment="0.05"
+                                                       FormatString="0.000" Width="135"
+                                                       ToolTip.Tip="Multiplies cycling frequency — palette cycles per rhythm unit (F4)." />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="Wrap:" Width="56" />
+                                        <ComboBox ItemsSource="{Binding WrapModeOptions}" SelectedItem="{Binding WrapMode}"
+                                                  Width="135" HorizontalAlignment="Left"
+                                                  ToolTip.Tip="Boundary behaviour: Repeat (modulo), PingPong (seamless mirror), Clamp (F5)." />
                                     </StackPanel>
                                 </StackPanel>
 
