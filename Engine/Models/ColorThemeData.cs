@@ -174,6 +174,10 @@ namespace FracturingFog.Models
         public byte G { get; set; }
         public byte B { get; set; }
 
+        /// <summary>Interior alpha (F10). 255 = opaque (default), so themes that
+        /// omit it keep the historical opaque interior byte-for-byte.</summary>
+        public byte A { get; set; } = 255;
+
         public InSetColorData() { }
 
         public InSetColorData(byte r, byte g, byte b)
@@ -181,9 +185,10 @@ namespace FracturingFog.Models
             R = r; G = g; B = b;
         }
 
-        /// <summary>Packs the colour as opaque 0xFFRRGGBB.</summary>
+        /// <summary>Packs the colour as AARRGGBB. A defaults to 255, so this is
+        /// the historical opaque 0xFFRRGGBB unless a theme sets a lower alpha.</summary>
         public uint ToPackedArgb()
-            => 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+            => ((uint)A << 24) | ((uint)R << 16) | ((uint)G << 8) | B;
     }
 
     /// <summary>

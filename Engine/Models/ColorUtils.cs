@@ -349,15 +349,18 @@ namespace FracturingFog.Models
             for (int i = 0; i <= LutSize; i++)
             {
                 float t = (i >= LutSize) ? 1f : i / (float)LutSize;
-                SampleStops(t, out float r, out float g, out float b);
+                SampleStops(t, out float r, out float g, out float b, out float alpha);
                 if (applyGamma)
                 {
                     // F6 palette gamma, baked once per LUT entry (0..255 space).
+                    // Alpha is a coverage term, not colour — gamma must not touch it.
                     r = MathF.Pow(System.Math.Clamp(r / 255f, 0f, 1f), gammaExp) * 255f;
                     g = MathF.Pow(System.Math.Clamp(g / 255f, 0f, 1f), gammaExp) * 255f;
                     b = MathF.Pow(System.Math.Clamp(b / 255f, 0f, 1f), gammaExp) * 255f;
                 }
-                samples[i] = Vector128.Create(r, g, b, 0f);
+                // F10: lane 3 carries alpha so the per-pixel base+delta·frac lerp
+                // in MapNormalized interpolates it for free alongside RGB.
+                samples[i] = Vector128.Create(r, g, b, alpha);
             }
             for (int i = 0; i < LutSize; i++)
             {
@@ -371,7 +374,7 @@ namespace FracturingFog.Models
             return lut;
         }
 
-        private void SampleStops(float t, out float r, out float g, out float b)
+        private void SampleStops(float t, out float r, out float g, out float b, out float alpha)
         {
             int n = Stops.Count - 1;
             int seg = 0;
@@ -391,6 +394,7 @@ namespace FracturingFog.Models
                 if (t <= Stops[0].Position)
                 {
                     r = Stops[0].Color.R; g = Stops[0].Color.G; b = Stops[0].Color.B;
+                    alpha = Stops[0].Color.A;
                     return;
                 }
                 seg = n - 1;
@@ -405,10 +409,14 @@ namespace FracturingFog.Models
             // F7: per-segment midpoint bias (belongs to the lower stop).
             u = ApplyMidpoint(u, a.Midpoint);
 
+            // F10: alpha interpolates linearly in the (midpoint-biased, curve-
+            // shaped) segment param, independent of the RGB blend space. Computed
+            // per branch below so it uses the same final u as the colour blend.
             // F2: segment blend shape.
             switch (_interpCurve)
             {
                 case InterpolationCurve.Cubic when Stops.Count >= 3:
+                    alpha = a.Color.A + (bStop.Color.A - a.Color.A) * u;
                     SampleCubic(seg, u, out r, out g, out b);
                     return;
                 case InterpolationCurve.Cosine:
@@ -418,6 +426,8 @@ namespace FracturingFog.Models
                     u = 0f;
                     break;
             }
+
+            alpha = a.Color.A + (bStop.Color.A - a.Color.A) * u;
 
             BlendInSpace(a.Color, bStop.Color, u, out r, out g, out b);
         }
@@ -526,6 +536,10 @@ namespace FracturingFog.Models
             Vector128<float> delta = packed.GetUpper();
             Vector128<float> rgb = baseRgb + delta * Vector128.Create(frac);
 
+            // F10: alpha rides in lane 3 (default stops → 255 → opaque, byte-exact).
+            // Dither is a colour-quantise fix; it must not touch the coverage term.
+            int aC = (int)System.Math.Clamp(rgb.GetElement(3), 0f, 255f);
+
             // F11a: ordered dither before the float→byte truncate. Gated so the
             // off path stays the exact original quantise (--colorprobe byte-exact).
             if (_ditherEnabled)
@@ -534,13 +548,13 @@ namespace FracturingFog.Models
                 int dr = (int)System.Math.Clamp(rgb.GetElement(0) + o, 0f, 255f);
                 int dg = (int)System.Math.Clamp(rgb.GetElement(1) + o, 0f, 255f);
                 int db = (int)System.Math.Clamp(rgb.GetElement(2) + o, 0f, 255f);
-                return unchecked((int)0xFF000000 | (dr << 16) | (dg << 8) | db);
+                return unchecked((aC << 24) | (dr << 16) | (dg << 8) | db);
             }
 
             int r = (int)rgb.GetElement(0);
             int g = (int)rgb.GetElement(1);
             int bC = (int)rgb.GetElement(2);
-            return unchecked((int)0xFF000000 | (r << 16) | (g << 8) | bC);
+            return unchecked((aC << 24) | (r << 16) | (g << 8) | bC);
         }
     }
 

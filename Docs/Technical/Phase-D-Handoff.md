@@ -17,7 +17,7 @@ prerequisite gate is built**. Remaining Phase D order:
 
 ```
 ☑ --colorprobe gate  →  ☑ F11a (CPU deband)  →  ◐ F11b (GPU dither, code done / UNVERIFIED on-device)
-→  ☑ runtime toggle (Deband checkbox + strength)  →  ☐ F10 (alpha)
+→  ☑ runtime toggle (Deband checkbox + strength)  →  ◐ F10 (alpha: F10.1 LUT foundation done)
 ```
 
 ## Commit ledger (this arc, newest last)
@@ -29,7 +29,8 @@ prerequisite gate is built**. Remaining Phase D order:
 | `b2dc48e` | docs: mark `--colorprobe` shipped in Phase D plan |
 | `8d5ce45` | feat: F11a CPU ordered dither (Bayer 8×8, pre-quantise, default-off) |
 | `5e9afc4` | feat: F11b GPU HLSL ordered dither in cg_pack_bgra (default-off, UNVERIFIED on-device) |
-| _(this)_ | feat: Deband runtime toggle (Post-FX checkbox + strength slider → GradientColorMap statics) |
+| `ad3de2c` | feat: Deband runtime toggle (Post-FX checkbox + strength slider → GradientColorMap statics) |
+| _(this)_ | feat: F10.1 per-stop alpha foundation (LUT 4th lane, default-255 byte-exact) |
 
 ## Audit findings that changed the plan (do NOT re-derive)
 
@@ -152,10 +153,40 @@ confirm the banding smooths without artefacts, on both CPU and D3D renderers).
 Calculate paths too if those should honour the toggle independent of the last
 interactive render.
 
-## Next task: F10 (alpha)
+## F10 — per-stop alpha (F10.1 foundation DONE)
 
-The last, widest unit — a compositing-contract change (opaque-ARGB force across
-~104 files), separate sign-off, behind a premultiply audit.
+Phased because the full change is a ~104-file compositing-contract shift. F10.1
+lands the gradient-LUT alpha carrier only, all defaulting to A=255 so output is
+byte-exact and `--colorprobe` still PASSES:
+
+- Data model: `ColorStopData.A` + `InSetColorData.A` (both default 255; omitted
+  in old JSON ⇒ property initialiser keeps 255 ⇒ back-compat).
+- `ColorStopDataExtensions` carries A both ways (`Color.FromArgb(A,R,G,B)`).
+- `SampleStops` outputs a linearly-interpolated `alpha` (blend-space independent,
+  gamma-exempt); `BuildLut` stores it in the Vector128 **lane 3**, so the
+  existing per-pixel `base+delta·frac` lerp interpolates it for free.
+- `MapNormalized` emits `(aC << 24)` from lane 3 instead of forcing `0xFF000000`
+  (both dither branches). Dither never touches the coverage term.
+- Verify: `--colorprobe` byte-exact (opaque default) + new `--colorprobe alpha`
+  proves A rides 0→255 monotone through the LUT.
+
+**Remaining F10 phases (each its own sign-off — NOT started):**
+1. Procedural themes: `ColorUtils.PackArgb`/`PackArgbF` still force `0xFF` (~40
+   `ColorSchemes/*` call sites). Give them an alpha-aware overload if procedural
+   themes should support transparency.
+2. 3D lit packs (`GradientPhong3DBase`, `PbrGradient3DBase`) still force opaque —
+   decide whether lit surfaces carry stop alpha at all.
+3. GPU parity: the D3D `cg_pack_bgra` forces `0xFF` (Silk/Skia too).
+4. **The risky one — downstream compositing/export audit:** `ImageExport`,
+   `PosterRenderer`, `BatchRenderer`, `SceneVideoRenderer`, `PngSequenceWriter`,
+   `FractalOverlayCompositor`, watermark. Premultiply / over-composite / PNG-vs-
+   video divergence. Needs a composite-over-known-background test + visual
+   sign-off. This is where the ~5-day estimate and the real bug risk live.
+
+F10.1 is plumbing only: `Map` now packs the interpolated alpha into the ARGB
+buffer, but no consumer deliberately blends on it and no built-in theme sets
+A<255, so behaviour is unchanged today. A UI to author sub-255 stop alpha plus
+the phase-4 compositing audit are what make transparency actually visible.
 
 ## Housekeeping / constraints
 
