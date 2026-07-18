@@ -642,6 +642,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private bool _alphaPreview;
+    /// <summary>F10.5 live per-stop alpha preview. Display-only checkerboard
+    /// composite in the host upload path, so a post-FX repaint (no recalc) is
+    /// enough to show/hide it.</summary>
+    public bool AlphaPreview
+    {
+        get => _alphaPreview;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _alphaPreview, value))
+            {
+                ViewState.AlphaPreview = value;
+                _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
     private bool _brightnessLocked;
     public bool BrightnessLocked { get => _brightnessLocked; set => this.RaiseAndSetIfChanged(ref _brightnessLocked, value); }
 

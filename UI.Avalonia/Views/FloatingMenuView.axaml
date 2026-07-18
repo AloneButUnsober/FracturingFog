@@ -175,7 +175,7 @@
                 <Border Classes="group">
                     <StackPanel Spacing="4">
                         <TextBlock Classes="section" Text="Post-FX" />
-                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding BrightnessLabel}" Margin="0,0,6,4" />
                             <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" 
                                        TickFrequency="25" Margin="0,0,6,4"
@@ -207,9 +207,12 @@
                                        IsEnabled="{Binding BandDither}"
                                        ToolTip.Tip="Deband strength (0–100, default 100 = full ±0.5-LSB spread)." />
 
-                            <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0"
+                            <CheckBox  Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Content="Alpha preview" IsChecked="{Binding AlphaPreview}" Margin="0,4,6,0"
+                                       ToolTip.Tip="Preview per-stop alpha over a checkerboard so translucent theme stops read as see-through on screen. Display-only — saved PNGs keep straight alpha. Off by default." />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0"
                                        ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
-                            <CheckBox  Grid.Row="5" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+                            <CheckBox  Grid.Row="6" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
                         </Grid>
                         <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="0,6,0,0">
                             <Button Grid.Column="0"

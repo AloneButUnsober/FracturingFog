@@ -162,6 +162,15 @@ namespace FracturingFog.ViewState
         /// spread. Only consulted when <see cref="BandDither"/> is on.</summary>
         public int BandDitherStrength { get; set; } = 100;
 
+        /// <summary>F10.5: live per-stop alpha preview. The on-screen path is
+        /// opaque (present ignores the alpha channel; the post-FX pass forces
+        /// 0xFF), so authored translucent stops are otherwise invisible while
+        /// editing a theme. When on, the host composites the render over a
+        /// checkerboard using the authored coverage byte so A&lt;255 reads as
+        /// see-through. Display-only — saved frames + exports keep straight
+        /// alpha. Toggling needs only a post-FX repaint, not a fresh render.</summary>
+        public bool AlphaPreview { get; set; }
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
         /// <summary>
