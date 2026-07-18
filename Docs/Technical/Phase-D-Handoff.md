@@ -16,7 +16,7 @@ and the live host gamma slider. Phase D is **planned + audited but only the
 prerequisite gate is built**. Remaining Phase D order:
 
 ```
-☑ --colorprobe gate  →  ☐ F11a (CPU deband)  →  ☐ F11b (GPU dither)  →  ☐ F10 (alpha)
+☑ --colorprobe gate  →  ☑ F11a (CPU deband)  →  ☐ F11b (GPU dither)  →  ☐ F10 (alpha)
 ```
 
 ## Commit ledger (this arc, newest last)
@@ -26,6 +26,7 @@ prerequisite gate is built**. Remaining Phase D order:
 | `31c0070` | docs: re-plan Phase D after pipeline audit |
 | `82720b8` | feat: `--colorprobe` golden gate (`Engine/Diagnostics/ColorProbe.cs` + Program.cs dispatch) |
 | `b2dc48e` | docs: mark `--colorprobe` shipped in Phase D plan |
+| _(this)_ | feat: F11a CPU ordered dither (Bayer 8×8, pre-quantise, default-off) |
 
 ## Audit findings that changed the plan (do NOT re-derive)
 
@@ -67,35 +68,42 @@ dotnet run --project FracturingFogCLD.csproj -- --colorprobe verbose   # gate + 
   colour-output change flips the digest → run `--colorprobe regen` and paste the
   new value into `GoldenDigest`. An unexpected drift is a real regression.
 
-## Next task: F11a — CPU deband
+## F11a — CPU deband (SHIPPED, route b1)
 
-Goal: kill banding on the CPU render path by dithering **before** the
-float→byte truncate, without changing the `IColorMap.Map` signature.
+Mechanism landed in `GradientColorMap` (`Engine/Models/ColorUtils.cs`):
 
-Planned approach (route b1 in the roadmap F11 note):
-
-- Add a `[ThreadStatic]` dither offset on `GradientColorMap`, e.g.
-  `DitherOffset` = `bayer8x8[x & 7, y & 7] − 0.5f` (ordered 8×8 Bayer).
-- The CPU render loops set it per pixel immediately before each `Map` call
-  (thread-safe: each worker sets its own before use).
+- Static `DitherEnabled` (master switch) + static `DitherStrength` (global amp,
+  the host lifts the active theme's strength here) + per-theme data-model
+  `PaletteDitherStrength`/`ExportDitherStrength` for JSON round-trip.
+- `[ThreadStatic] _ditherOffset`; `SetDitherForPixel(x,y)` seeds it from a
+  centred 8×8 Bayer table (`(raw+0.5)/64 − 0.5`), no-op when disabled.
 - `MapNormalized` adds the offset to each float channel **before** the `(int)`
-  cast at `ColorUtils.cs:451-453`. Also apply at the two 3D pack points
-  (`GradientPhong3DBase`, `PbrGradient3DBase`) since they share the quantise.
-- Off by default. Data model: global toggle + optional per-theme
-  `DitherStrength`.
-- **Guard with `--colorprobe`:** the gate must still PASS with dither OFF (zero
-  offset → byte-identical). Only regen if the *default-off* output changes
-  (it must not).
+  cast, clamped to `[0,255]` — gated so the OFF path is the exact original
+  truncate. The two 3D pack points (`GradientPhong3DBase`, `PbrGradient3DBase`)
+  read the shared `CurrentDitherOffset` before their byte cast.
+- Wired into the CPU scalar loops in `EscapeTimeCalculator` (the row loop +
+  `FillAuxAndColor`, which is the colorize exit for the SIMD kernels too).
 
-Find the CPU render loops that call `Map` (they have x/y):
+Verify: `--colorprobe` still **PASS** (byte-exact, digest unchanged) and
+`--colorprobe dither` proves the enabled path spreads the step and is
+mean-preserving (revealed the truncate was biasing R 80.5→81).
 
-```
-Grep  int Map(   in Engine/Calculators/** and Rendering.Skia/**
-```
+**STILL UNWIRED (do next as part of F11 integration):** nothing flips
+`DitherEnabled` at runtime yet — no host/UI toggle and no still-render CLI knob.
+The video path has its *own, separate* pre-quantise dither on the CDF/iter value
+(`_videoBandDitherEnabled`, `RenderRequest.BandDither`) — do NOT confuse it with
+this LUT-quantise dither. Add an Avalonia toggle (+ optional strength slider,
+per `feedback_tunable_params`) and have the render host set
+`GradientColorMap.DitherEnabled` / `.DitherStrength` from it. SIMD *vector*
+color maps (`IVectorColorMap`, the fixed HSV/Fire/etc. palettes) are procedural,
+not LUT-banded, so they are out of scope.
 
-F11b (GPU HLSL dither) and F10 (alpha) are separate, wider units — each behind
-its own sign-off. GPU is where deep-zoom banding is worst, so F11 is only
-"done" once F11b ships too.
+## Next task: F11b — GPU HLSL dither
+
+Same idea on the GPU render path (`Rendering.Silk` / `Rendering.Skia` shaders),
+where deep-zoom banding is worst. Add the ordered offset before the shader's
+float→8-bit write. F11 is only "done" once F11b ships. F10 (alpha) is the last,
+widest unit — separate sign-off, behind a premultiply audit (~104 files).
 
 ## Housekeeping / constraints
 

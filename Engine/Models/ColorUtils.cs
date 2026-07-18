@@ -175,6 +175,84 @@ namespace FracturingFog.Models
         public float ExportTransferStrength => TransferStrength;
         public float ExportPaletteGamma => _paletteGamma;
 
+        // ── F11a: ordered (Bayer 8×8) pre-quantise dither ────────────────────
+        // Banding is born below in MapNormalized, where the interpolated float
+        // RGB is truncated to a byte. Adding a per-pixel ordered offset to each
+        // float channel BEFORE that cast spreads the quantise step spatially, so
+        // a shallow gradient reads smooth instead of stair-stepping. The offset
+        // is centred (~[-0.5,0.5) × strength) in byte space.
+        //
+        // Off by default: DitherEnabled gates both the render-loop offset set
+        // (SetDitherForPixel) and the MapNormalized add, so with the feature off
+        // the quantise is the original truncate and --colorprobe is byte-exact.
+
+        private static bool _ditherEnabled;
+
+        /// <summary>Global master switch for ordered dither (F11a). The host
+        /// sets this before a render; false = original truncate everywhere.</summary>
+        public static bool DitherEnabled { get => _ditherEnabled; set => _ditherEnabled = value; }
+
+        /// <summary>Global dither amount, multiplies the ±0.5 Bayer offset. The
+        /// host lifts the active theme's strength here when enabling dither.
+        /// 1.0 = full ±0.5-LSB spread.</summary>
+        public static float DitherStrength { get; set; } = 1f;
+
+        private float _paletteDitherStrength = 1f;
+
+        /// <summary>Per-theme dither strength carried in the data model so a
+        /// theme round-trips its preferred amount to JSON. Not read per-pixel
+        /// (that uses the static <see cref="DitherStrength"/>); the host lifts
+        /// this into the static at render time.</summary>
+        protected float PaletteDitherStrength
+        {
+            get => _paletteDitherStrength;
+            set => _paletteDitherStrength = value;
+        }
+
+        /// <summary>Data-model accessor for JSON export of the per-theme strength.</summary>
+        public float ExportDitherStrength => _paletteDitherStrength;
+
+        // Centred 8×8 Bayer thresholds: (raw+0.5)/64 − 0.5 ∈ ~[-0.492,0.492].
+        private static readonly float[] Bayer8 = BuildBayer8();
+
+        // Per-worker offset for the next Map call. [ThreadStatic] so each render
+        // worker owns its own slot with no locking.
+        [ThreadStatic] private static float _ditherOffset;
+
+        /// <summary>Ordered-dither offset in play for the next quantise on THIS
+        /// thread (0 when dither is off). Exposed to the 3D lit bases, which
+        /// quantise at their own pack points rather than through MapNormalized.</summary>
+        protected static float CurrentDitherOffset => _ditherEnabled ? _ditherOffset : 0f;
+
+        /// <summary>Sets the ordered-dither offset for pixel (x,y) on the calling
+        /// thread, consumed by the next Map/MapNormalized call. Forces 0 when
+        /// <see cref="DitherEnabled"/> is false. Thread-safe: each render worker
+        /// owns its own [ThreadStatic] slot.</summary>
+        public static void SetDitherForPixel(int x, int y)
+            => _ditherOffset = _ditherEnabled
+                ? DitherStrength * Bayer8[((y & 7) << 3) | (x & 7)]
+                : 0f;
+
+        private static float[] BuildBayer8()
+        {
+            // Standard recursive ordered-dither matrix, raw values 0..63.
+            ReadOnlySpan<byte> raw = new byte[]
+            {
+                 0,32, 8,40, 2,34,10,42,
+                48,16,56,24,50,18,58,26,
+                12,44, 4,36,14,46, 6,38,
+                60,28,52,20,62,30,54,22,
+                 3,35,11,43, 1,33, 9,41,
+                51,19,59,27,49,17,57,25,
+                15,47, 7,39,13,45, 5,37,
+                63,31,55,23,61,29,53,21,
+            };
+            var t = new float[64];
+            for (int i = 0; i < 64; i++)
+                t[i] = (raw[i] + 0.5f) / 64f - 0.5f;
+            return t;
+        }
+
         /// <summary>
         /// Remaps the mapping scalar before palette lookup (F3). Every curve
         /// fixes f(0)=0, f(1)=1 so cycling seams stay continuous. Identity when
@@ -447,6 +525,17 @@ namespace FracturingFog.Models
             Vector128<float> baseRgb = packed.GetLower();
             Vector128<float> delta = packed.GetUpper();
             Vector128<float> rgb = baseRgb + delta * Vector128.Create(frac);
+
+            // F11a: ordered dither before the float→byte truncate. Gated so the
+            // off path stays the exact original quantise (--colorprobe byte-exact).
+            if (_ditherEnabled)
+            {
+                float o = _ditherOffset;
+                int dr = (int)System.Math.Clamp(rgb.GetElement(0) + o, 0f, 255f);
+                int dg = (int)System.Math.Clamp(rgb.GetElement(1) + o, 0f, 255f);
+                int db = (int)System.Math.Clamp(rgb.GetElement(2) + o, 0f, 255f);
+                return unchecked((int)0xFF000000 | (dr << 16) | (dg << 8) | db);
+            }
 
             int r = (int)rgb.GetElement(0);
             int g = (int)rgb.GetElement(1);

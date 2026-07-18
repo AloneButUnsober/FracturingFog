@@ -399,9 +399,12 @@ namespace FracturingFog.Models
             b = PbrMath.AcesFilmic(b);
 
             // 9. Linear → sRGB encode for display.
-            byte R = (byte)(Math.Clamp(PbrMath.LinearToSrgb(r), 0f, 1f) * 255f);
-            byte G = (byte)(Math.Clamp(PbrMath.LinearToSrgb(g), 0f, 1f) * 255f);
-            byte B = (byte)(Math.Clamp(PbrMath.LinearToSrgb(b), 0f, 1f) * 255f);
+            // F11a: shared ordered dither before the byte quantise. od is 0 when
+            // dither is off, so the clamp is an identity and output is unchanged.
+            float od = CurrentDitherOffset;
+            byte R = (byte)Math.Clamp(Math.Clamp(PbrMath.LinearToSrgb(r), 0f, 1f) * 255f + od, 0f, 255f);
+            byte G = (byte)Math.Clamp(Math.Clamp(PbrMath.LinearToSrgb(g), 0f, 1f) * 255f + od, 0f, 255f);
+            byte B = (byte)Math.Clamp(Math.Clamp(PbrMath.LinearToSrgb(b), 0f, 1f) * 255f + od, 0f, 255f);
 
             return unchecked((int)0xFF000000 | (R << 16) | (G << 8) | B);
 

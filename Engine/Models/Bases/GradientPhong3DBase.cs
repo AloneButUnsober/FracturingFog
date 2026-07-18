@@ -220,9 +220,12 @@ namespace FracturingFog.Models
                 }
             }
 
-            byte R = (byte)(Math.Clamp(r, 0f, 1f) * 255f);
-            byte G = (byte)(Math.Clamp(g, 0f, 1f) * 255f);
-            byte B = (byte)(Math.Clamp(b, 0f, 1f) * 255f);
+            // F11a: shared ordered dither before the byte quantise. od is 0 when
+            // dither is off, so the clamp is an identity and output is unchanged.
+            float od = CurrentDitherOffset;
+            byte R = (byte)Math.Clamp(Math.Clamp(r, 0f, 1f) * 255f + od, 0f, 255f);
+            byte G = (byte)Math.Clamp(Math.Clamp(g, 0f, 1f) * 255f + od, 0f, 255f);
+            byte B = (byte)Math.Clamp(Math.Clamp(b, 0f, 1f) * 255f + od, 0f, 255f);
             return unchecked((int)0xFF000000 | (R << 16) | (G << 8) | B);
         }
     }
