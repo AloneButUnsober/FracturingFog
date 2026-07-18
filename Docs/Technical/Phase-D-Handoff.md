@@ -223,19 +223,32 @@ That correctness work is F10.3.
   translucent theme now exports with its alpha. **Scope: the PNG *encode* path
   only.**
 
-- **F10.3b — the risky remainder: multi-consumer compositing audit + visual
-  sign-off.** Every consumer that blends onto a background or reloads/reencodes
-  is still opaque-assuming or unverified: the watermark composite
-  (`CompositeWatermarkSkia` reloads a now-translucent PNG, draws, re-encodes —
-  the interactive "Image" button ALWAYS takes this path), `SceneVideoRenderer` +
-  `PngSequenceWriter` (video frame accumulation, PNG-vs-video alpha divergence),
-  `FractalOverlayCompositor`, `BatchRenderer`, and the on-screen display (opaque
-  blit — screen can't show translucency at all). Needs a per-consumer premultiply
-  audit + **on-device visual sign-off** (author a translucent theme, export, view
-  the PNG over a checkerboard; confirm the "Image" button's watermarked output
-  keeps alpha). This is where the residual ~multi-day estimate + real bug risk
-  live; do it as its own focused unit with a real GUI (RDP here can't drive/see
-  the window).
+- **F10.3b — multi-consumer compositing audit (DONE, commit `e96fbb1`;
+  visual proof `599c9b4`).** Audited every consumer that blends onto a
+  background or reloads/reencodes:
+  - **`PngSequenceWriter.SavePng`** (video / PNG-sequence frames) declared
+    `Premul` on the straight-alpha buffer → **fixed to `Unpremul`**. New TRUE
+    gate `--colorprobe pngseq` round-trips a translucent frame through the
+    writer → decode (PASS; it has its own `SavePng`, separate from ImageExport).
+  - **`FractalOverlayCompositor.DrawOnto`** (in-place grid/watermark/HUD blend)
+    declared `Premul` → **fixed to `Unpremul`** so SrcOver over a translucent
+    fractal composites correctly.
+  - **Watermark reload (`CompositeWatermarkRenderSkia`)** — audited, already
+    correct: `SKBitmap.Decode` → premul surface → SrcOver over transparent
+    preserves src alpha → PNG re-encode unpremultiplies → round-trips. No change.
+  - All fixes are byte-identical for opaque output (A=255 ⇒ premul==straight),
+    so the golden `--colorprobe` digest is unchanged (`b68af584…`).
+  - **On-device visual sign-off DONE** via `--colorprobe alphaimage`: renders a
+    translucent gradient (A 0→128→255) through the real `ImageExport` PNG path
+    and composites it over a checkerboard. Confirmed a smooth coverage fade (not
+    a blown-out hard band) → straight-alpha contract holds end to end.
+  - NOTE: driving the live GUI window with computer-use was **denied by the
+    owner** this session, so the sign-off was done with the headless
+    `alphaimage` artifact instead of clicking the interactive "Image" button.
+    The interactive button's path (`PosterRenderer` → `ImageExport` +
+    `CompositeWatermarkRenderSkia`) is the same code the gates + artifact
+    exercise, but a human eyeball of the actual button output is still worth
+    doing when convenient.
 - **F10.4 — procedural/3D/GPU pack parity.** `ColorUtils.PackArgb`/`PackArgbF`
   (~40 `ColorSchemes/*` sites), the two 3D lit packs (`GradientPhong3DBase`,
   `PbrGradient3DBase`), and the GPU `cg_pack_bgra` (D3D/Silk/Skia) still force
