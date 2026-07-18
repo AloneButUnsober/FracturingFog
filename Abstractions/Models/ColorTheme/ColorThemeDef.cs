@@ -149,6 +149,8 @@ namespace FracturingFog.Models
         public TransferFunctionDef TransferFunction { get; set; } = TransferFunctionDef.Linear;
         /// <summary>Identity↔transfer blend in [0,1] (F3). Default 1.</summary>
         public float TransferStrength { get; set; } = 1f;
+        /// <summary>Per-theme palette gamma baked into the LUT (F6). Default 1 (neutral).</summary>
+        public float PaletteGamma { get; set; } = 1f;
 
         // ── Cycling / 3D ──────────────────────────────────────────────────
         public float CycleSpeed { get; set; } = 0.02f;

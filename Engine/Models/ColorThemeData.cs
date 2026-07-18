@@ -235,6 +235,14 @@ namespace FracturingFog.Models
         /// </summary>
         public float TransferStrength { get; set; } = 1f;
 
+        /// <summary>
+        /// Per-theme palette gamma (Phase C / F6). Baked into the gradient LUT
+        /// (<c>out = pow(in, 1/gamma)</c> per channel) → free per pixel. 1.0 =
+        /// neutral (default). Independent of, and compounds with, the host's
+        /// live image-gamma slider.
+        /// </summary>
+        public float PaletteGamma { get; set; } = 1f;
+
         // ── Cycling / 3D ──────────────────────────────────────────────────────
 
         public float CycleSpeed { get; set; } = 0.02f;

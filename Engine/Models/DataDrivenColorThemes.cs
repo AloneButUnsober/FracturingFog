@@ -88,6 +88,7 @@ namespace FracturingFog.Models
                             InterpolationCurve = pbr.ExportInterpolationCurve,
                             TransferFunction = pbr.ExportTransferFunction,
                             TransferStrength = pbr.ExportTransferStrength,
+                            PaletteGamma = pbr.ExportPaletteGamma,
                             ColorOffset = pbr.ExportColorOffset,
                             ColorDensity = pbr.ExportColorDensity,
                             WrapMode = pbr.ExportWrapMode,
@@ -128,6 +129,7 @@ namespace FracturingFog.Models
                         InterpolationCurve = phong.ExportInterpolationCurve,
                         TransferFunction = phong.ExportTransferFunction,
                         TransferStrength = phong.ExportTransferStrength,
+                        PaletteGamma = phong.ExportPaletteGamma,
                         ColorOffset = phong.ExportColorOffset,
                         ColorDensity = phong.ExportColorDensity,
                         WrapMode = phong.ExportWrapMode,
@@ -160,6 +162,7 @@ namespace FracturingFog.Models
                         InterpolationCurve = cyc.ExportInterpolationCurve,
                         TransferFunction = cyc.ExportTransferFunction,
                         TransferStrength = cyc.ExportTransferStrength,
+                        PaletteGamma = cyc.ExportPaletteGamma,
                         ColorOffset = cyc.ExportColorOffset,
                         ColorDensity = cyc.ExportColorDensity,
                         WrapMode = cyc.ExportWrapMode,
@@ -182,6 +185,7 @@ namespace FracturingFog.Models
                         InterpolationCurve = grad.ExportInterpolationCurve,
                         TransferFunction = grad.ExportTransferFunction,
                         TransferStrength = grad.ExportTransferStrength,
+                        PaletteGamma = grad.ExportPaletteGamma,
                         Stops = StopsToData(grad.ExportStops),
                         Brightness = bright,
                         Contrast = contrast,
@@ -284,6 +288,7 @@ namespace FracturingFog.Models
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -325,6 +330,7 @@ namespace FracturingFog.Models
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -387,6 +393,7 @@ namespace FracturingFog.Models
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -481,6 +488,7 @@ namespace FracturingFog.Models
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;

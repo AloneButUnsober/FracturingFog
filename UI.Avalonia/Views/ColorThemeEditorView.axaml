@@ -224,7 +224,7 @@
                     <Border Classes="group">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Interpolation" />
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Space:" Margin="0,0,8,4" />
                                 <ComboBox Grid.Row="0" Grid.Column="1"
                                           ItemsSource="{Binding ColorSpaceOptions}" SelectedItem="{Binding InterpSpace}"
@@ -240,12 +240,20 @@
                                           ItemsSource="{Binding TransferOptions}" SelectedItem="{Binding TransferFn}"
                                           HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
                                           ToolTip.Tip="Remaps the mapping scalar before palette lookup (Gradient + Cycling kinds; 3D albedo unaffected)." />
-                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Strength:" Margin="0,0,8,0" />
-                                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Strength:" Margin="0,0,8,4" />
+                                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
                                     <Slider Value="{Binding TransferStrength}" Minimum="0" Maximum="1"
                                             Width="170" VerticalAlignment="Center"
                                             ToolTip.Tip="Blend from identity (0) to full transfer curve (1)." />
                                     <TextBlock Text="{Binding TransferStrength, StringFormat=0.00}"
+                                               Foreground="#9B9B9B" Width="36" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Gamma:" Margin="0,0,8,0" />
+                                <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Slider Value="{Binding PaletteGamma}" Minimum="0.2" Maximum="3"
+                                            Width="170" VerticalAlignment="Center"
+                                            ToolTip.Tip="Per-theme palette gamma, baked into the LUT (out = in^(1/gamma)). 1.0 = neutral; &gt;1 lifts shadows/brightens, &lt;1 darkens. Compounds with the live image-gamma slider." />
+                                    <TextBlock Text="{Binding PaletteGamma, StringFormat=0.00}"
                                                Foreground="#9B9B9B" Width="36" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>

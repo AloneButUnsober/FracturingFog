@@ -382,6 +382,16 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _transferStrength, Math.Clamp(value, 0d, 1d)); FieldChanged(); }
     }
 
+    private double _paletteGamma = 1d;
+    /// <summary>Per-theme palette gamma baked into the LUT (F6),
+    /// out = in^(1/gamma). 1.0 = neutral; &gt;1 lifts shadows/brightens, &lt;1
+    /// darkens. Compounds with the host image gamma.</summary>
+    public double PaletteGamma
+    {
+        get => _paletteGamma;
+        set { this.RaiseAndSetIfChanged(ref _paletteGamma, Math.Clamp(value, 0.2d, 3d)); FieldChanged(); }
+    }
+
     // ── Cycling phase / density / wrap (Phase A F4, F5) ───────────────────
 
     private decimal _colorOffset;
@@ -1157,6 +1167,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             InterpCurve = def.InterpolationCurve;
             TransferFn = def.TransferFunction;
             TransferStrength = Math.Clamp((double)def.TransferStrength, 0d, 1d);
+            PaletteGamma = def.PaletteGamma <= 0f ? 1d : Math.Clamp((double)def.PaletteGamma, 0.2d, 3d);
 
             CycleSpeed = ClampDec((decimal)def.CycleSpeed, 0.0001M, 10M);
             ColorOffset = ClampDec((decimal)def.ColorOffset, -10M, 10M);
@@ -1230,6 +1241,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             InterpolationCurve = InterpCurve,
             TransferFunction = TransferFn,
             TransferStrength = (float)TransferStrength,
+            PaletteGamma = (float)PaletteGamma,
             CycleSpeed = (float)CycleSpeed,
             ColorOffset = (float)ColorOffset,
             ColorDensity = (float)ColorDensity,
