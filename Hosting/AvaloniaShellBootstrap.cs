@@ -2785,7 +2785,15 @@ namespace FracturingFog.Hosting
         private static void RenderMiniMapAsync(ShellViewModel shell)
         {
             if (shell == null) return;
-            var type = shell.Main.ViewState.FractalType;
+            // Read the committed combo selection, NOT ViewState.FractalType.
+            // This handler is invoked synchronously from the
+            // SelectedFractalType PropertyChanged, which RaiseAndSetIfChanged
+            // raises BEFORE the setter assigns ViewState.FractalType — so
+            // ViewState.FractalType is still the PREVIOUS type at this point
+            // (the "minimap lags fractal-type change by one" bug, issue #29).
+            // SelectedFractalType is already updated; the other call sites
+            // (visibility toggle, ColorMapChanged) have both in sync anyway.
+            var type = shell.Main.SelectedFractalType;
             if (!FracturingFog.Models.MiniMapDefaults.IsSupported(type)) return;
             if (s_renderHost == null) return;
 
