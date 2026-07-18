@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UI.Avalonia/Slideshow/SlideshowEngine.cs
 //
 // Avalonia-side slideshow cycler with CPU cross-fade. Drives the shell-neutral
@@ -191,7 +194,15 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             try
             {
                 var regions = ApplyRegionFilter(_service.EnumerateSlideshowRegionNames());
-                if (regions == null || regions.Count == 0) return;
+                if (regions == null || regions.Count == 0)
+                {
+                    // Authoritative filter matched zero regions (or the host
+                    // surfaced none). Surface it rather than silently showing
+                    // excluded types; the finally block fires Stopped.
+                    Console.Error.WriteLine(
+                        "[SlideshowEngine] no regions match the active filter — slideshow not started.");
+                    return;
+                }
 
                 int fadeSteps = Math.Clamp(_settings.FadeSteps, 2, 200);
                 int regionStepMs = Math.Max(8, Math.Max(50, _settings.RegionFadeMs) / fadeSteps);
@@ -337,9 +348,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         // ── Filter helpers ────────────────────────────────────────────────
         // Intersect the eligibility set surfaced by the host with the include
         // list + metadata filters carried on Config. Null/empty filter = keep
-        // everything. Returns the original list when every filter ends up
-        // emptying the set so the engine's downstream "host produced zero
-        // regions?" guard still fires (rather than silently skipping a leg).
+        // everything. When a filter IS active but matches zero regions the
+        // result is genuinely empty — the filter is authoritative, so we do
+        // NOT fall back to the full unfiltered universe (that silently played
+        // excluded fractal types). The caller's zero-count guard then holds
+        // the current pool (live refresh) or stops the loop (initial pick)
+        // instead of showing regions the user filtered out.
         private IReadOnlyList<string> ApplyRegionFilter(IReadOnlyList<string> input)
         {
             var inc = Config?.IncludedRegions;
@@ -362,7 +376,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 if (qpSet != null && !qpSet.Contains(_service.GetRegionQualityPresetName(n))) continue;
                 filtered.Add(n);
             }
-            return filtered.Count > 0 ? filtered : input;
+            // A filter is active (the no-filter case early-returned above).
+            // Return the filtered set as-is, even when empty: an unsatisfiable
+            // filter means "no matching regions", not "show everything".
+            return filtered;
         }
 
         private IReadOnlyList<string>? ApplyThemeFilter(IReadOnlyList<string>? input)

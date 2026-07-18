@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // MandelbrotCalculator.cs  — v5  (surface normal output)
 //
 // Changes over v4
@@ -132,7 +135,8 @@ public sealed class MandelbrotCalculator
 
     /// <summary>Zoom threshold above which OD ref orbit is used (else QD).
     /// Wave 2.11 — 8-limb octuple-double centre + reference orbit.
-    /// QD ceiling is ~5×10⁵⁸ (X3 limb noise floor); OD pushes to ~10¹¹⁶.
+    /// QD ceiling is ~1×10⁶⁴ (coordinate-separation floor, --qdfloorsweep:
+    /// 128/128 distinct at 1e64, collapses at 1e66); OD pushes to ~10¹¹⁶.
     /// Engaged just below QD's wall so a single zoom step doesn't bounce
     /// off the precision floor.
     /// Verified by `OctupleDoubleTests.RefOrbit_ModerateZoom_OdMatchesQd`:
@@ -186,6 +190,30 @@ public sealed class MandelbrotCalculator
 
     /// <summary>True when the last Calculate() used double-double arithmetic.</summary>
     public bool IsHighPrecisionActive { get; private set; }
+
+    /// <summary>Estimated deepest zoom (as log₁₀) at which the CURRENT view
+    /// centre still resolves detail, set by the last reference-orbit build.
+    ///
+    /// Perturbation resolves a pixel only while its offset δ (∝ 1/zoom),
+    /// amplified by ∏|2·Zₙ| over the reference orbit, reaches O(1). If the
+    /// orbit ESCAPES at iteration N the amplification is finite —
+    /// Σ log₁₀|2·Zₙ| decades — so zoom beyond ~10^that collapses the whole
+    /// viewport to a single escape value (flat frame). A centre that stays
+    /// bounded to maxIter has effectively unbounded depth ⇒
+    /// <see cref="double.PositiveInfinity"/>. This is a property of the POINT,
+    /// not a precision limit: to go deeper the user must recentre on a point
+    /// with a longer-lived orbit. The host surfaces it as a "detail limit"
+    /// notice so a collapsed deep frame doesn't read as broken navigation.</summary>
+    public double MaxUsefulZoomLog10 { get; private set; } = double.PositiveInfinity;
+
+    /// <summary>Iteration count of the last reference orbit (escape index, or
+    /// maxIter when the centre stays bounded). Diagnostic — surfaced in the
+    /// render-context overlay.</summary>
+    public int ReferenceOrbitLength => _refOrbitLen;
+
+    /// <summary>True when the last reference orbit escaped before maxIter (a
+    /// finite <see cref="MaxUsefulZoomLog10"/>); false when it stayed bounded.</summary>
+    public bool ReferenceOrbitEscaped => _refCachedEscaped;
 
     /// <summary>
     /// When true the HP path runs the perturbation loop without SA prelude
@@ -354,6 +382,89 @@ public sealed class MandelbrotCalculator
     private double _refCy4, _refCy5, _refCy6, _refCy7;
     private int _refCachedMaxIter = -1;
     private bool _refCachedEscaped;  // true when orbit terminated by escape
+
+    // Wave 3.5 — reference-orbit recycling across frames. When the view centre
+    // moves only slightly (pan/zoom video, interactive nudges), the cached
+    // orbit at the PREVIOUS centre stays valid for the new frame provided every
+    // new-frame pixel's |δ_0| = |pixelOffset·scale + Δc| stays inside the cached
+    // BLA validity radius. Δc = (newCentre − cachedCentre) is injected into the
+    // SIMD PT dc; the DD/QD/OD glitch fallbacks already derive
+    // δc = absoluteWorldCoord − storedRefCentre, so they stay correct with no
+    // change. Off by default — enabling shifts per-frame pixels within
+    // perturbation tolerance (measured near-identical by --reforbitrecycle),
+    // pending video-flicker sign-off before it drives production renders.
+    public static bool AllowRefOrbitRecycle { get; set; } = false;
+
+    /// <summary>SM-11b — per-render opt-in for reference-orbit recycling, set by
+    /// the host on the progressive pan/zoom PREVIEW calculators so a drag reuses
+    /// one reference across preview frames (no per-move recompute → no deep-zoom
+    /// "jumping"). Instance flag (not the global static) so it applies only to
+    /// the sidecar preview calcs; the committed full-res calc keeps it false and
+    /// renders a fresh, exact reference. See Docs/Deep-Zoom-Perturbation.md §6.</summary>
+    public bool AllowRecycleThisRender { get; set; }
+    // Per-frame centre shift from the cached reference centre, in world units,
+    // rounded to double (the SIMD PT dc is double regardless of tier). Zero on
+    // any non-recycled frame — `x + 0.0 == x`, so the default path is
+    // bit-identical to pre-3.5.
+    private double _refRecycleDx, _refRecycleDy;
+    // Precision tier the cached orbit was built at (0=DD 1=QD 2=OD; -1 none).
+    // Recycling refuses to cross tiers — a tier change alters the centre limbs
+    // and the fallback precision, so a fresh orbit is required.
+    private int _refCachedTier = -1;
+    // Diagnostics — reset per Calculate is not needed; these accumulate for
+    // the --reforbitrecycle probe and status reporting.
+    private long _refRecycleHits, _refRecycleMisses;
+    /// <summary>Wave 3.5 — count of frames served by a recycled reference orbit
+    /// (centre moved but the cached orbit was reused). Diagnostic / probe use.</summary>
+    public long RefRecycleHits => _refRecycleHits;
+    /// <summary>Wave 3.5 — count of recycle attempts that fell through to a
+    /// fresh orbit compute. Diagnostic / probe use.</summary>
+    public long RefRecycleMisses => _refRecycleMisses;
+
+    // SM-2 — perturbation rebasing (Zhuoran). The double-precision PT δ-loop
+    // (ComputePixelPT and the SIMD PT4/PT8 lanes) bails as a "glitch" the moment
+    // δ is absorbed by Z in double (|δ| < ULP(Z)), which past ~1e30 is iteration
+    // ~1 for every pixel — so deep frames fall to the per-pixel direct-QD/OD
+    // path (4-limb math, no shared reference orbit) and run for minutes.
+    // Rebasing keeps a single reference orbit valid to arbitrary depth: track
+    // the reference index m separately, reconstruct z = Z[m] + δ, and when the
+    // full value is smaller than the perturbation (|z| < |δ|) or the reference
+    // is exhausted, restart the reference (Z[0]=0) with δ := z. The δ-chain
+    // stays in double (fast) and never needs the glitch fallback. Off by default
+    // pending A/B parity + perf sign-off against the QD/OD truth via
+    // --rebaseprobe; when on it replaces the QD/OD/HP glitch fallback with the
+    // rebased scalar path. Default ON (2026-07-05) — probe-verified equal to the
+    // QD render at ~100× the speed; the "Bypass Rebasing" debug toggle flips it
+    // off to A/B against the legacy per-pixel QD/OD path.
+    public static bool AllowPtRebasing { get; set; } = true;
+
+    // SM-11a — use a DOUBLE-DOUBLE reference orbit in the rebased δ-loop instead
+    // of the single-double Z_n. The full reference orbit is already stored to 8
+    // limbs (_refZr/_refZrLo/..X7); the rebased loop historically consumed only
+    // the top limb (_refZr[m] = X0), so two nearby view centres' double-rounded
+    // Z chains diverged over thousands of iterations. That made the deep-zoom
+    // render REFERENCE-DEPENDENT: recentring (any pan / focus / box-zoom) redrew
+    // the same world region with slightly different iteration counts, which the
+    // palette amplified into apparent navigation drift + live pan "jumping" —
+    // even though the input math places the centre exactly (proved 9.5e-15 px at
+    // 4.65e64 via --navrepro). Feeding DD Z_n (Hi=_refZr, Lo=_refZrLo) halves the
+    // per-step reference rounding (~1e-16 → ~1e-32), restoring centre-invariance.
+    // A/B via --navrepro ddref (target: focus-err → 0 on the user's 4.65e64
+    // coord). Gate to deep zoom once verified — DD in the hot loop is ~4-8× the
+    // double cost, wasted where the single-double reference already suffices.
+    // See Docs/Deep-Zoom-Perturbation.md for the full model and history.
+    public static bool UseDdRebaseReference { get; set; } = false;
+
+    // SM-11a diagnostic only — force the scalar PT path (bypass SIMD) so every
+    // pixel routes through ComputePixelPTRebased. Slow; used by --navrepro to A/B
+    // the DD reference across ALL pixels, not just the ~2 % glitch fallback.
+    public static bool ForceScalarPtPath { get; set; } = false;
+
+    // Diagnostics — pixels resolved by the rebased scalar fallback.
+    private long _ptRebasedPixels;
+    /// <summary>SM-2 — count of pixels resolved by the rebased PT fallback
+    /// (instead of per-pixel QD/OD/HP). Diagnostic / probe use.</summary>
+    public long PtRebasedPixels => _ptRebasedPixels;
 
     // BLA (Bilinear Approximation) cache — skip thousands of perturbation
     // iterations per pixel when |δ| stays inside the validity radius. Built
@@ -1556,26 +1667,45 @@ public sealed class MandelbrotCalculator
         //                     populated by MainForm pan/zoom when active.
         //   • Zoom > 1e50  →  promote to OD center (~124 digits) — Wave 2.11.
         //                     Adds 4 more limbs (X4..X7, Y4..Y7).
-        if (Zoom > ODZoomThreshold)
+        //
+        // Wave 3.5 — reference-orbit recycling. Reset the per-frame centre
+        // shift, then try to reuse the cached orbit from a slightly-moved
+        // centre. On a hit TryRecycle keeps the orbit + sets Δc; on a miss
+        // (or when the feature is off) Δc stays zero and we compute fresh.
+        _refRecycleDx = 0.0;
+        _refRecycleDy = 0.0;
+        // SM-11b — recycle also when this render opts in per-frame (progressive
+        // pan/zoom PREVIEW sidecars) so a drag keeps ONE reference orbit across
+        // preview frames instead of recomputing it each move. Recomputing per
+        // move is what makes the same region redraw slightly differently — the
+        // "image jumps around while dragging" the user sees at deep zoom. The
+        // committed full-res frame leaves this off and computes fresh, so the
+        // final image is always exact; only the transient preview reuses.
+        bool recycled = (AllowRefOrbitRecycle || AllowRecycleThisRender)
+                        && TryRecycleReferenceOrbit(maxIt, scale);
+        if (!recycled)
         {
-            var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
-                              CenterX4, CenterX5, CenterX6, CenterX7);
-            var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
-                              CenterY4, CenterY5, CenterY6, CenterY7);
-            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
-        }
-        else if (Zoom > QDZoomThreshold)
-        {
-            var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
-            var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
-            // Wave 2.12 — opt-in GPU QD reference orbit. Falls back to CPU on
-            // any GPU init / kernel / copy failure.
-            if (!(UseGpuReferenceOrbit && TryComputeReferenceOrbitQDGpu(cxQD, cyQD, maxIt)))
-                ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
-        }
-        else
-        {
-            ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
+            if (Zoom > ODZoomThreshold)
+            {
+                var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                                  CenterX4, CenterX5, CenterX6, CenterX7);
+                var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                                  CenterY4, CenterY5, CenterY6, CenterY7);
+                ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
+            }
+            else if (Zoom > QDZoomThreshold)
+            {
+                var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
+                var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
+                // Wave 2.12 — opt-in GPU QD reference orbit. Falls back to CPU on
+                // any GPU init / kernel / copy failure.
+                if (!(UseGpuReferenceOrbit && TryComputeReferenceOrbitQDGpu(cxQD, cyQD, maxIt)))
+                    ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
+            }
+            else
+            {
+                ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
+            }
         }
 
         // Build / refresh the BLA table now that the reference orbit is current.
@@ -1586,6 +1716,15 @@ public sealed class MandelbrotCalculator
         double halfWS = effImgW * 0.5 * scale;
         double halfHS = effImgH * 0.5 * scale;
         double dcMaxAbs = Math.Sqrt(halfWS * halfWS + halfHS * halfHS);
+        if (recycled)
+        {
+            // Recycled frames measure dc from the CACHED centre, so worst-case
+            // |δ_0| grows by the centre shift. Widen the BLA/SA validity radius
+            // to cover it — EnsureBlaTable rebuilds the (cheap) table on the
+            // KEPT orbit when the drift exceeds its 5% tolerance, so every
+            // recycled pixel's dc stays inside a valid linearisation.
+            dcMaxAbs += Math.Sqrt(_refRecycleDx * _refRecycleDx + _refRecycleDy * _refRecycleDy);
+        }
         EnsureBlaTable(dcMaxAbs);
         EnsureSeriesApproximation();
 
@@ -1601,6 +1740,10 @@ public sealed class MandelbrotCalculator
         // dispatch fires for tile and full-image renders.
         bool useSimd512 = Avx512F.IsSupported && Vector512.IsHardwareAccelerated;
         bool useSimd = DD4.IsSupported;
+        // SM-11a diagnostic: force the scalar per-pixel path so every pixel routes
+        // through ComputePixelPTRebased (→ the DD-reference variant when enabled),
+        // isolating whether DD reference cures the deep-zoom centre-dependence.
+        if (ForceScalarPtPath) { useSimd512 = false; useSimd = false; }
         if (!_loggedSimdPath)
         {
             Debug.WriteLine(useSimd512 ? "PT path: AVX-512 (8 lanes)"
@@ -1964,7 +2107,7 @@ public sealed class MandelbrotCalculator
     // ── Full-QD per-pixel fallback (used for PT glitches at zoom > QDZoomThreshold) ─
     // DD cannot distinguish adjacent pixels at zoom > ~5e27 (pixel spacing falls below
     // DD precision ~6e-32), causing all glitched pixels in a block to produce identical
-    // coordinates and colors. QD (~62 digits) resolves pixels down to zoom ~5e58.
+    // coordinates and colors. QD (~62 digits) resolves pixels down to zoom ~1e64.
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ComputePixelQD<TMap>(QD cx, QD cy, int maxIter, int idx, TMap colorMap)
@@ -2058,6 +2201,93 @@ public sealed class MandelbrotCalculator
     // PATH B perturbation theory — reference orbit + double-precision delta
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Wave 3.5 — a recycled orbit may serve a frame whose centre moved up to
+    // this fraction of the frame's corner-dc. The reference orbit (the
+    // expensive QD/OD build we're skipping) stays a valid perturbation base
+    // well past the frame corner; only the cheaper BLA/SA linearisation is
+    // radius-bounded, and those are rebuilt for the widened dc on a recycle.
+    // 0.25 → worst-case pixel dc ≤ 1.25× the original corner, a mild
+    // extrapolation the --reforbitrecycle probe verifies against a fresh render.
+    private const double RecycleMaxShiftFactor = 0.25;
+
+    /// <summary>Wave 3.5 — decide whether the cached reference orbit can serve
+    /// the current frame from a slightly-shifted centre instead of being
+    /// recomputed. Returns true (and sets <see cref="_refRecycleDx"/> /
+    /// <see cref="_refRecycleDy"/>) only when: the cache exists at the SAME
+    /// precision tier, its length is usable, its maxIter covers this frame, and
+    /// the centre shift stays under <see cref="RecycleMaxShiftFactor"/> of the
+    /// frame corner-dc. On a hit the (cheap) BLA/SA tables are rebuilt for the
+    /// widened dc by the caller; the (expensive) orbit build is skipped. A
+    /// recycled frame matches a fresh render within perturbation float
+    /// tolerance — the DD/QD/OD glitch fallbacks derive
+    /// δc = absoluteWorldCoord − storedRefCentre, so they stay exact. Any doubt
+    /// → false → recompute. A zero shift also returns false so the cheaper
+    /// exact-centre short-circuit in ComputeReferenceOrbit* owns that case.</summary>
+    private bool TryRecycleReferenceOrbit(int maxIter, double scale)
+    {
+        // Nothing cached, or the orbit is too short to be a useful base.
+        if (_refCachedTier < 0 || _refOrbitLen < 4) { _refRecycleMisses++; return false; }
+
+        // Precision tier must match — a tier change alters the centre limbs and
+        // the fallback precision, invalidating direct reuse.
+        int tier = Zoom > ODZoomThreshold ? 2 : (Zoom > QDZoomThreshold ? 1 : 0);
+        if (tier != _refCachedTier) { _refRecycleMisses++; return false; }
+
+        // maxIter coverage — same predicate as the exact-centre cache: a cached
+        // orbit that escaped is valid for any cap; otherwise its cap must reach
+        // this frame's cap.
+        if (!(_refCachedEscaped || maxIter <= _refCachedMaxIter)) { _refRecycleMisses++; return false; }
+
+        // Centre shift Δc = newCentre − cachedCentre, computed at the tier's
+        // precision then rounded to double (the SIMD PT dc is double at every
+        // tier; precision-sensitive pixels take the exact QD/OD fallback).
+        double dx, dy;
+        switch (tier)
+        {
+            case 0:
+                dx = (double)(new DD(CenterX, CenterXLo) - new DD(_refCxHi, _refCxLo));
+                dy = (double)(new DD(CenterY, CenterYLo) - new DD(_refCyHi, _refCyLo));
+                break;
+            case 1:
+                dx = (double)(new QD(CenterX, CenterXLo, CenterX2, CenterX3)
+                            - new QD(_refCxHi, _refCxLo, _refCx2, _refCx3));
+                dy = (double)(new QD(CenterY, CenterYLo, CenterY2, CenterY3)
+                            - new QD(_refCyHi, _refCyLo, _refCy2, _refCy3));
+                break;
+            default:
+                dx = (double)(new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                                     CenterX4, CenterX5, CenterX6, CenterX7)
+                            - new OD(_refCxHi, _refCxLo, _refCx2, _refCx3,
+                                     _refCx4, _refCx5, _refCx6, _refCx7));
+                dy = (double)(new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                                     CenterY4, CenterY5, CenterY6, CenterY7)
+                            - new OD(_refCyHi, _refCyLo, _refCy2, _refCy3,
+                                     _refCy4, _refCy5, _refCy6, _refCy7));
+                break;
+        }
+
+        // Identical centre → let the exact-centre cache branch handle it (it is
+        // cheaper and bit-exact; recycling only earns its keep when the centre
+        // actually moved).
+        if (dx == 0.0 && dy == 0.0) { _refRecycleMisses++; return false; }
+
+        double shift = Math.Sqrt(dx * dx + dy * dy);
+        double halfWS = EffectiveImageWidth  * 0.5 * scale;
+        double halfHS = EffectiveImageHeight * 0.5 * scale;
+        double frameDcMax = Math.Sqrt(halfWS * halfWS + halfHS * halfHS);
+
+        // Reject shifts that push the reference too far from the frame — the
+        // orbit's perturbation validity, while wider than the BLA radius, is not
+        // unbounded, and a large extrapolation risks glitch-storm fallback that
+        // erases the recycling win.
+        if (shift > frameDcMax * RecycleMaxShiftFactor) { _refRecycleMisses++; return false; }
+
+        _refRecycleDx = dx;
+        _refRecycleDy = dy;
+        _refRecycleHits++;
+        return true;
+    }
+
     private void ComputeReferenceOrbit(DD cx, DD cy, int maxIter)
     {
         // Cache hit: same center (all 4 QD limbs match — DD path uses limbs 2,3 = 0)
@@ -2074,6 +2304,7 @@ public sealed class MandelbrotCalculator
 
         EnsureRefOrbitCapacity(maxIter);
         DD zr = DD.Zero, zi = DD.Zero;
+        double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -2083,11 +2314,19 @@ public sealed class MandelbrotCalculator
             _refZiX2[n] = 0;    _refZiX3[n] = 0;
             _refZrX4[n] = 0;    _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
             _refZiX4[n] = 0;    _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
-            if (zr.Hi * zr.Hi + zi.Hi * zi.Hi >= EscapeRadius2) break;
+            double zmag2 = zr.Hi * zr.Hi + zi.Hi * zi.Hi;
+            if (zmag2 >= EscapeRadius2) break;
+            // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
+            // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
+            // escape radius the orbit blows up to the bailout and its derivative
+            // growth no longer corresponds to resolvable detail (that tail would
+            // otherwise inflate the estimate ~5 decades over the real collapse).
+            if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             DD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
+        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.Hi;  _refZrLo[n] = zr.Lo;
         _refZi[n] = zi.Hi;  _refZiLo[n] = zi.Lo;
         _refZrX2[n] = 0;    _refZrX3[n] = 0;
@@ -2103,6 +2342,7 @@ public sealed class MandelbrotCalculator
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = n < maxIter;
+        _refCachedTier = 0;  // DD
     }
 
     // Wave 2.11 — single allocation point. QD/OD paths share this storage
@@ -2148,6 +2388,7 @@ public sealed class MandelbrotCalculator
 
         EnsureRefOrbitCapacity(maxIter);
         QD zr = QD.Zero, zi = QD.Zero;
+        double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -2155,11 +2396,19 @@ public sealed class MandelbrotCalculator
             _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
             _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
             _refZiX4[n] = 0; _refZiX5[n] = 0; _refZiX6[n] = 0; _refZiX7[n] = 0;
-            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= EscapeRadius2) break;
+            double zmag2 = zr.X0 * zr.X0 + zi.X0 * zi.X0;
+            if (zmag2 >= EscapeRadius2) break;
+            // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
+            // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
+            // escape radius the orbit blows up to the bailout and its derivative
+            // growth no longer corresponds to resolvable detail (that tail would
+            // otherwise inflate the estimate ~5 decades over the real collapse).
+            if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             QD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
+        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.X0;  _refZrLo[n] = zr.X1;  _refZrX2[n] = zr.X2;  _refZrX3[n] = zr.X3;
         _refZi[n] = zi.X0;  _refZiLo[n] = zi.X1;  _refZiX2[n] = zi.X2;  _refZiX3[n] = zi.X3;
         _refZrX4[n] = 0; _refZrX5[n] = 0; _refZrX6[n] = 0; _refZrX7[n] = 0;
@@ -2173,6 +2422,7 @@ public sealed class MandelbrotCalculator
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = n < maxIter;
+        _refCachedTier = 1;  // QD
     }
 
     // Wave 2.12 — GPU QD reference orbit dispatch. Lazily instantiated so
@@ -2230,6 +2480,7 @@ public sealed class MandelbrotCalculator
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = escaped;
+        _refCachedTier = 1;  // QD (GPU)
         return true;
     }
 
@@ -2253,6 +2504,7 @@ public sealed class MandelbrotCalculator
 
         EnsureRefOrbitCapacity(maxIter);
         OD zr = OD.Zero, zi = OD.Zero;
+        double logDerivSum = 0.0;   // Σ log₁₀|2·Zₙ| — δ-amplification decades
         int n;
         for (n = 0; n < maxIter; n++)
         {
@@ -2264,11 +2516,19 @@ public sealed class MandelbrotCalculator
             _refZiX2[n] = zi.X2; _refZiX3[n] = zi.X3;
             _refZiX4[n] = zi.X4; _refZiX5[n] = zi.X5;
             _refZiX6[n] = zi.X6; _refZiX7[n] = zi.X7;
-            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= EscapeRadius2) break;
+            double zmag2 = zr.X0 * zr.X0 + zi.X0 * zi.X0;
+            if (zmag2 >= EscapeRadius2) break;
+            // Derivative product ∏|2·Zₙ| ⇒ Σ log₁₀|2·Zₙ|, INCLUDING contraction
+            // steps (|2·Z|<1, negative), and frozen once |Z|>2: past the classic
+            // escape radius the orbit blows up to the bailout and its derivative
+            // growth no longer corresponds to resolvable detail (that tail would
+            // otherwise inflate the estimate ~5 decades over the real collapse).
+            if (zmag2 > 0.0 && zmag2 <= 4.0) logDerivSum += 0.5 * Math.Log10(4.0 * zmag2);
             OD newZi = (zr * zi) * 2.0 + cy;
             zr = zr.Square() - zi.Square() + cx;
             zi = newZi;
         }
+        MaxUsefulZoomLog10 = n < maxIter ? logDerivSum : double.PositiveInfinity;
         _refZr[n] = zr.X0;   _refZrLo[n] = zr.X1;
         _refZrX2[n] = zr.X2; _refZrX3[n] = zr.X3;
         _refZrX4[n] = zr.X4; _refZrX5[n] = zr.X5;
@@ -2286,6 +2546,7 @@ public sealed class MandelbrotCalculator
         _refCy4 = cy.X4;  _refCy5 = cy.X5;  _refCy6 = cy.X6;  _refCy7 = cy.X7;
         _refCachedMaxIter = maxIter;
         _refCachedEscaped = n < maxIter;
+        _refCachedTier = 2;  // OD
     }
 
     // Full-OD per-pixel fallback (used for PT glitches at zoom > 1e50).
@@ -2425,6 +2686,169 @@ public sealed class MandelbrotCalculator
         return true;
     }
 
+    // SM-2 — rebasing perturbation (Zhuoran). Always resolves a pixel in double
+    // precision, at any zoom, from the single shared reference orbit — the
+    // glitch-free replacement for the per-pixel QD/OD/HP fallback. Reference
+    // index m advances independently of the iteration count; z = Z[m] + δ is
+    // reconstructed each step for the escape test, and when the full value is
+    // smaller than the perturbation (reference no longer a good anchor) or the
+    // reference runs out, the reference is restarted from Z[0]=0 with δ := z.
+    // Because Z[0]=0, the step right after a rebase is δ' = δ² + dc — the exact
+    // non-perturbative step for the full value δ now carries. Escape count is
+    // the global iteration n, not m. No SA prelude: this is the correctness
+    // fallback for lanes the SIMD path could not carry, so it favours a simple
+    // exact chain over the SA skip (the SIMD attempt already paid the SA cost).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ComputePixelPTRebased<TMap>(
+        double colOffsetX, double rowOffsetY, double scale,
+        int maxIter, int idx, TMap colorMap)
+        where TMap : IColorMap
+    {
+        if (UseDdRebaseReference)
+        {
+            ComputePixelPTRebasedDD(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+            return;
+        }
+
+        int refLen = _refOrbitLen;
+        if (refLen < 1)
+        {
+            // No usable reference orbit — treat as interior (matches the
+            // degenerate case the QD/OD fallbacks would also colour flat).
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorHP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+
+        // The δ-chain runs in plain DOUBLE. A DD δ-chain + DD reference + DD dc
+        // was measured against the per-pixel QD path and produced byte-identical
+        // iteration counts (--rebaseprobe): precision does NOT change the result
+        // at these depths. The apparent ~50 % divergence from the QD render is
+        // chaotic sensitivity of deep filamentary regions at high iteration
+        // count — the QD path disagrees with ITSELF (SA-off vs SA-on) by the
+        // same ~50 % (QDself ≈ reb-vs-QD). So double rebasing is as accurate as
+        // QD here, at ~100× the speed. dc is a single-rounded double for the
+        // same reason (the exact low word buys nothing).
+        double dcR = colOffsetX * scale + _refRecycleDx;
+        double dcI = rowOffsetY * scale + _refRecycleDy;
+
+        double dr = 0.0, di = 0.0;    // δ_0 = 0
+        double drv = 1.0, div = 0.0;  // dz/dc for surface normals (IQ convention)
+        int m = 0;                    // reference-orbit index (independent of iter)
+        double zr = 0.0, zi = 0.0;    // full value z = Z[m] + δ (last is escape z)
+
+        int iter;
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            double Zr = _refZr[m];
+            double Zi = _refZi[m];
+            zr = Zr + dr;
+            zi = Zi + di;
+
+            double zmag2 = zr * zr + zi * zi;
+            if (zmag2 >= EscapeRadius2) break;
+
+            // Derivative of the FULL orbit — independent of rebasing.
+            double newDrv = 2.0 * (zr * drv - zi * div) + 1.0;
+            double newDiv = 2.0 * (zr * div + zi * drv);
+            drv = newDrv; div = newDiv;
+
+            // Rebase when the reference no longer anchors this pixel (full value
+            // below the perturbation magnitude) or the reference is exhausted.
+            double dmag2 = dr * dr + di * di;
+            if (zmag2 < dmag2 || m + 1 >= refLen)
+            {
+                dr = zr; di = zi;      // δ := z, relative to the restarted Z[0]=0
+                Zr = 0.0; Zi = 0.0;
+                m = 0;
+            }
+
+            // δ_{n+1} = (2·Z[m] + δ)·δ + dc  (Z[m]=0 right after a rebase).
+            double a = 2.0 * Zr + dr;
+            double b = 2.0 * Zi + di;
+            double newDr = a * dr - b * di + dcR;
+            double newDi = a * di + b * dr + dcI;
+            dr = newDr; di = newDi;
+            m++;
+        }
+
+        Interlocked.Increment(ref _ptRebasedPixels);
+        IterationBuffer[idx] = iter;
+        FillAuxAndColorHP(idx, iter, maxIter, zr, zi, drv, div, colorMap);
+    }
+
+    // SM-11a — DOUBLE-DOUBLE-reference variant of ComputePixelPTRebased. Same
+    // Zhuoran rebasing, but the reference orbit Z[m] and the δ-chain carry a DD
+    // (Hi+Lo) so recentring reproduces the same iteration count for a fixed world
+    // point (centre-invariance). dc is captured exactly from the two source
+    // doubles via a DD multiply. Selected by UseDdRebaseReference; ~4-8× the
+    // double loop cost, so intended to gate on deep zoom once --navrepro confirms
+    // it drives focus-err → 0. Mirror of the double loop line-for-line — keep the
+    // two in sync if either changes. See Docs/Deep-Zoom-Perturbation.md.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ComputePixelPTRebasedDD<TMap>(
+        double colOffsetX, double rowOffsetY, double scale,
+        int maxIter, int idx, TMap colorMap)
+        where TMap : IColorMap
+    {
+        int refLen = _refOrbitLen;
+        if (refLen < 1)
+        {
+            IterationBuffer[idx] = maxIter;
+            FillAuxAndColorHP(idx, maxIter, maxIter, 0, 0, 1, 0, colorMap);
+            return;
+        }
+
+        // dc as DD, exact product of the two source doubles (DD*double keeps the
+        // low word that colOffsetX*scale would round away).
+        DD dcR = new DD(scale) * colOffsetX + _refRecycleDx;
+        DD dcI = new DD(scale) * rowOffsetY + _refRecycleDy;
+
+        DD dr = new DD(0.0), di = new DD(0.0);   // δ_0 = 0
+        double drv = 1.0, div = 0.0;             // derivative stays double (normals)
+        int m = 0;
+        double zrHi = 0.0, ziHi = 0.0;           // full-value Hi (last = escape z)
+
+        int iter;
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            DD Zr = new DD(_refZr[m], _refZrLo[m]);
+            DD Zi = new DD(_refZi[m], _refZiLo[m]);
+            DD zr = Zr + dr;      // z = Z[m] + δ   (DD)
+            DD zi = Zi + di;
+            zrHi = zr.Hi; ziHi = zi.Hi;
+
+            double zmag2 = zr.Hi * zr.Hi + zi.Hi * zi.Hi;
+            if (zmag2 >= EscapeRadius2) break;
+
+            double newDrv = 2.0 * (zr.Hi * drv - zi.Hi * div) + 1.0;
+            double newDiv = 2.0 * (zr.Hi * div + zi.Hi * drv);
+            drv = newDrv; div = newDiv;
+
+            // Rebase when the full value drops below the perturbation magnitude
+            // (reference no longer anchors) or the reference is exhausted.
+            double dmag2 = dr.Hi * dr.Hi + di.Hi * di.Hi;
+            if (zmag2 < dmag2 || m + 1 >= refLen)
+            {
+                dr = zr; di = zi;               // δ := z (full DD kept)
+                Zr = new DD(0.0); Zi = new DD(0.0);
+                m = 0;
+            }
+
+            // δ_{n+1} = (2·Z[m] + δ)·δ + dc   (Z[m]=0 right after a rebase).
+            DD a = Zr * 2.0 + dr;
+            DD b = Zi * 2.0 + di;
+            DD newDr = a * dr - b * di + dcR;
+            DD newDi = a * di + b * dr + dcI;
+            dr = newDr; di = newDi;
+            m++;
+        }
+
+        Interlocked.Increment(ref _ptRebasedPixels);
+        IterationBuffer[idx] = iter;
+        FillAuxAndColorHP(idx, iter, maxIter, zrHi, ziHi, drv, div, colorMap);
+    }
+
     private void ComputeRowPTScalar<TMap>(
         int y, double scale, int maxIter, int rowBase, TMap colorMap)
         where TMap : IColorMap
@@ -2439,7 +2863,11 @@ public sealed class MandelbrotCalculator
         int    offX  = SubRectOffsetX;
         int    offY  = SubRectOffsetY;
         double rowOffsetY = offY + y - halfH;
-        double dcY = rowOffsetY * scale;
+        // Wave 3.5 — _refRecycleDy is the frame's centre shift from the cached
+        // reference centre (zero unless the orbit was recycled), so dc is
+        // measured from the actual reference orbit. `+ 0.0` on the common path
+        // keeps this bit-identical to pre-3.5.
+        double dcY = rowOffsetY * scale + _refRecycleDy;
         bool useOD = Zoom > ODZoomThreshold;
         bool useQD = Zoom > QDZoomThreshold && !useOD;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), rowOffsetY, scale);
@@ -2456,11 +2884,13 @@ public sealed class MandelbrotCalculator
         for (int x = 0; x < Width; x++)
         {
             double colOffsetX = offX + x - halfW;
-            double dcX = colOffsetX * scale;
+            double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                if (useOD)
+                if (AllowPtRebasing)
+                    ComputePixelPTRebased(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                else if (useOD)
                 {
                     OD cx_od = OD.FromCenterOffset(
                         new OD(CenterX, CenterXLo, CenterX2, CenterX3,
@@ -2498,7 +2928,11 @@ public sealed class MandelbrotCalculator
         int    offX  = SubRectOffsetX;
         int    offY  = SubRectOffsetY;
         double rowOffsetY = offY + y - halfH;
-        double dcY = rowOffsetY * scale;
+        // Wave 3.5 — _refRecycleDy is the frame's centre shift from the cached
+        // reference centre (zero unless the orbit was recycled), so dc is
+        // measured from the actual reference orbit. `+ 0.0` on the common path
+        // keeps this bit-identical to pre-3.5.
+        double dcY = rowOffsetY * scale + _refRecycleDy;
         bool useOD = Zoom > ODZoomThreshold;
         bool useQD = Zoom > QDZoomThreshold && !useOD;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), rowOffsetY, scale);
@@ -2534,10 +2968,13 @@ public sealed class MandelbrotCalculator
 
         for (; x + 4 <= Width; x += 4)
         {
-            double dcR0 = (offX + x     - halfW) * scale;
-            double dcR1 = (offX + x + 1 - halfW) * scale;
-            double dcR2 = (offX + x + 2 - halfW) * scale;
-            double dcR3 = (offX + x + 3 - halfW) * scale;
+            // Wave 3.5 — + _refRecycleDx applies the frame's centre shift so dc
+            // is measured from the cached reference centre (zero unless the
+            // orbit was recycled; `+ 0.0` keeps the common path bit-identical).
+            double dcR0 = (offX + x     - halfW) * scale + _refRecycleDx;
+            double dcR1 = (offX + x + 1 - halfW) * scale + _refRecycleDx;
+            double dcR2 = (offX + x + 2 - halfW) * scale + _refRecycleDx;
+            double dcR3 = (offX + x + 3 - halfW) * scale + _refRecycleDx;
             var dcRv = Vector256.Create(dcR0, dcR1, dcR2, dcR3);
 
             var dr = Vector256<double>.Zero;
@@ -2715,6 +3152,12 @@ public sealed class MandelbrotCalculator
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
                     double colOffsetX = offX + x + k - halfW;
+                    if (AllowPtRebasing)
+                    {
+                        ComputePixelPTRebased(
+                            colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                        continue;
+                    }
                     if (useOD)
                     {
                         OD cx_od = OD.FromCenterOffset(
@@ -2751,11 +3194,13 @@ public sealed class MandelbrotCalculator
         for (; x < Width; x++)
         {
             double colOffsetX = offX + x - halfW;
-            double dcX = colOffsetX * scale;
+            double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                if (useOD)
+                if (AllowPtRebasing)
+                    ComputePixelPTRebased(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                else if (useOD)
                 {
                     OD cx_od = OD.FromCenterOffset(
                         new OD(CenterX, CenterXLo, CenterX2, CenterX3,
@@ -2806,7 +3251,11 @@ public sealed class MandelbrotCalculator
         int    offX  = SubRectOffsetX;
         int    offY  = SubRectOffsetY;
         double rowOffsetY = offY + y - halfH;
-        double dcY = rowOffsetY * scale;
+        // Wave 3.5 — _refRecycleDy is the frame's centre shift from the cached
+        // reference centre (zero unless the orbit was recycled), so dc is
+        // measured from the actual reference orbit. `+ 0.0` on the common path
+        // keeps this bit-identical to pre-3.5.
+        double dcY = rowOffsetY * scale + _refRecycleDy;
         bool useOD = Zoom > ODZoomThreshold;
         bool useQD = Zoom > QDZoomThreshold && !useOD;
         DD cy_dd = DD.FromCenterOffset(new DD(CenterY, CenterYLo), rowOffsetY, scale);
@@ -2842,14 +3291,16 @@ public sealed class MandelbrotCalculator
 
         for (; x + 8 <= Width; x += 8)
         {
-            double dcR0 = (offX + x     - halfW) * scale;
-            double dcR1 = (offX + x + 1 - halfW) * scale;
-            double dcR2 = (offX + x + 2 - halfW) * scale;
-            double dcR3 = (offX + x + 3 - halfW) * scale;
-            double dcR4 = (offX + x + 4 - halfW) * scale;
-            double dcR5 = (offX + x + 5 - halfW) * scale;
-            double dcR6 = (offX + x + 6 - halfW) * scale;
-            double dcR7 = (offX + x + 7 - halfW) * scale;
+            // Wave 3.5 — + _refRecycleDx: see ComputeRowPT4 (centre-shift for
+            // orbit recycling; zero on the common path → bit-identical).
+            double dcR0 = (offX + x     - halfW) * scale + _refRecycleDx;
+            double dcR1 = (offX + x + 1 - halfW) * scale + _refRecycleDx;
+            double dcR2 = (offX + x + 2 - halfW) * scale + _refRecycleDx;
+            double dcR3 = (offX + x + 3 - halfW) * scale + _refRecycleDx;
+            double dcR4 = (offX + x + 4 - halfW) * scale + _refRecycleDx;
+            double dcR5 = (offX + x + 5 - halfW) * scale + _refRecycleDx;
+            double dcR6 = (offX + x + 6 - halfW) * scale + _refRecycleDx;
+            double dcR7 = (offX + x + 7 - halfW) * scale + _refRecycleDx;
             var dcRv = Vector512.Create(dcR0, dcR1, dcR2, dcR3, dcR4, dcR5, dcR6, dcR7);
 
             var dr = Vector512<double>.Zero;
@@ -3012,6 +3463,12 @@ public sealed class MandelbrotCalculator
                 if (glitched && ((escapedMask >> k) & 1) == 0)
                 {
                     double colOffsetX = offX + x + k - halfW;
+                    if (AllowPtRebasing)
+                    {
+                        ComputePixelPTRebased(
+                            colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                        continue;
+                    }
                     if (useOD)
                     {
                         OD cx_od = OD.FromCenterOffset(
@@ -3047,11 +3504,13 @@ public sealed class MandelbrotCalculator
         for (; x < Width; x++)
         {
             double colOffsetX = offX + x - halfW;
-            double dcX = colOffsetX * scale;
+            double dcX = colOffsetX * scale + _refRecycleDx;  // Wave 3.5 recycle shift (0 on normal path)
             int idx = rowBase + x;
             if (!ComputePixelPT(dcX, dcY, maxIter, idx, colorMap))
             {
-                if (useOD)
+                if (AllowPtRebasing)
+                    ComputePixelPTRebased(colOffsetX, rowOffsetY, scale, maxIter, idx, colorMap);
+                else if (useOD)
                 {
                     OD cx_od = OD.FromCenterOffset(
                         new OD(CenterX, CenterXLo, CenterX2, CenterX3,
@@ -3708,6 +4167,7 @@ public sealed class MandelbrotCalculator
         _refCy2 = 0; _refCy3 = 0; _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = orbit.MaxIter;
         _refCachedEscaped = orbit.Escaped;
+        _refCachedTier = 0;  // DD (seeded)
     }
 
     /// <summary>D-6b2 — seed the internal ref-orbit cache with an
@@ -3756,6 +4216,7 @@ public sealed class MandelbrotCalculator
         _refCy4 = 0; _refCy5 = 0; _refCy6 = 0; _refCy7 = 0;
         _refCachedMaxIter = orbit.MaxIter;
         _refCachedEscaped = orbit.Escaped;
+        _refCachedTier = 1;  // QD (seeded)
     }
 
     /// <summary>D-6b2 — seed the internal ref-orbit cache with an
@@ -3812,5 +4273,6 @@ public sealed class MandelbrotCalculator
         _refCy6  = orbit.CentreY6; _refCy7  = orbit.CentreY7;
         _refCachedMaxIter = orbit.MaxIter;
         _refCachedEscaped = orbit.Escaped;
+        _refCachedTier = 2;  // OD (seeded)
     }
 }

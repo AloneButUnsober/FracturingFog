@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // compute-smoke entry point.
 //
 // Phase X.5 / Slice 5.1 — minimal ILGPU device probe. Mirrors the role of

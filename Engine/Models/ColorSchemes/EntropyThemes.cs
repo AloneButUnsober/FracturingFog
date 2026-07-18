@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/EntropyThemes.cs
 //
 // Color themes driven by local Shannon entropy of the smooth-iteration field.
@@ -132,7 +135,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class EntropyHeatmap : GradientColorMap, IPostProcessColorMap
     {
-        public static string Name => "Entropy — Heatmap";
+        public static string Name => "Entropy - Heatmap";
         public static string Category => "Information Theory";
         public static string Description =>
             "Local Shannon entropy of the smooth-iteration field, displayed as " +
@@ -190,7 +193,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class EntropyContrastMap : GradientColorMap, IPostProcessColorMap
     {
-        public static string Name => "Entropy — Contrast";
+        public static string Name => "Entropy - Contrast";
         public static string Category => "Information Theory";
         public static string Description =>
             "Twilight gradient by iteration count, modulated by local Shannon " +
@@ -258,7 +261,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class EntropyEdgeMap : GradientColorMap, IPostProcessColorMap
     {
-        public static string Name => "Entropy — Filament Glow";
+        public static string Name => "Entropy - Filament Glow";
         public static string Category => "Information Theory";
         public static string Description =>
             "Dark deep-teal base modulated by additive gold glow where local " +

@@ -1,4 +1,7 @@
-﻿// Interefaces/IColorMap.cs  — v4 (3D lighting extension)
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Interefaces/IColorMap.cs  — v4 (3D lighting extension)
 //
 // The core change in this version is the addition of a second Map overload
 // that receives the surface normal vector (nx, ny) estimated at escape.

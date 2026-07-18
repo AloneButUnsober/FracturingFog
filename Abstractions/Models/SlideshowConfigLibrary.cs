@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // SlideshowConfigLibrary.cs
 //
 // Keyed collection of named slideshow presets, persisted to
@@ -5,9 +8,10 @@
 // the legacy single-config file (slideshow-settings.json, owned by
 // SlideshowSettingsStore) into a "Default" entry so users keep their tuning.
 //
-// Import/Export read and write a single SlideshowConfig file (one preset per
-// file) so users can share named presets without disturbing the rest of the
-// library.
+// Export writes a single SlideshowConfig file (one preset per file) so users
+// can share named presets without disturbing the rest of the library. Import
+// reads that form and a JSON array of presets, so a hand-assembled or
+// bulk-exported multi-preset file lands in one pass.
 
 using System;
 using System.Collections.Generic;
@@ -58,6 +62,7 @@ namespace FracturingFog.Models
                     if (file != null && file.Configs.Count > 0)
                     {
                         EnsureActiveValid(file);
+                        NormalizeLegacyNames(file);
                         return file;
                     }
                 }
@@ -144,24 +149,63 @@ namespace FracturingFog.Models
             return false;
         }
 
-        /// <summary>Read a single preset from <paramref name="path"/> and upsert
-        /// it into the library. Returns the imported preset's name, or null on
-        /// any IO/parse error.</summary>
-        public static string? Import(SlideshowConfigFile file, string path)
+        /// <summary>Read one or many presets from <paramref name="path"/> and
+        /// upsert each into the library. Accepts a bare preset object as well
+        /// as a JSON array of presets. Same-name presets are replaced (matching
+        /// the single-preset import this grew out of), and the last preset in
+        /// the file ends up active. Returns the imported names in file order,
+        /// empty on any IO/parse error or when no element carried a name.</summary>
+        public static IReadOnlyList<string> Import(SlideshowConfigFile file, string path)
         {
-            if (file == null || string.IsNullOrWhiteSpace(path)) return null;
+            if (file == null || string.IsNullOrWhiteSpace(path)) return Array.Empty<string>();
             try
             {
                 var json = File.ReadAllText(path);
-                var cfg = JsonSerializer.Deserialize<SlideshowConfig>(json, JsonOpts);
-                if (cfg == null || string.IsNullOrWhiteSpace(cfg.Name)) return null;
-                Upsert(file, cfg);
-                return cfg.Name;
+                var parsed = ParseConfigs(json);
+                if (parsed.Count == 0) return Array.Empty<string>();
+
+                // Normalize the whole batch through one wrapper before any
+                // upsert, so legacy names in the file resolve the same way they
+                // do on Load() — the wrapper shares the parsed references.
+                var wrap = new SlideshowConfigFile { ActiveName = parsed[0].Name };
+                wrap.Configs.AddRange(parsed);
+                NormalizeLegacyNames(wrap);
+
+                var names = new List<string>(parsed.Count);
+                foreach (var cfg in parsed)
+                {
+                    Upsert(file, cfg); // persists; marks the imported preset active
+                    names.Add(cfg.Name);
+                }
+                return names;
             }
             catch
             {
-                return null;
+                return Array.Empty<string>();
             }
+        }
+
+        // Root shape decides: '[' = many presets, anything else = one. Nameless
+        // entries are dropped rather than defaulted, so a malformed element
+        // can't silently overwrite the "Default" preset via Upsert.
+        private static List<SlideshowConfig> ParseConfigs(string json)
+        {
+            var parsed = new List<SlideshowConfig>();
+            if (string.IsNullOrWhiteSpace(json)) return parsed;
+
+            if (json.TrimStart().StartsWith("["))
+            {
+                var many = JsonSerializer.Deserialize<List<SlideshowConfig>>(json, JsonOpts);
+                if (many != null) parsed.AddRange(many);
+            }
+            else
+            {
+                var one = JsonSerializer.Deserialize<SlideshowConfig>(json, JsonOpts);
+                if (one != null) parsed.Add(one);
+            }
+
+            parsed.RemoveAll(c => c == null || string.IsNullOrWhiteSpace(c.Name));
+            return parsed;
         }
 
         /// <summary>Write a single preset (looked up by name) to
@@ -204,6 +248,29 @@ namespace FracturingFog.Models
             };
             Save(file);
             return file;
+        }
+
+        // Rewrite any saved pre-ASCII (Unicode) region / color-theme names in
+        // the include lists to their current ASCII names via the alias map, so
+        // filter matching against the live (renamed) libraries keeps working.
+        // Self-healing: the ASCII names persist on the next Save.
+        private static void NormalizeLegacyNames(SlideshowConfigFile file)
+        {
+            foreach (var c in file.Configs)
+            {
+                MapInPlace(c.IncludedRegions);
+                MapInPlace(c.IncludedColorThemes);
+            }
+
+            static void MapInPlace(List<string>? names)
+            {
+                if (names == null) return;
+                for (int i = 0; i < names.Count; i++)
+                {
+                    var mapped = LegacyNameAliases.Resolve(names[i]);
+                    if (mapped != null) names[i] = mapped;
+                }
+            }
         }
 
         private static void EnsureActiveValid(SlideshowConfigFile file)

@@ -1,4 +1,7 @@
-﻿// Models/ColorSchemes/CosmicMandala.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/ColorSchemes/CosmicMandala.cs
 // Algorithmic palette inspired by a jewelled fractal mandala image:
 // black void → deep violet → magenta → copper/amber → gold → turquoise glass.
 //

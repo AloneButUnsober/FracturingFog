@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // GpuRaymarchParams.cs
 //
 // P7 infra — shared camera/ray/light/march struct passed to every per-fractal

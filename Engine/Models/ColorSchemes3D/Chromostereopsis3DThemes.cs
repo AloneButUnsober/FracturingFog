@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes3D/Chromostereopsis3DThemes.cs
 //
 // 3D variants of the "Chromostereopsis" Eye Trick palette.  The pure

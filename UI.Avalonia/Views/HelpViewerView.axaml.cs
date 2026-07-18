@@ -1,20 +1,20 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using FracturingFog.UI.Avalonia.Input;
-using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
-public sealed partial class HelpViewerView : Window
+/// <summary>
+/// Markdown-backed contextual Help viewer. Hybrid-shell: a UserControl hosted
+/// modeless by <see cref="HelpViewerLauncher"/>, which owns the window chrome
+/// and wires the VM's <c>CloseRequested</c> to the host window's close.
+/// </summary>
+public sealed partial class HelpViewerView : UserControl
 {
     public HelpViewerView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
-        if (DataContext is HelpViewerViewModel vm) vm.CloseRequested += Close;
-        DataContextChanged += (_, _) =>
-        {
-            if (DataContext is HelpViewerViewModel v) v.CloseRequested += Close;
-        };
     }
 }

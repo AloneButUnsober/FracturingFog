@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Hosting/AvaloniaDialogs.cs
 //
 // Small helpers used by AvaloniaShellBootstrap to satisfy SaveFileRequested
@@ -32,6 +35,7 @@ using Avalonia.Threading;
 
 using FracturingFog.Audio;
 using FracturingFog.Imaging;
+using FracturingFog.UI.Avalonia.Services;
 using FracturingFog.UI.Avalonia.ViewModels;
 using FracturingFog.UI.Avalonia.Views;
 
@@ -181,6 +185,15 @@ namespace FracturingFog.Hosting
 
         // ── Slideshow settings ───────────────────────────────────────────────
 
+        /// <summary>Window chrome for the Slideshow Settings panel host — the
+        /// title/size/background formerly on the view's <c>&lt;Window&gt;</c> root.
+        /// Shared by both the legacy and library-mode launchers.</summary>
+        private static PanelHostOptions SlideshowHostOptions() =>
+            new PanelHostOptions(
+                "Slideshow Settings",
+                Width: 520, MinWidth: 460,
+                Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C)));
+
         /// <summary>
         /// Legacy overload — opens the dialog bound to a single
         /// <see cref="global::FracturingFog.Models.SlideshowSettings"/>.
@@ -196,9 +209,10 @@ namespace FracturingFog.Hosting
             void Run()
             {
                 var vm = new SlideshowSettingsViewModel(current, audioReactive);
-                var win = new SlideshowSettingsView { DataContext = vm };
-                vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
-                win.Closed += (_, _) =>
+                var panel = new SlideshowSettingsView { DataContext = vm };
+                var host = new PanelHostWindow(panel, SlideshowHostOptions());
+                vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(host);
+                host.Closed += (_, _) =>
                 {
                     if (tcs.Task.IsCompleted) return;
                     if (vm.ResultSettings != null)
@@ -207,8 +221,7 @@ namespace FracturingFog.Hosting
                         tcs.TrySetResult(null);
                 };
                 var owner = ActiveMainWindow;
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(host, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -247,7 +260,8 @@ namespace FracturingFog.Hosting
             {
                 var vm = new SlideshowSettingsViewModel(file, audioReactive);
                 vm.PopulateAvailableLists(regionNames, themeNames, animationNames);
-                var win = new SlideshowSettingsView { DataContext = vm };
+                var panel = new SlideshowSettingsView { DataContext = vm };
+                var win = new PanelHostWindow(panel, SlideshowHostOptions());
                 vm.ShowAudioDialogRequested += (_, _) => _ = ShowAudioSettingsAsync(win);
                 vm.CapturePostFxRequested += (_, _) =>
                 {
@@ -262,8 +276,21 @@ namespace FracturingFog.Hosting
                             "Import Slideshow Preset",
                             "JSON File (*.json)|*.json|All Files (*.*)|*.*");
                         if (string.IsNullOrEmpty(path)) return;
-                        var name = global::FracturingFog.Models.SlideshowConfigLibrary.Import(file, path);
-                        vm.ApplyImportedConfig(name);
+                        var names = global::FracturingFog.Models.SlideshowConfigLibrary.Import(file, path);
+                        if (names.Count == 0)
+                        {
+                            await ShowMessageAsync(
+                                "Import Slideshow Preset",
+                                "The file contains no slideshow presets.",
+                                expectsConfirmation: false);
+                            return;
+                        }
+                        vm.ApplyImportedConfig(names[names.Count - 1]);
+                        if (names.Count > 1)
+                            await ShowMessageAsync(
+                                "Import Slideshow Preset",
+                                $"{names.Count} presets imported.",
+                                expectsConfirmation: false);
                     }
                     catch (Exception ex)
                     {
@@ -331,8 +358,7 @@ namespace FracturingFog.Hosting
                 };
 
                 var owner = ActiveMainWindow;
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -349,18 +375,18 @@ namespace FracturingFog.Hosting
         {
             var tcs = new TaskCompletionSource<global::FracturingFog.Models.VideoSettingsConfig?>();
 
-            void Run()
+            async void Run()
             {
                 var vm = new VideoSettingsViewModel(current);
-                var win = new VideoSettingsView { DataContext = vm };
-                win.Closed += (_, _) =>
-                {
-                    if (tcs.Task.IsCompleted) return;
-                    tcs.TrySetResult(vm.Result);
-                };
-                var o = owner ?? ActiveMainWindow;
-                if (o != null) _ = win.ShowDialog(o);
-                else win.Show();
+                var panel = new VideoSettingsView { DataContext = vm };
+                await WindowService.ShowPanelDialogAsync(
+                    panel,
+                    new PanelHostOptions(
+                        "Video Settings",
+                        Width: 460, MinWidth: 380,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
+                    owner ?? ActiveMainWindow);
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(vm.Result);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -392,12 +418,12 @@ namespace FracturingFog.Hosting
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            void Run()
+            async void Run()
             {
                 var current = AudioSettingsStore.Load();
                 var vm = new AudioSettingsViewModel(current, liveSource: null,
                     capabilities: AudioCapabilityProbe.Detect());
-                var win = new AudioSettingsView { DataContext = vm };
+                var panel = new AudioSettingsView { DataContext = vm };
 
                 // Browse… → Avalonia open-file picker; push the chosen path back.
                 vm.BrowseFileRequested += async (_, _) =>
@@ -408,20 +434,21 @@ namespace FracturingFog.Hosting
                     if (!string.IsNullOrEmpty(path)) vm.FilePath = path!;
                 };
 
-                // OK commits vm.Result; persist it. Cancel raises false → no save.
-                vm.CloseRequested += (_, ok) =>
+                var result = await WindowService.ShowPanelDialogAsync(
+                    panel,
+                    new PanelHostOptions(
+                        "Audio-Reactive Slideshow",
+                        Width: 520, MinWidth: 420,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
+                    owner);
+
+                // OK (true) commits vm.Result; persist it. Cancel/dismiss → no save.
+                if (result == true)
                 {
-                    if (ok)
-                    {
-                        try { AudioSettingsStore.Save(vm.Result); } catch { }
-                    }
-                };
+                    try { AudioSettingsStore.Save(vm.Result); } catch { }
+                }
 
-                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
-
-                if (owner != null) _ = win.ShowDialog(owner);
-                else if (ActiveMainWindow != null) _ = win.ShowDialog(ActiveMainWindow);
-                else win.Show();
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -443,27 +470,30 @@ namespace FracturingFog.Hosting
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            void Run()
+            async void Run()
             {
                 var current = FracturingFog.Models.AnimationSettingsStore.Load();
                 var vm = new AppSettingsViewModel(current);
-                var win = new AppSettingsView { DataContext = vm };
+                var panel = new AppSettingsView { DataContext = vm };
 
-                vm.CloseRequested += (_, ok) =>
+                // PanelHostWindow owns the window chrome + closing; we await the
+                // pop-out and persist on a committed result.
+                await WindowService.ShowPanelDialogAsync(
+                    panel,
+                    new PanelHostOptions(
+                        "Application Settings",
+                        Width: 520, MinWidth: 440,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
+                    owner);
+
+                if (vm.Result != null)
                 {
-                    if (ok && vm.Result != null)
-                    {
-                        try { FracturingFog.Models.AnimationSettingsStore.Save(vm.Result); } catch { }
-                        FracturingFog.UI.Avalonia.ViewModels.Animation
-                            .AnimationBusHost.InvalidateCeilingCache();
-                    }
-                };
+                    try { FracturingFog.Models.AnimationSettingsStore.Save(vm.Result); } catch { }
+                    FracturingFog.UI.Avalonia.ViewModels.Animation
+                        .AnimationBusHost.InvalidateCeilingCache();
+                }
 
-                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(true); };
-
-                if (owner != null) _ = win.ShowDialog(owner);
-                else if (ActiveMainWindow != null) _ = win.ShowDialog(ActiveMainWindow);
-                else win.Show();
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -575,8 +605,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -654,8 +683,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
                 box.Focus();
                 box.SelectAll();
             }
@@ -798,8 +826,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
                 box.Focus();
                 box.SelectAll();
             }
@@ -981,8 +1008,7 @@ namespace FracturingFog.Hosting
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1464,8 +1490,7 @@ namespace FracturingFog.Hosting
                 win.Content = root;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
 
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1490,10 +1515,7 @@ namespace FracturingFog.Hosting
             void Run()
             {
                 var win = BuildMessageWindow(title, body, expectsConfirmation, tcs);
-                if (owner != null)
-                    _ = win.ShowDialog(owner);
-                else
-                    win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1640,8 +1662,7 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1738,9 +1759,8 @@ namespace FracturingFog.Hosting
                 grid.Children.Add(buttonRow);
 
                 win.Content = grid;
-                win.Opened += (_, _) => { try { win.Activate(); } catch { } };
-                if (owner != null) _ = win.ShowDialog(owner);
-                else win.Show();
+                // Foreground activation is handled centrally by WindowService.
+                _ = WindowService.ShowDialogAsync(win, owner);
             }
 
             if (Dispatcher.UIThread.CheckAccess()) Run();
@@ -1795,9 +1815,7 @@ namespace FracturingFog.Hosting
                 if (!tcs.Task.IsCompleted) tcs.TrySetResult(accepted != null);
             };
 
-            var owner = ActiveMainWindow;
-            if (owner != null) _ = win.ShowDialog(owner);
-            else win.Show();
+            _ = WindowService.ShowDialogAsync(win, ActiveMainWindow);
 
             await tcs.Task;
             return accepted;

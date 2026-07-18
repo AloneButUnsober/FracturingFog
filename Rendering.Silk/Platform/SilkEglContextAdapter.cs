@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // SilkEglContextAdapter.cs
 //
 // EGL P/Invoke wrapper that turns a foreign Wayland wl_surface* (the handle

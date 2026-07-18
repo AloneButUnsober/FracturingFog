@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Rendering.D3D/WindowsD3D11HardwareInfoProvider.cs
 //
 // Phase X.0 / Slice 0.3b — IHardwareInfoProvider implementation backed by

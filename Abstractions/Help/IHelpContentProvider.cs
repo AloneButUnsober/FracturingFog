@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Help/IHelpContentProvider.cs
 //
 // Bridge between the Avalonia FloatingHelp VM and the host's help-text

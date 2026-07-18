@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/PotentialThemes.cs
 //
 // Douady-Hubbard potential — the harmonic Green's function of the exterior of
@@ -25,7 +28,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class PotentialEquipotentialMap : IColorMap
     {
-        public static string Name => "Potential — Equipotential Bands";
+        public static string Name => "Potential - Equipotential Bands";
         public static string Category => "Douady-Hubbard Potential";
         public static string Description =>
             "Discrete bands of the Douady-Hubbard potential G(c) = log|z|/2^n.  " +
@@ -76,7 +79,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class PotentialSmoothMap : GradientColorMap
     {
-        public static string Name => "Potential — Smooth";
+        public static string Name => "Potential - Smooth";
         public static string Category => "Douady-Hubbard Potential";
         public static string Description =>
             "Continuous gradient of log G(c) — smooth visualisation of the " +
@@ -117,7 +120,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class PotentialContourMap : IColorMap
     {
-        public static string Name => "Potential — Octave Contours";
+        public static string Name => "Potential - Octave Contours";
         public static string Category => "Douady-Hubbard Potential";
         public static string Description =>
             "Thin contour lines at each octave of G(c).  Topographic engraving of " +

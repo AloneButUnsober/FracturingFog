@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/InteriorThemes.cs
 //
 // Phase 4b — Interior colouring themes.  These themes paint the IN-SET region
@@ -121,7 +124,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class MultiplierMap : GradientColorMap, IInteriorAwareColorMap
     {
-        public static string Name => "Multiplier |λ|";
+        public static string Name => "Multiplier |lambda|";
         public static string Category => "Interior";
         public static string Description =>
             "In-set pixels coloured by cycle multiplier magnitude |λ|. " +

@@ -1,0 +1,71 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Design tokens for the Fracturing Fog Avalonia shell.
+
+        Single source of truth for colors, brushes, and sizing constants used
+        across every dialog. Values here intentionally reproduce the palette
+        that was previously hardcoded per-dialog (esp. FloatingMenuView) so the
+        F1 retrofit is a pure de-duplication with no visual change. Recolors
+        (if any) happen deliberately in later phases by editing tokens here,
+        once, rather than hunting literals across ~30 views.
+
+        Naming: Color* = raw Color; Brush* = SolidColorBrush; Size*/Width* =
+        numeric doubles.
+    -->
+
+    <!-- ── Surfaces ──────────────────────────────────────────────────────── -->
+    <Color x:Key="ColorSurface">#161616</Color>          <!-- window bg -->
+    <Color x:Key="ColorSurfaceAlt">#1C1C1C</Color>       <!-- dialog bg -->
+    <Color x:Key="ColorInput">#282828</Color>            <!-- textbox bg -->
+    <Color x:Key="ColorGroupBorder">#3A3A3A</Color>
+
+    <SolidColorBrush x:Key="BrushSurface"     Color="{StaticResource ColorSurface}" />
+    <SolidColorBrush x:Key="BrushSurfaceAlt"  Color="{StaticResource ColorSurfaceAlt}" />
+    <SolidColorBrush x:Key="BrushInput"       Color="{StaticResource ColorInput}" />
+    <SolidColorBrush x:Key="BrushGroupBorder" Color="{StaticResource ColorGroupBorder}" />
+
+    <!-- ── Text ──────────────────────────────────────────────────────────── -->
+    <Color x:Key="ColorTextPrimary">#DCDCDC</Color>
+    <Color x:Key="ColorTextLabel">#9B9B9B</Color>
+    <Color x:Key="ColorTextLabelAlt">#B4B4B4</Color>
+    <Color x:Key="ColorAccent">#C8C864</Color>           <!-- section headers -->
+    <Color x:Key="ColorAccentWarm">#C8C878</Color>
+    <!-- Colorblind-safe warning/attention signal (user is red/green colorblind:
+         use yellow, never red, for meaning-bearing states). -->
+    <Color x:Key="ColorWarn">#FFCC00</Color>
+
+    <SolidColorBrush x:Key="BrushTextPrimary"  Color="{StaticResource ColorTextPrimary}" />
+    <SolidColorBrush x:Key="BrushTextLabel"    Color="{StaticResource ColorTextLabel}" />
+    <SolidColorBrush x:Key="BrushTextLabelAlt" Color="{StaticResource ColorTextLabelAlt}" />
+    <SolidColorBrush x:Key="BrushAccent"       Color="{StaticResource ColorAccent}" />
+    <SolidColorBrush x:Key="BrushAccentWarm"   Color="{StaticResource ColorAccentWarm}" />
+    <SolidColorBrush x:Key="BrushWarn"         Color="{StaticResource ColorWarn}" />
+
+    <!-- ── Button fills (semantic) ───────────────────────────────────────── -->
+    <Color x:Key="ColorBtnNeutral">#2D2D32</Color>
+    <Color x:Key="ColorBtnGo">#285028</Color>
+    <Color x:Key="ColorBtnDanger">#502323</Color>
+    <Color x:Key="ColorBtnSlideshow">#283728</Color>
+    <Color x:Key="ColorBtnVideo">#372846</Color>
+    <Color x:Key="ColorBtnHelp">#283C64</Color>
+
+    <SolidColorBrush x:Key="BrushBtnNeutral"   Color="{StaticResource ColorBtnNeutral}" />
+    <SolidColorBrush x:Key="BrushBtnGo"        Color="{StaticResource ColorBtnGo}" />
+    <SolidColorBrush x:Key="BrushBtnDanger"    Color="{StaticResource ColorBtnDanger}" />
+    <SolidColorBrush x:Key="BrushBtnSlideshow" Color="{StaticResource ColorBtnSlideshow}" />
+    <SolidColorBrush x:Key="BrushBtnVideo"     Color="{StaticResource ColorBtnVideo}" />
+    <SolidColorBrush x:Key="BrushBtnHelp"      Color="{StaticResource ColorBtnHelp}" />
+
+    <!-- ── Sizing constants ──────────────────────────────────────────────────
+         Centralized so buttons and numeric fields are uniform everywhere. The
+         numeric-field widths are the fix for "fields too narrow to show their
+         value": FieldWidthNumeric fits a signed 6-7 digit value + spinner;
+         FieldWidthWide fits longer coordinate/duration values. -->
+    <x:Double x:Key="ButtonMinWidth">64</x:Double>
+    <x:Double x:Key="LabelColumnWidth">96</x:Double>
+    <x:Double x:Key="FieldWidthNumeric">120</x:Double>
+    <x:Double x:Key="FieldWidthWide">150</x:Double>
+    <Thickness x:Key="GroupPadding">8</Thickness>
+    <Thickness x:Key="FieldMargin">0,0,0,4</Thickness>
+</ResourceDictionary>

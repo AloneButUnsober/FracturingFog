@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // HdriProbe.cs
 //
 // Tiny indirection so the Avalonia UI shell can eagerly pre-warm an HDRI

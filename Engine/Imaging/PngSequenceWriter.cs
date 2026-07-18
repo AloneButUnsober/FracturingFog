@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
 using System.IO;
 using System.Threading;
@@ -89,16 +92,22 @@ namespace FracturingFog
             });
         }
 
-        // SkiaSharp PNG save. BGRA8888 + Premul matches the upstream GPU
-        // readback. InstallPixels pins the uint[] into the SKBitmap so we
-        // avoid an extra managed→native copy; encode then writes directly
+        // SkiaSharp PNG save. InstallPixels pins the uint[] into the SKBitmap so
+        // we avoid an extra managed→native copy; encode then writes directly
         // to the file stream. Per-frame allocation count is unchanged from
         // the GDI+ path (one bmp + one stream).
         private static unsafe void SavePng(uint[] pixels, int w, int h, string path)
         {
+            // F10.3b — the frame buffer carries STRAIGHT (non-premultiplied)
+            // alpha, same contract as ImageExport.SaveBgraSkia. Declaring Premul
+            // would make the PNG encoder unpremultiply (divide RGB by alpha) on
+            // an already-straight buffer, blowing out colour for authored
+            // translucent themes. Opaque frames (A=255 — every built-in theme,
+            // all GPU readback which forces 0xFF) are premul==unpremul
+            // byte-for-byte, so existing sequences are unchanged.
             // Keep the SKBitmap lifetime entirely inside the fixed block so the
             // pinned pointer stays valid until after the encode completes.
-            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
             fixed (uint* p = pixels)
             {
                 using var bmp = new SKBitmap();

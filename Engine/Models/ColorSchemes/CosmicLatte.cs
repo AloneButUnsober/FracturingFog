@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/CosmicLatte.cs
 // Named after the 2002 Johns Hopkins University finding that the average colour
 // of the universe is a pale beige (#FFF8E7).

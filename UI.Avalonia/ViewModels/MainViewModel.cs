@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/MainViewModel.cs
 //
 // Step D of the Phase 2.3 MainForm cut plan. Thin facade over the three
@@ -192,6 +195,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Multibrot,        "Multibrot"),
         (FractalType.Phoenix,          "Phoenix"),
         (FractalType.Newton,           "Newton"),
+        (FractalType.Nova,             "Nova"),
         (FractalType.BuddhaBrot,       "Buddhabrot"),
         (FractalType.Nebulabrot,       "Nebulabrot"),
         (FractalType.AntiBuddhabrot,   "Anti-Buddhabrot"),
@@ -229,23 +233,116 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Dla,                   "DLA (Brownian Tree)"),
     };
 
+    /// <summary>Category filter applied to the toolbar Type combo via its
+    /// right-click sort menu. Mirrors the Region combo's RegionSortMode. A pure
+    /// view concern — narrows which entries are listed without changing the
+    /// active fractal.</summary>
+    public enum FractalTypeFilter { Default, TwoD, ThreeD, User, CalcGen, Promoted }
+
+    private FractalTypeFilter _fractalFilter = FractalTypeFilter.Default;
+
+    /// <summary>User-equation family — the three built-ins backed by editable
+    /// equation sources (matches the "User" filter bucket).</summary>
+    private static bool IsUserFamily(FractalType t) =>
+           t == FractalType.UserEquation
+        || t == FractalType.Sandbox
+        || t == FractalType.UserBulb;
+
+    /// <summary>CalculatorGen-emitted built-ins (the "Generated …" labels).</summary>
+    private static bool IsCalcGen(FractalType t) =>
+           t == FractalType.GeneratedMandelbrotZ2
+        || t == FractalType.GeneratedMandelbrotZ3
+        || t == FractalType.GeneratedMandelbrotZ4
+        || t == FractalType.GeneratedMandelbrotZ5
+        || t == FractalType.GeneratedTricorn
+        || t == FractalType.GeneratedBurningShip;
+
+    private bool MatchesFilter(FractalType t) => _fractalFilter switch
+    {
+        FractalTypeFilter.TwoD    => !FractalViewState.IsThreeD(t),
+        FractalTypeFilter.ThreeD  => FractalViewState.IsThreeD(t),
+        FractalTypeFilter.User    => IsUserFamily(t),
+        FractalTypeFilter.CalcGen => IsCalcGen(t),
+        _                          => true, // Default (Promoted handled separately)
+    };
+
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label
-    /// table + the current <see cref="RegisteredFractalCatalog"/> snapshot.
-    /// Call after a user equation is saved/promoted so the combo picks up
-    /// the new entry.</summary>
+    /// table + the current <see cref="RegisteredFractalCatalog"/> snapshot,
+    /// narrowed by the active <see cref="FractalTypeFilter"/>. Call after a user
+    /// equation is saved/promoted so the combo picks up the new entry. Preserves
+    /// the current selection when it survives the rebuild.</summary>
     public void RebuildFractalEntries()
     {
+        // Remember the live pick so a filter flip doesn't drop the active
+        // fractal's highlight when it still qualifies for the new bucket.
+        var prevType = _selectedFractalEntry?.Type ?? _selectedFractalType;
+        var prevPromoted = _selectedFractalEntry?.Promoted;
+
         FractalEntries.Clear();
-        foreach (var (t, label) in BuiltInFractalLabels)
-            FractalEntries.Add(FractalTypeEntry.BuiltIn(t, label));
 
         var promoted = RegisteredFractalCatalog.Snapshot();
-        if (promoted.Count > 0)
+
+        if (_fractalFilter == FractalTypeFilter.Promoted)
         {
-            FractalEntries.Add(FractalTypeEntry.Divider());
+            // Promoted-only view: just the catalog entries, no built-ins.
             foreach (var r in promoted)
                 FractalEntries.Add(FractalTypeEntry.FromPromoted(r));
         }
+        else
+        {
+            foreach (var (t, label) in BuiltInFractalLabels)
+                if (MatchesFilter(t))
+                    FractalEntries.Add(FractalTypeEntry.BuiltIn(t, label));
+
+            // Promoted equations follow the "— Registered —" divider under the
+            // Default view only; the category filters list built-ins alone.
+            if (_fractalFilter == FractalTypeFilter.Default && promoted.Count > 0)
+            {
+                FractalEntries.Add(FractalTypeEntry.Divider());
+                foreach (var r in promoted)
+                    FractalEntries.Add(FractalTypeEntry.FromPromoted(r));
+            }
+        }
+
+        // Restore the highlight without re-triggering a render. If the prior
+        // pick was filtered out, leave _selectedFractalEntry pointing at it —
+        // the combo simply shows no selection until a filter that includes it
+        // is chosen; the active fractal is unchanged either way.
+        FractalTypeEntry? restore = null;
+        foreach (var e in FractalEntries)
+        {
+            if (e.IsDivider) continue;
+            if (prevPromoted != null ? ReferenceEquals(e.Promoted, prevPromoted)
+                                     : (e.Promoted == null && e.Type == prevType))
+            { restore = e; break; }
+        }
+        if (restore != null && !ReferenceEquals(_selectedFractalEntry, restore))
+        {
+            _selectedFractalEntry = restore;
+            this.RaisePropertyChanged(nameof(SelectedFractalEntry));
+        }
+    }
+
+    /// <summary>Build the Type combo's right-click sort/filter menu
+    /// (Default / 2D / 3D / User / CalcGen / Promoted). Mirrors
+    /// <see cref="FloatingMenuViewModel.BuildRegionSortMenu"/>; each pick flips
+    /// the filter and rebuilds the entry list.</summary>
+    public IReadOnlyList<ComboMenuItem> BuildFractalTypeSortMenu()
+    {
+        ComboMenuItem Filter(string header, FractalTypeFilter f) =>
+            ComboMenuItem.Item(header, _fractalFilter == f,
+                () => { _fractalFilter = f; RebuildFractalEntries(); });
+
+        return new List<ComboMenuItem>
+        {
+            Filter("Default", FractalTypeFilter.Default),
+            ComboMenuItem.Separator,
+            Filter("2D",       FractalTypeFilter.TwoD),
+            Filter("3D",       FractalTypeFilter.ThreeD),
+            Filter("User",     FractalTypeFilter.User),
+            Filter("CalcGen",  FractalTypeFilter.CalcGen),
+            Filter("Promoted", FractalTypeFilter.Promoted),
+        };
     }
 
     private FractalTypeEntry? FindEntryForType(FractalType type)
@@ -469,6 +566,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private int _gamma;
+    /// <summary>Live image gamma in [-100,100]; 0 = neutral. Write-through to
+    /// ViewState + post-FX repaint, exactly like Brightness/Contrast. No lock:
+    /// gamma has no theme default (themes bake their own PaletteGamma).</summary>
+    public int Gamma
+    {
+        get => _gamma;
+        set
+        {
+            int v = Math.Clamp(value, -100, 100);
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _gamma, v))
+            {
+                ViewState.Gamma = v;
+                _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
     private int _adaptive;
     public int Adaptive
     {
@@ -488,6 +603,58 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // RepaintWithAdaptive so the histogram-eq pass doesn't
                 // thrash mid-drag.
                 _adaptiveRepaintDebounce.Change(AdaptiveRepaintDebounceMs, System.Threading.Timeout.Infinite);
+            }
+        }
+    }
+
+    private bool _bandDither;
+    /// <summary>F11 ordered-dither deband (CPU F11a + GPU F11b). Unlike the
+    /// post-FX sliders this acts at colorize time, so it needs a full re-render
+    /// (Trigger), not a RepaintWithPostFx. The host lifts ViewState.BandDither
+    /// into the GradientColorMap statics at render start.</summary>
+    public bool BandDither
+    {
+        get => _bandDither;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _bandDither, value))
+            {
+                ViewState.BandDither = value;
+                _renderHost.Trigger();
+            }
+        }
+    }
+
+    private int _bandDitherStrength = 100;
+    /// <summary>Dither amplitude in [0,100]; 100 = full ±0.5-LSB. Live only when
+    /// <see cref="BandDither"/> is on; re-renders on change.</summary>
+    public int BandDitherStrength
+    {
+        get => _bandDitherStrength;
+        set
+        {
+            int v = Math.Clamp(value, 0, 100);
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _bandDitherStrength, v))
+            {
+                ViewState.BandDitherStrength = v;
+                if (_bandDither) _renderHost.Trigger();
+            }
+        }
+    }
+
+    private bool _alphaPreview;
+    /// <summary>F10.5 live per-stop alpha preview. Display-only checkerboard
+    /// composite in the host upload path, so a post-FX repaint (no recalc) is
+    /// enough to show/hide it.</summary>
+    public bool AlphaPreview
+    {
+        get => _alphaPreview;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _alphaPreview, value))
+            {
+                ViewState.AlphaPreview = value;
+                _renderHost.RepaintWithPostFx();
             }
         }
     }
@@ -675,6 +842,28 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private FracturingFog.Models.WatermarkDef? _draftWatermark;
+    /// <summary>Unsaved watermark currently being edited in the Watermark
+    /// Editor. Outranks every other source while the editor is open, and is
+    /// deliberately *not* routed through UserWatermarkStore: a draft has not
+    /// been saved yet, so a store lookup can never see it. Set to null when
+    /// the editor closes to fall back to the normal chain.</summary>
+    public FracturingFog.Models.WatermarkDef? DraftWatermark
+    {
+        get => _draftWatermark;
+        set
+        {
+            _draftWatermark = value;
+            this.RaisePropertyChanged(nameof(DraftWatermark));
+            // A draft is only visible if the overlay is on at all. Same
+            // intent-signal reasoning as the UseCustomWatermark setter: the
+            // user is actively editing a watermark, so show it.
+            if (value != null && !_showWatermark) ShowWatermark = true;
+            PushActiveWatermark();
+            if (_showWatermark) _renderHost.RepaintWithPostFx();
+        }
+    }
+
     /// <summary>The library entry pointed at by SelectedCustomWatermarkName,
     /// resolved fresh each call so the editor's Save round-trip is visible.
     /// Null when the name is unset or no longer exists.</summary>
@@ -685,6 +874,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// hands it to FractalOverlayCompositor + ImageExport on the next frame.</summary>
     public void PushActiveWatermark()
     {
+        if (_draftWatermark != null)
+        {
+            _renderHost.ActiveWatermark = _draftWatermark;
+            return;
+        }
+
         var custom = ActiveCustomWatermark;
         FracturingFog.Models.WatermarkDef? resolved =
             (_overrideRegionWatermark && custom != null) ? custom :
@@ -760,6 +955,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         Brightness = 0;
         Contrast = 0;
         Adaptive = 0;
+        Gamma = 0;
         IterLocked = false;
         _renderHost.Trigger();
     }
@@ -935,6 +1131,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             $"zoom={info.Zoom:G6}  iter={info.Iterations}  " +
             $"{precTag}  [{info.ElapsedMs} ms  {info.Width}×{info.Height}]" +
             (info.IterLocked ? "  [ITER LOCKED]" : "");
+        // NOTE: the detail-depth limit notice moved OFF the status bar — a long
+        // wrapping string there resized the panel and bounced the image edge.
+        // It now lives in the render-context overlay (RenderContextOverlay).
         _lastFrameInfo = info;
         ApplyOrDeferStatusText(text);
     }

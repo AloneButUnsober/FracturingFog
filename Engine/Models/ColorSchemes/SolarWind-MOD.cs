@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/SolarWind.cs
 // Simulates the visual appearance of charged-particle streams in solar photography:
 // deep near-ultraviolet purple through electric blue, cyan, and finally a bright

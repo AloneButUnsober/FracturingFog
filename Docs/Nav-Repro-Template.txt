@@ -1,0 +1,31 @@
+# Deep-zoom navigation repro — fill this in and send it back.
+#
+# WHY: describing a deep-zoom navigation bug in words hasn't pinned it down.
+# These few numbers let the engine reproduce your EXACT view headlessly and
+# measure the focus/pan error in pixels (`--navrepro`), so the fix targets the
+# real fault instead of a guess.
+#
+# HOW TO CAPTURE (about 30 seconds, at the view where it misbehaves):
+#   1. Turn on the perf overlay. Note the "limbs X:n/8 Y:n/8", "px WxH",
+#      "zoom", and "maxUseful" lines — and whether zoom has passed maxUseful
+#      (if so you're past this point's detail floor; the frame is flat and
+#      that's expected, not a control bug).
+#   2. From the floating menu, copy the WHOLE CX field and the WHOLE CY field
+#      (they already show every limb, pipe-separated) into cx= / cy= below.
+#   3. Copy the zoom value.
+#   4. Put the render size from the overlay's "px WxH" into dim= (and h= if not
+#      square).
+#   5. click = roughly how many pixels RIGHT,DOWN of screen-centre you clicked
+#      (or the centre of the outline box). Positive = right/down.
+#   6. Save as navrepro.txt next to FracturingFog.exe (or send this file and
+#      I'll run it), plus — ideally — two screenshots: one marking the point
+#      you aimed at, one showing where it ended up after the click/zoom.
+#
+# Lines are key=value. '#' lines are ignored. Only cx, cy, zoom are required.
+
+cx=
+cy=
+zoom=
+dim=1000
+# h=1000
+click=44,26

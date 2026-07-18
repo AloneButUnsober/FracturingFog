@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UserBulbCalculator.cs
 //
 // CPU distance-estimation raymarcher for a 3D escape-time fractal whose
@@ -32,6 +35,7 @@
 using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -101,7 +105,8 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ);
         }
         return UserBulbDE(_compiled!, x, y, z, iter, bailout, jacH, pArr,
-            jul, FractalParameters.UserBulbJuliaCX, FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ);
+            jul, FractalParameters.UserBulbJuliaCX, FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ,
+            FractalParameters.UserBulbKifsScale);
     }
 
     /// <summary>When true, render at half resolution and nearest-upscale into
@@ -116,6 +121,12 @@ public sealed class UserBulbCalculator : IFractalCalculator
     private UserBulbAxisModeKind _compiledAxisMode = UserBulbAxisModeKind.Vec3;
     private UserBulbCompilerKind _compiledCompiler = UserBulbCompilerKind.Roslyn;
     private AnalyticDEPattern _analyticPattern = new(AnalyticDEKind.None, 0);
+    // True when the compiled step references the sample point `c`. Maps that
+    // don't (pure z-folds: KIFS Menger/Sierpinski, Kaleidoscopic-IFS chains)
+    // are position-independent under the Mandelbrot seeding (z=0, c=point) and
+    // render blank; they need the orbit seeded AT the sample point instead.
+    // Default true = classic z=0 + c seeding (safe for z^p+c style maps).
+    private bool _mapUsesC = true;
     private readonly UserBulbTemporalCache _cache = new();
     private UserBulbGpuCalculator? _gpu;
     private UserBulbSandboxGpuCompiler? _sandboxGpu;
@@ -137,12 +148,41 @@ public sealed class UserBulbCalculator : IFractalCalculator
     /// component-wise statics so users can write Vec3.Sin(z) or just use
     /// Math.Sin(z.X) inside a `new Vec3(...)`.
     /// </summary>
+    /// <summary>True when <paramref name="source"/> references the sample
+    /// point `c` as a standalone identifier (ignoring `//` and block comments).
+    /// Used to pick the orbit seeding convention: maps that use `c` seed at
+    /// z=0 (Mandelbrot style); maps that don't seed at the sample point (KIFS
+    /// style) so they aren't position-invariant.</summary>
+    private static bool SourceReferencesC(string? source)
+    {
+        if (string.IsNullOrEmpty(source)) return false;
+        // Strip comments so `c` in prose ("try c instead of...") doesn't count.
+        string stripped = Regex.Replace(source, @"//[^\n]*", " ");
+        stripped = Regex.Replace(stripped, @"/\*.*?\*/", " ", RegexOptions.Singleline);
+        return Regex.IsMatch(stripped, @"\bc\b");
+    }
+
     public void Compile(string source)
     {
         LastErrorPosition = -1;
         LastErrorLength = 0;
         var chain = FractalParameters.UserBulbChain;
         bool useChain = chain != null && chain.Count > 0;
+
+        // Decide the orbit seeding convention. A step that never references the
+        // sample point `c` (KIFS folds, Kaleidoscopic-IFS) is position-invariant
+        // under z=0 seeding and would render blank; seed such maps at the point.
+        if (useChain)
+        {
+            _mapUsesC = false;
+            foreach (var st in chain!)
+                if (SourceReferencesC(st.Source)) { _mapUsesC = true; break; }
+        }
+        else
+        {
+            _mapUsesC = SourceReferencesC(source);
+        }
+
         if (!useChain && string.IsNullOrWhiteSpace(source))
         {
             _compiled = null;
@@ -633,6 +673,12 @@ namespace FracturingFogDyn
         pArr[_compiledParamNames.Length] = FractalParameters.UserBulbTime;
 
         bool juliaMode = FractalParameters.UserBulbJuliaMode;
+        // A map that never references `c` is position-invariant under z=0
+        // seeding (blank render). Seed it at the sample point instead — this is
+        // exactly the Julia-mode seeding path (perturb the point, c held const),
+        // and with jc defaulting to 0 the unused `c` is harmless. Real Julia
+        // mode still forces point-seeding regardless.
+        if (!_mapUsesC) juliaMode = true;
         double jcX = FractalParameters.UserBulbJuliaCX;
         double jcY = FractalParameters.UserBulbJuliaCY;
         double jcZ = FractalParameters.UserBulbJuliaCZ;
@@ -688,11 +734,14 @@ namespace FracturingFogDyn
         double jacH = Math.Max(1e-8, FractalParameters.UserBulbJacobianH);
         double cullRadius = Math.Max(0.1, FractalParameters.UserBulbCullRadius);
         double cullRadiusSq = cullRadius * cullRadius;
+        // > 0 engages the scalar KIFS/Mandelbox running-derivative DE (Vec3
+        // path only) instead of the numerical Jacobian. See UserBulbDE.
+        double kifsScale = quatMode ? 0.0 : FractalParameters.UserBulbKifsScale;
 
         // DE mode selection. Auto: use analytic if pattern detected AND probe agrees.
         var deMode = FractalParameters.UserBulbDEMode;
         bool useAnalytic =
-            !juliaMode && (
+            !juliaMode && kifsScale <= 0.0 && (
                 (deMode == UserBulbDEModeKind.Analytic && _analyticPattern.Kind != AnalyticDEKind.None)
                 || (deMode == UserBulbDEModeKind.Auto && _analyticPattern.Kind != AnalyticDEKind.None
                     && UserBulbAnalyticDE.AcceptAuto(fn!, _analyticPattern, deIter, bailout, jacH, pArr)));
@@ -770,7 +819,7 @@ namespace FracturingFogDyn
             ? UserBulbQuatDE(fnQ!, sliceW, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
             : useAnalytic
                 ? UserBulbAnalyticDE.PowerDE(fn!, x, y, z, deIter, bailout, analyticPower, pArr)
-                : UserBulbDE(fn!, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                : UserBulbDE(fn!, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
 
         // Phase 4 — G-buffer for SSAO post-pass. Skipped during low-res preview
         // because the SSAO pass is much heavier than the preview budget allows.
@@ -806,6 +855,7 @@ namespace FracturingFogDyn
         bool vecAnalyticGpuOk = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
+            && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
             && (sandboxQuatGpu || vecAnalyticGpuOk))
         {
             // Quat-mode allows analytic only when the pattern matched and
@@ -930,7 +980,7 @@ namespace FracturingFogDyn
                         ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
                         : useAnalytic
                             ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
-                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
                     if (d < coneEps) { tMin = tT; break; }
                     if (tT > tEx + 1.0) break;
                     px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -1001,7 +1051,7 @@ namespace FracturingFogDyn
                         ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
                         : useAnalytic
                             ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
-                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
                     if (dist < eps)
                     {
                         // Clip plane: if surface point is on positive side of plane, skip past.
@@ -1041,17 +1091,17 @@ namespace FracturingFogDyn
                     ? UserBulbQuatDE(fnQ!, sliceW, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
                     : useAnalytic
                         ? UserBulbAnalyticDE.PowerDE(fn!, px + h, py, pz, deIter, bailout, analyticPower, pArr)
-                        : UserBulbDE(fn!, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                        : UserBulbDE(fn!, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
                 double dyp = quatMode
                     ? UserBulbQuatDE(fnQ!, sliceW, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
                     : useAnalytic
                         ? UserBulbAnalyticDE.PowerDE(fn!, px, py + h, pz, deIter, bailout, analyticPower, pArr)
-                        : UserBulbDE(fn!, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                        : UserBulbDE(fn!, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
                 double dzp = quatMode
                     ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
                     : useAnalytic
                         ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz + h, deIter, bailout, analyticPower, pArr)
-                        : UserBulbDE(fn!, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ);
+                        : UserBulbDE(fn!, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
                 double n0 = (dxp - hitDist) * invH;
                 double n1 = (dyp - hitDist) * invH;
                 double n2 = (dzp - hitDist) * invH;
@@ -1299,13 +1349,45 @@ namespace FracturingFogDyn
         return 0.5 * r / Math.Max(dr, 1e-10);
     }
 
+    /// <summary>Scalar KIFS/Mandelbox distance estimator. The user map is a
+    /// composition of isometric folds/rotations (|det| = 1) and a uniform linear
+    /// scale, so a small perturbation grows by |scale| per iteration; track that
+    /// with a scalar running derivative instead of a finite-difference Jacobian.
+    /// This is the only DE that handles per-iteration rotation across a fold's
+    /// discontinuity planes — the numerical Jacobian straddles those planes and
+    /// blows up. Orbit is seeded at the sample point (KIFS maps ignore c).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double UserBulbKifsDE(
+        Func<Vec3, Vec3, int, double[], Vec3> fn,
+        double cx, double cy, double cz,
+        int iter, double bailout, double scale, double[] pArr)
+    {
+        Vec3 z = new(cx, cy, cz);
+        Vec3 cWorld = z;              // held constant; KIFS maps don't read c
+        double absScale = Math.Abs(scale);
+        double dr = 1.0;
+        double r = 0.0;
+        for (int i = 0; i < iter; i++)
+        {
+            r = z.Length;
+            if (!double.IsFinite(r) || r > bailout) break;
+            z = fn(z, cWorld, i, pArr);
+            dr *= absScale;
+        }
+        // Linear escape estimate: distance to the fractal ≈ |z| / dr.
+        return r / Math.Max(dr, 1e-30);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double UserBulbDE(
         Func<Vec3, Vec3, int, double[], Vec3> fn,
         double cx, double cy, double cz,
         int iter, double bailout, double h, double[] pArr,
-        bool juliaMode, double jcX, double jcY, double jcZ)
+        bool juliaMode, double jcX, double jcY, double jcZ, double kifsScale)
     {
+        if (kifsScale > 0.0)
+            return UserBulbKifsDE(fn, cx, cy, cz, iter, bailout, kifsScale, pArr);
+
         Vec3 cBase, cPx, cPy, cPz;
         Vec3 z, zx, zy, zz;
         if (juliaMode)

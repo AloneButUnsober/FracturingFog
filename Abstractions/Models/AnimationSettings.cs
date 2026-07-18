@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // AnimationSettings.cs
 //
 // App-global animation preferences (Animation Roadmap Phase 6). Lives in the

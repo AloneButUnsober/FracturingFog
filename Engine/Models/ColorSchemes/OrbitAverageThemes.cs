@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/OrbitAverageThemes.cs
 //
 // Statistical averaging colour maps that sample z at every orbit step and

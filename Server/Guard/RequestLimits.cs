@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Guard/RequestLimits.cs
 // Bounds the server rejects requests outside of. Image width × height cap
 // covers 32K posters. Video seconds cap matches the local BatchOptions

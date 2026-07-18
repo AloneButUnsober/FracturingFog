@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
 using System.Reactive;
 
@@ -17,7 +20,7 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 /// OK commits the edited <see cref="AnimationSettings"/> into
 /// <see cref="Result"/>; Cancel leaves it null so the host discards edits.
 /// </summary>
-public sealed class AppSettingsViewModel : ViewModelBase
+public sealed class AppSettingsViewModel : ViewModelBase, IClosableDialog
 {
     private int _ceilingOverride;
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/WatermarkEditorViewModel.cs
 //
 // Avalonia VM for the Watermark Editor dialog. Same shape as
@@ -45,6 +48,7 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
         DeleteCommand   = ReactiveCommand.CreateFromTask(DeleteFromLibraryAsync);
         RevertCommand   = ReactiveCommand.Create(Revert);
         HelpCommand     = ReactiveCommand.Create(() => HelpRequested?.Invoke(this, EventArgs.Empty));
+        ImportCommand   = ReactiveCommand.Create(() => ImportRequested?.Invoke(this, EventArgs.Empty));
         CloseCommand    = ReactiveCommand.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty));
 
         if (!string.IsNullOrEmpty(initialWatermarkName) && WatermarkNames.Contains(initialWatermarkName))
@@ -193,7 +197,17 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
     public bool LivePreview
     {
         get => _livePreview;
-        set => this.RaiseAndSetIfChanged(ref _livePreview, value);
+        set
+        {
+            bool changed = _livePreview != value;
+            this.RaiseAndSetIfChanged(ref _livePreview, value);
+            if (!changed) return;
+            // Turning live preview on should show the current buffer straight
+            // away; turning it off should drop the preview rather than leave
+            // the last pushed edit stuck on the overlay.
+            if (value) PushPreview();
+            else PreviewCancelled?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private string _titleText = "Watermark Editor";
@@ -206,6 +220,7 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DeleteCommand   { get; }
     public ReactiveCommand<Unit, Unit> RevertCommand   { get; }
     public ReactiveCommand<Unit, Unit> HelpCommand     { get; }
+    public ReactiveCommand<Unit, Unit> ImportCommand   { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand    { get; }
 
     // ── Events ──────────────────────────────────────────────────────────────
@@ -216,6 +231,10 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
     /// throttled by the renderer's debounce).</summary>
     public event EventHandler<WatermarkDef>? PreviewRequested;
 
+    /// <summary>Fires when the user turns Live Preview off — the host drops
+    /// the draft so the overlay reverts to the saved-library chain.</summary>
+    public event EventHandler? PreviewCancelled;
+
     /// <summary>Fires after a successful Save — host refreshes any combos
     /// (FloatingMenu watermark dropdown, Poster dialog dropdown, ServerAdmin).</summary>
     public event EventHandler<string>? WatermarkSavedToLibrary;
@@ -224,6 +243,13 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
     public event EventHandler<string>? WatermarkDeletedFromLibrary;
 
     public event EventHandler? HelpRequested;
+
+    /// <summary>Import watermarks from a JSON file (one watermark object, or an
+    /// array of them). The shell routes it through the Watermark asset source —
+    /// the same importer the Asset Manager bundle uses — and calls
+    /// <see cref="RefreshWatermarkNames"/> back when it lands.</summary>
+    public event EventHandler? ImportRequested;
+
     public event EventHandler? CloseRequested;
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
 
@@ -380,6 +406,20 @@ public sealed class WatermarkEditorViewModel : ViewModelBase
         _suppressChange = false;
 
         NewBlank();
+    }
+
+    /// <summary>Re-pull the saved-watermark list from the store. Called by the
+    /// shell after an import adds entries behind the editor's back; the current
+    /// edit buffer and selection are left alone.</summary>
+    public void RefreshWatermarkNames()
+    {
+        string? selected = SelectedWatermark;
+        _suppressChange = true;
+        WatermarkNames.Clear();
+        foreach (var n in UserWatermarkStore.Instance.EnumerateNames()) WatermarkNames.Add(n);
+        if (!string.IsNullOrEmpty(selected) && WatermarkNames.Contains(selected))
+            SelectedWatermark = selected;
+        _suppressChange = false;
     }
 
     private Task RaiseMessageAsync(ThemeMessageEventArgs args)

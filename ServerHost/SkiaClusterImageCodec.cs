@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ServerHost/SkiaClusterImageCodec.cs
 // D-2b: concrete IClusterImageCodec backed by SkiaSharp. Lives in
 // ServerHost/ so both shells (WinExe FracturingFogCLD, cross-plat

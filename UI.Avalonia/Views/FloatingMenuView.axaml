@@ -13,50 +13,9 @@
         Background="#161616"
         Foreground="#DCDCDC">
 
-    <Window.Styles>
-        <Style Selector="TextBlock.section">
-            <Setter Property="Foreground" Value="#C8C864" />
-            <Setter Property="FontWeight" Value="Bold" />
-        </Style>
-        <Style Selector="TextBlock.label">
-            <Setter Property="Foreground" Value="#9B9B9B" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Right" />
-        </Style>
-        <Style Selector="TextBlock.fxLabel">
-            <Setter Property="Foreground" Value="#B4B4B4" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Right" />
-            <Setter Property="Width" Value="84" />
-        </Style>
-        <Style Selector="Border.group">
-            <Setter Property="BorderBrush" Value="#3A3A3A" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="3" />
-            <Setter Property="Padding" Value="8" />
-            <Setter Property="Margin" Value="0,0,0,8" />
-        </Style>
-        <Style Selector="Button.action">
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Padding" Value="10,4" />
-            <Setter Property="Margin" Value="0,0,4,0" />
-        </Style>
-        <Style Selector="Button.neutral">  <Setter Property="Background" Value="#2D2D32" /> </Style>
-        <Style Selector="Button.go">       <Setter Property="Background" Value="#285028" /> </Style>
-        <Style Selector="Button.danger">   <Setter Property="Background" Value="#502323" /> </Style>
-        <Style Selector="Button.slideshow"><Setter Property="Background" Value="#283728" /> </Style>
-        <Style Selector="Button.video">    <Setter Property="Background" Value="#372846" /> </Style>
-        <Style Selector="Button.help">     <Setter Property="Background" Value="#283C64" /> </Style>
-        <Style Selector="TextBox.coord">
-            <Setter Property="Background" Value="#282828" />
-            <Setter Property="Foreground" Value="#DCDCDC" />
-            <Setter Property="FontFamily" Value="Consolas, monospace" />
-            <Setter Property="TextAlignment" Value="Right" />
-        </Style>
-    </Window.Styles>
+    <!-- Styles hoisted to Themes/ControlThemes.axaml (merged in App.axaml).
+         section / label / fxLabel / group / action + fill classes / coord are
+         now shared globally across all dialogs. -->
 
     <Grid RowDefinitions="Auto,*">
 
@@ -173,6 +132,11 @@
                                       Foreground="#FFCC00"
                                       FontWeight="Bold"
                                       ToolTip.Tip="Diagnostic: force legacy single-precision BLA (pre-Wave-2.10). Ctrl+Shift+D" />
+                            <CheckBox Content="Bypass Rebasing"
+                                      IsChecked="{Binding BypassRebasing}"
+                                      Foreground="#FFCC00"
+                                      FontWeight="Bold"
+                                      ToolTip.Tip="SM-2: rebasing is ON by default (≈100× faster than per-pixel QD/OD at deep zoom, matches the QD image). Check to BYPASS it and fall back to the legacy per-pixel QD/OD path for A/B comparison." />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -211,7 +175,7 @@
                 <Border Classes="group">
                     <StackPanel Spacing="4">
                         <TextBlock Classes="section" Text="Post-FX" />
-                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding BrightnessLabel}" Margin="0,0,6,4" />
                             <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" 
                                        TickFrequency="25" Margin="0,0,6,4"
@@ -231,9 +195,24 @@
                                        ToolTip.Tip="Adaptive contrast (histogram equalization, 0 = off, 100 = full)" />
                             <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding AdaptiveLocked}" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Lock adaptive — ignore theme defaults" />
 
-                            <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0"
+                            <TextBlock Grid.Row="3" Grid.Column="0" Classes="fxLabel" Text="{Binding GammaLabel}" Margin="0,0,6,4" />
+                            <Slider    Grid.Row="3" Grid.Column="1" Value="{Binding Gamma}" Minimum="-100" Maximum="100"
+                                       TickFrequency="25" Margin="0,0,6,4"
+                                       ToolTip.Tip="Image gamma (-100 to +100, default 0). +brightens, −darkens. Compounds with a theme's baked palette gamma." />
+
+                            <CheckBox  Grid.Row="4" Grid.Column="0" Content="Deband" IsChecked="{Binding BandDither}" Margin="0,4,6,0"
+                                       ToolTip.Tip="Ordered dither before the palette float→byte quantise — smooths gradient banding (CPU + GPU). Off by default." />
+                            <Slider    Grid.Row="4" Grid.Column="1" Value="{Binding BandDitherStrength}" Minimum="0" Maximum="100"
+                                       TickFrequency="25" Margin="0,4,6,0"
+                                       IsEnabled="{Binding BandDither}"
+                                       ToolTip.Tip="Deband strength (0–100, default 100 = full ±0.5-LSB spread)." />
+
+                            <CheckBox  Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Content="Alpha preview" IsChecked="{Binding AlphaPreview}" Margin="0,4,6,0"
+                                       ToolTip.Tip="Preview per-stop alpha over a checkerboard so translucent theme stops read as see-through on screen. Display-only — saved PNGs keep straight alpha. Off by default." />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Classes="fxLabel" Text="Lock Lighting &amp; FX" Margin="0,4,6,0"
                                        ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
-                            <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+                            <CheckBox  Grid.Row="6" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
                         </Grid>
                         <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="0,6,0,0">
                             <Button Grid.Column="0"
@@ -317,6 +296,12 @@
                                 HorizontalAlignment="Stretch"
                                 Margin="0,4,0,0"
                                 ToolTip.Tip="Open the Animation Editor (Roadmap Phase 3c)" />
+                        <Button Classes="action help"
+                                Content="Edit Scene…"
+                                Command="{Binding EditSceneCommand}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,4,0,0"
+                                ToolTip.Tip="Open the Scene Editor (Scene Engine Roadmap S5)" />
                     </StackPanel>
                 </Border>
 

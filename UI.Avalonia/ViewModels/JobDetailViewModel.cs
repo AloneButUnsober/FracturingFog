@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/JobDetailViewModel.cs
 // D-5c. Per-job tile map for the cluster admin UI. Polls
 // cluster.jobTileMap every 2 s and rebuilds the per-tile rect collection.

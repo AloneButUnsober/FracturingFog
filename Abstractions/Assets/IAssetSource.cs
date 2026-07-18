@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Assets/IAssetSource.cs
 //
 // Asset Manager (Animation Roadmap Sub-goal A) core contract. One top-level
@@ -26,20 +29,33 @@ namespace FracturingFog.Abstractions.Assets
         UserBulb = 5,
         SlideshowConfig = 6,
         Watermark = 7,
+        Scene = 8,
     }
 
     /// <summary>One row in the Asset Manager's middle list. <paramref name="SizeOnDisk"/>
     /// is an approximation (serialized byte length of the single entry) since
     /// the underlying stores pack many assets into one JSON file — there is no
     /// per-asset file to stat. <paramref name="CreatedAt"/> is null when the
-    /// source model tracks no timestamp (all of them, today). Thumbnails are a
-    /// deferred follow-up (dev-plan open question) — always null for now.</summary>
+    /// source model tracks no timestamp (all of them, today).
+    ///
+    /// <paramref name="ThumbnailBytes"/> is an eagerly-rendered PNG the source
+    /// produced during Enumerate (cheap swatches, e.g. data-driven colour-theme
+    /// gradients). <paramref name="ThumbnailFactory"/> is the lazy alternative:
+    /// a closure the UI invokes on first display when the render is too costly
+    /// to run for every row up front (built-in colour themes rasterise a strip
+    /// from their <c>IColorMap</c> only when scrolled into view). At most one of
+    /// the two is set. <paramref name="ReadOnly"/> flags assets that ship with
+    /// the app rather than the user's library — surfaced (not user-deletable /
+    /// exportable the same way; e.g. built-in colour themes are C# classes with
+    /// no JSON entry to remove or serialize).</summary>
     public sealed record AssetDescriptor(
         string Name,
         AssetKind Kind,
         DateTime? CreatedAt,
         long SizeOnDisk,
-        byte[]? ThumbnailBytes);
+        byte[]? ThumbnailBytes,
+        bool ReadOnly = false,
+        Func<byte[]?>? ThumbnailFactory = null);
 
     /// <summary>Outcome of importing one asset entry from a bundle (A3 import).</summary>
     public enum AssetImportStatus

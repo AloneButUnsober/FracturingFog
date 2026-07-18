@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // DirectX12Renderer.cs  — Vortice.DirectX 3.8.3
 //
 // Full-screen textured quad renderer using D3D12.

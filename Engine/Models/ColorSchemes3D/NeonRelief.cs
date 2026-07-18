@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/NeonRelief.cs
 //
 // Dark near-black surface with three bright neon rim lights (magenta, cyan,

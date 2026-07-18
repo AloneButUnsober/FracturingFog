@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/DomainColoringThemes.cs
 //
 // Domain coloring of the final escape value z_n — the standard complex-function
@@ -22,7 +25,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DomainColorClassicMap : IColorMap
     {
-        public static string Name => "Domain Color — Classic";
+        public static string Name => "Domain Color - Classic";
         public static string Category => "Domain Coloring";
         public static string Description =>
             "Classic domain coloring of z at escape: hue = arg(z), brightness from " +
@@ -57,7 +60,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DomainColorPhasePortraitMap : IColorMap
     {
-        public static string Name => "Domain Color — Phase Portrait";
+        public static string Name => "Domain Color - Phase Portrait";
         public static string Category => "Domain Coloring";
         public static string Description =>
             "Wegert-style phase portrait.  Hue from arg(z), white modulus contours " +
@@ -111,7 +114,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DomainColorRiemannMap : IColorMap
     {
-        public static string Name => "Domain Color — Riemann Sphere";
+        public static string Name => "Domain Color - Riemann Sphere";
         public static string Category => "Domain Coloring";
         public static string Description =>
             "Riemann-sphere projection of z at escape.  Near-origin → black, near-∞ → " +

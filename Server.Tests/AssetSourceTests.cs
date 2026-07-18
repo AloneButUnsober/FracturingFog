@@ -1,8 +1,12 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Abstractions.Assets;
 using FracturingFog.Assets;
 using FracturingFog.Models;
@@ -19,21 +23,28 @@ namespace FracturingFog.Server.Tests;
 /// UI.Avalonia (not referenced here); ExportJson — the per-asset half of the A3
 /// bundle — is covered directly.
 /// </summary>
+/// <remarks>Joins the non-parallel <see cref="FractalRegionLibraryCollection"/>
+/// because the adapters mutate + Save() the process-wide region / animation /
+/// scene library singletons over one shared (redirected) data root. Without
+/// serialisation these race the other singleton-mutating classes (e.g.
+/// <see cref="SceneLibraryTests"/>) — the race surfaced intermittently as a
+/// null scene after a fresh ImportJson.</remarks>
+[Collection(FractalRegionLibraryCollection.Name)]
 public sealed class AssetSourceTests
 {
     [Fact]
-    public void Registry_exposes_eight_sources_in_type_tree_order()
+    public void Registry_exposes_nine_sources_in_type_tree_order()
     {
         var sources = AssetSourceRegistry.All();
 
-        Assert.Equal(8, sources.Count);
+        Assert.Equal(9, sources.Count);
 
         // Order matches the AssetKind enum / left-pane type tree.
         var expected = new[]
         {
             AssetKind.Region, AssetKind.ColorTheme, AssetKind.Animation,
             AssetKind.UserEquation, AssetKind.SandboxEquation, AssetKind.UserBulb,
-            AssetKind.SlideshowConfig, AssetKind.Watermark,
+            AssetKind.SlideshowConfig, AssetKind.Watermark, AssetKind.Scene,
         };
         Assert.Equal(expected, sources.Select(s => s.Kind).ToArray());
 
@@ -159,5 +170,108 @@ public sealed class AssetSourceTests
 
         Assert.Equal(AssetImportStatus.Failed, src.ImportJson("not json at all", overwrite: true).Status);
         Assert.Equal(AssetImportStatus.Failed, src.ImportJson("", overwrite: true).Status);
+    }
+
+    // ── Colour-theme built-ins ───────────────────────────────────────────────
+
+    /// <summary>The ColorTheme node surfaces the whole curated built-in roster
+    /// (ColorPalette.BuiltIns), not just user-saved data-driven themes. Built-ins
+    /// are read-only, carry no eager thumbnail, and expose a lazy factory that
+    /// rasterises a swatch PNG on demand — kept off the enumerate hot path.</summary>
+    [Fact]
+    public void ColorTheme_source_lists_builtins_readonly_with_lazy_swatch_factory()
+    {
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.ColorTheme);
+        var rows = src.Enumerate().ToList();
+
+        // At least every built-in surfaces (plus any user themes on top).
+        Assert.True(rows.Count >= ColorPalette.BuiltIns.Count);
+
+        string builtinName = ColorPalette.GetStaticName(ColorPalette.BuiltIns[0]);
+        var row = rows.FirstOrDefault(d => d.Name == builtinName && d.ReadOnly);
+        Assert.NotNull(row);
+
+        // Read-only, no eager bytes, but a working lazy factory.
+        Assert.True(row!.ReadOnly);
+        Assert.Null(row.ThumbnailBytes);
+        Assert.NotNull(row.ThumbnailFactory);
+
+        byte[]? png = row.ThumbnailFactory!();
+        Assert.NotNull(png);
+        Assert.True(png!.Length > 0);
+        // PNG magic number (‰PNG).
+        Assert.Equal(0x89, png[0]);
+        Assert.Equal((byte)'P', png[1]);
+        Assert.Equal((byte)'N', png[2]);
+        Assert.Equal((byte)'G', png[3]);
+
+        // Built-ins have no user-library entry: not deletable or exportable there.
+        Assert.False(src.Delete(builtinName));
+        Assert.Null(src.ExportJson(builtinName));
+    }
+
+    // ── Scene source (S5) ────────────────────────────────────────────────────
+
+    /// <summary>The Scene node surfaces the built-in demos once the library is
+    /// loaded, and ExportJson emits the nested S3 camera track with enum-as-string
+    /// (not the plain shared options) so a hand-edited bundle round-trips.</summary>
+    [Fact]
+    public void Scene_source_enumerates_builtins_and_exports_camera_as_string_enums()
+    {
+        SceneLibrary.Instance.Load(); // seeds the built-in demos
+
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.Scene);
+
+        var row = src.Enumerate().SingleOrDefault(d => d.Name == "Mandelbulb Orbit");
+        Assert.NotNull(row);
+        Assert.Equal(AssetKind.Scene, row!.Kind);
+        Assert.True(row.SizeOnDisk > 0);
+
+        string? json = src.ExportJson("Mandelbulb Orbit");
+        Assert.False(string.IsNullOrWhiteSpace(json));
+        Assert.Contains("\"Cut\"", json!);      // SceneTransitionKind as a string name
+        Assert.Contains("\"Keys\"", json!);     // the nested CameraTrack survived
+        Assert.DoesNotContain("\"Transition\":0", json!);
+
+        Assert.Null(src.ExportJson("no-such-scene"));
+    }
+
+    /// <summary>ImportJson keys on the entry's own Name and honours the overwrite
+    /// flag, persisting through SceneLibrary — the round-trip preserves the
+    /// nested camera track.</summary>
+    [Fact]
+    public void Scene_source_import_round_trips_and_respects_overwrite()
+    {
+        const string name = "AM_Test_Scene";
+        var lib = SceneLibrary.Instance;
+        lib.Load();
+        lib.Remove(name); // clean slate
+
+        var src = AssetSourceRegistry.All().Single(s => s.Kind == AssetKind.Scene);
+
+        var scene = new SceneData
+        {
+            Name = name,
+            Category = "User",
+            Shots = new List<SceneShot>
+            {
+                new SceneShot { FractalType = FractalType.Mandelbrot, DurationSeconds = 4.0 },
+            },
+        };
+        string json = JsonSerializer.Serialize(scene, SceneLibrary.BuildJsonOptions());
+
+        var added = src.ImportJson(json, overwrite: false);
+        Assert.Equal(AssetImportStatus.Added, added.Status);
+        Assert.Equal(name, added.Name);
+        Assert.Equal(4.0, lib.GetByName(name)!.Shots[0].DurationSeconds, precision: 9);
+
+        // Same name again with overwrite off → skipped, untouched.
+        Assert.Equal(AssetImportStatus.SkippedExists, src.ImportJson(json, overwrite: false).Status);
+
+        // overwrite on → replaced.
+        Assert.Equal(AssetImportStatus.Replaced, src.ImportJson(json, overwrite: true).Status);
+
+        Assert.True(src.Delete(name));
+        Assert.DoesNotContain(src.Enumerate(), d => d.Name == name);
     }
 }

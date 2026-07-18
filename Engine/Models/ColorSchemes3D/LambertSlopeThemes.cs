@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes3D/LambertSlopeThemes.cs
 //
 // Lightweight standalone 3D-style themes that read the per-pixel surface

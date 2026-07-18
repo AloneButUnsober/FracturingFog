@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/UserBulbChainPrimitives.cs
 //
 // Catalog of named "fold + power" snippets users can drop into a User Bulb
@@ -45,6 +48,8 @@ namespace FracturingFog.Models
         public const string IdSierpinski = "sierp";
         /// <summary>Identifier used by the "Mandelbulb power" primitive.</summary>
         public const string IdBulbPow = "bulb";
+        /// <summary>Identifier used by the Kaleidoscopic-IFS fold primitive.</summary>
+        public const string IdKifsFold = "kfold";
         /// <summary>Identifier used by the Kaleidoscopic-IFS rotation primitive.</summary>
         public const string IdKifsRot = "kifsrot";
         /// <summary>Identifier used by the Kaleidoscopic-IFS scale primitive.</summary>
@@ -168,20 +173,39 @@ namespace FracturingFog.Models
         {
             return new List<UserBulbChainStep>
             {
-                new() { OutputName = IdSierpinski, Source = GetById(IdSierpinski)!.Source },
+                new()
+                {
+                    OutputName = IdKifsFold,
+                    Source = "// Menger-style fold: |x|,|y|,|z| then sort descending (no scale).\n" +
+                             "// A pure isometric fold — the scale lives in the last step so the\n" +
+                             "// Scalar KIFS DE (declared scale 3) tracks it exactly.\n" +
+                             "var v = Vec3.Abs(z);\n" +
+                             "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
+                             "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
+                             "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
+                             "return v;",
+                },
                 new()
                 {
                     OutputName = IdKifsRot,
-                    Source = "// Per-iter rotation breaks symmetry — try 0.3..1.2 rad.\n" +
-                             "return Vec3.Rot(" + IdSierpinski + ", new Vec3(0, 1, 0), 0.5);",
+                    Source = "// Per-iteration rotation — the 'kaleidoscopic' twist. This is why the\n" +
+                             "// preset needs DE Mode = Scalar KIFS: rotating across the fold's\n" +
+                             "// discontinuity planes defeats the numerical-Jacobian DE. Try 0.1..0.8.\n" +
+                             "return Vec3.Rot(" + IdKifsFold + ", new Vec3(0, 1, 0), 0.3);",
                 },
                 new()
                 {
                     OutputName = IdKifsScale,
-                    Source = "// Scale-2 + translation offset. Try c instead of (1,1,1) for parameter drift.\n" +
-                             "return " + IdKifsRot + " * 2.0 - new Vec3(1, 1, 1);",
+                    Source = "// Scale-3 + translation offset. The scale factor here (3) must match\n" +
+                             "// the KIFS Scale setting so the running-derivative DE is exact.\n" +
+                             "return " + IdKifsRot + " * 3.0 - new Vec3(2, 2, 0);",
                 },
             };
         }
+
+        /// <summary>Per-iteration linear scale of <see cref="KaleidoscopicIfsChain"/>,
+        /// to be declared as FractalParameters.UserBulbKifsScale so the scalar
+        /// KIFS distance estimator is exact.</summary>
+        public const double KaleidoscopicIfsScale = 3.0;
     }
 }

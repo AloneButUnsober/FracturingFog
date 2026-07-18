@@ -1,16 +1,8 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         x:Class="FracturingFog.UI.Avalonia.Views.EquationMorphView"
         x:DataType="vm:EquationMorphViewModel"
-        Title="Equation Morph"
-        Width="760"
-        Height="600"
-        MinWidth="560"
-        MinHeight="460"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#1C1C1C"
         Foreground="#DCDCDC">
 
     <Grid Margin="12" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto">
@@ -112,7 +104,6 @@
         <ProgressBar Grid.Row="3"
                      Value="{Binding ProgressFrame}"
                      Maximum="{Binding FrameCount}"
-                     Height="6"
                      Margin="0,10,0,0" />
 
         <TextBlock Grid.Row="4"
@@ -151,4 +142,4 @@
         </Grid>
 
     </Grid>
-</Window>
+</UserControl>

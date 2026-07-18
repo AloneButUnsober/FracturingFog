@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Engine/Assets/AssetSourceRegistry.cs
 //
 // Central list of every IAssetSource the Asset Manager surfaces, in type-tree
@@ -23,6 +26,7 @@ namespace FracturingFog.Assets
             new UserBulbAssetSource(),
             new SlideshowConfigAssetSource(),
             new WatermarkAssetSource(),
+            new SceneAssetSource(),
         };
     }
 }

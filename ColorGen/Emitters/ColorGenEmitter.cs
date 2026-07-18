@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ColorGenEmitter.cs
 //
 // Walks a CgProgram and renders the body of the generated IColorMap.Map()
@@ -197,6 +200,9 @@ public sealed class ColorGenEmitter
             case "rgb":      return $"new Cg3({A(0)}, {A(1)}, {A(2)})";
             case "hsv":      return $"Cg3.FromHsv({A(0)}, {A(1)}, {A(2)})";
             case "hsl":      return $"Cg3.FromHsl({A(0)}, {A(1)}, {A(2)})";
+            case "oklab":    return $"Cg3.FromOkLab({A(0)}, {A(1)}, {A(2)})";
+            case "oklch":    return $"Cg3.FromOkLch({A(0)}, {A(1)}, {A(2)})";
+            case "mix_oklab":return $"Cg3.MixOkLab({A(0)}, {A(1)}, {A(2)})";
             case "palette":
             {
                 var sb = new StringBuilder();
@@ -208,6 +214,7 @@ public sealed class ColorGenEmitter
                 sb.Append(')');
                 return sb.ToString();
             }
+            case "cosine":     return $"Cg3.Cosine({A(0)}, {A(1)}, {A(2)}, {A(3)}, {A(4)})";
             case "brightness": return $"Cg3.Brightness({A(0)}, {A(1)})";
             case "contrast":   return $"Cg3.Contrast({A(0)}, {A(1)})";
             case "gamma":      return $"Cg3.Gamma({A(0)}, {A(1)})";

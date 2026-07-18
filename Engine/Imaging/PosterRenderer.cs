@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PosterRenderer.cs
 //
 // Shell-neutral poster / high-resolution capture engine extracted from the
@@ -55,6 +58,26 @@ namespace FracturingFog.Imaging
         public IColorMap ColorMap { get; init; } = null!;
         public QualityPreset Quality { get; init; } = null!;
         public FractalParameters FractalParameters { get; init; } = new();
+
+        // Post-FX (parity with the interactive ViewState sliders). Defaults =
+        // identity. Brightness/Contrast are a BGRA post-pass; HistogramEq is
+        // adaptive equalization strength applied on the calculator before the
+        // colour buffer is read (Mandelbrot only).
+        public int Brightness { get; init; }   // -100..100, 0 = none
+        public int Contrast { get; init; }     // -100..100, 0 = none
+        public int HistogramEq { get; init; }  //    0..100, 0 = none
+
+        /// <summary>F11 ordered-dither deband of the palette float→byte quantise
+        /// (CPU F11a + GPU F11b). Off = plain truncate/round. The colour pipeline
+        /// reads this through process-global <see cref="GradientColorMap"/> statics,
+        /// which <see cref="PosterRenderer.RenderToFile"/> sets from this request
+        /// (and restores afterwards) so a headless / batch render is deterministic
+        /// regardless of whatever the last interactive frame left in those globals.</summary>
+        public bool BandDither { get; init; }
+
+        /// <summary>Ordered-dither amplitude in [0,100]; 100 = full ±0.5-LSB spread.
+        /// Only consulted when <see cref="BandDither"/> is on.</summary>
+        public int BandDitherStrength { get; init; } = 100;
 
         /// <summary>Landscape render dimensions. When <see cref="Rotate"/> is
         /// set the saved image is the 90°-rotated transpose of these.</summary>
@@ -147,6 +170,18 @@ namespace FracturingFog.Imaging
             uint[] buffer;
             int w, h;
 
+            // F11 deband — the colour pipeline reads dither state from process-global
+            // GradientColorMap statics, so set them from this request for the render
+            // and restore afterwards. Explicit here (not inherited from ambient global)
+            // so a headless / batch / server render debands deterministically instead
+            // of depending on whatever the last interactive frame happened to leave set.
+            bool prevDither = GradientColorMap.DitherEnabled;
+            float prevDitherStrength = GradientColorMap.DitherStrength;
+            GradientColorMap.DitherEnabled = req.BandDither;
+            GradientColorMap.DitherStrength = Math.Clamp(req.BandDitherStrength, 0, 100) / 100f;
+            try
+            {
+
             IFractalCalculator? alt = BuildCaptureCalculator(req);
             if (alt != null)
             {
@@ -211,12 +246,26 @@ namespace FracturingFog.Imaging
                 }
                 calc.Calculate(token);
                 token.ThrowIfCancellationRequested();
+                // Adaptive HE — Mandelbrot-only, applied on the calculator so
+                // it recolours from the iteration histogram before read.
+                if (req.HistogramEq > 0)
+                    calc.ApplyHistogramEqualization(req.HistogramEq / 100.0);
                 buffer = calc.ColorBuffer;
                 w = calc.Width;
                 h = calc.Height;
             }
 
+            }
+            finally
+            {
+                GradientColorMap.DitherEnabled = prevDither;
+                GradientColorMap.DitherStrength = prevDitherStrength;
+            }
+
             sw.Stop();
+
+            // Brightness/Contrast BGRA post-pass (both calculator paths).
+            ApplyBrightnessContrast(buffer, w * h, req.Brightness, req.Contrast);
 
             if (req.Rotate)
             {
@@ -247,6 +296,35 @@ namespace FracturingFog.Imaging
             }
         }
 
+        // In-place brightness/contrast BGRA post-pass. Same math as
+        // FractalRenderHost.UploadProcessedBuffer so poster output matches the
+        // interactive image: contrast pivots around mid-grey (127.5), then
+        // brightness offsets in 0..255 space.
+        private static void ApplyBrightnessContrast(uint[] buf, int n, int brightness, int contrast)
+        {
+            if (brightness == 0 && contrast == 0) return;
+            float contrastFactor = 1f + contrast / 100f;
+            float brightnessOffset255 = brightness / 100f * 255f;
+            int len = Math.Min(n, buf.Length);
+            for (int i = 0; i < len; i++)
+            {
+                uint p = buf[i];
+                float r = (p >> 16) & 0xFF;
+                float g = (p >> 8) & 0xFF;
+                float b = p & 0xFF;
+                r = (r - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                g = (g - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                b = (b - 127.5f) * contrastFactor + 127.5f + brightnessOffset255;
+                byte R = (byte)Math.Clamp(r, 0f, 255f);
+                byte G = (byte)Math.Clamp(g, 0f, 255f);
+                byte B = (byte)Math.Clamp(b, 0f, 255f);
+                // F10.3 — preserve the source alpha byte (was forced 0xFF, which
+                // clobbered per-stop coverage on any brightness/contrast export).
+                // Opaque pixels keep 0xFF, so pre-F10 output is byte-identical.
+                buf[i] = (p & 0xFF000000u) | ((uint)R << 16) | ((uint)G << 8) | B;
+            }
+        }
+
         private static WatermarkRender? BuildPosterWatermark(PosterRequest req, Color fontColor)
         {
             // No top-line + no sub-line + no custom override = nothing to draw.
@@ -259,34 +337,35 @@ namespace FracturingFog.Imaging
 
             // The caller (FractalRenderHost.CreatePosterRequest) pre-composes
             // req.Watermark (= "Region - Theme") and req.SubText
-            // (= "Program vX YYYY"). The render struct can use those verbatim
-            // for the default path, or substitute the custom watermark's
-            // top-line + colours / placement / justify when supplied. Subtext
-            // (program/version) is always req.SubText — the user can re-style
-            // and re-place it but not edit or hide it.
-            if (req.CustomWatermark != null)
-            {
-                return new WatermarkRender
-                {
-                    TopText = req.CustomWatermark.Text ?? string.Empty,
-                    SubText = req.SubText ?? string.Empty,
-                    TextColor = req.CustomWatermark.TextColor ?? new RgbDef(255, 255, 255),
-                    HighlightColor = req.CustomWatermark.HighlightColor,
-                    BackgroundColor = req.CustomWatermark.BackgroundColor,
-                    Placement = req.CustomWatermark.Placement,
-                    Justify = req.CustomWatermark.Justify,
-                    IsCustom = true,
-                };
-            }
+            // (= "Program vX YYYY"), so those go in as the already-formatted
+            // default rather than being re-derived from region/theme here.
+            // Precedence itself belongs to WatermarkResolver — the shell has
+            // already collapsed the chain into req.CustomWatermark, so a
+            // non-null value is by construction the active choice.
+            var wm = WatermarkResolver.Resolve(
+                activeCustom: req.CustomWatermark,
+                regionEmbedded: null,
+                overrideRegionWatermark: req.CustomWatermark != null,
+                useCustomWatermark: req.CustomWatermark != null,
+                regionName: req.Watermark ?? string.Empty,
+                themeName: string.Empty,
+                programName: string.Empty,
+                programVersion: string.Empty,
+                defaultTextColor: new RgbDef(fontColor.R, fontColor.G, fontColor.B));
 
+            // Resolve composes its own program/version sub-line from the
+            // program name/version it is handed; the poster path already has
+            // the formatted string, so keep that one.
             return new WatermarkRender
             {
-                TopText = req.Watermark ?? string.Empty,
+                TopText = wm.TopText,
                 SubText = req.SubText ?? string.Empty,
-                TextColor = new RgbDef(fontColor.R, fontColor.G, fontColor.B),
-                Placement = WatermarkPlacement.Bottom,
-                Justify = WatermarkJustify.Right,
-                IsCustom = false,
+                TextColor = wm.TextColor,
+                HighlightColor = wm.HighlightColor,
+                BackgroundColor = wm.BackgroundColor,
+                Placement = wm.Placement,
+                Justify = wm.Justify,
+                IsCustom = wm.IsCustom,
             };
         }
 

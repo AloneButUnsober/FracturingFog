@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // MandelbrotRefOrbitGpu.cs
 //
 // Wave 2.12 (D-6.27) — GPU reference orbit for the Mandelbrot perturbation
@@ -11,11 +14,13 @@
 // generic params instead of 11. Single ArrayView<RefOrbitSlot> output is
 // cleaner than 8 parallel ArrayView<double>.
 //
-// First cut iterates in plain Hi-only doubles to validate the kernel path
-// end-to-end. The QD upgrade (using GpuQDMath) lives in a follow-on slice
-// once we confirm whether ILGPU 1.5.3 will JIT the deep tuple chains in
-// Renorm5/ThreeSum or whether a struct-output rewrite of those primitives
-// is required.
+// The kernel iterates in full quad-double (QD) via GpuQDMath — all 4 limbs
+// of (zr, zi) are carried on the GPU and written back per slot, so the
+// perturbation path gets the same ~62-digit reference orbit the CPU
+// ComputeReferenceOrbitQD produces. ILGPU 1.5.3 JITs the GpuQDMath tuple
+// chains (Renorm5/ThreeSum) fine because those primitives return tuples
+// (no `out`) and use the split-based TwoProduct instead of FMA (the FMA
+// intrinsic is what triggered the earlier "internal compiler error").
 
 using System;
 using System.Linq;
@@ -69,26 +74,43 @@ public sealed class MandelbrotRefOrbitGpu : IDisposable
         {
             _ownCtx = Context.Create(b => b.Default());
             var devices = _ownCtx.Devices.ToList();
-            Device? picked = devices.FirstOrDefault(d => d.AcceleratorType == AcceleratorType.Cuda);
-            if (picked == null)
-            {
-                // OpenCL devices vary in FP64 support — without a cheap probe
-                // we'd JIT-fail same as before. Skip OpenCL by default; fall
-                // straight to CPU which always has FP64 (slower than CUDA
-                // but still uses ILGPU's vectorized backend).
-                picked = devices.FirstOrDefault(d => d.AcceleratorType == AcceleratorType.CPU);
-            }
-            if (picked == null)
+            // Prefer CUDA (fast FP64), fall back to CPU (always FP64). OpenCL
+            // is skipped — FP64 support varies and a JIT failure is costlier
+            // than just using the CPU backend. A device that *enumerates* can
+            // still fail to *create* its accelerator (e.g. a low-VRAM CUDA
+            // card that OOMs at context init), so try each candidate in turn
+            // and fall through to the next rather than giving up on the first
+            // failure — otherwise a flaky GPU strands us off the CPU path.
+            var candidates = devices.Where(d => d.AcceleratorType == AcceleratorType.Cuda)
+                .Concat(devices.Where(d => d.AcceleratorType == AcceleratorType.CPU))
+                .ToList();
+            if (candidates.Count == 0)
             {
                 LastError = "GPU ref-orbit: no CUDA or CPU device available.";
                 _ownCtx.Dispose(); _ownCtx = null;
                 acc = null!;
                 return false;
             }
-            _ownAcc = picked.CreateAccelerator(_ownCtx);
-            SelectedDeviceLabel = $"{picked.AcceleratorType} — {picked.Name}";
-            acc = _ownAcc;
-            return true;
+            var errors = new System.Text.StringBuilder();
+            foreach (var dev in candidates)
+            {
+                try
+                {
+                    _ownAcc = dev.CreateAccelerator(_ownCtx);
+                    SelectedDeviceLabel = $"{dev.AcceleratorType} — {dev.Name}";
+                    acc = _ownAcc;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    errors.Append(dev.AcceleratorType).Append(": ")
+                          .Append(ex.Message).Append("; ");
+                }
+            }
+            LastError = $"GPU ref-orbit: no usable FP64 accelerator ({errors}).";
+            _ownCtx.Dispose(); _ownCtx = null;
+            acc = null!;
+            return false;
         }
         catch (Exception ex)
         {
@@ -220,12 +242,13 @@ public sealed class MandelbrotRefOrbitGpu : IDisposable
         // Single-thread kernel — guard against accidental multi-launch.
         if (idx != 0) return;
 
-        // First cut — Hi-only ref orbit. QD upgrade tracked in a follow-on
-        // slice; see file comment for ILGPU 1.5.3 tuple-chain caveat.
-        double cxH = p.CxX0;
-        double cyH = p.CyX0;
-        double zrH = 0.0;
-        double ziH = 0.0;
+        // Full QD ref orbit: Z_{n+1} = Z² + C with all 4 limbs carried on the
+        // GPU. Escape test uses the Hi limb only (matches the EscapeRadius2
+        // contract + CPU ComputeReferenceOrbitQD).
+        GpuQD cx = new GpuQD(p.CxX0, p.CxX1, p.CxX2, p.CxX3);
+        GpuQD cy = new GpuQD(p.CyX0, p.CyX1, p.CyX2, p.CyX3);
+        GpuQD zr = GpuQD.Zero;
+        GpuQD zi = GpuQD.Zero;
 
         int maxIter = p.MaxIter;
         double er2 = p.EscapeRadius2;
@@ -234,18 +257,24 @@ public sealed class MandelbrotRefOrbitGpu : IDisposable
         for (n = 0; n < maxIter; n++)
         {
             RefOrbitSlot s = default;
-            s.ZrX0 = zrH; s.ZiX0 = ziH;
+            s.ZrX0 = zr.X0; s.ZrX1 = zr.X1; s.ZrX2 = zr.X2; s.ZrX3 = zr.X3;
+            s.ZiX0 = zi.X0; s.ZiX1 = zi.X1; s.ZiX2 = zi.X2; s.ZiX3 = zi.X3;
             slots[n] = s;
-            if (zrH * zrH + ziH * ziH >= er2) break;
+            if (zr.X0 * zr.X0 + zi.X0 * zi.X0 >= er2) break;
 
-            double newZi = 2.0 * zrH * ziH + cyH;
-            double newZr = zrH * zrH - ziH * ziH + cxH;
-            zrH = newZr;
-            ziH = newZi;
+            // newZi = 2·Zr·Zi + Cy ; newZr = Zr² - Zi² + Cx
+            GpuQD cross = GpuQDMath.Mul(zr, zi);
+            GpuQD newZi = GpuQDMath.Add(GpuQDMath.MulD(cross, 2.0), cy);
+            GpuQD zr2 = GpuQDMath.Square(zr);
+            GpuQD zi2 = GpuQDMath.Square(zi);
+            GpuQD newZr = GpuQDMath.Add(GpuQDMath.Sub(zr2, zi2), cx);
+            zr = newZr;
+            zi = newZi;
         }
         {
             RefOrbitSlot s = default;
-            s.ZrX0 = zrH; s.ZiX0 = ziH;
+            s.ZrX0 = zr.X0; s.ZrX1 = zr.X1; s.ZrX2 = zr.X2; s.ZrX3 = zr.X3;
+            s.ZiX0 = zi.X0; s.ZiX1 = zi.X1; s.ZiX2 = zi.X2; s.ZiX3 = zi.X3;
             slots[n] = s;
         }
         info[0] = n;

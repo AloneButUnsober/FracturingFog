@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Models/ColorTheme/IColorThemeService.cs
 //
 // Bridge between the UI-neutral ColorThemeEditor VM in UI.Avalonia and the
@@ -231,6 +234,34 @@ namespace FracturingFog.Models
         /// the user library. Replaces by case-insensitive name. Returns
         /// true on success.</summary>
         bool SaveAnimation(AnimationData animation);
+
+        // ── Scene Engine Roadmap Phase S5 — Scene asset persistence ───────────
+        // The Scene Editor VM (UI.Avalonia) reaches SceneLibrary (Engine) only
+        // through these, exactly as the Animation Editor reaches AnimationLibrary
+        // above. Default implementations are inert (Abstractions can't reference
+        // Engine) so any non-host implementer keeps compiling; the host overrides.
+
+        /// <summary>Display names of every scene in the library (built-in demos
+        /// + user), for the editor's Load combo and the Asset Manager.</summary>
+        IReadOnlyList<string> EnumerateSceneNames() => System.Array.Empty<string>();
+
+        /// <summary>Fetch a saved scene by name (case-insensitive). Null when the
+        /// library has no entry by that name.</summary>
+        SceneData? GetScene(string sceneName) => null;
+
+        /// <summary>True when a scene with this name already exists
+        /// (case-insensitive). Used by the editor to confirm overwrite before
+        /// <see cref="SaveScene"/>.</summary>
+        bool SceneExistsInLibrary(string sceneName) => false;
+
+        /// <summary>Persist the given scene to the library (insert or replace by
+        /// case-insensitive name). Returns true on success.</summary>
+        bool SaveScene(SceneData scene) => false;
+
+        /// <summary>Remove the named scene from the library. Returns true when a
+        /// scene was actually removed. Built-in demo scenes re-appear on the next
+        /// load (the seed re-merges), same as built-in animations.</summary>
+        bool DeleteScene(string sceneName) => false;
 
         /// <summary>
         /// Remove the named region from the user library. Returns true if a

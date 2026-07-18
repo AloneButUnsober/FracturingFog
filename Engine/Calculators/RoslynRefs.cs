@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Engine/Calculators/RoslynRefs.cs
 //
 // S-X7.9 (2026-06-23) — shared MetadataReference gathering for every Roslyn

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // CalculatorGenUnitTests.cs
 //
 // Golden-output unit tests for the CalculatorGen AST pipeline. No

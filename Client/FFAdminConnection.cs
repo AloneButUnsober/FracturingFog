@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Client/FFAdminConnection.cs
 // Admin-cert wrapper over FFClientConnection. Connect with admin.pfx (OU=role-admin)
 // and the master's role gate (FFServer.AcceptsRole) lets the cluster.* methods

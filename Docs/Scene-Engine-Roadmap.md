@@ -1,0 +1,682 @@
+# Scene Engine — World-Class 2D/3D Fractal Animation Roadmap
+
+Status: **research / planning**. No code shipped yet. Project-wide roadmap
+altitude, alongside [`Animation-Roadmap.md`](Animation-Roadmap.md),
+[`Lighting-FX-Roadmap.md`](Lighting-FX-Roadmap.md), and
+[`Performance-Roadmap.md`](Performance-Roadmap.md).
+
+Branch: `feature/scene-engine`. Per-phase commits enforced (one commit per
+`S`-phase completion, mirroring the Animation / Lighting / Performance
+roadmap discipline).
+
+Goal (user-stated): make Fracturing Fog a **world-class 2D/3D animation
+engine** for the fractals it renders — cinematic Scenes, life-like 3D that
+"pops," silky animation, max fidelity on high-end hardware, usable
+performance on low-mid hardware, and a hard 90% ceiling on total CPU/memory
+so the software never crashes the host.
+
+---
+
+## The reframe: what already exists vs. what's actually missing
+
+Fracturing Fog is **not** an early-stage renderer. Most of the "give it the
+works" fidelity wishlist is already shipped. This roadmap deliberately does
+**not** re-build it. Grounding:
+
+- **3D lighting / FX (shipped)** — Cook-Torrance GGX PBR, Burley SSS,
+  triplanar texturing, roughness-convolved HDRI IBL, single-scatter
+  volumetrics (FBM clouds + self-shadow + god-rays), recursive reflection
+  bounces, hex-bokeh HDR DoF, edge-ink, true per-eye stereo. All 8
+  raymarchers. See [`Lighting-FX-Roadmap.md`](Lighting-FX-Roadmap.md).
+- **Performance (shipped)** — ILGPU GPU raymarch port for all 8 3D
+  fractals, buffer pooling, low-res interactive preview, adaptive
+  volumetric LOD, SIMD bloom, perturbation + double-double / quad-double
+  deep zoom. See [`Performance-Roadmap.md`](Performance-Roadmap.md).
+- **Parameter animation (shipped, Phases 0–6)** — render-gated animation
+  bus, per-type animatable-param registry, `AnimationData` asset +
+  `AnimationLibrary`, editor, slideshow integration, per-track animated-
+  param ceiling with hardware-derived defaults. See
+  [`Animation-Roadmap.md`](Animation-Roadmap.md).
+- **Asset infra (shipped)** — Asset Manager UI + Region Editor
+  ([`AssetManager-DevPlan.md`](Technical/AssetManager-DevPlan.md),
+  [`RegionEditor-DevPlan.md`](Technical/RegionEditor-DevPlan.md)).
+
+**The three real gaps this roadmap fills:**
+
+1. **No Scene concept.** Nothing composes shots into a timeline with a
+   moving camera. Animation today mutates *parameters*; it does not move
+   the *camera* or sequence *shots*.
+2. **No resource governor.** Nothing enforces the 90% CPU/memory ceiling.
+3. **No unified hardware-tier layer.** The performance knobs all exist but
+   are not wired to a single tiered profile a novice can pick from.
+
+---
+
+## The organising principle: two render modes
+
+The user's spec pulls two ways at once — "silky smooth realtime on low-mid
+hardware" **and** "push high-end hardware to maximum fidelity." A single
+render path cannot serve both. Every real animation tool splits **viewport
+preview** from **final render**; we adopt the same split, and it dissolves
+the tension:
+
+| Mode | Priority | Behaviour |
+|------|----------|-----------|
+| **Realtime / preview** | smoothness | Governed. Adaptive quality. Sheds resolution, param count, and effect stack to hold framerate. Obeys the 90% resource cap. This is what runs while authoring a Scene. |
+| **Offline / export** | fidelity | Frame-locked. Each frame renders to completion, decoupled from wall-clock. Slower-than-realtime is fine and expected. Enables motion blur, high sample counts, deterministic output. This is what produces the MP4. |
+
+A Scene is authored and previewed in realtime mode, then *rendered* in
+offline mode. Low-mid hardware gets a usable **preview**; every machine
+gets a max-fidelity **output**. This split is Phase **S0** and everything
+else depends on it.
+
+---
+
+## Scene data model
+
+A Scene is a generalisation of what
+[`SlideshowConfig`](../Abstractions/Models/SlideshowConfig.cs) +
+[`SlideshowEngine`](../UI.Avalonia/Slideshow/SlideshowEngine.cs) already do:
+they cross-fade `region + theme + animation` triples. A Scene adds an
+ordered **timeline** and a **camera path** over the same primitives. It
+references existing assets — it does not replace them.
+
+```
+SceneData                       // persisted to %APPDATA%/FracturingFog/scenes.json
+├── Name, Description, Category  // same shape as AnimationData / ColorThemeData
+├── Shots : List<Shot>          // ordered timeline
+│   └── Shot = {
+│         RegionName            : string   // existing FractalRegion ref
+│         ColorThemeName        : string?  // existing theme ref
+│         AnimationName         : string?  // existing AnimationData ref
+│         LightingPresetName    : string?  // existing LightingFxPresetData ref
+│         CameraTrack           : CameraTrack?   // NEW — see below
+│         DurationSeconds       : double
+│         TransitionIn / Out    : TransitionSpec // reuse crossfade + new kinds
+│       }
+├── GlobalTracks : List<ParamTrack>?   // scene-wide overrides (exposure, IBL rot)
+└── Tags : List<string>
+```
+
+Storage reuses the singleton-JSON-library pattern shared by
+`FractalRegionLibrary`, `UserColorThemeLibrary`, and
+[`AnimationLibrary`](../Engine/Models/AnimationLibrary.cs): one more
+singleton (`SceneLibrary`) + one JSON file. No new persistence shape.
+
+### The one genuinely new engine surface: the camera track
+
+Everything in a Shot except `CameraTrack` already exists and already plays
+through the animation bus + slideshow engine. The camera path is the new
+capability — and it is the "reach out and touch it" 3D feel the user wants.
+
+The 8 raymarchers already accept camera state: `camX/camY/camZ`, the
+`right` basis vector, and `StereoEyeOffset` (added in Lighting-FX Phase
+20b — see
+[`LightingFxData.cs`](../Abstractions/Rendering/Lighting/LightingFxData.cs)
+and the eight `Engine/Calculators/*Calculator.cs` +
+`Engine/Calculators/Gpu/*GpuCalculator.cs` that shift `camX += right.X *
+EyeOffset`). A `CameraTrack` keyframes those inputs:
+
+```
+CameraTrack
+├── Keys : List<CameraKey>
+│   └── CameraKey = { TimeSeconds, Position(x,y,z), Target(x,y,z),
+│                     FovDegrees, FocalDistance, Roll, Easing }
+└── PathKind : { Linear | CatmullRom | Bezier }   // spline through keys
+```
+
+This yields orbit, dolly, dolly-zoom (Vertigo/Hitchcock), fly-through, and
+rack-focus (keyframing the already-shipped DoF `FocalDistance`) for free —
+the raymarchers already consume every field; the track just supplies
+time-varying values through the existing animation bus tick.
+
+---
+
+## The resource governor (the 90% cap)
+
+This is the hardest and most nuanced sub-goal. Honest breakdown, because
+"never take more than 90% of CPU and memory" is not a single switch:
+
+- **Memory hard cap — feasible.** Windows Job Objects
+  (`JOBOBJECT_EXTENDED_LIMIT_INFORMATION.ProcessMemoryLimit`) enforce a
+  real ceiling. But hitting it means allocation failure, so pair it with a
+  **soft watermark** that sheds caches first (the P0 buffer pools, HDRI
+  mips, low-res preview buffers) well before the hard limit.
+- **CPU hard cap — technically possible, usually wrong.** Job Objects
+  support CPU rate control (`JOBOBJECT_CPU_RATE_CONTROL_INFORMATION`,
+  Win8+). But throttling our *own* process starves the UI thread — the
+  exact UX collapse we are trying to avoid. **Primary mechanism is an
+  adaptive governor:** a sampler watches CPU% + frametime and turns the
+  hardware-tier knobs down (worker-thread count, resolution scale,
+  animated-param ceiling, effect stack) to hold headroom. The OS job-
+  object cap sits underneath only as a last-resort backstop.
+- **Cross-platform caveat.** Job Objects are Windows-only. The managed
+  governor is the portable primary; the OS cap is a Windows-only
+  hardener. Consistent with the Avalonia cross-platform direction in
+  [`CLAUDE.md`](../CLAUDE.md).
+- **The cap is a backstop, not an always-on throttle.** On a discrete-GPU
+  workstation the target is to sit *near* 90% deliberately (push the
+  hardware); on a laptop iGPU the governor protects the UI thread. Same
+  90% target, opposite intent — this must be explicit in the UI or it
+  reads as a bug.
+
+Built as its own cross-cutting service (`ResourceGovernor`), not folded
+into the renderer.
+
+---
+
+## Hardware tiers (novice-friendly performance)
+
+The perf knobs already exist (quality presets Draft→Extreme,
+`LowResPreview.ScaleFactor`, `VolumeStepsFalloff`, animated-param ceiling,
+`UseGpuRender`, GPU-vendor detection). They are **not** wired to a single
+selector. A novice should pick one thing:
+
+| Tier | Target hardware | Drives |
+|------|-----------------|--------|
+| **Potato** | iGPU / old laptop | half-res preview, effects minimal, param ceiling 4, CPU fallback OK |
+| **Balanced** | mid GPU | leans slightly toward performance (per user's low-mid spec) |
+| **Wow** | discrete GPU workstation | full effect stack, high sample counts, sit near the 90% cap |
+
+Tier = a profile that sets all the sub-knobs. An "Advanced" drawer exposes
+the individual knobs for manual rebalance (per the user's "user-tunable
+parameters so they feel in control" ask). **Rule: wire existing knobs to
+the tier — do not add parallel knobs.** Knob explosion is the top
+confusion risk (there are already 5+ overlapping perf controls).
+
+Default tier is derived from the same hardware probe the animation ceiling
+already uses (logical CPU count + GPU vendor string from the D3D init
+path).
+
+---
+
+## Phase plan
+
+Avalonia-only per [`CLAUDE.md`](../CLAUDE.md). WinForms untouched. One
+commit per completed phase.
+
+| Phase | Scope | Risk | Depends on |
+|-------|-------|------|-----------|
+| **S0** | Two-mode split: realtime-governed vs offline-frame-locked render path | med | — |
+| **S1** | `ResourceGovernor` service — soft watermark + adaptive tier feedback; Windows job-object backstop | high | S0 |
+| **S2** | Hardware-tier profile (Potato / Balanced / Wow) wiring existing knobs to one master + Advanced drawer | low | S1 |
+| **S3** | `CameraTrack` + keyframe interpolation (Linear / Catmull-Rom / Bezier) plumbed through the 8 raymarchers via the animation bus | med | — |
+| **S4** | `SceneData` asset + `SceneLibrary` (scenes.json) + Asset Manager node | low | S3 |
+| **S5** | `SceneEditorView` — timeline strip + camera keyframe row (reuses `AnimationEditorView` patterns) | med | S4 |
+| **S6** | Scene playback through the animation bus + `SlideshowEngine` cross-fade | med | S4 |
+| **S7** | Offline scene render → MP4 (reuse `Export/Mp4Writer` + ffmpeg) + accumulation motion blur | med | S0, S6 |
+| **S8** | Polish: easing curves UI, rack focus, exposure / IBL-rotation tracks, audio-reactive scenes | low | S3–S7 |
+
+S3 and S0/S1/S2 are independent tracks — the camera work and the
+governor/tier work can proceed in parallel. MVP is shippable after **S6**
+(author + preview a cinematic Scene end-to-end); S7 adds export, S8 is
+polish.
+
+---
+
+## Phase detail
+
+### S0 — Two render modes
+
+**Status — Shipped.** `Abstractions/Render/RenderMode.cs`: `RenderMode` enum
++ `RenderModePolicy` record (`Realtime` / `Offline` / `OfflineFastGpu`)
+carrying frame-time budget, deterministic-CPU pin, and governor
+participation; `ResolveUseGpuRender()` is the single gate keeping
+deterministic exports off the float GPU path; `RenderModeScope` is the
+thread-affine ambient current policy (nesting + restore-on-dispose,
+defaults to `Realtime`). Ships behind current behaviour — no consumer yet
+(S1/S2/S7). 8 tests in `Server.Tests/RenderModeScopeTests.cs`.
+
+Formalise the realtime-vs-offline split. Realtime path stays the current
+interactive renderer, now under governor control. Offline path renders each
+frame to completion into a buffer, ignoring wall-clock — this is mostly a
+driver loop around the existing `Calculate` + post-pass chain that does not
+early-out on a frame-time budget. The existing slideshow video path already
+records animated content frame-by-frame; S0 generalises that into a named
+mode both Scenes and existing video export share.
+
+Determinism note: the CPU path is `double`; the GPU path is `float` and not
+bit-identical (documented in the Performance + Lighting roadmaps). Offline
+render pins the CPU path by default so exported MP4s are reproducible; a
+"fast GPU export (non-deterministic)" opt-in covers the high-end case.
+
+### S1 — Resource governor
+
+**Status — Shipped (managed core).** `Abstractions/Render/ResourceGovernor.cs`:
+
+- `ResourceGovernor.Evaluate(sample, participatesInGovernor)` — pure,
+  deterministic control loop. Ratchets a `QualityScale` [floor..1] down when
+  CPU ≥ 85% soft target or memory ≥ 0.80 watermark, back up only after
+  `RecoverHoldTicks` sustained calm below the recover band (75% / 0.70). The
+  soft-target/recover gap is the anti-oscillation hysteresis band. `HardCapBreached`
+  flags the OS backstop at the 90% / 0.90 ceiling.
+- Offline (`participatesInGovernor == false`) freezes `QualityScale` (full
+  fidelity) but the memory cache-shed signal stays unconditional.
+- `ProcessResourceSampler` — cross-platform CPU% (process CPU-time delta ÷
+  wall × cores) + memory fraction (working set ÷ `TotalAvailableMemoryBytes`,
+  cgroup-aware).
+- `IResourceCapBackstop` + `NoOpResourceCapBackstop` — injection point for the
+  OS hard cap. **The Windows Job Object implementation is deferred to the host
+  project** — it P/Invokes and can kill the process, so it is not shipped as an
+  unverifiable default. The managed governor is the primary mechanism.
+
+9 tests in `Server.Tests/ResourceGovernorTests.cs` cover throttle-down,
+floor clamp, offline freeze, unconditional shed, breach flag, band hold,
+slow recovery, and reset. No periodic driver yet — S2 owns the
+sample→evaluate→apply-knobs loop.
+
+### S2 — Hardware tiers
+
+See [Hardware tiers](#hardware-tiers-novice-friendly-performance). Pure
+wiring: a `PerformanceTier` profile sets existing knobs; Advanced drawer
+exposes them. Default tier from the existing hardware probe.
+
+**Status — Shipped (profile core).** `Abstractions/Render/PerformanceTier.cs`:
+the `PerformanceTier` enum (Potato / Balanced / Wow), the concrete
+`TierKnobs` record (preview scale, volume steps, animated-param ceiling, AA,
+precision tier, GPU / CPU-fallback gates), and pure `PerformanceTierProfile`
+with three operations — `Baseline(tier)` (default knobs per tier),
+`DefaultTier(HardwareProfile)` (picks a tier from the same cores + discrete-GPU
+probe the animation ceiling uses), and `Resolve(baseline, qualityScale)` (folds
+the live S1 governor scale onto the continuous knobs — proportional throttle,
+floor clamps, no-boost-past-baseline — while leaving structural knobs, precision
+tier / GPU gate, untouched). `Resolve` is the apply half of the
+sample→evaluate→apply loop; the periodic driver + push onto
+`FractalParameters` / `LightingFxData` is the UI consumer, wired through
+`AvaloniaShellBootstrap` later (ships behind current behaviour, same cadence
+as S0 / S1).
+
+12 tests in `Server.Tests/PerformanceTierTests.cs` cover default-tier
+selection, monotonic baseline ordering, Resolve identity at full quality,
+proportional throttle, floor clamps, no-boost-past-baseline, and
+structural-knob invariance.
+
+### S3 — Camera track
+
+The new engine surface. `CameraTrack` + `CameraKey` + spline interpolation.
+Plumbs time-varying camera state into the 8 raymarchers through the
+existing animation bus tick (the bus already gates renders so camera
+motion inherits the flicker-free handshake for free). Round-trip tests:
+every field a `CameraKey` claims is actually consumed by each raymarcher's
+primary-ray construction.
+
+**Status — Shipped (engine core).** Three files in `Abstractions/`:
+
+- `Render/CameraTrack.cs` — `CameraState` (distance / theta / phi, matching
+  the raymarchers' orbit-camera triple), `CameraKey`, and `CameraTrack` with a
+  pure `Evaluate(time)` spline: `Linear`, `CatmullRom` (default, C¹ through the
+  keys), and `Bezier` (cubic ease-in/out — settles at each key; per-key handle
+  authoring is the deferred S8 editor). Clamps outside the key range; angles
+  interpolate literally (θ 0→4π orbits twice, no shortest-path collapse);
+  `Add` inserts keys sorted.
+- `Render/CameraParamBinding.cs` — the seam onto the concrete per-type fields,
+  data-driven off one authoritative `FractalType → (distance, theta, phi)`
+  name map. `Apply` / `Read` / `SupportedTypes` cover exactly the 8 raymarch
+  types (Mandelbulb / Mandelbox / Kifs / QJulia / QMandel / Kleinian /
+  Bicomplex / UserBulb).
+- `Animation/CameraTrackAnimator.cs` — an `IParameterAnimator` (same contract
+  as the procedural animators, `Moderate` cost so the ceiling drops it first)
+  that advances a scene clock each `Tick(dt)`, samples the track, and applies
+  via the binding. Bus registration is S6.
+
+17 tests in `Server.Tests/CameraTrackTests.cs`: evaluator structure (empty /
+single / clamp / duration / sorted insert), each interpolation (linear
+midpoint, literal angles, Bezier ease, pass-through-keys for all three), the
+per-type round-trip (supported set == the 8 raymarch types; every claimed
+field is a read/write `double` on `FractalParameters`; `Apply`→`Read` identity;
+unsupported type rejected), and the animator (time advance, loop wrap, enable
+gate, non-camera-type rejection).
+
+### S4 — Scene asset + library
+
+`SceneData` DTO + `SceneLibrary` singleton + scenes.json. Slots into the
+Asset Manager as a new node type. Built-in demo scenes ship in-source (same
+pattern as built-in regions / animations).
+
+**Status — Shipped (data core).** Two files:
+
+- `Abstractions/Animation/SceneData.cs` — the Scene asset. `SceneData` is an
+  ordered list of `SceneShot` (mirrors `AnimationData`'s name / category / tags
+  shape so it slots into the Asset Manager identically). A `SceneShot` names its
+  assets by string (region / theme / animation — loose coupling like
+  `AnimationTrack`'s param name, so a Scene serialises without embedding its
+  assets and a renamed asset degrades to a resolve-time fallback), carries an
+  optional S3 `CameraTrack` (3D-only), a duration, and a `SceneTransitionKind`
+  (`Cut` / `Crossfade` / `LightSweep` / `ParamMorph`) with its own length.
+  `TotalDurationSeconds` is a computed (non-serialised) sum.
+- `Engine/Models/SceneLibrary.cs` — the singleton library, a line-for-line
+  mirror of `AnimationLibrary`: lazy singleton, `%APPDATA%\FracturingFog\
+  scenes.json`, indented enums-as-string JSON, non-fatal load/save,
+  `Add` / `ReplaceOrAdd` / `Remove` / `GetByName`, and built-in demo scenes
+  merged on first `Load()`. The built-ins are deliberately region-free
+  (`RegionName` empty → render the fractal type directly) so they can never
+  break from a renamed region: a 20 s Mandelbulb orbit and a two-shot
+  Mandelbulb→Mandelbox cross-fade, both driving the S3 camera track.
+
+8 tests in `Server.Tests/SceneLibraryTests.cs`: the `SceneData` / `SceneShot`
+JSON round-trip incl. a nested `CameraTrack`, enum-as-string persistence,
+null-camera omission + round-trip, the computed total-duration (sums positive
+shot durations, not serialised), and built-in sanity (≥1 shot, positive
+durations, cameras only on orbit-camera types, the Mandelbulb orbit seed sweeps
+a full turn through the S3 evaluator).
+
+The Asset Manager node type is UI (Avalonia) — wired alongside the S5 editor,
+consistent with the S0–S3 pattern of shipping the pure + tested core first and
+deferring the impure UI consumer.
+
+### S5 — Scene editor
+
+`SceneEditorView.axaml`: horizontal timeline of shots, per-shot property
+panel (region / theme / animation / lighting-preset pickers reuse existing
+dialogs), camera keyframe row with add/drag/delete, live preview button
+that plays the scene in realtime mode.
+
+**Status — Shipped.** The Scene Editor plus the deferred S4 Asset Manager node
+landed together, following the same VM-through-`IColorThemeService` seam the
+Animation Editor uses (UI.Avalonia never references Engine, where `SceneLibrary`
+lives).
+
+Deferred S4 item — **Asset Manager node** (`AssetKind.Scene`):
+`SceneAssetSource` (`Engine/Assets/AssetSources.cs`) wraps `SceneLibrary`,
+registered ninth in `AssetSourceRegistry`. Unlike the shared `AssetSizing`
+helpers it serialises through `SceneLibrary.BuildJsonOptions()` so the nested S3
+`CameraTrack` and the `SceneTransitionKind` enums round-trip as human-editable
+strings. `AvaloniaShellBootstrap` warms `SceneLibrary.Instance.Load()` at
+startup so the node + editor combo see the built-in demos on first open.
+
+Persistence seam — five members added to `IColorThemeService`
+(`EnumerateSceneNames` / `GetScene` / `SceneExistsInLibrary` / `SaveScene` /
+`DeleteScene`), inert default impls (Abstractions can't reach Engine) overridden
+in `HostColorThemeService` against `SceneLibrary`.
+
+Editor — `SceneEditorViewModel` + `SceneEditorView.axaml`. Load / New / Revert /
+Save / Delete over the scene library; an ordered shots list (`SceneShotRowViewModel`)
+with add / remove / reorder; per-shot region/theme/animation/fractal-type/
+duration/transition pickers (reusing the service's existing enumerations); a
+camera-keyframe sub-list (`CameraKeyRowViewModel`) with add / edit / delete of
+numeric `t / distance / θ / φ` keys plus an interpolation picker, shown only for
+the 3D-camera types (`CameraParamBinding.Supports`). Per-shot **Preview** routes
+through the shell to apply that shot's region + theme + param-animation to the
+live view; the entry points are the Asset Manager (click a Scene row) and the
+floating menu's **Edit Scene…** button.
+
+Scope cuts (deliberate, deferred with rationale): keyframe **pixel-drag** and the
+horizontal **filmstrip scrub bar** move to S8 (which already owns the Bezier /
+per-key handle editor) — S5 ships the data-complete numeric editor. **Sequenced
+multi-shot playback** with camera motion + transition blends is S6; S5 Preview is
+a single-shot static-framing preview only, so S6 stays the phase that first
+drives `CameraTrackAnimator` on the bus.
+
+Tests: `AssetSourceTests` grows to cover the ninth (Scene) source — registry
+count 8→9, built-in enumeration, enum-as-string camera export, and the
+import round-trip with overwrite/skip. The 8 S4 `SceneLibraryTests` still pass.
+The editor VM/view are UI (not referenced by `Server.Tests`), untested here per
+the same convention as `AnimationEditorViewModel`.
+
+### S6 — Scene playback
+
+Drive shot sequencing through `SlideshowEngine`'s cross-fade machinery;
+drive per-shot param + camera motion through the animation bus. Transitions
+extend the existing crossfade with scene-appropriate kinds (cut, crossfade,
+light-sweep, param-morph).
+
+**Status — Shipped (realtime playback).** A **Play** button in the Scene Editor
+runs the scene live on the main view.
+
+Pure core — `SceneTimeline` (`Abstractions/Animation/SceneTimeline.cs`). Builds a
+deterministic back-to-back schedule from a `SceneData` (drops non-positive-
+duration shots, keeps the original shot index), exposes `TotalDuration`, and
+`Sample(t)` answers "which shot, how far in, and are we inside its opening
+transition window (with what blend 0→1 against the outgoing shot)". First shot
+and `Cut` shots get a zero-length window; `TransitionSeconds` clamps to the
+shot's own duration. `SceneTransitions.ResolveVisual` maps the authored kind to
+what the current build renders — `Cut`/`Crossfade` honoured, `LightSweep`/
+`ParamMorph` fall back to crossfade (bespoke visuals are S8), and the authored
+kind stays on disk so scenes upgrade for free later.
+
+Camera on the bus — `AnimationBusHost.LoadSceneShot(shot, shotAnimation, target)`
+registers the shot's param-animation animators **and** its keyframed orbit
+camera as a `CameraTrackAnimator`. **This is the deferred S3 consumer** ("bus
+registration is S6"): scene-camera motion now inherits the bus's render-
+completion gate + animated-param ceiling (camera counts as raymarched-3D, so it
+sheds first under load), honouring the resource cap.
+
+Realtime driver — `ShellViewModel.PlayScene` / `StopScene`. A 50 ms dispatcher
+clock walks the timeline and, on each shot boundary, jumps the live view to the
+shot (region + theme) and (re)loads its camera + param motion onto the bus;
+intra-shot motion is the bus's job. Loops at the end. Entry point: the editor's
+**Play**; **Stop** / editor close halts it.
+
+Deliberate scope call — realtime playback **cuts** between shots. Cross-fade /
+light-sweep / param-morph *compositing* (blending two rendered frames) needs
+both sides rendered at once; for two live 3D raymarchers that breaches the
+~90 % CPU/mem cap, so frame-composited transitions belong to the **offline
+frame-locked path (S7)**, which renders sub-frames anyway. The timeline already
+computes the blend factor for S7 to consume — no re-work, just a consumer.
+
+Tests: 9 in `SceneTimelineTests` (sequencing, zero-duration skip + original-index
+mapping, first/cut window suppression, transition-length clamp, mid-shot vs
+in-transition sampling + blend, out-of-range clamp, empty timeline, visual
+fallback). The bus registration + dispatcher driver are UI (not referenced by
+`Server.Tests`); `CameraTrackAnimator` itself is covered by its S3 tests.
+
+### S7 — Offline render + motion blur
+
+Frame-locked render of a Scene to MP4 via `Export/Mp4Writer` + the ffmpeg
+pipeline. Accumulation motion blur (render N sub-frames per output frame at
+sub-tick camera offsets, average) — only viable in offline mode, large
+fidelity boost for camera motion.
+
+**Status — Shipped.**
+
+Pure core — `SceneRenderPlan` (Abstractions/Animation). Turns a `SceneData` +
+`SceneRenderSettings` (fps, motion-blur sub-frames, shutter fraction) into the
+exact list of output frames an encoder must emit, and — per frame — the
+motion-blur sub-frame sample times + weights and the optional cross-fade
+composite. It is the deferred consumer the S6 note promised ("the timeline
+already computes the blend factor for S7 to consume — no re-work, just a
+consumer"): each frame's composite reads `SceneTimeline`'s blend directly.
+Accumulation blur spreads N sub-samples across the open-shutter window at the
+frame's leading edge (uniform box filter, weights sum to 1); the frozen
+outgoing frame is the outgoing shot's final instant, mirroring the realtime
+freeze that keeps two shots from running live at once. Deterministic + pure +
+unit-tested; no render, no I/O.
+
+Offline renderer — `Engine/Export/SceneVideoRenderer`. Consumes the plan,
+resolves each shot once against the region / theme / animation libraries
+(self-contained — no live render host, so it is callable headless), and for
+each output frame renders every sub-frame via `PosterRenderer`'s offscreen
+calculator, applies the shot's param animation + keyframed orbit camera at that
+sub-frame's local time, weight-averages them (accumulation motion blur), and —
+inside a transition window — blends the frozen outgoing frame in by the plan's
+blend factor (**the frame-composited cross-fade S6 deferred here** — realtime
+cuts because compositing two live 3D raymarchers breaches the ~90% cap; offline
+renders sub-frames anyway, so the fade is free). One calculator is live at a
+time, so peak memory is a single frame's accumulators plus the pending PNG
+queue — inside the cap. Frames go through the cross-platform `PngSequenceWriter`
+→ `FfmpegEncoder` pipeline the batch video/slideshow paths already use; a
+missing ffmpeg keeps the recoverable PNG sequence rather than failing.
+
+Driver — headless `--batch --mode scene --scene NAME` (`BatchRenderer.RenderScene`),
+with `--motion-blur N` / `--shutter F` / `--fps` / `--encode` / `--width`
+/`--height` / `--out` / `--keep-frames`. Consistent with the existing
+video/slideshow batch modes; the Avalonia "Export Scene…" command is a thin
+follow-up over the same engine API.
+
+Tests: 12 in `SceneRenderPlanTests` (frame counting incl. partial-trailing +
+exact-multiple edges, sub-frame count / weights / ascending times / shutter
+window, sub-frame→shot mapping, cross-fade composite + rising blend + frozen
+outgoing frame, cut suppression, LightSweep/ParamMorph→crossfade fallback,
+empty scene, settings clamps). The renderer + batch driver are integration
+surface (not unit-covered) but reuse the battle-tested
+`BuildCaptureCalculator` / `PngSequenceWriter` / `FfmpegEncoder` primitives; an
+end-to-end smoke render of the built-in "Mandelbulb Orbit" scene produced the
+expected 40-frame sequence. While here, serialised `AssetSourceTests` +
+`SceneLibraryTests` into the non-parallel library-singleton collection to close
+a latent scenes.json race the new test class perturbed into view.
+
+### S8 — Polish
+
+Bezier easing editor (this is the deferred Animation-roadmap `D.1` keyframe
+work, which Scenes need anyway), rack-focus preset, exposure / tonemap /
+IBL-sky-rotation global tracks, audio-reactive scenes (deferred Animation-
+roadmap `D.4`).
+
+**Status — Shipped (bespoke transition visuals).** The transition trio S6/S7
+carried as crossfade fallbacks is now complete; the other S8 items remain open
+(see below).
+
+`SceneTransitions.ResolveVisual` no longer collapses LightSweep / ParamMorph to
+Crossfade — every authored kind is rendered as itself. Two pure cores land in
+Abstractions:
+
+- **LightSweep** — `SceneTransitions.LightSweepWeight(u, blend, feather)`: a
+  left→right soft-edged wipe. Per-column incoming weight sweeps from 0 (fully
+  outgoing) at blend 0 to 1 (fully incoming) at blend 1, monotonic in both args.
+  The offline renderer composites the frozen outgoing frame under this per-pixel
+  weight instead of a uniform alpha.
+- **ParamMorph** — `SceneParamMorph.Lerp(from, to, t)`: component-wise lerp over
+  every public read/write `double` on `FractalParameters` (the continuous shape
+  knobs), on top of a clone of the incoming shot for all discrete state. The
+  renderer renders the *incoming* shot with these morphed params across the
+  window (the shape itself morphs) rather than compositing two frames — guarded
+  to same-fractal-type shot pairs, degrading to a crossfade otherwise (the one
+  decision made at render time, from the resolved shot types).
+
+Tests: 6 in `SceneTransitionVisualsTests` (wipe endpoints / left-lead / blend
+monotonicity; morph endpoint lerp / discrete-state passthrough / endpoint
+non-mutation). Two S6/S7 tests that asserted the old crossfade fallback were
+flipped to assert the honoured kind. The renderer's per-pixel / per-param wiring
+is integration surface over the unchanged S7 render path. Full suite 514/514.
+
+**Avalonia "Export Scene…" — Shipped.** The Scene Editor now has an **⤓ Export…**
+button + an "Export (offline render)" knob group (width / height / fps /
+motion-blur sub-frames / encode). It raises `ExportSceneRequested`
+(`SceneExportEventArgs`, an Engine-free DTO); the host
+(`AvaloniaShellBootstrap`) picks the output path, maps the knobs onto
+`SceneVideoOptions`, and runs `SceneVideoRenderer.Render` on a background thread
+(one calculator live at a time → inside the cap), then reports the result —
+keeping UI.Avalonia free of the Engine, per the SaveFileRequested /
+MessageRequested host-fulfilled pattern. ffmpeg missing → the recoverable PNG
+sequence is kept and the user is told. The GUI export loop is now complete
+(previously headless `--batch --mode scene` only).
+
+**Per-key camera easing (D.1) — Shipped.** Each `CameraKey` now carries a
+`CameraEase` (None / EaseIn / EaseOut / EaseInOut) that reparametrises the
+normalised parameter of the segment starting at that key
+(`CameraKey.ApplyEase`), applied in `CameraTrack.Evaluate` before the spatial
+interpolation basis reads it — so easing composes with Linear / CatmullRom /
+Bezier path shapes and keys are always passed through exactly. The Scene
+Editor's camera-key rows gained an "ease" combo; the enum round-trips as a
+string through `SceneLibrary.BuildJsonOptions`. This is the pragmatic,
+per-key-granular slice of the D.1 "easing editor" — a full graphical
+Bezier-handle curve widget is a heavier follow-up, but authors now control
+acceleration into/out of every pose. 6 tests in `CameraTrackTests` (endpoint
+fixing, midpoint shaping, `Evaluate` honouring the starting key's ease with the
+default unchanged).
+
+**Global tracks (scene-wide post / look) — Shipped.** `SceneData.GlobalTracks`
+(a `List<SceneGlobalTrack>`) keyframes scene-wide post scalars, sampled at
+GLOBAL scene time and applied on top of every shot — an exposure ramp, a bloom
+swell, a closing vignette across the whole timeline. Three pure pieces land in
+`Abstractions/Animation/SceneGlobalTrack.cs`:
+
+- `SceneGlobalTrack` / `SceneGlobalKey` — a keyframed scalar reusing the
+  S3/D.1 `CameraInterpolation` (Linear default — a look ramp wants no spline
+  overshoot) + `CameraEase` vocabulary, so authors get the same spline + per-key
+  easing they know from the camera track. `Evaluate(globalTime)` clamps outside
+  the key range and eases the segment fraction before interpolating.
+- `SceneGlobalTarget` + `SceneGlobalBinding` — the data-driven seam onto
+  `FractalParameters.Lighting` (one switch, mirroring `CameraParamBinding`).
+  Ships the continuous `LightingFxData` post knobs: `Exposure` (the headline),
+  `BloomStrength` / `BloomThreshold` / `Vignette` / `ChromaticAberration`.
+- `SceneGlobalTracks.Apply` / `SceneGlobalTrackAnimator` — the multi-track apply
+  (later track wins on a shared target) and the bus animator for realtime.
+
+Consumers: the **offline renderer** (`SceneVideoRenderer.RenderShotFrame`)
+applies the tracks at each sub-frame's global time, last, so the scene-wide look
+overrides the shot's own lighting; the **realtime** driver re-installs a
+`SceneGlobalTrackAnimator` per shot (the bus clears its dynamic set on each cut)
+seeded at the shot's global start, so the sweep continues mid-timeline across a
+cut instead of restarting. Cost is `Cheap` (post scalars) so the animated-param
+ceiling never sheds it ahead of a raymarch track. A built-in **"Exposure Ramp"**
+demo scene shows a Mandelbulb orbit fading up out of near-black. 18 tests in
+`SceneGlobalTrackTests` (evaluator clamp / interpolation / ease, binding
+round-trip per target, later-wins apply, animator, JSON enum-string round-trip,
+built-in sanity).
+
+**Per-shot tone-map — Shipped.** `SceneShot.ToneMap` is a nullable
+`ToneMapOperator` (None / Reinhard / ReinhardExtended / ACES); null inherits the
+shot's region lighting, a value pins the shot's HDR tone-map. It is deliberately
+a per-shot discrete choice, **not** a keyframed global track — a tone-map
+operator is a look decision, not a continuous scalar, so it lives on the shot
+next to the region/theme picks rather than in `SceneGlobalTarget` (which carries
+the continuous exposure / bloom knobs). The offline renderer
+(`SceneVideoRenderer.RenderShotFrame`) applies it last, after the shot's region
+lighting + the scene global tracks, so it overrides regardless of the region's
+own operator; the Scene Editor exposes it as a per-shot combo and the realtime
+driver pins it on the live params at each shot cut. Null omits from scenes.json
+and round-trips as an enum string. 2 tests in `SceneLibraryTests`
+(enum-string round-trip, null-omission).
+
+Scope calls, deferred with rationale:
+**IBL-sky-rotation** has no field yet (the HDRI sampler reads the surface normal
+with no yaw offset); adding it means plumbing a rotation through all 8 CPU + 8
+GPU raymarchers — a Lighting-FX-roadmap phase — but the `SceneGlobalTarget` enum
++ binding are built so it slots in for free once the field lands. A dedicated
+Scene-Editor **global-track row** is deferred to the graphical-curve-editor
+follow-up; global tracks are authored today through the Asset Manager's
+JSON-editable Scene node (they round-trip as human-editable strings).
+
+**Still open (future polish):** a graphical Bezier-handle curve editor (beyond
+the per-key ease enum + the JSON global-track authoring above), rack-focus
+preset, IBL-sky-rotation track (needs the lighting field first), audio-reactive
+scenes (`D.4`). None block the core Scene authoring → preview → export loop,
+which is complete end to end (S0–S8 core).
+
+---
+
+## Risks & open questions
+
+- **R1 — Knob explosion.** Already 5+ overlapping perf controls; Scenes +
+  governor + tiers risk burying the novice user. *Mitigation:* S2's single
+  tier selector is mandatory before shipping any new knob. New controls
+  land inside the Advanced drawer, off by default.
+- **R2 — CPU cap starves the UI.** A naïve CPU throttle degrades the exact
+  UX it protects. *Mitigation:* governor-first (adaptive quality), OS cap
+  as backstop only (S1).
+- **R3 — GPU/CPU non-determinism in export.** `float` GPU vs `double` CPU.
+  *Mitigation:* offline render pins CPU path by default (S0).
+- **R4 — Camera track vs. existing param animations conflict.** Both
+  integrate into the same params record per tick. *Mitigation:* the
+  animation bus already defines a deterministic tick order (documented in
+  Animation-roadmap Phase 5); camera track slots in as one more registered
+  animator with a defined precedence.
+- **R5 — Scene scope creep toward a full NLE.** A fractal Scene tool is not
+  Premiere. *Mitigation:* procedural + keyframe motion only; no per-pixel
+  compositing, no audio mixing, no multi-track video layering beyond the
+  single fractal render.
+- **R6 — Cross-platform governor.** Job Objects are Windows-only.
+  *Mitigation:* managed governor is primary and portable; job-object cap is
+  an additive Windows hardener, not a dependency.
+
+---
+
+## Companion pages
+
+- [Scene Engine User Guide](User/SceneEngine-UserGuide.md) — the end-user
+  guide: authoring, camera, transitions, export.
+- [Scene Engine Architecture](Technical/SceneEngine-Architecture.md) — the
+  developer reference for the shipped S0–S8 stack.
+- [Example Scenes](Examples/Scenes/_Index.md) — four importable demo Scenes,
+  one per feature.
+- [Animation Roadmap](Animation-Roadmap.md) — param animation the camera
+  track and scene playback build on.
+- [Lighting + FX Roadmap](Lighting-FX-Roadmap.md) — the shipped 3D fidelity
+  stack Scenes render with; stereo `EyeOffset` plumbing the camera track
+  reuses.
+- [Performance Roadmap](Performance-Roadmap.md) — the perf knobs S2 wires
+  into tiers; the two-mode split extends its realtime-vs-offline thinking.
+- [Architecture Overview](Technical/Architecture-Overview.md) — module map;
+  where `SceneLibrary` and `ResourceGovernor` slot in.
+- [`CLAUDE.md`](../CLAUDE.md) — Avalonia-is-canonical rule bounding scope.

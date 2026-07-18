@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Batch/ConsoleSpinner.cs
 // Indeterminate-progress spinner for tasks that don't expose a percent
 // callback (a single offscreen image render finishes when Calculate()

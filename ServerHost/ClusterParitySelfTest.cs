@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ServerHost/ClusterParitySelfTest.cs
 // D-2b acceptance: render a small image two ways, byte-compare the
 // merged BGRA buffers.

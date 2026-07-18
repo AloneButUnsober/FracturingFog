@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/GradientPhong3DThemes.cs
 //
 // All 13 gradient-based 3D colour themes.

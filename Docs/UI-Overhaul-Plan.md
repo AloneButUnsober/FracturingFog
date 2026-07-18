@@ -1,0 +1,288 @@
+# UI Overhaul Plan — Fracturing Fog (Avalonia shell)
+
+Branch: `feature/ui-overhaul` (off `feature/scene-engine`).
+Status: **active**. Started 2026-07-06.
+
+Canonical UI is `UI.Avalonia/` (WinForms deprecated — see root `CLAUDE.md`).
+All work here lands in `UI.Avalonia/` only.
+
+---
+
+## 1. Why
+
+The Avalonia UI works but is inefficient, hides functionality, and confuses.
+The ~15 reported symptoms trace to **two root causes** plus downstream
+organizational debt:
+
+**Root 1 — no shared design system.** Every dialog hand-styles itself.
+`FloatingMenuView.axaml` defines its own button classes, label widths, coord
+styles. `AvaloniaDialogs.cs` (~1800 lines) builds Poster/Prompt/Video dialogs
+*imperatively in C#* with per-control inline `MinWidth` / `Margin`. Nothing is
+shared, so the same parameter is a slider in one dialog and a numeric field in
+another, fields are too narrow (each author guesses a width), buttons are
+non-uniform.
+→ Explains: narrow/clipped numeric fields, slider-vs-numeric inconsistency,
+non-uniform buttons.
+
+**Root 2 — no window manager.** Each dialog self-shows: `ShowDialog(owner)` vs
+`Show()`, `WindowStartupLocation` set per-dialog, scattered Win32
+nested-modal `win.Activate()` workarounds. No single owner of placement,
+z-order, or screen-fit.
+→ Explains: windows opening on-top/under unpredictably, dialogs rendering
+off-screen or clipped on small monitors, oversized dialogs.
+
+**Downstream (organizational):** overlong floating menu, overlong main-window
+context menu, buried features (Volumetric Lighting FX only reachable via
+fractal-params), clunky collapsible dropdowns with short unfilterable lists,
+no central jumping-off point.
+
+Fix the roots first, or the reorg just repaints the chaos.
+
+## 2. Goals
+
+Efficient, non-confusing UI; sleek but usable styling; every feature
+represented correctly and usably; well-organized windowing; thoughtful editing.
+Preserve what the user likes: the minimalist render window ("outboard
+controller" paradigm), the HUD + Lighting overlays.
+
+## 3. Chosen direction (decided 2026-07-06)
+
+- **Shell paradigm: Hybrid — shell + poppable panels.** A `SplitView`
+  control-center (nav-rail + content) is the default home; every panel can
+  detach into a managed, multi-monitor-aware floating window and be recalled
+  individually. (`Dock.Avalonia` library rejected in favor of a lighter
+  custom shell with full dark-theme control.)
+- **Sequencing: foundation-first.** Design-system + WindowService + the
+  View→UserControl conversion land and stabilize before the shell is built.
+  Each phase ships independently and improves the current UI even pre-shell.
+
+### Architectural rule created by Hybrid
+
+Every feature View must render in **two hosts** (docked panel AND floating
+window). Therefore:
+
+> **Views are `UserControl`, never `Window`.** A thin host wraps them: a
+> `ContentControl` slot when docked inside the shell, a generic shell `Window`
+> (owned by `WindowService`) when popped out.
+
+Today the opposite holds — `FloatingMenuView`, `SlideshowSettingsView`, etc.
+are `Window` subclasses. Converting them is the backbone migration (Phase F3),
+mechanical and per-view, touching no feature logic.
+
+## 4. What Avalonia gives us (capability notes)
+
+- Docking-like behavior without a lib: `SplitView` nav pane + custom edge-snap.
+- Multi-monitor: `Screens` API (`window.Screens.All`, `ScreenFromPoint`).
+- Guiding-hand modes: bind `IsBeginnerMode`, drive `Classes` / `IsVisible` on
+  advanced sections (show/hide, no duplicate UI).
+- Overlays for post-FX: `Popup`/layered panel over the render surface (extend
+  existing HUD/Lighting overlay infra).
+- Screen-fit: bind dialog `MaxHeight` to `Screen.WorkingArea`.
+- Filterable lists: `ListBox`/`TreeView` + filter `TextBox` (replaces the
+  clunky collapsible dropdowns, no window-resize jank).
+- No native MDI, no UWP-style adaptive VisualStateManager — classes +
+  bounds-binding cover the gap.
+
+## 5. Phases
+
+Foundation (F) first, then shell (S). Commit per phase.
+
+### Phase F1 — Design system
+- `UI.Avalonia/Themes/ControlThemes.axaml`: shared `ControlTheme` for Button
+  (uniform min-width/padding), TextBox, ComboBox, section headers, group
+  borders. Merge into `App.axaml`.
+- Reusable controls: `LabeledNumericField` (label + numeric auto-sized to fit
+  its value range), `LabeledSlider`.
+- Canonical rule: bounded ~0–100 params → slider; unbounded/precise → numeric.
+- Retrofit `FloatingMenuView` onto the shared resources (local `Window.Styles`
+  block deleted; classes now come from the global merge).
+- Kills: narrow fields, slider/numeric inconsistency, non-uniform buttons.
+
+**Scope note (decided during F1):** the *infrastructure* — `Tokens.axaml`,
+`ControlThemes.axaml`, `LabeledNumericField`, `LabeledSlider`, App wiring — plus
+the `FloatingMenuView` de-dup ships as F1. **Per-dialog field retrofit** (moving
+each view's cramped numeric fields / inconsistent slider-vs-numeric params onto
+`Labeled*`) is **folded into F3**: each view is retrofitted at the same time it
+is converted `Window`→`UserControl`, so every view is touched once, not twice.
+This keeps F1 low-risk (no behavioral edits to feature dialogs) and avoids a
+30-dialog sweep that can't be visually verified in one commit.
+
+Status: **F1 done** (commit pending).
+
+### Phase F2 — WindowService
+- `WindowService` (static, `UI.Avalonia/Services/`) — single entry to open any
+  window: `ShowDialogAsync` (modal), `Show` (modeless), `Prepare` (treatment
+  without showing, for pop-out hosts in F3/S2). Owns owner resolution,
+  startup placement, multi-monitor targeting (`Placement.SecondaryMonitor`
+  primitive landed; auto-populate policy toggle is S2), screen-fit
+  `MaxWidth`/`MaxHeight` clamp, and an on-open position clamp that nudges any
+  spilled window back onto its screen.
+- All ~14 show call-sites in `AvaloniaDialogs.cs` routed through it; the three
+  scattered `win.Activate()` Win32 nested-modal hacks are centralized (deliberate
+  `Topmost=true` on the video/recording prompts kept).
+- Kills: on-top/under chaos, off-screen-on-small-screen, oversized dialogs.
+- Note: content-overflow *inside* a clamped window (dialog taller than screen
+  with no internal scroll) is a per-dialog concern handled during F3.
+
+Status: **F2 done** (commit pending). Full solution build green.
+
+### Phase F3 — View → UserControl conversion (+ folded field retrofit)
+- Convert each feature View from `Window` to `UserControl`; floating = wrap in
+  the generic host window via WindowService. No feature logic changed.
+- **While each view is open for conversion**, retrofit its numeric/slider
+  fields onto `LabeledNumericField` / `LabeledSlider` (the F1 field-retrofit,
+  folded here so every view is touched once).
+
+**Pattern (established on `AppSettingsView`, build green):**
+1. `ViewModels/IClosableDialog.cs` — `event EventHandler<bool>? CloseRequested`.
+2. `Services/PanelHostWindow.cs` + `PanelHostOptions` — generic pop-out host:
+   owns window chrome (title/size/background), Esc-to-close, and wires the
+   panel VM's `CloseRequested` → window close.
+3. `WindowService.ShowPanelDialogAsync(panel, options, owner)` → `Task<bool?>`.
+4. View: `<Window>` → `<UserControl>`, chrome removed (moved to host options);
+   `.axaml.cs`: `Window` → `UserControl`, drop self-close + `EscapeCloseBehavior`.
+5. VM: add `: IClosableDialog` (event already present on most).
+6. Field retrofit: swap bare `NumericUpDown`/slider rows for `LabeledNumericField`
+   / `LabeledSlider`.
+7. `AvaloniaDialogs` show-helper: build panel, `await ShowPanelDialogAsync`,
+   read `vm.Result` after.
+
+**Two host families** (discovered during the sweep — dictates conversion shape):
+
+1. **Modal dialogs** — shown via `WindowService.ShowPanelDialogAsync` returning
+   a result. View implements `IClosableDialog`; the `PanelHostWindow` binds
+   `CloseRequested` → close + `DialogResult`. Launcher in `AvaloniaDialogs.cs`.
+2. **Modeless windows** — persistent, shown non-modal with a close⇒hide
+   lifecycle owned by a *manager*. Two managers:
+   - **MainWindow `Sync*`**: create-once, `Closing`⇒cancel+hide, shell
+     `IsXVisible` flag authoritative, VM poll (where present) on host
+     `Opened`/`Closed`. `PanelHostWindow` reused as a plain chrome wrapper
+     (no `IClosableDialog`; VM `CloseRequested` is a plain `EventHandler`
+     routed via the shell flag). Field type becomes `PanelHostWindow`.
+   - **AvaloniaShellBootstrap `.Show()`**: static/instance window fields,
+     inter-parenting (e.g. Cookbook shown over the UserEquation window),
+     per-view `Opened` hooks (sort menus, focus). Needs host wiring in
+     *Bootstrap*, not MainWindow. **Not yet started.**
+
+**Converted:**
+- *Modal:* AppSettings (pattern, verified live), VideoSettings, AudioSettings,
+  **SlideshowSettings** (both legacy + library launchers).
+- *Modeless / MainWindow Sync\*:* **MasterConfig** (modeless-host exemplar),
+  **ServerAdmin, ClusterDashboard, JobList, JobDetail, WorkerDetail**.
+
+**F3 COMPLETE (2026-07-06).** Every feature View is now a `UserControl`:
+- *Modal (PanelHostWindow + result):* AppSettings, VideoSettings,
+  AudioSettings, SlideshowSettings.
+- *Modeless / MainWindow Sync\* (host wrapper, close⇒hide):* MasterConfig,
+  ServerAdmin, ClusterDashboard, JobList, JobDetail, WorkerDetail,
+  AssetManager, RegionEditor, FloatingHelp, FFClient, SceneEditor,
+  AnimationEditor, WatermarkEditor, ColorThemeEditor.
+- *Modeless / Bootstrap `.Show()` (close-and-destroy):* HelpViewer (hub),
+  UserEquation, Sandbox, UserBulb, ColorGenEditor, Cookbook, EquationMorph,
+  FractalParams (+ ParamSections, already UserControls), LightingFxDialog.
+
+`PanelHostOptions` grew `ShowInTaskbar` + `StartupLocation` for the modeless
+hosts. `HelpViewerLauncher` builds the host + snapshots vm.Title. Bootstrap
+`s_*Win` fields + all `new XView{DC}` sites now build `PanelHostWindow`.
+
+**Not converted (intentional):** `MainWindow` (the render window), the Mini*
+tool windows, `FloatingMenuView` (the modeless main menu — revisited when the
+shell replaces it in S1).
+
+**Verification: smoke-test GREEN (2026-07-06).** The converted sweep was
+smoke-tested live — dialogs open/close, no systemic host regression. F3 signed
+off; proceeding to S1.
+
+Status: **F3 COMPLETE (2026-07-06)** — all feature Views converted (see the
+Converted list below). AppSettings runtime-verified live; the rest build green,
+pending a GUI verification pass (see Verification debt). Sweep ran by-area,
+commit per batch (batches 1–7).
+
+**Finding (pre-existing, out of scope):** Escape closes NO dialog app-wide —
+`EscapeCloseBehavior` (attached to ~30 dialogs) does not fire in Avalonia
+12.0.4; confirmed on both a converted (`PanelHostWindow`) and an unconverted
+(`SlideshowSettings`) dialog, so it is not an F3 regression. Tracked as a
+standalone shared-input fix (spawned task), not folded into the conversion sweep.
+
+### Phase S1 — Shell
+- `SplitView`: left nav-rail (grouped ~5–6 nav groups collapsing the current
+  ~11 menu sections) + content region hosting the UserControls.
+- Beginner/Power toggle → `IsBeginnerMode` bound, drives advanced-section
+  visibility ("guiding hand").
+
+**Decisions (2026-07-06):** shell **replaces** FloatingMenu (render window stays
+minimal + HUD/Lighting overlays), lives in its **own window** (WindowService,
+2nd-monitor aware), **6-group taxonomy**: View · Explore · Color & Light ·
+Capture · Assets · Advanced (+ System under Advanced).
+
+**S1.1 DONE (scaffold, builds green):** `ControlCenterViewModel` re-presents the
+existing `FloatingMenuViewModel` + shell `Show*` commands (no state duplicated —
+shared `Menu` instance keeps render window + shell in lock-step).
+`ControlCenterView` = SplitView nav-rail + 6 sectioned panels (lifted from the
+FloatingMenu groups). Beginner/power toggle hides Advanced group + deep-zoom
+diagnostics. Hosted modeless via `MainWindow.SyncControlCenter` (PanelHostWindow,
+close⇒hide). Opened from the render-window context menu ("Control Center");
+FloatingMenu kept alongside until parity.
+
+**S1.2 + S1 DONE, smoke-green:** Mini/Toy/On-Top under View, slideshow
+lock-region/more-colors under Capture, full FloatingMenu parity + beginner/power
+gating. FloatingMenu kept as fallback (rule 5), retire once parity fully
+confirmed.
+
+### Phase S2 — Poppable + overlays + reorg
+**Shipped, smoke-green (2026-07-07):**
+- **S2.1 context-menu reorg** — render-window right-click cut ~25→~16 items;
+  editor/tool launchers (Params, Edit Theme, ColorGen, Asset Manager, Watermark,
+  Mini*/Toy, Span) moved to the Control Center. Commit b1faa09.
+- **Standalone Volumetric Lighting FX** — surfaced at top level (Control Center
+  › Color & Light), no longer buried inside Fractal Params.
+  `ShellViewModel.ShowLightingFxCommand`/`LightingFxRequested`; bootstrap pops
+  `LightingFxDialog` in `s_lightingFxWin` over a `FractalParamsViewModel` on the
+  shared ViewState. Type-independent → stays open across type changes. 0eb13a2.
+- **Detachable panels** — 6 Control Center sections extracted to UserControls
+  (`Views/ControlCenterSections/`); "⧉ Detach section" floats the current one in
+  its own window bound to the same VM (live sync). Detached windows own to the
+  render **MainWindow** (not the CC window — CC is hide-on-close, so owning to it
+  would kill the detached panel); reuse branch re-Shows a hidden window before
+  Activate. ab7f3af + c623b63.
+
+- **Edge-snap** — `Input/EdgeSnapBehavior.Attach` on every PanelHostWindow;
+  magnetic snap-on-pause (120 ms debounce, not during-drag) to the screen
+  work-area + sibling windows (incl. render MainWindow). Physical-px, 14 px
+  threshold, Normal state only. Commit cd543f2.
+- **Post-FX HUD overlay** — brightness/contrast/adaptive on-canvas via a
+  borderless `PostFxHudWindow` tethered to the render window (the GPU HWND sits
+  above the Avalonia tree, so a true in-tree overlay isn't possible on DX — this
+  follows the Mini Map/Depth precedent). Bound to the shared FloatingMenu, so it
+  and the Control Center Post-FX panel stay in lock-step. `MiniWindowTether`
+  gained TopLeft/TopRight anchors; HUD anchors TopLeft (clears the two minis).
+  Toggle in Control Center › View › Display.
+
+**S2 complete.** Follow-up (optional, own branch): retire the FloatingMenu
+context entry + code once parity is fully confirmed (rule 5).
+
+## 6. Open decisions
+
+- Edge-snap for floating panels: full snap vs smart-place only (snap = extra
+  work). Revisit at S2.
+- Nav-rail taxonomy: propose at S1 start (collapse ~11 sections → ~5–6 groups).
+
+## 7. Symptom → phase traceability
+
+| Reported symptom | Root | Fixed in |
+|---|---|---|
+| Narrow / clipped numeric fields | R1 | F1 |
+| Slider vs numeric inconsistency | R1 | F1 |
+| Non-uniform / too-narrow buttons | R1 | F1 |
+| Windows open on-top/under unpredictably | R2 | F2 |
+| Dialogs off-screen / clipped on small monitors | R2 | F2 |
+| Oversized dialogs | R2 | F2 |
+| Overlong floating menu | org | S1 |
+| No central jumping-off point | org | S1 |
+| Overlong main-window context menu | org | S2.1 ✅ |
+| Volumetric Lighting FX buried | org | S2 ✅ |
+| Clunky collapsible dropdowns, unfilterable lists | org | F1 control + S2 |
+| Post-FX would suit overlays | org | S2 HUD ✅ |
+| 2nd-monitor auto-populate | vision | F2 + S2 detach ✅ |
+| Docking / windows align to each other | vision | S2 edge-snap ✅ |
+| Control center + guiding hand | vision | S1 |

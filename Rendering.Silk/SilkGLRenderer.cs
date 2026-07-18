@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // SilkGLRenderer.cs
 // Cross-platform OpenGL 3.3 core implementation of IFractalRenderer.
 // Mirrors the DirectXRenderer geometry — a single SV_VertexID-style

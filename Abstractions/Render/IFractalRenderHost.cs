@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Render/IFractalRenderHost.cs
 //
 // Shell-neutral surface for the renderer + calculator orchestration that
@@ -29,7 +32,14 @@ namespace FracturingFog.Render
         bool HighPrecisionActive,
         bool IterLocked,
         FractalType FractalType,
-        string? PrecisionLabel = null);
+        string? PrecisionLabel = null,
+        // Estimated deepest zoom (log₁₀) at which THIS centre still resolves
+        // detail — set from the Mandelbrot reference orbit's δ-amplification.
+        // +∞ = centre stays bounded (unbounded depth). The shell warns when the
+        // live zoom exceeds it so a collapsed (flat) deep frame reads as a
+        // location depth limit, not broken navigation. Other fractal paths
+        // leave it +∞ (no notice).
+        double MaxUsefulZoomLog10 = double.PositiveInfinity);
 
     /// <summary>
     /// Orchestrates the renderer + per-fractal-type calculators. The input
@@ -190,6 +200,12 @@ namespace FracturingFog.Render
         /// table (pre-Wave-2.10) instead of the DD-precision merge. Used to
         /// isolate suspected Wave 2.10 regressions at extreme zoom.</summary>
         bool MandelbrotDisableDdBla { get; set; }
+
+        /// <summary>SM-2 A/B toggle — when on, glitched deep-zoom pixels resolve
+        /// via the fast rebasing PT path instead of per-pixel QD/OD (≈100×
+        /// faster at extreme zoom, matching the QD image). Off = legacy
+        /// per-pixel QD/OD fallback.</summary>
+        bool MandelbrotAllowPtRebasing { get; set; }
 
         /// <summary>Region label rendered in the watermark.</summary>
         string? RegionName { get; set; }

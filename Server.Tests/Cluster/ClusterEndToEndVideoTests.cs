@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server.Tests/Cluster/ClusterEndToEndVideoTests.cs
 // D-4a — end-to-end frame-range tile pipeline through the coordinator.
 // Drives job.submit (video mode) → tile.next → tile.deliver

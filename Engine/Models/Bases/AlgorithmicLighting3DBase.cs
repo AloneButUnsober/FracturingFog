@@ -1,4 +1,7 @@
-﻿// Models/AlgorithmicLighting3DBase.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/AlgorithmicLighting3DBase.cs
 //
 // Shared base classes for 3D Phong and PBR variants of *algorithmic* colour
 // schemes (those that compute colour directly from smooth/distance rather

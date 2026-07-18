@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
+using System.Collections.Generic;
 using FracturingFog.Abstractions.Animation;
 using FracturingFog.Models;
+using FracturingFog.Render;
 
 namespace FracturingFog.UI.Avalonia.ViewModels.Animation;
 
@@ -66,6 +71,72 @@ public static class AnimationBusHost
         {
             _bus.RegisterDynamic(animator);
             if (animator.Cost == AnimatableParamCost.Moderate) includesRaymarched3D = true;
+        }
+
+        _bus.Ceiling = ResolveCeiling(includesRaymarched3D);
+        _bus.Refresh();
+    }
+
+    /// <summary>Scene Engine Roadmap Phase S6 — swap the dynamic animator set to
+    /// one scene shot: its param-animation (if any) plus its keyframed orbit
+    /// camera (if the shot carries a <see cref="SceneShot.Camera"/> and its
+    /// fractal type supports one). This is where the S3
+    /// <see cref="CameraTrackAnimator"/> — deferred at S3 with "bus registration
+    /// is S6" — finally registers on the bus, so scene-camera motion inherits the
+    /// same render-completion gate + animated-param ceiling as every other track.
+    /// <paramref name="target"/> is the live <see cref="FractalParameters"/> the
+    /// shot drives; <paramref name="shotAnimation"/> is the resolved
+    /// param-animation asset (null = none). No-op if the bus isn't initialised.
+    /// <para><paramref name="globalTracks"/> are the scene's S8 scene-wide
+    /// post/look tracks — re-installed on every shot (the bus clears its dynamic
+    /// set per cut) seeded at <paramref name="globalTimeOffset"/> (this shot's
+    /// global start time) so the sweep continues mid-timeline across a cut instead
+    /// of restarting.</para></summary>
+    public static void LoadSceneShot(SceneShot shot, AnimationData? shotAnimation, FractalParameters target,
+        IReadOnlyList<SceneGlobalTrack>? globalTracks = null, double globalTimeOffset = 0.0)
+    {
+        if (_bus == null) return;
+
+        _bus.ClearDynamic();
+
+        if (shot == null || target == null)
+        {
+            _bus.Refresh();
+            return;
+        }
+
+        bool includesRaymarched3D = false;
+
+        // Param-animation animators (same path as a region-attached animation).
+        if (shotAnimation != null)
+        {
+            foreach (var animator in shotAnimation.ToAnimators(target))
+            {
+                _bus.RegisterDynamic(animator);
+                if (animator.Cost == AnimatableParamCost.Moderate) includesRaymarched3D = true;
+            }
+        }
+
+        // Keyframed orbit camera (S3). Only for the 3D-camera types with keys.
+        if (shot.Camera != null
+            && shot.Camera.Keys.Count > 0
+            && CameraParamBinding.Supports(shot.FractalType))
+        {
+            var camera = new CameraTrackAnimator(shot.Camera, target, shot.FractalType)
+            {
+                Loop = true, // the shot loops its camera across its own window
+            };
+            _bus.RegisterDynamic(camera);
+            includesRaymarched3D = true; // raymarched 3D — drop first under load
+        }
+
+        // Scene-wide post/look tracks (S8). Cheap (post-process scalars) — the
+        // ceiling never sheds them ahead of a raymarch track. Seeded at this
+        // shot's global start so global time is continuous across cuts.
+        if (globalTracks != null)
+        {
+            var g = new SceneGlobalTrackAnimator(globalTracks, target, globalTimeOffset);
+            if (g.HasWork) _bus.RegisterDynamic(g);
         }
 
         _bus.Ceiling = ResolveCeiling(includesRaymarched3D);

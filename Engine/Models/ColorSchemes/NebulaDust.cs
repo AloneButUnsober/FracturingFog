@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/NebulaDust.cs
 // Hue cycles from smooth count; brightness and saturation are modulated
 // by the exterior distance estimate, creating a glowing-fog effect around

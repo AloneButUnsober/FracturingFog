@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Rendering/FractalRenderHost.cs
 //
 // Concrete IFractalRenderHost — owns the IFractalRenderer + every
@@ -484,6 +487,89 @@ namespace FracturingFog.Rendering
             set => _calculator.DisableDdBla = value;
         }
 
+        // SM-2 — deep-zoom rebasing A/B toggle. AllowPtRebasing is a static
+        // switch on the calculator (it gates the glitch-fallback path for all
+        // instances), so this passthrough drives the process-wide flag; that is
+        // fine for a debug A/B control.
+        public bool MandelbrotAllowPtRebasing
+        {
+            get => MandelbrotCalculator.AllowPtRebasing;
+            set => MandelbrotCalculator.AllowPtRebasing = value;
+        }
+
+        /// <summary>SM-11b — reuse the reference orbit across progressive pan/zoom
+        /// PREVIEW frames instead of recomputing it each move. Default OFF:
+        /// `--panjitter` showed the FRESH per-frame render is already
+        /// reference-consistent during a drag (inter-frame Δiter ≈ 0-6/px even at
+        /// 40px steps), so recycling changes neither the pixels nor perceptibly
+        /// the speed — the deep-zoom "jumping" is NOT reference recompute. Kept as
+        /// clean plumbing (instance flag on the preview calc) for future recycle
+        /// work; flip on only with a measured reason. See Docs/Deep-Zoom-Perturbation.md §6.</summary>
+        public bool RecyclePreviewOrbit { get; set; } = false;
+
+        // Render-context overlay lines + optional detail-limit warning, folded
+        // into the perf HUD (ShowPerfHud). Kept out of the status bar so a long
+        // warning can't wrap and resize the panel. Reads the live calculator
+        // state; called on the render thread just before the HUD composites.
+        private (System.Collections.Generic.List<string> lines, string? warning)
+            BuildRenderContextOverlay()
+        {
+            var lines = new System.Collections.Generic.List<string>(9);
+            double zoom = _calculator.Zoom;
+            // Non-zero limb counts for X/Y centre. If these drop below what the
+            // zoom needs (rough rule: ~1 limb per 16 zoom-decades, so ~5 limbs at
+            // 1e64), the centre has been truncated somewhere and deep-zoom anchors
+            // will drift — the single fastest tell for a navigation-precision bug.
+            int lx = NonZeroLimbs(_calculator.CenterX, _calculator.CenterXLo, _calculator.CenterX2,
+                _calculator.CenterX3, _calculator.CenterX4, _calculator.CenterX5,
+                _calculator.CenterX6, _calculator.CenterX7);
+            int ly = NonZeroLimbs(_calculator.CenterY, _calculator.CenterYLo, _calculator.CenterY2,
+                _calculator.CenterY3, _calculator.CenterY4, _calculator.CenterY5,
+                _calculator.CenterY6, _calculator.CenterY7);
+            lines.Add($"type   {ViewState.FractalType}");
+            lines.Add($"center {_calculator.CenterX:G10}");
+            lines.Add($"       {_calculator.CenterY:G10}");
+            lines.Add($"limbs  X:{lx}/8  Y:{ly}/8   px {_calculator.Width}x{_calculator.Height}");
+            lines.Add($"zoom   {zoom:G4}   iter {_calculator.MaxIterations}");
+
+            double maxUseful = _calculator.MaxUsefulZoomLog10;
+            string orbit = _calculator.ReferenceOrbitEscaped
+                ? $"ref-orbit escaped @ {_calculator.ReferenceOrbitLength}"
+                : $"ref-orbit bounded ({_calculator.ReferenceOrbitLength})";
+            lines.Add(orbit);
+            lines.Add(double.IsPositiveInfinity(maxUseful)
+                ? "max-detail zoom: unbounded (bounded orbit)"
+                : $"max-detail zoom: ~1e{maxUseful:F0}");
+
+            // Active diagnostic toggles (only when off/on-non-default).
+            var flags = new System.Collections.Generic.List<string>(4);
+            if (!MandelbrotCalculator.AllowPtRebasing) flags.Add("REBASE off");
+            if (_calculator.DisableAcceleration) flags.Add("ACCEL off");
+            if (_calculator.DisableSeriesApproximation) flags.Add("SA off");
+            if (_calculator.DisableDdBla) flags.Add("DD-BLA off");
+            if (flags.Count > 0) lines.Add("flags  " + string.Join(", ", flags));
+
+            // Detail-limit warning when the live zoom has passed this centre's
+            // δ-amplification floor (frame collapses to flat → navigation has no
+            // structure to grab). Fires just as detail degrades (estimate − 1).
+            string? warning = null;
+            if (!double.IsPositiveInfinity(maxUseful) && zoom > 0 &&
+                Math.Log10(zoom) > maxUseful - 1.0)
+            {
+                warning = $"detail limit ~1e{maxUseful:F0} - recenter on structure to zoom deeper";
+            }
+            return (lines, warning);
+        }
+
+        private static int NonZeroLimbs(double a, double b, double c, double d,
+                                        double e, double f, double g, double h)
+        {
+            int n = 0;
+            if (a != 0) n++; if (b != 0) n++; if (c != 0) n++; if (d != 0) n++;
+            if (e != 0) n++; if (f != 0) n++; if (g != 0) n++; if (h != 0) n++;
+            return n;
+        }
+
         // T3.1: GPU compute kernel constructed lazily on the first Use
         // request when a factory is installed. Null on non-D3D11 backends or
         // when the user has never enabled the feature.
@@ -710,16 +796,27 @@ namespace FracturingFog.Rendering
         /// <summary>
         /// Snapshot the current view + colour state into a
         /// <see cref="PosterRequest"/> for an offscreen high-resolution render.
-        /// Used by the Avalonia shell's Poster command (the shared
+        /// Used by the Avalonia shell's Poster + Wallpaper commands (the shared
         /// <see cref="PosterRenderer"/> does the actual calc + save). The full
         /// quad-precision centre is copied so a Mandelbrot deep zoom survives
         /// the re-render at poster resolution.
+        ///
+        /// The watermark top-line and program/version sub-line are composed
+        /// here, from the same RegionName / ThemeName / ProgramName /
+        /// ProgramVersion the live overlay reads. Callers used to pass those
+        /// strings in, and each one spelled them out slightly differently —
+        /// that is how Wallpaper ended up with a "Fracturing Fog" region
+        /// fallback and a version-less sub-line that no other surface had.
         /// </summary>
         public PosterRequest CreatePosterRequest(
             int width, int height, bool rotate,
-            string path, FracturingFog.Imaging.ImageFileFormat format, string watermark, string subText,
+            string path, FracturingFog.Imaging.ImageFileFormat format,
             FracturingFog.Models.WatermarkDef? customWatermark = null)
         {
+            string watermark = FracturingFog.Imaging.WatermarkResolver.ComposeDefaultTopText(
+                RegionName, ThemeName);
+            string subText = FracturingFog.Imaging.WatermarkResolver.BuildSubText(
+                ProgramName ?? "Fracturing Fog", ProgramVersion ?? string.Empty);
             var s = ViewState;
             int effIters = _calculator.MaxIterations > 0
                 ? _calculator.MaxIterations
@@ -737,6 +834,12 @@ namespace FracturingFog.Rendering
                 ColorMap = _calculator.ColorMap,
                 Quality = s.Quality,
                 FractalParameters = s.FractalParameters,
+                // F11 deband parity — carry the interactive toggle into the
+                // offscreen render so an exported still matches what the deband
+                // switch shows on screen (WYSIWYG). Default-off requests stay
+                // byte-identical to the pre-F11 poster output.
+                BandDither = s.BandDither,
+                BandDitherStrength = s.BandDitherStrength,
                 Rotate = rotate,
                 Path = path,
                 Format = format,
@@ -754,10 +857,22 @@ namespace FracturingFog.Rendering
             _calculator.CenterXLo = ViewState.CenterXLo;
             _calculator.CenterX2 = ViewState.CenterX2;
             _calculator.CenterX3 = ViewState.CenterX3;
+            // OD limbs (X4..X7) — required past the OD threshold (1e50). Dropping
+            // them truncated the render centre to QD while the view state held
+            // the full OD value, so deep frames rendered at a wrong centre and
+            // navigation compounded against the mis-placed image.
+            _calculator.CenterX4 = ViewState.CenterX4;
+            _calculator.CenterX5 = ViewState.CenterX5;
+            _calculator.CenterX6 = ViewState.CenterX6;
+            _calculator.CenterX7 = ViewState.CenterX7;
             _calculator.CenterY = ViewState.CenterY;
             _calculator.CenterYLo = ViewState.CenterYLo;
             _calculator.CenterY2 = ViewState.CenterY2;
             _calculator.CenterY3 = ViewState.CenterY3;
+            _calculator.CenterY4 = ViewState.CenterY4;
+            _calculator.CenterY5 = ViewState.CenterY5;
+            _calculator.CenterY6 = ViewState.CenterY6;
+            _calculator.CenterY7 = ViewState.CenterY7;
             _calculator.Zoom = ViewState.Zoom;
             _calculator.Quality = ViewState.Quality;
 
@@ -990,8 +1105,20 @@ namespace FracturingFog.Rendering
             catch (ObjectDisposedException) { }
         }
 
+        // F11: push the ViewState deband toggle into the global GradientColorMap
+        // statics that the CPU (F11a) and GPU (F11b) quantise points read. One
+        // knob, applied at every render entry so interactive / video / export
+        // stay consistent. Default-off ⇒ statics stay false ⇒ plain quantise.
+        private void ApplyBandDitherState()
+        {
+            FracturingFog.Models.GradientColorMap.DitherEnabled = ViewState.BandDither;
+            FracturingFog.Models.GradientColorMap.DitherStrength =
+                System.Math.Clamp(ViewState.BandDitherStrength, 0, 100) / 100f;
+        }
+
         private void RunFrameJobCalc(in FrameJob job)
         {
+            ApplyBandDitherState();
             var token = job.Token;
             var calc = job.Calc;
             var altCalc = job.AltCalc;
@@ -1011,6 +1138,11 @@ namespace FracturingFog.Rendering
                     ? _previewCalcQuarter
                     : _previewCalcHalf;
                 MirrorMandelbrotState(calc, preview);
+                // SM-11b — let the preview reuse its cached reference orbit across
+                // a drag so consecutive preview frames share one reference (no
+                // per-move recompute → no deep-zoom "jumping"). Only the transient
+                // preview; the committed full-res calc below stays fresh/exact.
+                preview.AllowRecycleThisRender = RecyclePreviewOrbit;
                 try { preview.Calculate(token); }
                 catch (OperationCanceledException)
                 {
@@ -1494,6 +1626,20 @@ namespace FracturingFog.Rendering
             if (!TaaFingerprintMatches(calc)) return;
             if (_taaSampleCount >= taaMax) return;
 
+            // Deep-zoom TAA no-op guard. RunOneTaaSample jitters the centre by
+            // ~scale on the DOUBLE CenterX/CenterY only; once that sub-pixel
+            // offset falls below the centre's double ULP (roughly past zoom
+            // ~1e10) it rounds away, so every continuation renders a byte-
+            // identical frame. Those are pure waste and re-run the upload/HUD/
+            // status path each pass — the "status flushing after the render
+            // finished" the user sees at deep zoom. Skip them: the base sample
+            // already IS the converged image. (Real deep-zoom TAA needs the
+            // jitter fed through the OD centre / per-pixel offset — deferred.)
+            double taaScale = (3.5 / Math.Max(calc.Width, calc.Height)) / calc.Zoom;
+            double ulpCentre = Math.Max(Math.Abs(calc.CenterX), Math.Abs(calc.CenterY))
+                               * 2.220446049250313e-16;
+            if (taaScale <= ulpCentre) return;
+
             var nextJob = new FrameJob(
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
                 staleBuf: null, staleW: 0, staleH: 0,
@@ -1694,9 +1840,13 @@ namespace FracturingFog.Rendering
                 // animation gating stay accurate.
                 if (job.TaaSampleIndex == 0)
                 {
+                    // Detail-depth estimate is meaningful only for the canonical
+                    // Mandelbrot calculator's reference orbit; alt calcs leave +∞.
+                    double maxUseful = useAlt ? double.PositiveInfinity
+                                              : _calculator.MaxUsefulZoomLog10;
                     FrameCompleted?.Invoke(this, new RenderFrameInfo(
                         curCx, curCy, curZoom, curIter, ms, curW, curH,
-                        hp, ViewState.IterLocked, ViewState.FractalType, lbl));
+                        hp, ViewState.IterLocked, ViewState.FractalType, lbl, maxUseful));
                 }
 
                 if (ShowPerfHud) _perfStats.RecordFrame(ms);
@@ -1847,7 +1997,11 @@ namespace FracturingFog.Rendering
                 }
             }
             if (srcBuf != null)
-                UploadProcessedBuffer(srcBuf, srcW, srcH);
+                // srcBuf is _lastFullResBuffer — a snapshot with post-FX
+                // already baked in. Flag it so UploadProcessedBuffer does NOT
+                // re-apply brightness/contrast/gamma (which would compound on
+                // every selection-box repaint, e.g. repeated right-clicks).
+                UploadProcessedBuffer(srcBuf, srcW, srcH, srcAlreadyProcessed: true);
             else
                 RepaintWithPostFx();
         }
@@ -2299,7 +2453,15 @@ namespace FracturingFog.Rendering
         private int _leakDiagBaselineGen0, _leakDiagBaselineGen1, _leakDiagBaselineGen2;
         private bool _leakDiagBaselineTaken;
 
-        private void UploadProcessedBuffer(uint[] src, int w, int h)
+        // srcAlreadyProcessed: true when the caller hands us a buffer that has
+        // ALREADY had brightness/contrast/gamma baked in (the _lastFullResBuffer
+        // snapshot). Re-applying the post-FX pass to it would compound the
+        // adjustment on every call — the exact bug behind "right-click darkens
+        // the image, progressively darker each click": a plain right-click
+        // fires two selection-box repaints (set + clear), each re-uploading the
+        // already-processed snapshot, and each re-darkening it because we then
+        // write the result back into that same snapshot below.
+        private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
@@ -2318,7 +2480,9 @@ namespace FracturingFog.Rendering
 
             int brightness = ViewState.Brightness;
             int contrast = ViewState.Contrast;
-            bool needsProcess = brightness != 0 || contrast != 0;
+            int gamma = ViewState.Gamma;
+            bool needsProcess = !srcAlreadyProcessed
+                                && (brightness != 0 || contrast != 0 || gamma != 0);
 
             if (needsProcess)
             {
@@ -2326,6 +2490,14 @@ namespace FracturingFog.Rendering
                 // Operate in 0..255 space so we can stay in integer-friendly
                 // ranges and pack channels back without a final *255 multiply.
                 float brightnessOffset255 = (brightness / 100.0f) * 255f;
+
+                // F6 part 2 — live image gamma. Precompute a 256-entry byte LUT
+                // once (pow is too costly per pixel and has no Vector256
+                // intrinsic). When gamma is active we take the scalar path so
+                // the LUT applies cleanly; the SIMD fast path stays intact for
+                // the common brightness/contrast-only case.
+                byte[]? gammaLut = gamma != 0 ? BuildGammaLut(gamma) : null;
+                bool gammaActive = gammaLut != null;
 
                 // Parallelise the brightness/contrast pass. At 2M pixels the
                 // serial loop was the dominant cost of an adaptive repaint —
@@ -2343,12 +2515,15 @@ namespace FracturingFog.Rendering
                         int rowBase = y * w;
                         int end = rowBase + w;
                         int i = rowBase;
-                        if (Vector256.IsHardwareAccelerated)
+                        // SIMD fast path only when gamma is inactive (the LUT
+                        // lookup below is not vectorised).
+                        if (!gammaActive && Vector256.IsHardwareAccelerated)
                         {
                             i = ProcessRowSimd(src, dst, i, end,
                                                contrastFactor, brightnessOffset255);
                         }
-                        // Scalar tail (and full fallback when SIMD unavailable).
+                        // Scalar tail (and full fallback when SIMD unavailable
+                        // or gamma is active).
                         for (; i < end; i++)
                         {
                             uint p = src[i];
@@ -2363,6 +2538,12 @@ namespace FracturingFog.Rendering
                             byte R = (byte)Math.Clamp(r, 0f, 255f);
                             byte G = (byte)Math.Clamp(g, 0f, 255f);
                             byte B = (byte)Math.Clamp(b, 0f, 255f);
+                            if (gammaActive)
+                            {
+                                R = gammaLut![R];
+                                G = gammaLut![G];
+                                B = gammaLut![B];
+                            }
                             dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
                         }
                     }
@@ -2390,6 +2571,45 @@ namespace FracturingFog.Rendering
             else
             {
                 _lastPreOverlayBuffer = null;
+            }
+
+            // F10.5 — live per-stop alpha preview. The on-screen present is
+            // opaque (the swap-chain ignores the alpha channel and the post-FX
+            // pass above forces 0xFF), so a theme's authored translucent stops
+            // are invisible while editing. When the toggle is on, composite the
+            // final RGB over a checkerboard using the ORIGINAL coverage byte
+            // from `src` (which still carries the authored alpha even after the
+            // post-FX force-opaque), so A<255 reads as see-through. Runs AFTER
+            // the pre-overlay snapshot above, so SaveLastFrameToPng and the
+            // export path keep straight alpha — this is a display-only aid.
+            // srcAlreadyProcessed frames (video record) are left untouched.
+            if (ViewState.AlphaPreview && !srcAlreadyProcessed)
+            {
+                int aChunk = h / (Environment.ProcessorCount * 4);
+                if (aChunk < 1) aChunk = 1;
+                Parallel.ForEach(Partitioner.Create(0, h, aChunk), range =>
+                {
+                    for (int y = range.Item1; y < range.Item2; y++)
+                    {
+                        int rowBase = y * w;
+                        for (int x = 0; x < w; x++)
+                        {
+                            int i = rowBase + x;
+                            int a = (int)((src[i] >> 24) & 0xFF);
+                            if (a >= 255) continue;   // opaque — dst already right
+                            uint pc = dst[i];
+                            int R = (int)((pc >> 16) & 0xFF);
+                            int G = (int)((pc >> 8) & 0xFF);
+                            int B = (int)(pc & 0xFF);
+                            int bg = ((((x >> 3) + (y >> 3)) & 1) == 0) ? 200 : 120;
+                            int inv = 255 - a;
+                            R = (R * a + bg * inv) / 255;
+                            G = (G * a + bg * inv) / 255;
+                            B = (B * a + bg * inv) / 255;
+                            dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+                        }
+                    }
+                });
             }
 
             // Composite grid + watermark on top of the post-FX buffer so the
@@ -2436,9 +2656,11 @@ namespace FracturingFog.Rendering
                     {
                         lbl += " (GPU)";
                     }
+                    var (ctxLines, warnLine) = BuildRenderContextOverlay();
                     _overlay.CompositePerfHud(dst, w, h,
                         snap, HardwareProbe.Summary,
-                        w, h, _calculator.MaxIterations, lbl);
+                        w, h, _calculator.MaxIterations, lbl,
+                        ctxLines, warnLine);
                 }
                 catch (Exception ex)
                 {
@@ -2565,6 +2787,24 @@ namespace FracturingFog.Rendering
         /// scalar processing from.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        /// <summary>Builds the 256-entry byte gamma LUT for the live image
+        /// gamma slider (F6 part 2). Slider maps to gamma = 2^(slider/100)
+        /// (+100→2 brightens, −100→0.5 darkens); the LUT stores
+        /// <c>round(pow(v/255, 1/gamma) * 255)</c>.</summary>
+        private static byte[] BuildGammaLut(int gammaSlider)
+        {
+            double gammaValue = Math.Pow(2.0, gammaSlider / 100.0);
+            double exp = 1.0 / gammaValue;
+            var lut = new byte[256];
+            for (int v = 0; v < 256; v++)
+            {
+                double outN = Math.Pow(v / 255.0, exp);
+                int o = (int)(outN * 255.0 + 0.5);
+                lut[v] = (byte)Math.Clamp(o, 0, 255);
+            }
+            return lut;
+        }
+
         private static int ProcessRowSimd(
             uint[] src, uint[] dst, int start, int end,
             float contrastFactor, float brightnessOffset255)

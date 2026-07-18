@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.ExploreSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Explore ═══ (extracted from ControlCenterView for detach/pop-out) -->
+    <StackPanel Spacing="0">
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Region Navigation" />
+                <ComboBox ItemsSource="{Binding Menu.RegionNames}"
+                          SelectedItem="{Binding Menu.SelectedRegion}"
+                          HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                <UniformGrid Columns="4">
+                    <Button Classes="action neutral" Content="Save"   Command="{Binding Menu.SaveViewCommand}"      ToolTip.Tip="Save current view as a region" Margin="0,0,4,0" />
+                    <Button Classes="action danger"  Content="Delete" Command="{Binding Menu.DeleteRegionCommand}"  ToolTip.Tip="Delete selected region" Margin="0,0,4,0" />
+                    <Button Classes="action neutral" Content="Exp…"   Command="{Binding Menu.ExportRegionsCommand}" ToolTip.Tip="Export regions to JSON" Margin="0,0,4,0" />
+                    <Button Classes="action neutral" Content="Imp…"   Command="{Binding Menu.ImportRegionsCommand}" ToolTip.Tip="Import regions from JSON" />
+                </UniformGrid>
+
+                <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0">
+                    <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="CX:" Margin="0,0,8,4" />
+                    <TextBox   Classes="coord" Grid.Row="0" Grid.Column="1" Text="{Binding Menu.CX, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
+                    <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="CY:" Margin="0,0,8,4" />
+                    <TextBox   Classes="coord" Grid.Row="1" Grid.Column="1" Text="{Binding Menu.CY, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
+                    <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Quality:" Margin="0,0,8,4" />
+                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Menu.QualityNames}" SelectedItem="{Binding Menu.SelectedQuality}" HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+                    <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Zoom:" Margin="0,0,8,4" />
+                    <TextBox   Classes="coord" Grid.Row="3" Grid.Column="1" Text="{Binding Menu.Zoom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
+                    <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Iterations:" Margin="0,0,8,0" />
+                    <TextBox   Classes="coord" Grid.Row="4" Grid.Column="1" Text="{Binding Menu.Iter, UpdateSourceTrigger=PropertyChanged}" />
+                </Grid>
+                <CheckBox Content="Lock Iterations" IsChecked="{Binding Menu.IterLocked}" Foreground="#C8C878" FontWeight="Bold" Margin="80,4,0,0" ToolTip.Tip="Lock iteration count — pan/zoom won't recalc" />
+                <UniformGrid Columns="3" Margin="80,6,0,0">
+                    <Button Classes="action go" Content="Go"     Command="{Binding Menu.GoCommand}"         Margin="0,0,4,0" />
+                    <Button Classes="action go" Content="Flip Y" Command="{Binding Menu.FlipCommand}"       Margin="0,0,4,0" />
+                    <Button Classes="action go" Content="Copy"   Command="{Binding Menu.CopyCoordsCommand}" ToolTip.Tip="Copy CX/CY/Zoom/Iter to clipboard" />
+                </UniformGrid>
+            </StackPanel>
+        </Border>
+
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Parameters" />
+                <Button Classes="action help" Content="Fractal Params…" Command="{Binding Shell.ShowFractalParamsCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Open the per-fractal parameter editor" />
+            </StackPanel>
+        </Border>
+
+        <!-- Deep-zoom diagnostics — power mode only -->
+        <Border Classes="group" IsVisible="{Binding IsPowerMode}">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Deep-Zoom Diagnostics" />
+                <StackPanel Orientation="Horizontal" Spacing="14">
+                    <CheckBox Content="Bypass BLA+SA" IsChecked="{Binding Menu.BypassAcceleration}"       Foreground="#FFCC00" FontWeight="Bold" ToolTip.Tip="Ctrl+Shift+A" />
+                    <CheckBox Content="Bypass SA"     IsChecked="{Binding Menu.BypassSeriesApproximation}" Foreground="#FFCC00" FontWeight="Bold" ToolTip.Tip="Ctrl+Shift+S" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="14">
+                    <CheckBox Content="Bypass DD-BLA"   IsChecked="{Binding Menu.BypassDdBla}"    Foreground="#FFCC00" FontWeight="Bold" ToolTip.Tip="Ctrl+Shift+D" />
+                    <CheckBox Content="Bypass Rebasing" IsChecked="{Binding Menu.BypassRebasing}" Foreground="#FFCC00" FontWeight="Bold" ToolTip.Tip="SM-2: rebasing default ON; check to A/B against legacy per-pixel QD/OD" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

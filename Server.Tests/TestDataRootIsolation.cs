@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -46,8 +49,10 @@ internal static class TestDataRootIsolation
 /// <c>FractalRegionLibrary.Instance</c> (a process-wide singleton persisting
 /// to one <c>regions.json</c>). Without this, classes run in parallel and
 /// concurrent <c>Save()</c> calls race on the same file — corrupting the
-/// atomic-swap backup assertions and each other's state. Members:
-/// <c>RegionEditorServiceTests</c>, <c>AnimationLibrarySaveLoopTests</c>.
+/// atomic-swap backup assertions and each other's state. Also serialises the
+/// sibling animation / scene library singletons, which the same classes mutate.
+/// Members: <c>RegionEditorServiceTests</c>, <c>AnimationLibrarySaveLoopTests</c>,
+/// <c>AssetSourceTests</c>, <c>SceneLibraryTests</c>.
 /// </summary>
 [CollectionDefinition(FractalRegionLibraryCollection.Name, DisableParallelization = true)]
 public sealed class FractalRegionLibraryCollection

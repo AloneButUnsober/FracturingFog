@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/MasterConfigViewModel.cs
 // D-5e. Edits the three live-tunable cluster knobs (ClusterMaxJobs,
 // ClusterArtifactRetentionMinutes, ClusterTileTargetPixels) on a running

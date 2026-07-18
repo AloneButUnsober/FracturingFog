@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Engine/Assets/AssetSources.cs
 //
 // Asset Manager (Animation Roadmap Sub-goal A, phase A0) — one thin IAssetSource
@@ -112,10 +115,33 @@ namespace FracturingFog.Assets
 
         public IEnumerable<AssetDescriptor> Enumerate()
         {
+            // User-saved, data-driven themes first: their gradient Stops fully
+            // describe a swatch, so ThemeSwatch rasterises it eagerly (few of
+            // them, cheap).
             foreach (var t in UserColorThemeLibrary.Instance.Themes)
-                yield return new AssetDescriptor(t.Name, Kind, null, AssetSizing.Bytes(t), null);
+                yield return new AssetDescriptor(t.Name, Kind, null, AssetSizing.Bytes(t), ThemeSwatch.RenderPng(t));
+
+            // Then the built-in curated roster (ColorPalette.BuiltIns) — the same
+            // themes shown in the toolbar combo. These are C# IColorMap classes,
+            // not library entries: no Stops to rasterise and nothing on disk to
+            // delete or export, so they're read-only and carry no size. Their
+            // swatch comes from sampling the map (ColorMapStrip), handed as a lazy
+            // factory so the ~250 built-ins only rasterise as rows scroll into
+            // view rather than all up front on Enumerate.
+            foreach (var map in ColorPalette.BuiltIns)
+            {
+                string name = ColorPalette.GetStaticName(map);
+                if (string.IsNullOrEmpty(name)) continue;
+                var captured = map;
+                yield return new AssetDescriptor(
+                    name, Kind, null, 0, ThumbnailBytes: null,
+                    ReadOnly: true,
+                    ThumbnailFactory: () => ColorMapStrip.RenderPng(captured));
+            }
         }
 
+        // Only user-library themes are removable; a built-in name has no JSON
+        // entry, so Remove returns false for it (nothing deleted).
         public bool Delete(string name) => UserColorThemeLibrary.Instance.Remove(name);
 
         public string? ExportJson(string name) => AssetSizing.Json(
@@ -268,6 +294,58 @@ namespace FracturingFog.Assets
             if (exists && !overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, c.Name);
             SlideshowConfigLibrary.Upsert(file, c); // persists; also marks imported preset active
             return new AssetImportResult(exists ? AssetImportStatus.Replaced : AssetImportStatus.Added, c.Name);
+        }
+    }
+
+    /// <summary>Scene Engine Roadmap Phase S5 — the Scene asset node. Wraps
+    /// <see cref="SceneLibrary"/>. Unlike the shared <see cref="AssetSizing"/>
+    /// helpers (plain options), Scenes serialise through
+    /// <see cref="SceneLibrary.BuildJsonOptions"/> so the nested S3
+    /// <c>CameraTrack</c> and the <c>SceneTransitionKind</c> enums round-trip as
+    /// human-editable strings, matching scenes.json. Built-in demo scenes
+    /// enumerate too; deleting one drops it until the next <c>Load()</c>
+    /// re-merges the seed (same as the Animation built-in).</summary>
+    public sealed class SceneAssetSource : IAssetSource
+    {
+        public AssetKind Kind => AssetKind.Scene;
+        public string DisplayName => "Scenes";
+
+        public IEnumerable<AssetDescriptor> Enumerate()
+        {
+            foreach (var s in SceneLibrary.Instance.Scenes)
+                yield return new AssetDescriptor(s.Name, Kind, null, SceneBytes(s), null);
+        }
+
+        public bool Delete(string name) => SceneLibrary.Instance.Remove(name);
+
+        public string? ExportJson(string name)
+        {
+            var scene = SceneLibrary.Instance.GetByName(name);
+            if (scene == null) return null;
+            try { return JsonSerializer.Serialize(scene, SceneLibrary.BuildJsonOptions()); }
+            catch { return null; }
+        }
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return AssetImportResult.Fail;
+            SceneData? s;
+            try { s = JsonSerializer.Deserialize<SceneData>(json, SceneLibrary.BuildJsonOptions()); }
+            catch { return AssetImportResult.Fail; }
+            if (s == null || string.IsNullOrWhiteSpace(s.Name)) return AssetImportResult.Fail;
+
+            var lib = SceneLibrary.Instance;
+            bool exists = lib.GetByName(s.Name) != null;
+            if (exists && !overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, s.Name);
+            lib.ReplaceOrAdd(s); // persists
+            return new AssetImportResult(exists ? AssetImportStatus.Replaced : AssetImportStatus.Added, s.Name);
+        }
+
+        // Size proxy through the library's own (enum-aware) options.
+        private static long SceneBytes(SceneData s)
+        {
+            try { return Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(s, SceneLibrary.BuildJsonOptions())); }
+            catch { return 0; }
         }
     }
 

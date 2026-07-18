@@ -1,4 +1,7 @@
-﻿// Models/ColorSchemes/ColorPalettes.cs  — v6 (user-defined JSON themes)
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/ColorSchemes/ColorPalettes.cs  — v6 (user-defined JSON themes)
 //
 // Add new built-in themes to the BuiltIns list; they appear automatically in
 // the UI.  User-defined themes loaded from %APPDATA%\FracturingFog\colorthemes.json
@@ -504,6 +507,12 @@ namespace FracturingFog.Models
         {
             foreach (var p in Palettes)
                 if (GetStaticName(p) == name) return p;
+            // Back-compat: saved data may reference the pre-ASCII (Unicode)
+            // theme name. Resolve the alias and retry once before HSV fallback.
+            var aliased = LegacyNameAliases.Resolve(name);
+            if (aliased != null)
+                foreach (var p in Palettes)
+                    if (GetStaticName(p) == aliased) return p;
             return new HsvPalette();
         }
 

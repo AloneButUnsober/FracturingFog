@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Rendering/FractalOverlayCompositor.cs
 //
 // CPU-side compositing of the Cartesian grid + region/theme watermark on top
@@ -41,10 +44,10 @@ namespace FracturingFog.Rendering
         // SKFontManager when "Courier New" / "Arial" aren't installed (Linux,
         // macOS — Skia maps to DejaVu Sans Mono / Helvetica respectively).
 
+        // Watermark fonts are not cached here — WatermarkPainterSkia owns them,
+        // so the live overlay and every export path share one definition.
         private readonly SKFont _labelFont = MakeFont("Courier New", 9f,  SKFontStyle.Normal);
         private readonly SKFont _zeroFont  = MakeFont("Courier New", 11f, SKFontStyle.Bold);
-        private readonly SKFont _mainFont  = MakeFont("Arial",       14f, SKFontStyle.Bold);
-        private readonly SKFont _subFont   = MakeFont("Arial",        9f, SKFontStyle.Normal);
 
         private readonly SKFont _hudHeader = MakeFont("Courier New", 10f, SKFontStyle.Bold);
         private readonly SKFont _hudBody   = MakeFont("Courier New",  9f, SKFontStyle.Normal);
@@ -114,15 +117,20 @@ namespace FracturingFog.Rendering
         }
 
         // Pin the BGRA buffer, wrap it as an SKBitmap, hand a canvas to the
-        // caller. BGRA8888 + Premul matches the renderer's upload format so
-        // no swizzle / unpremul conversion is needed.
+        // caller. F10.3b — the buffer carries STRAIGHT (non-premultiplied)
+        // alpha (GradientColorMap.MapNormalized packs coverage directly), so
+        // the SKBitmap is declared Unpremul and Skia does correct straight-alpha
+        // SrcOver when blending the grid/watermark/HUD overlays on top. Opaque
+        // backgrounds (A=255) are premul==unpremul byte-for-byte, so overlay
+        // output is unchanged for every existing theme; only an authored
+        // translucent fractal background now composites correctly.
         private static void DrawOnto(uint[] bgra, int width, int height, Action<SKCanvas> draw)
         {
             var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
             try
             {
                 IntPtr ptr = handle.AddrOfPinnedObject();
-                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
                 using var bmp = new SKBitmap();
                 bmp.InstallPixels(info, ptr, info.RowBytes);
                 using var canvas = new SKCanvas(bmp);
@@ -273,53 +281,12 @@ namespace FracturingFog.Rendering
                 programVersion: programVersion ?? string.Empty,
                 defaultTextColor: defaultText);
 
-            Color fill = Color.FromArgb(wm.TextColor.R, wm.TextColor.G, wm.TextColor.B);
-            using var mainBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(wm.IsCustom ? 255 : 220, fill)) };
-            using var subBrush  = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(Color.FromArgb(wm.IsCustom ? 230 : 180, fill)) };
-            Color haloColor = wm.HighlightColor != null
-                ? Color.FromArgb(wm.HighlightColor.A, wm.HighlightColor.R, wm.HighlightColor.G, wm.HighlightColor.B)
-                : halo;
-            using var shdBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = ToSk(haloColor) };
-
-            float topW_f = string.IsNullOrEmpty(wm.TopText) ? 0f : _mainFont.MeasureText(wm.TopText);
-            float subW_f = string.IsNullOrEmpty(wm.SubText) ? 0f : _subFont.MeasureText(wm.SubText);
-            float topH_f = string.IsNullOrEmpty(wm.TopText) ? 0f : LineHeight(_mainFont);
-            float subH_f = string.IsNullOrEmpty(wm.SubText) ? 0f : LineHeight(_subFont);
-
-            int topW = (int)Math.Ceiling(topW_f);
-            int topH = (int)Math.Ceiling(topH_f);
-            int subW = (int)Math.Ceiling(subW_f);
-            int subH = (int)Math.Ceiling(subH_f);
-
-            const int edgePad = 6;
-            var (bx, by, bw, bh) = WatermarkResolver.ComputeBlockBounds(
-                wm, w, h, topW, topH, subW, subH, edgePad);
-
-            if (wm.BackgroundColor != null)
-            {
-                var bg = Color.FromArgb(wm.BackgroundColor.A,
-                    wm.BackgroundColor.R, wm.BackgroundColor.G, wm.BackgroundColor.B);
-                const int bgPad = 4;
-                using var bgBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, Color = ToSk(bg) };
-                canvas.DrawRect(bx - bgPad, by - bgPad, bw + bgPad * 2, bh + bgPad * 2, bgBrush);
-            }
-
-            int topX = WatermarkResolver.AlignLineX(bx, bw, topW, wm.Justify);
-            int subX = WatermarkResolver.AlignLineX(bx, bw, subW, wm.Justify);
-
-            if (!string.IsNullOrEmpty(wm.TopText))
-            {
-                float yb = Baseline(_mainFont);
-                canvas.DrawText(wm.TopText, topX + 1, by + 1 + yb, _mainFont, shdBrush);
-                canvas.DrawText(wm.TopText, topX,     by     + yb, _mainFont, mainBrush);
-            }
-            if (!string.IsNullOrEmpty(wm.SubText))
-            {
-                int subY = by + topH;
-                float yb = Baseline(_subFont);
-                canvas.DrawText(wm.SubText, subX + 1, subY + 1 + yb, _subFont, shdBrush);
-                canvas.DrawText(wm.SubText, subX,     subY     + yb, _subFont, subBrush);
-            }
+            // scale 1.0: the live overlay keeps fixed on-screen metrics rather
+            // than growing with the window. Export surfaces scale with the
+            // image instead; both go through the same painter.
+            WatermarkPainterSkia.Paint(canvas, wm, w, h,
+                defaultHalo: new RgbaDef(halo.R, halo.G, halo.B, halo.A),
+                scale: 1f);
         }
 
         // ── Perf HUD ──────────────────────────────────────────────────────
@@ -337,7 +304,9 @@ namespace FracturingFog.Rendering
         public void CompositePerfHud(
             uint[] bgra, int width, int height,
             PerfSnapshot snap, string hwSummary,
-            int frameW, int frameH, int maxIter, string precisionLabel)
+            int frameW, int frameH, int maxIter, string precisionLabel,
+            System.Collections.Generic.IReadOnlyList<string>? contextLines = null,
+            string? warningLine = null)
         {
             if (bgra == null || bgra.Length < width * height) return;
             if (width <= 1 || height <= 1) return;
@@ -377,6 +346,25 @@ namespace FracturingFog.Rendering
                 coreLines.Add("");
                 coreLines.Add($"frame  {frameW}x{frameH}  iter {maxIter}  {precisionLabel}");
                 coreLines.Add(hwSummary);
+
+                // Render-context block (host-built): centre, zoom, ref-orbit,
+                // detail-depth estimate, active toggles. Helps diagnose deep-zoom
+                // behaviour without cluttering the (deliberately simple) status bar.
+                if (contextLines != null && contextLines.Count > 0)
+                {
+                    coreLines.Add("");
+                    coreLines.Add("RENDER CONTEXT");
+                    foreach (var cl in contextLines) coreLines.Add(cl);
+                }
+
+                // Yellow (#FFCC00, colour-blind-safe) warning line, drawn last.
+                int warnIndex = -1;
+                if (!string.IsNullOrEmpty(warningLine))
+                {
+                    coreLines.Add("");
+                    warnIndex = coreLines.Count;
+                    coreLines.Add(warningLine!);
+                }
                 string[] lines = coreLines.ToArray();
 
                 float maxW = 0;
@@ -401,6 +389,7 @@ namespace FracturingFog.Rendering
                 using var bord = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true, Color = new SKColor(80, 200, 255, 180) };
                 using var headBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(120, 220, 255, 255) };
                 using var bodyBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(230, 230, 230, 245) };
+                using var warnBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(255, 204, 0, 255) };  // #FFCC00
                 using var shadowBrush = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true, Color = new SKColor(0, 0, 0, 160) };
 
                 canvas.DrawRect(x0, y0, boxW, boxH, bg);
@@ -419,8 +408,9 @@ namespace FracturingFog.Rendering
                 {
                     if (lines[i].Length > 0)
                     {
+                        var brush = i == warnIndex ? warnBrush : bodyBrush;
                         canvas.DrawText(lines[i], x0 + pad + 1, ty + 1 + bodyBase, _hudBody, shadowBrush);
-                        canvas.DrawText(lines[i], x0 + pad,     ty     + bodyBase, _hudBody, bodyBrush);
+                        canvas.DrawText(lines[i], x0 + pad,     ty     + bodyBase, _hudBody, brush);
                     }
                     ty += lineH;
                 }

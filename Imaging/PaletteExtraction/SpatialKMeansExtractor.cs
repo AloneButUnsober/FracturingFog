@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PaletteExtraction/SpatialKMeansExtractor.cs
 //
 // k-means in a 5-D feature space: (L, a, b, scaled_x, scaled_y). The xy

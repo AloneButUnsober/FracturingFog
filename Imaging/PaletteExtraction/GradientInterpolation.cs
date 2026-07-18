@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PaletteExtraction/GradientInterpolation.cs
 //
 // Per-pixel gradient sampling in a choosable colour space. Avalonia's

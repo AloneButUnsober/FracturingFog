@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UserBulbIlgpuTranslator.cs
 //
 // Validates a user step source for GPU compatibility, then emits a string

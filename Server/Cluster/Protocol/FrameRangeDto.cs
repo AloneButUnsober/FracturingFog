@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/FrameRangeDto.cs
 // Master → Worker, optional payload attached to TileJobDto when the
 // parent job is video mode. Carries a half-open contiguous frame index

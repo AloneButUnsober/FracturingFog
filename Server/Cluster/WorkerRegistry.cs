@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/WorkerRegistry.cs
 // Thread-safe in-memory registry of connected worker nodes. Keyed by
 // WorkerId (UUID-style base32). Pins the worker's cert thumbprint at

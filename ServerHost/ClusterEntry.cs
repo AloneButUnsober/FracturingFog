@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ServerHost/ClusterEntry.cs
 // D-2b: --master / --worker CLI handlers. Stands the cluster bits up
 // out of the same hosting layer the single-server --server path uses.

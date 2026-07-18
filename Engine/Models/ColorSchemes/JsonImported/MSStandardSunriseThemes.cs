@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/JsonImported/MSStandardSunriseThemes.cs
 //
 // Four "MS Standard Sunrise" variants — gold/yellow background, deep blue

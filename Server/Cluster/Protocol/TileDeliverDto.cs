@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/TileDeliverDto.cs
 // Worker → Master, body of tile.deliver. Carries the rendered tile
 // pixels back to the master so they can be merged into the final image.

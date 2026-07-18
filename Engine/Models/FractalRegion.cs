@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/FractalRegion.cs
 // Defines FractalRegion (a named, typed coordinate bookmark) and
 // FractalRegionLibrary which owns both the 12 built-in regions and an
@@ -424,7 +427,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Magnet 1 — Main Body",
+                Name        = "Magnet 1 - Main Body",
                 CenterX     =  1.5,
                 CenterY     =  0.0,
                 Zoom        =  0.6,
@@ -436,7 +439,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Magnet 2 — Triple Lobe",
+                Name        = "Magnet 2 - Triple Lobe",
                 CenterX     =  1.5,
                 CenterY     =  0.0,
                 Zoom        =  0.5,
@@ -448,7 +451,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Glynn — Canonical",
+                Name        = "Glynn - Canonical",
                 CenterX     = -0.2,
                 CenterY     =  0.0,
                 Zoom        =  0.7,
@@ -460,7 +463,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Logistic — Full Cascade",
+                Name        = "Logistic - Full Cascade",
                 CenterX     =  3.5,
                 CenterY     =  0.5,
                 Zoom        =  2.0,
@@ -472,7 +475,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Halley — z³ − 1 basins",
+                Name        = "Halley - z3 - 1 basins",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -484,7 +487,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Secant — z³ − 1 basins",
+                Name        = "Secant - z3 - 1 basins",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -496,7 +499,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Spider — Canonical",
+                Name        = "Spider - Canonical",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.2,
@@ -508,7 +511,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Mandelbox — Canonical (scale 2)",
+                Name        = "Mandelbox - Canonical (scale 2)",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -520,7 +523,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Mandelbox — Inverse (scale −1.5)",
+                Name        = "Mandelbox - Inverse (scale -1.5)",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -532,7 +535,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Mandelbox — Open Pore (scale 3)",
+                Name        = "Mandelbox - Open Pore (scale 3)",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -544,7 +547,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "KIFS — Menger sponge",
+                Name        = "KIFS - Menger sponge",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -556,7 +559,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "KIFS — Sierpinski tetra",
+                Name        = "KIFS - Sierpinski tetra",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -568,7 +571,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Quat Julia — Classic Norton (−0.2, 0.4, −0.4, −0.4)",
+                Name        = "Quat Julia - Classic Norton (-0.2, 0.4, -0.4, -0.4)",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -580,7 +583,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Quat Julia — Dendrite (0.0, 1.0, 0.0, 0.0)",
+                Name        = "Quat Julia - Dendrite (0.0, 1.0, 0.0, 0.0)",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -592,7 +595,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Quat Julia — Spheroid (−1.0, 0.2, 0.0, 0.0)",
+                Name        = "Quat Julia - Spheroid (-1.0, 0.2, 0.0, 0.0)",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -604,7 +607,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Quat Mandelbrot — Slice W = 0",
+                Name        = "Quat Mandelbrot - Slice W = 0",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -616,7 +619,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Quat Mandelbrot — Slice W = 0.5",
+                Name        = "Quat Mandelbrot - Slice W = 0.5",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -628,7 +631,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Apollonian — (−1, 2, 2, 3) Gasket",
+                Name        = "Apollonian - (-1, 2, 2, 3) Gasket",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  2.0,
@@ -640,7 +643,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "DLA — Default Brownian Tree",
+                Name        = "DLA - Default Brownian Tree",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -652,7 +655,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Bicomplex Mandelbrot — Slice k = 0",
+                Name        = "Bicomplex Mandelbrot - Slice k = 0",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -664,7 +667,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Bicomplex Mandelbrot — Slice k = 0.4",
+                Name        = "Bicomplex Mandelbrot - Slice k = 0.4",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -676,7 +679,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Kleinian — Tetrahedral 4-Sphere",
+                Name        = "Kleinian - Tetrahedral 4-Sphere",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -688,7 +691,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Apollonian — L/R Kissing Cusp",
+                Name        = "Apollonian - L/R Kissing Cusp",
                 CenterX     =  0.0,
                 CenterY     =  0.4,
                 Zoom        =  6.0,
@@ -700,7 +703,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Plasma — Default",
+                Name        = "Plasma - Default",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -712,7 +715,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Flame — Default Chaos",
+                Name        = "Flame - Default Chaos",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -724,7 +727,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Logistic — r ∈ [2.9, 4.0]",
+                Name        = "Logistic - r in [2.9, 4.0]",
                 CenterX     =  3.45,
                 CenterY     =  0.5,
                 Zoom        =  1.8,
@@ -736,7 +739,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "TearDrop — Default",
+                Name        = "TearDrop - Default",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  0.6,
@@ -748,7 +751,7 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Mandelbulb — Power 8",
+                Name        = "Mandelbulb - Power 8",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
@@ -973,6 +976,13 @@ namespace FracturingFog.Models
             foreach (var r in All)
                 if (r.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                     return r;
+            // Back-compat: saved data may reference the pre-ASCII (Unicode)
+            // region name. Resolve the alias and retry once.
+            var aliased = LegacyNameAliases.Resolve(name);
+            if (aliased != null)
+                foreach (var r in All)
+                    if (r.Name.Equals(aliased, StringComparison.OrdinalIgnoreCase))
+                        return r;
             return null;
         }
     }
