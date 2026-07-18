@@ -438,6 +438,18 @@ static class Program
             return 0;
         }
 
+        // --colorprobe: golden gate for the colour pipeline (Phase A/B/C option
+        // matrix). Unlike the diagnostic probes below, this RETURNS non-zero on
+        // drift so CI can gate. Prerequisite for Phase D (F11 deband / F10 alpha),
+        // which edit the float->byte quantise + LUT build. See ColorProbe.cs.
+        //   --colorprobe          gate vs embedded golden (exit 1 on drift)
+        //   --colorprobe regen    print freshly computed digest to pin
+        //   --colorprobe verbose  gate + dump per-config table to stdout
+        if (args.Length > 0 && args[0] == "--colorprobe")
+        {
+            return FracturingFog.Diagnostics.ColorProbe.Run(args);
+        }
+
         // --kifsprobe: Wave 5.9.f1 — headless geometric check on the KIFS folds.
         // Sphere-traces the DE inward from radius 6 along a Fibonacci set of
         // directions and records the surface radius R(dir) per direction, plus
