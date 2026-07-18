@@ -144,6 +144,12 @@ namespace FracturingFog.ViewState
         /// <summary>Contrast adjustment in [-100, 100]; 0 = neutral.</summary>
         public int Contrast { get; set; }
 
+        /// <summary>Live image gamma in [-100, 100]; 0 = neutral. Maps to an
+        /// exponent of 2^(slider/100) (out = in^(1/gamma)), so +100 brightens
+        /// (gamma 2), -100 darkens (gamma 0.5). Applied in the post-FX upload
+        /// pass; compounds on top of any per-theme <c>PaletteGamma</c>.</summary>
+        public int Gamma { get; set; }
+
         /// <summary>Adaptive contrast (histogram eq) strength in [0, 100]; 0 = off.</summary>
         public int HistogramEq { get; set; }
 
