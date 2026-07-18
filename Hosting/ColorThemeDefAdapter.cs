@@ -74,7 +74,7 @@ namespace FracturingFog.Hosting
         private static ColorStopData ToData(ColorStopDef s) => new ColorStopData
         {
             Position = s.Position,
-            R = s.R, G = s.G, B = s.B,
+            R = s.R, G = s.G, B = s.B, A = s.A,
             Midpoint = s.Midpoint,
         };
 
@@ -93,7 +93,7 @@ namespace FracturingFog.Hosting
             Roughness = b.Roughness,
         };
 
-        private static InSetColorData? ToData(InSetColorDef? c) => c == null ? null : new InSetColorData(c.R, c.G, c.B);
+        private static InSetColorData? ToData(InSetColorDef? c) => c == null ? null : new InSetColorData(c.R, c.G, c.B) { A = c.A };
 
         private static ColorThemeKind ToKind(ColorThemeKindDef k) => k switch
         {
@@ -165,7 +165,7 @@ namespace FracturingFog.Hosting
         private static ColorStopDef ToDef(ColorStopData s) => new ColorStopDef
         {
             Position = s.Position,
-            R = s.R, G = s.G, B = s.B,
+            R = s.R, G = s.G, B = s.B, A = s.A,
             Midpoint = s.Midpoint <= 0f ? 0.5f : s.Midpoint,
         };
 
@@ -186,7 +186,7 @@ namespace FracturingFog.Hosting
 
         private static InSetColorDef? ToDef(InSetColorData? c) => c == null ? null : new InSetColorDef
         {
-            R = c.R, G = c.G, B = c.B,
+            R = c.R, G = c.G, B = c.B, A = c.A,
         };
 
         private static ColorThemeKindDef ToKindDef(ColorThemeKind k) => k switch
