@@ -32,7 +32,7 @@
         <Border Classes="group">
             <StackPanel Spacing="4">
                 <TextBlock Classes="section" Text="Post-FX" />
-                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.BrightnessLabel}" Margin="0,0,6,4" />
                     <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Menu.Brightness}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,0,6,4" ToolTip.Tip="Brightness (-100..100)" />
                     <CheckBox  Grid.Row="0" Grid.Column="2" IsChecked="{Binding Menu.BrightnessLocked}" ToolTip.Tip="Lock brightness" Margin="0,0,0,4" />
@@ -42,14 +42,25 @@
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.AdaptiveLabel}" Margin="0,0,6,0" IsEnabled="{Binding Menu.AdaptiveEnabled}" />
                     <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Menu.Adaptive}" Minimum="0" Maximum="100" TickFrequency="25" Margin="0,0,6,0" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
                     <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding Menu.AdaptiveLocked}" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
+                    <!-- Phase D deband (F11a/b) + alpha preview (F10.5). Mirrors
+                         the FloatingMenu Post-FX rows; VM props shared via Menu. -->
+                    <CheckBox  Grid.Row="3" Grid.Column="0" Content="Deband" IsChecked="{Binding Menu.BandDither}" Margin="0,4,6,0"
+                               ToolTip.Tip="Ordered dither before the palette float→byte quantise — smooths gradient banding (CPU + GPU). Off by default." />
+                    <Slider    Grid.Row="3" Grid.Column="1" Value="{Binding Menu.BandDitherStrength}" Minimum="0" Maximum="100"
+                               TickFrequency="25" Margin="0,4,6,0"
+                               IsEnabled="{Binding Menu.BandDither}"
+                               ToolTip.Tip="Deband strength (0–100, default 100 = full ±0.5-LSB spread)." />
+                    <CheckBox  Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Content="Alpha preview" IsChecked="{Binding Menu.AlphaPreview}" Margin="0,4,6,0"
+                               ToolTip.Tip="Preview per-stop alpha over a checkerboard so translucent theme stops read as see-through on screen. Display-only — saved PNGs keep straight alpha. Off by default." />
+
                     <!-- Not fxLabel: that style fixes Width=84, which clipped
                          "Lock Lighting & FX". Inline the bold/alt-foreground and
                          let it size to content across cols 0-1. -->
-                    <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Text="Lock Lighting &amp; FX"
+                    <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Text="Lock Lighting &amp; FX"
                                Foreground="#9B9B9B" FontWeight="Bold" VerticalAlignment="Center"
                                HorizontalAlignment="Left" Margin="0,4,6,0"
                                ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
-                    <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding Menu.LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+                    <CheckBox  Grid.Row="5" Grid.Column="2" IsChecked="{Binding Menu.LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
                 </Grid>
 
                 <!-- Adaptive sweep (mirrors the main menu) -->
