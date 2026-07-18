@@ -68,6 +68,12 @@ namespace FracturingFog.Diagnostics
                 return RunPngSeqGate();
             if (args.Length > 1 && string.Equals(args[1], "alphaimage", StringComparison.OrdinalIgnoreCase))
                 return RunAlphaImage(args);
+            if (args.Length > 1 && string.Equals(args[1], "alphawm", StringComparison.OrdinalIgnoreCase))
+                return RunAlphaWatermarkGate();
+            if (args.Length > 1 && string.Equals(args[1], "alphaposter", StringComparison.OrdinalIgnoreCase))
+                return RunAlphaPosterGate(args);
+            if (args.Length > 1 && string.Equals(args[1], "alphascan", StringComparison.OrdinalIgnoreCase))
+                return RunAlphaScan(args);
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -342,6 +348,275 @@ namespace FracturingFog.Diagnostics
             Console.WriteLine($"  strip  (straight alpha)  = {stripPath}");
             Console.WriteLine($"  over checkerboard        = {checkPath}");
             return 0;
+        }
+
+        // --colorprobe alphascan <file.png>: inspect an EXISTING exported PNG for
+        // per-stop alpha. Straight-alpha PNGs keep RGB byte-identical to an opaque
+        // theme (only the A byte differs), so an alpha-unaware viewer shows a
+        // translucent export and an opaque one identically — the transparency is
+        // in the file but invisible without compositing. This reports the alpha
+        // coverage of the real file and writes <name>_checker.png so it can be
+        // seen. Point it at an actual "Save Image" / poster output.
+        private static int RunAlphaScan(string[] args)
+        {
+            if (args.Length < 3 || string.IsNullOrWhiteSpace(args[2]))
+            {
+                Console.WriteLine("usage: --colorprobe alphascan <file.png>");
+                return 2;
+            }
+            string path = args[2];
+            if (!System.IO.File.Exists(path))
+            {
+                Console.WriteLine($"alphascan: file not found — {path}");
+                return 2;
+            }
+
+            using var bmp = SkiaSharp.SKBitmap.Decode(path);
+            if (bmp == null)
+            {
+                Console.WriteLine($"alphascan: could not decode — {path}");
+                return 2;
+            }
+
+            int cw = bmp.Width, ch = bmp.Height;
+            int minA = 255, maxA = 0; long trans = 0, total = 0;
+            var comp = new uint[cw * ch];
+            const int cell = 12;
+            for (int y = 0; y < ch; y++)
+                for (int x = 0; x < cw; x++)
+                {
+                    var px = bmp.GetPixel(x, y);
+                    byte a = px.Alpha;
+                    if (a < minA) minA = a;
+                    if (a > maxA) maxA = a;
+                    if (a < 255) trans++;
+                    total++;
+                    float af = a / 255f;
+                    int bg = ((((x / cell) + (y / cell)) & 1) == 0) ? 200 : 120;
+                    int R = (int)(px.Red * af + bg * (1 - af));
+                    int G = (int)(px.Green * af + bg * (1 - af));
+                    int B = (int)(px.Blue * af + bg * (1 - af));
+                    comp[y * cw + x] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+                }
+
+            string checkerPath = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)) ?? ".",
+                System.IO.Path.GetFileNameWithoutExtension(path) + "_checker.png");
+            FracturingFog.Imaging.ImageExport.SavePixelsToFile(
+                comp, cw, ch, checkerPath, FracturingFog.Imaging.ImageFileFormat.Png,
+                (FracturingFog.Imaging.WatermarkRender?)null);
+
+            Console.WriteLine($"alphascan: {path}");
+            Console.WriteLine($"  size          = {cw}x{ch}");
+            Console.WriteLine($"  alpha min..max = {minA}..{maxA}");
+            Console.WriteLine($"  translucent px = {trans}/{total}");
+            Console.WriteLine($"  checker view   = {checkerPath}");
+            Console.WriteLine();
+            Console.WriteLine(minA < 255
+                ? "This file HAS per-stop alpha (open the _checker.png to see it)."
+                : "This file is fully opaque (no alpha < 255 anywhere).");
+            return 0;
+        }
+
+        // --colorprobe alphaposter [outpng]: end-to-end test of the REAL still
+        // export. Renders a Mandelbrot through PosterRenderer.RenderToFile with a
+        // translucent theme (no watermark) and scans the decoded PNG's alpha. This
+        // is the exact path the interactive "Image" button / batch / server use;
+        // the synthetic alphapng/alphawm gates only prove ImageExport in isolation.
+        // If PosterRenderer or the calculator colourise flattens alpha, minA==255.
+        private static int RunAlphaPosterGate(string[] args)
+        {
+            var data = new ColorThemeData
+            {
+                Name = "probe-alpha-poster",
+                Kind = ColorThemeKind.Gradient,
+                Stops = new List<ColorStopData>
+                {
+                    new ColorStopData { Position = 0.00f, R = 250, G = 40,  B = 70,  A = 0   },
+                    new ColorStopData { Position = 0.50f, R = 60,  G = 200, B = 240, A = 128 },
+                    new ColorStopData { Position = 1.00f, R = 250, G = 230, B = 90,  A = 255 },
+                },
+            };
+            var map = DataDrivenColorThemes.Create(data);
+            if (map == null) { Console.WriteLine("RESULT: FAIL (map null)"); return 1; }
+
+            bool keep = args.Length > 2 && !string.IsNullOrWhiteSpace(args[2]);
+            string path = keep
+                ? args[2]
+                : System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ff-alphaposter-{Guid.NewGuid():N}.png");
+
+            // Render twice: once WITHOUT a watermark (isolates PosterRenderer +
+            // calculator), once WITH the default watermark (the exact path the
+            // interactive "Image" button takes — SaveBgraSkia then reload +
+            // re-encode). Report alpha coverage for both.
+            (int min, int max, long trans, long total) ScanPoster(string p, bool withWm)
+            {
+                var req = new FracturingFog.Imaging.PosterRequest
+                {
+                    CenterX = -0.5, CenterY = 0.0, Zoom = 0.9,
+                    MaxIterations = 300,
+                    FractalType = FractalType.Mandelbrot,
+                    ColorMap = map,
+                    Quality = FracturingFog.Models.QualityPreset.Standard,
+                    Width = 240, Height = 180,
+                    Path = p,
+                    Format = FracturingFog.Imaging.ImageFileFormat.Png,
+                    Watermark = withWm ? "ALPHA TEST" : "",
+                    SubText = withWm ? "probe" : "",
+                };
+                FracturingFog.Imaging.PosterRenderer.RenderToFile(req, System.Threading.CancellationToken.None);
+                using var bmp = SkiaSharp.SKBitmap.Decode(p);
+                if (bmp == null) return (255, 0, 0, 0);
+                int mn = 255, mx = 0; long tr = 0, tot = 0;
+                for (int y = 0; y < bmp.Height; y++)
+                    for (int x = 0; x < bmp.Width; x++)
+                    {
+                        byte a = bmp.GetPixel(x, y).Alpha;
+                        if (a < mn) mn = a;
+                        if (a > mx) mx = a;
+                        if (a < 255) tr++;
+                        tot++;
+                    }
+                return (mn, mx, tr, tot);
+            }
+
+            string wmPath = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(path) ?? System.IO.Path.GetTempPath(),
+                System.IO.Path.GetFileNameWithoutExtension(path) + "_wm.png");
+
+            (int min, int max, long trans, long total) noWm, wm;
+            try
+            {
+                noWm = ScanPoster(path, withWm: false);
+                wm = ScanPoster(wmPath, withWm: true);
+            }
+            finally
+            {
+                if (!keep)
+                {
+                    try { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); } catch { }
+                    try { if (System.IO.File.Exists(wmPath)) System.IO.File.Delete(wmPath); } catch { }
+                }
+            }
+
+            // When keeping output, also emit a checkerboard-composited preview of
+            // the real render so the alpha is *visible* — a normal alpha-unaware
+            // viewer shows the straight-alpha PNG identically to an opaque theme
+            // (RGB is unchanged; only the A byte differs), which is exactly why
+            // the transparency looks "missing" until composited over a background.
+            if (keep)
+            {
+                try
+                {
+                    using var src = SkiaSharp.SKBitmap.Decode(path);
+                    if (src != null)
+                    {
+                        int cw = src.Width, ch = src.Height;
+                        var comp = new uint[cw * ch];
+                        const int cell = 12;
+                        for (int y = 0; y < ch; y++)
+                            for (int x = 0; x < cw; x++)
+                            {
+                                var px = src.GetPixel(x, y);
+                                float a = px.Alpha / 255f;
+                                int bg = ((((x / cell) + (y / cell)) & 1) == 0) ? 200 : 120;
+                                int R = (int)(px.Red * a + bg * (1 - a));
+                                int G = (int)(px.Green * a + bg * (1 - a));
+                                int B = (int)(px.Blue * a + bg * (1 - a));
+                                comp[y * cw + x] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+                            }
+                        string checkerPath = System.IO.Path.Combine(
+                            System.IO.Path.GetDirectoryName(path) ?? System.IO.Path.GetTempPath(),
+                            System.IO.Path.GetFileNameWithoutExtension(path) + "_checker.png");
+                        FracturingFog.Imaging.ImageExport.SavePixelsToFile(
+                            comp, cw, ch, checkerPath, FracturingFog.Imaging.ImageFileFormat.Png,
+                            (FracturingFog.Imaging.WatermarkRender?)null);
+                        Console.WriteLine($"  checker view = {checkerPath}");
+                    }
+                }
+                catch { }
+            }
+
+            Console.WriteLine("F10 real-export (PosterRenderer) alpha scan:");
+            Console.WriteLine($"  no watermark : alpha {noWm.min}..{noWm.max}  translucent {noWm.trans}/{noWm.total}");
+            Console.WriteLine($"  + watermark  : alpha {wm.min}..{wm.max}  translucent {wm.trans}/{wm.total}");
+            if (keep) Console.WriteLine($"  saved        = {path} , {wmPath}");
+
+            bool okNoWm = noWm.min < 255 && noWm.trans > 0;
+            bool okWm = wm.min < 255 && wm.trans > 0;
+            Console.WriteLine();
+            if (okNoWm && okWm)
+                Console.WriteLine("RESULT: PASS (real still export carries per-stop alpha, with and without watermark)");
+            else if (okNoWm && !okWm)
+                Console.WriteLine("RESULT: FAIL (watermark path flattens alpha — PosterRenderer buffer had it)");
+            else
+                Console.WriteLine("RESULT: FAIL (export is fully opaque — alpha lost before/at save)");
+            return (okNoWm && okWm) ? 0 : 1;
+        }
+
+        // --colorprobe alphawm: TRUE gate for the WATERMARKED export path.
+        // The interactive "Image" button ALWAYS passes a watermark, so the save
+        // goes SaveBgraSkia (writes straight-alpha PNG) -> CompositeWatermarkRenderSkia
+        // (reloads that PNG, redraws, re-encodes). If the reload/re-encode flattens
+        // alpha (e.g. SKBitmap.Decode returns an Opaque-typed bitmap, or the surface
+        // has no alpha channel), the exported image comes back opaque even though
+        // the buffer and the no-watermark path carry alpha. Samples a corner pixel
+        // well away from the bottom-right watermark text.
+        private static int RunAlphaWatermarkGate()
+        {
+            const byte A = 128, R = 200, G = 100, B = 50;
+            const int w = 96, h = 64;
+            var pixels = new uint[w * h];
+            uint packed = ((uint)A << 24) | ((uint)R << 16) | ((uint)G << 8) | B;
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = packed;
+
+            var wm = new FracturingFog.Imaging.WatermarkRender
+            {
+                TopText = "ALPHA TEST",
+                SubText = "probe",
+                TextColor = new RgbDef(255, 255, 255),
+                Placement = WatermarkPlacement.Bottom,
+                Justify = WatermarkJustify.Right,
+                IsCustom = false,
+            };
+
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), $"ff-alphawm-{Guid.NewGuid():N}.png");
+
+            byte da = 0, dr = 0, dg = 0, db = 0;
+            bool decoded = false;
+            try
+            {
+                FracturingFog.Imaging.ImageExport.SavePixelsToFile(
+                    pixels, w, h, path, FracturingFog.Imaging.ImageFileFormat.Png, wm);
+
+                using var bmp = SkiaSharp.SKBitmap.Decode(path);
+                if (bmp != null)
+                {
+                    var c = bmp.GetPixel(2, 2); // top-left corner, clear of watermark
+                    da = c.Alpha; dr = c.Red; dg = c.Green; db = c.Blue;
+                    decoded = true;
+                }
+            }
+            finally
+            {
+                try { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); } catch { }
+            }
+
+            Console.WriteLine("F10.3b watermarked-export straight-alpha gate:");
+            Console.WriteLine($"  wrote  ARGB = ({A},{R},{G},{B})");
+            Console.WriteLine($"  read   ARGB = ({da},{dr},{dg},{db})  (corner, no watermark)");
+
+            bool ok = decoded
+                      && Math.Abs(da - A) <= 2
+                      && Math.Abs(dr - R) <= 3
+                      && Math.Abs(dg - G) <= 3
+                      && Math.Abs(db - B) <= 3;
+            Console.WriteLine();
+            Console.WriteLine(ok
+                ? "RESULT: PASS (watermark reload kept straight alpha)"
+                : "RESULT: FAIL (watermark reload/re-encode flattened alpha)");
+            return ok ? 0 : 1;
         }
 
         // --colorprobe alphapng: TRUE gate for F10.3 straight-alpha PNG export.
