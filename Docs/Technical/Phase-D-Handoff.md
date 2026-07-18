@@ -194,23 +194,43 @@ byte-exact and `--colorprobe` still PASSES:
 - Verify: `--colorprobe` byte-exact (opaque default) + new `--colorprobe alpha`
   proves A rides 0→255 monotone through the LUT.
 
-**Remaining F10 phases (each its own sign-off — NOT started):**
-1. Procedural themes: `ColorUtils.PackArgb`/`PackArgbF` still force `0xFF` (~40
-   `ColorSchemes/*` call sites). Give them an alpha-aware overload if procedural
-   themes should support transparency.
-2. 3D lit packs (`GradientPhong3DBase`, `PbrGradient3DBase`) still force opaque —
-   decide whether lit surfaces carry stop alpha at all.
-3. GPU parity: the D3D `cg_pack_bgra` forces `0xFF` (Silk/Skia too).
-4. **The risky one — downstream compositing/export audit:** `ImageExport`,
-   `PosterRenderer`, `BatchRenderer`, `SceneVideoRenderer`, `PngSequenceWriter`,
-   `FractalOverlayCompositor`, watermark. Premultiply / over-composite / PNG-vs-
-   video divergence. Needs a composite-over-known-background test + visual
-   sign-off. This is where the ~5-day estimate and the real bug risk live.
+### F10.2 — per-stop alpha AUTHORING UI (DONE, commit `fb0719a`)
 
-F10.1 is plumbing only: `Map` now packs the interpolated alpha into the ARGB
-buffer, but no consumer deliberately blends on it and no built-in theme sets
-A<255, so behaviour is unchanged today. A UI to author sub-255 stop alpha plus
-the phase-4 compositing audit are what make transparency actually visible.
+Gives F10.1's LUT carrier a consumer — the Color Theme Editor can now author +
+save per-stop opacity (nothing set A<255 before, so the foundation was
+untestable). `ColorStopDef`/`InSetColorDef` gain `A` (byte=255); the
+`ColorThemeDefAdapter` carries it across all four Data↔Def stop/in-set maps;
+`ColorStopRowVm` exposes `A` (0..255) with an ARGB `StopColor` (ColorPicker
+alpha slider works) + alpha-aware swatch; the editor row gained an Alpha
+NumericUpDown. Authoring + persistence only — default A=255 ⇒ `--colorprobe`
+byte-exact (digest `b68af584…`), `--colorprobe alpha` PASS.
+
+**Authored A rides into the ARGB buffer (via F10.1) but is NOT yet surfaced
+correctly:** the screen blits opaque, and PNG export still declares
+`SKAlphaType.Premul` (`ImageExport.SaveBgraSkia`) while the buffer is *straight*
+alpha — so an exported translucent theme would mis-colour (premul-vs-straight).
+That correctness work is F10.3.
+
+**Remaining F10 phases (each its own sign-off — NOT started):**
+
+- **F10.3 — the risky one: straight-alpha export + compositing audit.** Flip
+  `SaveBgraSkia` to `Unpremul` (opaque case byte-identical: A=255 ⇒ premul==
+  straight), audit every consumer that blends onto a background:
+  `PosterRenderer.ApplyBrightnessContrast` (forces `0xFF000000`), the watermark
+  composite (`CompositeWatermarkSkia` reloads + draws over a now-translucent
+  PNG), `BatchRenderer`, `SceneVideoRenderer`, `PngSequenceWriter`,
+  `FractalOverlayCompositor`. Gate: a **headless** probe that renders a 2-stop
+  A=128 theme through `PosterRenderer` → temp PNG → reads the pixel back and
+  asserts A preserved + RGB unmangled (testable without the GUI). PNG-vs-video
+  alpha divergence + premultiply is where the ~5-day estimate and real bug risk
+  live. Do this as its own focused unit with on-device visual sign-off
+  (translucent theme over a checkerboard).
+- **F10.4 — procedural/3D/GPU pack parity.** `ColorUtils.PackArgb`/`PackArgbF`
+  (~40 `ColorSchemes/*` sites), the two 3D lit packs (`GradientPhong3DBase`,
+  `PbrGradient3DBase`), and the GPU `cg_pack_bgra` (D3D/Silk/Skia) still force
+  `0xFF`. Decide per-surface whether lit / procedural / GPU paths carry stop
+  alpha, then make the packs alpha-aware. Lower priority than F10.3 — no visible
+  effect until F10.3 lets alpha out of the pipeline.
 
 ## Housekeeping / constraints
 
