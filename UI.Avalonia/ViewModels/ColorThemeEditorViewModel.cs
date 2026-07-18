@@ -1483,6 +1483,7 @@ public sealed class ColorStopRowVm : ReactiveObject
         _r = seed.R;
         _g = seed.G;
         _b = seed.B;
+        _a = seed.A;
         _midpoint = seed.Midpoint <= 0f ? 0.5f : seed.Midpoint;
 
         SelectCommand = ReactiveCommand.Create(() => _parent.SelectRow(this));
@@ -1583,7 +1584,20 @@ public sealed class ColorStopRowVm : ReactiveObject
         set { this.RaiseAndSetIfChanged(ref _b, value); this.RaisePropertyChanged(nameof(SwatchBrush)); _parent.NotifyRowChanged(); }
     }
 
-    public IBrush SwatchBrush => new ImmutableSolidColorBrush(Color.FromRgb(R, G, B));
+    private byte _a;
+    /// <summary>Per-stop alpha (F10). 255 = opaque (default). Authored here and
+    /// carried through the theme JSON + LUT; visible surfacing in the render /
+    /// export path is a later F10 phase.</summary>
+    public byte A
+    {
+        get => _a;
+        set { this.RaiseAndSetIfChanged(ref _a, value); this.RaisePropertyChanged(nameof(SwatchBrush)); this.RaisePropertyChanged(nameof(StopColor)); _parent.NotifyRowChanged(); }
+    }
+
+    // Swatch reflects the authored alpha so a translucent stop reads as a
+    // partly-transparent chip over the row background (visual feedback the
+    // render path can't yet give).
+    public IBrush SwatchBrush => new ImmutableSolidColorBrush(Color.FromArgb(A, R, G, B));
 
     private float _midpoint = 0.5f;
     /// <summary>Segment blend bias in (0,1) for the segment starting at this
@@ -1599,14 +1613,16 @@ public sealed class ColorStopRowVm : ReactiveObject
         }
     }
 
-    /// <summary>Composite RGB binding target for the ColorPicker control.</summary>
+    /// <summary>Composite ARGB binding target for the ColorPicker control. Alpha
+    /// is carried so a ColorPicker with its alpha slider enabled edits per-stop
+    /// opacity too; the explicit A field remains the primary control.</summary>
     public Color StopColor
     {
-        get => Color.FromRgb(R, G, B);
-        set { R = value.R; G = value.G; B = value.B; this.RaisePropertyChanged(nameof(StopColor)); }
+        get => Color.FromArgb(A, R, G, B);
+        set { R = value.R; G = value.G; B = value.B; A = value.A; this.RaisePropertyChanged(nameof(StopColor)); }
     }
 
-    public ColorStopDef ToDef() => new() { Position = Position, R = R, G = G, B = B, Midpoint = Midpoint };
+    public ColorStopDef ToDef() => new() { Position = Position, R = R, G = G, B = B, A = A, Midpoint = Midpoint };
 }
 
 public sealed class MaterialBandRowVm : ReactiveObject

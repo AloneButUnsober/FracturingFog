@@ -82,6 +82,10 @@ namespace FracturingFog.Models
         public byte G { get; set; }
         public byte B { get; set; }
 
+        /// <summary>Per-stop alpha (F10). 255 = opaque (default), so a def that
+        /// omits it round-trips to the historical opaque stop byte-for-byte.</summary>
+        public byte A { get; set; } = 255;
+
         /// <summary>Segment midpoint bias in (0,1); 0.5 = linear (default).
         /// 0 / out-of-range is treated as 0.5 by the runtime.</summary>
         public float Midpoint { get; set; } = 0.5f;
@@ -121,6 +125,9 @@ namespace FracturingFog.Models
         public byte R { get; set; }
         public byte G { get; set; }
         public byte B { get; set; }
+
+        /// <summary>Interior alpha (F10). 255 = opaque (default).</summary>
+        public byte A { get; set; } = 255;
     }
 
     /// <summary>

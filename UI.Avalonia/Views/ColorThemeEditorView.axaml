@@ -183,7 +183,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="vm:ColorStopRowVm">
                                                 <Border Background="{Binding RowBackground}" CornerRadius="2" Margin="2,1" Padding="2">
-                                                    <Grid ColumnDefinitions="132,Auto,Auto,Auto,Auto" Margin="2,1">
+                                                    <Grid ColumnDefinitions="132,Auto,Auto,Auto,Auto,Auto" Margin="2,1">
                                                         <Grid.Styles>
                                                             <Style Selector="Grid">
                                                                 <Setter Property="Background" Value="Transparent" />
@@ -203,11 +203,15 @@
                                                                 Background="#325A6E" Foreground="White" FontWeight="Bold"
                                                                 Command="{Binding SampleCommand}"
                                                                 ToolTip.Tip="Sample a color from anywhere on the desktop and apply to this stop." />
-                                                        <NumericUpDown Grid.Column="3" Value="{Binding Midpoint}"
+                                                        <NumericUpDown Grid.Column="3" Value="{Binding A}"
+                                                                       Minimum="0" Maximum="255" Increment="5"
+                                                                       FormatString="0" Width="78" Margin="0,0,10,0"
+                                                                       ToolTip.Tip="Per-stop alpha (0 = transparent, 255 = opaque). Authored + saved now; visible in the render/export path in a later F10 update." />
+                                                        <NumericUpDown Grid.Column="4" Value="{Binding Midpoint}"
                                                                        Minimum="0.01" Maximum="0.99" Increment="0.05"
                                                                        FormatString="0.00" Width="82" Margin="0,0,10,0"
                                                                        ToolTip.Tip="Segment midpoint bias for the blend starting at this stop (0.5 = linear)." />
-                                                        <Button Grid.Column="4" Classes="action danger" Content="X" Width="28"
+                                                        <Button Grid.Column="5" Classes="action danger" Content="X" Width="28"
                                                                 Command="{Binding $parent[ItemsControl].((vm:ColorThemeEditorViewModel)DataContext).RemoveStopCommand}"
                                                                 CommandParameter="{Binding}" />
                                                     </Grid>
