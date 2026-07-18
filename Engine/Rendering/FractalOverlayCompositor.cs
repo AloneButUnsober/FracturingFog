@@ -117,15 +117,20 @@ namespace FracturingFog.Rendering
         }
 
         // Pin the BGRA buffer, wrap it as an SKBitmap, hand a canvas to the
-        // caller. BGRA8888 + Premul matches the renderer's upload format so
-        // no swizzle / unpremul conversion is needed.
+        // caller. F10.3b — the buffer carries STRAIGHT (non-premultiplied)
+        // alpha (GradientColorMap.MapNormalized packs coverage directly), so
+        // the SKBitmap is declared Unpremul and Skia does correct straight-alpha
+        // SrcOver when blending the grid/watermark/HUD overlays on top. Opaque
+        // backgrounds (A=255) are premul==unpremul byte-for-byte, so overlay
+        // output is unchanged for every existing theme; only an authored
+        // translucent fractal background now composites correctly.
         private static void DrawOnto(uint[] bgra, int width, int height, Action<SKCanvas> draw)
         {
             var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
             try
             {
                 IntPtr ptr = handle.AddrOfPinnedObject();
-                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
                 using var bmp = new SKBitmap();
                 bmp.InstallPixels(info, ptr, info.RowBytes);
                 using var canvas = new SKCanvas(bmp);
