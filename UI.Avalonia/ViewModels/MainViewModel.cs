@@ -607,6 +607,41 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private bool _bandDither;
+    /// <summary>F11 ordered-dither deband (CPU F11a + GPU F11b). Unlike the
+    /// post-FX sliders this acts at colorize time, so it needs a full re-render
+    /// (Trigger), not a RepaintWithPostFx. The host lifts ViewState.BandDither
+    /// into the GradientColorMap statics at render start.</summary>
+    public bool BandDither
+    {
+        get => _bandDither;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _bandDither, value))
+            {
+                ViewState.BandDither = value;
+                _renderHost.Trigger();
+            }
+        }
+    }
+
+    private int _bandDitherStrength = 100;
+    /// <summary>Dither amplitude in [0,100]; 100 = full ±0.5-LSB. Live only when
+    /// <see cref="BandDither"/> is on; re-renders on change.</summary>
+    public int BandDitherStrength
+    {
+        get => _bandDitherStrength;
+        set
+        {
+            int v = Math.Clamp(value, 0, 100);
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _bandDitherStrength, v))
+            {
+                ViewState.BandDitherStrength = v;
+                if (_bandDither) _renderHost.Trigger();
+            }
+        }
+    }
+
     private bool _brightnessLocked;
     public bool BrightnessLocked { get => _brightnessLocked; set => this.RaiseAndSetIfChanged(ref _brightnessLocked, value); }
 

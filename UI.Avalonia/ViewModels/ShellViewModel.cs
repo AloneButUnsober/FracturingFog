@@ -193,6 +193,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.ContrastSlide     += (_, v) => Main.Contrast = v;
         FloatingMenu.AdaptiveSlide     += (_, v) => Main.Adaptive = v;
         FloatingMenu.GammaSlide        += (_, v) => Main.Gamma = v;
+        FloatingMenu.BandDitherToggle          += (_, v) => Main.BandDither = v;
+        FloatingMenu.BandDitherStrengthSlide   += (_, v) => Main.BandDitherStrength = v;
         // Phase 24 — mirror the lighting-lock checkbox into MainViewModel so
         // the theme-change handler below can consult it. Phase 24b extends
         // the same pattern to Brightness / Contrast / Adaptive — previously
