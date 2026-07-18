@@ -376,15 +376,22 @@ Color Theme Editor in commit e33d05a (interp space/curve/transfer + strength,
 offset/density/wrap, per-stop midpoint), plus the F6/F12 controls above.
 
 **Phase D — structural (gate behind explicit sign-off):**
-☐ F11a (CPU deband) · ☐ F11b (GPU dither) · ☐ F10 (alpha)
+☑ `--colorprobe` gate · ☐ F11a (CPU deband) · ☐ F11b (GPU dither) · ☐ F10 (alpha)
 
 Pipeline audit **done 2026-07-17** (see the F10 / F11 notes above); it overturned
 two assumptions the original phasing rested on, so the plan is re-sequenced:
 
-1. **Prerequisite — `--colorprobe` golden gate.** Mirrors `--kifsprobe` /
-   `--inputprobe`. Golden-compares colour output across the option matrix.
-   Nothing structural lands without it, because both remaining features change
-   pixel values in ways only a golden diff catches.
+1. **Prerequisite — `--colorprobe` golden gate. ☑ SHIPPED 2026-07-17.** Mirrors
+   `--kifsprobe` / `--inputprobe` but is a true GATE (non-zero exit on drift, for
+   CI). `Engine/Diagnostics/ColorProbe.cs`: sweeps the 21-config Gradient+Cycling
+   option matrix (F1-F9/F12) through `DataDrivenColorThemes.Create` →
+   `IColorMap.Map`, SHA-256 over sampled ARGB, compares to an embedded golden
+   digest. `--colorprobe` (gate) / `--colorprobe regen` (re-pin after an intended
+   change) / `--colorprobe verbose`. Per-config table dumped to `colorprobe.out`
+   to localise drift. 3D (needs normals) + ColorGen (separate codegen) out of
+   scope — the shared quantise point (`MapNormalized`) is fully exercised via
+   Gradient/Cycling. Nothing structural lands without this, because both
+   remaining features change pixel values in ways only a golden diff catches.
 2. **F11a — CPU deband (lowest risk, real payoff).** Add the ordered-dither
    threshold *before* the `(int)` truncate in `MapNormalized`, coord delivered
    by a `[ThreadStatic]` offset the CPU render loops set per pixel. No
